@@ -85,10 +85,10 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
             var argT = new TypeDecl(baseType = Type.tBlock, at = at)                      // block<(x:field1type)>
             var fldT = clone_type(fld._type)
             if (stype.flags.constant) {
-                fldT.flags |= TypeDeclFlags.constant
+                fldT.flags.constant = true
             }
             if (!fldT.isRefType) {
-                fldT.flags |= TypeDeclFlags.ref
+                fldT.flags.ref = true
             }
             emplace(argT.argTypes, fldT)
             if (hasExtraArg) {
@@ -102,7 +102,7 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
     var fn = qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
-    fn.flags |= FunctionFlags.privateFunction
+    fn.flags.privateFunction = true
     compiling_module() |> add_function(fn)
 }
 
@@ -141,10 +141,10 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
             var argT = new TypeDecl(baseType = Type.tBlock, at = at)                      // block<(x:field1type)>
             var fldT = clone_type(flda)
             if (stype.flags.constant) {
-                fldT.flags |= TypeDeclFlags.constant
+                fldT.flags.constant = true
             }
             if (!fldT.isRefType) {
-                fldT.flags |= TypeDeclFlags.ref
+                fldT.flags.ref = true
             }
             emplace(argT.argTypes, fldT)
             argT.firstType = new TypeDecl(baseType = Type.tVoid, at = at)
@@ -155,7 +155,7 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
     var fn = qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
-    fn.flags |= FunctionFlags.privateFunction
+    fn.flags.privateFunction = true
     compiling_module() |> add_function(fn)
 }
 
@@ -204,10 +204,10 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
             var argT = new TypeDecl(baseType = Type.tBlock, at = at)                      // block<(x:field1type)>
             var fldT = clone_type(flda)
             if (stype.flags.constant) {
-                fldT.flags |= TypeDeclFlags.constant
+                fldT.flags.constant = true
             }
             if (!fldT.isRefType) {
-                fldT.flags |= TypeDeclFlags.ref
+                fldT.flags.ref = true
             }
             emplace(argT.argTypes, fldT)
             argT.firstType = new TypeDecl(baseType = Type.tVoid, at = at)
@@ -218,7 +218,7 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
     var fn = qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
-    fn.flags |= FunctionFlags.privateFunction
+    fn.flags.privateFunction = true
     compiling_module() |> add_function(fn)
 }
 

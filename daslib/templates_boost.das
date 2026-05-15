@@ -474,9 +474,9 @@ def private add_global_var_any(mod : Module?; vname : string; vat : LineInfo; vf
         ),
         init = value
     )
-    vvar.flags |= VariableFlags.generated
+    vvar.flags.generated = true
     if (priv) {
-        vvar.flags |= VariableFlags.private_variable
+        vvar.flags.private_variable = true
     }
     return add_variable(mod, vvar)
 }
@@ -495,9 +495,9 @@ def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : L
         name := vname,
         _type <- typ
     )
-    vvar.flags |= VariableFlags.generated
+    vvar.flags.generated = true
     if (priv) {
-        vvar.flags |= VariableFlags.private_variable
+        vvar.flags.private_variable = true
     }
     invoke(blk, vvar)
     return add_variable(mod, vvar)
@@ -655,13 +655,13 @@ def public add_type_ptr_ref(anything : auto(TT); flags : TypeDeclFlags) : TypeDe
 
 def private generatedExpr(var expr : Expression?) : Expression? {
     //! Marks the expression as generated.
-    expr.genFlags |= ExprGenFlags.generated
+    expr.genFlags.generated = true
     return expr
 }
 
 def private generatedVariable(var svar : VariablePtr) : VariablePtr {
     //! Marks the variable as generated.
-    svar.flags |= VariableFlags.generated
+    svar.flags.generated = true
     return <- svar
 }
 
@@ -1176,7 +1176,7 @@ def public apply_qmacro_function(fname : string; var expr : Expression?; blk : b
 def public apply_qmacro_method(fname : string; var parent : StructurePtr; var expr : Expression?; blk : block<(var rules : Template) : void>) : FunctionPtr {
     //! Implementation details for reification. This is a class method function generation reification.
     var func = apply_qmacro_function(fname, expr, blk)
-    func.flags |= FunctionFlags.isClassMethod
+    func.flags.isClassMethod = true
     func.classParent = parent
     return <- func
 }
@@ -1288,7 +1288,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     var instance_structure <- clone_structure(template_structure)
     instance_structure.parent = template_structure.parent
     instance_structure.name := instance_name
-    instance_structure.flags &= ~(StructureFlags.isTemplate)
+    instance_structure.flags.isTemplate = false
     var instance_type = new TypeDecl(at = template_structure.at,
         baseType = Type.tStructure,
         structType = instance_structure
@@ -1334,7 +1334,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             let func_clone_name = method_renames[string(func.name)]
             var func_clone = clone_function(func)
             func_clone.name := func_clone_name
-            func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
+            func_clone.moreFlags.isTemplate = false
             func_clone.classParent = instance_structure
             func_clone.result  = apply_template(rules, func.at, clone_type(func.result))
             // expand $a() argument lists in function parameters (blkArg rules)
@@ -1401,7 +1401,7 @@ def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var r
     var inscope rules : Template
     invoke(blk, rules)
     var func_clone = clone_function(func)
-    func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
+    func_clone.moreFlags.isTemplate = false
     func_clone.result  = apply_template(rules, func.at, clone_type(func.result))
     for (arg in func_clone.arguments) {
         arg._type  = apply_template(rules, arg.at, clone_type(arg._type))

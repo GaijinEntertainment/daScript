@@ -40,14 +40,14 @@ def public static_let_finalize(blk : block) {
 
 def private make_shutdown_function(varname : string; at : LineInfo) {
     var fn = new Function(at = at, atDecl = at, name := "shutdown`{varname}")
-    fn.flags |= FunctionFlags.generated
-    fn.flags |= FunctionFlags.shutdown
+    fn.flags.generated = true
+    fn.flags.shutdown = true
     fn.result = new TypeDecl(baseType = Type.tVoid, at = at)
     var blk = new ExprBlock(at = at)
     var delv = new ExprDelete(at = at,
         subexpr <- new ExprVar(at = at, name := varname)
     )
-    delv.genFlags |= ExprGenFlags.alwaysSafe
+    delv.genFlags.alwaysSafe = true
     emplace(blk.list, delv)
     fn.body = blk
     return compiling_module() |> add_function(fn)
@@ -96,8 +96,8 @@ class StaticLetMacro : AstFunctionAnnotation {
             for (vvar in lexpr.variables) {
                 {
                     var vclone <- clone_variable(vvar)
-                    vclone.flags |= VariableFlags.private_variable
-                    vclone.flags |= VariableFlags.generated
+                    vclone.flags.private_variable = true
+                    vclone.flags.generated = true
                     let old_name = "{vclone.name}"
                     let new_name = "{prefix}{vclone.name}"
                     vclone.name := new_name

@@ -619,7 +619,7 @@ class MatchMacro : AstCallMacro {
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
-                (ee as ExprIfThenElse).if_flags |= IfFlags.doNotFold
+                (ee as ExprIfThenElse).if_flags.doNotFold = true
             }
         }
     }

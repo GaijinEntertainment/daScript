@@ -35,9 +35,7 @@ def _first_opt(arr : array<auto(TT)>) : Option<TT -const -#> {
     //! Compat-mode fallback: returns ``some(arr[0])`` if non-empty, ``none`` otherwise.
     //! Inside `_sql(...)` the macro intercepts this call before evaluation
     //! and emits ` LIMIT 1` with the OneOpt materializer.
-    if (!empty(arr)) {
-        return some(arr[0])
-    }
+    if (!empty(arr)) return some(arr[0])
     return none(type<TT -const -#>)
 }
 
@@ -210,9 +208,7 @@ variant private SqlFrag {
 
 [macro_function]
 def private push_text(var out : array<SqlFrag>; s : string) {
-    if (empty(s)) {
-        return
-    }
+    if (empty(s)) return
     let n = length(out)
     if (n > 0 && out[n - 1] is text) {
         out[n - 1] = SqlFrag(text = string(out[n - 1] as text) + s)
@@ -246,18 +242,14 @@ def private push_frags(var dst : array<SqlFrag>; var src : array<SqlFrag>) {
 [macro_function]
 def private has_bind_frag(var frags : array<SqlFrag>) : bool {
     for (f in frags) {
-        if (f is bind) {
-            return true
-        }
+        if (f is bind) return true
     }
     return false
 }
 
 [macro_function]
 def private extract_const_string(e : ExpressionPtr) : tuple<bool; string> {
-    if (e == null || !(e is ExprConstString)) {
-        return (false, "")
-    }
+    if (e == null || !(e is ExprConstString)) return (false, "")
     let cs = e as ExprConstString
     return (true, string(cs.value))
 }
@@ -360,9 +352,7 @@ def private sql_to_frags_ex(sql : string;
     var idIdx = 0
     while (true) {
         let p = next_placeholder(rest)
-        if (p._0 < 0) {
-            break
-        }
+        if (p._0 < 0) break
         if (p._1 == uint8('?')) {
             if (bindIdx >= length(orderedBinds)) {
                 out |> push_text(rest |> slice(0, p._0 + 1))
@@ -397,12 +387,8 @@ def private sql_to_frags_ex(sql : string;
 
 [macro_function]
 def private source_alias_for_idx(q : SqlQuery; idx : int) : string {
-    if (empty(q.rootAlias)) {
-        return ""
-    }
-    if (idx == 0) {
-        return q.rootAlias
-    }
+    if (empty(q.rootAlias)) return ""
+    if (idx == 0) return q.rootAlias
     return q.joins[idx - 1].alias
 }
 
@@ -410,9 +396,7 @@ def private source_alias_for_idx(q : SqlQuery; idx : int) : string {
 def private source_rootType_for_idx(var q : SqlQuery&; idx : int) : TypeDeclPtr {
     if (idx == 0) {
         // Multi-join LHS subquery: rootType is null, fromRowType holds the inner's projected named tuple.
-        if (q.rootType == null && q.fromRowType != null) {
-            return q.fromRowType
-        }
+        if (q.rootType == null && q.fromRowType != null) return q.fromRowType
         return q.rootType
     }
     return q.joins[idx - 1].rootType
@@ -421,15 +405,11 @@ def private source_rootType_for_idx(var q : SqlQuery&; idx : int) : TypeDeclPtr 
 [macro_function]
 def private source_rootType_for_alias(var q : SqlQuery&; alias : string) : TypeDeclPtr {
     if (alias == q.rootAlias) {
-        if (q.rootType == null && q.fromRowType != null) {
-            return q.fromRowType
-        }
+        if (q.rootType == null && q.fromRowType != null) return q.fromRowType
         return q.rootType
     }
     for (j in q.joins) {
-        if (j.alias == alias) {
-            return j.rootType
-        }
+        if (j.alias == alias) return j.rootType
     }
     return q.rootType
 }
@@ -437,28 +417,20 @@ def private source_rootType_for_alias(var q : SqlQuery&; alias : string) : TypeD
 [macro_function]
 def private column_sql_for_alias(alias : string; rootT : TypeDeclPtr; field : string) : string {
     // [sql_fts5] @sql_fts_rank → emit FTS5's hidden `rank` unquoted (quoting names a real column).
-    if (is_fts_rank_field(rootT, field)) {
-        return "rank"
-    }
+    if (is_fts_rank_field(rootT, field)) return "rank"
     let sqlCol = field_to_column_name(rootT, field)
-    if (empty(alias)) {
-        return "\"{sqlCol}\""
-    }
+    if (empty(alias)) return "\"{sqlCol}\""
     return "\"{alias}\".\"{sqlCol}\""
 }
 
 [macro_function]
 def private is_fts_rank_field(rootT : TypeDeclPtr; fieldName : string) : bool {
-    if (rootT == null || rootT.structType == null) {
-        return false
-    }
+    if (rootT == null || rootT.structType == null) return false
     var st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
             for (annDecl in field.annotation) {
-                if (annDecl.name == "sql_fts_rank") {
-                    return true
-                }
+                if (annDecl.name == "sql_fts_rank") return true
             }
             return false
         }
@@ -484,21 +456,15 @@ def private render_json_extract(rootT : TypeDeclPtr; alias : string; col : strin
 def private lookup_arg_source(q : SqlQuery; argName : string) : int {
     let n = length(q.argNames)
     for (i in range(n)) {
-        if (q.argNames[i] == argName) {
-            return q.argSourceIdx[i]
-        }
+        if (q.argNames[i] == argName) return q.argSourceIdx[i]
     }
     return -1
 }
 
 [macro_function]
 def private call_resolved_name(var call : ExprCall?) : string {
-    if (call == null || call.func == null) {
-        return ""
-    }
-    if (call.func.fromGeneric != null) {
-        return string(call.func.fromGeneric.name)
-    }
+    if (call == null || call.func == null) return ""
+    if (call.func.fromGeneric != null) return string(call.func.fromGeneric.name)
     return string(call.func.name)
 }
 
@@ -517,9 +483,7 @@ def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : 
     if (negated) {
         // Three-valued logic: `x != NULL` is unknown, so naive NOT IN drops rows
         // whose column is NULL. Defensive form preserves them on nullable columns.
-        if (nullable) {
-            return "({xSql} NOT IN (SELECT value FROM json_each(?)) OR {xSql} IS NULL)"
-        }
+        if (nullable) return "({xSql} NOT IN (SELECT value FROM json_each(?)) OR {xSql} IS NULL)"
         return "{xSql} NOT IN (SELECT value FROM json_each(?))"
     }
     return "{xSql} IN (SELECT value FROM json_each(?))"
@@ -535,26 +499,16 @@ def private looks_like_subquery_chain(var arg : ExpressionPtr) : bool {
     var cur = arg
     let max_depth = 32
     for (_ in range(max_depth)) {
-        if (cur == null) {
-            return false
-        }
+        if (cur == null) return false
         if (cur is ExprCall) {
             var call = cur as ExprCall
-            if (call_resolved_name(call) == "select_from") {
-                return true
-            }
-            if (length(call.arguments) == 0) {
-                return false
-            }
+            if (call_resolved_name(call) == "select_from") return true
+            if (empty(call.arguments)) return false
             cur = call.arguments[0]
         } elif (cur is ExprCallMacro) {
             var mcall = cur as ExprCallMacro
-            if (mcall.name == "select_from") {
-                return true
-            }
-            if (length(mcall.arguments) == 0) {
-                return false
-            }
+            if (mcall.name == "select_from") return true
+            if (empty(mcall.arguments)) return false
             cur = mcall.arguments[0]
         } else {
             return false
@@ -572,15 +526,11 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
     if (node is ExprRef2Value) {
         node = (node as ExprRef2Value).subexpr
     }
-    if (node == null) {
-        return true
-    }
+    if (node == null) return true
     var receiver : ExpressionPtr
     var fieldName : string
     if (!qmatch(node, $e(receiver).$f(fieldName)).matched
-            || receiver == null || !(receiver is ExprVar)) {
-        return true
-    }
+            || receiver == null || !(receiver is ExprVar)) return true
     let argName = string((receiver as ExprVar).name)
     var srcIdx = -1
     if (!empty(q.rootAlias)) {
@@ -591,18 +541,12 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
     } elif (argName == "_") {
         srcIdx = 0
     }
-    if (srcIdx < 0) {
-        return true
-    }
+    if (srcIdx < 0) return true
     let rootT = source_rootType_for_idx(q, srcIdx)
-    if (rootT == null || rootT.structType == null) {
-        return true
-    }
+    if (rootT == null || rootT.structType == null) return true
     var st = rootT.structType
     for (field in st.fields) {
-        if (field.name == fieldName) {
-            return is_option_field_type(field._type)
-        }
+        if (field.name == fieldName) return is_option_field_type(field._type)
     }
     return true
 }
@@ -611,60 +555,37 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
 
 [macro_function]
 def private peel_lambda_body(var lam : ExpressionPtr) : ExpressionPtr {
-    if (lam == null || !(lam is ExprMakeBlock)) {
-        return null
-    }
+    if (lam == null || !(lam is ExprMakeBlock)) return null
     var mblk = lam as ExprMakeBlock
     var blk = mblk._block as ExprBlock
-    if (blk == null || blk.arguments |> length != 1 || blk.list |> length != 1) {
-        return null
-    }
-    if (!(blk.list[0] is ExprReturn)) {
-        return null
-    }
+    if (blk == null || blk.arguments |> length != 1 || blk.list |> length != 1 || !(blk.list[0] is ExprReturn)) return null
     var ret = blk.list[0] as ExprReturn
     return ret.subexpr
 }
 
 [macro_function]
 def private match_linq_call(var expr : ExpressionPtr; name : string) : ExprCall? {
-    if (expr == null || !(expr is ExprCall)) {
-        return null
-    }
+    if (expr == null || !(expr is ExprCall)) return null
     var call = expr as ExprCall
-    if (call.func == null || call.func._module == null) {
-        return null
-    }
-    if (call.func.name == name && call.func._module.name == "linq") {
-        return call
-    }
-    if (call.func.fromGeneric != null
-            && call.func.fromGeneric.name == name
-            && call.func.fromGeneric._module != null
-            && call.func.fromGeneric._module.name == "linq") {
-        return call
-    }
+    if (call.func == null || call.func._module == null) return null
+    if ((call.func.name == name && call.func._module.name == "linq")
+            || (call.func.fromGeneric != null
+                && call.func.fromGeneric.name == name
+                && call.func.fromGeneric._module != null
+                && call.func.fromGeneric._module.name == "linq")) return call
     return null
 }
 
 [macro_function]
 def private match_module_call(var expr : ExpressionPtr; name : string; modName : string) : ExprCall? {
-    if (expr == null || !(expr is ExprCall)) {
-        return null
-    }
+    if (expr == null || !(expr is ExprCall)) return null
     var call = expr as ExprCall
-    if (call.func == null || call.func._module == null) {
-        return null
-    }
-    if (call.func.name == name && call.func._module.name == modName) {
-        return call
-    }
-    if (call.func.fromGeneric != null
-            && call.func.fromGeneric.name == name
-            && call.func.fromGeneric._module != null
-            && call.func.fromGeneric._module.name == modName) {
-        return call
-    }
+    if (call.func == null || call.func._module == null) return null
+    if ((call.func.name == name && call.func._module.name == modName)
+            || (call.func.fromGeneric != null
+                && call.func.fromGeneric.name == name
+                && call.func.fromGeneric._module != null
+                && call.func.fromGeneric._module.name == modName)) return call
     return null
 }
 
@@ -673,9 +594,7 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
                                   linqName : string; sqlOp : string; promote_to_double : bool;
                                   prog : ProgramPtr; at : LineInfo) : bool {
     var aCall = match_linq_call(node, linqName)
-    if (aCall == null) {
-        return false
-    }
+    if (aCall == null) return false
     if (q.seenTerminal || q.seenToArray) {
         macro_error(prog, at, "_sql: only one terminal allowed per chain")
         return true
@@ -684,9 +603,7 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
         macro_error(prog, at, "_sql: {linqName}(predicate) is not yet supported in `_sql` chains; use `_select(_.Col) |> {linqName}()` for column aggregates")
         return true
     }
-    if (!analyze_chain(aCall.arguments[0], q, prog, at)) {
-        return true
-    }
+    if (!analyze_chain(aCall.arguments[0], q, prog, at)) return true
     if (q.proj != ProjectionShape.SingleColumn || length(q.selectCols) != 1) {
         macro_error(prog, at, "_sql: {linqName}() needs an upstream `_select(_.Col)` projecting exactly one column (got proj={int(q.proj)}, cols={length(q.selectCols)})")
         return true
@@ -875,9 +792,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
         q.proj = ProjectionShape.Aggregate
     } elif (fillPassthrough) {
         // Terminal wrap: outer projects passthrough columns from inner's named-tuple aliases.
-        if (!apply_passthrough_projection(q, projType, prog, at)) {
-            return false
-        }
+        if (!apply_passthrough_projection(q, projType, prog, at)) return false
     }
     return true
 }
@@ -939,9 +854,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     // flag indistinguishably set in chains like `_join(...) |> _first()`).
     let savedSeenTerminal = q.seenTerminal
     let savedSeenToArray = q.seenToArray
-    if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
-        return false
-    }
+    if (!analyze_chain(jCall.arguments[0], q, prog, at)) return false
     if ((q.seenTerminal && !savedSeenTerminal) || (q.seenToArray && !savedSeenToArray)) {
         macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
@@ -969,17 +882,13 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     let needsLhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
                                         && !empty(q.whereSql))
     if (q.seenJoin || needsLhsWrapForPreservedSide) {
-        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
-            return false
-        }
+        if (!snapshot_q_to_subquery_wrap(q, prog, at)) return false
     }
     q.seenJoin = true
     q.rootAlias = "t0"
     // 3. Build sub-q for srcb. rootAlias="t1" drives column qualification; do NOT set seenJoin (it gates other paths we already reject post-hoc).
     var subQ = SqlQuery(rootAlias = "t1", inView = q.inView)
-    if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) {
-        return false
-    }
+    if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) return false
     // Reject right-side stages we don't yet support.
     if (subQ.seenGroupBy || !empty(subQ.havingSql)) {
         macro_error(prog, at, "_sql: _join right side cannot use `_group_by` / `_having`")
@@ -1005,7 +914,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _join right side cannot use `_order_by` (apply to the joined result instead)")
         return false
     }
-    if (subQ.seenJoin && length(subQ.joins) > 0) {
+    if (subQ.seenJoin && !empty(subQ.joins)) {
         macro_error(prog, at, "_sql: _join right side cannot itself contain a join (3+ table joins not yet supported)")
         return false
     }
@@ -1082,9 +991,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     let projOk = analyze_projection(iret.subexpr, q, prog, at)
     q.argNames |> clear
     q.argSourceIdx |> clear
-    if (!projOk) {
-        return false
-    }
+    if (!projOk) return false
     if (savedAggExpr != "") {
         q.aggregateExpr := savedAggExpr
         q.aggregateType = savedAggType
@@ -1111,17 +1018,13 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.rootAlias = "t0"
     let savedSeenTerminal = q.seenTerminal
     let savedSeenToArray = q.seenToArray
-    if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
-        return false
-    }
+    if (!analyze_chain(jCall.arguments[0], q, prog, at)) return false
     if ((q.seenTerminal && !savedSeenTerminal) || (q.seenToArray && !savedSeenToArray)) {
         macro_error(prog, at, "_sql: _cross_join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
     if (q.seenJoin) {
-        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
-            return false
-        }
+        if (!snapshot_q_to_subquery_wrap(q, prog, at)) return false
     } else {
         if (q.seenSelect) {
             macro_error(prog, at, "_sql: _cross_join must precede `_select` in source order — the cross's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
@@ -1135,9 +1038,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.seenJoin = true
     q.rootAlias = "t0"
     var subQ = SqlQuery(rootAlias = "t1", inView = q.inView)
-    if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) {
-        return false
-    }
+    if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) return false
     if (subQ.seenGroupBy || !empty(subQ.havingSql)) {
         macro_error(prog, at, "_sql: _cross_join right side cannot use `_group_by` / `_having`")
         return false
@@ -1162,7 +1063,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _cross_join right side cannot use `_order_by` (apply to the joined result instead)")
         return false
     }
-    if (subQ.seenJoin && length(subQ.joins) > 0) {
+    if (subQ.seenJoin && !empty(subQ.joins)) {
         macro_error(prog, at, "_sql: _cross_join right side cannot itself contain a join (3+ table joins not yet supported)")
         return false
     }
@@ -1213,9 +1114,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     let projOk = analyze_projection(iret.subexpr, q, prog, at)
     q.argNames |> clear
     q.argSourceIdx |> clear
-    if (!projOk) {
-        return false
-    }
+    if (!projOk) return false
     if (savedAggExpr != "") {
         q.aggregateExpr := savedAggExpr
         q.aggregateType = savedAggType
@@ -1285,22 +1184,16 @@ def private sql_fragment_is_quoted_ident(frag : string; ident : string) : bool {
 // pred_to_sql to validate `_.alias` references against the inner's projection.
 [macro_function]
 def private fromrow_alias_exists(rowT : TypeDeclPtr; name : string) : bool {
-    if (rowT == null || rowT.baseType != Type.tTuple) {
-        return false
-    }
+    if (rowT == null || rowT.baseType != Type.tTuple) return false
     for (an in rowT.argNames) {
-        if (an == name) {
-            return true
-        }
+        if (an == name) return true
     }
     return false
 }
 
 [macro_function]
 def private fromrow_alias_list(rowT : TypeDeclPtr) : string {
-    if (rowT == null || rowT.baseType != Type.tTuple || length(rowT.argNames) == 0) {
-        return "(none)"
-    }
+    if (rowT == null || rowT.baseType != Type.tTuple || empty(rowT.argNames)) return "(none)"
     return build_string() $(var w) {
         for (i in range(length(rowT.argNames))) {
             if (i > 0) {
@@ -1320,9 +1213,7 @@ def private fromrow_alias_list(rowT : TypeDeclPtr) : string {
 // fromRowType is the witness pred_to_sql consults to know "is this an over-subquery outer Q, and what aliases does it expose?"
 [macro_function]
 def private inner_projection_type(var inner : SqlQuery&; at : LineInfo) : TypeDeclPtr {
-    if (inner.proj == ProjectionShape.FullRow) {
-        return inner.rootType
-    }
+    if (inner.proj == ProjectionShape.FullRow) return inner.rootType
     if (inner.proj == ProjectionShape.NamedTuple) {
         let n = length(inner.selectCols)
         var tupT = new TypeDecl(at = at, baseType = Type.tTuple)
@@ -1357,9 +1248,7 @@ def private inner_projection_type(var inner : SqlQuery&; at : LineInfo) : TypeDe
 def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
                             prog : ProgramPtr; at : LineInfo) : bool {
     var subQ = SqlQuery(inView = q.inView)
-    if (!analyze_chain(node, subQ, prog, at)) {
-        return false
-    }
+    if (!analyze_chain(node, subQ, prog, at)) return false
     if (subQ.seenTerminal || subQ.seenToArray) {
         macro_error(prog, at, "_sql: terminals (`_first`, `_to_array`, etc.) cannot appear inside a subquery — keep the terminal at the outermost chain position")
         return false
@@ -1388,14 +1277,12 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
         if (q.rootType == null) {
             q.rootType = subQ.rootType
         }
-        if (q.proj == ProjectionShape.FullRow && length(q.selectCols) == 0 && q.rootType != null) {
+        if (q.proj == ProjectionShape.FullRow && empty(q.selectCols) && q.rootType != null) {
             fill_default_columns(q, q.rootType, prog, at)
         }
     } else {
         // NamedTuple/Grouped: passthrough aliases as SQL frags → `SELECT "a1", ... FROM (<innerSql>) AS t0`.
-        if (!apply_passthrough_projection(q, q.fromRowType, prog, at)) {
-            return false
-        }
+        if (!apply_passthrough_projection(q, q.fromRowType, prog, at)) return false
     }
     return true
 }
@@ -1418,9 +1305,7 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
                          prog : ProgramPtr; at : LineInfo;
                          max_outer_phase : int = INT_MAX_PHASE) : int {
     if (q.minPhaseSeen != INT_MAX_PHASE && my_phase > q.minPhaseSeen
-            && q.minPhaseSeen <= max_outer_phase) {
-        return divert_to_inner(node, q, prog, at) ? 1 : -1
-    }
+            && q.minPhaseSeen <= max_outer_phase) return divert_to_inner(node, q, prog, at) ? 1 : -1
     if (my_phase < q.minPhaseSeen) { q.minPhaseSeen = my_phase; }
     return 0
 }
@@ -1500,33 +1385,23 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // ---- Column aggregates: sum / average / min / max ----
     {
-        if (peel_column_aggregate(node, q, "sum",     "SUM", false, prog, at)) {
-            return q.aggregateExpr != ""
-        }
+        if (peel_column_aggregate(node, q, "sum",     "SUM", false, prog, at)) return q.aggregateExpr != ""
     }
     {
-        if (peel_column_aggregate(node, q, "average", "AVG", true,  prog, at)) {
-            return q.aggregateExpr != ""
-        }
+        if (peel_column_aggregate(node, q, "average", "AVG", true,  prog, at)) return q.aggregateExpr != ""
     }
     {
-        if (peel_column_aggregate(node, q, "min",     "MIN", false, prog, at)) {
-            return q.aggregateExpr != ""
-        }
+        if (peel_column_aggregate(node, q, "min",     "MIN", false, prog, at)) return q.aggregateExpr != ""
     }
     {
-        if (peel_column_aggregate(node, q, "max",     "MAX", false, prog, at)) {
-            return q.aggregateExpr != ""
-        }
+        if (peel_column_aggregate(node, q, "max",     "MAX", false, prog, at)) return q.aggregateExpr != ""
     }
     // ---- Stage operators: peel distinct(prev) — emits SELECT DISTINCT.
     {
         var dCall = match_linq_call(node, "distinct")
         if (dCall != null) {
             let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenDistinct) {
                 macro_error(prog, at, "_sql: distinct() can appear at most once in the chain")
                 return false
@@ -1545,9 +1420,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var tCall = match_linq_call(node, "take")
         if (tCall != null) {
             let dr = maybe_divert(q, PHASE_TAKE, node, prog, at)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenTake) {
                 macro_error(prog, at, "_sql: take(n) can appear at most once in the chain")
                 return false
@@ -1566,9 +1439,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var obCall = match_linq_call(node, "order_by")
         if (obCall != null) {
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering: `_order_by((_.k1, _.k2))`)")
                 return false
@@ -1578,12 +1449,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _order_by key lambda has unexpected shape")
                 return false
             }
-            if (!analyze_chain(obCall.arguments[0], q, prog, at)) {
-                return false
-            }
-            if (!collect_order_keys(body, q, "ASC", prog, at)) {
-                return false
-            }
+            if (!analyze_chain(obCall.arguments[0], q, prog, at)
+                    || !collect_order_keys(body, q, "ASC", prog, at)) return false
             q.seenOrderBy = true
             return true
         }
@@ -1593,9 +1460,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var odCall = match_linq_call(node, "order_by_descending")
         if (odCall != null) {
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering)")
                 return false
@@ -1605,12 +1470,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _order_by_descending key lambda has unexpected shape")
                 return false
             }
-            if (!analyze_chain(odCall.arguments[0], q, prog, at)) {
-                return false
-            }
-            if (!collect_order_keys(body, q, "DESC", prog, at)) {
-                return false
-            }
+            if (!analyze_chain(odCall.arguments[0], q, prog, at)
+                    || !collect_order_keys(body, q, "DESC", prog, at)) return false
             q.seenOrderBy = true
             return true
         }
@@ -1620,9 +1481,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var sCall = match_linq_call(node, "skip")
         if (sCall != null) {
             let dr = maybe_divert(q, PHASE_SKIP, node, prog, at)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenSkip) {
                 macro_error(prog, at, "_sql: skip(n) can appear at most once in the chain")
                 return false
@@ -1645,9 +1504,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             // outer WHERE can reference projection aliases. DISTINCT / TAKE / SKIP / ORDER_BY / set-op apply
             // to projected output in both SQL and linq positional — same semantics, no wrap needed.
             let dr = maybe_divert(q, PHASE_SELECT, node, prog, at, PHASE_WHERE)
-            if (dr != 0) {
-                return dr > 0
-            }
+            if (dr != 0) return dr > 0
             if (q.seenSelect) {
                 macro_error(prog, at, "_sql: _select can only appear once in the chain")
                 return false
@@ -1658,22 +1515,16 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return analyze_chain(sCall.arguments[0], q, prog, at)
             }
             // Recurse first so q.seenGroupBy reflects any downstream `_group_by` fusing with this `_select`.
-            if (!analyze_chain(sCall.arguments[0], q, prog, at)) {
-                return false
-            }
+            if (!analyze_chain(sCall.arguments[0], q, prog, at)) return false
             var body = peel_lambda_body(sCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _select projection lambda has unexpected shape")
                 return false
             }
             if (q.seenGroupBy) {
-                if (!analyze_grouped_projection(body, q, prog, at)) {
-                    return false
-                }
+                if (!analyze_grouped_projection(body, q, prog, at)) return false
             } else {
-                if (!analyze_projection(body, q, prog, at)) {
-                    return false
-                }
+                if (!analyze_projection(body, q, prog, at)) return false
             }
             q.seenSelect = true
             return true
@@ -1690,9 +1541,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             let beforeGroupBy = q.seenGroupBy
-            if (!analyze_chain(hCall.arguments[0], q, prog, at)) {
-                return false
-            }
+            if (!analyze_chain(hCall.arguments[0], q, prog, at)) return false
             if (q.seenHaving) {
                 macro_error(prog, at, "_sql: _having can appear at most once in the chain")
                 return false
@@ -1714,12 +1563,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             q.inHaving = true
             let s = pred_to_sql(body, q, prog, at)
             q.inHaving = false
-            if (q.hadError) {
-                return false   // pred_to_sql (or deeper) issued a macro_error
-            }
-            if (empty(s)) {
-                return false   // top-level pred_to_sql returned "" without setting hadError
-            }
+            if (q.hadError || empty(s)) return false   // pred_to_sql emitted macro_error, OR returned "" without setting hadError
             q.havingSql = s
             q.seenHaving = true
             return true
@@ -1744,9 +1588,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _group_by key lambda has unexpected shape")
                 return false
             }
-            if (!collect_group_keys(body, q, prog, at)) {
-                return false
-            }
+            if (!collect_group_keys(body, q, prog, at)) return false
             q.seenGroupBy = true
             return analyze_chain(gbCall.arguments[0], q, prog, at)
         }
@@ -1762,9 +1604,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _where predicate lambda has unexpected shape")
                 return false
             }
-            if (!analyze_chain(wCall.arguments[0], q, prog, at)) {
-                return false
-            }
+            if (!analyze_chain(wCall.arguments[0], q, prog, at)) return false
             // nolint:STYLE015 v2.1: outer WHERE on JOIN's named-tuple `into` filters PROJECTED rows;
             // pred_to_sql against base scope emits `t0.alias` which doesn't exist. Snapshot in place so
             // WHERE renders as `... FROM (joinSql) AS "t0" WHERE "alias" = ...`, resolved through
@@ -1774,9 +1614,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             // Aggregate-with-WHERE (`_join | _where | _count`) needs same wrap for alias reference;
             // snapshot preserves aggregate state on the outer.
             if (q.seenJoin && (q.proj == ProjectionShape.NamedTuple || q.aggregateExpr != "")) {
-                if (!snapshot_q_to_subquery_wrap(q, prog, at, [fillPassthrough = true])) {
-                    return false
-                }
+                if (!snapshot_q_to_subquery_wrap(q, prog, at, [fillPassthrough = true])) return false
             }
             return analyze_predicate(body, q, prog, at)
         }
@@ -1812,9 +1650,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             // Recurse into LHS — fills q with the left query.
-            if (!analyze_chain(soCall.arguments[0], q, prog, at)) {
-                return false
-            }
+            if (!analyze_chain(soCall.arguments[0], q, prog, at)) return false
             // SQLite syntax-errors on per-side ORDER BY / LIMIT in compound queries — reject both sides.
             if (q.seenOrderBy) {
                 macro_error(prog, at, "_sql: set-op LHS cannot use `_order_by` (apply to the combined set-op result instead)")
@@ -1826,9 +1662,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
             // Recurse into RHS in a fresh sub-q; reject set-ops within set-ops.
             var subQ = SqlQuery(inView = q.inView)
-            if (!analyze_chain(soCall.arguments[1], subQ, prog, at)) {
-                return false
-            }
+            if (!analyze_chain(soCall.arguments[1], subQ, prog, at)) return false
             if (subQ.seenSetOp || subQ.setOpKind != SetOpKind.None) {
                 macro_error(prog, at, "_sql: set-ops cannot themselves contain set-ops")
                 return false
@@ -1864,37 +1698,27 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     // Peel _join (linq_boost expands `on` into keya/keyb selectors).
     {
         var jCall = match_linq_call(node, "join")
-        if (jCall != null) {
-            return process_join_call(jCall, q, JoinKind.Inner, prog, at)
-        }
+        if (jCall != null) return process_join_call(jCall, q, JoinKind.Inner, prog, at)
     }
     // Peel _left_join — same shape as `join`, right side becomes NULL on no-match.
     {
         var ljCall = match_linq_call(node, "left_join")
-        if (ljCall != null) {
-            return process_join_call(ljCall, q, JoinKind.Left, prog, at)
-        }
+        if (ljCall != null) return process_join_call(ljCall, q, JoinKind.Left, prog, at)
     }
     // Peel _right_join — mirror of left_join, left side becomes NULL on no-match. SQLite ≥3.39.
     {
         var rjCall = match_linq_call(node, "right_join")
-        if (rjCall != null) {
-            return process_join_call(rjCall, q, JoinKind.Right, prog, at)
-        }
+        if (rjCall != null) return process_join_call(rjCall, q, JoinKind.Right, prog, at)
     }
     // Peel _full_outer_join — both sides surface; unmatched pair with NULL. SQLite ≥3.39.
     {
         var foCall = match_linq_call(node, "full_outer_join")
-        if (foCall != null) {
-            return process_join_call(foCall, q, JoinKind.FullOuter, prog, at)
-        }
+        if (foCall != null) return process_join_call(foCall, q, JoinKind.FullOuter, prog, at)
     }
     // Peel _cross_join — Cartesian; 3-arg shape (no on lambda).
     {
         var cxCall = match_linq_call(node, "cross_join")
-        if (cxCall != null) {
-            return process_cross_join_call(cxCall, q, prog, at)
-        }
+        if (cxCall != null) return process_cross_join_call(cxCall, q, prog, at)
     }
     // Bottom: select_from(db, type<T>) — plain function in sqlite_boost.
     {
@@ -1921,22 +1745,16 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
 [macro_function]
 def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
                                 var argName : string&; positive : bool) : string {
-    if (!q.seenJoin || empty(q.joins)) {
-        return ""
-    }
+    if (!q.seenJoin || empty(q.joins)) return ""
     // Require a bare ExprVar — `$i` would over-match on ExprField/ExprCall receivers, capturing foreign names.
     var n = node
     if (n is ExprRef2Value) {
         n = (n as ExprRef2Value).subexpr
     }
-    if (n == null || !(n is ExprVar)) {
-        return ""
-    }
+    if (n == null || !(n is ExprVar)) return ""
     argName = string((n as ExprVar).name)
     let srcIdx = lookup_arg_source(q, argName)
-    if (srcIdx < 0) {
-        return ""
-    }
+    if (srcIdx < 0) return ""
     unsafe {
         let spec & = q.joins[length(q.joins) - 1]
         var probeAlias : string
@@ -1959,9 +1777,7 @@ def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
         } else {
             return ""
         }
-        if (positive) {
-            return "\"{probeAlias}\".\"{sqlCol}\" IS NOT NULL"
-        }
+        if (positive) return "\"{probeAlias}\".\"{sqlCol}\" IS NOT NULL"
         return "\"{probeAlias}\".\"{sqlCol}\" IS NULL"
     }
 }
@@ -1970,17 +1786,13 @@ def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
 def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
                                          var outFrag : string&; var outLeafType : TypeDeclPtr&;
                                          prog : ProgramPtr; at : LineInfo) : int {
-    if (val == null || !(val is ExprField)) {
-        return 0
-    }
+    if (val == null || !(val is ExprField)) return 0
     var ef0 = val as ExprField
     var recv0 = ef0.value
     if (recv0 is ExprRef2Value) {
         recv0 = (recv0 as ExprRef2Value).subexpr
     }
-    if (recv0 == null || !(recv0 is ExprField)) {
-        return 0
-    }
+    if (recv0 == null || !(recv0 is ExprField)) return 0
     var chain : array<string>
     chain |> push(string(ef0.name))
     var cur : ExpressionPtr = recv0
@@ -1992,9 +1804,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
             cur = (cur as ExprRef2Value).subexpr
         }
     }
-    if (cur == null || !(cur is ExprVar)) {
-        return 0
-    }
+    if (cur == null || !(cur is ExprVar)) return 0
     let argName = string((cur as ExprVar).name)
     // Silent resolution (mirror of pred_to_sql): unrecognized names fall through, preserving sibling diagnostics.
     var srcIdx = -1
@@ -2006,9 +1816,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
     } elif (argName == "_") {
         srcIdx = 0
     }
-    if (srcIdx < 0) {
-        return 0
-    }
+    if (srcIdx < 0) return 0
     let nChain = length(chain)
     let colName = chain[nChain - 1]
     let srcType = source_rootType_for_idx(q, srcIdx)
@@ -2016,9 +1824,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
         macro_error(prog, at, "_sql: cannot project @sql_blob column path '{colName}.…'; round-trip the row and access the field in daslang, or use raw SQL")
         return -1
     }
-    if (!has_field_annotation(srcType, colName, "sql_json")) {
-        return 0
-    }
+    if (!has_field_annotation(srcType, colName, "sql_json")) return 0
     var jsonPath : array<string>
     jsonPath |> reserve(nChain - 1)
     for (i in range(nChain - 1)) {
@@ -2038,22 +1844,14 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
 def private try_recognize_sql_function_proj(val : ExpressionPtr; var q : SqlQuery&;
                                             var outFrag : string&; var outLeafType : TypeDeclPtr&;
                                             prog : ProgramPtr; at : LineInfo) : int {
-    if (val == null || !(val is ExprCall)) {
-        return 0
-    }
+    if (val == null || !(val is ExprCall)) return 0
     var call = val as ExprCall
-    if (call.func == null) {
-        return 0
-    }
+    if (call.func == null) return 0
     let info = sql_function_info_from_func(call.func)
-    if (empty(info.name)) {
-        return 0
-    }
+    if (empty(info.name)) return 0
     // fn_call_to_sql handles directonly+inView guard and recursive arg emission.
     let frag = fn_call_to_sql(call, q, prog, at)
-    if (q.hadError) {
-        return -1
-    }
+    if (q.hadError) return -1
     outFrag = frag
     outLeafType = call.func.result
     return 1
@@ -2074,9 +1872,7 @@ def private push_computed_proj_slot(var q : SqlQuery&; frag : string;
 [macro_function]
 def private resolve_proj_arg_to_source(q : SqlQuery; argName : string; prog : ProgramPtr; at : LineInfo) : int {
     if (!q.seenJoin) {
-        if (argName == "_") {
-            return 0
-        }
+        if (argName == "_") return 0
         macro_error(prog, at, "_sql: _select projection refers to unbound arg `{argName}`; expected `_` in single-source mode")
         return -1
     }
@@ -2107,9 +1903,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
         var frag : string
         var leafType : TypeDeclPtr
         let m = try_recognize_json_path_proj(body, q, frag, leafType, prog, at)
-        if (m < 0) {
-            return false
-        }
+        if (m < 0) return false
         if (m > 0) {
             q.selectCols |> clear
             q.selectColAliases |> clear
@@ -2125,9 +1919,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
         var frag : string
         var leafType : TypeDeclPtr
         let m = try_recognize_sql_function_proj(body, q, frag, leafType, prog, at)
-        if (m < 0) {
-            return false
-        }
+        if (m < 0) return false
         if (m > 0) {
             q.selectCols |> clear
             q.selectColAliases |> clear
@@ -2146,9 +1938,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                 && receiver != null && receiver is ExprVar) {
             let argName = string((receiver as ExprVar).name)
             let srcIdx = resolve_proj_arg_to_source(q, argName, prog, at)
-            if (srcIdx < 0) {
-                return false
-            }
+            if (srcIdx < 0) return false
             q.selectCols |> clear
             q.selectColAliases |> clear
             q.selectColTypes |> clear
@@ -2168,7 +1958,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
         var mkTup = body as ExprMakeTuple
         var tupT = mkTup._type
         if (tupT != null && tupT.baseType == Type.tTuple
-                && length(tupT.argNames) > 0
+                && !empty(tupT.argNames)
                 && length(mkTup.values) == length(tupT.argNames)) {
             q.selectCols |> clear
             q.selectColAliases |> clear
@@ -2185,9 +1975,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                     var jfrag : string
                     var jleaf : TypeDeclPtr
                     let m = try_recognize_json_path_proj(val, q, jfrag, jleaf, prog, at)
-                    if (m < 0) {
-                        return false
-                    }
+                    if (m < 0) return false
                     if (m > 0) {
                         push_computed_proj_slot(q, jfrag, jleaf, string(tupT.argNames[i]))
                         continue
@@ -2198,9 +1986,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                     var sfrag : string
                     var sleaf : TypeDeclPtr
                     let m = try_recognize_sql_function_proj(val, q, sfrag, sleaf, prog, at)
-                    if (m < 0) {
-                        return false
-                    }
+                    if (m < 0) return false
                     if (m > 0) {
                         push_computed_proj_slot(q, sfrag, sleaf, string(tupT.argNames[i]))
                         continue
@@ -2212,9 +1998,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                         && receiver != null && receiver is ExprVar) {
                     let argName = string((receiver as ExprVar).name)
                     let srcIdx = resolve_proj_arg_to_source(q, argName, prog, at)
-                    if (srcIdx < 0) {
-                        return false
-                    }
+                    if (srcIdx < 0) return false
                     q.selectCols |> push(fieldName)
                     q.projRecordNames |> push(string(tupT.argNames[i]))
                     q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
@@ -2263,9 +2047,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
 def private group_key_column_name(q : SqlQuery; idx : int) : string {
     let raw = q.groupByCols[idx]
     let n = length(raw)
-    if (n >= 2 && raw |> starts_with("\"") && raw |> ends_with("\"")) {
-        return slice(raw, 1, n - 1)
-    }
+    if (n >= 2 && raw |> starts_with("\"") && raw |> ends_with("\"")) return slice(raw, 1, n - 1)
     return raw
 }
 
@@ -2276,13 +2058,9 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
     if (n is ExprRef2Value) {
         n = (n as ExprRef2Value).subexpr
     }
-    if (n == null || !(n is ExprCall)) {
-        return false
-    }
+    if (n == null || !(n is ExprCall)) return false
     var call = n as ExprCall
-    if (call.func == null) {
-        return false
-    }
+    if (call.func == null) return false
     var fname = string(call.func.name)
     if (call.func.fromGeneric != null) {
         fname = string(call.func.fromGeneric.name)
@@ -2361,7 +2139,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
     var mkTup = body as ExprMakeTuple
     var tupT = mkTup._type
     if (tupT == null || tupT.baseType != Type.tTuple
-            || length(tupT.argNames) == 0
+            || empty(tupT.argNames)
             || length(tupT.argNames) != length(mkTup.values)) {
         macro_error(prog, at, "_sql: _select after _group_by must be a NAMED tuple — every entry needs `Name=expr`")
         return false
@@ -2418,9 +2196,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         var sqlFrag : string
         var resType : TypeDeclPtr
         if (try_translate_group_aggregate(val, q, prog, at, sqlFrag, resType)) {
-            if (empty(sqlFrag)) {
-                return false   // helper emitted macro_error
-            }
+            if (empty(sqlFrag)) return false   // helper emitted macro_error
             q.groupedSelectExprs |> push(sqlFrag)
             q.groupedSelectTypes |> push(resType)
             q.projRecordNames |> push(string(tupT.argNames[i]))
@@ -2500,7 +2276,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
     // Multi-column tuple `(_.k1, _.k2)` — each entry picks compile-time `_.Field` or runtime string column.
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
-        if (length(mkTup.values) == 0) {
+        if (empty(mkTup.values)) {
             macro_error(prog, at, "_sql: _order_by: empty tuple key")
             return false
         }
@@ -2554,7 +2330,7 @@ def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog
     // Multi-column form: tuple literal `(_.k1, _.k2)`.
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
-        if (length(mkTup.values) == 0) {
+        if (empty(mkTup.values)) {
             macro_error(prog, at, "_sql: _group_by: empty tuple key")
             return false
         }
@@ -2581,12 +2357,8 @@ def private analyze_predicate(var body : ExpressionPtr; var q : SqlQuery&; prog 
         return false
     }
     let s = pred_to_sql(body, q, prog, at)
-    if (q.hadError) {
-        return false   // operator handlers wrap empty children (`lhs = rhs` -> `" = ?"`); empty(s) alone isn't reliable
-    }
-    if (empty(s)) {
-        return false
-    }
+    // operator handlers wrap empty children (`lhs = rhs` -> `" = ?"`); empty(s) alone isn't reliable
+    if (q.hadError || empty(s)) return false
     if (empty(q.whereSql)) {
         q.whereSql = s
     } else {
@@ -2607,19 +2379,15 @@ def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg :
 
 [macro_function]
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
-    if (node == null) {
-        return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
-    }
+    if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
         node = (node as ExprRef2Value).subexpr
-        if (node == null) {
-            return pred_fail(q, prog, at, "_sql: _where: ExprRef2Value with null subexpr")
-        }
+        if (node == null) return pred_fail(q, prog, at, "_sql: _where: ExprRef2Value with null subexpr")
     }
     // Logical NOT — `_not_in` lowers to `!contains(subq, x)`; dispatch on textual name (pre-typer).
     {
         var inner : ExpressionPtr
-        if (qmatch(node, !$e(inner)).matched) {
+        if (qmatch(node, !$e(inner)).matched) { // nolint:STYLE016 — structural NOT-peel, not a guard chain
             if (inner != null && inner is ExprCall) {
                 var icall = inner as ExprCall
                 let iname = string(icall.name)
@@ -2660,92 +2428,66 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     {
         var lhs : ExpressionPtr
         var rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) && $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) AND ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) && $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) AND ({pred_to_sql(rhs, q, prog, at)})"
     }
     // Logical OR
     {
         var lhs : ExpressionPtr
         var rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) || $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) OR ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) || $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) OR ({pred_to_sql(rhs, q, prog, at)})"
     }
     // Comparison ops.
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) == $e(rhs)).matched) {
             // `== none()` would silently bind a 0-byte placeholder; nudge to is_some/is_none.
-            if (is_none_call(lhs) || is_none_call(rhs)) {
-                return pred_fail(q, prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
-            }
+            if (is_none_call(lhs) || is_none_call(rhs)) return pred_fail(q, prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
             return "{pred_to_sql(lhs, q, prog, at)} = {pred_to_sql(rhs, q, prog, at)}"
         }
     }
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) != $e(rhs)).matched) {
-            if (is_none_call(lhs) || is_none_call(rhs)) {
-                return pred_fail(q, prog, at, "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
-            }
+            if (is_none_call(lhs) || is_none_call(rhs)) return pred_fail(q, prog, at, "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
             return "{pred_to_sql(lhs, q, prog, at)} <> {pred_to_sql(rhs, q, prog, at)}"
         }
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) < $e(rhs)).matched) {
-            return "{pred_to_sql(lhs, q, prog, at)} < {pred_to_sql(rhs, q, prog, at)}"
-        }
+        if (qmatch(node, $e(lhs) < $e(rhs)).matched) return "{pred_to_sql(lhs, q, prog, at)} < {pred_to_sql(rhs, q, prog, at)}"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) <= $e(rhs)).matched) {
-            return "{pred_to_sql(lhs, q, prog, at)} <= {pred_to_sql(rhs, q, prog, at)}"
-        }
+        if (qmatch(node, $e(lhs) <= $e(rhs)).matched) return "{pred_to_sql(lhs, q, prog, at)} <= {pred_to_sql(rhs, q, prog, at)}"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) > $e(rhs)).matched) {
-            return "{pred_to_sql(lhs, q, prog, at)} > {pred_to_sql(rhs, q, prog, at)}"
-        }
+        if (qmatch(node, $e(lhs) > $e(rhs)).matched) return "{pred_to_sql(lhs, q, prog, at)} > {pred_to_sql(rhs, q, prog, at)}"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) >= $e(rhs)).matched) {
-            return "{pred_to_sql(lhs, q, prog, at)} >= {pred_to_sql(rhs, q, prog, at)}"
-        }
+        if (qmatch(node, $e(lhs) >= $e(rhs)).matched) return "{pred_to_sql(lhs, q, prog, at)} >= {pred_to_sql(rhs, q, prog, at)}"
     }
     // Arithmetic — parens preserve precedence in emitted SQL.
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) + $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) + ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) + $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) + ({pred_to_sql(rhs, q, prog, at)})"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) - $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) - ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) - $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) - ({pred_to_sql(rhs, q, prog, at)})"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) * $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) * ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) * $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) * ({pred_to_sql(rhs, q, prog, at)})"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) / $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) / ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) / $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) / ({pred_to_sql(rhs, q, prog, at)})"
     }
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) % $e(rhs)).matched) {
-            return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
-        }
+        if (qmatch(node, $e(lhs) % $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
     }
     // Multi-level field chain `<arg>.Col.path…` — descends @sql_json via json_extract; @sql_blob is a compile error.
     if (node is ExprField) {
@@ -2783,9 +2525,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     let nChain = length(chain)
                     let colName = chain[nChain - 1]
                     let srcType = source_rootType_for_idx(q, srcIdx)
-                    if (has_field_annotation(srcType, colName, "sql_blob")) {
-                        return pred_fail(q, prog, at, "_sql: cannot descend into @sql_blob column '{colName}'; filter in daslang after round-trip, or use raw SQL")
-                    }
+                    if (has_field_annotation(srcType, colName, "sql_blob")) return pred_fail(q, prog, at, "_sql: cannot descend into @sql_blob column '{colName}'; filter in daslang after round-trip, or use raw SQL")
                     if (has_field_annotation(srcType, colName, "sql_json")) {
                         // Reverse outer-to-inner chain into column-out path (drop the column name).
                         var jsonPath : array<string>
@@ -2795,9 +2535,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                         }
                         // Validate every path segment — the typer never sees `_where`'s lambda body so silent NULL-on-typo is the failure mode.
                         let leaf = resolve_nested_field_type(srcType, colName, jsonPath)
-                        if (leaf == null) {
-                            return pred_fail(q, prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
-                        }
+                        if (leaf == null) return pred_fail(q, prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
                         return render_json_extract(srcType, source_alias_for_idx(q, srcIdx), colName, jsonPath)
                     }
                 }
@@ -2829,9 +2567,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     // nolint:STYLE015 Multi-Q outer over named-tuple inner: rootType is null, resolve `_.alias`
                     // against fromRowType.argNames; FROM is `(<innerSql>) AS t0` so unqualified suffices.
                     if (q.rootType == null && q.fromRowType != null) {
-                        if (!fromrow_alias_exists(q.fromRowType, fieldName)) {
-                            return pred_fail(q, prog, at, "_sql: column `{fieldName}` is not a projection alias of the inner subquery; valid aliases are {fromrow_alias_list(q.fromRowType)}")
-                        }
+                        if (!fromrow_alias_exists(q.fromRowType, fieldName)) return pred_fail(q, prog, at, "_sql: column `{fieldName}` is not a projection alias of the inner subquery; valid aliases are {fromrow_alias_list(q.fromRowType)}")
                         return "\"{fieldName}\""
                     }
                     return column_sql_for_alias("", q.rootType, fieldName)
@@ -2883,9 +2619,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                         q.bindExprs |> push <| clone_expression(b)
                     }
                 }
-                if (mname == "_not_in") {
-                    return "{xSql} NOT IN ({subSql})"
-                }
+                if (mname == "_not_in") return "{xSql} NOT IN ({subSql})"
                 return "{xSql} IN ({subSql})"
             }
             // Captured-collection form: arg2 is `array<T>` (variable, function result,
@@ -2910,12 +2644,10 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     q.bindExprs |> push <| clone_expression(b)
                 }
             }
-            if (mname == "_not_in") {
-                return "{xSql} NOT IN ({subSql})"
-            }
+            if (mname == "_not_in") return "{xSql} NOT IN ({subSql})"
             return "{xSql} IN ({subSql})"
         }
-        if ((mname == "_any" || mname == "_none") && length(mcall.arguments) >= 1) {
+        if ((mname == "_any" || mname == "_none") && !empty(mcall.arguments)) {
             // 1-arg `subq._any()/_none()` or 2-arg `_any(pred)/_none(pred)` (pred bare; call_macro hasn't lambda-wrapped).
             var subSql : string
             var binds : array<ExpressionPtr>
@@ -2928,15 +2660,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     q.hadError = true   // analyze_chain emitted macro_error on subQ
                     return ""
                 }
-                if (subQ.seenJoin || length(subQ.joins) > 0) {
-                    return pred_fail(q, prog, at, "_sql: subqueries cannot themselves contain joins")
-                }
+                if (subQ.seenJoin || !empty(subQ.joins)) return pred_fail(q, prog, at, "_sql: subqueries cannot themselves contain joins")
                 if (subQ.seenGroupBy || !empty(subQ.havingSql) || subQ.seenOrderBy
                         || subQ.distinctFlag || subQ.limitBindExpr != null
                         || subQ.offsetBindExpr != null || subQ.seenTerminal
-                        || subQ.seenToArray) {
-                    return pred_fail(q, prog, at, "_sql: _any/_none subquery must be a `select_from(...)` (chain stages and terminals are not yet allowed)")
-                }
+                        || subQ.seenToArray) return pred_fail(q, prog, at, "_sql: _any/_none subquery must be a `select_from(...)` (chain stages and terminals are not yet allowed)")
                 if (!analyze_predicate(mcall.arguments[1], subQ, prog, at)) {
                     q.hadError = true   // analyze_predicate emitted macro_error on subQ
                     return ""
@@ -2958,22 +2686,16 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     q.bindExprs |> push <| clone_expression(b)
                 }
             }
-            if (mname == "_none") {
-                return "NOT EXISTS ({subSql})"
-            }
+            if (mname == "_none") return "NOT EXISTS ({subSql})"
             return "EXISTS ({subSql})"
         }
     }
     // Function call → SQL function dispatch (table-driven below).
     if (node is ExprCall) {
         let sql = fn_call_to_sql(node as ExprCall, q, prog, at)
-        if (!empty(sql)) {
-            return sql
-        }
+        if (!empty(sql)) return sql
         // fn_call_to_sql may have emitted a targeted macro_error via pred_fail (e.g. text_match on non-FTS5 struct); stop here so the generic "unsupported expression" doesn't double-fire.
-        if (q.hadError) {
-            return ""
-        }
+        if (q.hadError) return ""
     }
     // nolint:STYLE015 Detect post-typer `operator==(a, none())` for is_none/is_some fixit. Must run
     // BEFORE the bind fallthrough, otherwise `none()` would silently bind an empty placeholder.
@@ -3005,9 +2727,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
 
 [macro_function]
 def private user_arg_count(call : ExprCall?) : int {
-    if (call == null) {
-        return 0
-    }
+    if (call == null) return 0
     var n = length(call.arguments)
     while (n > 0) {
         let a = call.arguments[n - 1]
@@ -3026,10 +2746,8 @@ def private analyze_subquery(var subqExpr : ExpressionPtr; var binds : array<Exp
                              prog : ProgramPtr; at : LineInfo;
                              requireSingleColumn : bool = false; inView : bool = false) : string {
     var subQ = SqlQuery(inView = inView)
-    if (!analyze_chain(subqExpr, subQ, prog, at)) {
-        return ""
-    }
-    if (subQ.seenJoin || length(subQ.joins) > 0) {
+    if (!analyze_chain(subqExpr, subQ, prog, at)) return ""
+    if (subQ.seenJoin || !empty(subQ.joins)) {
         macro_error(prog, at, "_sql: subqueries cannot themselves contain joins")
         return ""
     }
@@ -3067,10 +2785,8 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
                                        prog : ProgramPtr; at : LineInfo;
                                        inView : bool = false) : string {
     var subQ = SqlQuery(inView = inView)
-    if (!analyze_chain(subqExpr, subQ, prog, at)) {
-        return ""
-    }
-    if (subQ.seenJoin || length(subQ.joins) > 0) {
+    if (!analyze_chain(subqExpr, subQ, prog, at)) return ""
+    if (subQ.seenJoin || !empty(subQ.joins)) {
         macro_error(prog, at, "_sql: subqueries cannot themselves contain joins")
         return ""
     }
@@ -3095,9 +2811,7 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
         macro_error(prog, at, "_sql: _any/_none predicate lambda has unexpected shape")
         return ""
     }
-    if (!analyze_predicate(body, subQ, prog, at)) {
-        return ""
-    }
+    if (!analyze_predicate(body, subQ, prog, at)) return ""
     let sql = build_sql_string(subQ)
     binds |> reserve(length(binds) + length(subQ.bindExprs))
     for (b in subQ.bindExprs) {
@@ -3108,9 +2822,7 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
 
 [macro_function]
 def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
-    if (call == null) {
-        return ""
-    }
+    if (call == null) return ""
     var fname : string
     if (call.func != null) {
         fname = string(call.func.name)
@@ -3166,9 +2878,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     }
     // ---- FTS5 (tut 40): text_match(_.Body, q) on [sql_fts5] → `Body MATCH ?`; non-FTS5 is a compile error.
     if (fname == "text_match" && argc == 2) {
-        if (!has_struct_annotation(q.rootType, "sql_fts5")) {
-            return pred_fail(q, prog, at, "_sql: text_match() requires an [sql_fts5] struct, got '{describe(q.rootType)}'. Options: use contains(_.Col, q) for LIKE-based substring match, or annotate the struct with [sql_fts5] for indexed full-text search.")
-        }
+        if (!has_struct_annotation(q.rootType, "sql_fts5")) return pred_fail(q, prog, at, "_sql: text_match() requires an [sql_fts5] struct, got '{describe(q.rootType)}'. Options: use contains(_.Col, q) for LIKE-based substring match, or annotate the struct with [sql_fts5] for indexed full-text search.")
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
         if (q.inHaving) {
@@ -3205,9 +2915,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (fname == "is_some" && argc == 1) {
         var argName : string
         let nullProbe = try_join_null_probe(call.arguments[0], q, argName, true)
-        if (!empty(nullProbe)) {
-            return nullProbe
-        }
+        if (!empty(nullProbe)) return nullProbe
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
         return "{inner} IS NOT NULL"
@@ -3215,9 +2923,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (fname == "is_none" && argc == 1) {
         var argName : string
         let nullProbe = try_join_null_probe(call.arguments[0], q, argName, false)
-        if (!empty(nullProbe)) {
-            return nullProbe
-        }
+        if (!empty(nullProbe)) return nullProbe
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
         return "{inner} IS NULL"
@@ -3237,9 +2943,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         // Captured-collection form: arg0 is `array<T>` and not a chain → JSON bridge.
         var firstT = call.arguments[0]._type
         if (firstT != null && firstT.isGoodArrayType
-                && !looks_like_subquery_chain(call.arguments[0])) {
-            return emit_in_collection_json_bridge(call.arguments[0], q, xSql, false, false)
-        }
+                && !looks_like_subquery_chain(call.arguments[0])) return emit_in_collection_json_bridge(call.arguments[0], q, xSql, false, false)
         var binds : array<ExpressionPtr>
         let subSql = analyze_subquery(call.arguments[0], binds, prog, at, true, q.inView)
         if (empty(subSql)) {
@@ -3260,9 +2964,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         if (argc == 1) {
             var binds : array<ExpressionPtr>
             let subSql = analyze_subquery(call.arguments[0], binds, prog, at, false, q.inView)
-            if (empty(subSql)) {
-                return ""
-            }
+            if (empty(subSql)) return ""
             for (b in binds) {
                 if (q.inHaving) {
                     q.havingBindExprs |> push <| clone_expression(b)
@@ -3275,9 +2977,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         if (argc == 2) {
             var binds : array<ExpressionPtr>
             let subSql = analyze_subquery_with_pred(call.arguments[0], call.arguments[1], binds, prog, at, q.inView)
-            if (empty(subSql)) {
-                return ""
-            }
+            if (empty(subSql)) return ""
             for (b in binds) {
                 if (q.inHaving) {
                     q.havingBindExprs |> push <| clone_expression(b)
@@ -3293,9 +2993,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         if (argc == 1) {
             var binds : array<ExpressionPtr>
             let subSql = analyze_subquery(call.arguments[0], binds, prog, at, false, q.inView)
-            if (empty(subSql)) {
-                return ""
-            }
+            if (empty(subSql)) return ""
             for (b in binds) {
                 if (q.inHaving) {
                     q.havingBindExprs |> push <| clone_expression(b)
@@ -3308,9 +3006,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         if (argc == 2) {
             var binds : array<ExpressionPtr>
             let subSql = analyze_subquery_with_pred(call.arguments[0], call.arguments[1], binds, prog, at, q.inView)
-            if (empty(subSql)) {
-                return ""
-            }
+            if (empty(subSql)) return ""
             for (b in binds) {
                 if (q.inHaving) {
                     q.havingBindExprs |> push <| clone_expression(b)
@@ -3325,9 +3021,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (call.func != null) {
         let info = sql_function_info_from_func(call.func)
         if (!empty(info.name)) {
-            if (info.directonly && q.inView) {
-                return pred_fail(q, prog, at, "_sql: [sql_function(directonly=true)] '{info.name}' cannot be used in `_create_view` body — SQLite forbids SQLITE_DIRECTONLY functions in views (drop directonly=true, or call the function only from application SQL)")
-            }
+            if (info.directonly && q.inView) return pred_fail(q, prog, at, "_sql: [sql_function(directonly=true)] '{info.name}' cannot be used in `_create_view` body — SQLite forbids SQLITE_DIRECTONLY functions in views (drop directonly=true, or call the function only from application SQL)")
             let sql = build_string() $(var w) {
                 w |> write(info.name)
                 w |> write("(")
@@ -3369,22 +3063,16 @@ def private sql_function_info_from_func(func : FunctionPtr) : tuple<name : strin
 
 [macro_function]
 def private is_none_call(node : ExpressionPtr) : bool {
-    if (node == null) {
-        return false
-    }
+    if (node == null) return false
     var peeled = node
     if (peeled is ExprRef2Value) {
         peeled = (peeled as ExprRef2Value).subexpr
-        if (peeled == null) {
-            return false
-        }
+        if (peeled == null) return false
     }
     if (peeled is ExprCall) {
         let c = peeled as ExprCall
         let cname = string(c.name)
-        if (cname == "none") {
-            return true
-        }
+        if (cname == "none") return true
         // Reified template form: contains both "option" and "none".
         return cname |> find("option") >= 0 && cname |> find("none") >= 0
     }
@@ -3414,7 +3102,7 @@ def private next_placeholder(sql : string) : tuple<int; uint8> {
                     continue
                 }
                 in_quote = !in_quote
-                i += 1
+                i++
                 continue
             }
             if (!in_quote && (ch == uint8('?') || ch == uint8(0x01))) {
@@ -3422,7 +3110,7 @@ def private next_placeholder(sql : string) : tuple<int; uint8> {
                 found_ch = ch
                 return
             }
-            i += 1
+            i++
         }
     }
     return (found_pos, found_ch)
@@ -3443,18 +3131,14 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
 [macro_function]
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
     // Read [sql_table]/[sql_view]/[sql_fts5] name from struct metadata directly — we can't reach the user's _::_sql_table_name from this module's macro context.
-    if (rootT == null || rootT.structType == null) {
-        return ""
-    }
+    if (rootT == null || rootT.structType == null) return ""
     var st = rootT.structType
     for (annDecl in st.annotations) {
         if (annDecl.annotation.name == "sql_table"
                 || annDecl.annotation.name == "sql_view"
                 || annDecl.annotation.name == "sql_fts5") {
             for (arg in annDecl.arguments) {
-                if (arg.name == "name" && arg.basicType == Type.tString) {
-                    return string(arg.sValue)
-                }
+                if (arg.name == "name" && arg.basicType == Type.tString) return string(arg.sValue)
             }
             break
         }
@@ -3464,13 +3148,9 @@ def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
 
 [macro_function]
 def private has_struct_annotation(rootT : TypeDeclPtr; name : string) : bool {
-    if (rootT == null || rootT.structType == null) {
-        return false
-    }
+    if (rootT == null || rootT.structType == null) return false
     for (annDecl in rootT.structType.annotations) {
-        if (annDecl.annotation.name == name) {
-            return true
-        }
+        if (annDecl.annotation.name == name) return true
     }
     return false
 }
@@ -3480,9 +3160,7 @@ def private has_struct_annotation(rootT : TypeDeclPtr; name : string) : bool {
 [macro_function]
 def private build_sql_string(var q : SqlQuery&; force_aliases : bool = false) : string {
     let inner = build_sql_select(q, force_aliases)
-    if (q.setOpKind == SetOpKind.None) {
-        return inner
-    }
+    if (q.setOpKind == SetOpKind.None) return inner
     var op : string
     if (q.setOpKind == SetOpKind.Union) {
         op = "UNION"
@@ -3628,7 +3306,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(q.whereSql)
         }
         // groupByCols hold daslang field names (quoted); translate to SQL identifier here.
-        if (length(q.groupByCols) > 0) {
+        if (!empty(q.groupByCols)) {
             w |> write(" GROUP BY ")
             for (i in range(length(q.groupByCols))) {
                 if (i > 0) {
@@ -3645,7 +3323,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" HAVING ")
             w |> write(q.havingSql)
         }
-        if (length(q.orderByCols) > 0) {
+        if (!empty(q.orderByCols)) {
             w |> write(" ORDER BY ")
             for (i in range(length(q.orderByCols))) {
                 if (i > 0) {
@@ -3678,9 +3356,7 @@ class private SqlTextMacro : AstCallMacro {
         macro_verify(argT != null, prog, call.at, "_sql_text: chain argument is not inferred yet")
         macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
         var q = SqlQuery()
-        if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
-            return null
-        }
+        if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
         let sql = build_sql_string(q)
         var noBinds : array<ExpressionPtr>
         var frags : array<SqlFrag>
@@ -3746,7 +3422,7 @@ class private SqlCreateViewMacro : AstCallMacro {
             return null
         }
         // CREATE VIEW DDL is run once; baking a runtime column name at view-creation time is surprising. Reject.
-        if (length(q.orderByInlineExprs) > 0) {
+        if (!empty(q.orderByInlineExprs)) {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
             return null
         }
@@ -3784,9 +3460,7 @@ class private SqlCreateViewMacro : AstCallMacro {
                 return null
             }
             let fieldT = viewT.structType.fields[i]._type
-            if (fieldT == null) {
-                continue
-            }
+            if (fieldT == null) continue
             let projDesc = describe(projType)
             let fieldDesc = describe(fieldT)
             if (projDesc != fieldDesc) {
@@ -3912,35 +3586,25 @@ class private SqlVacuumIntoMacro : AstCallMacro {
 
 [macro_function]
 def private lookup_struct_field_type(rootT : TypeDeclPtr; fieldName : string) : TypeDeclPtr {
-    if (rootT == null) {
-        return null
-    }
+    if (rootT == null) return null
     // Named tuple — used by multi-Q outer Q (rootType=null, fromRowType=projected named tuple).
     if (rootT.baseType == Type.tTuple) {
         for (i in range(length(rootT.argNames))) {
-            if (rootT.argNames[i] == fieldName && i < length(rootT.argTypes)) {
-                return clone_type(rootT.argTypes[i])
-            }
+            if (rootT.argNames[i] == fieldName && i < length(rootT.argTypes)) return clone_type(rootT.argTypes[i])
         }
         return null
     }
-    if (rootT.structType == null) {
-        return null
-    }
+    if (rootT.structType == null) return null
     var st = rootT.structType
     for (field in st.fields) {
-        if (field.name == fieldName) {
-            return clone_type(field._type)
-        }
+        if (field.name == fieldName) return clone_type(field._type)
     }
     return null
 }
 
 [macro_function]
 def private has_field_annotation(rootT : TypeDeclPtr; fieldName : string; annoName : string) : bool {
-    if (rootT == null || rootT.structType == null) {
-        return false
-    }
+    if (rootT == null || rootT.structType == null) return false
     var st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
@@ -3954,16 +3618,12 @@ def private has_field_annotation(rootT : TypeDeclPtr; fieldName : string; annoNa
 [macro_function]
 def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string;
                                          annoName : string; defaultV : string) : string {
-    if (rootT == null || rootT.structType == null) {
-        return defaultV
-    }
+    if (rootT == null || rootT.structType == null) return defaultV
     var st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
             let v = find_arg(field.annotation, annoName)
-            if (v is tString) {
-                return string(v as tString)
-            }
+            if (v is tString) return string(v as tString)
             return defaultV
         }
     }
@@ -3978,13 +3638,9 @@ def private field_to_column_name(rootT : TypeDeclPtr; fieldName : string) : stri
 [macro_function]
 def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jsonPath : array<string>) : TypeDeclPtr {
     var cur = lookup_struct_field_type(rootT, colName)
-    if (cur == null) {
-        return null
-    }
+    if (cur == null) return null
     for (seg in jsonPath) {
-        if (cur == null) {
-            return null
-        }
+        if (cur == null) return null
         if (cur.baseType == Type.tStructure && cur.structType != null) {
             var found : TypeDeclPtr
             for (field in cur.structType.fields) {
@@ -3993,11 +3649,9 @@ def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jso
                     break
                 }
             }
-            if (found == null) {
-                return null
-            }
+            if (found == null) return null
             cur = found
-        } elif (cur.baseType == Type.tTuple && length(cur.argNames) > 0) {
+        } elif (cur.baseType == Type.tTuple && !empty(cur.argNames)) {
             var idx = -1
             for (i in range(length(cur.argNames))) {
                 if (cur.argNames[i] == seg) {
@@ -4005,9 +3659,7 @@ def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jso
                     break
                 }
             }
-            if (idx < 0) {
-                return null
-            }
+            if (idx < 0) return null
             cur = clone_type(cur.argTypes[idx])
         } else {
             return null
@@ -4026,7 +3678,7 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     if (q.proj == ProjectionShape.SingleColumn) {
         let colIdx = 0
         var fieldType : TypeDeclPtr
-        if (length(q.selectColTypes) > 0) {
+        if (!empty(q.selectColTypes)) {
             fieldType = q.selectColTypes[0]
         } else {
             fieldType = lookup_struct_field_type(q.rootType, q.selectCols[0])
@@ -4091,9 +3743,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     macro_verify(argT != null, prog, call.at, "_sql/_try_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
     var q = SqlQuery()
-    if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
-        return null
-    }
+    if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // take(n)/skip(n) before an aggregate is degenerate in SQL — aggregate collapses to one row, LIMIT/OFFSET no-op; reject loudly.
     if (q.proj == ProjectionShape.Aggregate
             && (q.limitBindExpr != null || q.offsetBindExpr != null)) {
@@ -4126,9 +3776,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
         })
     }
     var rowBuilder = build_row_builder(q, prog, call.at)
-    if (rowBuilder == null) {
-        return null
-    }
+    if (rowBuilder == null) return null
     var dbExpr = q.dbExpr
     let suffix = (q.matr == Materializer.One ? "_one"
                   : (q.matr == Materializer.OneOpt ? "_one_opt" : ""))
@@ -4164,9 +3812,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     macro_verify(argT != null, prog, call.at, "_each_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
     var q = SqlQuery()
-    if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
-        return null
-    }
+    if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // Reject terminals (iterator, not scalar/row/array). Order matters: aggregates set both Aggregate+One, so dispatch on proj first.
     if (q.seenToArray) {
         macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` — _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
@@ -4199,9 +3845,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         })
     }
     var rowBuilder = build_row_builder(q, prog, call.at)
-    if (rowBuilder == null) {
-        return null
-    }
+    if (rowBuilder == null) return null
     var dbExpr = q.dbExpr
     // bind_blk = block (one-shot, before the generator); row_blk = capturing lambda (outlives run_each_select).
     var res = qmacro(_::run_each_select($e(dbExpr), $e(sqlExpr),
@@ -4241,7 +3885,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
         return false
     }
     var mkTup = body as ExprMakeTuple
-    if (length(mkTup.values) == 0) {
+    if (empty(mkTup.values)) {
         macro_error(prog, at, "_sql_update: set clause is empty — UPDATE with no columns is invalid SQL. Pass at least one (Col=expr) pair.")
         return false
     }
@@ -4273,8 +3917,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
     if (q.rootType != null && q.rootType.structType != null) {
         var st = q.rootType.structType
         var seenCols : table<string; bool>
-        for (i in range(length(recordNames))) {
-            let colName = recordNames[i]
+        for (colName in recordNames) {
             if (key_exists(seenCols, colName)) {
                 macro_error(prog, at, "_sql_update: duplicate SET column \"{colName}\"")
                 return false
@@ -4306,12 +3949,8 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
         let sqlCol = field_to_column_name(q.rootType, colName)
         var val = mkTup.values[i]
         let valSql = pred_to_sql(val, setQ, prog, at)
-        if (setQ.hadError) {
-            return false   // pred_to_sql (or deeper) emitted a macro_error
-        }
-        if (empty(valSql)) {
-            return false   // top-level pred_to_sql returned "" without setting hadError
-        }
+        // pred_to_sql emitted macro_error, OR returned "" without setting hadError
+        if (setQ.hadError || empty(valSql)) return false
         setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
     setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
@@ -4323,9 +3962,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
 
 [macro_function]
 def private build_returning_clause(rootT : TypeDeclPtr) : string {
-    if (rootT == null || rootT.structType == null) {
-        return ""
-    }
+    if (rootT == null || rootT.structType == null) return ""
     var st = rootT.structType
     return build_string() $(var w) {
         w |> write(" RETURNING ")
@@ -4382,20 +4019,13 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
         argNames <- ["_"],
         argSourceIdx <- [0]
     )
-    // Translate WHERE — raw AST.
+    // Translate WHERE — raw AST. pred_to_sql emitted macro_error, OR returned "" without setting hadError.
     let whereSql = pred_to_sql(whereE, q, prog, call.at)
-    if (q.hadError) {
-        return null   // pred_to_sql (or deeper) emitted a macro_error
-    }
-    if (empty(whereSql)) {
-        return null
-    }
+    if (q.hadError || empty(whereSql)) return null
     // Translate SET — raw named-tuple literal.
     var setSqlClauses : array<string>
     var setBindExprs : array<ExpressionPtr>
-    if (!analyze_set_clause(setE, q, setSqlClauses, setBindExprs, prog, call.at)) {
-        return null
-    }
+    if (!analyze_set_clause(setE, q, setSqlClauses, setBindExprs, prog, call.at)) return null
     // Build SQL.
     var sql = build_string() $(var w) {
         w |> write("UPDATE \"")
@@ -4456,13 +4086,9 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
         argNames <- ["_"],
         argSourceIdx <- [0]
     )
+    // pred_to_sql emitted macro_error, OR returned "" without setting hadError.
     let whereSql = pred_to_sql(whereE, q, prog, call.at)
-    if (q.hadError) {
-        return null   // pred_to_sql (or deeper) emitted a macro_error
-    }
-    if (empty(whereSql)) {
-        return null
-    }
+    if (q.hadError || empty(whereSql)) return null
     var sql = "DELETE FROM \"{tableName}\" WHERE {whereSql}"
     if (isReturning) {
         sql += build_returning_clause(rootT)
@@ -4523,9 +4149,7 @@ class private OuterArgTwoMacro : AstCallMacro {
 class private SqlUpdateMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) return null
         return emit_update_body(prog, call, rootT, false, false)
     }
 }
@@ -4534,9 +4158,7 @@ class private SqlUpdateMacro : OuterArgZeroMacro {
 class private SqlTryUpdateMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) return null
         return emit_update_body(prog, call, rootT, true, false)
     }
 }
@@ -4545,9 +4167,7 @@ class private SqlTryUpdateMacro : OuterArgZeroMacro {
 class private SqlUpdateReturningMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) return null
         return emit_update_body(prog, call, rootT, false, true)
     }
 }
@@ -4556,9 +4176,7 @@ class private SqlUpdateReturningMacro : OuterArgZeroMacro {
 class private SqlTryUpdateReturningMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) return null
         return emit_update_body(prog, call, rootT, true, true)
     }
 }
@@ -4567,9 +4185,7 @@ class private SqlTryUpdateReturningMacro : OuterArgZeroMacro {
 class private SqlDeleteMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) return null
         return emit_delete_body(prog, call, rootT, false, false)
     }
 }
@@ -4578,9 +4194,7 @@ class private SqlDeleteMacro : OuterArgZeroMacro {
 class private SqlTryDeleteMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) return null
         return emit_delete_body(prog, call, rootT, true, false)
     }
 }
@@ -4589,9 +4203,7 @@ class private SqlTryDeleteMacro : OuterArgZeroMacro {
 class private SqlDeleteReturningMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) return null
         return emit_delete_body(prog, call, rootT, false, true)
     }
 }
@@ -4600,9 +4212,7 @@ class private SqlDeleteReturningMacro : OuterArgZeroMacro {
 class private SqlTryDeleteReturningMacro : OuterArgZeroMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
-            return null
-        }
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) return null
         return emit_delete_body(prog, call, rootT, true, true)
     }
 }
@@ -4612,9 +4222,7 @@ class private SqlTryDeleteReturningMacro : OuterArgZeroMacro {
 [macro_function]
 def private is_field_computed(field) : bool {
     let v = find_arg(field.annotation, "sql_computed")
-    if (v is tString) {
-        return !empty(v as tString)
-    }
+    if (v is tString) return !empty(v as tString)
     return false
 }
 
@@ -4677,7 +4285,7 @@ def private analyze_upsert_conflict_inner(var node : ExpressionPtr; rootT : Type
     // Tuple form: `tuple(_.A, _.B, ...)` parses as ExprMakeTuple.
     if (n is ExprMakeTuple) {
         var mkt = n as ExprMakeTuple
-        if (length(mkt.values) == 0) {
+        if (empty(mkt.values)) {
             macro_error(prog, at, "_sql_upsert: on_conflict tuple is empty")
             return false
         }
@@ -4737,7 +4345,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         return false
     }
     var mkTup = body as ExprMakeTuple
-    if (length(mkTup.values) == 0) {
+    if (empty(mkTup.values)) {
         macro_error(prog, at, "_sql_upsert: do_update is empty — pass at least one (Col=expr) pair")
         return false
     }
@@ -4761,8 +4369,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
     if (rootT != null && rootT.structType != null) {
         var st = rootT.structType
         var seenCols : table<string; bool>
-        for (i in range(length(recordNames))) {
-            let colName = recordNames[i]
+        for (colName in recordNames) {
             if (key_exists(seenCols, colName)) {
                 macro_error(prog, at, "_sql_upsert: duplicate do_update column \"{colName}\"")
                 return false
@@ -4802,12 +4409,8 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         let sqlCol = field_to_column_name(rootT, colName)
         var val = mkTup.values[i]
         let valSql = pred_to_sql(val, setQ, prog, at)
-        if (setQ.hadError) {
-            return false   // pred_to_sql (or deeper) emitted a macro_error
-        }
-        if (empty(valSql)) {
-            return false
-        }
+        // pred_to_sql emitted macro_error, OR returned "" without setting hadError
+        if (setQ.hadError || empty(valSql)) return false
         setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
     setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
@@ -4833,22 +4436,16 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
     let tableName = sql_table_name_from_type(rootT)
     // 1) on_conflict columns
     var conflictCols : array<string>
-    if (!analyze_upsert_conflict_inner(conflictE, rootT, conflictCols, prog, call.at)) {
-        return null
-    }
+    if (!analyze_upsert_conflict_inner(conflictE, rootT, conflictCols, prog, call.at)) return null
     // 2) do_update SET clauses (with upsertMode=true so `_excluded.Col` resolves)
     var setSqlClauses : array<string>
     var setBindExprs : array<ExpressionPtr>
-    if (!analyze_upsert_set_clause(doUpdateE, rootT, tableName, setSqlClauses, setBindExprs, prog, call.at)) {
-        return null
-    }
+    if (!analyze_upsert_set_clause(doUpdateE, rootT, tableName, setSqlClauses, setBindExprs, prog, call.at)) return null
     // 3) INSERT column list (non-computed only) — SQL-side names, positional bind indices.
     var nonComputedCols : array<string>
     var nRowBinds = 0
     for (f in st.fields) {
-        if (is_field_computed(f)) {
-            continue
-        }
+        if (is_field_computed(f)) continue
         nonComputedCols |> push(field_to_column_name(rootT, string(f.name)))
         nRowBinds++
     }
@@ -4915,9 +4512,7 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
 class private SqlUpsertMacro : OuterArgTwoMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_upsert_args(prog, call, rootT)) {
-            return null
-        }
+        if (!validate_outer_upsert_args(prog, call, rootT)) return null
         return emit_upsert_body(prog, call, rootT, false, false)
     }
 }
@@ -4926,9 +4521,7 @@ class private SqlUpsertMacro : OuterArgTwoMacro {
 class private SqlTryUpsertMacro : OuterArgTwoMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_upsert_args(prog, call, rootT)) {
-            return null
-        }
+        if (!validate_outer_upsert_args(prog, call, rootT)) return null
         return emit_upsert_body(prog, call, rootT, true, false)
     }
 }
@@ -4937,9 +4530,7 @@ class private SqlTryUpsertMacro : OuterArgTwoMacro {
 class private SqlUpsertReturningMacro : OuterArgTwoMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_upsert_args(prog, call, rootT)) {
-            return null
-        }
+        if (!validate_outer_upsert_args(prog, call, rootT)) return null
         return emit_upsert_body(prog, call, rootT, false, true)
     }
 }
@@ -4948,9 +4539,7 @@ class private SqlUpsertReturningMacro : OuterArgTwoMacro {
 class private SqlTryUpsertReturningMacro : OuterArgTwoMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_upsert_args(prog, call, rootT)) {
-            return null
-        }
+        if (!validate_outer_upsert_args(prog, call, rootT)) return null
         return emit_upsert_body(prog, call, rootT, true, true)
     }
 }

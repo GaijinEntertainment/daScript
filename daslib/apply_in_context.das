@@ -87,7 +87,7 @@ class AppendCondAnnotation : AstFunctionAnnotation {
     }
     if (!func.result.isVoid) {
       var resType = clone_type(func.result)
-      resType.flags &= ~TypeDeclFlags.constant
+      resType.flags.constant = false
       ctxFnArguments |> emplace_new <| qmacro_variable(resName, type<$t(resType)?>)
       ctxFnBlockList |> push(qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments)); }))
     } else {
@@ -100,7 +100,7 @@ class AppendCondAnnotation : AstFunctionAnnotation {
         $b(ctxFnBlockList)
       }
     }
-    ctxFn.moreFlags |= MoreFunctionFlags.pinvoke
+    ctxFn.moreFlags.pinvoke = true
     compiling_module() |> add_function(ctxFn)
 
     var fn = clone_function(func)

@@ -175,9 +175,7 @@ def node_text(node : xml_node; child_name : string; default_value : string = "")
     //! Returns the text content of the child element named *child_name*,
     //! or *default_value* if the child does not exist or has no text.
     let ch = child(node, child_name)
-    if (!ch.ok) {
-        return default_value
-    }
+    if (!ch.ok) return default_value
     return as_string(ch.text, default_value)
 }
 
@@ -185,9 +183,7 @@ def node_attr(node : xml_node; attr_name : string; default_value : string = "") 
     //! Returns the string value of attribute *attr_name*,
     //! or *default_value* if no such attribute exists.
     let a = attribute(node, attr_name)
-    if (!a.ok) {
-        return default_value
-    }
+    if (!a.ok) return default_value
     return as_string(a, default_value)
 }
 
@@ -504,13 +500,9 @@ def select_text(node : xml_node; xpath_query : string; default_value : string = 
     //! Runs an XPath query and returns the text content of the first
     //! matching node, or *default_value* if nothing matches.
     let result = select_node(node, xpath_query)
-    if (!result.ok) {
-        return default_value
-    }
+    if (!result.ok) return default_value
     let rn = result.node
-    if (rn.ok) {
-        return as_string(rn.text, default_value)
-    }
+    if (rn.ok) return as_string(rn.text, default_value)
     return default_value
 }
 
@@ -519,17 +511,11 @@ def select_value(node : xml_node; xpath_query : string; default_value : string =
     //! node. If the result is an attribute, returns its string value;
     //! if an element, returns its text content.
     let result = select_node(node, xpath_query)
-    if (!result.ok) {
-        return default_value
-    }
+    if (!result.ok) return default_value
     let ra = result.attribute
-    if (ra.ok) {
-        return as_string(ra, default_value)
-    }
+    if (ra.ok) return as_string(ra, default_value)
     let rn = result.node
-    if (rn.ok) {
-        return as_string(rn.text, default_value)
-    }
+    if (rn.ok) return as_string(rn.text, default_value)
     return default_value
 }
 
@@ -692,15 +678,11 @@ def from_XML(node : xml_node; anything : auto(TT)) {
         let txt = as_string(node.text, "")
         // Try name-based first, then int-based for @enum_as_int compatibility
         let nameResult = to_enum(type<TT -const>, txt, default<TT -const>)
-        if ("{nameResult}" == txt) {
-            return nameResult
-        }
+        if ("{nameResult}" == txt) return nameResult
         // Fall back to int-based matching
         let intVal = as_int(node.text, 0)
         for (e in type<TT -const>) {
-            if (int(e) == intVal) {
-                return e
-            }
+            if (int(e) == intVal) return e
         }
         return default<TT -const>
     } static_elif (typeinfo is_bitfield(anything)) {

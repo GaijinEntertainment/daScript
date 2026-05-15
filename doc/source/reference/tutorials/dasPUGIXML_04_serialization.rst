@@ -116,7 +116,7 @@ Bitfields serialize as their unsigned integer value:
    let perms = Permissions.read | Permissions.execute
    let xml_str = to_XML(perms, "permissions")
    let restored = from_XML(xml_str, type<Permissions>)
-   let has_read = uint(restored & Permissions.read) != 0u
+   let has_read = restored.read
    print("read: {has_read}\n")
    // read: true
 

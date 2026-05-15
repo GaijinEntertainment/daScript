@@ -34,7 +34,7 @@ class QsortMacro : AstCallMacro {
             var call = new ExprCall(name := "sort", at = expr.at)
             var tsa = new ExprCall(name := "temp_array", at = expr.at)
             emplace_new(tsa.arguments) <| clone_expression(expr.arguments[0])
-            tsa.genFlags |= ExprGenFlags.alwaysSafe
+            tsa.genFlags.alwaysSafe = true
             emplace(call.arguments, tsa)
             emplace_new(call.arguments) <| clone_expression(expr.arguments[1])
             return <- call

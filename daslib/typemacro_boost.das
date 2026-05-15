@@ -126,7 +126,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
             return false
         }
         var cls <- make_class(className, parentType.structType, compiling_module())
-        cls.flags &= ~StructureFlags.genCtor
+        cls.flags.genCtor = false
         cls.flags.privateStructure = true
         let cvtFnName = "{func.name}`cvt`arguments"
         var cvtFn = qmacro_function(cvtFnName) $(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
@@ -301,7 +301,7 @@ def public infer_template_types(passArgument : TypeDeclPtr; var args  : array<Ty
         }
     }
     var resT = clone_type(passArgument)
-    resT.flags &= ~TypeDeclFlags.ref
+    resT.flags.ref = false
     return <- resT
 }
 

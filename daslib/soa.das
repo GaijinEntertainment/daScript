@@ -166,7 +166,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function("[]") $(st : $t(stypeT); index : int const) {
             return SOA_INDEX()
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_length(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
@@ -175,7 +175,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function("length") $(st : $t(stypeT)) : int {
             return length(st.$f(firstFieldName))
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_any_named_call(st : StructurePtr; var stype : StructurePtr; var argT : TypeDeclPtr&; fnName, callName : string; argField : bool) : FunctionPtr {
@@ -192,7 +192,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function(fnName) $(var st : $t(stypeT); var arg : $t(argT)) : void {
             $b(bodyExprs)
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_erase(st : StructurePtr; var stype : StructurePtr) {
@@ -217,7 +217,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function(fnName) $(var st : $t(stypeT)) : void {
             $b(bodyExprs)
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_capacity(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
@@ -226,7 +226,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function("capacity") $(st : $t(stypeT)) : int {
             return capacity(st.$f(firstFieldName))
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_swap(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
@@ -239,7 +239,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var fn = qmacro_function("swap") $(var st : $t(stypeT); i : int const; j : int const) : void {
             $b(bodyExprs)
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_from_array(var st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
@@ -262,7 +262,7 @@ class SoaStructMacro : AstStructureAnnotation {
                 $b(bodyExprs)
             }
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
     def make_to_array(var st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
@@ -292,7 +292,7 @@ class SoaStructMacro : AstStructureAnnotation {
             }
             return <- result
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         return <- fn
     }
 }

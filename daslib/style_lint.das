@@ -30,6 +30,7 @@ module style_lint shared private
 //!   STYLE019 — nested min/max — use 'clamp(x, lo, hi)' from math module
 //!   STYLE020 — from_JV(v, type<T>, defV) on a scalar — use 'v ?? defV' (operator ?? from json_boost)
 //!   STYLE021 — table<string; JsonValue?> built by repeated insert — use 'var v = JV((k1=..., k2=...))'
+//!   STYLE022 — bitfield compound-bit-set/clear ('foo |= BfT.m' / 'foo &= ~BfT.m') — use field-assign 'foo.m = true' / 'foo.m = false'
 
 require daslib/ast_boost
 require strings
@@ -396,6 +397,159 @@ class StyleLintVisitor : AstVisitor {
                 let positive = (expr.op == "==" && cval) || (expr.op == "!=" && !cval)
                 let suggestion = positive ? "b" : "!b"
                 self->style_warning("STYLE018: redundant boolean comparison — use '{suggestion}' directly (drop the '{expr.op} {cval}')", expr.at)
+            }
+        }
+        // STYLE022: foo |= BfT.m  /  foo &= ~BfT.m  on a bitfield variable.
+        if (expr.op == "|=" || expr.op == "&=") {
+            self->check_style022_bitfield_set_clear(expr)
+        }
+        // STYLE023: int_cast(bf & BfT.m) !=/== 0  →  [!]bf.m
+        if (expr.op == "==" || expr.op == "!=") {
+            self->check_style023_bitfield_test(expr)
+        }
+    }
+
+    // --- STYLE022: bitfield-as-field compound-set/clear ---
+
+    def is_bitfield_value_type(t : TypeDecl?) : bool {
+        //! True for plain bitfield-typed expressions (not arrays of bitfield).
+        return t != null && t.baseType == Type.tBitfield && empty(t.dim)
+    }
+
+    def extract_single_bit_name(expr : Expression? const; bf_type : TypeDecl?) : string {
+        //! If `expr` resolves to a single named bit of `bf_type`, return its name; else "".
+        //! Accepts two shapes:
+        //!   - ExprField(value=ExprVar(BfTypeName), name="m") — common when running under
+        //!     lint policies (no_optimizations + no_infer_time_folding), which keep the
+        //!     source-level field access intact.
+        //!   - ExprConstBitfield(value=<single-bit mask>) — what regular compilation
+        //!     leaves after folding; map the mask back to the bit name via argNames.
+        if (expr == null) return ""
+        var inner = expr
+        if (inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value.subexpr)
+        }
+        if (inner == null) return ""
+        if (inner is ExprField) {
+            let f = inner as ExprField
+            if (f.value != null && f.value is ExprVar) return string(f.name)
+            return ""
+        }
+        if (inner is ExprConstBitfield && bf_type != null) {
+            let cb = inner as ExprConstBitfield
+            let v = uint64(cb.value)
+            // Single-bit mask: power of two, exactly one bit set.
+            if (v == 0ul || (v & (v - 1ul)) != 0ul) return ""
+            // Map bit index → argNames[index].
+            var idx = 0
+            var probe = v
+            while (probe > 1ul) {
+                probe = probe >> 1ul
+                idx++
+            }
+            if (idx < 0 || idx >= length(bf_type.argNames)) return ""
+            return string(bf_type.argNames[idx])
+        }
+        return ""
+    }
+
+    def is_zero_int_const(expr : Expression? const) : bool {
+        //! True for ExprConstInt/UInt/Int64/UInt64 whose value is zero. The lint
+        //! runner disables folding, so `0` / `0u` / `0l` / `0ul` literals stay as
+        //! distinct typed const nodes — we accept all four.
+        if (expr == null) return false
+        if (expr is ExprConstInt) return (expr as ExprConstInt.value) == 0
+        if (expr is ExprConstUInt) return (expr as ExprConstUInt.value) == 0u
+        if (expr is ExprConstInt64) return (expr as ExprConstInt64.value) == 0l
+        if (expr is ExprConstUInt64) return (expr as ExprConstUInt64.value) == 0ul
+        return false
+    }
+
+    def unwrap_int_like_cast(expr : Expression? const) : Expression? const {
+        //! Peel one int/uint/int64/uint64 single-arg call. Returns the inner
+        //! expression, or null if not such a cast.
+        if (expr == null || !(expr is ExprCall)) return null
+        let call = expr as ExprCall
+        if (call.func == null) return null
+        let name = string(call.func.name)
+        if ((name != "int" && name != "uint" && name != "int64" && name != "uint64") || length(call.arguments) != 1) return null
+        return call.arguments[0]
+    }
+
+    def check_style023_bitfield_test(expr : ExprOp2?) : void {
+        //! STYLE023: `int_cast(bf & BfT.bit) !=/== 0` collapses to `bf.bit` / `!bf.bit`.
+        //! Detect: one side is a typed zero constant; the other side is
+        //! `int|uint|int64|uint64(bf & SingleBit)` where `bf` is bitfield-typed
+        //! and `SingleBit` is a single named bit of the same bitfield.
+        let lhs = self->peel_ref2value_const(expr.left)
+        let rhs = self->peel_ref2value_const(expr.right)
+        let lzero = self->is_zero_int_const(lhs)
+        let rzero = self->is_zero_int_const(rhs)
+        if (lzero == rzero) return    // 0 == 0 and cast == cast both skipped
+        let cast_side = lzero ? rhs : lhs
+        let inner = self->unwrap_int_like_cast(cast_side)
+        if (inner == null) return
+        // inner must be `bf & SingleBit`. Peel ref2value, require ExprOp2 op="&".
+        var and_expr = inner
+        if (and_expr != null && and_expr is ExprRef2Value) {
+            and_expr = (and_expr as ExprRef2Value.subexpr)
+        }
+        if (and_expr == null || !(and_expr is ExprOp2)) return
+        let op2 = and_expr as ExprOp2
+        if (op2.op != "&" || op2.left == null || !self->is_bitfield_value_type(op2.left._type)) return
+        let bf_type = op2.left._type
+        let bit_name = self->extract_single_bit_name(op2.right, bf_type)
+        if (empty(bit_name)) return
+        let positive = expr.op == "!="    // !=0 means "the bit is set"
+        let suggestion = positive ? "bf.{bit_name}" : "!bf.{bit_name}"
+        self->style_warning("STYLE023: bitfield test via int-cast can be written directly — use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at)
+    }
+
+    def check_style022_bitfield_set_clear(expr : ExprOp2?) : void {
+        if (expr.left == null || !self->is_bitfield_value_type(expr.left._type)) return
+        let bf_type = expr.left._type
+        if (expr.op == "|=") {
+            // foo |= BfT.m  →  foo.m = true
+            let name = self->extract_single_bit_name(expr.right, bf_type)
+            if (empty(name)) return
+            self->style_warning("STYLE022: 'foo |= BfT.{name}' on a bitfield is the bit-set idiom; write 'foo.{name} = true' instead (bitfield-as-field assignment)", expr.at)
+        } elif (expr.op == "&=") {
+            // foo &= ~BfT.m  →  foo.m = false
+            // The folded form is ExprConstBitfield with the complement mask; the
+            // un-folded form is ExprOp1(~, ExprField). Cover both.
+            var inner = expr.right
+            if (inner != null && inner is ExprRef2Value) {
+                inner = (inner as ExprRef2Value.subexpr)
+            }
+            // ExprOp1(~, X): peel the operator, match a single bit on X.
+            if (inner != null && inner is ExprOp1) {
+                let op1 = inner as ExprOp1
+                if (op1.op != "~") return
+                let name = self->extract_single_bit_name(op1.subexpr, bf_type)
+                if (empty(name)) return
+                self->style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at)
+                return
+            }
+            // ExprConstBitfield: must be the complement of a single bit.
+            if (inner != null && inner is ExprConstBitfield) {
+                let cb = inner as ExprConstBitfield
+                let v = uint64(cb.value)
+                // Build the valid-bit mask for the bitfield width. Shifting by ≥ 64 is UB,
+                // so special-case bitfield64 (length(argNames) == 64) to ~0ul.
+                let n = uint64(length(bf_type.argNames))
+                let valid_mask = n >= 64ul ? ~0ul : ((1ul << n) - 1ul)
+                let complement = (~v) & valid_mask
+                // Single-bit complement: complement is a power of two.
+                if (complement == 0ul || (complement & (complement - 1ul)) != 0ul) return
+                var idx = 0
+                var probe = complement
+                while (probe > 1ul) {
+                    probe = probe >> 1ul
+                    idx++
+                }
+                if (idx < 0 || idx >= length(bf_type.argNames)) return
+                let name = string(bf_type.argNames[idx])
+                self->style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at)
             }
         }
     }

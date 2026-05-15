@@ -17,14 +17,14 @@ class TemplateMacro : AstFunctionAnnotation {
             errors := "stub function must have a result type"
             return false
         }
-        func.sideEffectFlags |= FunctionSideEffectFlags.userScenario
+        func.sideEffectFlags.userScenario = true
         for (arg in func.arguments) {
-            arg.flags |= VariableFlags.marked_used
+            arg.flags.marked_used = true
         }
         if (func.result.baseType == Type.tVoid) return true
         var resType = clone_type(func.result)
         if (!resType.flags.ref) {
-            resType.flags &= ~TypeDeclFlags.constant
+            resType.flags.constant = false
         }
         var qblk = qmacro_block() {
             panic("stub function called")

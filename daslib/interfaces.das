@@ -89,7 +89,7 @@ class ImplementsMacro : AstStructureAnnotation {
         let iface_get_name_func = "{st.name}`{iface_get_name}"
         // make class for the interface, remove 'interface' annotation
         var cls <- make_class(iface_class_name, parent, st._module)
-        cls.flags |= StructureFlags.privateStructure
+        cls.flags.privateStructure = true
         var iface_index = -1
         for (ann, ii in cls.annotations, count()) {
             if (ann.annotation.name == "interface") {

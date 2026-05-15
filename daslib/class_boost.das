@@ -33,10 +33,10 @@ class ClassMethodMacro : AstFunctionAnnotation {
         }
         var tt = new TypeDecl(baseType = Type.tStructure, structType = func.classParent)
         if (explicitConstClassMethod) {
-            tt.flags |= TypeDeclFlags.explicitConst
+            tt.flags.explicitConst = true
         }
         if (func.moreFlags.isConstClassMethod) {
-            tt.flags |= TypeDeclFlags.constant
+            tt.flags.constant = true
         }
         var vv <- qmacro_variable("self", type<$t(tt)>)
         emplace(func.arguments, vv, 0)

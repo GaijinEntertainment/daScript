@@ -50,7 +50,7 @@ class RemoveCallArgsMacro : AstFunctionAnnotation {
         if (empty(removeIndices)) return true
 
         for (arg in func.arguments) {
-            arg.flags |= VariableFlags.marked_used // to disable errors: unused function argument
+            arg.flags.marked_used = true // to disable errors: unused function argument
         }
 
         var fn = clone_function(func)

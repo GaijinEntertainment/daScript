@@ -2424,16 +2424,23 @@ namespace das
             SideEffects::none, "das_aot_enabled")
                 ->args({"context","at"});
         // bitfield
-        addExtern<DAS_BIND_FUN(__bit_set)>(*this, lib, "__bit_set",
+        // `__bit_set` has additional raw-integer overloads in aot.h (for handle-bound
+        // bitfield fields like Function::flags, which is uint32_t on the C++ side) —
+        // disambiguate the runtime binding to the Bitfield& variant explicitly.
+        using BitSetFn   = void(*)(Bitfield&,   Bitfield,   bool);
+        using BitSet8Fn  = void(*)(Bitfield8&,  Bitfield8,  bool);
+        using BitSet16Fn = void(*)(Bitfield16&, Bitfield16, bool);
+        using BitSet64Fn = void(*)(Bitfield64&, Bitfield64, bool);
+        addExtern<BitSetFn, static_cast<BitSetFn>(__bit_set)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set")
                 ->args({"value","mask","on"});
-        addExtern<DAS_BIND_FUN(__bit_set8)>(*this, lib, "__bit_set",
+        addExtern<BitSet8Fn, static_cast<BitSet8Fn>(__bit_set8)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set8")
                 ->args({"value","mask","on"});
-        addExtern<DAS_BIND_FUN(__bit_set16)>(*this, lib, "__bit_set",
+        addExtern<BitSet16Fn, static_cast<BitSet16Fn>(__bit_set16)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set16")
                 ->args({"value","mask","on"});
-        addExtern<DAS_BIND_FUN(__bit_set64)>(*this, lib, "__bit_set",
+        addExtern<BitSet64Fn, static_cast<BitSet64Fn>(__bit_set64)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set64")
                 ->args({"value","mask","on"});
         // platform and architecture

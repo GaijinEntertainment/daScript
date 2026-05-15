@@ -124,7 +124,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
             func_copy.arguments |> erase(i)
         }
         // func_copy.flags |= FunctionFlags exports
-        func_copy.flags |= FunctionFlags.generated
+        func_copy.flags.generated = true
         func_copy.annotations |> erase(anni)
         compiling_module() |> add_function(func_copy)
         var new_call = clone_expression(expr)

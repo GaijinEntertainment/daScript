@@ -124,6 +124,7 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF016 | ternary abs (`x < 0 ? -x : x`) | Low | use `math::abs(x)` (negabs `x < 0 ? x : -x` not flagged) |
 | PERF017 | `length(x) == 0` / `> 0` / `>= 1` etc. | Medium | use `empty(x)` / `!empty(x)`; avoids strlen on strings |
 | PERF018 | `for (i in range(length(arr))) { ... arr[i] ... }` (where `i` only indexes `arr`) | Medium | use `for (c in arr) { ... c ... }`; direct iteration drops the index |
+| PERF019 | `int(T.a) \| int(T.b)` on the same bitfield (or enum with `operator \|` overload) | Low | collapse to `int(T.a \| T.b)` — one cast instead of two. **Const-foldable forms only fire under lint policies** (`no_optimizations`/`no_infer_time_folding`); dastest validates runtime forms only. Enum-overload probe iterates `program_for_each_module` + `for_each_function(mod, "\|")`, cached per-enum-type on the visitor |
 
 ## Visitor gotchas
 

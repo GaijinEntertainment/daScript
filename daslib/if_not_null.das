@@ -41,7 +41,7 @@ class ApplyMacro : AstCallMacro {
             var fcall = expr.arguments[1] as ExprCall
             var vtype = clone_type(PTR._type)
             if (!PTR._type.flags.constant) {
-                vtype.flags |= TypeDeclFlags.removeConstant
+                vtype.flags.removeConstant = true
             }
             var ptrClone = clone_expression(PTR)
             var argClones : array<ExpressionPtr>
