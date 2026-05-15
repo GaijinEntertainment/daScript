@@ -677,6 +677,9 @@ namespace das {
 
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             return program;
+        } else {
+            // Serialization failed and the program changed, so set it for proper GC collection on exit.
+            parse_gc_collect.prog = program.get();
         }
 
         int err;
