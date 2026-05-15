@@ -15,6 +15,7 @@ require exchange
 require pipeline
 require patterns
 require report
+require ../common/parallel_workers.das
 
 
 // ── helpers ──────────────────────────────────────────────────────────
