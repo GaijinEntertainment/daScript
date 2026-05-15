@@ -136,6 +136,28 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-nav__install:hover { color: var(--bg); background: #f4b04a; }
 
+/* "N NEW" blog chip injected by files/blog-counter.js */
+.forge-nav__links a.forge-blog-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.forge-blog-chip {
+    display: inline-flex;
+    align-items: center;
+    min-width: 16px;
+    padding: 1px 6px;
+    border: 1px solid var(--amber);
+    border-radius: 3px;
+    color: var(--amber);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
 /* Logo mark */
 .forge-mark {
     display: flex;

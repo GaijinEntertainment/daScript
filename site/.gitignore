@@ -7,6 +7,7 @@ blog/feed.xml
 changelist.html
 news/
 files/news.json
+files/blog.json
 
 # Playground: vendored from web/ui/src/ for local-dev preview only.
 # CI rebuilds these from source on every publish. To preview locally:
