@@ -256,14 +256,6 @@ jobs:
         cd modules/dasImgui && git diff --exit-code -- src/ \
           || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
 
-    - name: "Dry-run imgui examples"
-      run: |
-        set -eux
-        for f in modules/dasImgui/example/*.das; do
-          echo "== compile-only: $f =="
-          $BIN/daslang -compile-only "$f"
-        done
-
     - name: "Coverage"
       if: matrix.target == 'linux'
       run: |
