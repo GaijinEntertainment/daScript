@@ -536,6 +536,19 @@ def main():
     (out / 'files' / 'news.json').write_text(
         json.dumps(top_news, indent=2), encoding='utf-8')
 
+    # 7. blog.json — drives the "N NEW" nav chip. baseline_date is the
+    #    date of the second-newest post: a first-time visitor (no
+    #    localStorage) sees exactly one post counted as new (the newest).
+    newest_date = posts[0].date if posts else '1970-01-01'
+    baseline_date = posts[1].date if len(posts) >= 2 else '1970-01-01'
+    blog_data = {
+        'newest_date': newest_date,
+        'baseline_date': baseline_date,
+        'posts': [{'slug': p.slug, 'date': p.date} for p in posts],
+    }
+    (out / 'files' / 'blog.json').write_text(
+        json.dumps(blog_data, indent=2), encoding='utf-8')
+
     print(f"built {len(posts)} posts, {len(news)} news entries → {out}/")
 
 

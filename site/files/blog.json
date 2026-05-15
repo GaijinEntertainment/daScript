@@ -1,0 +1,110 @@
+{
+  "newest_date": "2026-05-14",
+  "baseline_date": "2026-03-20",
+  "posts": [
+    {
+      "slug": "the-3-horseman",
+      "date": "2026-05-14"
+    },
+    {
+      "slug": "running-it-live",
+      "date": "2026-03-20"
+    },
+    {
+      "slug": "ai-friendly",
+      "date": "2026-03-06"
+    },
+    {
+      "slug": "we-can-has-dasilb",
+      "date": "2026-02-20"
+    },
+    {
+      "slug": "quality-of-life",
+      "date": "2026-01-22"
+    },
+    {
+      "slug": "templates-what",
+      "date": "2026-01-19"
+    },
+    {
+      "slug": "linq-that",
+      "date": "2025-10-08"
+    },
+    {
+      "slug": "how-to-edsl",
+      "date": "2025-06-05"
+    },
+    {
+      "slug": "gen2-syntax",
+      "date": "2025-05-04"
+    },
+    {
+      "slug": "zero-point-five",
+      "date": "2024-10-10"
+    },
+    {
+      "slug": "of-pipes-and-blocks",
+      "date": "2024-09-17"
+    },
+    {
+      "slug": "data-initialization",
+      "date": "2024-07-23"
+    },
+    {
+      "slug": "gc-in-the-wild",
+      "date": "2024-04-16"
+    },
+    {
+      "slug": "daslang-it-is",
+      "date": "2023-12-28"
+    },
+    {
+      "slug": "version-4",
+      "date": "2023-05-01"
+    },
+    {
+      "slug": "hectic",
+      "date": "2023-04-17"
+    },
+    {
+      "slug": "a-matter-of-multipliction",
+      "date": "2023-03-20"
+    },
+    {
+      "slug": "wake-up-and-test-the-damn-thing",
+      "date": "2023-02-25"
+    },
+    {
+      "slug": "pattern-matching",
+      "date": "2023-02-07"
+    },
+    {
+      "slug": "for-loop-noise",
+      "date": "2023-01-27"
+    },
+    {
+      "slug": "performance-and-aliasing",
+      "date": "2023-01-21"
+    },
+    {
+      "slug": "its-not-a-script",
+      "date": "2022-12-31"
+    },
+    {
+      "slug": "instruments",
+      "date": "2022-12-11"
+    },
+    {
+      "slug": "something-about-jit",
+      "date": "2022-11-20"
+    },
+    {
+      "slug": "better-safe",
+      "date": "2022-11-14"
+    },
+    {
+      "slug": "builtin-lock-check-md",
+      "date": "2022-11-13"
+    }
+  ]
+}
