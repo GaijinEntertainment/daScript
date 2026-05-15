@@ -2,7 +2,7 @@
 slug: dasimgui-widget-no-ident-form
 title: Can dasImgui `[widget]` calls drop the IDENT first-arg?
 created: 2026-05-14
-last_verified: 2026-05-14
+last_verified: 2026-05-15
 links: []
 ---
 
@@ -39,12 +39,27 @@ NOT:
 - `label_text("...")` — has `key` + `value`. Use `label_text((key = ..., value = ...))`.
 - `button("Save")` — interactive; explicit ident encouraged.
 
-## Limitations
+## Form 3 positional gate — what it accepts
 
-**Interpolated strings cannot use positional form.** `text("foo {x}")` parses to `string_builder("foo ", x)` (an `ExprOp2`), not `ExprConstString`. The positional-string gate only matches bare literals. For interpolation, use named-tuple no-ident form:
+The call_macro at `imgui_boost.das:222` matches `head is ExprConstString || head is ExprStringBuilder`. So:
 
-    text((text = "foo {x}"))     // ✓
-    text("foo {x}")              // ✗ error: first argument must be identifier, named-tuple, ...; got string_builder(...)
+    text("hello")                ✓ ExprConstString
+    text("foo {x}")              ✓ ExprStringBuilder (interpolation builds at parse time)
+    text("a" + "b")              ✗ ExprOp2 (binary +) — falls through to Form 1, treats `"a"` as IDENT, errors
+    text(LIPSUM)                 ✗ ExprVar — falls through to Form 1, treats LIPSUM as widget IDENT, errors
+    text(some_local)             ✗ same
+
+**Variables and string concatenations must use Form 2 (named-tuple):**
+
+    text((text = LIPSUM))                       // ✓ ExprVar inside named-tuple is fine
+    text((text = "a" + "b" + "c"))              // ✓ multi-line concat inside named-tuple
+    text((text = "{x} of {y}"))                 // ✓ but STYLE001 will flag this — use positional
+
+## STYLE001: positional is mandatory when it works (PR #33)
+
+After PR #33, `text((text = "literal"))` is a `macro_error` (50503) when the positional form would compile. Rule applies to single-arg narrative widgets where the named-tuple's lone field-value is `ExprConstString` or `ExprStringBuilder`. Concat / variable forms are unaffected. Per-file opt-out: `options _allow_imgui_legacy = true`.
+
+## Other limitations
 
 **Zero-arg widgets still require an explicit ident.** `separator()` / `spacing()` / `bullet()` / `new_line()` / zero-arg `same_line()` all error with `missing widget body — pass (named=arg, …)`. The `[widget]` macro hard-errors on empty argument list. Workaround: pass an explicit ident. Future work: special-case the macro to accept zero-arg.
 
