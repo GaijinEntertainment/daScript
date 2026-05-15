@@ -595,7 +595,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
 
         if (Rule(repeat = $v(rule_))) return <- gen |> generate_repeat(rule_)
 
-        if (Rule(subrule = $v(subrule))) abort("TODO: Suburle")
+        if (Rule(subrule = $v(subrule))) abort("TODO: Subrule")
 
         if (Rule(option = $v(rule_))) return <- gen |> generate_option(rule_)  // nolint:STYLE005 — last arm of match block
     }
