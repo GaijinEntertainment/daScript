@@ -42,7 +42,9 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/hv_static.lib)
 	ELSE()
 		find_package(OpenSSL REQUIRED)
-		SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv_static.a)
+		# libhv ≥ master renames hv_static's OUTPUT_NAME to "hv" on POSIX,
+		# so the installed file is libhv.a (was libhv_static.a in v1.3.4).
+		SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv.a)
 		SET(OPENSSL_LIBRARIES_FILES OpenSSL::Crypto OpenSSL::SSL)
 	ENDIF()
 
@@ -61,15 +63,22 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		-DOPENSSL_LIBRARIES="${OPENSSL_CRYPTO_LIBRARY};${OPENSSL_SSL_LIBRARY}"
 	)
 	IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+		IF(MSVC)
+			SET(_HV_ASAN_FLAG "/fsanitize=address")
+		ELSE()
+			SET(_HV_ASAN_FLAG "-fsanitize=address")
+		ENDIF()
 		LIST(APPEND HV_CMAKE_FLAGS
-			"-DCMAKE_C_FLAGS=/fsanitize=address"
-			"-DCMAKE_CXX_FLAGS=/fsanitize=address"
+			"-DCMAKE_C_FLAGS=${_HV_ASAN_FLAG}"
+			"-DCMAKE_CXX_FLAGS=${_HV_ASAN_FLAG}"
 		)
 	ENDIF()
+	# TODO: switch back to ithewei/libhv upstream tag once
+	# https://github.com/ithewei/libhv/pull/835 is merged.
 	ExternalProject_Add(
 		LIBHV
-		URL https://github.com/ithewei/libhv/archive/refs/tags/v1.3.4.tar.gz
-		URL_HASH SHA256=f0a9a197f90da55cc3ff104f9c7a27cc927f117b6c18613c3292726068588e10
+		URL https://github.com/aleksisch/libhv/archive/343437b72fbd0f348abb168d61fe7f1c6c4f4d20.tar.gz
+		URL_HASH SHA256=1b809d55dc1a637aafecb25e717c4ab302a6733390f43b32244976d6583cd866
 		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 		PREFIX ${CMAKE_CURRENT_BINARY_DIR}/libhv
 		CMAKE_ARGS ${HV_CMAKE_FLAGS}
