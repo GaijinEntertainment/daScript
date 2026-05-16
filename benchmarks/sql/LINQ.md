@@ -87,13 +87,19 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 | count_aggregate | `where → count` | 5 | 5 | parity (same counter loop) |
 | chained_where | `where → where → count` | 17 | 8 | **2.1× faster** (fuses chained wheres into single `&&` predicate) |
 | select_count | `select → count` | 15 | 2 | **7.5× faster** (counter lane ignores projection; no array materialization) |
-| to_array_filter | `where → select → to_array` | 11 | 13 | ~18% slower (explicit loop vs comprehension lowering) |
+| to_array_filter | `where → select → to_array` | 11 | 11 | parity (after `each(<array>)` peel + reserve + workhorse `push`) |
 
 Shapes outside Phase 2A scope now compile to plain linq (`m3f ≈ m3`). This is an intentional regression vs the historical `_old_fold` numbers — Boris's call ("we let it fall through unfolded, and we see performance issues. im ok being slower until we fix") as the forcing function for Phase 2B+. The previous "m3f = m3f_old (identical by construction)" baseline assumed `_fold` would dispatch to `_old_fold` on the unmatched path; Phase 2A drops that dispatch.
 
-### Why `to_array_filter` regressed
+### Three small things that closed the to_array_filter gap
 
-Comprehensions `[for (it in src) where p; expr]` lower through the compiler's dedicated `ExprArrayComprehension` path, which appears to compose more aggressively with array growth than an emitted-by-macro explicit loop with `static_if (is_workhorse) var val = expr; arr.emplace(val)`. The 18% gap is small relative to the 2-7× wins elsewhere; Phase 2B can profile and tune (likely pre-reserving the result array or switching to `push` for workhorse).
+The first cut was 18% slower than the comprehension. Three independent fixes brought it to parity:
+
+1. **Workhorse decision at macro time, not runtime.** The first emission used `static_if (typeinfo is_workhorse(projection))` inside the qmacro so the compiler picked copy- vs move-init. The projection's `_type` is already resolved when the planner runs, so the macro now reads `projection._type.isWorkhorseType` directly and emits exactly one branch — less AST, no static_if to fold away.
+2. **Pre-reserve when the source has a known length.** ExprArrayComprehension lowering reserves the result array to the source's length to avoid growth reallocs; the explicit loop has to do the same explicitly. The planner emits `acc |> reserve(length(src))` when the source isn't an iterator.
+3. **Peel `each(<array>)` at macro time.** The benchmark source `each(arr)` reports as `iterator<T>`, so the reserve from (2) wouldn't fire. The planner now detects `each(<expr>)` where the inner expression has length and unwraps it — the emitted loop iterates the array directly. `for (it in arr)` and `for (it in each(arr))` yield the same element refs; the wrapper iterator is incidental in fold context.
+
+A fourth simplification dropped the intermediate `var val = projection; emplace(val)` for workhorse types — comprehension lowering pushes the projection expression directly, so the planner now emits `acc |> push(projection)` in that case (no temp binding). Non-workhorse projections still need the bind-then-emplace dance because `<-` is a statement, not an expression.
 
 ## Operator-coverage checklist (parity tests)
 

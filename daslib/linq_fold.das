@@ -530,6 +530,18 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // with a plain for-loop. Returns null for anything else — caller falls through unfolded.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
+    // Peel `each(<array>)` so the emitted loop iterates the array directly and the
+    // array-lane reserve below has a length to use. Iteration semantics are unchanged —
+    // `for (it in each(arr))` and `for (it in arr)` yield the same element refs.
+    if (top is ExprCall) {
+        var topCall = top as ExprCall
+        if (topCall.func != null && topCall.func.name == "each"
+                && topCall.arguments |> length == 1
+                && topCall.arguments[0]._type != null
+                && !topCall.arguments[0]._type.isIterator) {
+            top = topCall.arguments[0]
+        }
+    }
     let lastName = calls.back()._1.name
     if (lastName != "count" && lastName != "where_" && lastName != "select") return null
     let counterLane = lastName == "count"
@@ -581,16 +593,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     } else {
         // array lane
         if (projection != null) {
-            // Pick copy- vs move-init at macro time using the projection's resolved type.
-            // Workhorse values copy cheaply; non-workhorse must move out of the temporary
-            // returned by the projection. Mirrors the `_old_fold` `fold_select_where`
-            // shape for parity (intermediate `val` binding then emplace).
+            // Workhorse projections copy cheaply — push the expression directly with no
+            // intermediate binding (matches ExprArrayComprehension lowering). Non-workhorse
+            // values must move out of the temporary returned by the projection, which `<-`
+            // can only do via an intermediate `var v` and then `emplace(v)`.
             let workhorseProj = projection._type != null && projection._type.isWorkhorseType
             var perElem : Expression?
             if (workhorseProj) {
-                perElem = qmacro_block() {
-                    var $i(valName) = $e(projection)
-                    $i(accName) |> emplace($i(valName))
+                perElem = qmacro_expr() {
+                    $i(accName) |> push($e(projection))
                 }
             } else {
                 perElem = qmacro_block() {
@@ -631,6 +642,10 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         }, $e(topExpr)))
     } else {
         let isIter = expr._type.isIterator
+        // Pre-reserve the accumulator to the source's length when the source has a known
+        // length (array, table, range — anything that isn't an iterator). Avoids realloc
+        // walks during growth; matches what ExprArrayComprehension lowering does.
+        let sourceHasLength = top._type != null && !top._type.isIterator
         if (isIter) {
             res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
                 var $i(accName) : array<$t(elementType)>
@@ -638,6 +653,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                     $e(loopBody)
                 }
                 return <- $i(accName).to_sequence_move()
+            }, $e(topExpr)))
+        } elif (sourceHasLength) {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+                var $i(accName) : array<$t(elementType)>
+                $i(accName) |> reserve(length($i(srcName)))
+                for ($i(itName) in $i(srcName)) {
+                    $e(loopBody)
+                }
+                return <- $i(accName)
             }, $e(topExpr)))
         } else {
             res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
