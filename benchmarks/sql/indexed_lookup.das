@@ -34,6 +34,18 @@ def run_m3(b : B?; n : int) {
     }
 }
 
+// --- m3f_old: pre-rewrite baseline fold ---
+def run_m3f_old(b : B?; n : int) {
+    let arr <- fixture_array(n)
+    let key = n / 2
+    b |> run("m3f_old_array_fold/{n}") {
+        let c = _old_fold(each(arr)._where(_.id == key).count())
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 // --- m3f: array LINQ folded into a single fused pass ---
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -47,16 +59,21 @@ def run_m3f(b : B?; n : int) {
 }
 
 [benchmark]
-def indexed_lookup_1m_m1(b : B?) {
-    run_m1(b, 1000000)
+def indexed_lookup_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]
-def indexed_lookup_1m_m3(b : B?) {
-    run_m3(b, 1000000)
+def indexed_lookup_m3(b : B?) {
+    run_m3(b, 100000)
 }
 
 [benchmark]
-def indexed_lookup_1m_m3f(b : B?) {
-    run_m3f(b, 1000000)
+def indexed_lookup_m3f_old(b : B?) {
+    run_m3f_old(b, 100000)
+}
+
+[benchmark]
+def indexed_lookup_m3f(b : B?) {
+    run_m3f(b, 100000)
 }

@@ -13,4 +13,5 @@ and pattern matching.
    generated/functional.rst
    generated/linq.rst
    generated/linq_boost.rst
+   generated/linq_fold.rst
    generated/match.rst
