@@ -911,7 +911,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
 
 // ── JSON-RPC dispatcher ──────────────────────────────────────────────
 
-def dispatch_one(req : jsonrpc::ParsedRequest) : string {
+def dispatch_one(req : jsonrpc::ParsedRequest; body : string) : string {
     // Malformed entry — parser already built the envelope. Notifications skip the wire.
     if (!empty(req.error_envelope)) {
         if (!req.is_notification) log_error(req.error_envelope)
@@ -919,7 +919,7 @@ def dispatch_one(req : jsonrpc::ParsedRequest) : string {
     }
     let id_json = req.id_str
     let method = req.method
-    log_request(method, "")
+    log_request(method, body)
     let t0 = get_clock()
     var result : string
     if (method == "initialize") {
@@ -946,12 +946,12 @@ def dispatch_jsonrpc(body : string) : string {
         log_error(pb.framing_error)
         return pb.framing_error
     }
-    if (!pb.is_batch) return dispatch_one(pb.requests[0])
+    if (!pb.is_batch) return dispatch_one(pb.requests[0], body)
     // §6 batch: collect non-empty per-entry responses, wrap as JSON array; "" if all-notifications.
     var parts : array<string>
     parts |> reserve(length(pb.requests))
     for (req in pb.requests) {
-        let r = dispatch_one(req)
+        let r = dispatch_one(req, body)
         if (!empty(r)) parts |> push(r)
     }
     if (empty(parts)) return ""

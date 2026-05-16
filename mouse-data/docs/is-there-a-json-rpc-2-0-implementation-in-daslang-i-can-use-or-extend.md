@@ -2,7 +2,7 @@
 slug: is-there-a-json-rpc-2-0-implementation-in-daslang-i-can-use-or-extend
 title: Is there a JSON-RPC 2.0 implementation in daslang I can use or extend?
 created: 2026-05-16
-last_verified: 2026-05-15
+last_verified: 2026-05-16
 links: []
 ---
 

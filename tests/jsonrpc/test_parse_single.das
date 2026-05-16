@@ -93,7 +93,7 @@ def test_params_lifetime_survives_parser_return(t : T?) {
     t |> success(find(re, "\"a\"") >= 0, "field 'a' present in re-serialized params")
     t |> success(find(re, "\"hello\"") >= 0, "string value 'hello' present")
     t |> success(find(re, "[1,2,3]") >= 0, "nested array present")
-    // Direct field access through the smart_ptr — confirms the variant data is live.
+    // Direct field access through the gc-tracked pointer — confirms the variant data is live.
     t |> success(req.params.value is _object, "params is still an _object after parser return")
 }
 

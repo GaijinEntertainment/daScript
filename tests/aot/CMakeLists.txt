@@ -249,6 +249,9 @@ FILE(GLOB AOT_JOBQUE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tes
 # AOT for json test files
 FILE(GLOB AOT_JSON_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/json/*.das")
 
+# AOT for jsonrpc test files
+FILE(GLOB AOT_JSONRPC_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/jsonrpc/*.das")
+
 # AOT for linq test files
 FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/linq/*.das")
 # Exclude module files (they are compiled via DAS_AOT_LIB below) and
@@ -528,6 +531,10 @@ add_custom_target(test_aot_json)
 SET(JSON_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_JSON_FILES}" JSON_AOT_GENERATED_SRC test_aot_json daslang)
 
+add_custom_target(test_aot_jsonrpc)
+SET(JSONRPC_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_JSONRPC_FILES}" JSONRPC_AOT_GENERATED_SRC test_aot_jsonrpc daslang)
+
 add_custom_target(test_aot_linq)
 SET(LINQ_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LINQ_FILES}" LINQ_AOT_GENERATED_SRC test_aot_linq daslang)
@@ -737,6 +744,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${INTERFACES_AOT_GENERATED_SRC}
     ${JOBQUE_AOT_GENERATED_SRC}
     ${JSON_AOT_GENERATED_SRC}
+    ${JSONRPC_AOT_GENERATED_SRC}
     ${LINQ_AOT_GENERATED_SRC}
     ${LINQ_MODULES_AOT_GENERATED_SRC}
     ${MACRO_CALL_AOT_GENERATED_SRC}
@@ -788,7 +796,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_gc
     test_aot_handle_types test_aot_hash_map
     test_aot_interfaces
-    test_aot_jobque test_aot_json
+    test_aot_jobque test_aot_json test_aot_jsonrpc
     test_aot_linq test_aot_linq_modules
     test_aot_macro_call
     test_aot_match
