@@ -3,14 +3,18 @@ options persistent_heap
 
 require _common public
 
-let THRESHOLD = 500
+// _select(_.brand) |> distinct() |> to_array — distinct values then materialize.
+// SQL: SELECT DISTINCT brand FROM Cars — engine builds a hashset.
+// Array variants must materialize a set/dedup before producing results.
+// (sqlite_linq's `distinct() |> count()` form raises a not-implemented error
+// for `COUNT(DISTINCT col)`; we measure the materialized distinct set instead.)
+// Expected length: BRAND_COUNT (5).
 
-// --- m1: _sql over :memory: ---
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let rows <- _sql(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD))
+            let rows <- _sql(db |> select_from(type<Car>) |> _select(_.brand) |> distinct())
             if (empty(rows)) {
                 b->failNow()
             }
@@ -18,33 +22,30 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-// --- m3: array LINQ (materializing intermediate arrays) ---
 def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
-        let rows <- (arr |> _where(_.price > THRESHOLD))
+        let rows <- (arr |> _select(_.brand) |> distinct())
         if (empty(rows)) {
             b->failNow()
         }
     }
 }
 
-// --- m3f_old: pre-rewrite baseline fold ---
 def run_m3f_old(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_old_array_fold/{n}", n) {
-        let rows <- _old_fold(each(arr)._where(_.price > THRESHOLD).to_array())
+        let rows <- _old_fold(each(arr)._select(_.brand).distinct().to_array())
         if (empty(rows)) {
             b->failNow()
         }
     }
 }
 
-// --- m3f: array LINQ folded into a single fused pass ---
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
-        let rows <- _fold(each(arr)._where(_.price > THRESHOLD).to_array())
+        let rows <- _fold(each(arr)._select(_.brand).distinct().to_array())
         if (empty(rows)) {
             b->failNow()
         }
@@ -52,21 +53,21 @@ def run_m3f(b : B?; n : int) {
 }
 
 [benchmark]
-def select_where_m1(b : B?) {
+def distinct_count_m1(b : B?) {
     run_m1(b, 100000)
 }
 
 [benchmark]
-def select_where_m3(b : B?) {
+def distinct_count_m3(b : B?) {
     run_m3(b, 100000)
 }
 
 [benchmark]
-def select_where_m3f_old(b : B?) {
+def distinct_count_m3f_old(b : B?) {
     run_m3f_old(b, 100000)
 }
 
 [benchmark]
-def select_where_m3f(b : B?) {
+def distinct_count_m3f(b : B?) {
     run_m3f(b, 100000)
 }

@@ -63,6 +63,7 @@ require daslib/fuzzer
 require daslib/match
 require daslib/linq
 require daslib/linq_boost
+require daslib/linq_fold
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 require daslib/macro_boost
@@ -969,6 +970,12 @@ def document_module_linq_boost(root : string) {
     document("Boost module for LINQ", mod, "linq_boost.rst", groups)
 }
 
+def document_module_linq_fold(root : string) {
+    var mod = find_module("linq_fold")
+    var groups : array<DocGroup>
+    document("LINQ fold macros (_fold / _old_fold)", mod, "linq_fold.rst", groups)
+}
+
 def document_module_command_line(root : string) {
     var mod = find_module("command_line")
     var groups <- array<DocGroup>(
@@ -1653,6 +1660,7 @@ def main {
     // document_module_linked_list(root)         // spoof template, not documentable
     document_module_linq(root)
     document_module_linq_boost(root)
+    document_module_linq_fold(root)
     document_module_lint(root)
     // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
     // document_module_live(root)                  // uses multiple_contexts
