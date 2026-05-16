@@ -149,3 +149,138 @@ def public collect_labels(expr : ExpressionPtr) {
     return <- res
 }
 
+[macro_function]
+def public has_sideeffects(expr : Expression?) : bool {
+    //! Conservative side-effect detection. Returns true when the expression has — or
+    //! might have — side effects. Returns false ONLY when provably pure (no function
+    //! calls, no heap allocation, no container mutation).
+    //!
+    //! Intended for macro-time elision of discardable evaluations.
+    //! Callers treat false as a promise; true is the safe default — when in doubt, true.
+    // null / compiler-tagged-pure / variable reads / constant literals — leaf, safe.
+    if (expr == null || expr.flags.noSideEffects
+            || expr is ExprVar
+            || expr is ExprConstInt || expr is ExprConstInt8 || expr is ExprConstInt16
+            || expr is ExprConstInt64 || expr is ExprConstUInt || expr is ExprConstUInt8
+            || expr is ExprConstUInt16 || expr is ExprConstUInt64 || expr is ExprConstFloat
+            || expr is ExprConstDouble || expr is ExprConstBool || expr is ExprConstString
+            || expr is ExprConstPtr || expr is ExprConstRange || expr is ExprConstURange
+            || expr is ExprConstRange64 || expr is ExprConstURange64
+            || expr is ExprConstEnumeration || expr is ExprConstBitfield) return false
+    // Member access — recurse into operand.
+    if (expr is ExprField) return has_sideeffects((expr as ExprField).value)
+    if (expr is ExprSafeField) return has_sideeffects((expr as ExprSafeField).value)
+    if (expr is ExprSwizzle) return has_sideeffects((expr as ExprSwizzle).value)
+    // Pointer / reference artifacts.
+    if (expr is ExprRef2Value) return has_sideeffects((expr as ExprRef2Value).subexpr)
+    if (expr is ExprRef2Ptr) return has_sideeffects((expr as ExprRef2Ptr).subexpr)
+    if (expr is ExprPtr2Ref) return has_sideeffects((expr as ExprPtr2Ref).subexpr)
+    if (expr is ExprAddr) return false
+    // Type / variant checks.
+    if (expr is ExprIs) return has_sideeffects((expr as ExprIs).subexpr)
+    if (expr is ExprIsVariant) return has_sideeffects((expr as ExprIsVariant).value)
+    if (expr is ExprAsVariant) return has_sideeffects((expr as ExprAsVariant).value)
+    if (expr is ExprSafeAsVariant) return has_sideeffects((expr as ExprSafeAsVariant).value)
+    // Cast — recurse.
+    if (expr is ExprCast) return has_sideeffects((expr as ExprCast).subexpr)
+    // Compile-time meta.
+    if (expr is ExprTypeInfo || expr is ExprTypeDecl || expr is ExprTag) return false
+    // Subscripts.
+    if (expr is ExprAt) {
+        let at_e = expr as ExprAt
+        // tables auto-insert on missing key — unsafe; arrays/strings safe (read-only).
+        if (at_e.subexpr == null || at_e.subexpr._type == null
+                || at_e.subexpr._type.isGoodTableType) return true
+        return has_sideeffects(at_e.subexpr) || has_sideeffects(at_e.index)
+    }
+    if (expr is ExprSafeAt) {
+        let sat = expr as ExprSafeAt
+        return has_sideeffects(sat.subexpr) || has_sideeffects(sat.index)
+    }
+    // Null coalescing.
+    if (expr is ExprNullCoalescing) {
+        let nc = expr as ExprNullCoalescing
+        return has_sideeffects(nc.subexpr) || has_sideeffects(nc.defaultValue)
+    }
+    // String builder — string heap allocation is no-op by compiler; recurse into operands.
+    if (expr is ExprStringBuilder) {
+        let sb = expr as ExprStringBuilder
+        for (e in sb.elements) {
+            if (has_sideeffects(e)) return true
+        }
+        return false
+    }
+    // key_exists is a pure container read.
+    if (expr is ExprKeyExists) {
+        let ke = expr as ExprKeyExists
+        for (a in ke.arguments) {
+            if (has_sideeffects(a)) return true
+        }
+        return false
+    }
+    // Function-call-shaped expressions: ExprCall (regular call) and ExprOp1/ExprOp2/ExprOp3
+    // (operators, which also resolve to a function). All carry a resolved `func` field
+    // when typing completed. But the typer sometimes leaves `func` null on operator
+    // expressions (e.g. after partial constant folding), so we also keep an op-name
+    // allowlist for the common pure operators on workhorse types — that bypasses
+    // resolution-timing artifacts. `/` and `%` stay UNSAFE (div-by-zero panic; design
+    // decision). Compound-assignment ops are not in the allowlist (mutation).
+    //
+    // `is`/`as` on handled types is EXACT-rtti (see CLAUDE.md), so each shape needs its
+    // own branch — can't cast ExprOp2 to ExprCallFunc even though the C++ class inherits.
+    if (expr is ExprOp1) {
+        let e1 = expr as ExprOp1
+        if (!is_safe_op1(e1.op) && func_has_sideeffects(e1.func)) return true
+        return has_sideeffects(e1.subexpr)
+    }
+    if (expr is ExprOp2) {
+        let e2 = expr as ExprOp2
+        // Unsafe: division/modulo (div-by-zero panic, design decision); or op not in the
+        // safe allowlist AND the resolved func indicates side effects. The allowlist also
+        // bypasses func==null artifacts from partial folding.
+        if (e2.op == "/" || e2.op == "%"
+                || (!is_safe_op2(e2.op) && func_has_sideeffects(e2.func))) return true
+        return has_sideeffects(e2.left) || has_sideeffects(e2.right)
+    }
+    if (expr is ExprOp3) {
+        let e3 = expr as ExprOp3
+        // ExprOp3 is the only ternary `?:` in daslang — pure if operands pure.
+        return has_sideeffects(e3.subexpr) || has_sideeffects(e3.left) || has_sideeffects(e3.right)
+    }
+    if (expr is ExprCall) {
+        let ec = expr as ExprCall
+        if (func_has_sideeffects(ec.func)) return true
+        for (a in ec.arguments) {
+            if (has_sideeffects(a)) return true
+        }
+        return false
+    }
+    // Default: unknown → unsafe.
+    return true
+}
+
+[macro_function]
+def private func_has_sideeffects(f : Function?) : bool {
+    //! True when calling `f` may have side effects. Allowlists builtins
+    //! (`flags.builtIn`) without `knownSideEffects` or `unsafeOperation`.
+    return (f == null || !f.flags.builtIn
+        || f.flags.knownSideEffects || f.flags.unsafeOperation)
+}
+
+[macro_function]
+def private is_safe_op1(op : das_string) : bool {
+    //! Unary operators that are pure on workhorse types — no overflow trap, no mutation.
+    //! Excludes `++` / `--` (mutation).
+    return op == "-" || op == "!" || op == "~" || op == "+"
+}
+
+[macro_function]
+def private is_safe_op2(op : das_string) : bool {
+    //! Binary operators that are pure on workhorse types. Excludes `/`, `%` (div-by-zero
+    //! panic — design decision) and all compound-assignment ops (mutation).
+    return (op == "+" || op == "-" || op == "*"
+        || op == "==" || op == "!=" || op == "<" || op == "<=" || op == ">" || op == ">="
+        || op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>"
+        || op == "&&" || op == "||")
+}
+

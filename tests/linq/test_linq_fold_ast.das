@@ -430,6 +430,26 @@ def target_select_count_fold() : int {
     return _fold(each([1, 2, 3, 4, 5])._select(_ * 2).count())
 }
 
+var g_select_count_proj_hits = 0
+
+def side_effect_select_proj(x : int) : int {
+    g_select_count_proj_hits ++
+    return x * 2
+}
+
+[export, marker(no_coverage)]
+def target_select_count_fold_impure() : int {
+    return _fold(each([1, 2, 3, 4, 5])._select(side_effect_select_proj(_)).count())
+}
+
+// `each(range(...))` — argument is a `range`, not an array. peel_each must NOT fire
+// here; we'd otherwise replace the iterator-yielding each call with the raw range
+// and downstream length-shortcut / reserve-by-length would silently misbehave.
+[export, marker(no_coverage)]
+def target_each_range_count() : int {
+    return _fold(each(range(10))._where(_ > 5).count())
+}
+
 // ── Tests: `_fold` Phase-2A loop emission ──────────────────────────────
 // Phase-2A `_fold` emits explicit for-loops inside an `invoke($block, $src)` wrapper
 // (no `ExprArrayComprehension` nodes). Each test asserts the invoke wrapper exists
@@ -615,4 +635,172 @@ def test_select_count_fold_result(t : T?) {
     t |> run("select _count _fold produces correct count (projection does not affect count value)") @(t : T?) {
         t |> equal(target_select_count_fold(), 5)
     }
+}
+
+// ── Counter-lane projection elision (has_sideeffects integration) ──────
+// For pure counter chains (`_select(_ * 2).count()`, bare `.count()`, etc.) on
+// length-supporting sources, the planner emits a `length(source)` shortcut and
+// the for-loop is dropped entirely. For impure projections (function call w/
+// side effects), the per-element loop is preserved with the discardable bind.
+
+// Returns the number of ExprLet/ExprFor statements in the counter-lane invoke's
+// inner block. Pure shortcut: `[var src, return length(src)]` → 0 for-loops.
+// Impure loop: `[var src, var acc=0, for {...}, return acc]` → 1 for-loop.
+def count_inner_for_loops(body_expr : Expression?) : int {
+    if (!(body_expr is ExprInvoke)) return -1
+    let inv = body_expr as ExprInvoke
+    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return -1
+    let mb = inv.arguments[0] as ExprMakeBlock
+    let outer = mb._block as ExprBlock
+    if (outer == null) return -1
+    var n = 0
+    for (stmt in outer.list) {
+        if (stmt is ExprFor) {
+            n ++
+        }
+    }
+    return n
+}
+
+// Returns the number of stmts in the for-body, or -1 if no for loop exists.
+def count_for_body_stmts(body_expr : Expression?) : int {
+    if (!(body_expr is ExprInvoke)) return -1
+    let inv = body_expr as ExprInvoke
+    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return -1
+    let mb = inv.arguments[0] as ExprMakeBlock
+    let outer = mb._block as ExprBlock
+    if (outer == null) return -1
+    for (stmt in outer.list) {
+        if (stmt is ExprFor) {
+            let fe = stmt as ExprFor
+            let fbody = fe.body as ExprBlock
+            if (fbody == null) return -1
+            return length(fbody.list)
+        }
+    }
+    return -1
+}
+
+[test]
+def test_pure_projection_uses_length_shortcut(t : T?) {
+    // `_select(_ * 2).count()` on a length-supporting source should collapse to
+    // `length(source)` — no for-loop emitted at all.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 0, "pure select-count must emit length() shortcut (no for loop)")
+    }
+}
+
+[test]
+def test_bare_count_uses_length_shortcut(t : T?) {
+    // Bare `.count()` on an array source should also use the length shortcut.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 0, "bare count on length-supporting source must use length() shortcut")
+    }
+}
+
+[test]
+def test_impure_projection_keeps_bind(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_count_fold_impure)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected counter-lane invoke wrapper")
+        let n = count_for_body_stmts(body_expr)
+        t |> equal(n, 2, "impure projection should preserve vfinal bind (for-body has bind + ++acc)")
+    }
+}
+
+// ── peel_each invariant: each(<array>) must always be peeled ──────────
+// The planner's `peel_each` helper unwraps `each(x)` regardless of x's type so
+// the emitted block sees the underlying container directly. Without this, the
+// length() shortcut would never fire (each returns an iterator, which has no
+// length) and array-lane reserve would emit against the iterator wrapper.
+
+// Returns the second arg of the invoke (the source expression passed in). If
+// it's still an ExprCall to `each`, peel didn't run.
+def invoke_source_is_each_wrapped(body_expr : Expression?) : bool {
+    if (!(body_expr is ExprInvoke)) return false
+    let inv = body_expr as ExprInvoke
+    if (length(inv.arguments) < 2 || !(inv.arguments[1] is ExprCall)) return false
+    let src_call = inv.arguments[1] as ExprCall
+    if (src_call.func == null) return false
+    return (src_call.func.name == "each"
+        || (src_call.func.fromGeneric != null && src_call.func.fromGeneric.name == "each"))
+}
+
+[test]
+def test_peel_each_on_array_source(t : T?) {
+    // Sanity: target_select_count_fold uses `each([1,2,3,4,5])`. After peel, the
+    // invoke wrapper must NOT receive an each-wrapped source.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> success(!invoke_source_is_each_wrapped(body_expr),
+            "peel_each must unwrap each(array) at macro time")
+    }
+}
+
+[test]
+def test_peel_each_on_bare_count(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> success(!invoke_source_is_each_wrapped(body_expr),
+            "peel_each must unwrap each(array) at macro time")
+    }
+}
+
+// Negative case: `each(range(...))` argument is an iterator-yielding range, not an
+// array. peel_each must NOT fire — peeling would drop the each call and put the raw
+// range in source position; the downstream length-shortcut and reserve hints would
+// then misbehave on a non-indexable source.
+[test]
+def test_peel_each_skips_non_array_source(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_each_range_count)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> success(invoke_source_is_each_wrapped(body_expr),
+            "peel_each must keep each(range) wrapper — only arrays may be peeled")
+    }
+}
+
+[test]
+def test_target_each_range_count_runs(t : T?) {
+    // Behavioral: ensure the iterator-source chain still compiles and produces the
+    // expected count. range(10) → [0,1,2,3,4,5,6,7,8,9]; filter > 5 → 4 elements.
+    t |> equal(target_each_range_count(), 4)
 }
