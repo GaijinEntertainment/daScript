@@ -612,7 +612,7 @@ def test_count_fold_result(t : T?) {
 
 [test]
 def test_select_count_fold_result(t : T?) {
-    t |> run("select _count _fold produces correct count (projection ignored by counter)") @(t : T?) {
+    t |> run("select _count _fold produces correct count (projection does not affect count value)") @(t : T?) {
         t |> equal(target_select_count_fold(), 5)
     }
 }
