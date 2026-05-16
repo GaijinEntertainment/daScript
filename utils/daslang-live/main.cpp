@@ -575,7 +575,7 @@ static void print_help() {
     tout << "  -heap-report       - dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules   - skip loading dynamic modules\n";
     tout << "  --no-dump-leaks    - silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
-    tout << "  --                 - separator for script arguments\n";
+    tout << "  --                 - separator; everything after is forwarded to the script (get_user_args)\n";
     tout << "  -h, --help         - this help\n";
 }
 
@@ -638,6 +638,11 @@ int main(int argc, char * argv[]) {
 
     install_das_crash_handler();
     das::arm_alloc_tracking();
+
+    // Forward full argv so scripts can read get_user_args() (post-`--` slice).
+    // Matches daslang.exe's behavior — daslang-live ignores everything after
+    // `--` itself, but the script still gets the slice via get_cli_arguments().
+    setCommandLineArguments(argc, argv);
 
     string scriptFile;
     bool noDynamicModules = false;
