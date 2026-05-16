@@ -397,6 +397,27 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_15_live_reloading.rst
    tutorials/daStrudel_16_hrtf_position.rst
 
+.. _tutorials_jsonrpc:
+
+JSON-RPC 2.0 Tutorials
+=======================
+
+These tutorials cover ``daslib/jsonrpc`` — the transport-agnostic
+JSON-RPC 2.0 library: building requests, implementing servers with
+``dispatch_line``, and the §6 batch semantics. The companion ``.das``
+files are in ``tutorials/jsonrpc/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/jsonrpc/01_request_response.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/jsonrpc_01_request_response.rst
+   tutorials/jsonrpc_02_dispatch_line.rst
+   tutorials/jsonrpc_03_batch.rst
+
 .. _tutorials_daspeg:
 
 dasPEG (Parser Generator) Tutorials

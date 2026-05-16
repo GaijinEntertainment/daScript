@@ -82,6 +82,11 @@ def do_live_command(name, args, port : string) : string {
     return live_post("/command", port, body)
 }
 
+def do_live_commands(commands, port : string) : string {
+    if (empty(commands)) return make_tool_result("commands must be a non-empty JSON array of \{name,args\} objects", true)
+    return live_post("/commands", port, commands)
+}
+
 def do_live_shutdown(port : string) : string {
     return live_post("/shutdown", port)
 }
