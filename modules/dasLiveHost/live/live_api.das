@@ -23,7 +23,6 @@ module live_api shared public
 //!   POST /shutdown    — graceful shutdown
 //!   POST /command     — dispatches a single [live_command] via host bridge
 //!   POST /commands    — dispatches an array of [live_command]s (continue-on-error)
-//!   ANY  *            — returns JSON help with all endpoints and curl examples
 //!
 //! When a compilation error is active, /command, /pause, and /unpause
 //! return HTTP 503 with the error text. Use /reload to fix.
@@ -198,8 +197,28 @@ class LiveApiServer : HvWebServer {
             return resp |> JSON(result, http_status.OK)
         }
 
-        // Catch-all: return help for any unmatched route
-        ANY("*") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+        // Help on the root path only — no ANY("*") catch-all. libhv's
+        // HttpService stores routes in std::unordered_map<std::string,...>
+        // (vendored libhv include/hv/HttpService.h:105) and GetRoute
+        // iterates in container order, taking the first wildcard or path
+        // match. With ANY("*") registered, libhv's bucket layout on Linux
+        // libstdc++ (and intermittently on Windows MSVC, depending on
+        // rehash timing) enumerates "*" BEFORE specific paths like
+        // /status, /shutdown, /command — so every request hits the
+        // wildcard handler, request_exit() never runs, and daslang-live
+        // never exits. Symptom: dasImgui playwright tests hang for the
+        // full popen watchdog (120 s) on POSIX, get SIGKILLed, drain ends
+        // with popen_exit_code=DAS_POPEN_TIMEOUT (0x7FFFFF01).
+        //
+        // GET / is a specific exact-match path, so it never collides with
+        // /status etc. Unknown paths now return libhv's default 404 —
+        // programmatic clients (playwright, MCP live tools) never relied
+        // on the catch-all. Humans typing curl :9090/ still get the help
+        // JSON.
+        //
+        // Proper fix lives in libhv (sort wildcards last in GetRoute, or
+        // switch pathHandlers to std::map); tracking upstream.
+        GET("/") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> JSON(live_api_help_json(), http_status.OK)
         }
     }
