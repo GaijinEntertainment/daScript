@@ -217,6 +217,14 @@ void arm_alloc_tracking() noexcept {
     g_armed.store(true, std::memory_order_release);
 }
 
+AllocTrackerInternalGuard::AllocTrackerInternalGuard() noexcept : prev(tl_inside) {
+    tl_inside = true;
+}
+
+AllocTrackerInternalGuard::~AllocTrackerInternalGuard() noexcept {
+    tl_inside = prev;
+}
+
 // ------------------------- Symbolization -------------------------
 
 #if defined(_MSC_VER)
