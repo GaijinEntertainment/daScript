@@ -448,9 +448,8 @@ def test_where_fold_emits_loop(t : T?) {
         t |> success(r.matched, "should have return expression")
         t |> success(body_expr is ExprInvoke, "_fold should produce invoke wrapper")
         if (!(body_expr is ExprInvoke)) return
-        let inv = body_expr as ExprInvoke
-        var arg0 = clone_expression(inv.arguments[0])
-        var maybe_comp <- qm_resolve_comprehension(arg0)
+        var body_clone = clone_expression(body_expr)
+        var maybe_comp <- qm_resolve_comprehension(body_clone)
         t |> success(maybe_comp == null, "loop planner must NOT emit a comprehension")
     }
 }
@@ -467,9 +466,8 @@ def test_select_fold_emits_loop(t : T?) {
         t |> success(r.matched, "should have return expression")
         t |> success(body_expr is ExprInvoke, "_fold should produce invoke wrapper")
         if (!(body_expr is ExprInvoke)) return
-        let inv = body_expr as ExprInvoke
-        var arg0 = clone_expression(inv.arguments[0])
-        var maybe_comp <- qm_resolve_comprehension(arg0)
+        var body_clone = clone_expression(body_expr)
+        var maybe_comp <- qm_resolve_comprehension(body_clone)
         t |> success(maybe_comp == null, "loop planner must NOT emit a comprehension")
     }
 }

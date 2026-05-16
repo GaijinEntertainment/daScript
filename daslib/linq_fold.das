@@ -594,16 +594,40 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // Build the per-element loop body.
     var loopBody : Expression?
     if (counterLane) {
+        // Counter lane must evaluate the projection (and any chained intermediates) per
+        // matched element so user-visible side effects fire — `count(select(src, f))` in
+        // plain LINQ invokes f per element, and our fold must match. Bind the final
+        // projection to a discardable local; daslang macro output bypasses LINT002.
+        var sideEffectStmts : array<Expression?>
+        sideEffectStmts |> reserve(length(intermediateBinds) + 2)
+        for (b in intermediateBinds) {
+            sideEffectStmts |> push(b)
+        }
+        if (projection != null) {
+            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            sideEffectStmts |> push <| qmacro_expr() {
+                var $i(finalBindName) = $e(projection)
+            }
+        }
+        sideEffectStmts |> push <| qmacro_expr() {
+            $i(accName) ++
+        }
+        var incBlock : Expression?
+        if (length(sideEffectStmts) == 1) {
+            incBlock = sideEffectStmts[0]
+        } else {
+            incBlock = qmacro_block() {
+                $b(sideEffectStmts)
+            }
+        }
         if (whereCond != null) {
             loopBody = qmacro_expr() {
                 if ($e(whereCond)) {
-                    $i(accName) ++
+                    $e(incBlock)
                 }
             }
         } else {
-            loopBody = qmacro_expr() {
-                $i(accName) ++
-            }
+            loopBody = incBlock
         }
     } else {
         // array lane

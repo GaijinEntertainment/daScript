@@ -86,7 +86,7 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 |---|---|---:|---:|---|
 | count_aggregate | `where → count` | 5 | 5 | parity (same counter loop) |
 | chained_where | `where → where → count` | 17 | 8 | **2.1× faster** (fuses chained wheres into single `&&` predicate) |
-| select_count | `select → count` | 15 | 2 | **7.5× faster** (counter lane ignores projection; no array materialization) |
+| select_count | `select → count` | 15 | 2 | **7.5× faster** (counter lane evaluates projection per iteration to preserve side effects; optimizer DCEs pure projections, no array materialization) |
 | to_array_filter | `where → select → to_array` | 11 | 11 | parity (after `each(<array>)` peel + reserve + workhorse `push`) |
 
 Shapes outside Phase 2A scope now compile to plain linq (`m3f ≈ m3`). This is an intentional regression vs the historical `_old_fold` numbers — Boris's call ("we let it fall through unfolded, and we see performance issues. im ok being slower until we fix") as the forcing function for Phase 2B+. The previous "m3f = m3f_old (identical by construction)" baseline assumed `_fold` would dispatch to `_old_fold` on the unmatched path; Phase 2A drops that dispatch.
