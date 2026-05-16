@@ -75,6 +75,14 @@ install(FILES ${DASTRUDEL_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/daStrudel
 )
 
+# Install jsonrpc tutorial .das files
+file(GLOB JSONRPC_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/jsonrpc/*.das
+)
+install(FILES ${JSONRPC_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/jsonrpc
+)
+
 if (NOT ${DAS_TUTORIAL_DISABLED})
     include(integration/c/CMakeLists.txt)
     include(integration/cpp/CMakeLists.txt)
@@ -85,6 +93,7 @@ SET(ALL_TUTORIAL_SOURCES
     ${MACRO_TUTORIAL_SOURCES}
     ${DASPEG_TUTORIAL_SOURCES}
     ${DASTRUDEL_TUTORIAL_SOURCES}
+    ${JSONRPC_TUTORIAL_SOURCES}
 )
 
 # Modules tutorials.

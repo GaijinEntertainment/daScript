@@ -10,6 +10,7 @@ JSON, XML, regular expressions, PEG parser generator, and reStructuredText proce
 
    generated/json.rst
    generated/json_boost.rst
+   generated/jsonrpc.rst
    generated/pugixml.rst
    generated/PUGIXML_boost.rst
    generated/regex.rst

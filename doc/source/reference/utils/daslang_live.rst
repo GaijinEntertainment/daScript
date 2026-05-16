@@ -533,8 +533,15 @@ Endpoints
      - Graceful shutdown.
    * - POST
      - ``/command``
-     - Dispatch a ``[live_command]`` via JSON body:
+     - Dispatch a single ``[live_command]`` via JSON body:
        ``{"name":"cmd_name","args":{...}}``.
+   * - POST
+     - ``/commands``
+     - Dispatch a batch of ``[live_command]`` in one round-trip.
+       Body is a JSON array of ``{name,args}`` objects;
+       response is a JSON array of per-entry results in input order.
+       Continue-on-error: malformed entries surface ``{"error":...}``
+       in their slot.
    * - ANY
      - ``*``
      - JSON help with all endpoints and curl examples.
@@ -555,8 +562,14 @@ Call a live command::
    curl -X POST http://localhost:9090/command \
      -d '{"name":"set_color","args":{"r":1.0,"g":0.0,"b":0.0}}'
 
+Call a batch of live commands::
+
+   curl -X POST http://localhost:9090/commands \
+     -d '[{"name":"set_color","args":{"r":0.5}},{"name":"set_alpha","args":{"a":0.5}}]'
+
 When using the daslang MCP server, prefer ``live_*`` MCP tools over
-curl (see :ref:`utils_mcp`).
+curl (see :ref:`utils_mcp`). The ``live_commands`` MCP tool maps to the
+``POST /commands`` batch endpoint above.
 
 
 .. _stdio_api:
@@ -589,37 +602,39 @@ an object when the command returned an object (``status``), a string
 when the command returned a string (``set_color`` in the demo returns a
 ``JV(string)`` so the result is a quoted JSON string), and so on.
 
+**Implementation.**  Parsing, envelope building, notification semantics,
+and §6 batch handling all come from :ref:`stdlib_jsonrpc`. The transport
+itself is just the stdin reader thread plus a thin
+``dispatch_command`` bridge — see ``handle_jsonrpc_line`` in
+``modules/dasLiveHost/live/live_api_stdio.das``. Clients that need the
+parser / envelope helpers directly should ``require daslib/jsonrpc``.
+
 **Framing guarantee.**  The transport always writes exactly one
 response per line on stdout, with no embedded newlines in the envelope.
 ``write_json`` pretty-prints by default, so the dispatch result is
-post-processed by ``compact_json_whitespace`` before being embedded in
-the envelope — whitespace outside string literals is stripped;
-whitespace inside ``"..."`` is preserved verbatim.
+post-processed by ``jsonrpc::compact_json_whitespace`` before being
+embedded in the envelope.
 
 **Notifications.**  Per JSON-RPC 2.0 §4.1, a request that omits the
 ``id`` field is a *notification*: the server MUST NOT respond.
 ``live_api_stdio`` honors this — fire-and-forget commands like
-``{"method":"shutdown"}`` produce no output, useful for clients that
-don't want to bookkeep a response.  An explicit ``"id":null`` is *not*
-a notification; the server responds with ``"id":null``.  Parse errors
-and invalid requests are *not* treated as notifications either — they
-emit ``-32700`` / ``-32600`` responses with ``"id":null`` so a buggy
-client doesn't hang waiting for a reply.
+``{"method":"shutdown"}`` produce no output. An explicit ``"id":null``
+is *not* a notification; the server responds with ``"id":null``. Parse
+errors and invalid requests still emit ``-32700`` / ``-32600``
+responses with ``"id":null``.
 
-**Permissive JSON-RPC subset.**  Two deviations from strict JSON-RPC 2.0
-to ease integration with real-world clients:
+**§6 batch support.**  Multiple commands in one wire message — a JSON
+array of requests at the top level — produce a JSON array of responses
+(in input order, notification entries suppressed). Empty array and
+top-level malformed JSON yield single error envelopes per spec.
 
-* The ``jsonrpc`` member is **optional**.  Strict compliance would
-  reject ``{"id":1,"method":"status"}`` because the ``"jsonrpc":"2.0"``
-  field is missing — this transport accepts it.  Requests with a
-  different version (``"jsonrpc":"1.0"``) are also accepted.
-* All other JSON-RPC 2.0 rules are enforced: ``method`` is required and
-  must be a string, ``id`` must be string / number / null when present
-  (objects / arrays / booleans are rejected with ``-32600``), and
-  notifications produce no response.
+**Permissive by default.**  The ``jsonrpc`` member is optional and any
+value is accepted; pass ``strict=true`` through ``daslib/jsonrpc`` for
+full §4 compliance. Other §4 rules (``method`` required and string,
+``id`` string/number/null only) are always enforced.
 
-Error envelopes follow JSON-RPC 2.0 codes: ``-32700`` parse error,
-``-32600`` invalid request (missing/non-string ``method``).
+Error envelopes follow JSON-RPC 2.0 codes (``-32700`` / ``-32600`` /
+``-32602``).
 
 Available methods (built-ins from ``live/live_api_builtins``):
 

@@ -21,7 +21,8 @@ module live_api shared public
 //!   POST /pause       — pauses the host
 //!   POST /unpause     — unpauses the host
 //!   POST /shutdown    — graceful shutdown
-//!   POST /command     — dispatches a [live_command] via host bridge
+//!   POST /command     — dispatches a single [live_command] via host bridge
+//!   POST /commands    — dispatches an array of [live_command]s (continue-on-error)
 //!   ANY  *            — returns JSON help with all endpoints and curl examples
 //!
 //! When a compilation error is active, /command, /pause, and /unpause
@@ -32,6 +33,7 @@ require daslib/json
 require daslib/json_boost
 require daslib/jobque_boost
 require daslib/debugger
+require strings
 require live_host
 
 var live_api_port : int = 9090
@@ -84,6 +86,9 @@ def live_api_help_json() : string {
     let cmd_desc = "Dispatch a [live_command] (JSON body: \{\"name\":\"cmd\",\"args\":\{...\}\})"
     let cmd_curl = "curl -X POST -H \"Content-Type: application/json\" -d '\{\"name\":\"help\"\}' http://localhost:{live_api_port}/command"
     endpoints |> push(JV({ "method" => "POST", "path" => "/command", "description" => cmd_desc, "curl" => cmd_curl }))
+    let cmds_desc = "Dispatch a batch of [live_command]s in one round-trip (JSON array of \{name,args\}); continue-on-error, result array preserves input order"
+    let cmds_curl = "curl -X POST -H \"Content-Type: application/json\" -d '[\{\"name\":\"help\"\}]' http://localhost:{live_api_port}/commands"
+    endpoints |> push(JV({ "method" => "POST", "path" => "/commands", "description" => cmds_desc, "curl" => cmds_curl }))
     var result : table<string; JsonValue?>
     result |> insert("endpoints", JV(endpoints))
     let err = get_last_error()
@@ -153,6 +158,43 @@ class LiveApiServer : HvWebServer {
             let body = string(req.body)
             if (empty(body)) return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
             let result = dispatch_command(body)
+            return resp |> JSON(result, http_status.OK)
+        }
+
+        // Batch: array of {name, args} objects. Continue-on-error — result array
+        // preserves input order; malformed entries get {"error":...} in their slot.
+        POST("/commands") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let guard = compilation_error_response(resp)
+            if (guard != http_status.OK) return guard
+            let body = string(req.body)
+            if (empty(body)) return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
+            var parse_error = ""
+            var parsed = read_json(body, parse_error)
+            if (parsed == null || !(parsed.value is _array)) {
+                return resp |> JSON(write_json(JV("body must be a JSON array of \{name,args\} objects")), http_status.BAD_REQUEST)
+            }
+            let arr & = unsafe(parsed.value as _array)
+            let result = build_string() $(var w) {
+                write_char(w, int('['))
+                var first = true
+                for (entry in arr) {
+                    if (!first) write_char(w, int(','))
+                    first = false
+                    let entry_v = unsafe(reinterpret<JsonValue?>(entry))
+                    if (entry_v == null || !(entry_v.value is _object)) {
+                        write(w, "\{\"error\":\"invalid command object\"}")
+                        continue
+                    }
+                    let entry_obj & = unsafe(entry_v.value as _object)
+                    let name_v = unsafe(reinterpret<JsonValue?>(entry_obj?["name"] ?? null))
+                    if (name_v == null || !(name_v.value is _string)) {
+                        write(w, "\{\"error\":\"missing or non-string name\"}")
+                        continue
+                    }
+                    write(w, dispatch_command(write_json(entry_v)))
+                }
+                write_char(w, int(']'))
+            }
             return resp |> JSON(result, http_status.OK)
         }
 
