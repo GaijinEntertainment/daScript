@@ -15,11 +15,11 @@ links: []
 [imgui_playwright] readiness gate FAILED
 ```
 
-External `curl http://localhost:9090/status` from a sibling shell returns 200 with proper status JSON throughout — only the popen parent's poll loop "can't see it". Reproduces on macOS and Linux; appears to NOT reproduce on Windows (which is the trap — see below).
+External `curl http://localhost:9090/status` from a sibling shell returns 200 with proper status JSON throughout — only the popen parent's poll loop "can't see it". Reproduces on macOS and Linux; pre-PR #2685 appeared to NOT reproduce on Windows (which was the trap — raw QPC tick math accidentally masked the bug; post-PR #2685 Windows also returns nanoseconds and shows the same failure).
 
 # Root cause
 
-**`ref_time_ticks()` returns nanoseconds on POSIX, but the wait-loop math assumes microseconds.**
+**`ref_time_ticks()` returns nanoseconds on all platforms (post-PR #2685), but the wait-loop math assumed microseconds.**
 
 `src/hal/performance_time.cpp` defines `ref_time_ticks()` per platform:
 
@@ -27,7 +27,7 @@ External `curl http://localhost:9090/status` from a sibling shell returns 200 wi
 |---|---|
 | Linux  | `tv_sec * 1e9 + tv_nsec` — **nanoseconds** |
 | macOS  | `clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)` — **nanoseconds** |
-| Windows | `QueryPerformanceCounter().QuadPart` — counter ticks, freq depends on hardware (often ~10 MHz, accidentally close to 1 MHz / microsecond scaling) |
+| Windows | QPC ticks converted to **nanoseconds** via `ticks × (1e9 / freq)`; fast path at 10 MHz QPF = 100 ns/tick multiply (PR #2685). Pre-PR #2685: raw `QuadPart` ticks, ~10 MHz, accidentally close to μs scaling. |
 
 `imgui_playwright`'s `wait_until_ready` (and other deadline loops) used:
 
@@ -41,7 +41,8 @@ while (ref_time_ticks() < deadline) {
 
 That `* 1000000.0f` assumes ref-time is in microseconds. So:
 - **Linux/macOS**: a "30s" deadline is `30 * 1e6 = 30 million nanoseconds = 30 milliseconds`. Loop fires 0-1 polls and exits. The `connect 127.0.0.1:9090 failed!` line is the one in-flight libhv connect attempt timing out — server health is fine; the loop just budgeted itself out of existence.
-- **Windows**: QPC freq is hardware-dependent but on common runners works out near enough to 1 MHz that `* 1e6` lands in the "seconds" ballpark by accident, masking the bug.
+- **Windows (post-PR #2685)**: `ref_time_ticks()` now also returns nanoseconds on Windows, so the same 30 ms budget applies — the bug is equally visible.
+- **Windows (pre-PR #2685)**: raw QPC `QuadPart` ticks at ~10 MHz worked out near enough to 1 MHz that `* 1e6` landed in the "seconds" ballpark by accident, masking the bug on Windows CI.
 
 # The Windows-only "require order" workaround is misleading
 
@@ -61,9 +62,10 @@ while (get_time_usec(t_start) < timeout_us) {
     ...
 }
 
-// Option B — compute deadline in nanoseconds, on POSIX
+// Option B — compute deadline in nanoseconds (safe on all platforms after PR #2685)
 let deadline = ref_time_ticks() + int64(timeout_sec * 1000000000.0f)
-// (DON'T do this without a per-platform branch — breaks Windows)
+// (On pre-PR #2685 Windows builds, ref_time_ticks() returned raw QPC ticks, so this
+//  would be wrong there. Prefer Option A if you need to support older builds.)
 ```
 
 **Option A is the right one.** `get_time_usec(reft)` is defined per-platform in `performance_time.cpp` and always returns microseconds. Audit any other `ref_time_ticks() + ... * 1000000.0f` patterns in your codebase the same way.
@@ -72,7 +74,7 @@ let deadline = ref_time_ticks() + int64(timeout_sec * 1000000000.0f)
 
 - Test hangs at `readiness gate FAILED` (not at `body did not converge` or similar).
 - External `curl` to `localhost:9090/status` works while the test hangs.
-- Reproduces on macOS / Linux; "works" on Windows (deceptive — see above).
+- Reproduces on macOS / Linux; on current code also reproduces on Windows (post-PR #2685 normalization). Pre-PR #2685, Windows masked the bug via raw QPC tick math — see the platform table above.
 - Suspect any deadline loop using `ref_time_ticks() + ... * 1e6` — that's the smoking gun.
 
 # Why this took a while to spot
