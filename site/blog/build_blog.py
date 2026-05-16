@@ -327,7 +327,7 @@ def render_index(posts: list[Entry], md) -> str:
             <h1 class="forge-h2" style="font-size:44px;">Notes from the language.</h1>
             <p class="forge-p" style="max-width:640px;">
                 Design rationale, refactor stories, and the occasional shipping
-                announcement. Newest first.
+                announcement. Newest first. <a href="feed.xml">RSS</a>.
             </p>
             <div class="forge-blog-list">
 {chr(10).join(items)}
