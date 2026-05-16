@@ -386,6 +386,16 @@ namespace das {
     DAS_API void    track_free_hook(void *p) noexcept;
     DAS_API void    arm_alloc_tracking() noexcept;
     DAS_API size_t  dump_alloc_leaks(FILE *out);
+    // RAII: sets the tracker's tl_inside so allocations/frees inside the scope
+    // are not recorded in the LeakMap. Use for internal bookkeeping containers
+    // (e.g. lexer_track_map) whose operator delete during erase would otherwise
+    // recurse into track_free_hook, bail on the already-true tl_inside, and
+    // leave phantom LeakMap entries.
+    struct DAS_API AllocTrackerInternalGuard {
+        bool prev;
+        AllocTrackerInternalGuard() noexcept;
+        ~AllocTrackerInternalGuard() noexcept;
+    };
     // Landmark RAII: ctor walks the stack once and stores the chain; alloc-site
     // captures that match the landmark's RSP short-circuit with a memcpy. Place
     // one on the stack high in the call tree (e.g. top of compile_and_run) to
@@ -409,6 +419,10 @@ namespace das {
     inline void   track_free_hook(void *) noexcept {}
     inline void   arm_alloc_tracking() noexcept {}
     inline size_t dump_alloc_leaks(FILE *) { return 0; }
+    struct AllocTrackerInternalGuard {
+        AllocTrackerInternalGuard() noexcept {}
+        ~AllocTrackerInternalGuard() noexcept {}
+    };
     struct AllocTrackingLandmark {
         AllocTrackingLandmark() noexcept {}
         ~AllocTrackingLandmark() noexcept {}
