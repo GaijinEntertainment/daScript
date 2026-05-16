@@ -754,3 +754,31 @@ def test_where_count_fold(t : T?) {
     }
 }
 
+var g_proj_hits = 0
+
+def projection_with_side_effect(x : int) : int {
+    g_proj_hits ++
+    return x * 2
+}
+
+[test]
+def test_counter_lane_projection_side_effects(t : T?) {
+    // Counter lane must evaluate the projection per matched element so user-visible
+    // side effects fire — matches raw `count(select(src, f))` semantics. Tests guard
+    // the projection-is-evaluated invariant after the Phase-2A planner fix.
+    t |> run("select|count fires projection once per element") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        g_proj_hits = 0
+        let c = _fold(each(arr)._select(projection_with_side_effect(_)).count())
+        t |> equal(5, c)
+        t |> equal(5, g_proj_hits)
+    }
+    t |> run("where|select|count fires projection only on matches") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        g_proj_hits = 0
+        let c = _fold(each(arr)._where(_ > 5)._select(projection_with_side_effect(_)).count())
+        t |> equal(5, c)
+        t |> equal(5, g_proj_hits)
+    }
+}
+
