@@ -25,7 +25,7 @@ error[31013]: '__::builtin`each`...' is unsafe, when not source of the for-loop;
 
 **Heuristic:** if the chain ends in a `_fold(...)` / `_old_fold(...)` wrapper or a for-loop, `each(arr)` works as the source. If the chain produces a value (or array) that escapes the expression — a `let`, a function return, the second arg to a macro — drop the `each()` and pass the array directly.
 
-The lint at runtime points at the **specific** `each(arr)` call that escapes, so for multi-each chains (`_join`, `_zip`), check which side is the issue.
+The compiler error points at the **specific** `each(arr)` call that escapes, so for multi-each chains (`_join`, `_zip`), check which side is the issue.
 
 ## Questions
 - Why does `each(arr)` fail with "unsafe when not source of for-loop" outside a for, and what's the alternative in a linq chain?
