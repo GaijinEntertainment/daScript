@@ -1,1 +1,1 @@
-Captures the current high-resolution time in ticks, suitable for measuring elapsed intervals with `get_time_usec`.
+Returns a monotonic timestamp in nanoseconds since an unspecified epoch (the same epoch within a process; not comparable across processes or reboots). Use with `get_time_usec(ref)` / `get_time_nsec(ref)` for elapsed-interval math; raw subtraction `now - then` is also valid since the unit is always nanoseconds on every platform.
