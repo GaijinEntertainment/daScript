@@ -522,6 +522,140 @@ def private fold_linq_default(var expr : Expression?; recursiveMacroName : strin
     return res
 }
 
+[macro_function]
+def private plan_loop_or_count(var expr : Expression?) : Expression? {
+    // Phase-2A loop planner. Recognizes chains of shape `[where_*][select?]` (array lane)
+    // and `[where_*][select?] |> count` (counter lane). Fuses chained wheres into `&&` and
+    // chained selects via expression composition; emits one inline `invoke($block, $src)`
+    // with a plain for-loop. Returns null for anything else — caller falls through unfolded.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    let lastName = calls.back()._1.name
+    if (lastName != "count" && lastName != "where_" && lastName != "select") return null
+    let counterLane = lastName == "count"
+    let intermediateCount = counterLane ? length(calls) - 1 : length(calls)
+    let at = calls[0]._0.at
+    let srcName = "`source`{at.line}`{at.column}"
+    let itName  = "`it`{at.line}`{at.column}"
+    let accName = "`acc`{at.line}`{at.column}"
+    let valName = "`val`{at.line}`{at.column}"
+    var whereCond : Expression?
+    var projection : Expression?
+    var seenSelect = false
+    var elementType = clone_type(top._type.firstType)
+    for (i in 0 .. intermediateCount) {
+        var cll & = unsafe(calls[i])
+        let opName = cll._1.name
+        if (opName == "where_") {
+            if (seenSelect) return null    // where-after-select not in Phase 2A
+            var predicate = fold_linq_cond(cll._0.arguments[1], itName)
+            if (whereCond == null) {
+                whereCond = predicate
+            } else {
+                whereCond = qmacro($e(whereCond) && $e(predicate))
+            }
+        } elif (opName == "select") {
+            if (projection != null) return null   // chained _select|_select needs ExprRef2Value-aware
+                                                  // substitution; deferred to Phase 2B.
+            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            elementType = clone_type(cll._0._type.firstType)
+            seenSelect = true
+        } else {
+            return null
+        }
+    }
+    // Build the per-element loop body.
+    var loopBody : Expression?
+    if (counterLane) {
+        if (whereCond != null) {
+            loopBody = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $i(accName) ++
+                }
+            }
+        } else {
+            loopBody = qmacro_expr() {
+                $i(accName) ++
+            }
+        }
+    } else {
+        // array lane
+        if (projection != null) {
+            // Pick copy- vs move-init at macro time using the projection's resolved type.
+            // Workhorse values copy cheaply; non-workhorse must move out of the temporary
+            // returned by the projection. Mirrors the `_old_fold` `fold_select_where`
+            // shape for parity (intermediate `val` binding then emplace).
+            let workhorseProj = projection._type != null && projection._type.isWorkhorseType
+            var perElem : Expression?
+            if (workhorseProj) {
+                perElem = qmacro_block() {
+                    var $i(valName) = $e(projection)
+                    $i(accName) |> emplace($i(valName))
+                }
+            } else {
+                perElem = qmacro_block() {
+                    var $i(valName) <- $e(projection)
+                    $i(accName) |> emplace($i(valName))
+                }
+            }
+            if (whereCond != null) {
+                loopBody = qmacro_expr() {
+                    if ($e(whereCond)) {
+                        $e(perElem)
+                    }
+                }
+            } else {
+                loopBody = perElem
+            }
+        } elif (whereCond != null) {
+            loopBody = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $i(accName) |> push_clone($i(itName))
+                }
+            }
+        } else {
+            // identity chain — nothing to fuse; let the caller fall through.
+            return null
+        }
+    }
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var res : Expression?
+    if (counterLane) {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+            var $i(accName) = 0
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return $i(accName)
+        }, $e(topExpr)))
+    } else {
+        let isIter = expr._type.isIterator
+        if (isIter) {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+                var $i(accName) : array<$t(elementType)>
+                for ($i(itName) in $i(srcName)) {
+                    $e(loopBody)
+                }
+                return <- $i(accName).to_sequence_move()
+            }, $e(topExpr)))
+        } else {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+                var $i(accName) : array<$t(elementType)>
+                for ($i(itName) in $i(srcName)) {
+                    $e(loopBody)
+                }
+                return <- $i(accName)
+            }, $e(topExpr)))
+        }
+    }
+    res.force_at(at)
+    res.force_generated(true)
+    let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
+    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+    return res
+}
+
 [call_macro(name="_fold")]
 class private LinqFold : AstCallMacro {
     //! implements _fold(expression) that folds LINQ expressions into optimized sequnences
@@ -534,12 +668,9 @@ class private LinqFold : AstCallMacro {
         //! Visits the _fold macro call and folds LINQ expressions into optimized sequences.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var res : Expression? = fold_linq_default(call.arguments[0], "_fold")
-        if (res == null) {
-            prog |> macro_error(call.at, "cannot fold LINQ expression\n{describe(call.arguments[0])}")
-            return res
-        }
-        return res
+        var res : Expression? = plan_loop_or_count(call.arguments[0])
+        if (res != null) return res
+        return clone_expression(call.arguments[0])
     }
 }
 

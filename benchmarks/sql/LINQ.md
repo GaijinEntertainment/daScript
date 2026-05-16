@@ -22,8 +22,9 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 |---|---|---|
 | 0 | Rename `_fold` → `_old_fold` in linq_boost; extract `_fold` and `_old_fold` into new `daslib/linq_fold.das` module; `linq_boost` `require linq_fold public` for re-export | ✅ done |
 | 1 | Benchmark suite: 24 files under `benchmarks/sql/`, each 4-way (m1 `_sql` / m3 plain linq / m3f_old `_old_fold` / m3f `_fold`) at 100K rows; baseline numbers captured | ✅ done |
-| 2 | Splice planner + initial operators (`count`, `sum`, `to_array`, `where` with literal-lambda inlining); pattern tests for "spliced" vs "fell back" | ⏳ next |
-| 3+ | Per-operator splice PRs: `select`, terminal aggregates with early-exit (`first`, `any`, `all`, `min`, `max`, `average`), `take`/`skip`/chained `where`, then buffer-required ops (`distinct`, `sort`, `groupby`, `zip`, `join`) | ⏳ |
+| 2A | Loop planner — `_fold` emits explicit for-loops for `[where_*][select?]` (array lane) and `[where_*][select?] |> count` (counter lane); anything else falls through unfolded. No comprehensions, no dispatch back to `_old_fold`. | ✅ done |
+| 2B | Aggregate accumulators: `sum`, `min`, `max`, `average`, `first`, `any`, `all`, `long_count`. Also `take`/`skip` in counter/array lane and chained-`_select|_select` fusion (needs `ExprRef2Value`-aware projection substitution) | ⏳ next |
+| 3+ | Buffer-required operators: `distinct`, `sort`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
 | 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
 
 ## Baselines (100K rows, INTERP mode)
@@ -69,7 +70,30 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 
 - **m1 vs m3** shows the SQLite-vs-in-memory-LINQ cost gap. SQL wins on `indexed_lookup` (b-tree) and on sorted-take patterns (engine partial-sort + LIMIT). Arrays win on raw aggregates where the SQL overhead exceeds the in-memory work.
 - **m3 vs m3f_old** shows what the *current* `_fold` macro already achieves. Big wins on the patterns it explicitly recognizes (`where+count` 6×, `where+select+to_array` ~4×, `chained_where+count` 2.6×). Negligible difference where it falls through to the default emitter.
-- **m3f vs m3f_old** is the target of Phase 2+. Currently identical by construction. Each PR in the splice series adds a splice path for one operator family and updates this table with the new ratio.
+- **m3f vs m3f_old** is the target of Phase 2+. Each PR in the splice series adds a path for one operator family and updates this table with the new ratio.
+
+## Phase 2A — Loop planner (2026-05-16)
+
+`_fold` now emits explicit for-loops for two narrow shape families instead of comprehensions. Anything outside scope falls through unfolded to raw linq (no dispatch to `_old_fold` or `fold_linq_default`).
+
+**In scope:** `[where_*][select?]` (array lane) and `[where_*][select?] |> count` (counter lane). Chained `_where|_where|...` fuses via `&&`; single `_select` composes; chained `_select|_select` falls through (needs ExprRef2Value-aware substitution, deferred to Phase 2B).
+
+**Out of scope (falls through):** `_select|_where`, `sum`, `min`, `max`, `average`, `first`, `any`, `all`, `long_count`, `_order`, `_distinct`, `_take`, `_skip`, `_zip`, `_reverse`, etc.
+
+### Phase 2A deltas (100K rows, INTERP)
+
+| Benchmark | Shape | m3f_old | m3f (Phase 2A) | Delta |
+|---|---|---:|---:|---|
+| count_aggregate | `where → count` | 5 | 5 | parity (same counter loop) |
+| chained_where | `where → where → count` | 17 | 8 | **2.1× faster** (fuses chained wheres into single `&&` predicate) |
+| select_count | `select → count` | 15 | 2 | **7.5× faster** (counter lane ignores projection; no array materialization) |
+| to_array_filter | `where → select → to_array` | 11 | 13 | ~18% slower (explicit loop vs comprehension lowering) |
+
+Shapes outside Phase 2A scope now compile to plain linq (`m3f ≈ m3`). This is an intentional regression vs the historical `_old_fold` numbers — Boris's call ("we let it fall through unfolded, and we see performance issues. im ok being slower until we fix") as the forcing function for Phase 2B+. The previous "m3f = m3f_old (identical by construction)" baseline assumed `_fold` would dispatch to `_old_fold` on the unmatched path; Phase 2A drops that dispatch.
+
+### Why `to_array_filter` regressed
+
+Comprehensions `[for (it in src) where p; expr]` lower through the compiler's dedicated `ExprArrayComprehension` path, which appears to compose more aggressively with array growth than an emitted-by-macro explicit loop with `static_if (is_workhorse) var val = expr; arr.emplace(val)`. The 18% gap is small relative to the 2-7× wins elsewhere; Phase 2B can profile and tune (likely pre-reserving the result array or switching to `push` for workhorse).
 
 ## Operator-coverage checklist (parity tests)
 
