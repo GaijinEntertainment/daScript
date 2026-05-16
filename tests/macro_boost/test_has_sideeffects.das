@@ -159,6 +159,49 @@ def test_string_builder_unsafe_part(t : T?) {
     t |> equal(_test_has_sideeffects("hello {side_effect_fn(_x)}"), true)
 }
 
+// ── Mutation operators — must be unsafe regardless of resolved-builtin flags ──
+//
+// `++`/`--` (ExprOp1) and compound-assignment ops (`+=`/`-=`/… ExprOp2) mutate
+// their operand. has_sideeffects blacklists these up front so a builtin
+// mistakenly missing `knownSideEffects`/`unsafeOperation` can't classify them
+// as pure. Covers Copilot review concern from PR #2691.
+
+[test]
+def test_postfix_increment_unsafe(t : T?) {
+    var _x = 5
+    t |> equal(_test_has_sideeffects(_x ++), true)
+}
+
+[test]
+def test_postfix_decrement_unsafe(t : T?) {
+    var _x = 5
+    t |> equal(_test_has_sideeffects(_x --), true)
+}
+
+// ── User-defined operator overload — must be unsafe (non-builtin func) ───
+//
+// Overloads of `+`, `*`, etc. on user types can carry arbitrary side effects.
+// The op-name allowlist must NOT bypass the func-flag check when func != null
+// — otherwise a custom `def operator +` slips through as pure. Covers Copilot
+// review concern from PR #2691.
+
+var g_op_overload_hits = 0
+
+struct private SideEffectingNumber {
+    v : int
+}
+
+def operator +(a : SideEffectingNumber; b : int) : SideEffectingNumber {
+    g_op_overload_hits ++
+    return SideEffectingNumber(v = a.v + b)
+}
+
+[test]
+def test_user_op_overload_unsafe(t : T?) {
+    var _c = SideEffectingNumber(v = 5)
+    t |> equal(_test_has_sideeffects(_c + 1), true)
+}
+
 // ── Conservative-unsafe cases — daslang-generic helpers fall through ─────
 //
 // `length`, `key_exists`, etc. are defined as daslang generics in builtin.das

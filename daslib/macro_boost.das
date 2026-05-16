@@ -219,27 +219,36 @@ def public has_sideeffects(expr : Expression?) : bool {
         return false
     }
     // Function-call-shaped expressions: ExprCall (regular call) and ExprOp1/ExprOp2/ExprOp3
-    // (operators, which also resolve to a function). All carry a resolved `func` field
-    // when typing completed. But the typer sometimes leaves `func` null on operator
-    // expressions (e.g. after partial constant folding), so we also keep an op-name
-    // allowlist for the common pure operators on workhorse types — that bypasses
-    // resolution-timing artifacts. `/` and `%` stay UNSAFE (div-by-zero panic; design
-    // decision). Compound-assignment ops are not in the allowlist (mutation).
+    // (operators, which also resolve to a function). Two-layer check:
+    //
+    //   1. Mutation ops (`++`, `--`, `+=`, `-=`, …) are unconditionally unsafe —
+    //      blacklisted up front, regardless of how the resolved builtin happens to be
+    //      flagged. Catches builtins that the C++ side forgot to mark with
+    //      `knownSideEffects`/`unsafeOperation`.
+    //   2. Trust `func.flags` when `func != null` — covers user-defined operator
+    //      overloads (e.g. `struct Foo { def operator +(...) }`), which fall through
+    //      `func_has_sideeffects` as non-builtin → unsafe. Fall back to the op-name
+    //      allowlist only when `func == null` (typer left it unresolved, e.g. after
+    //      partial constant folding). `/` and `%` stay UNSAFE (div-by-zero panic;
+    //      design decision).
     //
     // `is`/`as` on handled types is EXACT-rtti (see CLAUDE.md), so each shape needs its
     // own branch — can't cast ExprOp2 to ExprCallFunc even though the C++ class inherits.
     if (expr is ExprOp1) {
         let e1 = expr as ExprOp1
-        if (!is_safe_op1(e1.op) && func_has_sideeffects(e1.func)) return true
+        // func != null → trust func flags (catches user overloads); func == null → fall
+        // back to op-name allowlist (handles partial-folding artifacts). Mutation ops
+        // are unconditionally unsafe (in case a C++ builtin missed the side-effect flag).
+        if (is_mutation_op1(e1.op)
+                || (e1.func != null && func_has_sideeffects(e1.func))
+                || (e1.func == null && !is_safe_op1(e1.op))) return true
         return has_sideeffects(e1.subexpr)
     }
     if (expr is ExprOp2) {
         let e2 = expr as ExprOp2
-        // Unsafe: division/modulo (div-by-zero panic, design decision); or op not in the
-        // safe allowlist AND the resolved func indicates side effects. The allowlist also
-        // bypasses func==null artifacts from partial folding.
-        if (e2.op == "/" || e2.op == "%"
-                || (!is_safe_op2(e2.op) && func_has_sideeffects(e2.func))) return true
+        if (is_mutation_op2(e2.op) || e2.op == "/" || e2.op == "%"
+                || (e2.func != null && func_has_sideeffects(e2.func))
+                || (e2.func == null && !is_safe_op2(e2.op))) return true
         return has_sideeffects(e2.left) || has_sideeffects(e2.right)
     }
     if (expr is ExprOp3) {
@@ -270,17 +279,36 @@ def private func_has_sideeffects(f : Function?) : bool {
 [macro_function]
 def private is_safe_op1(op : das_string) : bool {
     //! Unary operators that are pure on workhorse types — no overflow trap, no mutation.
-    //! Excludes `++` / `--` (mutation).
+    //! Excludes `++` / `--` (handled by is_mutation_op1).
     return op == "-" || op == "!" || op == "~" || op == "+"
 }
 
 [macro_function]
 def private is_safe_op2(op : das_string) : bool {
     //! Binary operators that are pure on workhorse types. Excludes `/`, `%` (div-by-zero
-    //! panic — design decision) and all compound-assignment ops (mutation).
+    //! panic — design decision) and all compound-assignment ops (handled by is_mutation_op2).
     return (op == "+" || op == "-" || op == "*"
         || op == "==" || op == "!=" || op == "<" || op == "<=" || op == ">" || op == ">="
         || op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>"
         || op == "&&" || op == "||")
+}
+
+[macro_function]
+def private is_mutation_op1(op : das_string) : bool {
+    //! Unary operators that mutate their operand. Unconditionally unsafe — bypasses any
+    //! flag check on the resolved builtin (in case the C++ side forgot to mark it).
+    //! `++` / `--` are prefix; `+++` / `---` are the daslang AST op-strings for postfix
+    //! increment/decrement (the trailing-plus / trailing-minus naming).
+    return op == "++" || op == "--" || op == "+++" || op == "---"
+}
+
+[macro_function]
+def private is_mutation_op2(op : das_string) : bool {
+    //! Compound-assignment operators (mutate the left operand). Same unconditional-unsafe
+    //! treatment as is_mutation_op1.
+    return (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%="
+        || op == "&=" || op == "|=" || op == "^="
+        || op == "<<=" || op == ">>="
+        || op == "&&=" || op == "||=" || op == "^^=")
 }
 

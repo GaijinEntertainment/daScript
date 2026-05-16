@@ -270,6 +270,17 @@ FILE(GLOB AOT_MACRO_CALL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS 
 # by the actual test files and don't need standalone AOT entries.
 list(FILTER AOT_MACRO_CALL_FILES EXCLUDE REGEX "/_")
 
+# AOT for macro_boost test files
+FILE(GLOB AOT_MACRO_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/macro_boost/*.das")
+# Exclude the call_macro probe helper (prefixed with `_`); it's required transitively
+# by the actual test file.
+list(FILTER AOT_MACRO_BOOST_FILES EXCLUDE REGEX "/_")
+
+# Macro_boost test module files (probe call_macro required transitively by tests)
+SET(AOT_MACRO_BOOST_MODULE_FILES
+    tests/macro_boost/_has_sideeffects_probe.das
+)
+
 # AOT for match test files
 FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/match/*.das")
 
@@ -547,6 +558,14 @@ add_custom_target(test_aot_macro_call)
 SET(MACRO_CALL_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MACRO_CALL_FILES}" MACRO_CALL_AOT_GENERATED_SRC test_aot_macro_call daslang)
 
+add_custom_target(test_aot_macro_boost)
+SET(MACRO_BOOST_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MACRO_BOOST_FILES}" MACRO_BOOST_AOT_GENERATED_SRC test_aot_macro_boost daslang)
+
+add_custom_target(test_aot_macro_boost_modules)
+SET(MACRO_BOOST_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_MACRO_BOOST_MODULE_FILES}" MACRO_BOOST_MODULES_AOT_GENERATED_SRC test_aot_macro_boost_modules daslang)
+
 add_custom_target(test_aot_match)
 SET(MATCH_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MATCH_FILES}" MATCH_AOT_GENERATED_SRC test_aot_match daslang)
@@ -680,6 +699,8 @@ SOURCE_GROUP_FILES("aot generated" JSON_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MACRO_CALL_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MACRO_BOOST_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MACRO_BOOST_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_MODULES_AOT_GENERATED_SRC)
@@ -748,6 +769,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LINQ_AOT_GENERATED_SRC}
     ${LINQ_MODULES_AOT_GENERATED_SRC}
     ${MACRO_CALL_AOT_GENERATED_SRC}
+    ${MACRO_BOOST_AOT_GENERATED_SRC}
+    ${MACRO_BOOST_MODULES_AOT_GENERATED_SRC}
     ${MATCH_AOT_GENERATED_SRC}
     ${MATH_AOT_GENERATED_SRC}
     ${MATH_MODULES_AOT_GENERATED_SRC}
@@ -799,6 +822,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_jobque test_aot_json test_aot_jsonrpc
     test_aot_linq test_aot_linq_modules
     test_aot_macro_call
+    test_aot_macro_boost test_aot_macro_boost_modules
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
     test_aot_option
