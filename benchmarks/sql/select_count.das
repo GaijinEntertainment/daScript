@@ -3,12 +3,14 @@ options persistent_heap
 
 require _common public
 
-// _select |> count — projection followed by counter. The projection has no effect on count
-// semantics, but on the array path m3 materializes the projected array before counting.
-// Phase-2A `_fold` recognizes the counter lane and emits a bare-loop counter that ignores
-// the projection entirely (no allocation). `_old_fold` lacks a [select, count] pattern in
-// g_foldSeq so it falls to the default nested-pass form (pass_0 = select(...); count(pass_0))
-// — materializing the same way m3 does.
+// _select |> count — projection followed by counter. The final count value doesn't depend
+// on the projection, but plain LINQ `count(select(src, f))` still evaluates `f` per element
+// so user-visible side effects fire. Phase-2A `_fold` matches that: the counter lane binds
+// the final projection to a discardable local per matched element (side effects preserved)
+// and skips array materialization. The optimizer DCEs the binding for pure projections
+// like `_.price * 2`, leaving a bare-loop counter for the common case. `_old_fold` lacks a
+// [select, count] pattern in g_foldSeq so it falls to the default nested-pass form
+// (pass_0 = select(...); count(pass_0)) — materializing the same way m3 does.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
