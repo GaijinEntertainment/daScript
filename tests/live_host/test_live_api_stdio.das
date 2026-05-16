@@ -114,6 +114,20 @@ def test_parse_notification(t : T?) {
         t |> success(!r.is_notification, "non-object is NOT a notification")
         t |> success(find(r.error_envelope, "-32600") >= 0, "invalid-request code")
     }
+    t |> run("empty object (no id, no method) is NOT a notification") @(t : T?) {
+        // A notification is a *well-formed* request that omits id. `{}` is missing
+        // the required `method` member, so it's an invalid request that must
+        // reach the wire with -32600 per JSON-RPC §5.1 — not silently swallowed.
+        let r = parse_jsonrpc_request("\{}")
+        t |> success(!r.is_notification, "missing method with no id is NOT a notification")
+        t |> success(find(r.error_envelope, "-32600") >= 0, "invalid-request code")
+        t |> success(find(r.error_envelope, "\"id\":null") >= 0, "id null when absent")
+    }
+    t |> run("non-string method with no id is NOT a notification") @(t : T?) {
+        let r = parse_jsonrpc_request("\{\"method\":42}")
+        t |> success(!r.is_notification, "non-string method with no id is NOT a notification")
+        t |> success(find(r.error_envelope, "-32600") >= 0, "invalid-request code")
+    }
 }
 
 // --- parse_jsonrpc_request: id type validation (JSON-RPC 2.0 §4) ---

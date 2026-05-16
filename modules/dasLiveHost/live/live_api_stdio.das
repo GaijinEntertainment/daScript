@@ -26,6 +26,22 @@ module live_api_stdio shared public
 //! IMPORTANT: stdout is the response channel. Scripts that use this
 //! transport must redirect ``print()`` to stderr or a log file, or the
 //! application's output will interleave with JSON-RPC responses.
+//!
+//! Spec compliance — this is a permissive JSON-RPC 2.0 subset, sized for
+//! the live-command demo, not a general-purpose JSON-RPC server. If a
+//! real-deal implementation is wanted under ``daslib/``, the gap list
+//! against the spec (https://www.jsonrpc.org/specification) is:
+//!
+//! * Batch requests (§6) — array of requests / array of responses. Currently rejected as -32600.
+//! * ``params`` type validation (§4.2) — spec says MUST be Array or Object; we forward whatever's there.
+//! * ``-32601`` method not found and ``-32603`` internal error — ``dispatch_command`` returns its own error JSON inside ``result`` rather than a JSON-RPC ``error`` envelope.
+//! * Optional ``data`` field on errors (genuinely optional, never emitted).
+//!
+//! Everything else (response envelope, id type validation, framing,
+//! notification semantics, ``-32700`` / ``-32600``, permissive
+//! ``jsonrpc`` member) is in place — the parser layer
+//! (``parse_jsonrpc_request``, ``compact_json_whitespace``,
+//! envelope helpers) is reusable as-is.
 
 require daslib/json
 require daslib/json_boost
@@ -99,12 +115,14 @@ def public parse_jsonrpc_request(line : string) : ParsedJsonRpc {
         result.error_envelope = json_rpc_error("null", -32600, "invalid request: id must be string, number, or null")
         return result
     }
-    result.is_notification = (id_v == null)
     result.id_str = serialize_id(id_v)
     if (method_v == null || !(method_v.value is _string)) {
+        // Don't flag as notification before method validation — `{}` or `{"method":42}`
+        // with no id would otherwise swallow the -32600 envelope per JSON-RPC §5.1.
         result.error_envelope = json_rpc_error(result.id_str, -32600, "invalid request: missing or non-string method")
         return result
     }
+    result.is_notification = (id_v == null)
     result.method = method_v.value as _string
     let method_str = write_json(JV(result.method))
     let params_str = params_v == null ? "null" : write_json(params_v)
