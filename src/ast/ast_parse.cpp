@@ -674,6 +674,11 @@ namespace das {
         program->library.renameModule(program->thisModule.get(), moduleName);
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
+        // Per-module timing snapshots, used by log_module_compile_time. We still
+        // accumulate into *totParse/*totInfer/*totOpt/*totM for the top-level summary.
+        uint64_t myParseT = 0, myInferT = 0, myOptT = 0, myMacroModT = 0;
+        auto macroTicks0 = daScriptEnvironment::getBound()->macroTimeTicks;
+        program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
 
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             return program;
@@ -767,7 +772,8 @@ namespace das {
             return program;
         }
         parserState = DasParserState();
-        *totParse += get_time_usec(time0);
+        myParseT = get_time_usec(time0);
+        *totParse += myParseT;
         if ( err || program->failed() ) {
             daScriptEnvironment::getBound()->g_Program.reset();
             daScriptEnvironment::getBound()->g_compilerLog = nullptr;
@@ -786,10 +792,19 @@ namespace das {
                 program->thisModule->isSolidContext = true;
             }
             callCompilationCallback(moduleName, fileName, "infer");
-            auto timeI = ref_time_ticks();
-            restartInfer: program->inferTypes(logs, libGroup);
-            if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-            *totInfer += get_time_usec(timeI);
+            // restartInfer: timer must be inside the label so each leg is timed independently.
+            // The pre-edit form (timeI set ONCE before the label) over-counted *totInfer on
+            // patchAnnotations() restarts: get_time_usec(timeI) included all previous legs,
+            // and we added it again each iteration.
+            restartInfer:
+            {
+                auto timeI = ref_time_ticks();
+                program->inferTypes(logs, libGroup);
+                if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
+                uint64_t inferLegT = get_time_usec(timeI);
+                myInferT += inferLegT;
+                *totInfer += inferLegT;
+            }
             if ( !program->failed() ) {
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
@@ -816,7 +831,8 @@ namespace das {
                     }
                 }
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-                *totOpt += get_time_usec(timeO);
+                myOptT = get_time_usec(timeO);
+                *totOpt += myOptT;
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed()) {
@@ -867,12 +883,29 @@ namespace das {
                         program->allocateStack(logs,true,false);
                     if (!program->failed())
                         program->makeMacroModule(logs);
-                    *totM += get_time_usec(timeM);
+                    myMacroModT = get_time_usec(timeM);
+                    *totM += myMacroModT;
                 }
             }
             daScriptEnvironment::getBound()->g_Program.reset();
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-            if ( program->options.getBoolOption("log_compile_time",policies.log_compile_time) ) {
+            bool logModule = program->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time);
+            // For the entry script (isDep == false) the heaviest post-parseDaScript work
+            // (markExecutableSymbolUse / removeUnusedSymbols / deriveAliases / allocateStack /
+            // validateAst) runs in compileDaScript AFTER this point, so the per-module
+            // breakdown here would be misleadingly low. The top-level summary emitted later
+            // in compileDaScript covers the entry's full cost authoritatively.
+            if ( logModule && isDep ) {
+                auto dt = get_time_usec(time0) / 1000000.;
+                auto macroDelta = ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks - macroTicks0);
+                logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << program->totalFunctions << " functions\n"
+                     << "\tparse    " << (myParseT     / 1000000.) << "\n"
+                     << "\tinfer    " << (myInferT     / 1000000.) << " (" << program->inferPassesUsed << " passes)\n"
+                     << "\toptimize " << (myOptT       / 1000000.) << "\n"
+                     << "\tmacro (in infer) " << (macroDelta   / 1000000.) << "\n"
+                     << "\tmacro mods " << (myMacroModT / 1000000.) << "\n"
+                ;
+            } else if ( program->options.getBoolOption("log_compile_time",policies.log_compile_time) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << ", " << fileName << "\n";
             }
@@ -1331,14 +1364,15 @@ namespace das {
                 res->thisNamespace = "_anon_" + to_string(normalizedPathHash(fileName, getDasRoot()));
             }
             res->validateAst();
-            if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
+            if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
+                 || res->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
                 auto totT = get_time_usec(time0);
-                logs << "compiler took " << (totT  / 1000000.) << ", " << fileName << "\n"
+                logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << res->totalFunctions << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
                      << "\tparse    " << (*totParse / 1000000.) << "\n"
                      << "\tinfer    " << (*totInfer / 1000000.) << "\n"
                      << "\toptimize " << (*totOpt   / 1000000.) << "\n"
-                     << "\tmacro    " << (ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks)  / 1000000.) << "\n"
+                     << "\tmacro (in infer) " << (ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks)  / 1000000.) << "\n"
                      << "\tmacro mods " << (*totM     / 1000000.) << "\n"
                 ;
             }

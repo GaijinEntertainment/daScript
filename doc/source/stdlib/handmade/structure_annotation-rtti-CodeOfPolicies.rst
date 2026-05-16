@@ -16,6 +16,7 @@ Keep context alive after main function.
 Whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs).
 Threshold for reporting candidates for function calls. If less than this number, we always report them.
 Maximum number of inference passes.
+Maximum call expression nesting depth during inference.
 Stack size.
 Whether to intern strings.
 Whether to use persistent heap (or linear heap).
@@ -65,6 +66,7 @@ Fails compilation if AOT is not available.
 Fails compilation if AOT export is not available.
 Log compile time.
 Log total compile time.
+Log detailed per-module compile-time breakdown. Each required module emits its own block with parse / infer (with pass count) / optimize / macro (in infer) / macro mods times plus function count. Also enables a separate ``simulate (...) took X, modName (fileName)`` line for every ``Program::simulate`` call and the top-level aggregate summary at the end of compilation. Wired to the daslang CLI flag ``-log-compile-time``.
 Disables fast call optimization.
 Reuse stack memory after variables go out of scope.
 Force in-scope for POD-like types.

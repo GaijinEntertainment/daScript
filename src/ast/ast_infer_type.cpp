@@ -5744,6 +5744,8 @@ namespace das {
     // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
     void Program::inferTypes(TextWriter &logs, ModuleGroup &libGroup) {
         newLambdaIndex = 1;
+        // inferPassesUsed is NOT reset here — parseDaScript resets it once per module
+        // before the restartInfer: loop, so multiple inferTypes legs accumulate properly.
         inferTypesDirty(logs, false);
         bool anyMacrosDidWork = false;
         bool anyMacrosFailedToInfer = false;
@@ -5832,6 +5834,7 @@ namespace das {
         for (pass = 0; pass < maxInferPasses; ++pass) {
             if (macroException)
                 break;
+            inferPassesUsed++;   // count each body invocation; avoids undercount when loop breaks early (pass is 0-based)
             failToCompile = false;
             errors.clear();
             InferTypes context(this, &logs);

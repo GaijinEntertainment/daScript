@@ -55,6 +55,7 @@ static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
+static bool logModuleCompileTime = false;
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
@@ -71,6 +72,7 @@ static CodeOfPolicies getPolicies() {
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.log_module_compile_time = logModuleCompileTime;
     return policies;
 }
 
@@ -141,7 +143,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-no-lint]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-no-lint] [-log-compile-time]\n";
         return -1;
     }
     bool dryRun = false;
@@ -199,6 +201,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 noDynamicModules = true;
             } else if ( strcmp(argv[ai],"-no-lint")==0 ) {
                 noLint = true;
+            } else if ( strcmp(argv[ai],"-log-compile-time")==0 ) {
+                logModuleCompileTime = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
@@ -276,6 +280,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.log_module_compile_time = logModuleCompileTime;
     policies.persistent_heap = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
@@ -442,6 +447,7 @@ void print_help() {
         << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
+        << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
@@ -449,6 +455,7 @@ void print_help() {
         << "    -q          suppress all output\n"
         << "    -dry-run    no changes will be written\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
+        << "    -log-compile-time  log per-module compile-time breakdown during AOT generation\n"
     ;
 }
 
@@ -583,6 +590,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 compileOnly = true;
             } else if ( cmd=="no-lint" ) {
                 noLint = true;
+            } else if ( cmd=="log-compile-time" ) {
+                logModuleCompileTime = true;
             } else if ( cmd=="project-root" || cmd=="project_root" ) {
                 project_root = argv[i + 1];
                 i++;
