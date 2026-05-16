@@ -550,11 +550,12 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     let srcName = "`source`{at.line}`{at.column}"
     let itName  = "`it`{at.line}`{at.column}"
     let accName = "`acc`{at.line}`{at.column}"
-    let valName = "`val`{at.line}`{at.column}"
     var whereCond : Expression?
     var projection : Expression?
+    var intermediateBinds : array<Expression?>
     var seenSelect = false
     var elementType = clone_type(top._type.firstType)
+    var lastBindName = itName
     for (i in 0 .. intermediateCount) {
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
@@ -567,9 +568,23 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 whereCond = qmacro($e(whereCond) && $e(predicate))
             }
         } elif (opName == "select") {
-            if (projection != null) return null   // chained _select|_select needs ExprRef2Value-aware
-                                                  // substitution; deferred to Phase 2B.
-            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            // Chained selects: bind the previous projection to a fresh local now so the next
+            // lambda's `_` can be renamed straight to that name — avoids the
+            // ExprRef2Value-substitution trap that plain `Template.replaceVariable` hits when
+            // splicing a typed expression into another typed expression. Phase 2A only
+            // chains workhorse projections; a non-workhorse intermediate binding would need
+            // a clone (`:=`) since `<-` (move) can corrupt source for lvalue projections
+            // like `_._field`. Deferred to Phase 2B.
+            if (projection != null) {
+                let prevWorkhorse = projection._type != null && projection._type.isWorkhorseType
+                if (!prevWorkhorse) return null   // chained non-workhorse selects — Phase 2B
+                let bindName = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
+                intermediateBinds |> push <| qmacro_expr() {
+                    var $i(bindName) = $e(projection)
+                }
+                lastBindName = bindName
+            }
+            projection = fold_linq_cond(cll._0.arguments[1], lastBindName)
             elementType = clone_type(cll._0._type.firstType)
             seenSelect = true
         } else {
@@ -593,20 +608,35 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     } else {
         // array lane
         if (projection != null) {
-            // Workhorse projections copy cheaply — push the expression directly with no
-            // intermediate binding (matches ExprArrayComprehension lowering). Non-workhorse
-            // values must move out of the temporary returned by the projection, which `<-`
-            // can only do via an intermediate `var v` and then `emplace(v)`.
+            // push for workhorse (cheap copy), push_clone for non-workhorse (deep clone,
+            // never mutates source). emplace would move out of the projection's value,
+            // which is unsafe when the projection returns a ref into the source.
+            // For chained selects, `intermediateBinds` carries N-1 prior bindings; splice
+            // them in before the push so each lambda body can resolve its renamed parameter
+            // to the correct binding name.
             let workhorseProj = projection._type != null && projection._type.isWorkhorseType
-            var perElem : Expression?
+            var pushStmt : Expression?
             if (workhorseProj) {
-                perElem = qmacro_expr() {
+                pushStmt = qmacro_expr() {
                     $i(accName) |> push($e(projection))
                 }
             } else {
+                pushStmt = qmacro_expr() {
+                    $i(accName) |> push_clone($e(projection))
+                }
+            }
+            var perElem : Expression?
+            if (empty(intermediateBinds)) {
+                perElem = pushStmt
+            } else {
+                var perElemStmts : array<Expression?>
+                perElemStmts |> reserve(length(intermediateBinds) + 1)
+                for (b in intermediateBinds) {
+                    perElemStmts |> push(b)
+                }
+                perElemStmts |> push(pushStmt)
                 perElem = qmacro_block() {
-                    var $i(valName) <- $e(projection)
-                    $i(accName) |> emplace($i(valName))
+                    $b(perElemStmts)
                 }
             }
             if (whereCond != null) {
@@ -619,9 +649,21 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 loopBody = perElem
             }
         } elif (whereCond != null) {
-            loopBody = qmacro_expr() {
-                if ($e(whereCond)) {
-                    $i(accName) |> push_clone($i(itName))
+            // Identity case (no projection): `it` aliases the source element. Workhorse
+            // types can `push` (cheap copy); non-workhorse needs `push_clone` to avoid
+            // mutating the source via a move.
+            let elemWorkhorse = elementType != null && elementType.isWorkhorseType
+            if (elemWorkhorse) {
+                loopBody = qmacro_expr() {
+                    if ($e(whereCond)) {
+                        $i(accName) |> push($i(itName))
+                    }
+                }
+            } else {
+                loopBody = qmacro_expr() {
+                    if ($e(whereCond)) {
+                        $i(accName) |> push_clone($i(itName))
+                    }
                 }
             }
         } else {

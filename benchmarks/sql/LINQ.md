@@ -76,7 +76,7 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 
 `_fold` now emits explicit for-loops for two narrow shape families instead of comprehensions. Anything outside scope falls through unfolded to raw linq (no dispatch to `_old_fold` or `fold_linq_default`).
 
-**In scope:** `[where_*][select?]` (array lane) and `[where_*][select?] |> count` (counter lane). Chained `_where|_where|...` fuses via `&&`; single `_select` composes; chained `_select|_select` falls through (needs ExprRef2Value-aware substitution, deferred to Phase 2B).
+**In scope:** `[where_*][select*]` (array lane) and `[where_*][select*] |> count` (counter lane). Chained `_where|_where|...` fuses via `&&`. Chained `_select|_select|...` fuses via intermediate `var v_N = projection_N` let-bindings — each next lambda's `_` is renamed straight to the prior binding's name, no expression substitution needed (which would have hit the ExprRef2Value-wrapper problem documented in `skills/das_macros.md`). Chained selects currently require all projections to be workhorse; non-workhorse intermediates would need `:=` (clone) since `<-` (move) can corrupt source for lvalue projections — deferred to Phase 2B.
 
 **Out of scope (falls through):** `_select|_where`, `sum`, `min`, `max`, `average`, `first`, `any`, `all`, `long_count`, `_order`, `_distinct`, `_take`, `_skip`, `_zip`, `_reverse`, etc.
 
@@ -99,7 +99,7 @@ The first cut was 18% slower than the comprehension. Three independent fixes bro
 2. **Pre-reserve when the source has a known length.** ExprArrayComprehension lowering reserves the result array to the source's length to avoid growth reallocs; the explicit loop has to do the same explicitly. The planner emits `acc |> reserve(length(src))` when the source isn't an iterator.
 3. **Peel `each(<array>)` at macro time.** The benchmark source `each(arr)` reports as `iterator<T>`, so the reserve from (2) wouldn't fire. The planner now detects `each(<expr>)` where the inner expression has length and unwraps it — the emitted loop iterates the array directly. `for (it in arr)` and `for (it in each(arr))` yield the same element refs; the wrapper iterator is incidental in fold context.
 
-A fourth simplification dropped the intermediate `var val = projection; emplace(val)` for workhorse types — comprehension lowering pushes the projection expression directly, so the planner now emits `acc |> push(projection)` in that case (no temp binding). Non-workhorse projections still need the bind-then-emplace dance because `<-` is a statement, not an expression.
+A fourth simplification dropped `emplace` from the emission entirely. emplace **moves** out of its argument and can corrupt the source when the projection returns a ref into it (e.g. `_._field`). The safe pattern is `push` for workhorse (cheap copy) and `push_clone` for non-workhorse (deep clone). No intermediate `var v = projection; emplace(v)` is needed in either case — the planner pushes the projection expression directly.
 
 ## Operator-coverage checklist (parity tests)
 

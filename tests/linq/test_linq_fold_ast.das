@@ -490,19 +490,19 @@ def test_chained_where_fold_emits_loop(t : T?) {
 }
 
 [test]
-def test_chained_select_fold_falls_through(t : T?) {
+def test_chained_select_fold_emits_loop(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_chained_select_fold)
         if (func == null) return
-        // Chained _select|_select needs ExprRef2Value-aware projection substitution; the
-        // Phase-2A planner bails out and `_fold` returns the raw chain unfolded. Phase 2B
-        // will lift this restriction by adding a substitution-aware composition pass.
+        // Chained _select|_select fuses via intermediate `var v_N = projection_N` bindings
+        // — the next lambda's `_` is renamed straight to the prior binding's name so no
+        // expression-substitution (and no ExprRef2Value-wrapping headaches) is needed.
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(!(body_expr is ExprInvoke), "chained _select|_select should fall through (no invoke wrapper)")
+        t |> success(body_expr is ExprInvoke, "chained _select|_select should fuse into single invoke loop")
     }
 }
 
