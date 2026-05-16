@@ -371,6 +371,10 @@ Debugging and Profiling
      - bool
      - false
      - Prints detailed compile time breakdown at the end of compilation.
+   * - ``log_module_compile_time``
+     - bool
+     - false
+     - Prints per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods) plus function count for each required module. Also enables per-context simulate timing logs and the top-level aggregate summary. CLI: ``-log-compile-time``.
 
 --------------------
 RTTI

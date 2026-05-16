@@ -3985,9 +3985,12 @@ namespace das
         if ( !options.getBoolOption("rtti",policies.rtti) ) {
             context.thisProgram = nullptr;
         }
-        if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
+        if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
+             || options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
             auto dt = get_time_usec(time0) / 1000000.;
-            logs << "simulate (including init script) took " << dt << "\n";
+            logs << "simulate (including init script) took " << dt << ", ";
+            if ( !thisModule->name.empty() ) logs << thisModule->name << " (" << thisModule->fileName << ")\n";
+            else logs << thisModule->fileName << "\n";
         }
         dapiSimulateContext(context);
         return errors.size() == 0;
