@@ -1,10 +1,13 @@
 #include "daScript/misc/platform.h"
 
 #include <future>
+#include <cstdlib>
 
 #include "../../../src/builtin/module_builtin_rtti.h"
 
 #include "dasHV.h"
+
+#include <hv/hlog.h>
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketClient,hv::WebSocketClient)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketServer,hv::WebSocketServer)
@@ -1167,6 +1170,26 @@ char * das_httpreq_get_url_encoded ( HttpRequest * req, const char * key, Contex
 class Module_HV : public Module {
 public:
     Module_HV() : Module("dashv") {
+        // libhv defaults to file_logger (bin/libhv.YYYYMMDD.log). Invisible
+        // under popen + CI runners. Two env-gated opt-outs:
+        //   DASLIVE_HV_LOG=stderr (or =1)  → redirect libhv to stderr
+        //   DASLIVE_HV_LOG=stdout          → redirect libhv to stdout
+        //   DASLIVE_HV_LOG=silent          → disable libhv logging entirely
+        // DASLIVE_HV_LOG_LEVEL=DEBUG/INFO/WARN/ERROR overrides the level.
+        // Default unset → file_logger (unchanged).
+        if (const char * route = std::getenv("DASLIVE_HV_LOG")) {
+            if (!strcmp(route, "stderr") || !strcmp(route, "1")) {
+                hlog_set_handler(stderr_logger);
+            } else if (!strcmp(route, "stdout")) {
+                hlog_set_handler(stdout_logger);
+            } else if (!strcmp(route, "silent")) {
+                hlog_disable();
+            }
+        }
+        if (const char * lvl = std::getenv("DASLIVE_HV_LOG_LEVEL")) {
+            hlog_set_level_by_str(lvl);
+        }
+
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
