@@ -34,12 +34,22 @@ namespace das {
 // to avoid a syscall on every ref_time_ticks() call. Race-tolerant: parallel
 // initialisers all compute the same value, and int64 stores are atomic on
 // x64/arm64.
+//
+// We also precompute `qpc_ns_per_tick = 1e9 / freq` when it divides cleanly
+// (the universal Win 7+ case where QPF = 10 MHz → 100 ns/tick). The fast path
+// is one multiply per call, so ref_time_ticks() stays within ~1 ns of the
+// bare QueryPerformanceCounter cost — critical for the function profiler,
+// which brackets every call. Fallback split path handles non-divisible
+// frequencies (theoretical; not observed on modern Windows).
+static int64_t qpc_ns_per_tick = 0;     // 0 -> use the fallback split path
+
 static int64_t qpc_freq() {
     static int64_t cached = 0;
     if ( cached == 0 ) {
         LARGE_INTEGER f;
         QueryPerformanceFrequency(&f);
         cached = f.QuadPart;
+        qpc_ns_per_tick = (1000000000LL % cached == 0) ? (1000000000LL / cached) : 0;
     }
     return cached;
 }
@@ -47,11 +57,14 @@ static int64_t qpc_freq() {
 extern "C" int64_t ref_time_ticks () {
     LARGE_INTEGER t0;
     QueryPerformanceCounter(&t0);
-    // Convert QPC counter to nanoseconds without overflowing int64:
+    const int64_t freq = qpc_freq();
+    if ( qpc_ns_per_tick ) {
+        return t0.QuadPart * qpc_ns_per_tick;
+    }
+    // Fallback: convert QPC counter to nanoseconds without overflowing int64:
     //   ns = (ticks / freq) * 1e9 + (ticks % freq) * 1e9 / freq
     // freq is typically 10 MHz, so (ticks / freq) fits comfortably and the
     // remainder * 1e9 also fits (max ~1e16, well under 2^63).
-    const int64_t freq = qpc_freq();
     const int64_t whole = t0.QuadPart / freq;
     const int64_t rem   = t0.QuadPart % freq;
     return whole * 1000000000LL + (rem * 1000000000LL) / freq;
