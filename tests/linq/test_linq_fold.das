@@ -1245,3 +1245,40 @@ def test_take_skip_array_lane(t : T?) {
         t |> equal(0, length(r))
     }
 }
+
+[test]
+def test_chained_non_workhorse_select(t : T?) {
+    // Pre-Commit-2: planner rejected any chained _select whose previous projection was
+    // non-workhorse (prevWorkhorse=false → return null), falling back to the iterator path.
+    // Commit 2: chained-bind emission switched to `:=` (clone) — safe for every type — so
+    // ComplexType intermediates now splice.
+    t |> run("int → ComplexType → int → sum") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r = _fold(each(arr)
+            ._select(ComplexType(a = [_ * 2]))    // int → ComplexType (non-workhorse)
+            ._select(_.a[0])                       // ComplexType → int (reads field)
+            .sum())
+        // sum(2 + 4 + 6 + 8 + 10) = 30
+        t |> equal(30, r)
+    }
+    t |> run("where then ComplexType intermediate then sum") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r = _fold(each(arr)
+            ._where(_ >= 2)                        // predicate before selects
+            ._select(ComplexType(a = [_ * 2, _ * 3]))
+            ._select(_.a[0] + _.a[1])              // ComplexType → int (reads two fields)
+            .sum())
+        // filtered [2,3,4,5] → [(4+6),(6+9),(8+12),(10+15)] = [10,15,20,25] → sum = 70
+        t |> equal(70, r)
+    }
+    t |> run("workhorse → ComplexType → workhorse → max") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r = _fold(each(arr)
+            ._select(_ * 2)                        // int → int (workhorse)
+            ._select(ComplexType(a = [_, _ + 1]))  // int → ComplexType (non-workhorse)
+            ._select(_.a[1])                       // ComplexType → int
+            .max())
+        // _ * 2 → [2,4,6,8,10]; .a[1] → [3,5,7,9,11]; max = 11
+        t |> equal(11, r)
+    }
+}

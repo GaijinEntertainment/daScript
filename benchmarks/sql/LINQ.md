@@ -26,7 +26,7 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 | 2B Ring 1 | Accumulator lane: `sum`, `min`, `max`, `average`, `long_count` with workhorse `<` / `>` for min/max scalars and `_::less` fallback for tuples/user types. `long_count` shares the count-length shortcut. | ✅ done |
 | 2B Ring 2 | Early-exit lane: `first`, `first_or_default`, `any`, `all`, `contains` via `invoke($block { ... return val })`. Predicate-free `any` gets a `length(src) > 0` shortcut. | ✅ done |
 | 2C Ring 3 | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes. Canonical chain order `[where_*][select*][skip?][take?] |> terminator`. Trailing take/skip (no explicit aggregator) → ARRAY lane with implicit `to_array`. Range-form `take(start..end)` falls through (slice operator, different semantics). Buffer-required ops (`order_by`, `distinct`, `reverse`, `group_by`, `zip`, `join`, `left_join`, `group_join`) recognized by name and emit silent fallback with future-mode markers (BufferTopN / BufferDistinct / BufferReverse / BufferGroupBy / MultiSourceZip / BufferedJoin). | ✅ done |
-| 2C Ring 4 | Non-workhorse chained selects via `:=`-clone. | ⏳ |
+| 2C Ring 4 | Non-workhorse chained selects via `:=`-clone. | ✅ done |
 | 2D | Fail-loudly contract — see "Planned" section below | ⏳ |
 | 3+ | Buffer-required emit modes: `distinct`, `sort`/`order_by`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
 | 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
@@ -211,6 +211,27 @@ Same skeleton across all four lanes — the per-match payload (acc++ / push_clon
 Sub-ns/op on the three improved benchmarks reflects the bounded-loop nature: per-element timing normalizes to `chunk_size = 100000`, but the actual loop runs ≤ K+N times (≤ 1010 here). The win is asymptotic — `_fold` is O(K+N), `_old_fold` is O(K+N) per inner iterator + N×O(1) wrapper push.
 
 `_old_fold`'s `take_count` at 0 ns/op already reflects iterator-fusion at the linq-runtime layer; the Phase 2C delta there is allocation count (`_fold`: 1 alloc for the result array, `_old_fold`: same with extra take-iterator wrapper). The functional Phase 2C win for that shape is structural — the splice path now emits a single fused loop where `_old_fold` chains iterator instances.
+
+## Phase 2C Ring 4 — chained-select clone via `:=` (2026-05-17)
+
+Pre-Ring-4, the planner rejected any chained `_select|_select|...` chain whose previous projection had a non-workhorse type. Reason given in the source: `<-` (move) corrupts source for lvalue projections like `_._field`. The rejection guard (`prevWorkhorse=false → return null`) was a Phase 2B placeholder.
+
+Resolution in Ring 4 follows from a Boris correctness observation: **`:=` is safe on every type** — byte copy on workhorse, deep-clone on non-workhorse — so a single emission shape (`var $i(bind) := $e(projection)`) covers both cases. The workhorse / non-workhorse branch in chained-bind emission is removed entirely; chained selects of any type now splice through one path.
+
+Concretely: `each(arr)._select(ComplexType(a = [_*2]))._select(_.a[0]).sum()` previously fell through to plain linq (iterator chain + allocation); now splices to a single fused for-loop.
+
+### Workhorse-branch audit
+
+After Ring 4, two workhorse-type branches remain in `linq_fold.das`. Both are intentional:
+
+1. **`fold_select_where` (line ~392), `static_if (typeinfo is_workhorse($e(selectExpr)))`** — used exclusively by `_old_fold`'s frozen baseline path via `g_foldSeq`. Not touched here; changing it would alter the frozen `_old_fold` output and invalidate the `m3f_old` benchmark column.
+2. **`min_max_compare` (line ~746) + caller (line ~933)** — perf-critical. Workhorse types use `<` / `>` directly (single-instruction compare); non-workhorse falls back to `_::less` so user/tuple comparator overloads still apply. Boris's design directive 2026-05-16 explicitly mandates keeping this branch (≈2× per-element on int columns; see PR #2696 numbers).
+
+No further workhorse branches in the splice path.
+
+### Ring 4 deltas
+
+Ring 4 is a correctness gate (chained non-workhorse selects now splice instead of falling through), not a per-benchmark improvement on the existing 100K suite. Coverage tracked via test `test_chained_non_workhorse_select` in `tests/linq/test_linq_fold.das` (3 subtests: int → ComplexType → int → sum / where + ComplexType chain + sum / workhorse → ComplexType → workhorse → max).
 
 ## Planned: fail-loudly contract
 

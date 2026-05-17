@@ -1195,19 +1195,17 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             // Chained selects: bind the previous projection to a fresh local now so the next
             // lambda's `_` can be renamed straight to that name — avoids the
             // ExprRef2Value-substitution trap that plain `Template.replaceVariable` hits when
-            // splicing a typed expression into another typed expression. Phase 2A only
-            // chains workhorse projections; a non-workhorse intermediate binding would need
-            // a clone (`:=`) since `<-` (move) can corrupt source for lvalue projections
-            // like `_._field`. Deferred to Phase 2B.
+            // splicing a typed expression into another typed expression. `:=` (clone) is
+            // safe on every type — byte copy on workhorse, deep-clone on non-workhorse — so
+            // the same emission shape works regardless of projection type, including lvalue
+            // projections like `_._field` that `<-` (move) would corrupt.
             if (projection != null) {
-                let prevWorkhorse = projection._type != null && projection._type.isWorkhorseType
-                if (!prevWorkhorse) return null   // chained non-workhorse selects — Phase 2B
                 if (has_sideeffects(projection)) {
                     allProjectionsPure = false
                 }
                 let bindName = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
                 intermediateBinds |> push <| qmacro_expr() {
-                    var $i(bindName) = $e(projection)
+                    var $i(bindName) := $e(projection)
                 }
                 lastBindName = bindName
             }
