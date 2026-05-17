@@ -655,7 +655,7 @@ int main(int argc, char * argv[]) {
         string arg = argv[i];
         if (arg == "-project" && i + 1 < argc) {
             projectFile = argv[++i];
-        } else if (arg == "-project_root" && i + 1 < argc) {
+        } else if ((arg == "-project_root" || arg == "-project-root") && i + 1 < argc) {
             project_root = argv[++i];
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
