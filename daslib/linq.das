@@ -2743,11 +2743,16 @@ def private chunk_impl(var src; tt : auto(TT); size : int) : array<array<TT -con
     //! Splits an array into chunks of a specified size
     panic("chunk size must be greater than 0") if (size <= 0)
     var buffer : array<array<TT -const -&>>
+    static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
+        buffer |> reserve((length(src) + size - 1) / size)
+    }
     var inscope chunk : array<TT -const -&>
+    chunk |> reserve(size)
     for (it in src) {
         chunk.push_clone(it)
         if (chunk.length() == size) {
             buffer.emplace(chunk)
+            chunk |> reserve(size)
         }
     }
     if (!empty(chunk)) {
@@ -2890,6 +2895,9 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : array
 [unused_argument(tt, uu)]
 def private zip_impl(var a; tt : auto(TT); var b; uu : auto(UU); result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
     var buffer : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b))) {
+        buffer |> reserve(min(length(a), length(b)))
+    }
     for (itA, itB in a, b) {
         buffer.push_clone(result_selector(itA, itB))
     }

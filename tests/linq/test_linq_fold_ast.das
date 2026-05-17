@@ -110,7 +110,7 @@ def test_where_old_fold_produces_comprehension(t : T?) {
         // fold_where output: invoke($(var source) .. var pass_0 <- COMP; return <- pass_0 .., src)
         var comp_expr : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(comp_expr)
                 return <- pass_0
@@ -135,7 +135,7 @@ def test_where_old_fold_comprehension_pattern(t : T?) {
         // Match the full structure including comprehension pattern
         var where_cond : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); it; where $e(where_cond)]
                 return <- pass_0
@@ -153,7 +153,7 @@ def test_select_old_fold_produces_comprehension(t : T?) {
         if (func == null) return
         var comp_expr : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(comp_expr)
                 return <- pass_0
@@ -176,7 +176,7 @@ def test_select_old_fold_comprehension_pattern(t : T?) {
         if (func == null) return
         var select_expr : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); $e(select_expr)]
                 return <- pass_0
@@ -199,7 +199,7 @@ def test_where_select_old_fold_comprehension(t : T?) {
         var select_expr : ExpressionPtr
         var where_cond : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); $e(select_expr); where $e(where_cond)]
                 return <- pass_0
@@ -225,7 +225,7 @@ def test_select_where_old_fold_structure(t : T?) {
         // It is NOT a simple comprehension - verify the fold still happened
         var inner_expr : ExpressionPtr
         var source_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
+        let r = qmatch_function(func) $() { // nolint:STYLE016
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(inner_expr)
                 return <- pass_0
@@ -1345,6 +1345,160 @@ def test_early_exit_falls_through_on_select_where(t : T?) {
         t |> success(r.matched, "should have return expression")
         t |> success(!(body_expr is ExprInvoke),
             "select|where|any should fall through unfolded (no invoke wrapper)")
+    }
+}
+
+// ── Phase 2C take/skip splice ──────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_where_take_count_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])._where(_ % 2 == 0).take(3).count())
+}
+
+[export, marker(no_coverage)]
+def target_skip_take_to_array_fold() : array<int> {
+    return <- _fold(each([1, 2, 3, 4, 5, 6, 7]).skip(2).take(3).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_order_by_take_falls_through() : array<int> {
+    // Buffer-required (order_by) → splice planner returns null → silent fallback to raw linq.
+    return <- _fold([1, 2, 3, 4, 5].to_sequence()._select(_ * 2)._order_by(_).take(2).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_distinct_falls_through() : array<int> {
+    // distinct is buffer-required — splice planner returns null → silent fallback.
+    return <- _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().to_array())
+}
+
+[export, marker(no_coverage)]
+def target_take_sum_fold() : int {
+    return _fold([1, 2, 3, 4, 5]._select(_ * 10).take(3).sum())
+}
+
+// AST helper — total break/continue count anywhere in the subtree. Used to assert that the
+// take-limit `break` and skip-counter `continue` actually got spliced into the per-element body.
+def count_break_continue(expr : Expression?; want_break : bool) : int {
+    if (expr == null) return 0
+    var n = 0
+    if (want_break && expr is ExprBreak) {
+        n ++
+    } elif (!want_break && expr is ExprContinue) {
+        n ++
+    }
+    if (expr is ExprBlock) {
+        let b = expr as ExprBlock
+        for (s in b.list) {
+            n += count_break_continue(s, want_break)
+        }
+        for (s in b.finalList) {
+            n += count_break_continue(s, want_break)
+        }
+    } elif (expr is ExprFor) {
+        let f = expr as ExprFor
+        for (s in f.sources) {
+            n += count_break_continue(s, want_break)
+        }
+        n += count_break_continue(f.body, want_break)
+    } elif (expr is ExprIfThenElse) {
+        let i = expr as ExprIfThenElse
+        n += count_break_continue(i.cond, want_break)
+        n += count_break_continue(i.if_true, want_break)
+        n += count_break_continue(i.if_false, want_break)
+    } elif (expr is ExprMakeBlock) {
+        let mb = expr as ExprMakeBlock
+        n += count_break_continue(mb._block, want_break)
+    } elif (expr is ExprInvoke) {
+        let inv = expr as ExprInvoke
+        for (a in inv.arguments) {
+            n += count_break_continue(a, want_break)
+        }
+    }
+    return n
+}
+
+[test]
+def test_take_splices_break_into_loop(t : T?) {
+    // where.take.count: counter lane with take guard → one for-loop + at least one break
+    // (the `if (taken == N) break` guard).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_take_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_break_continue(body_expr, true) >= 1, "take guard must emit a break")
+    }
+}
+
+[test]
+def test_skip_take_splices_continue_and_break(t : T?) {
+    // skip.take.to_array: array lane with both guards → continue (skip) + break (take).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_skip_take_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_break_continue(body_expr, true) >= 1, "take guard must emit a break")
+        t |> success(count_break_continue(body_expr, false) >= 1, "skip guard must emit a continue")
+    }
+}
+
+[test]
+def test_take_sum_splices_in_accumulator(t : T?) {
+    // select.take.sum: accumulator lane with take → one for-loop + acc += ... + break.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_take_sum_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_op2(body_expr, "+=") >= 1, "sum must emit `+=` in accumulator")
+        t |> success(count_break_continue(body_expr, true) >= 1, "take guard must emit a break")
+    }
+}
+
+[test]
+def test_order_by_take_falls_through(t : T?) {
+    // order_by + take is BufferTopN territory — recognized as buffer-required, planner returns
+    // null, falls through to plain linq. Future PR replaces with a dedicated emit path.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_take_falls_through)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> success(!(body_expr is ExprInvoke),
+            "order_by chain should fall through unfolded — splice planner doesn't handle buffer mode yet")
+    }
+}
+
+[test]
+def test_distinct_falls_through(t : T?) {
+    // distinct is buffer-required (hash set) — fall-through marker.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_falls_through)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> success(!(body_expr is ExprInvoke),
+            "distinct chain should fall through unfolded — BufferDistinct mode not yet implemented")
     }
 }
 

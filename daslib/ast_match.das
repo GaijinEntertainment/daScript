@@ -508,7 +508,10 @@ def private qm_null_guard(at : LineInfo; actual_var : string) : Expression? {
 
 [macro_function]
 def private next_var(var index : int&) : string {
-    let name = "_qm_{index}"
+    // Generated locals for qmatch pattern-match bind sites. Leading `qm_` (no underscore
+    // prefix) sidesteps LINT004 — these vars are USED downstream in the emitted match
+    // arms, so the unused-prefix convention doesn't apply.
+    let name = "qm_{index}"
     index++
     return name
 }
@@ -749,7 +752,7 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
 
                 // Get physical index at runtime (skipping fake args)
                 let phys_var = next_var(index)
-                body |> push <| qmacro_expr(${ var $i(phys_var) = qm_real_arg_index($i(target_var).arguments, $v(i)); })
+                body |> push <| qmacro_expr(${ let $i(phys_var) = qm_real_arg_index($i(target_var).arguments, $v(i)); })
 
                 // Name matching
                 if (!empty(arg_name)) {
@@ -1550,7 +1553,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_pattern = arg
                     if (child_pattern != null) {
                         let phys_var = next_var(index)
-                        body |> push <| qmacro_expr(${ var $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004
+                        body |> push <| qmacro_expr(${ let $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004
                         let child_var = next_var(index)
                         body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_var)]); }) // nolint:LINT004
                         generate_match(child_pattern, child_var, body, index, at)
@@ -1793,7 +1796,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             // For simplicity: try block match first. If RTTI fails (not a block),
             // fall back to direct match. We use a runtime helper for this.
             let direct_var = next_var(index)
-            body |> push <| qmacro_expr(${ var $i(direct_var) = qm_rtti($i(actual_var)) != "ExprBlock" && qm_rtti($i(actual_var)) != "ExprMakeBlock"; })
+            body |> push <| qmacro_expr(${ let $i(direct_var) = qm_rtti($i(actual_var)) != "ExprBlock" && qm_rtti($i(actual_var)) != "ExprMakeBlock"; })
             // If it's not a block, match directly
             var direct_body : array<Expression?>
             generate_match(single_pat, actual_var, direct_body, index, at)
@@ -1842,7 +1845,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
 
     // Get the total length of the actual block for bounds checking
     let len_var = next_var(index)
-    body |> push <| qmacro_expr(${ var $i(len_var) = length($i(cast_var).list); })
+    body |> push <| qmacro_expr(${ let $i(len_var) = length($i(cast_var).list); })
 
     // Walk through pattern statements
     // Track pending $b capture: save_var holds start position, b_vname holds user variable name

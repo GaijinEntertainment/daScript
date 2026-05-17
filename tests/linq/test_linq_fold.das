@@ -188,7 +188,7 @@ def test_generic_fold_order(t : T?) {
             ._fold()
         )
         t |> equal(typeinfo typename(t7), "iterator<string>")
-        var sorted = ["kiwi", "apple", "banana", "cherry", "blueberry"]
+        var sorted = ["kiwi", "apple", "banana", "cherry", "blueberry"]    // nolint:LINT003
         for (i, v in 0..5, t7) {
             t |> equal(sorted[i], v)
         }
@@ -199,7 +199,7 @@ def test_generic_fold_order(t : T?) {
             ._fold()
         )
         t |> equal(typeinfo typename(t8), "array<string>")
-        var sorted = ["blueberry", "banana", "cherry", "apple", "kiwi"]
+        var sorted = ["blueberry", "banana", "cherry", "apple", "kiwi"]    // nolint:LINT003
         for (i, v in 0..5, t8) {
             t |> equal(sorted[i], v)
         }
@@ -209,7 +209,7 @@ def test_generic_fold_order(t : T?) {
 [test]
 def test_generic_fold_aggregates(t : T?) {
     t |> run("min fold") @(t : T?) {
-        var t1 = ([5, 3, 8, 1, 4]
+        var t1 = ([5, 3, 8, 1, 4]    // nolint:LINT003 — `var` required for the `typename(t1) == "int"` assertion below (let adds const)
             .to_sequence()
             .min()
             ._fold()
@@ -218,7 +218,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(1, t1)
     }
     t |> run("min_by fold") @(t : T?) {
-        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]    // nolint:LINT003
             .to_sequence()
             ._min_by(length(_))
             ._fold()
@@ -227,7 +227,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal("kiwi", t2)
     }
     t |> run("max fold") @(t : T?) {
-        var t2 = ([5, 3, 8, 1, 4]
+        var t2 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             .max()
             ._fold()
@@ -236,7 +236,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(8, t2)
     }
     t |> run("max_by fold") @(t : T?) {
-        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]    // nolint:LINT003
             .to_sequence()
             ._max_by(length(_))
             ._fold()
@@ -267,7 +267,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal("blueberry", tmax)
     }
     t |> run("average fold") @(t : T?) {
-        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]    // nolint:LINT003
             .to_sequence()
             .average()
             ._fold()
@@ -289,7 +289,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(4, tavg)
     }
     t |> run("sum fold") @(t : T?) {
-        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]    // nolint:LINT003
             .to_sequence()
             .sum()
             ._fold()
@@ -298,7 +298,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(36, t2)
     }
     t |> run("aggregate fold") @(t : T?) {
-        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]    // nolint:LINT003
             .to_sequence()
             .aggregate("", $(a, b) => "{a},{b}")
             ._fold()
@@ -311,7 +311,7 @@ def test_generic_fold_aggregates(t : T?) {
 [test]
 def test_generic_fold_skip_and_take(t : T?) {
     t |> run("skip fold") @(t : T?) {
-        var t1 = ([5, 3, 8, 1, 4]
+        var t1 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             .skip(2)
             .min()
@@ -321,7 +321,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(1, t1)
     }
     t |> run("skip_while fold") @(t : T?) {
-        var t2 = ([5, 3, 8, 1, 4]
+        var t2 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             ._skip_while(_ > 3)
             .min()
@@ -331,7 +331,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(1, t2)
     }
     t |> run("take fold") @(t : T?) {
-        var t3 = ([5, 3, 8, 1, 4]
+        var t3 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             .take(3)
             .max()
@@ -341,7 +341,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(8, t3)
     }
     t |> run("take_while fold") @(t : T?) {
-        var t4 = ([5, 3, 8, 1, 4]
+        var t4 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             ._take_while(_ < 8)
             .max()
@@ -351,7 +351,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(5, t4)
     }
     t |> run("take range fold") @(t : T?) {
-        var t5 = ([5, 3, 8, 1, 4]
+        var t5 = ([5, 3, 8, 1, 4]    // nolint:LINT003
             .to_sequence()
             .take(1..4)
             .max()
@@ -381,7 +381,7 @@ def test_concat(t : T?) {
         )
         t |> equal(typeinfo typename(q), "array<int>")
         t |> equal(length(q), 6)
-        var expected = [6, 4, 2, 30, 27, 24]
+        var expected = [6, 4, 2, 30, 27, 24]    // nolint:LINT003
         for (i, v in 0..6, q) {
             t |> equal(expected[i], v)
         }
@@ -400,7 +400,7 @@ def test_concat(t : T?) {
         )
         t |> equal(typeinfo typename(q), "array<int>")
         t |> equal(length(q), 4)
-        var expected = [6, 4, 2, 100]
+        var expected = [6, 4, 2, 100]    // nolint:LINT003
         for (i, v in 0..4, q) {
             t |> equal(expected[i], v)
         }
@@ -419,7 +419,7 @@ def test_concat(t : T?) {
         )
         t |> equal(typeinfo typename(q), "array<int>")
         t |> equal(length(q), 4)
-        var expected = [100, 6, 4, 2]
+        var expected = [100, 6, 4, 2]    // nolint:LINT003
         for (i, v in 0..4, q) {
             t |> equal(expected[i], v)
         }
@@ -429,7 +429,7 @@ def test_concat(t : T?) {
 [test]
 def test_any_all_contains(t : T?) {
     t |> run("fold any") @(t : T?) {
-        var query = (
+        var query = (    // nolint:LINT003
             [for (x in 0..5); x]
             ._any(_ > 3)
             ._fold()
@@ -437,7 +437,7 @@ def test_any_all_contains(t : T?) {
         t |> success(query)
     }
     t |> run("fold any false") @(t : T?) {
-        var qpred2 = (
+        var qpred2 = (    // nolint:LINT003
             [iterator for(x in 0..5); x]
             ._any(_ > 10)
             ._fold()
@@ -445,7 +445,7 @@ def test_any_all_contains(t : T?) {
         t |> success(!qpred2)
     }
     t |> run("fold all") @(t : T?) {
-        var query = (
+        var query = (    // nolint:LINT003
             [iterator for(x in 0..5); x]
             ._all(_ < 5)
             ._fold()
@@ -453,7 +453,7 @@ def test_any_all_contains(t : T?) {
         t |> success(query)
     }
     t |> run("fold all empty") @(t : T?) {
-        var qempty = (
+        var qempty = (    // nolint:LINT003
             empty(type<int>)
             ._all(_ < 5)
             ._fold()
@@ -461,7 +461,7 @@ def test_any_all_contains(t : T?) {
         t |> success(qempty)
     }
     t |> run("fold contains") @(t : T?) {
-        var query = (
+        var query = (    // nolint:LINT003
             [iterator for(x in 0..5); x]
             .contains(3)
             ._fold()
@@ -469,7 +469,7 @@ def test_any_all_contains(t : T?) {
         t |> success(query)
     }
     t |> run("fold complex contains") @(t : T?) {
-        var qcomplex = (
+        var qcomplex = (    // nolint:LINT003
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
             .contains(ComplexType(a = [3, 30]))
             ._fold()
@@ -477,7 +477,7 @@ def test_any_all_contains(t : T?) {
         t |> success(qcomplex)
     }
     t |> run("fold complex contains false") @(t : T?) {
-        var qcomplex = (
+        var qcomplex = (    // nolint:LINT003
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
             .contains(ComplexType(a = [3, 31]))
             ._fold()
@@ -534,7 +534,7 @@ def test_unique(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [0, 1, 2, 3, 9, 16, 25, 36, 49]
+        var expected = [0, 1, 2, 3, 9, 16, 25, 36, 49]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -552,7 +552,7 @@ def test_unique(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [0, 1, 2, 3]
+        var expected = [0, 1, 2, 3]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -574,7 +574,7 @@ def test_except(t : T?) {
             .distinct()
             ._fold()
         )
-        var expected = [0, 1, 2, 3]
+        var expected = [0, 1, 2, 3]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -593,7 +593,7 @@ def test_except(t : T?) {
             .distinct()
             ._fold()
         )
-        var expected = [2, 3]
+        var expected = [2, 3]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -614,7 +614,7 @@ def test_intersect(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [3, 4, 5]
+        var expected = [3, 4, 5]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -632,7 +632,7 @@ def test_intersect(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [3, 4, 5, 6]
+        var expected = [3, 4, 5, 6]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -700,7 +700,7 @@ def test_zip(t : T?) {
 [test]
 def test_order_distinct(t : T?) {
     t |> run("basic order distinct") @(t : T?) {
-        var t7 = (
+        var t7 = (    // nolint:LINT003
             [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
             ._select(_ * 10)
             .order()
@@ -712,7 +712,7 @@ def test_order_distinct(t : T?) {
         t |> equal(10, t7)
     }
     t |> run("first position order distinct") @(t : T?) {
-        var t7 = (
+        var t7 = (    // nolint:LINT003
             [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
             .order()
             .distinct()
@@ -1071,5 +1071,177 @@ def test_contains_early_exit(t : T?) {
         // Projected values: [10, 20, 30]. contains(20) → true.
         let r = _fold(each(arr)._select(_ * 10).contains(20))
         t |> equal(true, r)
+    }
+}
+
+[test]
+def test_take_skip_counter_lane(t : T?) {
+    t |> run("counter: where.take.count") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // Even values: 2,4,6,8,10 — take 3 → 3.
+        let r = _fold(each(arr)._where(_ % 2 == 0).take(3).count())
+        t |> equal(3, r)
+    }
+    t |> run("counter: where.skip.count") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // Even values: 2,4,6,8,10. skip 2 → 6,8,10 → 3.
+        let r = _fold(each(arr)._where(_ % 2 == 0).skip(2).count())
+        t |> equal(3, r)
+    }
+    t |> run("counter: where.skip.take.count") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // Even values: 2,4,6,8,10. skip 1 take 3 → 4,6,8 → 3.
+        let r = _fold(each(arr)._where(_ % 2 == 0).skip(1).take(3).count())
+        t |> equal(3, r)
+    }
+    t |> run("counter: take(0).count → 0") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r = _fold(each(arr).take(0).count())
+        t |> equal(0, r)
+    }
+    t |> run("counter: take(huge).count → all source") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r = _fold(each(arr).take(1000).count())
+        t |> equal(3, r)
+    }
+    t |> run("counter: skip(huge).count → 0") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r = _fold(each(arr).skip(1000).count())
+        t |> equal(0, r)
+    }
+}
+
+[test]
+def test_take_skip_accumulator_lane(t : T?) {
+    t |> run("accumulator: select.take.sum") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        // Projected: 10,20,30,40,50. take 3 → 10+20+30 = 60.
+        let r = _fold(each(arr)._select(_ * 10).take(3).sum())
+        t |> equal(60, r)
+    }
+    t |> run("accumulator: select.skip.take.average") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8]
+        // Projected (* 10): 10,20,30,40,50,60,70,80. skip 2 take 4 → 30+40+50+60=180 / 4 = 45.
+        let r = _fold(each(arr)._select(_ * 10).skip(2).take(4).average())
+        t |> equal(45.0lf, r)
+    }
+    t |> run("accumulator: take.min") @(t : T?) {
+        let arr <- [5, 3, 8, 1, 4]
+        // take 3 → 5,3,8 → min=3.
+        let r = _fold(each(arr).take(3).min())
+        t |> equal(3, r)
+    }
+    t |> run("accumulator: where.take.long_count → int64") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // odd values: 1,3,5,7,9. take 3 → 3.
+        let r = _fold(each(arr)._where(_ % 2 == 1).take(3).long_count())
+        t |> equal(3l, r)
+    }
+    t |> run("accumulator: take(0).sum → 0") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r = _fold(each(arr).take(0).sum())
+        t |> equal(0, r)
+    }
+}
+
+[test]
+def test_take_skip_early_exit_lane(t : T?) {
+    t |> run("early-exit: take.first") @(t : T?) {
+        let arr <- [5, 3, 8, 1, 4]
+        // take 3 → 5,3,8. first → 5.
+        let r = _fold(each(arr).take(3).first())
+        t |> equal(5, r)
+    }
+    t |> run("early-exit: where.take.any → true") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        // even values: 2,4. take 5 → 2,4. any → true.
+        let r = _fold(each(arr)._where(_ % 2 == 0).take(5).any())
+        t |> equal(true, r)
+    }
+    t |> run("early-exit: where.skip.take.first → 6") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // even: 2,4,6,8,10. skip 2 take 3 → 6,8,10. first → 6.
+        let r = _fold(each(arr)._where(_ % 2 == 0).skip(2).take(3).first())
+        t |> equal(6, r)
+    }
+    t |> run("early-exit: take.all(odd) → false (even hits within take limit)") @(t : T?) {
+        let arr <- [1, 3, 5, 2, 7]
+        // take 5 → all five. all(odd) → false (2 fails).
+        let r = _fold(each(arr).take(5).all($(x : int) => x % 2 == 1))
+        t |> equal(false, r)
+    }
+    t |> run("early-exit: take(3).all(odd) → true (even excluded by take)") @(t : T?) {
+        let arr <- [1, 3, 5, 2, 7]
+        // take 3 → 1,3,5. all(odd) → true.
+        let r = _fold(each(arr).take(3).all($(x : int) => x % 2 == 1))
+        t |> equal(true, r)
+    }
+    t |> run("early-exit: take(0).any → false (empty)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r = _fold(each(arr).take(0).any())
+        t |> equal(false, r)
+    }
+    t |> run("early-exit: take(0).all(p) → true (vacuous)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r = _fold(each(arr).take(0).all($(x : int) => x > 100))
+        t |> equal(true, r)
+    }
+    t |> run("early-exit: take.first_or_default") @(t : T?) {
+        let arr : array<int>
+        let r = _fold(each(arr).take(5).first_or_default(-1))
+        t |> equal(-1, r)
+    }
+    t |> run("early-exit: take.contains") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        // take 3 → 1,2,3. contains(4) → false (excluded by take).
+        let r = _fold(each(arr).take(3).contains(4))
+        t |> equal(false, r)
+    }
+}
+
+[test]
+def test_take_skip_array_lane(t : T?) {
+    t |> run("array: take.to_array") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let r <- _fold(each(arr).take(3).to_array())
+        t |> equal(3, length(r))
+        t |> equal(1, r[0])
+        t |> equal(2, r[1])
+        t |> equal(3, r[2])
+    }
+    t |> run("array: skip.take.to_array") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7]
+        let r <- _fold(each(arr).skip(2).take(3).to_array())
+        t |> equal(3, length(r))
+        t |> equal(3, r[0])
+        t |> equal(4, r[1])
+        t |> equal(5, r[2])
+    }
+    t |> run("array: where.skip.take.to_array") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // even: 2,4,6,8,10. skip 1 take 3 → 4,6,8.
+        let r <- _fold(each(arr)._where(_ % 2 == 0).skip(1).take(3).to_array())
+        t |> equal(3, length(r))
+        t |> equal(4, r[0])
+        t |> equal(6, r[1])
+        t |> equal(8, r[2])
+    }
+    t |> run("array: where.select.take.to_array") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7]
+        // _ > 2 → 3,4,5,6,7. * 2 → 6,8,10,12,14. take 2 → 6,8.
+        let r <- _fold(each(arr)._where(_ > 2)._select(_ * 2).take(2).to_array())
+        t |> equal(2, length(r))
+        t |> equal(6, r[0])
+        t |> equal(8, r[1])
+    }
+    t |> run("array: take(0).to_array → empty") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).take(0).to_array())
+        t |> equal(0, length(r))
+    }
+    t |> run("array: skip(huge).to_array → empty") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).skip(100).to_array())
+        t |> equal(0, length(r))
     }
 }

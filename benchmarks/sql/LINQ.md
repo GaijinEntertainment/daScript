@@ -25,8 +25,10 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 | 2A | Loop planner — `_fold` emits explicit for-loops for `[where_*][select?]` (array lane) and `[where_*][select?] |> count` (counter lane); anything else falls through unfolded. No comprehensions, no dispatch back to `_old_fold`. | ✅ done |
 | 2B Ring 1 | Accumulator lane: `sum`, `min`, `max`, `average`, `long_count` with workhorse `<` / `>` for min/max scalars and `_::less` fallback for tuples/user types. `long_count` shares the count-length shortcut. | ✅ done |
 | 2B Ring 2 | Early-exit lane: `first`, `first_or_default`, `any`, `all`, `contains` via `invoke($block { ... return val })`. Predicate-free `any` gets a `length(src) > 0` shortcut. | ✅ done |
-| 2C | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes; non-workhorse chained selects via `:=`-clone; `_select|_where` (where-after-select; needs `ExprRef2Value` substitution). | ⏳ |
-| 3+ | Buffer-required operators: `distinct`, `sort`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
+| 2C Ring 3 | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes. Canonical chain order `[where_*][select*][skip?][take?] |> terminator`. Trailing take/skip (no explicit aggregator) → ARRAY lane with implicit `to_array`. Range-form `take(start..end)` falls through (slice operator, different semantics). Buffer-required ops (`order_by`, `distinct`, `reverse`, `group_by`, `zip`, `join`, `left_join`, `group_join`) recognized by name and emit silent fallback with future-mode markers (BufferTopN / BufferDistinct / BufferReverse / BufferGroupBy / MultiSourceZip / BufferedJoin). | ✅ done |
+| 2C Ring 4 | Non-workhorse chained selects via `:=`-clone. | ⏳ |
+| 2D | Fail-loudly contract — see "Planned" section below | ⏳ |
+| 3+ | Buffer-required emit modes: `distinct`, `sort`/`order_by`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
 | 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
 
 ## Baselines (100K rows, INTERP mode)
@@ -160,6 +162,77 @@ All Ring 2 ops hit single-digit ns/op with **zero allocations**. Early-exit case
 
 `first` / `first_or_default` collapse to sub-ns/op because the where matches near the front of the array; the early-exit returns at the first hit and per-element timing measures the loop overhead per the chunk_size (100K), not per actual iteration. The same is why `any_match` was already at 0 ns/op pre-Phase-2B — `_old_fold` and m3 also bail early on first match.
 
+## Phase 2C Ring 3 — splice-mode take/skip (2026-05-17)
+
+`_fold` now recognizes the chain shape `[where_*][select*][skip?][take?] |> terminator` and emits the per-element work wrapped with bounded-loop counters. Skip and take guards are spliced into the per-match block (after the optional `where` filter, before the lane-specific work and intermediate projection binds). Counters live alongside the lane's accumulator in the outer invoke block.
+
+**Emission shape (counter lane example, `where(p).skip(K).take(N).count()`):**
+
+```
+invoke($($i(src) : ...) {
+    var <skipRem> = K
+    var <takenCount> = 0
+    var <acc> = 0
+    for (<it> in <src>) {
+        if (p(<it>)) {
+            if (<takenCount> == N) break          // take guard
+            if (<skipRem> > 0) { <skipRem>--; continue }   // skip guard
+            <takenCount>++                         // before lane work — keeps reachable
+                                                   // even for early-exit terminators that
+                                                   // `return X` from per-match
+            <acc>++
+        }
+    }
+    return <acc>
+}, <topExpr>)
+```
+
+Same skeleton across all four lanes — the per-match payload (acc++ / push_clone / `acc += val` / `return X`) is the only thing that varies.
+
+**Chain-shape detection.** New planner state machine on `(seenSelect, seenSkip, seenTake)` accepts the canonical order and rejects reversed forms (`where` after select/skip/take, etc.) — those return null and the chain falls through to plain linq. At most one skip and one take per chain in this phase; multiple of either is a fall-through.
+
+**Take/skip as terminator.** When `take(N).to_array()` or `skip(K).take(N).to_array()` is the chain tail, the `to_array` strip (LinqCall `skip = true` in `linqCalls`) makes the last visible call `take` or `skip`. `classify_terminator` now routes those to ARRAY lane, with the trailing take/skip captured into `takeExpr`/`skipExpr` and the lane emitting implicit-to_array.
+
+**Buffer-required marker arms.** `is_buffer_required_op` recognizes `order_by`/`order`/`order_descending`/`order_by_descending`, `distinct`/`distinct_by`, `reverse`, `group_by`/`group_by_lazy`, `zip`, `join`/`left_join`/`group_join`. These all return null (silent fallback) with a `// TODO Phase 2X: <FutureMode>` comment naming the future emit mode. Future PRs replace each return-null with a dedicated emit path without re-walking the chain-recognition logic. AST tests `test_order_by_take_falls_through` and `test_distinct_falls_through` pin this behavior.
+
+**Range-form `take(start..end)` falls through.** The slice-style overload has different semantics (yield elements at indices `[start, end)`); decomposing to `skip(start).take(end-start)` is correct but introduces an arithmetic dependency the planner doesn't model today. Phase 2C handles only the int-form (`takeArg._type.baseType == Type.tInt`); range form drops to plain linq.
+
+**Reserve refinement.** When `take(N)` is present on a length-bearing source, the array-lane reserve hint tightens from `length(src)` to `min(N, length(src))` (inline `?:` — no `math::min` dep at the user's call site). Prevents over-allocating millions of slots when take cap is small.
+
+### Phase 2C Ring 3 deltas (100K rows, INTERP)
+
+| Benchmark | Shape | m3f_old | m3f (Phase 2C) | Delta |
+|---|---|---:|---:|---|
+| take_count | `take(N).to_array` (N=1000) | 0 | 0 | parity (`_old_fold`'s take iterator already bails early at N) |
+| skip_take | `skip(K).take(N).to_array` (K=10, N=1000) | 23 | **0** | bounded-loop exits after K+N iterations (small vs 100K source) |
+| take_sum_aggregate (new) | `select.take(N).sum` | 14 | **0** | accumulator-lane take splice |
+| take_count_filtered (new) | `where.take(N).count` | 11 | **0** | counter-lane take + where splice |
+
+Sub-ns/op on the three improved benchmarks reflects the bounded-loop nature: per-element timing normalizes to `chunk_size = 100000`, but the actual loop runs ≤ K+N times (≤ 1010 here). The win is asymptotic — `_fold` is O(K+N), `_old_fold` is O(K+N) per inner iterator + N×O(1) wrapper push.
+
+`_old_fold`'s `take_count` at 0 ns/op already reflects iterator-fusion at the linq-runtime layer; the Phase 2C delta there is allocation count (`_fold`: 1 alloc for the result array, `_old_fold`: same with extra take-iterator wrapper). The functional Phase 2C win for that shape is structural — the splice path now emits a single fused loop where `_old_fold` chains iterator instances.
+
+## Planned: fail-loudly contract
+
+The current contract: when `_fold` can't splice a chain (out-of-scope terminator, buffer-required op, multiple take/skip, range-form take/skip, etc.), it falls through to plain linq — same as today's master. This is **temporary**. The planned contract (Boris design directive 2026-05-17): `_fold` will emit `macro_error("_fold: cannot splice — <reason>")` for any unsupported shape, mirroring the sqlite_linq `_sql(...)` "splice or error" contract.
+
+When the switch lands, every `m3f` variant currently relying on silent fallback breaks. Approximate accounting from the current benchmark suite (8 affected `m3f` variants), grouped by future emit mode that would resolve each:
+
+| Benchmark | Future mode |
+|---|---|
+| `distinct_count` | BufferDistinct (hash set) |
+| `sort_first` | BufferTopN (order_by + early-exit) |
+| `sort_take` | BufferTopN (order_by + take/skip) |
+| `select_where_order_take` | BufferTopN with predicate prefix |
+| `groupby_count` | BufferGroupBy (hash multi-bucket) |
+| `groupby_sum` | BufferGroupBy + nested fold inside select |
+| `zip_dot_product` | MultiSourceZip (2 cursors advanced lockstep) |
+| `join_count` | BufferedJoin (hash-build + probe) |
+
+The fail-loudly PR will either (a) comment out `m3f` in the affected benchmarks until the corresponding emit mode lands, or (b) deliver one or more emit modes alongside the switch. Decision deferred to that PR.
+
+Tracking issue: the planner's `is_buffer_required_op` recognition + the named-arm `// TODO Phase 2X: <FutureMode>` markers are the in-code TODOs.
+
 ## Operator-coverage checklist (parity tests)
 
 The 24 benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
@@ -167,15 +240,15 @@ The 24 benchmarks above cover the most common shapes. The end-game target is one
 | Source test file | Operator group | Covered by benchmark | Status |
 |---|---|---|---|
 | `test_linq.das` | comprehension basics | count_aggregate, sum_aggregate | ✅ |
-| `test_linq_aggregation.das` | count/sum/min/max/avg/aggregate | count/sum/min/max/average_aggregate, sum_where | ✅ core; `aggregate(seed, fn)` ⏳ |
-| `test_linq_querying.das` | any/all/contains | any_match, all_match | ✅ core; `contains` ⏳ |
+| `test_linq_aggregation.das` | count/sum/min/max/avg/aggregate | count/sum/min/max/average_aggregate, sum_where, long_count_aggregate | ✅ core; `aggregate(seed, fn)` ⏳ |
+| `test_linq_querying.das` | any/all/contains | any_match, all_match, contains_match | ✅ core |
 | `test_linq_transform.das` | select/select_many/zip | to_array_filter, zip_dot_product | ✅ select/zip; `select_many` ⏳ |
 | `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take | ✅ ascending; `order_descending` + `reverse` ⏳ |
 | `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum | ✅ basic; `having_` ⏳ |
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
-| `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take | ✅ take/skip; `_while` + `chunk` ⏳ |
+| `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
 | `test_linq_set.das` | distinct/union/except/intersect/unique | distinct_count | ✅ distinct; set ops ⏳ |
-| `test_linq_element.das` | first/last/single/element_at + _or_default | first_match | ✅ first; last/single/element_at ⏳ |
+| `test_linq_element.das` | first/last/single/element_at + _or_default | first_match, first_or_default_match | ✅ first/first_or_default; last/single/element_at ⏳ |
 | `test_linq_concat.das` | concat/prepend/append | — | ⏳ |
 | `test_linq_generation.das` | range/repeat/etc. | — | ⏳ |
 | `test_linq_bugs.das` | regression cases | — | ⏳ as bugs surface |
