@@ -543,6 +543,29 @@ def private is_each_call(call : ExprCall?) : bool {
         || (call.func.fromGeneric != null && call.func.fromGeneric.name == "each"))
 }
 
+enum private LinqLane {
+    //! Terminator-category classification driving `plan_loop_or_count`'s emit dispatch.
+    //! ARRAY: bare or `[where_*][select*]` chain — produces `array<T>` / `iterator<T>`.
+    //! COUNTER: `[...] |> count` — produces `int` accumulator.
+    //! ACCUMULATOR: `[...] |> {sum,min,max,average,long_count}` — typed single-pass accumulator.
+    //! EARLY_EXIT: `[...] |> {first,first_or_default,any,all,contains}` — loop with early return.
+    //! UNKNOWN: terminator not recognized by the planner; fall through to plain linq.
+    UNKNOWN
+    ARRAY
+    COUNTER
+    ACCUMULATOR
+    EARLY_EXIT
+}
+
+[macro_function]
+def private classify_terminator(name : string) : LinqLane {
+    if (name == "count") return LinqLane.COUNTER
+    if (name == "where_" || name == "select") return LinqLane.ARRAY
+    if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
+    if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains") return LinqLane.EARLY_EXIT
+    return LinqLane.UNKNOWN
+}
+
 [macro_function]
 def private peel_each(var top : Expression?) : Expression? {
     // Unwrap `each(<arr>)` to `<arr>` when `<arr>` is a true array (or fixed-size array).
@@ -561,18 +584,461 @@ def private peel_each(var top : Expression?) : Expression? {
 }
 
 [macro_function]
+def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? {
+    // Shared post-emit cleanup for every `invoke($block, $src)` the planner returns.
+    // Stamping the location and the generated-flag keeps diagnostics pointing at the user's
+    // chain site, and `can_shadow` lets the gensym source name coexist with whatever the
+    // user already has in scope at the splice point.
+    res.force_at(at)
+    res.force_generated(true)
+    let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
+    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+    return res
+}
+
+[macro_function]
+def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
+    // Count-shaped shortcut: emit `length(src)` (count) or `int64(length(src))` (long_count)
+    // directly, eliding the loop. Caller has verified count-shaped terminator + no predicate
+    // + all projections pure + source has length. `int(int)` is identity, so a single
+    // template handles both via `$c(castName)`.
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    let castName = opName == "long_count" ? "int64" : "int"
+    var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+        return $c(castName)(length($i(srcName)))
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
+def private invoke_src_param_type(var top : Expression?) : TypeDeclPtr {
+    // Compute the invoke block's `$src` parameter type from the chain top:
+    // iterator sources need outer `-const` stripped so the body can advance the handle;
+    // length-bearing sources keep modifiers so a `const&` source matches.
+    var srcParamType = clone_type(top._type)
+    if (top._type.isIterator) {
+        srcParamType.flags.constant = false
+    }
+    return srcParamType
+}
+
+[macro_function]
+def private prepend_binds(var stmts : array<Expression?>; var intermediateBinds : array<Expression?>) {
+    // Splice the chain's let-bindings (one per upstream `select`) ahead of the per-element
+    // work. Every lane builds its per-match block this way: prior bindings first, then the
+    // op-specific stmts.
+    if (empty(intermediateBinds)) return
+    var prefixed : array<Expression?>
+    prefixed |> reserve(length(intermediateBinds) + length(stmts))
+    for (b in intermediateBinds) {
+        prefixed |> push(b)
+    }
+    for (s in stmts) {
+        prefixed |> push(s)
+    }
+    swap(stmts, prefixed)
+}
+
+[macro_function]
+def private stmts_to_expr(var stmts : array<Expression?>) : Expression? {
+    // Collapse a stmt list to a single expression: pass through when there's only one,
+    // wrap in a qmacro_block otherwise. Used wherever a lane builds an N-stmt block whose
+    // length is data-dependent.
+    if (length(stmts) == 1) return stmts[0]
+    return <- qmacro_block() {
+        $b(stmts)
+    }
+}
+
+[macro_function]
+def private wrap_with_condition(var body : Expression?; var cond : Expression?) : Expression? {
+    // Wrap `body` in `if ($cond) { body }` when `cond` is non-null, else return `body` as-is.
+    // Used by every lane that fuses an upstream `where_` predicate into the per-element work.
+    if (cond == null) return body
+    return <- qmacro_expr() {
+        if ($e(cond)) {
+            $e(body)
+        }
+    }
+}
+
+[macro_function]
+def private min_max_compare(workhorse : bool; opName : string; valName, accName : string) : Expression? {
+    // Workhorse types use direct `<` / `>` (single-instruction comparison) — this is the
+    // perf-critical branch. Non-workhorse falls back to `_::less` so user / tuple comparator
+    // overloads still apply. For max, the operands flip so `_::less` still semantically means
+    // "accName is less than valName" (i.e. valName > accName).
+    if (workhorse && opName == "min") return <- qmacro($i(valName) < $i(accName))
+    if (workhorse) return <- qmacro($i(valName) > $i(accName))
+    if (opName == "min") return <- qmacro(_::less($i(valName), $i(accName)))
+    return <- qmacro(_::less($i(accName), $i(valName)))
+}
+
+[macro_function]
+def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; var loopBody : Expression?; at : LineInfo) : Expression? {
+    // Counter lane: `var acc = 0; for (it in src) { $loopBody }; return acc` inside invoke.
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        var $i(accName) = 0
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+        return $i(accName)
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
+def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr; srcName, accName, itName : string; at : LineInfo) : Expression? {
+    // Array lane: `var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
+    // wrapped in invoke. Two orthogonal axes select the body shape:
+    //   - whole-pipeline iterator-ness (`expr._type.isIterator`) — drives the `to_sequence_move`
+    //     return path so an iterator pipeline still ends in an iterator,
+    //   - source-length availability — drives the pre-reserve hint (only useful when source is
+    //     array-shaped; iter sources can't reserve cheaply).
+    // Single-$b body shares scope: `var acc` decl + optional reserve + for-loop + return all
+    // live in one block.
+    let isIter = expr._type.isIterator
+    let sourceHasLength = type_has_length(top._type)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push <| qmacro_expr() {
+        var $i(accName) : array<$t(elementType)>
+    }
+    if (sourceHasLength && !isIter) {
+        bodyStmts |> push <| qmacro_expr() {
+            $i(accName) |> reserve(length($i(srcName)))
+        }
+    }
+    bodyStmts |> push <| qmacro_expr() {
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+    }
+    if (isIter) {
+        bodyStmts |> push <| qmacro_expr() {
+            return <- $i(accName).to_sequence_move()
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            return <- $i(accName)
+        }
+    }
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(bodyStmts)
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
+def private emit_accumulator_lane(
+                                  opName : string;
+                                  var top : Expression?;
+                                  var projection : Expression?;
+                                  var whereCond : Expression?;
+                                  var intermediateBinds : array<Expression?>;
+                                  var elementType : TypeDeclPtr;
+                                  srcName, accName, itName : string;
+                                  at : LineInfo
+                                  ) : Expression? {
+    // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
+    // Per-op variation lives in (preludeStmts, perMatchStmts, returnExpr) — the invoke shell
+    // is one template. For min/max the workhorse-branch on `<` / `>` vs `_::less` is the
+    // perf-critical decision (single-instruction vs function call).
+    var valueExpr : Expression?
+    if (projection != null) {
+        valueExpr = clone_expression(projection)
+    } else {
+        valueExpr = qmacro_expr() {
+            $i(itName)
+        }
+    }
+    // Accumulator type: projection-typed if present, else source's element type. Strip
+    // `const` and `&` so the accumulator is a mutable value (`+=` / `:=` apply).
+    var accType : TypeDeclPtr
+    if (projection != null) {
+        accType = clone_type(projection._type)
+    } else {
+        accType = clone_type(elementType)
+    }
+    if (accType != null) {
+        accType.flags.constant = false
+        accType.flags.ref = false
+    }
+    let valBindName = "`val`{at.line}`{at.column}"
+    let firstName = "`first`{at.line}`{at.column}"
+    let cntName = "`cnt`{at.line}`{at.column}"
+    var preludeStmts : array<Expression?>
+    var perMatchStmts : array<Expression?>
+    var returnExpr : Expression?
+    if (opName == "long_count") {
+        preludeStmts <- qmacro_block_to_array() {
+            var $i(accName) : int64 = 0l
+        }
+        // Value is unused; mirror counter-lane discipline and bind only when projection has
+        // observable side effects so user-visible f(x) calls still fire.
+        if (projection != null && has_sideeffects(projection)) {
+            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            perMatchStmts |> push <| qmacro_expr() {
+                var $i(finalBindName) = $e(projection)
+            }
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            $i(accName) ++
+        }
+        returnExpr = qmacro_expr() {
+            $i(accName)
+        }
+    } elif (opName == "sum") {
+        preludeStmts <- qmacro_block_to_array() {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+        }
+        perMatchStmts <- qmacro_block_to_array() {
+            $i(accName) += $e(valueExpr)
+        }
+        returnExpr = qmacro_expr() {
+            $i(accName)
+        }
+    } elif (opName == "average") {
+        preludeStmts <- qmacro_block_to_array() {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+            var $i(cntName) = 0
+        }
+        perMatchStmts <- qmacro_block_to_array() {
+            $i(accName) += $e(valueExpr)
+            $i(cntName) ++
+        }
+        returnExpr = qmacro_expr() {
+            double($i(accName)) / double($i(cntName))
+        }
+    } elif (opName == "min" || opName == "max") {
+        preludeStmts <- qmacro_block_to_array() {
+            var $i(firstName) = true
+            var $i(accName) : $t(accType)
+        }
+        let workhorse = ((projection != null && projection._type != null && projection._type.isWorkhorseType)
+            || (projection == null && elementType != null && elementType.isWorkhorseType))
+        var compareExpr = min_max_compare(workhorse, opName, valBindName, accName)
+        perMatchStmts <- qmacro_block_to_array() {
+            let $i(valBindName) = $e(valueExpr)
+            if ($i(firstName)) {
+                $i(accName) := $i(valBindName)
+                $i(firstName) = false
+            } elif ($e(compareExpr)) {
+                $i(accName) := $i(valBindName)
+            }
+        }
+        returnExpr = qmacro_expr() {
+            $i(accName)
+        }
+    } else {
+        return null
+    }
+    prepend_binds(perMatchStmts, intermediateBinds)
+    var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
+    // Collect all body statements into one list so they share scope when spliced via $b.
+    // Splitting decls / for / return into separate splice tags would put each in its own
+    // sub-block, hiding the accumulator from later statements (caught by AST dump under
+    // `options log_infer_passes`).
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + 2)
+    for (s in preludeStmts) {
+        bodyStmts |> push(s)
+    }
+    bodyStmts |> push <| qmacro_expr() {
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+    }
+    bodyStmts |> push <| qmacro_expr() {
+        return $e(returnExpr)
+    }
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(bodyStmts)
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
+def private emit_any_empty_shortcut(var top : Expression?; srcName : string; at : LineInfo) : Expression? {
+    // any (no predicate) shortcut: emit `!empty(src)` directly. Caller has verified no
+    // upstream where + no impure projection + source has length. Behaviorally identical to
+    // running the loop and returning true on first element, but skips the loop entirely.
+    // `!empty` over `length > 0` avoids the strlen detour PERF017 flags on string sources.
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+        return !empty($i(srcName))
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
+def private emit_early_exit_lane(
+                                 opName : string;
+                                 var top : Expression?;
+                                 var projection : Expression?;
+                                 var whereCond : Expression?;
+                                 var intermediateBinds : array<Expression?>;
+                                 var elementType : TypeDeclPtr;
+                                 terminatorCall : ExprCall?;
+                                 srcName, itName : string;
+                                 at : LineInfo
+                                 ) : Expression? {
+    // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
+    // Emits `invoke($block { [arg-binds]; for { ...; return X }; tail }, src)` where the
+    // block-level `return` yields the invoke's result without escaping the user's function.
+    // Stack-allocated block (no heap alloc), per Boris's confirmation. Per-op variation
+    // lives in (preludeStmts, per-element return logic, tailStmts) — the invoke shell is
+    // one template; all stmts share scope via a single $b(bodyStmts) splice.
+    // If there's a projection chain, bind the final projection to a local so the per-element
+    // work names the value directly. Avoids re-evaluating the projection in compares and
+    // side-steps the ExprRef2Value substitution trap that splicing typed expressions hits.
+    var perMatchStmts : array<Expression?>
+    var valueName = itName
+    let projBindName = "`vproj`{at.line}`{at.column}"
+    if (projection != null) {
+        perMatchStmts |> push <| qmacro_expr() {
+            let $i(projBindName) = $e(projection)
+        }
+        valueName = projBindName
+    }
+    // Per-op (preludeStmts, per-element work appended to perMatchStmts, tailStmts).
+    var preludeStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    if (opName == "first") {
+        // Return type for first: projection's type (if any) or source's element type.
+        // Strip const/ref so `default<T>` (the fallback path) yields a fresh value.
+        var retType : TypeDeclPtr
+        if (projection != null) {
+            retType = clone_type(projection._type)
+        } else {
+            retType = clone_type(elementType)
+        }
+        if (retType != null) {
+            retType.flags.constant = false
+            retType.flags.ref = false
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            return $i(valueName)
+        }
+        // Tail: panic + unreachable default-return (matches linq.das line 2383).
+        tailStmts <- qmacro_block_to_array() {
+            panic("sequence contains no elements")
+            return default<$t(retType)>
+        }
+    } elif (opName == "first_or_default") {
+        // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
+        let defaultName = "`dval`{at.line}`{at.column}"
+        var defaultExpr = clone_expression(terminatorCall.arguments[1])
+        preludeStmts |> push <| qmacro_expr() {
+            let $i(defaultName) = $e(defaultExpr)
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            return $i(valueName)
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return $i(defaultName)
+        }
+    } elif (opName == "any") {
+        let argCount = length(terminatorCall.arguments)
+        if (argCount > 1) {
+            var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($e(predExpr)) {
+                    return true
+                }
+            }
+        } else {
+            perMatchStmts |> push <| qmacro_expr() {
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return false
+        }
+    } elif (opName == "all") {
+        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
+        perMatchStmts |> push <| qmacro_expr() {
+            if (!$e(predExpr)) {
+                return false
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return true
+        }
+    } elif (opName == "contains") {
+        // `v` is bound once at the top of the block; per-element compare uses the bound name
+        // to avoid re-evaluating an expensive argument.
+        let containsValName = "`cval`{at.line}`{at.column}"
+        var valExpr = clone_expression(terminatorCall.arguments[1])
+        preludeStmts |> push <| qmacro_expr() {
+            let $i(containsValName) = $e(valExpr)
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            if ($i(valueName) == $i(containsValName)) {
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return false
+        }
+    } else {
+        return null
+    }
+    prepend_binds(perMatchStmts, intermediateBinds)
+    var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
+    // Single-$b body so all stmts (prelude + for + tail) share scope under one wrapping block.
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 1)
+    for (s in preludeStmts) {
+        bodyStmts |> push(s)
+    }
+    bodyStmts |> push <| qmacro_expr() {
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+    }
+    for (s in tailStmts) {
+        bodyStmts |> push(s)
+    }
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(bodyStmts)
+    }, $e(topExpr)))
+    return finalize_invoke(res, at)
+}
+
+[macro_function]
 def private plan_loop_or_count(var expr : Expression?) : Expression? {
-    // Phase-2A loop planner. Recognizes chains of shape `[where_*][select?]` (array lane)
-    // and `[where_*][select?] |> count` (counter lane). Fuses chained wheres into `&&` and
-    // chained selects via expression composition; emits one inline `invoke($block, $src)`
-    // with a plain for-loop. Returns null for anything else — caller falls through unfolded.
+    // Phase-2B loop planner. Recognizes chains of shape `[where_*][select*]` plus a terminator,
+    // dispatched by `classify_terminator` into one of four lanes:
+    //   ARRAY        — `[where_*][select*]`                            → array<T> / iterator<T>
+    //   COUNTER      — `[where_*][select*] |> count`                   → int
+    //   ACCUMULATOR  — `[where_*][select*] |> {sum,min,max,average,long_count}` → typed scalar
+    //   EARLY_EXIT   — `[where_*][select*] |> {first,first_or_default,any,all,contains}`
+    // Fuses chained wheres into `&&` and chained selects via let-binding composition; emits one
+    // inline `invoke($block, $src)`. Returns null for shapes outside scope — caller falls through.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     top = peel_each(top)
     let lastName = calls.back()._1.name
-    if (lastName != "count" && lastName != "where_" && lastName != "select") return null
-    let counterLane = lastName == "count"
-    let intermediateCount = counterLane ? length(calls) - 1 : length(calls)
+    let lane = classify_terminator(lastName)
+    // Phase 2B emits all four lanes; UNKNOWN terminators fall through unfolded.
+    if (lane == LinqLane.UNKNOWN) return null
+    let counterLane = lane == LinqLane.COUNTER
+    let hasTerminator = lane != LinqLane.ARRAY
+    let intermediateCount = hasTerminator ? length(calls) - 1 : length(calls)
     let at = calls[0]._0.at
     let srcName = "`source`{at.line}`{at.column}"
     let itName  = "`it`{at.line}`{at.column}"
@@ -625,196 +1091,83 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
-    // Counter-lane shortcut: when there's no filter and every projection in the chain is
-    // pure, the count is simply `length(source)`. Skip the loop entirely — no per-element
-    // increments, no per-element side-effect evaluation. Gated on `type_has_length` so we
-    // only emit `length(src)` when it's statically resolvable.
-    if (counterLane && whereCond == null && allProjectionsPure
-            && type_has_length(top._type)) {
-        var topExpr = clone_expression(top)
-        topExpr.genFlags.alwaysSafe = true
-        var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-            return length($i(srcName))
-        }, $e(topExpr)))
-        res.force_at(at)
-        res.force_generated(true)
-        let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
-        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
-        return res
+    // Count-shaped shortcut: when terminator is `count` (→ int) or `long_count` (→ int64),
+    // there's no filter, and every projection is pure, the result is just the source length.
+    // Skip the loop entirely.
+    let isCountShaped = (lane == LinqLane.COUNTER
+        || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
+    if (isCountShaped && whereCond == null && allProjectionsPure
+            && type_has_length(top._type))
+        return emit_length_shortcut(lastName, top, srcName, at)
+    // Ring 1: accumulator lane builds its own per-op loop body (typed accumulator, optional
+    // first-iteration init for min/max, sum+count for average) — dispatch before the
+    // COUNTER/ARRAY loopBody construction.
+    if (lane == LinqLane.ACCUMULATOR)
+        return emit_accumulator_lane(lastName, top, projection, whereCond,
+            intermediateBinds, elementType, srcName, accName, itName, at)
+    // Ring 2: early-exit lane — `any` no-pred + no upstream work + length-bearing source
+    // gets the empty-shortcut; everything else dispatches to the loop emitter.
+    if (lane == LinqLane.EARLY_EXIT) {
+        let terminatorCall = calls.back()._0
+        let isAnyNoPred = lastName == "any" && length(terminatorCall.arguments) == 1
+        if (isAnyNoPred && whereCond == null && allProjectionsPure
+                && type_has_length(top._type))
+            return emit_any_empty_shortcut(top, srcName, at)
+        return emit_early_exit_lane(lastName, top, projection, whereCond,
+            intermediateBinds, elementType, terminatorCall, srcName, itName, at)
     }
-    // Build the per-element loop body.
+    // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
+    // collect per-element stmts (incl. side-effect-preserving projection binds), prepend
+    // chain `intermediateBinds`, collapse to a single expression, wrap with `whereCond`.
     var loopBody : Expression?
     if (counterLane) {
         // Counter lane must evaluate the projection (and any chained intermediates) per
         // matched element so user-visible side effects fire — `count(select(src, f))` in
         // plain LINQ invokes f per element, and our fold must match. Bind the final
         // projection to a discardable local; daslang macro output bypasses LINT002.
-        var sideEffectStmts : array<Expression?>
-        sideEffectStmts |> reserve(length(intermediateBinds) + 2)
-        for (b in intermediateBinds) {
-            sideEffectStmts |> push(b)
-        }
-        // Bind the final projection only when it might have side effects. Pure projections
-        // (the common case — `_._field * 2`) can be elided entirely; no need to rely on
-        // the optimizer to DCE a dead store afterwards.
+        // Pure projections (the common case — `_._field * 2`) get elided entirely; no need
+        // to rely on the optimizer to DCE a dead store afterwards.
+        var stmts : array<Expression?>
         if (projection != null && has_sideeffects(projection)) {
             let finalBindName = "`vfinal`{at.line}`{at.column}"
-            sideEffectStmts |> push <| qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
         }
-        sideEffectStmts |> push <| qmacro_expr() {
+        stmts |> push <| qmacro_expr() {
             $i(accName) ++
         }
-        var incBlock : Expression?
-        if (length(sideEffectStmts) == 1) {
-            incBlock = sideEffectStmts[0]
-        } else {
-            incBlock = qmacro_block() {
-                $b(sideEffectStmts)
-            }
-        }
-        if (whereCond != null) {
-            loopBody = qmacro_expr() {
-                if ($e(whereCond)) {
-                    $e(incBlock)
-                }
-            }
-        } else {
-            loopBody = incBlock
-        }
+        prepend_binds(stmts, intermediateBinds)
+        loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
     } else {
-        // array lane
+        // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
+        // byte copy (same cost as `push`); for non-workhorse it deep-clones, avoiding the
+        // mutation that `emplace` would do via move-out — important when the projection
+        // returns a ref into the source. For chained selects, `intermediateBinds` carries
+        // N-1 prior bindings; splice them in before the push so each lambda body can resolve
+        // its renamed parameter to the correct binding name.
+        var stmts : array<Expression?>
         if (projection != null) {
-            // push for workhorse (cheap copy), push_clone for non-workhorse (deep clone,
-            // never mutates source). emplace would move out of the projection's value,
-            // which is unsafe when the projection returns a ref into the source.
-            // For chained selects, `intermediateBinds` carries N-1 prior bindings; splice
-            // them in before the push so each lambda body can resolve its renamed parameter
-            // to the correct binding name.
-            let workhorseProj = projection._type != null && projection._type.isWorkhorseType
-            var pushStmt : Expression?
-            if (workhorseProj) {
-                pushStmt = qmacro_expr() {
-                    $i(accName) |> push($e(projection))
-                }
-            } else {
-                pushStmt = qmacro_expr() {
-                    $i(accName) |> push_clone($e(projection))
-                }
-            }
-            var perElem : Expression?
-            if (empty(intermediateBinds)) {
-                perElem = pushStmt
-            } else {
-                var perElemStmts : array<Expression?>
-                perElemStmts |> reserve(length(intermediateBinds) + 1)
-                for (b in intermediateBinds) {
-                    perElemStmts |> push(b)
-                }
-                perElemStmts |> push(pushStmt)
-                perElem = qmacro_block() {
-                    $b(perElemStmts)
-                }
-            }
-            if (whereCond != null) {
-                loopBody = qmacro_expr() {
-                    if ($e(whereCond)) {
-                        $e(perElem)
-                    }
-                }
-            } else {
-                loopBody = perElem
+            stmts |> push <| qmacro_expr() {
+                $i(accName) |> push_clone($e(projection))
             }
         } elif (whereCond != null) {
-            // Identity case (no projection): `it` aliases the source element. Workhorse
-            // types can `push` (cheap copy); non-workhorse needs `push_clone` to avoid
-            // mutating the source via a move.
-            let elemWorkhorse = elementType != null && elementType.isWorkhorseType
-            if (elemWorkhorse) {
-                loopBody = qmacro_expr() {
-                    if ($e(whereCond)) {
-                        $i(accName) |> push($i(itName))
-                    }
-                }
-            } else {
-                loopBody = qmacro_expr() {
-                    if ($e(whereCond)) {
-                        $i(accName) |> push_clone($i(itName))
-                    }
-                }
+            // Identity case (no projection): `it` aliases the source element.
+            stmts |> push <| qmacro_expr() {
+                $i(accName) |> push_clone($i(itName))
             }
         } else {
             // identity chain — nothing to fuse; let the caller fall through.
             return null
         }
+        prepend_binds(stmts, intermediateBinds)
+        loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
     }
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var res : Expression?
-    // Pick the block-parameter typedecl modifier by source shape:
-    //   - iterator (rvalue, e.g. `each(range(10))`) — strip `-const` so the body can
-    //     consume the iterator. Without the strip, daslang's typer reports
-    //     "can't iterate over const iterator".
-    //   - container with length (array/table/string/range/fixed-array) — keep modifiers
-    //     so a `const&` source (e.g. `let arr <-`) matches the param exactly.
-    let topIsIter = top._type != null && top._type.isIterator
     if (counterLane) {
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) = 0
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(accName) = 0
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        }
+        return emit_counter_lane(top, srcName, accName, itName, loopBody, at)
     } else {
-        let isIter = expr._type.isIterator
-        // Pre-reserve the accumulator to the source's length when the source has a known
-        // length (array, table, range — anything that isn't an iterator). Avoids realloc
-        // walks during growth; matches what ExprArrayComprehension lowering does.
-        let sourceHasLength = type_has_length(top._type)
-        if (isIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) : array<$t(elementType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return <- $i(accName).to_sequence_move()
-            }, $e(topExpr)))
-        } elif (sourceHasLength) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(accName) : array<$t(elementType)>
-                $i(accName) |> reserve(length($i(srcName)))
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return <- $i(accName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) : array<$t(elementType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return <- $i(accName)
-            }, $e(topExpr)))
-        }
+        return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName, at)
     }
-    res.force_at(at)
-    res.force_generated(true)
-    let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
-    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
-    return res
 }
 
 [call_macro(name="_fold")]

@@ -219,6 +219,8 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type iterable in `for` loops
 - When the iterator is named `each`, the call can be omitted: `for (v in each(x))` is identical to `for (v in x)`
 - Other iterator names (e.g. `filter`, `map`) cannot be omitted
+- **Iterator element-const variance is pointer-like:** `iterator<T -&>` flows into `iterator<T const -&>` (mut → const), not the reverse. So a generic param declared as `iterator<auto(TT) const>` takes both `each(array<T>)` (yields `iterator<T -&>`) and iterator-comprehension (yields `iterator<T const -&>`) sources via a single instantiation. The `const` qualifier alone is enough — do NOT add `&` (that's a separate ref-form modifier, not what you want for variance)
+- **Generic-mangling pitfall:** instantiations of the same generic that differ only in inner element-const (`iterator<int -&>` vs `iterator<int const -&>`) currently hash-collide in the instance registry, producing `error[50609]: multiple instances of …` when both arise in one module. Workaround at the library level: declare the iterator overload as `iterator<auto(TT) const>` instead of `iterator<auto(TT)>` — both source flavors then converge on a single instance per the variance rule above. Caveat: the constify makes `it` inside the body const, so the body must not move from / mutate / call non-const operators on `it`. linq.das only constifies `all` and `contains` for this reason; the rest stay vulnerable until the mangler is fixed upstream
 
 ### String access functions
 

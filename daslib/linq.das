@@ -681,7 +681,7 @@ def count(a : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : int {
 def long_count(var a : iterator<auto(TT)>) : int64 {
     //! Counts elements in an iterator, using a long integer
     var count = 0l
-    for (it in a) {
+    for (_ in a) {
         count ++
     }
     return count
@@ -1949,8 +1949,12 @@ def private all_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(a
     return all_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
 }
 
-def all(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
+def all(var src : iterator<auto(TT) const>; predicate : block<(arg : TT -&) : bool>) : bool {
     //! Returns true if all elements in the iterator satisfy the predicate
+    //! `const` on the inner element collapses mut-ref and const-ref iterator sources
+    //! (`each(arr)` vs iterator comprehensions) into a single generic instance, sidestepping
+    //! the generic-mangler hash collision (error[50609]) that fires when both flavors
+    //! arise in one module. Full fix lives in the mangler itself (follow-up PR).
     return all_impl(src, type<TT -const -&>, predicate)
 }
 
@@ -2160,8 +2164,9 @@ def private contains_impl_const(src : auto(ARGT); tt : auto(TT); element : TT -&
     return contains_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, element)
 }
 
-def contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
+def contains(var src : iterator<auto(TT) const>; element : TT -&) : bool {
     //! Returns true if the element is present in the iterator
+    //! `const` on the inner element — see comment on `all()` above for the rationale.
     return contains_impl(src, type<TT -const -&>, element)
 }
 
