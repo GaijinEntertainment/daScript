@@ -86,17 +86,17 @@ def draw_fourier() {
     draw_arrow(float2(0.0f, 0.0f), p0, float3(1.0f, 0.0f, 0.0f))
     if (enable_1) {
         var p = p0
-        draw_circle(p, length(cp1), float3(0.0f, 0.0f, 0.0f))
+        draw_circle(p, length(cp1), float3(0.357f, 0.333f, 0.278f))
         draw_arrow(p, pp1, float3(1.0f, 0.0f, 0.0f))
         p += pp1
-        draw_circle(p, length(cn1), float3(0.0f, 0.0f, 0.0f))
+        draw_circle(p, length(cn1), float3(0.357f, 0.333f, 0.278f))
         draw_arrow(p, pn1, float3(1.0f, 0.0f, 0.0f))
         p += pn1
         if (enable_2) {
-            draw_circle(p, length(cp2), float3(0.0f, 0.0f, 0.0f))
+            draw_circle(p, length(cp2), float3(0.357f, 0.333f, 0.278f))
             draw_arrow(p, pp2, float3(1.0f, 0.0f, 0.0f))
             p += pp2
-            draw_circle(p, length(cn2), float3(0.0f, 0.0f, 0.0f))
+            draw_circle(p, length(cn2), float3(0.357f, 0.333f, 0.278f))
             draw_arrow(p, pn2, float3(1.0f, 0.0f, 0.0f))
             p += pn2
         }
@@ -120,7 +120,9 @@ def update() {
     var display_w, display_h : int
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
-    glClearColor(0.85f, 0.85f, 0.90f, 1.0f)
+    // Match the daslang theme's bg (#0d0c0a) so the GL viewport blends
+    // seamlessly with the ImGui windows that sit on top.
+    glClearColor(0.051f, 0.047f, 0.039f, 1.0f)
     glClear(GL_COLOR_BUFFER_BIT)
     draw_fourier()
 
