@@ -479,7 +479,7 @@ def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
 def top_n_by(var a : iterator<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! Returns the ``n`` smallest elements of an iterator by ``key(element)``,
     //! sorted ascending. Uses a bounded heap of size ``n`` during the scan;
-    //! at most ``n+1`` elements ever resident.
+    //! at most ``n`` elements resident.
     var buf : array<TT -const -&>
     if (n <= 0) return <- buf
     buf |> reserve(n)

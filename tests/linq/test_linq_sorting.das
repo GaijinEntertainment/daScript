@@ -514,3 +514,54 @@ def test_heap_ops(t : T?) {
         }
     }
 }
+
+[test]
+def test_q_macros(t : T?) {
+    //! Smoke tests for the qpartial_sort / qnth_element / qmake_heap /
+    //! qpush_heap / qpop_heap dispatcher macros. Verifies the macro expansion
+    //! routes to the right wrapper for ``array<T>`` sources.
+    t |> run("qpartial_sort on array") @(t : T?) {
+        var a <- [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
+        sort_boost::qpartial_sort(a, 3) <| $(x, y : int) : bool {
+            return x < y
+        }
+        t |> equal(a[0], 0)
+        t |> equal(a[1], 1)
+        t |> equal(a[2], 2)
+    }
+    t |> run("qnth_element on array") @(t : T?) {
+        var a <- [7, 3, 1, 9, 5, 8, 0, 4, 2]
+        sort_boost::qnth_element(a, 4) <| $(x, y : int) : bool {
+            return x < y
+        }
+        t |> equal(a[4], 4)
+    }
+    t |> run("qmake_heap on array") @(t : T?) {
+        var a <- [5, 2, 8, 1, 9, 3, 7]
+        sort_boost::qmake_heap(a) <| $(x, y : int) : bool {
+            return x < y
+        }
+        t |> equal(a[0], 9)
+    }
+    t |> run("qpush_heap append-then-sift") @(t : T?) {
+        var a <- [9, 5, 7, 1, 3, 6]
+        sort_boost::qmake_heap(a) <| $(x, y : int) : bool {
+            return x < y
+        }
+        a |> push(12)
+        sort_boost::qpush_heap(a) <| $(x, y : int) : bool {
+            return x < y
+        }
+        t |> equal(a[0], 12)
+    }
+    t |> run("qpop_heap moves max to end") @(t : T?) {
+        var a <- [5, 2, 8, 1, 9, 3, 7]
+        sort_boost::qmake_heap(a) <| $(x, y : int) : bool {
+            return x < y
+        }
+        sort_boost::qpop_heap(a) <| $(x, y : int) : bool {
+            return x < y
+        }
+        t |> equal(a[length(a) - 1], 9)
+    }
+}

@@ -38,9 +38,11 @@ def public make_struct_array(n : int) : array<KeyedItem> {
 }
 
 def public expected_sorted_value_at(n : int; i : int) : int {
-    //! For input ``((i + 1) * 37) % 1000`` with ``n`` >= 1000, all 1000
-    //! residues are hit uniformly (``n / 1000`` copies each), so sorted
+    //! For input ``((i + 1) * 37) % 1000`` with ``n`` a multiple of 1000, all
+    //! 1000 residues are hit uniformly (``n / 1000`` copies each), so sorted
     //! ``arr[i] = (i * 1000) / n``. Used by benchmarks for self-validating
-    //! post-sort checks.
+    //! post-sort checks at the n values we actually exercise (10000, 100000).
+    //! For non-multiples of 1000 the residue counts are uneven and this formula
+    //! does not match the true sorted value.
     return (i * 1000) / n
 }

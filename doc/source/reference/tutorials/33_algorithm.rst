@@ -161,7 +161,7 @@ array. For array sources it uses ``partial_sort`` under the hood
     // [2, 5, 8]
 
 For iterator sources, ``top_n`` maintains a bounded heap of size ``N`` during
-the scan — at most ``N+1`` elements are ever resident:
+the scan — at most ``N`` elements are ever resident:
 
 .. code-block:: das
 
