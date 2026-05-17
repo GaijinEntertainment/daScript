@@ -553,7 +553,7 @@ def main():
     (out / 'files' / 'blog.json').write_text(
         json.dumps(blog_data, indent=2), encoding='utf-8')
 
-    print(f"built {len(posts)} posts, {len(news)} news entries → {out}/")
+    print(f"built {len(posts)} posts, {len(news)} news entries -> {out}/")
 
 
 if __name__ == '__main__':
