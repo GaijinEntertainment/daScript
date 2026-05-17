@@ -568,6 +568,7 @@ static void print_help() {
     tout << "daslang-live - live-reloading application host for daScript\n";
     tout << "Usage: daslang-live [options] <script.das> [-- script arguments]\n";
     tout << "  -project <file>    - project file (.das_project)\n";
+    tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
     tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
@@ -654,6 +655,8 @@ int main(int argc, char * argv[]) {
         string arg = argv[i];
         if (arg == "-project" && i + 1 < argc) {
             projectFile = argv[++i];
+        } else if ((arg == "-project_root" || arg == "-project-root") && i + 1 < argc) {
+            project_root = argv[++i];
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {
