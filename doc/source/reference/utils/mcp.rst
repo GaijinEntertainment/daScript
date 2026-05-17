@@ -180,13 +180,15 @@ Execution
      - Description
    * - ``run_script``
      - Run a ``.das`` file or inline code snippet and return
-       stdout/stderr.
+       stdout/stderr.  Optional ``project`` for ``.das_project``-bound
+       module resolution.
    * - ``run_test``
      - Run dastest on a ``.das`` test file and return pass/fail
        results.  Optional ``json`` for structured output.
    * - ``eval_expression``
      - Evaluate a daslang expression and return its printed result.
-       Supports module imports via ``require`` parameter.
+       Supports module imports via ``require`` parameter.  Optional
+       ``project`` for ``.das_project``-bound module resolution.
 
 Code generation and transformation
 -----------------------------------
@@ -358,7 +360,10 @@ instance via its REST API.  All accept an optional ``port`` parameter
      - Description
    * - ``live_launch``
      - Launch ``daslang-live.exe`` on a script if not already running.
-       Sets working directory to the script's folder.
+       Sets working directory to the script's folder.  Optional
+       ``project`` is forwarded to ``daslang-live`` as
+       ``-project <file>`` for ``.das_project``-bound module
+       resolution.
    * - ``live_status``
      - Query the running instance for fps, uptime, paused state, and
        error status.
@@ -370,6 +375,10 @@ instance via its REST API.  All accept an optional ``port`` parameter
      - Pause or unpause execution.
    * - ``live_command``
      - Dispatch a ``[live_command]`` by name with JSON arguments.
+   * - ``live_commands``
+     - Dispatch a batch of ``[live_command]``\ s in one round-trip;
+       continue-on-error semantics, response is a JSON array
+       preserving input order.
    * - ``live_shutdown``
      - Gracefully shut down the running instance.
 

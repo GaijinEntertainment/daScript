@@ -242,7 +242,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file to run"),
             "code" => PropertySchema(_type = "string", description = "Inline daslang code to run (written to temp file and executed)"),
             "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 30). Process tree is killed if exceeded"),
-            "track_allocations" => PropertySchema(_type = "string", description = "If 'true', enable heap allocation tracking and append a heap report at exit (shows where each allocation came from)")
+            "track_allocations" => PropertySchema(_type = "string", description = "If 'true', enable heap allocation tracking and append a heap report at exit (shows where each allocation came from)"),
+            "project" => PROJECT_PROP
         },
         []
     ))
@@ -251,7 +252,8 @@ def handle_tools_list(id_json : string) : string {
         "Evaluate a daslang expression and return its printed result. Wraps the expression in a string builder print statement. Use 'require' to add module imports (comma-separated).",
         {
             "expression" => PropertySchema(_type = "string", description = "daslang expression to evaluate (e.g. 'to_float(42) + 1.0', 'length(\"hello\")')"),
-            "require" => PropertySchema(_type = "string", description = "Comma-separated module imports (e.g. 'math', 'strings, daslib/json'). On compile failure, single-token names are retried under 'daslib/'.")
+            "require" => PropertySchema(_type = "string", description = "Comma-separated module imports (e.g. 'math', 'strings, daslib/json'). On compile failure, single-token names are retried under 'daslib/'."),
+            "project" => PROJECT_PROP
         },
         ["expression"]
     ))
@@ -614,9 +616,9 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
-        return do_run_script(arg1, arg2, arg3, arg4 == "true")
+        return do_run_script(arg1, arg2, arg3, arg4 == "true", project)
     } elif (tool_name == "eval_expression") {
-        return do_eval_expression(arg1, arg2)
+        return do_eval_expression(arg1, arg2, project)
     } elif (tool_name == "describe_type") {
         return do_describe_type(arg1, arg2, project)
     } elif (tool_name == "ast_dump") {
