@@ -29,7 +29,7 @@ But did u know
 * there is an MCP server, which helps with das. and cpp. like if u work with cpp - it can lookup symbols and do the works. fast.
 * there is also 'blind mouse' MCP server, which is very experimental - but Claude says it helps already
 * there is lint. lint + Claude is synergetic. lint + Claude + Boris is something I'm figuring out
-* there is detect-dup and find-dup. detect-dup is very local. when Claude writes a lot of Code, it says 'and these 3 functions are too similar' (btw, Boris wrote two of them - one in 2022). find-dup is how u do it on a large scale.
+* there is detect-dupe and find-dupe. detect-dupe is very local. when Claude writes a lot of Code, it says 'and these 3 functions are too similar' (btw, Boris wrote two of them - one in 2022). find-dupe is how u do it on a large scale.
 * dastest and benchctl. one is tests. and benchmarks. the other is to remind u that performance regression is a regression
 * llvm support is getting better. way better. loop annotations are now first class thing.
 
