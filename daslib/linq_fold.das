@@ -534,18 +534,30 @@ def private type_has_length(t : TypeDecl?) : bool {
 }
 
 [macro_function]
-def private peel_each_length_source(var top : Expression?) : Expression? {
-    // If `top` is `each(<x>)` and `<x>` has a length-supporting type, return `<x>` so
-    // the emitted loop iterates the underlying container directly — lets the array-lane
-    // reserve fire and avoids the iterator wrapper. Iteration semantics are preserved
-    // (`for (it in each(arr))` and `for (it in arr)` yield the same element refs).
-    // Restricted to length-supporting types to keep `reserve(length(src))` valid.
+def private is_each_call(call : ExprCall?) : bool {
+    //! `each` in daslib/builtin.das is generic, so the resolved `func.name` on a typed
+    //! call is the mangled instance name (e.g. `builtin\`each\`30908...`). The generic's
+    //! original name lives in `func.fromGeneric.name`. Match either.
+    if (call == null || call.func == null) return false
+    return (call.func.name == "each"
+        || (call.func.fromGeneric != null && call.func.fromGeneric.name == "each"))
+}
+
+[macro_function]
+def private peel_each(var top : Expression?) : Expression? {
+    // Unwrap `each(<arr>)` to `<arr>` when `<arr>` is a true array (or fixed-size array).
+    // Iteration semantics are preserved: `for it in <arr>` implicitly re-wraps via the
+    // same `each` overload. We gate on array-ness because peeling an iterator-typed
+    // argument (e.g. `each(range(10))`, `each(generator())`) would put the iterator in
+    // place — the downstream length shortcut and reserve-by-length hints assume an
+    // indexable source. Only peel when we can prove that's true.
     if (!(top is ExprCall)) return top
     var topCall = top as ExprCall
-    if (topCall.func == null || topCall.func.name != "each"
-            || topCall.arguments |> length != 1
-            || !type_has_length(topCall.arguments[0]._type)) return top
-    return clone_expression(topCall.arguments[0])
+    if (!is_each_call(topCall) || topCall.arguments |> length != 1) return top
+    let argExpr = topCall.arguments[0]
+    if ((argExpr == null || argExpr._type == null)
+            || (!argExpr._type.isGoodArrayType && !argExpr._type.isArray)) return top
+    return clone_expression(argExpr)
 }
 
 [macro_function]
@@ -556,7 +568,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // with a plain for-loop. Returns null for anything else — caller falls through unfolded.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
-    top = peel_each_length_source(top)
+    top = peel_each(top)
     let lastName = calls.back()._1.name
     if (lastName != "count" && lastName != "where_" && lastName != "select") return null
     let counterLane = lastName == "count"
@@ -569,6 +581,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     var projection : Expression?
     var intermediateBinds : array<Expression?>
     var seenSelect = false
+    var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
     var lastBindName = itName
     for (i in 0 .. intermediateCount) {
@@ -593,6 +606,9 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             if (projection != null) {
                 let prevWorkhorse = projection._type != null && projection._type.isWorkhorseType
                 if (!prevWorkhorse) return null   // chained non-workhorse selects — Phase 2B
+                if (has_sideeffects(projection)) {
+                    allProjectionsPure = false
+                }
                 let bindName = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
                 intermediateBinds |> push <| qmacro_expr() {
                     var $i(bindName) = $e(projection)
@@ -606,6 +622,26 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             return null
         }
     }
+    if (projection != null && has_sideeffects(projection)) {
+        allProjectionsPure = false
+    }
+    // Counter-lane shortcut: when there's no filter and every projection in the chain is
+    // pure, the count is simply `length(source)`. Skip the loop entirely — no per-element
+    // increments, no per-element side-effect evaluation. Gated on `type_has_length` so we
+    // only emit `length(src)` when it's statically resolvable.
+    if (counterLane && whereCond == null && allProjectionsPure
+            && type_has_length(top._type)) {
+        var topExpr = clone_expression(top)
+        topExpr.genFlags.alwaysSafe = true
+        var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return length($i(srcName))
+        }, $e(topExpr)))
+        res.force_at(at)
+        res.force_generated(true)
+        let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
+        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+        return res
+    }
     // Build the per-element loop body.
     var loopBody : Expression?
     if (counterLane) {
@@ -618,7 +654,10 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         for (b in intermediateBinds) {
             sideEffectStmts |> push(b)
         }
-        if (projection != null) {
+        // Bind the final projection only when it might have side effects. Pure projections
+        // (the common case — `_._field * 2`) can be elided entirely; no need to rely on
+        // the optimizer to DCE a dead store afterwards.
+        if (projection != null && has_sideeffects(projection)) {
             let finalBindName = "`vfinal`{at.line}`{at.column}"
             sideEffectStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
@@ -713,14 +752,31 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var res : Expression?
+    // Pick the block-parameter typedecl modifier by source shape:
+    //   - iterator (rvalue, e.g. `each(range(10))`) — strip `-const` so the body can
+    //     consume the iterator. Without the strip, daslang's typer reports
+    //     "can't iterate over const iterator".
+    //   - container with length (array/table/string/range/fixed-array) — keep modifiers
+    //     so a `const&` source (e.g. `let arr <-`) matches the param exactly.
+    let topIsIter = top._type != null && top._type.isIterator
     if (counterLane) {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-            var $i(accName) = 0
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return $i(accName)
-        }, $e(topExpr)))
+        if (topIsIter) {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+                var $i(accName) = 0
+                for ($i(itName) in $i(srcName)) {
+                    $e(loopBody)
+                }
+                return $i(accName)
+            }, $e(topExpr)))
+        } else {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+                var $i(accName) = 0
+                for ($i(itName) in $i(srcName)) {
+                    $e(loopBody)
+                }
+                return $i(accName)
+            }, $e(topExpr)))
+        }
     } else {
         let isIter = expr._type.isIterator
         // Pre-reserve the accumulator to the source's length when the source has a known
@@ -736,7 +792,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 return <- $i(accName).to_sequence_move()
             }, $e(topExpr)))
         } elif (sourceHasLength) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
                 var $i(accName) : array<$t(elementType)>
                 $i(accName) |> reserve(length($i(srcName)))
                 for ($i(itName) in $i(srcName)) {

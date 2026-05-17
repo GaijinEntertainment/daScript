@@ -84,10 +84,10 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 
 | Benchmark | Shape | m3f_old | m3f (Phase 2A) | Delta |
 |---|---|---:|---:|---|
-| count_aggregate | `where → count` | 5 | 5 | parity (same counter loop) |
-| chained_where | `where → where → count` | 17 | 8 | **2.1× faster** (fuses chained wheres into single `&&` predicate) |
-| select_count | `select → count` | 15 | 2 | **7.5× faster** (counter lane evaluates projection per iteration to preserve side effects; optimizer DCEs pure projections, no array materialization) |
-| to_array_filter | `where → select → to_array` | 11 | 11 | parity (after `each(<array>)` peel + reserve + workhorse `push`) |
+| count_aggregate | `where → count` | 5 | 4 | parity-ish (1ns improvement from `each(<array>)` peel) |
+| chained_where | `where → where → count` | 17 | 6 | **2.8× faster** (fuses chained wheres into single `&&` predicate; small gain from peel + const-ref param) |
+| select_count | `select → count` | 15 | 0 | **∞ faster** — when the projection is pure (`has_sideeffects == false`) and the source has length, the counter lane shortcuts to `length(src)` and elides the loop entirely. See [macro_boost::has_sideeffects](../../daslib/macro_boost.das) and `linq_fold.das:plan_loop_or_count` |
+| to_array_filter | `where → select → to_array` | 11 | 10 | parity (after `each(<array>)` peel + reserve + workhorse `push`) |
 
 Shapes outside Phase 2A scope now compile to plain linq (`m3f ≈ m3`). This is an intentional regression vs the historical `_old_fold` numbers — Boris's call ("we let it fall through unfolded, and we see performance issues. im ok being slower until we fix") as the forcing function for Phase 2B+. The previous "m3f = m3f_old (identical by construction)" baseline assumed `_fold` would dispatch to `_old_fold` on the unmatched path; Phase 2A drops that dispatch.
 
