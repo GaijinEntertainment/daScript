@@ -22,6 +22,7 @@ require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_cache
 require daslib/archive
+require daslib/clargs
 require daslib/json
 require daslib/json_boost
 require daslib/utf8_utils
@@ -32,9 +33,29 @@ require strings
 
 var public live_window : GLFWwindow?
 
+// Lazy CLI-flag cache. `--no-hdpi-framebuffer` after `--` asks the backend
+// to open a window whose framebuffer matches the requested logical size,
+// even on retina / high-DPI displays. Used by APNG recording tools to keep
+// capture pixel counts (and PNG encoder workload) small.
+var private g_no_hdpi_parsed : bool = false
+var private g_no_hdpi        : bool = false
+
+def private ensure_no_hdpi_parsed() {
+    return if (g_no_hdpi_parsed)
+    g_no_hdpi_parsed = true
+    let args <- get_user_args()
+    let raw = find_bool_flag_raw_value(args, "--no-hdpi-framebuffer")
+    g_no_hdpi = (raw |> unwrap_or("false")) == "true"
+}
+
 def public live_create_window(title : string; width, height : int) : GLFWwindow? {
     //! Creates a GLFW window (or reuses the preserved one on reload).
     //! Call this from init().
+    //!
+    //! Pass ``--no-hdpi-framebuffer`` (after the daslang ``--`` separator)
+    //! to force the framebuffer to match the requested logical dimensions
+    //! on high-DPI displays — used by APNG recording tools to keep capture
+    //! pixel counts manageable.
     // Already have a window (restored from reload)
     return live_window if (live_window != null)
     if (glfwInit() == 0) {
@@ -42,6 +63,15 @@ def public live_create_window(title : string; width, height : int) : GLFWwindow?
     }
     glfwInitOpenGL(3, 3)
     glfwWindowHint(int(GLFW_SAMPLES), 4)
+    ensure_no_hdpi_parsed()
+    if (g_no_hdpi) {
+        // macOS: disable retina backing so framebuffer == window size in
+        // physical pixels. No-op on other platforms.
+        glfwWindowHint(int(GLFW_COCOA_RETINA_FRAMEBUFFER), 0)
+        // Windows: override any caller-set SCALE_TO_MONITOR=1 so DPI scaling
+        // doesn't multiply the requested size. No-op on macOS/Linux.
+        glfwWindowHint(int(GLFW_SCALE_TO_MONITOR), 0)
+    }
     live_window = glfwCreateWindow(width, height, title, null, null)
     if (live_window == null) {
         panic("glfw_live: can't create window")
