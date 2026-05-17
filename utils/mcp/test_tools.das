@@ -188,6 +188,42 @@ def test_compile_check_invalid_project(t : T?) {
     }
 }
 
+[test]
+def test_run_script_invalid_project(t : T?) {
+    t |> run("missing project file reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_run_script("", "print(\"hi\")", "", false, "nonexistent_xyz.das_project"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "'project' file not found") >= 0, "should mention project file not found")
+    }
+    t |> run("non-.das_project extension reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_run_script("", "print(\"hi\")", "", false, fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "expected a path to a .das_project file") >= 0, "should mention expected extension")
+    }
+}
+
+[test]
+def test_eval_expression_invalid_project(t : T?) {
+    t |> run("missing project file reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 1", "", "nonexistent_xyz.das_project"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "'project' file not found") >= 0, "should mention project file not found")
+    }
+    t |> run("non-.das_project extension reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 1", "", fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "expected a path to a .das_project file") >= 0, "should mention expected extension")
+    }
+}
+
 // ── parse_file_list (smoke) ──────────────────────────────────────────
 // Canonical unit tests for `parse_file_list` and `expand_glob` live in
 // `tests/fio/expand_glob_test.das` (the helpers moved to `daslib/fio`).
