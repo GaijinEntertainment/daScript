@@ -235,6 +235,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - String builder requires `unsafe` or `options persistent_heap` if returned
 - Tuple field access: `t._0`, `t._1`, `t._2`
 - Annotations: `[export]`, `[test]`; `options no_aot`, `options rtti`
+- **`options` are MODULE-LOCAL for pass-macros** (`[lint_macro]` / `AstPassMacro`). The macro fires once per module in the require chain, reading `prog._options` from THAT module's options table — not the program-root's. So `options _my_lint_off = true` in `foo.das` suppresses YOUR lint in `foo`, but `require foo` from `bar.das` does not inherit the flag — `bar` gets linted unless it sets its own. Don't confuse with runtime options (`gc`, `multiple_contexts`, `persistent_heap`, `rtti`) which DO unify across the program codegen and effectively cascade up to consumers
 - **Visibility is a prefix keyword, not an annotation:** `def private foo()`, `struct private Foo { ... }`, `enum private E { ... }`, `variable private x = 0`, `alias private X = Y`. There is **no** `[private]` annotation — it's a grammar error
 - **Field/variable annotations use `@name` only:** `@safe_when_uninitialized at : LineInfo`, `@sql_primary_key id : int64`, `@do_not_delete ctx : Context?`. The `[name]` form is reserved for struct/function/global-level annotations and does NOT parse on a struct field
 - `require` uses forward slash: `require daslib/linq` — NOT backslash
