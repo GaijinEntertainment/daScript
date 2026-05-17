@@ -717,8 +717,12 @@ def private wrap_with_skip_take(var stmts : array<Expression?>; var skipExpr : E
     prefixed |> reserve(length(stmts) + 3)
     if (takeExpr != null) {
         var takeLimit = clone_expression(takeExpr)
+        // `>=` (not `==`) so non-positive N short-circuits on the first iteration —
+        // matches reference iterator semantics: linq.das take_impl uses `if (total <= 0) break`,
+        // so `take(-1)` and `take(0)` yield nothing. `==` would silently take all elements
+        // for negative N (takenCount starts at 0 and only ever increments).
         prefixed |> push <| qmacro_expr() {
-            if ($i(takeCountName) == $e(takeLimit)) {
+            if ($i(takeCountName) >= $e(takeLimit)) {
                 break
             }
         }

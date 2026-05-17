@@ -1244,6 +1244,32 @@ def test_take_skip_array_lane(t : T?) {
         let r <- _fold(each(arr).skip(100).to_array())
         t |> equal(0, length(r))
     }
+    // Pin non-positive N/K behavior — reference iterator semantics treat negative as
+    // "take/skip nothing" (linq.das take_impl: `if (total <= 0) break`; skip_impl:
+    // `if (total > 0) decrement-and-skip` so non-positive falls through).
+    t |> run("array: take(-1).to_array → empty (matches take_impl)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).take(-1).to_array())
+        t |> equal(0, length(r))
+    }
+    t |> run("array: take(0).to_array → empty (pins zero-N)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).take(0).to_array())
+        t |> equal(0, length(r))
+    }
+    t |> run("array: skip(-1).to_array → full (non-positive skip is a no-op)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).skip(-1).to_array())
+        t |> equal(3, length(r))
+        t |> equal(1, r[0])
+        t |> equal(2, r[1])
+        t |> equal(3, r[2])
+    }
+    t |> run("array: skip(0).to_array → full (zero-K is a no-op)") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let r <- _fold(each(arr).skip(0).to_array())
+        t |> equal(3, length(r))
+    }
 }
 
 [test]
