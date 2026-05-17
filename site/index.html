@@ -43,6 +43,7 @@
                     <a href="doc/index.html">docs</a>
                     <a href="#benchmarks">benchmarks</a>
                     <a href="downloads.html">downloads</a>
+                    <a href="daspkg.html">daspkg</a>
                     <a href="blog/index.html">blog</a>
                     <a href="https://t.me/daScript">community</a>
                     <a href="playground/index.html">playground</a>
@@ -305,11 +306,71 @@ def main() {
         </div>
     </section>
 
-    <!-- ───── § 05 Changelog / news ───── -->
-    <section class="forge-section forge-section--alt">
+    <!-- ───── § 05 Packages (daspkg) ───── -->
+    <section class="forge-section forge-pkg-callout">
         <div class="forge-container">
             <div class="forge-section-label">
                 <span class="forge-section-label__num">§ 05</span>
+                <span class="forge-section-label__rule"></span>
+                <span>packages</span>
+            </div>
+            <div class="forge-pkg-callout__grid">
+                <div>
+                    <h2>
+                        A package manager that
+                        <em>compiles in.</em>
+                    </h2>
+                    <p class="forge-pkg-callout__lede">
+                        <code class="forge-inline-code">daspkg</code> is the daslang package
+                        manager. Bindings for Dear ImGui, the Claude API, Telegram bots —
+                        one command, no accounts. Publishing is a single CLI call against
+                        an open index repo.
+                    </p>
+                    <div class="forge-pkg-callout__ctas">
+                        <a class="forge-pkg-callout__primary" href="daspkg.html">browse daspkg →</a>
+                        <a class="forge-pkg-callout__secondary" href="doc/index.html">cli docs</a>
+                    </div>
+                    <div class="forge-pkg-callout__index">
+                        index · <a href="https://github.com/borisbat/daspkg-index">github.com/borisbat/daspkg-index</a>
+                    </div>
+                </div>
+                <div>
+                    <div class="forge-pkg-callout__term">
+                        <div><span class="prompt">$</span> daspkg install dasImgui</div>
+                        <div class="dim">  fetching dasImgui@latest from github.com/borisbat/dasImgui</div>
+                        <div class="dim">  building native bindings…</div>
+                        <div class="ok">  ✓ installed dasImgui · 1 native dep</div>
+                    </div>
+                    <div class="forge-pkg-callout__cells">
+                        <a class="forge-pkg-callout__cell" href="https://github.com/borisbat/dasImgui" target="_blank" rel="noopener noreferrer">
+                            <div class="forge-pkg-callout__cell-name">dasImgui</div>
+                            <div class="forge-pkg-callout__cell-tags">gui · imgui</div>
+                            <div class="forge-pkg-callout__cell-desc">Dear ImGui bindings for daslang.</div>
+                        </a>
+                        <a class="forge-pkg-callout__cell" href="https://github.com/borisbat/dasAnthropic" target="_blank" rel="noopener noreferrer">
+                            <div class="forge-pkg-callout__cell-name">das-claude</div>
+                            <div class="forge-pkg-callout__cell-tags">ai · api</div>
+                            <div class="forge-pkg-callout__cell-desc">Typed bindings for the Anthropic Claude Messages API.</div>
+                        </a>
+                        <a class="forge-pkg-callout__cell" href="https://github.com/borisbat/dasTelegram" target="_blank" rel="noopener noreferrer">
+                            <div class="forge-pkg-callout__cell-name">dasTelegram</div>
+                            <div class="forge-pkg-callout__cell-tags">telegram · bot</div>
+                            <div class="forge-pkg-callout__cell-desc">Telegram Bot API bindings for daslang — zero-DOM JSON via sscan_json/sprint_json.</div>
+                        </a>
+                    </div>
+                    <div class="forge-pkg-callout__indexed">
+                        <a href="daspkg.html">browse all packages →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───── § 06 Changelog / news ───── -->
+    <section class="forge-section forge-section--alt">
+        <div class="forge-container">
+            <div class="forge-section-label">
+                <span class="forge-section-label__num">§ 06</span>
                 <span class="forge-section-label__rule"></span>
                 <span>changelog</span>
             </div>
