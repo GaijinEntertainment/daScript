@@ -230,4 +230,148 @@ inline void das_qsort_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
     }
 }
 
+// Expanded 2026-05-17 by Boris Batkin / Claude (Opus 4.7):
+//   das_nth_element_r / das_partial_sort_r — introselect (median-of-3
+//     quickselect with smoothsort fallback on depth blowup) + smoothsort tail
+//   das_make_heap_r / das_push_heap_r / das_pop_heap_r — binary max-heap on a
+//     contiguous byte buffer with explicit width
+// Same inline-comparator template style as the existing das_qsort_r above.
+// Motivated by the linq_fold splice project's BufferTopN emit mode — see
+// benchmarks/sql/LINQ.md for context. Without these the partial_sort /
+// nth_element / heap-op bindings would only cover workhorse types
+// (std::partial_sort etc. template on iterator type, not void*+width).
+// User-defined struct types route through the any-cblock path which lands here.
+
+static inline void byte_swap(void *pa, void *pb, uint32_t width)
+{
+    unsigned char tmp[256];
+    unsigned char *a = (unsigned char *)pa;
+    unsigned char *b = (unsigned char *)pb;
+    while (width) {
+        uint32_t chunk = uint32_t(sizeof(tmp)) < width ? uint32_t(sizeof(tmp)) : width;
+        memcpy(tmp, a, chunk);
+        memcpy(a, b, chunk);
+        memcpy(b, tmp, chunk);
+        a += chunk;
+        b += chunk;
+        width -= chunk;
+    }
+}
+
+template <typename Compare>
+static inline void das_sift_down_r(unsigned char *data, uint32_t parent, uint32_t nel, uint32_t width, Compare cmp)
+{
+    while (true) {
+        uint32_t left = 2u * parent + 1u;
+        if (left >= nel) return;
+        uint32_t right = left + 1u;
+        uint32_t largest = parent;
+        if (cmp(data + parent * width, data + left * width)) largest = left;
+        if (right < nel && cmp(data + largest * width, data + right * width)) largest = right;
+        if (largest == parent) return;
+        byte_swap(data + parent * width, data + largest * width, width);
+        parent = largest;
+    }
+}
+
+template <typename Compare>
+inline void das_make_heap_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
+{
+    if (nel <= 1) return;
+    unsigned char *data = (unsigned char *)base;
+    // Floyd bottom-up: sift_down from the last non-leaf node.
+    for (uint32_t i = nel / 2u; i-- > 0u;) {
+        das_sift_down_r(data, i, nel, width, cmp);
+    }
+}
+
+template <typename Compare>
+inline void das_push_heap_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
+{
+    // Assumes the caller has just appended the new element at index (nel-1)
+    // and now wants the heap property restored.
+    if (nel <= 1) return;
+    unsigned char *data = (unsigned char *)base;
+    uint32_t child = nel - 1u;
+    while (child > 0u) {
+        uint32_t parent = (child - 1u) / 2u;
+        if (!cmp(data + parent * width, data + child * width)) return;
+        byte_swap(data + parent * width, data + child * width, width);
+        child = parent;
+    }
+}
+
+template <typename Compare>
+inline void das_pop_heap_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
+{
+    // Swap root with last, then sift_down over the reduced range [0..nel-2].
+    // Caller is expected to pop / drop the last slot after.
+    if (nel <= 1) return;
+    unsigned char *data = (unsigned char *)base;
+    byte_swap(data, data + (nel - 1u) * width, width);
+    das_sift_down_r(data, 0u, nel - 1u, width, cmp);
+}
+
+template <typename Compare>
+inline void das_nth_element_r(void *base, uint32_t nel, uint32_t n, uint32_t width, Compare cmp)
+{
+    if (nel <= 1u || n >= nel) return;
+    unsigned char *data = (unsigned char *)base;
+    uint32_t lo = 0u;
+    uint32_t hi = nel - 1u;
+    // Introselect depth bound: 2 * floor(log2(nel)). On bound exhaustion,
+    // fall back to smoothsort over the remaining range — O(n log n) but
+    // immune to adversarial quickselect inputs.
+    int depth_limit = 0;
+    for (uint32_t x = nel; x > 0u; x >>= 1) depth_limit += 2;
+    while (lo < hi) {
+        if (depth_limit-- <= 0) {
+            das_qsort_r(data + lo * width, hi - lo + 1u, width, cmp);
+            return;
+        }
+        // Small range: insertion sort and we're done. 16 is a common cutoff.
+        if (hi - lo < 16u) {
+            for (uint32_t i = lo + 1u; i <= hi; i++) {
+                for (uint32_t j = i; j > lo && cmp(data + j * width, data + (j - 1u) * width); j--) {
+                    byte_swap(data + j * width, data + (j - 1u) * width, width);
+                }
+            }
+            return;
+        }
+        // Median-of-3 pivot across lo, mid, hi; leaves median at `mid`.
+        uint32_t mid = lo + (hi - lo) / 2u;
+        unsigned char *plo  = data + lo  * width;
+        unsigned char *pmid = data + mid * width;
+        unsigned char *phi  = data + hi  * width;
+        if (cmp(pmid, plo)) byte_swap(plo, pmid, width);
+        if (cmp(phi,  plo)) byte_swap(plo, phi,  width);
+        if (cmp(phi,  pmid)) byte_swap(pmid, phi, width);
+        // Move pivot to `hi` and partition (Lomuto).
+        byte_swap(pmid, phi, width);
+        unsigned char *pivot = phi;
+        uint32_t i = lo;
+        for (uint32_t j = lo; j < hi; j++) {
+            if (cmp(data + j * width, pivot)) {
+                if (i != j) byte_swap(data + i * width, data + j * width, width);
+                i++;
+            }
+        }
+        byte_swap(data + i * width, pivot, width);
+        if (i == n) return;
+        if (i < n) lo = i + 1u;
+        else       hi = i - 1u;  // i > n implies i >= 1
+    }
+}
+
+template <typename Compare>
+inline void das_partial_sort_r(void *base, uint32_t nel, uint32_t n, uint32_t width, Compare cmp)
+{
+    if (nel <= 1u || n == 0u) return;
+    if (n > nel) n = nel;
+    if (n < nel) {
+        das_nth_element_r(base, nel, n, width, cmp);
+    }
+    das_qsort_r(base, n, width, cmp);
+}
+
 }

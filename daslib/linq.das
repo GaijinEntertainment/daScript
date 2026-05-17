@@ -7,6 +7,7 @@ module linq shared public
 
 require math
 require daslib/option public
+require daslib/sort_boost
 
 //! LINQ-style query operations on iterators and arrays.
 //!
@@ -446,6 +447,64 @@ def order_by_descending_to_array(var a : iterator<auto(TT)>; key) : array<TT -co
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => _::less(key(v2), key(v1)))
     return <- arr
+}
+
+// ============================================================================
+// top_n / top_n_by — return the N smallest elements in ascending order.
+//
+// Array source: partial_sort on a clone, then resize to N. O(M log N).
+// Iterator source: bounded heap of size N maintained during scan, then sort.
+// Iteratively O(M log N), max N+1 elements ever resident.
+//
+// For workhorse keys / element types the heap ops route to std::push_heap /
+// std::pop_heap. For user-defined types they route to das_push_heap_r /
+// das_pop_heap_r (byte-pointer heap on the any-cblock path).
+// ============================================================================
+
+def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
+    //! Returns the ``n`` smallest elements of ``arr`` by ``key(element)``,
+    //! sorted ascending. ``n <= 0`` or empty ``arr`` yields an empty result.
+    var buf : array<TT -const -&>
+    if (n <= 0 || length(arr) == 0) return <- buf
+    let take_count = min(n, length(arr))
+    buf |> reserve(take_count)
+    for (i in range(length(arr))) {
+        buf |> push_clone(arr[i])
+    }
+    sort_boost::partial_sort(buf, take_count, $(v1, v2) => _::less(key(v1), key(v2)))
+    buf |> resize(take_count)
+    return <- buf
+}
+
+def top_n_by(var a : iterator<auto(TT)>; n : int; key) : array<TT -const -&> {
+    //! Returns the ``n`` smallest elements of an iterator by ``key(element)``,
+    //! sorted ascending. Uses a bounded heap of size ``n`` during the scan;
+    //! at most ``n+1`` elements ever resident.
+    var buf : array<TT -const -&>
+    if (n <= 0) return <- buf
+    buf |> reserve(n)
+    for (it in a) {
+        if (length(buf) < n) {
+            buf |> push_clone(it)
+            sort_boost::push_heap(buf, $(v1, v2) => _::less(key(v1), key(v2)))
+        } elif (_::less(key(it), key(buf[0]))) {
+            sort_boost::pop_heap(buf, $(v1, v2) => _::less(key(v1), key(v2)))
+            buf[length(buf) - 1] := it
+            sort_boost::push_heap(buf, $(v1, v2) => _::less(key(v1), key(v2)))
+        }
+    }
+    sort(buf, $(v1, v2) => _::less(key(v1), key(v2)))
+    return <- buf
+}
+
+def top_n(arr : array<auto(TT)>; n : int) : array<TT -const -&> {
+    //! Returns the ``n`` smallest elements of ``arr`` (by ``<``), sorted ascending.
+    return <- top_n_by(arr, n, $(v : TT -&) => v)
+}
+
+def top_n(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> {
+    //! Returns the ``n`` smallest elements of an iterator (by ``<``), ascending.
+    return <- top_n_by(a, n, $(v : TT -&) => v)
 }
 
 def unique_key(a) {
