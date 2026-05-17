@@ -617,48 +617,49 @@ def private emit_length_shortcut(opName : string; var top : Expression?; srcName
 }
 
 [macro_function]
+def private invoke_src_param_type(var top : Expression?) : TypeDeclPtr {
+    // Compute the invoke block's `$src` parameter type from the chain top:
+    // iterator sources need outer `-const` stripped so the body can advance the handle;
+    // length-bearing sources keep modifiers so a `const&` source matches.
+    var srcParamType = clone_type(top._type)
+    if (top._type.isIterator) {
+        srcParamType.flags.constant = false
+    }
+    return srcParamType
+}
+
+[macro_function]
 def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; var loopBody : Expression?; at : LineInfo) : Expression? {
     // Counter lane: `var acc = 0; for (it in src) { $loopBody }; return acc` inside invoke.
-    // Iterator sources must strip `-const` on the block param so the body can consume them;
-    // length-bearing sources keep modifiers so a `const&` source matches.
-    let topIsIter = top._type != null && top._type.isIterator
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
-    var res : Expression?
-    if (topIsIter) {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-            var $i(accName) = 0
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return $i(accName)
-        }, $e(topExpr)))
-    } else {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-            var $i(accName) = 0
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return $i(accName)
-        }, $e(topExpr)))
-    }
+    var srcParamType = invoke_src_param_type(top)
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        var $i(accName) = 0
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+        return $i(accName)
+    }, $e(topExpr)))
     return finalize_invoke(res, at)
 }
 
 [macro_function]
 def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr; srcName, accName, itName : string; at : LineInfo) : Expression? {
     // Array lane: `var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
-    // wrapped in invoke. Three internal shapes selected by:
+    // wrapped in invoke. Two orthogonal axes select the body shape:
     //   - whole-pipeline iterator-ness (`expr._type.isIterator`) — drives the `to_sequence_move`
     //     return path so an iterator pipeline still ends in an iterator,
-    //   - source-length availability — drives the pre-reserve hint.
+    //   - source-length availability — drives the pre-reserve hint (only useful when source is
+    //     array-shaped; iter sources can't reserve cheaply and already strip outer const).
     let isIter = expr._type.isIterator
     let sourceHasLength = type_has_length(top._type)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
     var res : Expression?
     if (isIter) {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
             var $i(accName) : array<$t(elementType)>
             for ($i(itName) in $i(srcName)) {
                 $e(loopBody)
@@ -666,7 +667,7 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
             return <- $i(accName).to_sequence_move()
         }, $e(topExpr)))
     } elif (sourceHasLength) {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
             var $i(accName) : array<$t(elementType)>
             $i(accName) |> reserve(length($i(srcName)))
             for ($i(itName) in $i(srcName)) {
@@ -675,7 +676,7 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
             return <- $i(accName)
         }, $e(topExpr)))
     } else {
-        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
             var $i(accName) : array<$t(elementType)>
             for ($i(itName) in $i(srcName)) {
                 $e(loopBody)
@@ -806,86 +807,44 @@ def private emit_accumulator_lane(
         accType.flags.constant = false
         accType.flags.ref = false
     }
-    let topIsIter = top._type != null && top._type.isIterator
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
     var res : Expression?
     if (opName == "long_count") {
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) : int64 = 0l
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(accName) : int64 = 0l
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            var $i(accName) : int64 = 0l
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return $i(accName)
+        }, $e(topExpr)))
     } elif (opName == "sum") {
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) : $t(accType) = default<$t(accType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(accName) : $t(accType) = default<$t(accType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return $i(accName)
+        }, $e(topExpr)))
     } elif (opName == "average") {
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(accName) : $t(accType) = default<$t(accType)>
-                var $i(cntName) = 0
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return double($i(accName)) / double($i(cntName))
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(accName) : $t(accType) = default<$t(accType)>
-                var $i(cntName) = 0
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return double($i(accName)) / double($i(cntName))
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+            var $i(cntName) = 0
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return double($i(accName)) / double($i(cntName))
+        }, $e(topExpr)))
     } elif (opName == "min" || opName == "max") {
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                var $i(firstName) = true
-                var $i(accName) : $t(accType)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                var $i(firstName) = true
-                var $i(accName) : $t(accType)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(accName)
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            var $i(firstName) = true
+            var $i(accName) : $t(accType)
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return $i(accName)
+        }, $e(topExpr)))
     } else {
         return null
     }
@@ -996,9 +955,9 @@ def private emit_early_exit_lane(
         loopBody = perMatchBlock
     }
     // Build the invoke wrapper per op.
-    let topIsIter = top._type != null && top._type.isIterator
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
+    var srcParamType = invoke_src_param_type(top)
     var res : Expression?
     if (opName == "first") {
         // Return type for first: projection's type (if any) or source's element type.
@@ -1014,99 +973,51 @@ def private emit_early_exit_lane(
             retType.flags.ref = false
         }
         // Tail: panic + unreachable default-return (matches linq.das line 2383).
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                panic("sequence contains no elements")
-                return default<$t(retType)>
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                panic("sequence contains no elements")
-                return default<$t(retType)>
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            panic("sequence contains no elements")
+            return default<$t(retType)>
+        }, $e(topExpr)))
     } elif (opName == "first_or_default") {
         // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
         let defaultName = "`dval`{at.line}`{at.column}"
         var defaultExpr = clone_expression(terminatorCall.arguments[1])
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                let $i(defaultName) = $e(defaultExpr)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(defaultName)
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                let $i(defaultName) = $e(defaultExpr)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return $i(defaultName)
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            let $i(defaultName) = $e(defaultExpr)
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return $i(defaultName)
+        }, $e(topExpr)))
     } elif (opName == "any") {
         // Tail: return false (loop didn't hit).
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return false
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return false
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return false
+        }, $e(topExpr)))
     } elif (opName == "all") {
         // Tail: return true (vacuously true if loop empty; also true if no element failed pred).
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return true
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return true
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return true
+        }, $e(topExpr)))
     } elif (opName == "contains") {
         // Bind `v` once at the top of the block.
         let containsValName = "`cval`{at.line}`{at.column}"
         var valExpr = clone_expression(terminatorCall.arguments[1])
-        if (topIsIter) {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr)) - const) {
-                let $i(containsValName) = $e(valExpr)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return false
-            }, $e(topExpr)))
-        } else {
-            res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-                let $i(containsValName) = $e(valExpr)
-                for ($i(itName) in $i(srcName)) {
-                    $e(loopBody)
-                }
-                return false
-            }, $e(topExpr)))
-        }
+        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            let $i(containsValName) = $e(valExpr)
+            for ($i(itName) in $i(srcName)) {
+                $e(loopBody)
+            }
+            return false
+        }, $e(topExpr)))
     } else {
         return null
     }
