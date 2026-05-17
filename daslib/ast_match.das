@@ -508,10 +508,10 @@ def private qm_null_guard(at : LineInfo; actual_var : string) : Expression? {
 
 [macro_function]
 def private next_var(var index : int&) : string {
-    // Generated locals for qmatch pattern-match bind sites. Leading `qm_` (no underscore
-    // prefix) sidesteps LINT004 — these vars are USED downstream in the emitted match
-    // arms, so the unused-prefix convention doesn't apply.
-    let name = "qm_{index}"
+    // Generated locals for qmatch pattern-match bind sites. Backtick marks them as
+    // compiler-generated — no collision with user identifiers, and lint.das:152 skips
+    // backtick-bearing names from LINT004's leading-underscore-used check.
+    let name = "qm`{index}"
     index++
     return name
 }
