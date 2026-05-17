@@ -560,10 +560,28 @@ enum private LinqLane {
 [macro_function]
 def private classify_terminator(name : string) : LinqLane {
     if (name == "count") return LinqLane.COUNTER
-    if (name == "where_" || name == "select") return LinqLane.ARRAY
+    // take/skip as the trailing call (after to_array strip) → implicit array materialization,
+    // same lane as bare `[where_*][select*]` chains.
+    if (name == "where_" || name == "select" || name == "take" || name == "skip") return LinqLane.ARRAY
     if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
     if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains") return LinqLane.EARLY_EXIT
     return LinqLane.UNKNOWN
+}
+
+[macro_function]
+def private is_buffer_required_op(name : string) : bool {
+    // Operators that splice-mode planner can't handle today; each maps to a future emit mode.
+    // Recognized by name so the planner can `return null` (silent fallthrough) deliberately
+    // instead of falling out the unknown-op default. Future PRs replace each `return null` with
+    // a dedicated emit path (BufferTopN / BufferDistinct / BufferReverse / BufferGroupBy /
+    // MultiSourceZip / BufferedJoin) without re-walking the chain recognition.
+    return (name == "order_by" || name == "order" || name == "order_descending"
+        || name == "order_by_descending"
+        || name == "distinct" || name == "distinct_by"
+        || name == "reverse"
+        || name == "group_by" || name == "group_by_lazy"
+        || name == "zip"
+        || name == "join" || name == "left_join" || name == "group_join")
 }
 
 [macro_function]
@@ -664,6 +682,71 @@ def private wrap_with_condition(var body : Expression?; var cond : Expression?) 
 }
 
 [macro_function]
+def private append_skip_take_prelude(var preludeStmts : array<Expression?>; var skipExpr : Expression?; var takeExpr : Expression?;
+                                     skipName, takeCountName : string) {
+    // Loop-level counters for skip/take. Both live in the outer invoke block, alongside any
+    // lane-specific accumulator decl. `skipRem` decrements per skipped match (initial value
+    // = the user's K). `takenCount` increments per yielded match; loop breaks when it equals
+    // the user's N. Pre-loop init only — emitted by the lane that builds `bodyStmts`.
+    if (skipExpr != null) {
+        var skipInit = clone_expression(skipExpr)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(skipName) = $e(skipInit)
+        }
+    }
+    if (takeExpr != null) {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(takeCountName) = 0
+        }
+    }
+}
+
+[macro_function]
+def private wrap_with_skip_take(var stmts : array<Expression?>; var skipExpr : Expression?; var takeExpr : Expression?;
+                                skipName, takeCountName : string) {
+    // Per-match-block wrapping. Order at the head of the block is:
+    //   1. take-limit `break` — fires before any projection runs (matches LINQ: `take(N)`
+    //      truncates upstream, so the (N+1)th match isn't pulled at all)
+    //   2. skip-counter `continue` — drops the first K matched elements
+    //   3. take-counter `++` — placed BEFORE the per-match work so early-exit terminators
+    //      (`return X` for first/first_or_default/any-no-pred) don't make it unreachable.
+    //      LINT001 would flag the trailing-increment placement.
+    //   4. existing per-match work
+    if (skipExpr == null && takeExpr == null) return
+    var prefixed : array<Expression?>
+    prefixed |> reserve(length(stmts) + 3)
+    if (takeExpr != null) {
+        var takeLimit = clone_expression(takeExpr)
+        // `>=` (not `==`) so non-positive N short-circuits on the first iteration —
+        // matches reference iterator semantics: linq.das take_impl uses `if (total <= 0) break`,
+        // so `take(-1)` and `take(0)` yield nothing. `==` would silently take all elements
+        // for negative N (takenCount starts at 0 and only ever increments).
+        prefixed |> push <| qmacro_expr() {
+            if ($i(takeCountName) >= $e(takeLimit)) {
+                break
+            }
+        }
+    }
+    if (skipExpr != null) {
+        prefixed |> push <| qmacro_expr() {
+            if ($i(skipName) > 0) {
+                $i(skipName) --
+                continue
+            }
+        }
+    }
+    if (takeExpr != null) {
+        prefixed |> push <| qmacro_expr() {
+            $i(takeCountName) ++
+        }
+    }
+    for (s in stmts) {
+        prefixed |> push(s)
+    }
+    swap(stmts, prefixed)
+}
+
+[macro_function]
 def private min_max_compare(workhorse : bool; opName : string; valName, accName : string) : Expression? {
     // Workhorse types use direct `<` / `>` (single-instruction comparison) — this is the
     // perf-critical branch. Non-workhorse falls back to `_::less` so user / tuple comparator
@@ -676,43 +759,72 @@ def private min_max_compare(workhorse : bool; opName : string; valName, accName 
 }
 
 [macro_function]
-def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; var loopBody : Expression?; at : LineInfo) : Expression? {
-    // Counter lane: `var acc = 0; for (it in src) { $loopBody }; return acc` inside invoke.
+def private emit_counter_lane(var top : Expression?; srcName, accName, itName, skipName, takeCountName : string;
+                              var skipExpr : Expression?; var takeExpr : Expression?;
+                              var loopBody : Expression?; at : LineInfo) : Expression? {
+    // Counter lane: `[skip/take init]; var acc = 0; for (it in src) { $loopBody }; return acc`
+    // inside invoke. Skip/take counters live alongside `acc` at block scope; the body has
+    // the guards/increment baked in by `wrap_with_skip_take` upstream.
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
-    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+    var bodyStmts : array<Expression?>
+    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
+    bodyStmts |> push <| qmacro_expr() {
         var $i(accName) = 0
+    }
+    bodyStmts |> push <| qmacro_expr() {
         for ($i(itName) in $i(srcName)) {
             $e(loopBody)
         }
+    }
+    bodyStmts |> push <| qmacro_expr() {
         return $i(accName)
+    }
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(bodyStmts)
     }, $e(topExpr)))
     return finalize_invoke(res, at)
 }
 
 [macro_function]
-def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr; srcName, accName, itName : string; at : LineInfo) : Expression? {
-    // Array lane: `var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
+def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
+                            srcName, accName, itName, skipName, takeCountName : string;
+                            var skipExpr : Expression?; var takeExpr : Expression?;
+                            at : LineInfo) : Expression? {
+    // Array lane: `[skip/take init]; var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
     // wrapped in invoke. Two orthogonal axes select the body shape:
     //   - whole-pipeline iterator-ness (`expr._type.isIterator`) — drives the `to_sequence_move`
     //     return path so an iterator pipeline still ends in an iterator,
     //   - source-length availability — drives the pre-reserve hint (only useful when source is
     //     array-shaped; iter sources can't reserve cheaply).
-    // Single-$b body shares scope: `var acc` decl + optional reserve + for-loop + return all
-    // live in one block.
+    // When `take(N)` is in play the reserve hint tightens to `min(N, length(src))` — at most
+    // N elements ever get pushed, so a length-of-source reserve over-allocates by far.
+    // Single-$b body shares scope: skip/take counters + `var acc` decl + optional reserve +
+    // for-loop + return all live in one block.
     let isIter = expr._type.isIterator
     let sourceHasLength = type_has_length(top._type)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
+    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
     bodyStmts |> push <| qmacro_expr() {
         var $i(accName) : array<$t(elementType)>
     }
     if (sourceHasLength && !isIter) {
-        bodyStmts |> push <| qmacro_expr() {
-            $i(accName) |> reserve(length($i(srcName)))
+        if (takeExpr != null) {
+            // Inline `min` so the emission doesn't depend on `require math` at the call site.
+            // Reserve = min(takeN, length(src)): at most takeN elements ever get pushed.
+            var takeReserveA = clone_expression(takeExpr)
+            var takeReserveB = clone_expression(takeExpr)
+            bodyStmts |> push <| qmacro_expr() {
+                $i(accName) |> reserve($e(takeReserveA) < length($i(srcName)) ? $e(takeReserveB) : length($i(srcName)))
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                $i(accName) |> reserve(length($i(srcName)))
+            }
         }
     }
     bodyStmts |> push <| qmacro_expr() {
@@ -743,7 +855,8 @@ def private emit_accumulator_lane(
                                   var whereCond : Expression?;
                                   var intermediateBinds : array<Expression?>;
                                   var elementType : TypeDeclPtr;
-                                  srcName, accName, itName : string;
+                                  srcName, accName, itName, skipName, takeCountName : string;
+                                  var skipExpr : Expression?; var takeExpr : Expression?;
                                   at : LineInfo
                                   ) : Expression? {
     // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
@@ -840,13 +953,16 @@ def private emit_accumulator_lane(
         return null
     }
     prepend_binds(perMatchStmts, intermediateBinds)
+    wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
     var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
     // Collect all body statements into one list so they share scope when spliced via $b.
     // Splitting decls / for / return into separate splice tags would put each in its own
     // sub-block, hiding the accumulator from later statements (caught by AST dump under
-    // `options log_infer_passes`).
+    // `options log_infer_passes`). skip/take counter init goes first so the guards inside
+    // the perMatch block can name-resolve them.
     var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(preludeStmts) + 2)
+    bodyStmts |> reserve(length(preludeStmts) + 4)
+    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
@@ -890,7 +1006,8 @@ def private emit_early_exit_lane(
                                  var intermediateBinds : array<Expression?>;
                                  var elementType : TypeDeclPtr;
                                  terminatorCall : ExprCall?;
-                                 srcName, itName : string;
+                                 srcName, itName, skipName, takeCountName : string;
+                                 var skipExpr : Expression?; var takeExpr : Expression?;
                                  at : LineInfo
                                  ) : Expression? {
     // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
@@ -995,10 +1112,13 @@ def private emit_early_exit_lane(
         return null
     }
     prepend_binds(perMatchStmts, intermediateBinds)
+    wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
     var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
-    // Single-$b body so all stmts (prelude + for + tail) share scope under one wrapping block.
+    // Single-$b body so all stmts (skip/take counters + prelude + for + tail) share scope
+    // under one wrapping block.
     var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 1)
+    bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 3)
+    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
@@ -1021,20 +1141,25 @@ def private emit_early_exit_lane(
 
 [macro_function]
 def private plan_loop_or_count(var expr : Expression?) : Expression? {
-    // Phase-2B loop planner. Recognizes chains of shape `[where_*][select*]` plus a terminator,
-    // dispatched by `classify_terminator` into one of four lanes:
-    //   ARRAY        — `[where_*][select*]`                            → array<T> / iterator<T>
-    //   COUNTER      — `[where_*][select*] |> count`                   → int
-    //   ACCUMULATOR  — `[where_*][select*] |> {sum,min,max,average,long_count}` → typed scalar
-    //   EARLY_EXIT   — `[where_*][select*] |> {first,first_or_default,any,all,contains}`
-    // Fuses chained wheres into `&&` and chained selects via let-binding composition; emits one
-    // inline `invoke($block, $src)`. Returns null for shapes outside scope — caller falls through.
+    // Phase-2C loop planner. Recognizes chains of shape `[where_*][select*][skip?][take?]`
+    // plus a terminator, dispatched by `classify_terminator` into one of four lanes:
+    //   ARRAY        — `[where_*][select*][skip?][take?]` (or trailing take/skip → implicit
+    //                  to_array)                                  → array<T> / iterator<T>
+    //   COUNTER      — `[...] |> count`                           → int
+    //   ACCUMULATOR  — `[...] |> {sum,min,max,average,long_count}` → typed scalar
+    //   EARLY_EXIT   — `[...] |> {first,first_or_default,any,all,contains}`
+    // Fuses chained wheres into `&&`, chained selects via let-binding composition, and
+    // skip/take into bounded-loop counters; emits one inline `invoke($block, $src)`. Returns
+    // null for shapes outside scope — caller falls through. Buffer-required ops (`order_by`,
+    // `distinct`, `group_by`, `zip`, `join`, `reverse`) are recognized by name and return null
+    // with a future-mode marker; future PRs replace each with a dedicated emit path.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     top = peel_each(top)
     let lastName = calls.back()._1.name
     let lane = classify_terminator(lastName)
-    // Phase 2B emits all four lanes; UNKNOWN terminators fall through unfolded.
+    // Marker: future PRs add BufferTopN / BufferDistinct / etc. for `is_buffer_required_op`
+    // names. Today: silent fallback.
     if (lane == LinqLane.UNKNOWN) return null
     let counterLane = lane == LinqLane.COUNTER
     let hasTerminator = lane != LinqLane.ARRAY
@@ -1043,10 +1168,16 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     let srcName = "`source`{at.line}`{at.column}"
     let itName  = "`it`{at.line}`{at.column}"
     let accName = "`acc`{at.line}`{at.column}"
+    let skipName = "`skip`{at.line}`{at.column}"
+    let takeCountName = "`tc`{at.line}`{at.column}"
     var whereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
+    var skipExpr : Expression?
+    var takeExpr : Expression?
     var seenSelect = false
+    var seenSkip = false
+    var seenTake = false
     var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
     var lastBindName = itName
@@ -1054,7 +1185,9 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
         if (opName == "where_") {
-            if (seenSelect) return null    // where-after-select not in Phase 2A
+            // where-after-select / -after-skip / -after-take is rejected — canonical chain
+            // order is [where_*][select*][skip?][take?].
+            if (seenSelect || seenSkip || seenTake) return null
             var predicate = fold_linq_cond(cll._0.arguments[1], itName)
             if (whereCond == null) {
                 whereCond = predicate
@@ -1062,28 +1195,49 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 whereCond = qmacro($e(whereCond) && $e(predicate))
             }
         } elif (opName == "select") {
+            if (seenSkip || seenTake) return null
             // Chained selects: bind the previous projection to a fresh local now so the next
             // lambda's `_` can be renamed straight to that name — avoids the
             // ExprRef2Value-substitution trap that plain `Template.replaceVariable` hits when
-            // splicing a typed expression into another typed expression. Phase 2A only
-            // chains workhorse projections; a non-workhorse intermediate binding would need
-            // a clone (`:=`) since `<-` (move) can corrupt source for lvalue projections
-            // like `_._field`. Deferred to Phase 2B.
+            // splicing a typed expression into another typed expression. `:=` (clone) is
+            // safe on every type — byte copy on workhorse, deep-clone on non-workhorse — so
+            // the same emission shape works regardless of projection type, including lvalue
+            // projections like `_._field` that `<-` (move) would corrupt.
             if (projection != null) {
-                let prevWorkhorse = projection._type != null && projection._type.isWorkhorseType
-                if (!prevWorkhorse) return null   // chained non-workhorse selects — Phase 2B
                 if (has_sideeffects(projection)) {
                     allProjectionsPure = false
                 }
                 let bindName = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
                 intermediateBinds |> push <| qmacro_expr() {
-                    var $i(bindName) = $e(projection)
+                    var $i(bindName) := $e(projection)
                 }
                 lastBindName = bindName
             }
             projection = fold_linq_cond(cll._0.arguments[1], lastBindName)
             elementType = clone_type(cll._0._type.firstType)
             seenSelect = true
+        } elif (opName == "skip") {
+            // Canonical chain: at most one skip, before any take. Multiple skips / skip-after-
+            // take falls through (no semantic difficulty, just scope deferral). Range-form
+            // `skip(start..end)` is a slice (different operator semantics) — fall through.
+            if (seenSkip || seenTake) return null
+            var skipArg = cll._0.arguments[1]
+            if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
+            skipExpr = clone_expression(skipArg)
+            seenSkip = true
+        } elif (opName == "take") {
+            if (seenTake) return null
+            var takeArg = cll._0.arguments[1]
+            if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
+            takeExpr = clone_expression(takeArg)
+            seenTake = true
+        } elif (is_buffer_required_op(opName)) {     // nolint:LINT009
+            // TODO Phase 2X: BufferTopN (order_by + take/skip), BufferDistinct (distinct/_by),
+            // BufferReverse (reverse), BufferGroupBy (group_by/_lazy), MultiSourceZip (zip),
+            // BufferedJoin (join/left_join/group_join). Recognized but not yet emitted —
+            // future PRs replace each return-null with a dedicated emit path; for now the
+            // marker arm fall-throughs identically to the unrecognized-op default.
+            return null
         } else {
             return null
         }
@@ -1091,12 +1245,14 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
+    let noLimits = skipExpr == null && takeExpr == null
     // Count-shaped shortcut: when terminator is `count` (→ int) or `long_count` (→ int64),
-    // there's no filter, and every projection is pure, the result is just the source length.
-    // Skip the loop entirely.
+    // there's no filter, no skip/take limits, and every projection is pure, the result is
+    // just the source length. Skip the loop entirely. take/skip would truncate the length so
+    // the shortcut can't fire there.
     let isCountShaped = (lane == LinqLane.COUNTER
         || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
-    if (isCountShaped && whereCond == null && allProjectionsPure
+    if (isCountShaped && whereCond == null && allProjectionsPure && noLimits
             && type_has_length(top._type))
         return emit_length_shortcut(lastName, top, srcName, at)
     // Ring 1: accumulator lane builds its own per-op loop body (typed accumulator, optional
@@ -1104,21 +1260,24 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // COUNTER/ARRAY loopBody construction.
     if (lane == LinqLane.ACCUMULATOR)
         return emit_accumulator_lane(lastName, top, projection, whereCond,
-            intermediateBinds, elementType, srcName, accName, itName, at)
-    // Ring 2: early-exit lane — `any` no-pred + no upstream work + length-bearing source
-    // gets the empty-shortcut; everything else dispatches to the loop emitter.
+            intermediateBinds, elementType, srcName, accName, itName, skipName, takeCountName,
+            skipExpr, takeExpr, at)
+    // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
+    // source gets the empty-shortcut; everything else dispatches to the loop emitter.
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = calls.back()._0
         let isAnyNoPred = lastName == "any" && length(terminatorCall.arguments) == 1
-        if (isAnyNoPred && whereCond == null && allProjectionsPure
+        if (isAnyNoPred && whereCond == null && allProjectionsPure && noLimits
                 && type_has_length(top._type))
             return emit_any_empty_shortcut(top, srcName, at)
         return emit_early_exit_lane(lastName, top, projection, whereCond,
-            intermediateBinds, elementType, terminatorCall, srcName, itName, at)
+            intermediateBinds, elementType, terminatorCall, srcName, itName, skipName,
+            takeCountName, skipExpr, takeExpr, at)
     }
     // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
     // collect per-element stmts (incl. side-effect-preserving projection binds), prepend
-    // chain `intermediateBinds`, collapse to a single expression, wrap with `whereCond`.
+    // chain `intermediateBinds`, wrap with skip/take guards, collapse to a single expression,
+    // wrap with `whereCond`.
     var loopBody : Expression?
     if (counterLane) {
         // Counter lane must evaluate the projection (and any chained intermediates) per
@@ -1138,6 +1297,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             $i(accName) ++
         }
         prepend_binds(stmts, intermediateBinds)
+        wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
         loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
     } else {
         // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
@@ -1151,8 +1311,10 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             stmts |> push <| qmacro_expr() {
                 $i(accName) |> push_clone($e(projection))
             }
-        } elif (whereCond != null) {
-            // Identity case (no projection): `it` aliases the source element.
+        } elif (whereCond != null || skipExpr != null || takeExpr != null) {
+            // Identity push: `it` aliases the source element. Reached when chain is bare
+            // [where_*][skip?][take?] (no select) — every match (post-filter, post-skip,
+            // pre-take) goes into the result array as-is.
             stmts |> push <| qmacro_expr() {
                 $i(accName) |> push_clone($i(itName))
             }
@@ -1161,12 +1323,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             return null
         }
         prepend_binds(stmts, intermediateBinds)
+        wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
         loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
     }
     if (counterLane) {
-        return emit_counter_lane(top, srcName, accName, itName, loopBody, at)
+        return emit_counter_lane(top, srcName, accName, itName, skipName, takeCountName,
+            skipExpr, takeExpr, loopBody, at)
     } else {
-        return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName, at)
+        return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName,
+            skipName, takeCountName, skipExpr, takeExpr, at)
     }
 }
 
