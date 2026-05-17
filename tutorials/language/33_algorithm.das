@@ -163,7 +163,7 @@ def top_n_demo() {
     print("top_n(arr, 3): {smallest3}\n")  // [2, 5, 8]
 
     // For iterator sources, top_n uses a bounded heap of size N during the
-    // scan — at most N+1 elements ever resident, O(M log N) total.
+    // scan — at most N elements ever resident, O(M log N) total.
     let arr2 <- [10, 20, 5, 8, 30, 15, 2, 25]
     let smallest3_iter <- top_n(arr2.to_sequence(), 3)
     print("top_n(iter, 3): {smallest3_iter}\n")  // [2, 5, 8]

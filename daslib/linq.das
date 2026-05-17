@@ -454,7 +454,7 @@ def order_by_descending_to_array(var a : iterator<auto(TT)>; key) : array<TT -co
 //
 // Array source: partial_sort on a clone, then resize to N. O(M log N).
 // Iterator source: bounded heap of size N maintained during scan, then sort.
-// Iteratively O(M log N), max N+1 elements ever resident.
+// Iteratively O(M log N), max N elements ever resident.
 //
 // For workhorse keys / element types the heap ops route to std::push_heap /
 // std::pop_heap. For user-defined types they route to das_push_heap_r /

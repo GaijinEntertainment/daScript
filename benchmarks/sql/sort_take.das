@@ -13,7 +13,7 @@ let TAKE_N = 10
 //
 // The m3_topn_* columns measure the new ``linq.top_n_by`` family: array source
 // uses ``partial_sort`` under the hood (O(M log N)), iterator source uses a
-// bounded heap of size N during the scan (max N+1 elements resident).
+// bounded heap of size N during the scan (max N elements resident).
 //
 // m3f / m3f_old are intentionally identical for top-N here — Phase 0 only adds
 // the library function; PR B (BufferTopN emit mode in linq_fold) is what makes
