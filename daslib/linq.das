@@ -482,7 +482,9 @@ def top_n_by(var a : iterator<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! at most ``n`` elements resident.
     var buf : array<TT -const -&>
     if (n <= 0) return <- buf
-    buf |> reserve(n)
+    // No reserve(n) — iterator cardinality is unknown; a caller passing
+    // n >> iter_size would force a large upfront allocation for no win.
+    // Geometric growth during the O(log n) fill phase is amortized O(1).
     for (it in a) {
         if (length(buf) < n) {
             buf |> push_clone(it)

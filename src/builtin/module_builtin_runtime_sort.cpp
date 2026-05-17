@@ -515,8 +515,9 @@ namespace das
         // ==================================================================
         // Phase 0: partial_sort / nth_element / make_heap / push_heap / pop_heap.
         // Same 19-type matrix as sort (6 numeric + 13 vector). String is omitted
-        // for now — strudel/sort_string is a special path with strcmp comparator;
-        // partial_sort / heap ops on strings are not a Phase 0 use case.
+        // for now — __builtin_sort_string is a special path with strcmp
+        // comparator; partial_sort / heap ops on strings are not a Phase 0 use
+        // case.
         // ==================================================================
 
         // numeric typed bindings (5 ops × 6 types × 4 variants = 120 registrations)
