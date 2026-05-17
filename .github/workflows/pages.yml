@@ -107,6 +107,7 @@ jobs:
         # Static landing page and assets
         cp site/index.html _site/
         cp site/downloads.html _site/
+        cp site/daspkg.html _site/
         cp site/robots.txt _site/
         cp -r site/files _site/files
 
