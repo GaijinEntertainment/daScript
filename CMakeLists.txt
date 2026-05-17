@@ -1755,10 +1755,13 @@ install(FILES
 add_subdirectory(tutorials)
 
 # ── Documentation build (optional) ──────────────────────────────────────────
-# Requires the `daslang` target (das2rst stdlib RST generator runs it), so we
-# also gate on NOT DAS_TOOLS_DISABLED — otherwise CMake fails on the missing
-# target. Tools-disabled builds simply can't generate docs.
-if(DAS_BUILD_DOCUMENTATION AND NOT DAS_TOOLS_DISABLED)
+# Requires the `daslang` target (das2rst stdlib RST generator runs it). If the
+# user explicitly asked for docs but also disabled tools, fail early rather
+# than silently skipping — mirrors the DAS_AOT_EXAMPLES check above.
+if(DAS_BUILD_DOCUMENTATION)
+    if(DAS_TOOLS_DISABLED)
+        message(FATAL_ERROR "DAS_BUILD_DOCUMENTATION requires DAS_TOOLS_DISABLED to be OFF (the docs pipeline runs daslang via das2rst.das)")
+    endif()
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
         execute_process(
