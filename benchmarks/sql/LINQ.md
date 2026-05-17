@@ -23,7 +23,9 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 | 0 | Rename `_fold` → `_old_fold` in linq_boost; extract `_fold` and `_old_fold` into new `daslib/linq_fold.das` module; `linq_boost` `require linq_fold public` for re-export | ✅ done |
 | 1 | Benchmark suite: 24 files under `benchmarks/sql/`, each 4-way (m1 `_sql` / m3 plain linq / m3f_old `_old_fold` / m3f `_fold`) at 100K rows; baseline numbers captured | ✅ done |
 | 2A | Loop planner — `_fold` emits explicit for-loops for `[where_*][select?]` (array lane) and `[where_*][select?] |> count` (counter lane); anything else falls through unfolded. No comprehensions, no dispatch back to `_old_fold`. | ✅ done |
-| 2B | Aggregate accumulators: `sum`, `min`, `max`, `average`, `first`, `any`, `all`, `long_count`. Also `take`/`skip` in counter/array lane and chained-`_select|_select` fusion (needs `ExprRef2Value`-aware projection substitution) | ⏳ next |
+| 2B Ring 1 | Accumulator lane: `sum`, `min`, `max`, `average`, `long_count` with workhorse `<` / `>` for min/max scalars and `_::less` fallback for tuples/user types. `long_count` shares the count-length shortcut. | ✅ done |
+| 2B Ring 2 | Early-exit lane: `first`, `first_or_default`, `any`, `all`, `contains` via `invoke($block { ... return val })`. Predicate-free `any` gets a `length(src) > 0` shortcut. | ✅ done |
+| 2C | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes; non-workhorse chained selects via `:=`-clone; `_select|_where` (where-after-select; needs `ExprRef2Value` substitution). | ⏳ |
 | 3+ | Buffer-required operators: `distinct`, `sort`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
 | 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
 
@@ -100,6 +102,63 @@ The first cut was 18% slower than the comprehension. Three independent fixes bro
 3. **Peel `each(<array>)` at macro time.** The benchmark source `each(arr)` reports as `iterator<T>`, so the reserve from (2) wouldn't fire. The planner now detects `each(<expr>)` where the inner expression has length and unwraps it — the emitted loop iterates the array directly. `for (it in arr)` and `for (it in each(arr))` yield the same element refs; the wrapper iterator is incidental in fold context.
 
 A fourth simplification dropped `emplace` from the emission entirely. emplace **moves** out of its argument and can corrupt the source when the projection returns a ref into it (e.g. `_._field`). The safe pattern is `push` for workhorse (cheap copy) and `push_clone` for non-workhorse (deep clone). No intermediate `var v = projection; emplace(v)` is needed in either case — the planner pushes the projection expression directly.
+
+## Phase 2B Ring 1 — Accumulator lane (2026-05-16)
+
+`_fold` now recognizes `[where_*][select*] |> {sum,min,max,average,long_count}` and emits a single-pass loop with a typed accumulator. New private dispatch infrastructure: `LinqLane` enum + `classify_terminator(name)` route each terminator to per-lane emit helpers (`emit_counter_lane`, `emit_array_lane`, `emit_length_shortcut`, **`emit_accumulator_lane`**); `plan_loop_or_count` is now an analyzer that builds the shared `whereCond` / `intermediateBinds` / `projection` state then dispatches.
+
+**Per-op shapes:**
+- `sum` — `var acc : T = default<T>; for { ...; acc += v }; return acc`. T = projection type (or element type).
+- `long_count` — `var acc : int64 = 0l; for { ...; acc++ }; return acc`. Length shortcut: `int64(length(src))` when no predicate + all pure.
+- `min` / `max` — `var first_iter = true; var best : T; for { ...; let v = ...; if (first_iter) { best := v; first_iter = false } elif (compare) { best := v } }; return best`.
+  - **Workhorse branch** (Boris's call: best perf > emission simplicity, see `feedback_linq_fold_perf_max`): T workhorse → direct `<` / `>`; non-workhorse → `_::less(...)` to preserve user/tuple comparator overloads.
+- `average` — `var sum_acc : T = default<T>; var cnt = 0; for { ...; sum_acc += v; cnt++ }; return double(sum_acc) / double(cnt)`. Returns `double` (matches linq.das line 1358); empty source → NaN.
+
+**Empty-source semantics** match linq.das exactly: sum/long_count → 0; min/max → `default<T>` (never assigned via the first-iter flag); average → div-by-zero NaN.
+
+**Modifier strip on accumulator type.** The element/projection type often carries `const &` (e.g. `int const &` for array elements). The accumulator must be a mutable value, so the planner strips both `flags.constant` and `flags.ref` on the cloned `accType` before emission. Without this, `var acc : int const = ...; acc += x` fails ("numeric operator '+=' left side can't be constant").
+
+### Phase 2B Ring 1 deltas (100K rows, INTERP)
+
+All Ring 1 ops hit single-digit ns/op with **zero allocations** (counter-lane parity).
+
+| Benchmark | Shape | m3f_old | m3f (Ring 1) | Delta |
+|---|---|---:|---:|---|
+| sum_aggregate | `select → sum` | 16 | **2** | **8× faster** |
+| sum_where | `where → select → sum` | 12 | **4** | **3× faster** |
+| min_aggregate | `select → min` | 25 | **6** | **4.2× faster** |
+| max_aggregate | `select → max` | 23 | **6** | **3.8× faster** |
+| average_aggregate | `select → average` | 20 | **5** | **4× faster** |
+| long_count_aggregate (new) | `where → long_count` | 15 | **4** | **3.75× faster** |
+
+The workhorse-branch decision is decisive for min/max: emitting `v < best` directly instead of dispatching through `_::less` cuts the per-element cost roughly in half on int columns. The non-workhorse path (tuples, user types) still goes through `_::less` to preserve overload semantics — see `test_min_non_workhorse_uses_less` in `tests/linq/test_linq_fold_ast.das`.
+
+## Phase 2B Ring 2 — Early-exit lane (2026-05-16)
+
+`_fold` now recognizes `[where_*][select*] |> {first,first_or_default,any,all,contains}` and emits a loop wrapped in `invoke($block { for { ...; return X }; tail }, src)`. The block-level `return` yields the invoke's value as an expression without escaping the user's enclosing function (Boris confirmed the idiom: `$() { ... }` is stack-allocated, no heap). New emit helper `emit_early_exit_lane` and a separate `emit_any_empty_shortcut` for the predicate-free `any` length-bearing shortcut.
+
+**Per-op shapes:**
+- `first` — `for { ...; return val }; panic("sequence contains no elements"); return default<T>` (matches linq.das line 2383; sentinel return makes the typer happy on the post-panic line).
+- `first_or_default(d)` — `let d_bound = d; for { ...; return val }; return d_bound` — eager evaluation of `d` matches linq.das line 2397 (no lazy-vs-eager divergence on observable side effects).
+- `any` — loop emission with `return true` on match, `return false` in tail. Shortcut: `length(src) > 0` when no upstream where + no per-element work + length-bearing source.
+- `all(pred)` — loop with `if (!pred) return false`, tail returns `true` (vacuously true on empty source).
+- `contains(v)` — `let v_bound = v; for { ...; if (it == v_bound) return true }; return false` — `v` bound once at top to avoid re-evaluating an expensive argument.
+
+**Workhorse branch deferred for `contains`**: daslang's `==` already handles tuples and user-defined `operator ==`, so no separate non-workhorse path is needed.
+
+### Phase 2B Ring 2 deltas (100K rows, INTERP)
+
+All Ring 2 ops hit single-digit ns/op with **zero allocations**. Early-exit cases (first hit near the front) collapse to sub-ns per element — true O(1) behavior at scale.
+
+| Benchmark | Shape | m3f_old | m3f (Ring 2) | Delta |
+|---|---|---:|---:|---|
+| first_match | `where → first` | 15 | **0** | early-exit at first hit |
+| first_or_default_match (new) | `where → first_or_default(d)` | 15 | **0** | same |
+| any_match | `where → first_opt`/`any` | 0 | **0** | parity (already sub-ns) |
+| all_match | `count(where ¬p)==0` / `all` | 24 | **3** | **8× faster** |
+| contains_match (new) | `select → contains(v)` | 15 | **2** | **7.5× faster** |
+
+`first` / `first_or_default` collapse to sub-ns/op because the where matches near the front of the array; the early-exit returns at the first hit and per-element timing measures the loop overhead per the chunk_size (100K), not per actual iteration. The same is why `any_match` was already at 0 ns/op pre-Phase-2B — `_old_fold` and m3 also bail early on first match.
 
 ## Operator-coverage checklist (parity tests)
 

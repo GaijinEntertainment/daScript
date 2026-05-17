@@ -681,7 +681,7 @@ def count(a : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : int {
 def long_count(var a : iterator<auto(TT)>) : int64 {
     //! Counts elements in an iterator, using a long integer
     var count = 0l
-    for (it in a) {
+    for (_ in a) {
         count ++
     }
     return count
