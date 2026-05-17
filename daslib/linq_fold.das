@@ -698,39 +698,40 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
     //   - whole-pipeline iterator-ness (`expr._type.isIterator`) — drives the `to_sequence_move`
     //     return path so an iterator pipeline still ends in an iterator,
     //   - source-length availability — drives the pre-reserve hint (only useful when source is
-    //     array-shaped; iter sources can't reserve cheaply and already strip outer const).
+    //     array-shaped; iter sources can't reserve cheaply).
+    // Single-$b body shares scope: `var acc` decl + optional reserve + for-loop + return all
+    // live in one block.
     let isIter = expr._type.isIterator
     let sourceHasLength = type_has_length(top._type)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
-    var res : Expression?
-    if (isIter) {
-        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-            var $i(accName) : array<$t(elementType)>
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return <- $i(accName).to_sequence_move()
-        }, $e(topExpr)))
-    } elif (sourceHasLength) {
-        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-            var $i(accName) : array<$t(elementType)>
-            $i(accName) |> reserve(length($i(srcName)))
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return <- $i(accName)
-        }, $e(topExpr)))
-    } else {
-        res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-            var $i(accName) : array<$t(elementType)>
-            for ($i(itName) in $i(srcName)) {
-                $e(loopBody)
-            }
-            return <- $i(accName)
-        }, $e(topExpr)))
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push <| qmacro_expr() {
+        var $i(accName) : array<$t(elementType)>
     }
+    if (sourceHasLength && !isIter) {
+        bodyStmts |> push <| qmacro_expr() {
+            $i(accName) |> reserve(length($i(srcName)))
+        }
+    }
+    bodyStmts |> push <| qmacro_expr() {
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+    }
+    if (isIter) {
+        bodyStmts |> push <| qmacro_expr() {
+            return <- $i(accName).to_sequence_move()
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            return <- $i(accName)
+        }
+    }
+    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(bodyStmts)
+    }, $e(topExpr)))
     return finalize_invoke(res, at)
 }
 
