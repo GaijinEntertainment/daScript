@@ -141,6 +141,10 @@ struct JitCliOptions {
     @clarg_name = "jit-dump"
     @clarg_doc = "JIT: dump generated LLVM IR"
     dump_ir : Option<bool>
+
+    @clarg_name = "jit-target"
+    @clarg_doc = "JIT: cross-compile target triple (use with -exe; e.g. wasm32-unknown-unknown)"
+    target : Option<string>
 }
 
 
@@ -179,6 +183,11 @@ class JIT_LLVM : AstSimulateMacro {
         var output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
+        // Cross-compile triple: --jit-target=<triple> CLI wins over the
+        // script-level `options jit_target = "..."`.
+        let opt_target = (prog._options |> find_arg("jit_target")) ?as tString ?? ""
+        let target_triple = cli_opts.target |> unwrap_or(opt_target)
+        let gen_wasm = gen_exe && (target_triple |> starts_with("wasm"))
 
         // Set global options
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
@@ -308,7 +317,12 @@ class JIT_LLVM : AstSimulateMacro {
                     let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                if (gen_exe) {
+                if (gen_wasm) {
+                    mkdir_rec(dir_name(output_path))
+                    // path_to_linker is reused as the optional wasm-ld override
+                    // (mirrors how it's used for clang-cl on the host path).
+                    write_wasm(g_mod, output_path, target_triple, path_to_linker)
+                } elif (gen_exe) {
                     mkdir_rec(dir_name(output_path))
                     write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, LINK_WHOLE_LIB)
                 } elif (use_dll) {

@@ -6684,5 +6684,6 @@ class public DisableJitVisitor : AstVisitor {
 def init_llvm_jit_module_options() {
     if (is_compiling_macros_in_module("llvm_jit")) {
         this_module() |> add_module_option("jit_vec3_ldu", Type.tBool)
+        this_module() |> add_module_option("jit_target", Type.tString)
     }
 }

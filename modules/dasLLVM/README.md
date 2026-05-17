@@ -78,3 +78,58 @@ cached DLL for instant execution.
 ### DLL location
 - By default, the `dll` is stored in `.jitted_scripts/`.
 - This can be changed using `jit_output_path`.
+
+## Cross-compilation (WebAssembly)
+The JIT pipeline can emit a non-host target instead of running on the host.
+Today the only supported cross-target is `wasm32-unknown-unknown`.
+
+### How it works
+`-exe` mode usually emits a host object via LLVM and links it with `clang`/`clang-cl`.
+When a cross-compile target is selected, dasLLVM instead:
+1. Initializes the WebAssembly LLVM target (lazy — no JIT-startup overhead when unused).
+2. Builds a `TargetMachine` for the requested triple and pins the module's data
+   layout / triple so codegen sizes pointers as 32-bit.
+3. Emits a `wasm32` object file via `LLVMTargetMachineEmitToFile`.
+4. Links it to a runnable `.wasm` by invoking `wasm-ld --no-entry --export-dynamic --allow-undefined`.
+
+### Linker (wasm-ld)
+dasLLVM looks for `wasm-ld` in this order:
+1. Explicit override (set `cop.jit_path_to_linker` programmatically).
+2. `<das_root>/bin/wasm-ld[.exe]` — bundled next to `daslang` and `clang-cl`.
+3. `wasm-ld` on `PATH` (e.g. system `llvm-22` install).
+
+### Example
+Write `add.das`:
+```
+options gen2
+def add(a, b : int) : int { return a + b; }
+[export] def main() : int { return add(2, 3); }
+```
+Pick a triple via either the script or the CLI (only one is required; both
+are optional — CLI wins when both present):
+
+**Script-level option:**
+```
+options jit_target = "wasm32-unknown-unknown"
+```
+then:
+```sh
+./bin/daslang -exe -output add add.das
+```
+
+**CLI flag** (no edit to the script):
+```sh
+./bin/daslang -exe -output add add.das -- --jit-target=wasm32-unknown-unknown
+```
+`-exe` selects executable JIT mode; the triple pins codegen to wasm32 and
+`wasm-ld` links `add.wasm` next to `-output`. Script-side flags live after
+`--`.
+
+### Running the produced `.wasm`
+```
+node -e 'WebAssembly.instantiate(require("fs").readFileSync("add.wasm"),{env:new Proxy({},{get:()=>()=>0})}).then(r=>console.log(r.instance.exports.main()))'
+```
+Prints `5`.
+The `Proxy` supplies a `()=>0` stub for every wasm import — needed because
+`--allow-undefined` leaves daslang-runtime symbols as imports. A
+pure-arithmetic `main` never actually calls one.

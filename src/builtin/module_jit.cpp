@@ -867,6 +867,74 @@ extern "C" {
     void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib, Context *context ) { }
 #endif
 
+#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+    // Resolves wasm-ld path: explicit > bin/wasm-ld[.exe] next to daslang > PATH lookup.
+    static string resolve_wasm_ld(const char * customWasmLd) {
+        if ( customWasmLd != nullptr && customWasmLd[0] != '\0' ) return customWasmLd;
+        #if defined(_WIN32) || defined(_WIN64)
+            string bundled = getDasRoot() + "/bin/wasm-ld.exe";
+        #else
+            string bundled = getDasRoot() + "/bin/wasm-ld";
+        #endif
+        if ( check_file_present(bundled.c_str()) ) return bundled;
+        return "wasm-ld"; // fall through to PATH
+    }
+
+    void link_wasm ( const char * objFilePath, const char * wasmPath, const char * customWasmLd, Context *context ) {
+        char cmd[1024];
+        const auto linker = resolve_wasm_ld(customWasmLd);
+        if ( !check_file_present(objFilePath) ) {
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing wasm32 object, does not exist\n";
+            return;
+        }
+        // --no-entry: no _start required (we export user functions, no main).
+        // --export-dynamic: surface symbols with default visibility as wasm exports.
+        // --allow-undefined: unresolved (daslang runtime) symbols become imports —
+        //   the JS host provides stubs. v1 only runs programs whose exported fn
+        //   doesn't touch the runtime at runtime, so stubs are never called.
+        auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" \"{}\" -o \"{}\" --no-entry --export-dynamic --allow-undefined 2>&1"),
+                                            linker, objFilePath, wasmPath);
+        *result = '\0';
+
+#if defined(_WIN32) || defined(_WIN64)
+    #define popen _popen
+    #define pclose _pclose
+#endif
+
+        FILE * fp = popen(cmd, "r");
+        if ( fp == NULL ) {
+            LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
+            return;
+        }
+        static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
+        char buffer[1024], output[MAX_OUTPUT_SIZE];
+        output[0] = '\0';
+        size_t output_length = 0;
+        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            size_t buffer_length = strlen(buffer);
+            if (output_length + buffer_length < MAX_OUTPUT_SIZE) {
+                strcat(output, buffer);
+                output_length += buffer_length;
+            } else {
+                strncat(output, buffer, MAX_OUTPUT_SIZE - output_length - 1);
+                break;
+            }
+        }
+        auto li = LineInfo();
+        if ( int status = pclose(fp); status != 0 ) {
+            string msg = string("Failed to link wasm ") + wasmPath + ", command '" + cmd + "'\n";
+            context->to_out(&li, LogLevel::error, msg.c_str());
+            string err = string("Output:\n") + output;
+            context->to_out(&li, LogLevel::error, err.c_str());
+        } else {
+            string msg = string("Wasm ") + wasmPath + " linked - ok\n";
+            context->to_out(&li, LogLevel::info, msg.c_str());
+        }
+    }
+#else
+    void link_wasm ( const char * objFilePath, const char * wasmPath, const char * customWasmLd, Context *context ) { }
+#endif
+
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
         context.deleteJITOnFinish.shared_lib = shared_lib;
         context.deleteJITOnFinish.llvm_ee = llvm_ee;
@@ -1009,6 +1077,9 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared", "linkWholeLib", "context"});
+            addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
+                SideEffects::worstDefault, "link_wasm")
+                    ->args({"objFilePath","wasmPath","customWasmLd","context"});
             addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
