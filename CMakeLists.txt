@@ -438,13 +438,22 @@ ENDMACRO()
 # Register a .das file to be run as a headless example check.
 # Modules call this from their CMakeLists.txt for examples that
 # can run without GUI, audio, or user interaction.
+#
+# When DAS_TOOLS_DISABLED=ON the `daslang` target is never created, so the
+# run_examples target below (which references $<TARGET_FILE:daslang>) cannot
+# be generated. Gate the registration here so every call site is automatically
+# safe and DAS_EXAMPLES_TO_RUN stays empty.
 MACRO(ADD_EXAMPLE_RUN das_file)
-    SET(_exe TRUE)
-    IF("${ARGN}" STREQUAL "FALSE")
-        SET(_exe FALSE)
+    IF(DAS_TOOLS_DISABLED)
+        MESSAGE(STATUS "EXAMPLE_RUN ${das_file} skipped (DAS_TOOLS_DISABLED=ON)")
+    ELSE()
+        SET(_exe TRUE)
+        IF("${ARGN}" STREQUAL "FALSE")
+            SET(_exe FALSE)
+        ENDIF()
+        MESSAGE("EXAMPLE_RUN ${das_file} (exe=${_exe})")
+        LIST(APPEND DAS_EXAMPLES_TO_RUN "${das_file}|${_exe}")
     ENDIF()
-    MESSAGE("EXAMPLE_RUN ${das_file} (exe=${_exe})")
-    LIST(APPEND DAS_EXAMPLES_TO_RUN "${das_file}|${_exe}")
 ENDMACRO()
 
 ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
@@ -1117,7 +1126,11 @@ SET(DAS_DASCRIPT_MAIN_SRC
 
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
-    include(examples/pathTracer/CMakeLists.txt)
+    # pathTracer links against libDaScriptAot, which is only created when
+    # AOT examples are enabled — gate the inclusion accordingly.
+    if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
+        include(examples/pathTracer/CMakeLists.txt)
+    endif()
     include(examples/crash/CMakeLists.txt)
     if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4))
         include(tests/aot/CMakeLists.txt)
@@ -1742,7 +1755,10 @@ install(FILES
 add_subdirectory(tutorials)
 
 # ── Documentation build (optional) ──────────────────────────────────────────
-if(DAS_BUILD_DOCUMENTATION)
+# Requires the `daslang` target (das2rst stdlib RST generator runs it), so we
+# also gate on NOT DAS_TOOLS_DISABLED — otherwise CMake fails on the missing
+# target. Tools-disabled builds simply can't generate docs.
+if(DAS_BUILD_DOCUMENTATION AND NOT DAS_TOOLS_DISABLED)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
         execute_process(
