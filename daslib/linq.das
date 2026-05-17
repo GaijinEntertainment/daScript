@@ -465,11 +465,11 @@ def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! Returns the ``n`` smallest elements of ``arr`` by ``key(element)``,
     //! sorted ascending. ``n <= 0`` or empty ``arr`` yields an empty result.
     var buf : array<TT -const -&>
-    if (n <= 0 || length(arr) == 0) return <- buf
+    if (n <= 0 || empty(arr)) return <- buf
     let take_count = min(n, length(arr))
     buf |> reserve(take_count)
-    for (i in range(length(arr))) {
-        buf |> push_clone(arr[i])
+    for (it in arr) {
+        buf |> push_clone(it)
     }
     sort_boost::partial_sort(buf, take_count, $(v1, v2) => _::less(key(v1), key(v2)))
     buf |> resize(take_count)

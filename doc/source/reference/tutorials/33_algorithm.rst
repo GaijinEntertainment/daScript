@@ -7,6 +7,10 @@ Algorithm
 .. index::
     single: Tutorial; Algorithm
     single: Tutorial; Binary Search
+    single: Tutorial; Sort
+    single: Tutorial; Partial Sort
+    single: Tutorial; Heap Operations
+    single: Tutorial; Top-N Selection
     single: Tutorial; Set Operations
     single: Tutorial; Topological Sort
 
@@ -48,6 +52,135 @@ Custom comparators let you search in non-default order:
         return lhs > rhs
     }
     print("{idx}\n") // 2
+
+Sort
+====
+
+``sort`` performs an in-place ascending sort using ``<`` by default. A block
+argument supplies a custom comparator:
+
+.. code-block:: das
+
+    var a <- [5, 2, 8, 1, 9, 3, 7]
+    sort(a)
+    // [1, 2, 3, 5, 7, 8, 9]
+
+    var b <- [5, 2, 8, 1, 9]
+    sort(b) $(x, y : int) : bool {
+        return x > y
+    }
+    // [9, 8, 5, 2, 1]
+
+Today's ``sort`` is full ``O(n log n)`` on the whole array. The next section
+shows what to use when you only need the first ``N`` sorted (``partial_sort``)
+or only the ``k``-th element (``nth_element``).
+
+partial_sort / nth_element
+==========================
+
+These live in ``daslib/sort_boost``. ``partial_sort(arr, N)`` sorts only the
+first ``N`` elements ascending; the remainder is left in unspecified order:
+
+.. code-block:: das
+
+    require daslib/sort_boost
+
+    var a <- [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
+    sort_boost::partial_sort(a, 3)
+    // a[0..3] = [0, 1, 2]; a[3..] is some permutation of the rest
+
+``nth_element(arr, k)`` places the ``k``-th-smallest at position ``k``.
+Elements before are ``<= a[k]``; elements after are ``>= a[k]``. Neither side
+is fully sorted, but the ``k``-th position is correctly the ``k``-th-smallest:
+
+.. code-block:: das
+
+    var b <- [7, 3, 1, 9, 5, 8, 0, 4, 2]
+    sort_boost::nth_element(b, 4)
+    // b[4] == 4 (median of 9 elements)
+
+Both accept a custom comparator block — same shape as ``sort``:
+
+.. code-block:: das
+
+    var c <- [PricePoint(item_id=1, price=50), PricePoint(item_id=2, price=20), ...]
+    sort_boost::partial_sort(c, 2) $(x, y : PricePoint) : bool {
+        return x.price < y.price
+    }
+
+Heap operations
+===============
+
+``daslib/sort_boost`` exposes the classic binary max-heap operators:
+``make_heap`` builds a heap from an unordered array, ``push_heap`` sifts up
+the just-appended element, ``pop_heap`` moves the heap max to the last slot
+(caller drops it afterward):
+
+.. code-block:: das
+
+    var a <- [5, 2, 8, 1, 9, 3, 7]
+    sort_boost::make_heap(a)
+    // a[0] = 9 (max)
+
+    a |> push(12)
+    sort_boost::push_heap(a)
+    // a[0] = 12 (new max)
+
+    sort_boost::pop_heap(a)
+    let max = a[length(a) - 1]
+    a |> resize(length(a) - 1)
+    // max = 12; remaining heap still valid
+
+Repeatedly popping the max yields a descending sequence (heap sort):
+
+.. code-block:: das
+
+    var b <- [5, 2, 8, 1, 9, 3, 7]
+    sort_boost::make_heap(b)
+    var descending : array<int>
+    while (length(b) > 0) {
+        sort_boost::pop_heap(b)
+        descending |> push(b[length(b) - 1])
+        b |> resize(length(b) - 1)
+    }
+    // descending = [9, 8, 7, 5, 3, 2, 1]
+
+top_n / top_n_by
+================
+
+``top_n(arr, N)`` returns the ``N`` smallest elements as a sorted ascending
+array. For array sources it uses ``partial_sort`` under the hood
+(``O(M log N)``):
+
+.. code-block:: das
+
+    require daslib/linq
+
+    let arr <- [10, 20, 5, 8, 30, 15, 2, 25]
+    let smallest3 <- top_n(arr, 3)
+    // [2, 5, 8]
+
+For iterator sources, ``top_n`` maintains a bounded heap of size ``N`` during
+the scan — at most ``N+1`` elements are ever resident:
+
+.. code-block:: das
+
+    let arr2 <- [10, 20, 5, 8, 30, 15, 2, 25]
+    let smallest3_iter <- top_n(arr2.to_sequence(), 3)
+    // [2, 5, 8]
+
+``top_n_by`` takes a key function. Useful for sorting structs by field
+without writing a full comparator block:
+
+.. code-block:: das
+
+    struct Person {
+        name : string
+        age  : int
+    }
+    let people <- [Person(name = "Alice", age = 30), Person(name = "Bob", age = 25), ...]
+    let youngest3 <- top_n_by(people, 3, @@(p : Person -&) => p.age)
+    // sorted ascending by age
 
 Sorting and deduplication
 =========================
