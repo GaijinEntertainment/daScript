@@ -293,7 +293,7 @@ TEST_CASE("das_push_heap_r — sift-up appends a new element to existing heap") 
 }
 
 TEST_CASE("das_pop_heap_r — move max to last position, sift-down [0..n-2]") {
-    SUBCASE("repeated pop yields sorted-ascending sequence") {
+    SUBCASE("repeated pop yields sorted-descending sequence") {
         std::vector<int32_t> a = { 5, 2, 8, 1, 9, 3, 7, 4, 6, 0 };
         das_make_heap_r(a.data(), a.size(), sizeof(int32_t), less_cmp<int32_t>());
         std::vector<int32_t> popped;

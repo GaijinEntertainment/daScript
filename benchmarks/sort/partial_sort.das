@@ -12,7 +12,7 @@ def run_partial_sort_int(b : B?; n : int; k : int) {
     b |> run("partial_sort_int_N{k}/{n}", n) {
         var arr <- make_int_array(n)
         sort_boost::partial_sort(arr, k)
-        if (arr[0] > arr[1]) {
+        if (arr[k - 1] != expected_sorted_value_at(n, k - 1)) {
             b->failNow()
         }
     }
@@ -22,7 +22,7 @@ def run_full_sort_then_take(b : B?; n : int; k : int) {
     b |> run("full_sort_take_N{k}/{n}", n) {
         var arr <- make_int_array(n)
         sort(arr)
-        if (arr[k - 1] < arr[0]) {
+        if (arr[k - 1] != expected_sorted_value_at(n, k - 1)) {
             b->failNow()
         }
     }
@@ -34,7 +34,7 @@ def run_partial_sort_struct(b : B?; n : int; k : int) {
         sort_boost::partial_sort(arr, k) $(x, y : KeyedItem) : bool {
             return x.key < y.key
         }
-        if (arr[0].key > arr[1].key) {
+        if (arr[k - 1].key != expected_sorted_value_at(n, k - 1)) {
             b->failNow()
         }
     }

@@ -13,11 +13,22 @@ def run_build_then_extract(b : B?; n : int) {
     b |> run("build_extract/{n}", n) {
         var arr <- make_int_array(n)
         sort_boost::make_heap(arr)
+        // make_heap invariant: arr[0] is the max element of the input
+        if (arr[0] != 999) {
+            b->failNow()
+        }
+        var first_pop = 0
+        var last_pop = 0
+        sort_boost::pop_heap(arr)
+        first_pop = arr[length(arr) - 1]
+        arr |> resize(length(arr) - 1)
         while (!empty(arr)) {
             sort_boost::pop_heap(arr)
+            last_pop = arr[length(arr) - 1]
             arr |> resize(length(arr) - 1)
         }
-        if (!empty(arr)) {
+        // pops emerge in descending order: first = max (999), last = min (0)
+        if (first_pop != 999 || last_pop != 0) {
             b->failNow()
         }
     }
@@ -38,7 +49,8 @@ def run_bounded_topn(b : B?; n : int; cap : int) {
                 sort_boost::push_heap(buf)
             }
         }
-        if (length(buf) != cap) {
+        // heap top must equal the (cap)-th smallest source value
+        if (buf[0] != expected_sorted_value_at(n, cap - 1)) {
             b->failNow()
         }
     }

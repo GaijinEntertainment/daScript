@@ -467,7 +467,7 @@ def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
     var buf : array<TT -const -&>
     if (n <= 0 || empty(arr)) return <- buf
     let take_count = min(n, length(arr))
-    buf |> reserve(take_count)
+    buf |> reserve(length(arr))
     for (it in arr) {
         buf |> push_clone(it)
     }

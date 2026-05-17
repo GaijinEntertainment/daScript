@@ -11,7 +11,7 @@ def run_sort_int(b : B?; n : int) {
     b |> run("sort_int/{n}", n) {
         var arr <- make_int_array(n)
         sort(arr)
-        if (arr[0] > arr[1]) {
+        if (arr[length(arr) - 1] != 999) {
             b->failNow()
         }
     }
@@ -23,7 +23,7 @@ def run_sort_struct_by_key(b : B?; n : int) {
         sort(arr) $(x, y : KeyedItem) : bool {
             return x.key < y.key
         }
-        if (arr[0].key > arr[1].key) {
+        if (arr[length(arr) - 1].key != 999) {
             b->failNow()
         }
     }

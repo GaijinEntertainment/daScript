@@ -13,7 +13,7 @@ def run_nth_element(b : B?; n : int; k : int) {
     b |> run("nth_element_k{k}/{n}", n) {
         var arr <- make_int_array(n)
         sort_boost::nth_element(arr, k)
-        if (arr[k] < 0) {
+        if (arr[k] != expected_sorted_value_at(n, k)) {
             b->failNow()
         }
     }
@@ -23,7 +23,7 @@ def run_full_sort_index(b : B?; n : int; k : int) {
     b |> run("full_sort_index_k{k}/{n}", n) {
         var arr <- make_int_array(n)
         sort(arr)
-        if (arr[k] < 0) {
+        if (arr[k] != expected_sorted_value_at(n, k)) {
             b->failNow()
         }
     }

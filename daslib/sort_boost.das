@@ -81,7 +81,7 @@ def public partial_sort(var a : array<auto(TT)> | #; n : int; cmp : block<(x, y 
 // ---- nth_element ----
 
 //! Place the ``n``-th smallest element at position ``n``, with all earlier
-//! elements <= and all later elements >=. Sub-O(N) on the kth element only.
+//! elements <= and all later elements >=. O(N) average on the kth element only.
 def public nth_element(var a : array<auto(TT)> | #; n : int) {
     if (length(a) <= 1 || n < 0 || n >= length(a)) return
     static_if (typeinfo is_numeric_comparable(type<TT>)) {
@@ -329,7 +329,7 @@ def private build_dispatch_call(prog : ProgramPtr; var expr : ExprCallMacro?; op
     let blockIndex = takesN ? 2 : 1
     macro_verify(expr.arguments[blockIndex]._type.baseType == Type.tBlock, prog, expr.at, "expecting block argument as last")
     let srcType = expr.arguments[0]._type
-    if (!empty(srcType.dim) || srcType.baseType == Type.tArray) {
+    if (srcType.baseType == Type.tArray) {
         var call = new ExprCall(name := opName, at = expr.at)
         for (a in expr.arguments) {
             emplace_new(call.arguments) <| clone_expression(a)
@@ -346,7 +346,7 @@ def private build_dispatch_call(prog : ProgramPtr; var expr : ExprCallMacro?; op
         }
         return <- call
     } else {
-        macro_error(prog, expr.at, "can only {opName} [], array, or handled vector")
+        macro_error(prog, expr.at, "can only {opName} array or handled vector")
         return null
     }
 }

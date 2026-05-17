@@ -16,11 +16,13 @@ struct public KeyedItem {
 
 def public make_int_array(n : int) : array<int> {
     //! Pseudo-random fixed sequence of ``n`` ints; same modulo trick as
-    //! benchmarks/sql/_common.das for cross-benchmark comparability.
+    //! benchmarks/sql/_common.das for cross-benchmark comparability. The
+    //! ``(i + 1)`` shift ensures ``arr[0] != 0`` so post-sort min-at-zero
+    //! checks distinguish from no-op runs.
     var arr : array<int>
     arr |> reserve(n)
     for (i in range(n)) {
-        arr |> push((i * 37) % 1000)
+        arr |> push(((i + 1) * 37) % 1000)
     }
     return <- arr
 }
@@ -30,7 +32,15 @@ def public make_struct_array(n : int) : array<KeyedItem> {
     var arr : array<KeyedItem>
     arr |> reserve(n)
     for (i in range(n)) {
-        arr |> push(KeyedItem(key = (i * 37) % 1000, payload_a = i, payload_b = i * 2))
+        arr |> push(KeyedItem(key = ((i + 1) * 37) % 1000, payload_a = i, payload_b = i * 2))
     }
     return <- arr
+}
+
+def public expected_sorted_value_at(n : int; i : int) : int {
+    //! For input ``((i + 1) * 37) % 1000`` with ``n`` >= 1000, all 1000
+    //! residues are hit uniformly (``n / 1000`` copies each), so sorted
+    //! ``arr[i] = (i * 1000) / n``. Used by benchmarks for self-validating
+    //! post-sort checks.
+    return (i * 1000) / n
 }
