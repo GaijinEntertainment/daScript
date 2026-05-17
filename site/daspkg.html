@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>daspkg — Daslang package manager</title>
+    <meta name="description" content="The daslang package index. Bindings, bots, batteries — one daspkg install away. Rendered straight from the open daspkg-index repo." />
+    <meta name="keywords" content="daslang, daspkg, package manager, daslang packages, bindings" />
+
+    <link rel="icon" type="image/svg+xml" href="files/forge-favicon.svg" />
+    <link rel="alternate" type="application/atom+xml" title="Daslang blog" href="blog/feed.xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="files/forge.css" />
+
+    <!-- Analytics -->
+    <script data-goatcounter="https://borisbat.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
+</head>
+<body>
+<div class="forge-page">
+
+    <!-- ───── Nav ───── -->
+    <nav class="forge-nav">
+        <div class="forge-container forge-nav__inner">
+            <div class="forge-nav__left">
+                <a class="forge-mark" href="index.html">
+                    <span class="forge-mark__glyph">&gt;</span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-nav__links">
+                    <a href="doc/index.html">docs</a>
+                    <a href="index.html#benchmarks">benchmarks</a>
+                    <a href="downloads.html">downloads</a>
+                    <a href="daspkg.html" class="is-active">daspkg</a>
+                    <a href="blog/index.html">blog</a>
+                    <a href="https://t.me/daScript">community</a>
+                    <a href="playground/index.html">playground</a>
+                </div>
+            </div>
+            <div class="forge-nav__right">
+                <button class="forge-nav__burger" type="button" aria-label="menu"
+                    onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
+                <span class="forge-nav__version">v0.6.2</span>
+                <a class="forge-nav__github" href="https://github.com/GaijinEntertainment/daScript">github ↗</a>
+                <a class="forge-nav__install" href="index.html#install">install</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ───── Hero ───── -->
+    <section class="forge-daspkg-hero">
+        <div class="forge-container forge-daspkg-hero__grid">
+            <div>
+                <div class="forge-daspkg-hero__kicker">▮ daspkg · package index</div>
+                <h1>
+                    Bindings, bots, batteries.
+                    <em>One install away.</em>
+                </h1>
+                <p class="forge-daspkg-hero__lede">
+                    <code class="forge-inline-code">daspkg</code> is the daslang package manager.
+                    The list below is rendered straight from
+                    <a href="https://github.com/borisbat/daspkg-index">github.com/borisbat/daspkg-index</a>
+                    — adding a package is a single CLI command. No accounts, no web upload.
+                </p>
+                <div class="forge-daspkg-hero__ctas">
+                    <div class="forge-daspkg-cmd">
+                        <span class="prompt">$</span>
+                        <span>daspkg install</span>
+                        <span class="placeholder">‹package›</span>
+                        <button type="button" class="copy" data-copy="daspkg install " aria-label="copy daspkg install command">⎘ copy</button>
+                    </div>
+                    <a class="forge-daspkg-hero__doc-link" href="doc/index.html">cli docs →</a>
+                </div>
+            </div>
+            <div class="forge-daspkg-publish">
+                <div class="forge-daspkg-publish__head">publish a package</div>
+                <div class="forge-daspkg-publish__body">
+                    <div><span class="prompt">$</span> daspkg introduce <span class="placeholder">github.com/you/repo</span></div>
+                    <div class="comment"># validates your .das_package manifest</div>
+                    <div class="comment"># opens a PR against the index repo</div>
+                </div>
+                <div class="forge-daspkg-publish__foot">
+                    <span class="forge-daspkg-publish__count" id="daspkg-publish-count">loading packages…</span>
+                    <a class="forge-daspkg-publish__cli" href="https://github.com/borisbat/daspkg-index">full CLI reference →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───── Filter strip ───── -->
+    <section class="forge-daspkg-filter">
+        <div class="forge-container">
+            <div class="forge-daspkg-filter__row">
+                <label class="forge-daspkg-search">
+                    <span class="forge-daspkg-search__glyph">⌕</span>
+                    <input id="daspkg-search" type="text" placeholder="filter by name, description, tag…" autocomplete="off" />
+                    <button class="forge-daspkg-search__clear" id="daspkg-search-clear" type="button" hidden>clear</button>
+                </label>
+                <div class="forge-daspkg-tags" id="daspkg-tags"></div>
+                <div class="forge-daspkg-count">
+                    <span class="forge-daspkg-count__n" id="daspkg-count-n">—</span> / <span id="daspkg-count-total">—</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───── Package grid ───── -->
+    <section class="forge-daspkg-grid">
+        <div class="forge-container">
+            <div class="forge-daspkg-grid__list" id="daspkg-list"></div>
+            <div class="forge-daspkg-empty" id="daspkg-status">loading packages…</div>
+        </div>
+    </section>
+
+    <!-- ───── Footer ───── -->
+    <footer class="forge-footer">
+        <div class="forge-container forge-footer__grid">
+            <div>
+                <a class="forge-mark" href="index.html">
+                    <span class="forge-mark__glyph">&gt;</span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-footer__about">
+                    High-performance scripting for C++.<br />
+                    © 2018–2026 Gaijin Entertainment · BSD 3-Clause
+                </div>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">learn</div>
+                <a class="forge-footer__link" href="doc/index.html">introduction</a>
+                <a class="forge-footer__link" href="doc/reference/index.html">reference</a>
+                <a class="forge-footer__link" href="blog/index.html">blog</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">ecosystem</div>
+                <a class="forge-footer__link" href="daspkg.html">daspkg · package index</a>
+                <a class="forge-footer__link" href="playground/index.html">playground</a>
+                <a class="forge-footer__link" href="https://edenspark.io">edenspark · games on daslang</a>
+                <a class="forge-footer__link" href="https://github.com/profelis/daScript-plugin">vs code extension</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">community</div>
+                <a class="forge-footer__link" href="https://t.me/daScript">telegram</a>
+                <a class="forge-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a>
+                <a class="forge-footer__link" href="changelist.html">change list</a>
+                <a class="forge-footer__link" href="downloads.html">downloads</a>
+            </div>
+        </div>
+    </footer>
+
+</div>
+<script src="files/daspkg.js" defer></script>
+</body>
+</html>
