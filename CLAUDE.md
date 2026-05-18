@@ -270,6 +270,9 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 | `int(BfT.a) \| int(BfT.b)` (same bitfield, or enum with `operator \|`) | `int(BfT.a \| BfT.b)` | PERF019: collapse two int casts to one. Const-foldable forms only surface under lint policies |
 | `foo \|= BfT.m` / `foo &= ~BfT.m` (bitfield `foo`, single named bit) | `foo.m = true` / `foo.m = false` | STYLE022: bitfield-as-field assignment reads bit-name-first, drops the `~` for clears |
 | `uint(bf & BfT.m) != 0u` / `int(bf & BfT.m) == 0` (bitfield `bf`, single named bit) | `bf.m` / `!bf.m` | STYLE023: bitfield-as-field read; drop the int cast + `!= 0` / `== 0` compare |
+| `unsafe(x + y)` / `unsafe { let d = x + y }` where nothing inside requires unsafe | drop the wrap | STYLE024: redundant `unsafe` — flagged when no descendant matches a known inherently-unsafe shape (reinterpret/upcast cast, `delete`, `addr`, table-index, variant-write, ExprCallFunc with `unsafeOperation`). Macro-generated subtrees (`genFlags.generated == true`) skipped per design |
+| `unsafe { stmt1; stmt2; stmt_needing_unsafe }` (only ONE stmt actually needs unsafe) | `stmt1; stmt2; unsafe(<sub-expr>)` | STYLE025: narrow block-form unsafe to expression-form on the single unsafe-needing statement. Silent when ≥2 statements need unsafe (block is justified) |
+| `unsafe { ...; unsafe { ... }; ... }` (nested `unsafe { }` block) | drop the inner wrap | STYLE026: outer `unsafe` already covers the whole inner scope, so the inner block is pure noise. Closure / lambda / generator bodies are NOT nested for this rule — they execute in a separate context where the outer wrap does not propagate |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 

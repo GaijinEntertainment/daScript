@@ -70,6 +70,9 @@ jobs:
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
+      with:
+        # Full history so the lint step can `git diff` against the PR base branch.
+        fetch-depth: 0
 
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
@@ -178,6 +181,7 @@ jobs:
         set -eux
         cmake --build ./build --config Release --target all_utils_exe
         $BIN/daslang -exe -output ./bin/das-fmt ./utils/das-fmt/dasfmt.das
+        $BIN/daslang -exe -output ./bin/das-lint ./utils/lint/main.das
 
     - name: "Sequence release smoke test"
       # Full daspkg install -> release -> launch cycle on the in-tree sequence
@@ -217,6 +221,21 @@ jobs:
         set -eux
         $BIN/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify
         $BIN/das-fmt.exe --path ./ --verify
+
+    - name: "Run lint on changed .das files"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
+        BASE_REF="${BASE_REF:-master}"
+        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
+        if [ ${#CHANGED[@]} -eq 0 ]; then
+          echo "no .das files changed; skipping lint"
+          exit 0
+        fi
+        echo "linting: ${CHANGED[*]}"
+        $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet
+        $BIN/das-lint.exe "${CHANGED[@]}" --quiet
 
     - name: "Test daslang_static"
       run: |

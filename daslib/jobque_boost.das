@@ -131,10 +131,8 @@ def for_each(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
             void_data = vd
         }
         if (void_data == null) break
-        unsafe {
-            let typed_data = reinterpret<TT?#> void_data
-            invoke(blk, *typed_data)
-        }
+        let typed_data = unsafe(reinterpret<TT?#> void_data)
+        invoke(blk, *typed_data)
     }
 }
 
@@ -165,11 +163,9 @@ def pop_one(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
         void_data = vd
     }
     if (void_data == null) return false
-    unsafe {
-        let typed_data = reinterpret<TT?#> void_data
-        invoke(blk, *typed_data)
-        return true
-    }
+    let typed_data = unsafe(reinterpret<TT?#> void_data)
+    invoke(blk, *typed_data)
+    return true
 }
 
 def pop_and_clone_one(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {

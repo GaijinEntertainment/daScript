@@ -31,6 +31,9 @@ module style_lint shared private
 //!   STYLE020 — from_JV(v, type<T>, defV) on a scalar — use 'v ?? defV' (operator ?? from json_boost)
 //!   STYLE021 — table<string; JsonValue?> built by repeated insert — use 'var v = JV((k1=..., k2=...))'
 //!   STYLE022 — bitfield compound-bit-set/clear ('foo |= BfT.m' / 'foo &= ~BfT.m') — use field-assign 'foo.m = true' / 'foo.m = false'
+//!   STYLE024 — redundant 'unsafe' wrap; inner expression / block body has no operation requiring unsafe — drop the wrap
+//!   STYLE025 — 'unsafe { ... }' block where only one statement needs unsafe — narrow to 'unsafe(<sub-expr>)'
+//!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 
 require daslib/ast_boost
 require strings
@@ -53,6 +56,11 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete current_function : Function?
     // STYLE011: track uninitialized variables from most recent ExprLet
     @do_not_delete pending_uninit_vars : array<Variable?>
+    // STYLE024/025 — tight unsafe checks.
+    @do_not_delete skip_userSaidItsSafe : array<Expression?>
+    @do_not_delete unsafeExprs : table<Expression?; int>
+    unsafe_stack : array<int>
+    unsafe_block_stack : array<int>
 
     def StyleLintVisitor() {
         pass
@@ -112,6 +120,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
+        unsafe_block_stack |> push(0)
         self->check_defer_pipe(fn)
     }
 
@@ -156,6 +165,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
         current_function = null
+        unsafe_block_stack |> pop
         return <- fn
     }
 
@@ -210,6 +220,17 @@ class StyleLintVisitor : AstVisitor {
         self->check_block_pipe(expr.at, expr.arguments)
         self->check_style019_clamp(expr)
         self->check_style020_from_jv(expr)
+        if (expr.genFlags.generated) return
+        if (self->call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
+            self->mark_unsafe_in_stack()
+            return
+        }
+        if (expr.func != null && expr.func.flags.isClassMethod
+                && expr.func.result != null && expr.func.result.isClass
+                && expr.func.result.structType != null
+                && expr.func.name == expr.func.result.structType.name) {
+            self->mark_unsafe_in_stack()
+        }
     }
 
     // --- STYLE020: from_JV scalar form → v ?? defV ---
@@ -309,6 +330,10 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE001/002 for desugared generators ---
 
     def override preVisitExprMakeStruct(var expr : ExprMakeStruct?) : void {
+        if (!expr.genFlags.generated && !expr.makeStructFlags.isNewClass
+                && expr.makeType != null && expr.makeType.isClass) {
+            self->mark_unsafe_in_stack()
+        }
         // generator<T>() <| $ { ... } is lowered before lint runs — ExprMakeGenerator
         // is replaced by ExprMakeStruct. Detect via source line inspection.
         if (expr.at.fileInfo == null || expr.at.line == 0u) return
@@ -367,6 +392,10 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
+        if (!expr.genFlags.generated
+                && self->call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
+            self->mark_unsafe_in_stack()
+        }
         if (expr.op == "==") {
             if (self->is_string_rtti_comparison(expr.left) || self->is_string_rtti_comparison(expr.right)) {
                 self->style_warning("STYLE006: string(__rtti) comparison should use `is` operator; e.g. expr is ExprFoo", expr.at)
@@ -659,6 +688,15 @@ class StyleLintVisitor : AstVisitor {
         if (v.init == null && !v.flags.generated && !v.flags.inScope && (current_function == null || current_function.fromGeneric == null)) {
             pending_uninit_vars |> push(v)
         }
+        // STYLE024/025: `let v & = unsafe(expr)` — local reference binding to
+        // a non-local expression requires unsafe per the compiler. Record the
+        // init-expression's `at` so preVisitExpression won't flag the wrap as
+        // redundant (the wrap is required by the let-binding, not by the inner
+        // expression's shape).
+        if (v.init != null && v._type != null && v._type.flags.ref
+            && v.init.genFlags.userSaidItsSafe) {
+            skip_userSaidItsSafe |> push(v.init)
+        }
     }
 
     def find_assign_var(expr : Expression?) : Variable? {
@@ -674,6 +712,9 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE017(b): adjacent `if (cond) { return b1 }; return b2` (b1 != b2) ---
 
     def override preVisitExprBlock(blk : ExprBlock?) : void {
+        if (blk.blockFlags.isClosure) {
+            unsafe_block_stack |> push(0)
+        }
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]
@@ -702,6 +743,13 @@ class StyleLintVisitor : AstVisitor {
                 self->style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' — use '{suggestion}' directly", outer_if.at)
             }
         }
+    }
+
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
+        if (blk.blockFlags.isClosure) {
+            unsafe_block_stack |> pop
+        }
+        return blk
     }
 
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
@@ -1187,6 +1235,191 @@ class StyleLintVisitor : AstVisitor {
         }
         return false
     }
+
+    // --- STYLE024/STYLE025: redundant or over-broad `unsafe` ---
+
+    def unsafe_count_for(expr : Expression?) : int {
+        return 0 if (expr == null)
+        return unsafeExprs |> key_exists(expr) ? unsafeExprs[expr] : 0
+    }
+
+    def mark_unsafe_in_stack() : void {
+        //! Add 1 to the current top of `unsafe_stack`.
+        let n = length(unsafe_stack)
+        if (n > 0) {
+            unsafe_stack[n - 1] = unsafe_stack[n - 1] + 1
+        }
+    }
+
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        //! Push a fresh 0 slot for this node.
+        unsafe_stack |> push(0)
+    }
+
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
+        //! Pop the slot for this node. The popped value is the subtree's
+        //! count of inherently-unsafe leaves. Use it to:
+        //!   - store `unsafeExprs[expr.at] = count` for later queries
+        //!     (used by `visitExprUnsafe` to decide STYLE024 vs STYLE025),
+        //!   - propagate count to the parent's slot (now top after our pop),
+        //!   - fire STYLE024 if `expr` is an `unsafe(...)` wrap target
+        //!     (`userSaidItsSafe`) and its subtree had count 0.
+        let n = length(unsafe_stack)
+        let count = unsafe_stack[n - 1]
+        unsafe_stack |> pop
+        if (count > 0) {
+            unsafeExprs |> insert(expr, count)
+            let m = length(unsafe_stack)
+            if (m > 0) {
+                unsafe_stack[m - 1] = unsafe_stack[m - 1] + count
+            }
+        }
+        // STYLE024 expression form: parser sets `userSaidItsSafe` on the
+        // inner expr of `unsafe(expr)`. Suppress when the wrap is required
+        // by an enclosing `let x & = ...` ref-binding.
+        if (expr.genFlags.userSaidItsSafe && !expr.genFlags.generated
+            && (current_function == null || current_function.fromGeneric == null)
+            && !(skip_userSaidItsSafe |> has_value(expr))
+            && count == 0) {
+            self->style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe — drop the wrap", expr.at)
+        }
+        return expr
+    }
+
+    def call_func_needs_unsafe(func : Function const?; is_for_loop_src : bool) : bool {
+        return (func == null
+            || func.flags.unsafeOperation
+            || (func.moreFlags.unsafeOutsideOfFor && !is_for_loop_src))
+    }
+
+    // Inherently-unsafe leaves — mark unconditionally (when not generated).
+
+    def override preVisitExprDelete(expr : ExprDelete?) : void {
+        if (!expr.genFlags.generated) self->mark_unsafe_in_stack()
+    }
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
+        if (!expr.genFlags.generated) self->mark_unsafe_in_stack()
+    }
+    def override preVisitExprRef2Ptr(expr : ExprRef2Ptr?) : void {
+        // `addr(x)` — address-of-reference. Always unsafe.
+        if (!expr.genFlags.generated) self->mark_unsafe_in_stack()
+    }
+    def override preVisitExprAsVariant(expr : ExprAsVariant?) : void {
+        if (!expr.genFlags.generated) self->mark_unsafe_in_stack()
+    }
+
+    // Conditional own-contribution.
+
+    def override preVisitExprCast(expr : ExprCast?) : void {
+        if (!expr.genFlags.generated
+                && (expr.castFlags.upcastCast || expr.castFlags.reinterpretCast)) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+
+    def override preVisitExprAt(expr : ExprAt?) : void {
+        // Table / raw-pointer index needs unsafe; array-index is safe. Lint
+        // pass sometimes leaves `_type` unset on the subexpr — bias to
+        // "needs unsafe" when unknown so the wrap stays.
+        if (expr.genFlags.generated) return
+        let unknown_subexpr_type = (expr.subexpr == null || expr.subexpr._type == null)
+        let is_unsafe_index = (!unknown_subexpr_type
+            && (expr.subexpr._type.baseType == Type.tTable
+                || expr.subexpr._type.baseType == Type.tPointer))
+        if (unknown_subexpr_type || is_unsafe_index) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+
+    def override preVisitExprField(expr : ExprField?) : void {
+        // variant.field requires unsafe (write context; over-mark on read
+        // is safer than under-mark — biases toward keeping wraps).
+        if (!expr.genFlags.generated && expr.value != null
+                && expr.value._type != null
+                && expr.value._type.baseType == Type.tVariant) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        // Returning a reference or a temporary requires unsafe
+        if (expr.genFlags.generated) return
+        var has = expr.returnFlags.returnReference
+        if (!has && expr.subexpr != null && expr.subexpr._type != null) {
+            let t = expr.subexpr._type
+            has = t.flags.ref || t.flags.temporary
+        }
+        if (!has && current_function != null && current_function.result != null) {
+            let rt = current_function.result
+            has = rt.flags.ref || rt.flags.temporary
+        }
+        if (!has && expr.returnFlags.moveSemantics && expr.subexpr != null) {
+            has = (expr.subexpr._type == null
+                || expr.subexpr._type.baseType == Type.autoinfer
+                || expr.subexpr._type.baseType == Type.alias
+                || expr.subexpr._type.flags.ref || expr.subexpr._type.flags.temporary)
+        }
+        if (has) self->mark_unsafe_in_stack()
+    }
+
+    def override preVisitExprOp1(expr : ExprOp1?) : void {
+        if (!expr.genFlags.generated
+                && self->call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+    def override preVisitExprOp3(expr : ExprOp3?) : void {
+        if (!expr.genFlags.generated
+                && self->call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+    def override preVisitExprNew(expr : ExprNew?) : void {
+        if (!expr.genFlags.generated
+                && (expr.func == null || expr.func.flags.unsafeOperation)) {
+            self->mark_unsafe_in_stack()
+        }
+    }
+
+    def override preVisitExprUnsafe(expr : ExprUnsafe?) : void {
+        let n = length(unsafe_block_stack)
+        if (expr != null && !expr.genFlags.generated
+            && (current_function == null || current_function.fromGeneric == null)
+            && n > 0 && unsafe_block_stack[n - 1] > 0) {
+            self->style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope — drop the inner wrap", expr.at)
+        }
+        if (n > 0) {
+            unsafe_block_stack[n - 1]++
+        }
+    }
+
+    def override visitExprUnsafe(var expr : ExprUnsafe?) : ExpressionPtr {
+        let n = length(unsafe_block_stack)
+        if (n > 0) {
+            unsafe_block_stack[n - 1]--
+        }
+        // Post-order: `unsafe { ... }` block form. The body's own
+        // `visitExpression` already aggregated its statements' counts into
+        // `unsafeExprs[body]` — just look it up.
+        //   0 unsafe leaves → wrap redundant (STYLE024)
+        //   1 unsafe leaf   → narrow to `unsafe(<that-leaf>)` (STYLE025)
+        //   ≥ 2 leaves      → block is justified, silent
+        if (expr == null || expr.body == null || expr.genFlags.generated
+            || (current_function != null && current_function.fromGeneric != null)
+            || !(expr.body is ExprBlock)) return expr
+        let blk = expr.body as ExprBlock
+        let count = self->unsafe_count_for(blk)
+        if (count == 0) {
+            self->style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe — drop the wrap", expr.at)
+        } elif (count == 1 &&
+                !(blk.list[0] is ExprYield ||
+                  blk.list[0] is ExprDelete ||
+                  blk.list[0] is ExprReturn ||
+                  blk.list[0] is ExprNew)) {
+            self->style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+        }
+        return expr
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1204,6 +1437,10 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hyg
     if (comment_hygiene) {
         astVisitor->scan_long_comment_blocks(prog)
     }
+    // STYLE024/025 stack-balance sanity check.
+    if (!empty(astVisitor.unsafe_stack)) {
+        panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
+    }
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
@@ -1219,6 +1456,10 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; c
     }
     if (comment_hygiene) {
         astVisitor->scan_long_comment_blocks(prog)
+    }
+    // STYLE024/025 stack-balance sanity check.
+    if (!empty(astVisitor.unsafe_stack)) {
+        panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
     }
     let count = astVisitor.warning_count
     warnings |> reserve(length(astVisitor.warnings))

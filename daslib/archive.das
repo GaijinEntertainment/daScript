@@ -183,9 +183,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
         delete value
         var index : int
         arch |> read_raw(index)
-        unsafe {
-            value |> set_variant_index(index)
-        }
+        unsafe(value |> set_variant_index(index))
     } else {
         var index = variant_index(value)
         arch |> write_raw(index)
@@ -335,9 +333,7 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
                 arch.stream->read(unsafe(addr(value[0])), len * typeinfo sizeof(type<TT>))
             }
         } else {
-            unsafe {
-                value |> resize(len)
-            }
+            unsafe(value |> resize(len))
             for (element in value) {
                 arch |> _::serialize(element)
             }

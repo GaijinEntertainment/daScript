@@ -84,9 +84,7 @@ def public temp_array(var data : auto? ==const; lenA : int; a : auto(TT)) : arra
     //!     * data memory does not change within the lifetime of the returned array
     var res : array<TT -const -#>
     if (lenA >= 1) {
-        unsafe {
-            _builtin_make_temp_array(res, data, lenA)
-        }
+        unsafe(_builtin_make_temp_array(res, data, lenA))
     }
     return <- res
 }
@@ -101,9 +99,7 @@ def public temp_array(data : auto? ==const; lenA : int; a : auto(TT)) : array<TT
     //!     * data memory does not change within the lifetime of the returned array
     var res : array<TT -const -#>
     if (lenA >= 1) {
-        unsafe {
-            _builtin_make_temp_array(res, data, lenA)
-        }
+        unsafe(_builtin_make_temp_array(res, data, lenA))
     }
     return <- res
 }
