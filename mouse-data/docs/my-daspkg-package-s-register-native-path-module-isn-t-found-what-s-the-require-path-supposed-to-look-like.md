@@ -2,7 +2,7 @@
 slug: my-daspkg-package-s-register-native-path-module-isn-t-found-what-s-the-require-path-supposed-to-look-like
 title: My daspkg package's register_native_path module isn't found — what's the require path supposed to look like?
 created: 2026-05-09
-last_verified: 2026-05-09
+last_verified: 2026-05-18
 links: []
 ---
 
@@ -52,11 +52,9 @@ require imgui_boost_v2                     // ✗
 - `daslang -dasroot <root>` similarly walks via `require_dynamic_modules`
 - daspkg install during build
 
-**The MCP daslang server** does NOT pre-load `.das_module` files, so `mcp__daslang__compile_check` on a file that requires dynamic modules will fail with "missing prerequisite" — that's expected. End-to-end testing uses daslang-live, not MCP compile_check.
+**The MCP daslang server** supports daspkg-style modules via the `project_root` argument (added 2026-05-18; commit 26e1407c1). Every MCP tool that already takes `project` also accepts `project_root`, equivalent to daslang's `-project_root <dir>` CLI flag. For external dev work without `daspkg install`, point `project_root` at a dummy root with a `modules/<pkg>` junction — see [external_module_debugging.md](../../skills/external_module_debugging.md) for the workflow. Before that change, MCP couldn't resolve dynamic modules and end-to-end testing fell back to daslang-live or shell.
 
-**Surfaced 2026-05-09** during dasImgui Phase 0a; spent ~30 minutes wondering why `require imgui_boost_v2` couldn't find the just-registered module. Adding the `imgui/` prefix fixed it instantly.
-
-last_verified: 2026-05-09
+**Surfaced 2026-05-09** during dasImgui Phase 0a; spent ~30 minutes wondering why `require imgui_boost_v2` couldn't find the just-registered module. Adding the `imgui/` prefix fixed it instantly. Updated 2026-05-18 with MCP `project_root` support.
 
 ## Questions
 - My daspkg package's register_native_path module isn't found — what's the require path supposed to look like?
