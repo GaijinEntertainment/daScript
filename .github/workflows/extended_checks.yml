@@ -227,6 +227,12 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
+    - name: "Test MCP tools"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_tools.das
+
     - name: "Run self-binder (bind_clangbind.das)"
       if: matrix.target == 'linux'
       run: |
