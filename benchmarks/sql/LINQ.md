@@ -28,7 +28,8 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 | 2C Ring 3 | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes. Canonical chain order `[where_*][select*][skip?][take?] |> terminator`. Trailing take/skip (no explicit aggregator) → ARRAY lane with implicit `to_array`. Range-form `take(start..end)` falls through (slice operator, different semantics). Buffer-required ops (`order_by`, `distinct`, `reverse`, `group_by`, `zip`, `join`, `left_join`, `group_join`) recognized by name and emit silent fallback with future-mode markers (BufferTopN / BufferDistinct / BufferReverse / BufferGroupBy / MultiSourceZip / BufferedJoin). | ✅ done |
 | 2C Ring 4 | Non-workhorse chained selects via `:=`-clone. | ✅ done |
 | 2D | Fail-loudly contract — see "Planned" section below | ⏳ |
-| 3+ | Buffer-required emit modes: `distinct`, `sort`/`order_by`, `reverse`, `groupby`, `zip`, `join`. Once we go array, we stay array | ⏳ |
+| 3 Phase 0 | `<algorithm>` sort-family bindings — `partial_sort`, `nth_element`, `make_heap`/`push_heap`/`pop_heap`. Both typed (19 workhorse types) and any-cblock paths (user structs via `das_qsort_r.h` introselect + binary-heap templates). `daslib/sort_boost.das` user-facing wrappers + `q*` dispatcher macros. `daslib/linq.das` `top_n` / `top_n_by` family (array + iterator sources). C++ tests, daslang tests (53/53), 6 benchmarks, doc grouping, `33_algorithm` tutorial expansion. Unblocks BufferTopN. | ✅ done |
+| 3+ | Buffer-required emit modes: BufferTopN (sort/order_by/take), BufferDistinct, BufferGroupBy, BufferReverse, MultiSourceZip, BufferedJoin. Once we go array, we stay array | ⏳ |
 | 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
 
 ## Baselines (100K rows, INTERP mode)

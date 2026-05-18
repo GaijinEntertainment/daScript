@@ -821,6 +821,9 @@ def document_module_PUGIXML_boost(root : string) {
 def document_module_sort_boost(root : string) {
     var mod = find_module("sort_boost")
     var groups <- array<DocGroup>(
+        group_by_regex("Partial sorting", mod, %regex~(partial_sort|nth_element|qpartial_sort|qnth_element)$%%),
+        group_by_regex("Heap operations", mod, %regex~(make_heap|push_heap|pop_heap|qmake_heap|qpush_heap|qpop_heap)$%%),
+        group_by_regex("Sort dispatch macro", mod, %regex~qsort$%%)
     )
     document("Boost package for the builtin sort", mod, "sort_boost.rst", groups)
 }
@@ -945,6 +948,7 @@ def document_module_linq(root : string) {
     var mod = find_module("linq")
     var groups <- array<DocGroup>(
         group_by_regex("Sorting data", mod, %regex~(reverse.*|order.*)$%%),
+        group_by_regex("Top-N selection", mod, %regex~(top_n.*)$%%),
         group_by_regex("Set operations", mod, %regex~(distinct.*|union.*|intersect.*|except.*|unique.*)$%%),
         group_by_regex("Concatenation operations", mod, %regex~(concat.*|append.*|prepend.*)$%%),
         group_by_regex("Generation operations", mod, %regex~(default_empty|repeat|empty|range_sequence)$%%),

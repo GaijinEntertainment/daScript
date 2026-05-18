@@ -3385,6 +3385,540 @@ namespace das {
         scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
     }
 
+    // ==========================================================================
+    // partial_sort / nth_element / heap-op cblock templates (Phase 0 expansion).
+    // Same scblk / scblk_array shape as builtin_sort_cblock above, parameterized
+    // on the algorithm being invoked. partial_sort and nth_element take an extra
+    // `n` argument; heap ops (make_heap / push_heap / pop_heap) take no `n`.
+    // ==========================================================================
+
+    // ---- partial_sort ----
+
+    template <typename CompareFn, typename TT>
+    struct pscblk {
+        template <int dimSize>
+        static __forceinline void psrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, CompareFn && cmp, Context *, LineInfoArg * ) {
+            if ( length<=1 || n<=0 ) return;
+            if ( n>length ) n = length;
+            partial_sort(arr.data, arr.data + n, arr.data + length, cmp);
+        }
+        template <int dimSize>
+        static __forceinline void psrtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            psrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct pscblk < const Block &, TT > {
+        template <int dimSize>
+        static __forceinline void psrtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 || n<=0 ) return;
+            if ( n>length ) n = length;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                partial_sort(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+        template <int dimSize>
+        static __forceinline void psrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 || n<=0 ) return;
+            if ( n>length ) n = length;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                partial_sort(data, data+n, data+length, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    };
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_partial_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        pscblk<CompareFn,TT>::psrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_partial_sort_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        pscblk<CompareFn,TT>::psrtr(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename TT>
+    void builtin_partial_sort_cblock ( vec4f arr, int32_t, int32_t length, int32_t n, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        if ( length<=1 || n<=0 ) return;
+        if ( n>length ) n = length;
+        auto data = cast<TT *>::to(arr);
+        if ( cmp.jitFunction ) {
+            using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context*>;
+            partial_sort(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
+            });
+        } else {
+            vec4f bargs[2];
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                partial_sort(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    }
+
+    template <typename CompareFn, typename TT>
+    struct pscblk_array {
+        static __forceinline void psrt ( Array & arr, int32_t, int32_t, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<=0 ) return;
+            if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
+            array_lock(*context, arr, at);
+            auto sdata = (TT *) arr.data;
+            das::partial_sort(sdata, sdata + n, sdata + arr.size, cmp);
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void psrtr ( Array & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            psrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct pscblk_array < const Block &, TT > {
+        static __forceinline void psrtr ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<=0 ) return;
+            if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context *>;
+                das::partial_sort(data, data + n, data + arr.size, [&](TT x, TT y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::partial_sort(data, data + n, data + arr.size, [&](TT x, TT y) -> bool {
+                        bargs[0] = cast<TT>::from(x);
+                        bargs[1] = cast<TT>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void psrt ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<=0 ) return;
+            if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, const TT &, const TT &, const Block &, Context *>;
+                das::partial_sort(data, data + n, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::partial_sort(data, data + n, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                        bargs[0] = cast<const TT &>::from(x);
+                        bargs[1] = cast<const TT &>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+    };
+
+    template <typename TT>
+    void builtin_partial_sort_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, int32_t n, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        pscblk_array<const Block &,TT>::psrtr(arr,elemSize,elemCount,n,cmp,context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_partial_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        pscblk_array<CompareFn,TT>::psrt(arr,elemSize,elemCount,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_partial_sort_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        pscblk_array<CompareFn,TT>::psrtr(arr,elemSize,elemCount,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    // ---- nth_element ----
+
+    template <typename CompareFn, typename TT>
+    struct nscblk {
+        template <int dimSize>
+        static __forceinline void nsrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, CompareFn && cmp, Context *, LineInfoArg * ) {
+            if ( length<=1 || n<0 || n>=length ) return;
+            nth_element(arr.data, arr.data + n, arr.data + length, cmp);
+        }
+        template <int dimSize>
+        static __forceinline void nsrtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            nsrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct nscblk < const Block &, TT > {
+        template <int dimSize>
+        static __forceinline void nsrtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 || n<0 || n>=length ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                nth_element(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+        template <int dimSize>
+        static __forceinline void nsrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 || n<0 || n>=length ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                nth_element(data, data+n, data+length, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    };
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_nth_element_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        nscblk<CompareFn,TT>::nsrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_nth_element_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        nscblk<CompareFn,TT>::nsrtr(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename TT>
+    void builtin_nth_element_cblock ( vec4f arr, int32_t, int32_t length, int32_t n, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        if ( length<=1 || n<0 || n>=length ) return;
+        auto data = cast<TT *>::to(arr);
+        if ( cmp.jitFunction ) {
+            using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context*>;
+            nth_element(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
+            });
+        } else {
+            vec4f bargs[2];
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                nth_element(data, data+n, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    }
+
+    template <typename CompareFn, typename TT>
+    struct nscblk_array {
+        static __forceinline void nsrt ( Array & arr, int32_t, int32_t, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<0 || uint32_t(n)>=arr.size ) return;
+            array_lock(*context, arr, at);
+            auto sdata = (TT *) arr.data;
+            das::nth_element(sdata, sdata + n, sdata + arr.size, cmp);
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void nsrtr ( Array & arr, int32_t elemSize, int32_t length, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            nsrt(arr,elemSize,length,n,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct nscblk_array < const Block &, TT > {
+        static __forceinline void nsrtr ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<0 || uint32_t(n)>=arr.size ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context *>;
+                das::nth_element(data, data + n, data + arr.size, [&](TT x, TT y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::nth_element(data, data + n, data + arr.size, [&](TT x, TT y) -> bool {
+                        bargs[0] = cast<TT>::from(x);
+                        bargs[1] = cast<TT>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void nsrt ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 || n<0 || uint32_t(n)>=arr.size ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, const TT &, const TT &, const Block &, Context *>;
+                das::nth_element(data, data + n, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::nth_element(data, data + n, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                        bargs[0] = cast<const TT &>::from(x);
+                        bargs[1] = cast<const TT &>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+    };
+
+    template <typename TT>
+    void builtin_nth_element_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, int32_t n, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        nscblk_array<const Block &,TT>::nsrtr(arr,elemSize,elemCount,n,cmp,context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_nth_element_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        nscblk_array<CompareFn,TT>::nsrt(arr,elemSize,elemCount,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_nth_element_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        nscblk_array<CompareFn,TT>::nsrtr(arr,elemSize,elemCount,n,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    // ---- Heap operation helpers (shared for make_heap / push_heap / pop_heap) ----
+    //
+    // Each heap op needs the same scblk-style structure (typed/Block dim + array
+    // variants). The structural difference between them is which std:: algorithm
+    // gets called. We factor that with a tag-and-dispatch helper that the three
+    // op-specific structs share.
+
+    enum class HeapOp { Make, Push, Pop };
+
+    template <HeapOp Op, typename Iter, typename Cmp>
+    __forceinline void heap_dispatch ( Iter first, Iter last, Cmp && cmp ) {
+        if ( Op == HeapOp::Make ) make_heap(first, last, das::forward<Cmp>(cmp));
+        else if ( Op == HeapOp::Push ) push_heap(first, last, das::forward<Cmp>(cmp));
+        else /* Pop */ pop_heap(first, last, das::forward<Cmp>(cmp));
+    }
+
+    template <HeapOp Op, typename CompareFn, typename TT>
+    struct hscblk {
+        template <int dimSize>
+        static __forceinline void hsrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, CompareFn && cmp, Context *, LineInfoArg * ) {
+            if ( length<=1 ) return;
+            heap_dispatch<Op>(arr.data, arr.data + length, cmp);
+        }
+        template <int dimSize>
+        static __forceinline void hsrtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            hsrt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <HeapOp Op, typename TT>
+    struct hscblk < Op, const Block &, TT > {
+        template <int dimSize>
+        static __forceinline void hsrtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                heap_dispatch<Op>(data, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+        template <int dimSize>
+        static __forceinline void hsrt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            if ( length<=1 ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                heap_dispatch<Op>(data, data+length, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    };
+
+    template <HeapOp Op, typename TT>
+    void heap_cblock_impl ( vec4f arr, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        if ( length<=1 ) return;
+        auto data = cast<TT *>::to(arr);
+        if ( cmp.jitFunction ) {
+            using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context*>;
+            heap_dispatch<Op>(data, data+length, [&](TT x, TT y) -> bool {
+                return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
+            });
+        } else {
+            vec4f bargs[2];
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                heap_dispatch<Op>(data, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            }, lineinfo);
+        }
+    }
+
+    template <HeapOp Op, typename CompareFn, typename TT>
+    struct hscblk_array {
+        static __forceinline void hsrt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            array_lock(*context, arr, at);
+            auto sdata = (TT *) arr.data;
+            heap_dispatch<Op>(sdata, sdata + arr.size, cmp);
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void hsrtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            hsrt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <HeapOp Op, typename TT>
+    struct hscblk_array < Op, const Block &, TT > {
+        static __forceinline void hsrtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context *>;
+                heap_dispatch<Op>(data, data + arr.size, [&](TT x, TT y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    heap_dispatch<Op>(data, data + arr.size, [&](TT x, TT y) -> bool {
+                        bargs[0] = cast<TT>::from(x);
+                        bargs[1] = cast<TT>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void hsrt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool, const TT &, const TT &, const Block &, Context *>;
+                heap_dispatch<Op>(data, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x, y, cmp, context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    heap_dispatch<Op>(data, data + arr.size, [&](const TT & x, const TT & y) -> bool {
+                        bargs[0] = cast<const TT &>::from(x);
+                        bargs[1] = cast<const TT &>::from(y);
+                        return code->evalBool(*context);
+                    });
+                }, at);
+            }
+            array_unlock(*context, arr, at);
+        }
+    };
+
+    // make_heap concrete cblock surface
+    template <typename TT>
+    void builtin_make_heap_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        heap_cblock_impl<HeapOp::Make,TT>(arr, length, cmp, context, lineinfo);
+    }
+    template <typename TT>
+    void builtin_make_heap_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Make, const Block &, TT>::hsrtr(arr, elemSize, elemCount, cmp, context, lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_make_heap_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Make,CompareFn,TT>::hsrt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_make_heap_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Make,CompareFn,TT>::hsrtr(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_make_heap_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Make,CompareFn,TT>::hsrt(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_make_heap_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Make,CompareFn,TT>::hsrtr(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    // push_heap concrete cblock surface
+    template <typename TT>
+    void builtin_push_heap_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        heap_cblock_impl<HeapOp::Push,TT>(arr, length, cmp, context, lineinfo);
+    }
+    template <typename TT>
+    void builtin_push_heap_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Push, const Block &, TT>::hsrtr(arr, elemSize, elemCount, cmp, context, lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_push_heap_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Push,CompareFn,TT>::hsrt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_push_heap_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Push,CompareFn,TT>::hsrtr(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_push_heap_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Push,CompareFn,TT>::hsrt(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_push_heap_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Push,CompareFn,TT>::hsrtr(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    // pop_heap concrete cblock surface
+    template <typename TT>
+    void builtin_pop_heap_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        heap_cblock_impl<HeapOp::Pop,TT>(arr, length, cmp, context, lineinfo);
+    }
+    template <typename TT>
+    void builtin_pop_heap_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Pop, const Block &, TT>::hsrtr(arr, elemSize, elemCount, cmp, context, lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_pop_heap_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Pop,CompareFn,TT>::hsrt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_pop_heap_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk<HeapOp::Pop,CompareFn,TT>::hsrtr(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_pop_heap_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Pop,CompareFn,TT>::hsrt(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_pop_heap_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        hscblk_array<HeapOp::Pop,CompareFn,TT>::hsrtr(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
     __forceinline vec4f cvt_ifloat2 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_ifloat3 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_ifloat4 ( int4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }

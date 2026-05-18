@@ -126,6 +126,54 @@ namespace das {
     DAS_API void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
 
+    // Sort-family extensions: partial_sort / nth_element / heap ops.
+    // Mirrors builtin_sort<TT> for the typed default-comparator path; uses
+    // std::less by default (max-heap for the heap ops, ascending for partial_sort).
+
+    template <typename TT>
+    __forceinline void builtin_partial_sort ( TT * data, int32_t length, int32_t n ) {
+        if ( length<=1 || n<=0 ) return;
+        if ( n>length ) n = length;
+        partial_sort ( data, data + n, data + length );
+    }
+
+    template <typename TT>
+    __forceinline void builtin_nth_element ( TT * data, int32_t length, int32_t n ) {
+        if ( length<=1 || n<0 || n>=length ) return;
+        nth_element ( data, data + n, data + length );
+    }
+
+    template <typename TT>
+    __forceinline void builtin_make_heap ( TT * data, int32_t length ) {
+        if ( length>1 ) make_heap ( data, data + length );
+    }
+
+    template <typename TT>
+    __forceinline void builtin_push_heap ( TT * data, int32_t length ) {
+        if ( length>1 ) push_heap ( data, data + length );
+    }
+
+    template <typename TT>
+    __forceinline void builtin_pop_heap ( TT * data, int32_t length ) {
+        if ( length>1 ) pop_heap ( data, data + length );
+    }
+
+    // Any-path runtime wrappers (user-defined types, opaque byte buffer).
+    // All defined in module_builtin_runtime_sort.cpp; thin wrappers around
+    // das_partial_sort_r / das_nth_element_r / das_make_heap_r / das_push_heap_r /
+    // das_pop_heap_r from src/builtin/das_qsort_r.h.
+
+    DAS_API void builtin_partial_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_partial_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_nth_element_any_cblock ( void * anyData, int32_t elementSize, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_nth_element_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, int32_t n, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_make_heap_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_make_heap_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_push_heap_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_push_heap_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_pop_heap_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_pop_heap_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+
     __forceinline int32_t variant_index(const Variant & v) { return v.index; }
     __forceinline void set_variant_index(Variant & v, int32_t index) { v.index = index; }
 
