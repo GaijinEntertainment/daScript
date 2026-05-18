@@ -9,6 +9,7 @@
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_matrix.h"
 #include "daScript/simulate/aot_builtin_time.h"
+#include "daScript/simulate/das_qsort_r.h"
 #include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
@@ -3241,7 +3242,7 @@ namespace das {
     struct scblk {
         template <int dimSize>
         static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context *, LineInfoArg * ) {
-            sort(arr.data, arr.data + dimSize, cmp);
+            das_sort(arr.data, arr.data + dimSize, cmp);
         }
         template <int dimSize>
         static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
@@ -3256,7 +3257,7 @@ namespace das {
             vec4f bargs[2];
             auto data = (TT *) arr.data;
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                sort ( data, data+length, [&](TT x, TT y) -> bool {
+                das_sort ( data, data+length, [&](TT x, TT y) -> bool {
                     bargs[0] = cast<TT>::from(x);
                     bargs[1] = cast<TT>::from(y);
                     return code->evalBool(*context);
@@ -3268,7 +3269,7 @@ namespace das {
             vec4f bargs[2];
             auto data = (TT *) arr.data;
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                sort ( data, data+length, [&](const TT & x, const TT & y) -> bool {
+                das_sort ( data, data+length, [&](const TT & x, const TT & y) -> bool {
                     bargs[0] = cast<const TT &>::from(x);
                     bargs[1] = cast<const TT &>::from(y);
                     return code->evalBool(*context);
@@ -3292,13 +3293,13 @@ namespace das {
         auto data = cast<TT *>::to(arr);
         if ( cmp.jitFunction ) {
             using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context*>;
-            sort ( data, data+length, [&](TT x, TT y) -> bool {
+            das_sort ( data, data+length, [&](TT x, TT y) -> bool {
                 return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
             });
         } else {
             vec4f bargs[2];
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                sort ( data, data+length, [&](TT x, TT y) -> bool {
+                das_sort ( data, data+length, [&](TT x, TT y) -> bool {
                     bargs[0] = cast<TT>::from(x);
                     bargs[1] = cast<TT>::from(y);
                     return code->evalBool(*context);
@@ -3316,7 +3317,7 @@ namespace das {
             if ( arr.size<=1 ) return;
             array_lock(*context, arr, at);
             auto sdata = (TT *) arr.data;
-            das::sort(sdata, sdata + arr.size, cmp);
+            das_sort (sdata, sdata + arr.size, cmp);
             array_unlock(*context, arr, at);
         }
         static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
@@ -3332,13 +3333,13 @@ namespace das {
             array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
                 using CmpFn = CallJitFn<bool,TT, TT,const Block &,Context *>;
-                das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                das_sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
                     return CmpFn::static_call(cmp.jitFunction, x,y,cmp,context);
                 });
             } else {
                 vec4f bargs[2];
                 context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                    das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                    das_sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
                         bargs[0] = cast<TT>::from(x);
                         bargs[1] = cast<TT>::from(y);
                         return code->evalBool(*context);
@@ -3353,13 +3354,13 @@ namespace das {
             array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
                 using CmpFn = CallJitFn<bool,const TT &,const TT &,const Block &,Context *>;
-                das::sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
+                das_sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
                     return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
                 });
             } else {
                 vec4f bargs[2];
                 context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                    das::sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
+                    das_sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
                         bargs[0] = cast<const TT &>::from(x);
                         bargs[1] = cast<const TT &>::from(y);
                         return code->evalBool(*context);

@@ -25,10 +25,10 @@ def find_unique_function_ptr(mod : Module?; name : string; canfail : bool = fals
 /*
  * We need this wrappers for initialization of Handle types
  */
-struct CaptureEntryInitData {
+struct public CaptureEntryInitData {
     //! Initialization data for a captured variable entry.
-    name : string
-    mode : CaptureMode
+    name : string       //! Variable name being captured.
+    mode : CaptureMode  //! Capture mode (copy, reference, move, or clone).
 }
 
 def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
@@ -79,10 +79,10 @@ def public clone(var args : rtti::AnnotationList; var nargs : array<rtti::Annota
 }
 
 
-struct EnumEntryInitData {
+struct public EnumEntryInitData {
     //! Initialization data for a quoted enum entry.
-    name : string
-    cppName : string
+    name : string     //! Enum entry name.
+    cppName : string  //! C++-side name for the entry (used when generating bindings).
     // at : LineInfo
     // value : ExpressionPtr
 }
@@ -97,14 +97,14 @@ def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) 
     }
 }
 
-struct AnnotationArgumentInitData {
+struct public AnnotationArgumentInitData {
     //! Initialization data for a quoted annotation argument.
-    basicType : Type
-    name : string
-    sValue : string
-    bValue : bool
-    iValue : int
-    fValue : float
+    basicType : Type  //! Argument type tag (string / bool / int / float / etc.).
+    name : string     //! Argument name as written in the annotation.
+    sValue : string   //! String value (used when basicType is tString).
+    bValue : bool     //! Bool value (used when basicType is tBool).
+    iValue : int      //! Int value (used when basicType is tInt).
+    fValue : float    //! Float value (used when basicType is tFloat).
     // @safe_when_uninitialized at: LineInfo // todo: add if needed
 }
 
