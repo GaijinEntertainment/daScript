@@ -33,6 +33,7 @@ module style_lint shared private
 //!   STYLE022 — bitfield compound-bit-set/clear ('foo |= BfT.m' / 'foo &= ~BfT.m') — use field-assign 'foo.m = true' / 'foo.m = false'
 //!   STYLE024 — redundant 'unsafe' wrap; inner expression / block body has no operation requiring unsafe — drop the wrap
 //!   STYLE025 — 'unsafe { ... }' block where only one statement needs unsafe — narrow to 'unsafe(<sub-expr>)'
+//!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 
 require daslib/ast_boost
 require strings
@@ -59,6 +60,7 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete skip_userSaidItsSafe : array<Expression?>
     @do_not_delete unsafeExprs : table<Expression?; int>
     unsafe_stack : array<int>
+    unsafe_block_stack : array<int>
 
     def StyleLintVisitor() {
         pass
@@ -118,6 +120,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
+        unsafe_block_stack |> push(0)
         self->check_defer_pipe(fn)
     }
 
@@ -162,6 +165,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
         current_function = null
+        unsafe_block_stack |> pop
         return <- fn
     }
 
@@ -708,6 +712,9 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE017(b): adjacent `if (cond) { return b1 }; return b2` (b1 != b2) ---
 
     def override preVisitExprBlock(blk : ExprBlock?) : void {
+        if (blk.blockFlags.isClosure) {
+            unsafe_block_stack |> push(0)
+        }
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]
@@ -736,6 +743,13 @@ class StyleLintVisitor : AstVisitor {
                 self->style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' — use '{suggestion}' directly", outer_if.at)
             }
         }
+    }
+
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
+        if (blk.blockFlags.isClosure) {
+            unsafe_block_stack |> pop
+        }
+        return blk
     }
 
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
@@ -1367,10 +1381,26 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    def override preVisitExprUnsafe(expr : ExprUnsafe?) : void {
+        let n = length(unsafe_block_stack)
+        if (expr != null && !expr.genFlags.generated
+            && (current_function == null || current_function.fromGeneric == null)
+            && n > 0 && unsafe_block_stack[n - 1] > 0) {
+            self->style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope — drop the inner wrap", expr.at)
+        }
+        if (n > 0) {
+            unsafe_block_stack[n - 1]++
+        }
+    }
+
     def override visitExprUnsafe(var expr : ExprUnsafe?) : ExpressionPtr {
+        let n = length(unsafe_block_stack)
+        if (n > 0) {
+            unsafe_block_stack[n - 1]--
+        }
         // Post-order: `unsafe { ... }` block form. The body's own
         // `visitExpression` already aggregated its statements' counts into
-        // `unsafeExprs[body.at]` — just look it up.
+        // `unsafeExprs[body]` — just look it up.
         //   0 unsafe leaves → wrap redundant (STYLE024)
         //   1 unsafe leaf   → narrow to `unsafe(<that-leaf>)` (STYLE025)
         //   ≥ 2 leaves      → block is justified, silent
