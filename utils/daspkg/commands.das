@@ -985,7 +985,7 @@ def build_package(pkg_dir : string) : bool {
     }
 
     // Build
-    exit_code = run_cmd("cmake --build \"{build_dir}\" --config Release", output)
+    exit_code = run_cmd("cmake --build \"{build_dir}\" --config Release --parallel", output)
     if (exit_code != 0) {
         log("  CMake build FAILED:\n{output}\n")
         return false
