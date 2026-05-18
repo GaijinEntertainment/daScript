@@ -15,6 +15,10 @@ build-asan/
 build-ubsan/
 build-linux-asan/
 build-linux/
+build_eastl/
+# EASTL local-verify checkouts (build_eastl uses these via -isystem)
+eastl/
+eabase/
 # docs
 site/doc-latex/
 # daspkg per-package cmake build dirs (utils/daspkg/commands.das:976 -> {pkg_dir}/_build)

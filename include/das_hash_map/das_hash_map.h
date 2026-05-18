@@ -10,41 +10,25 @@
 // Probe hash sentinels match anyhash.h: 0 = EMPTY, 1 = KILLED. User-supplied
 // hashes that collide with sentinels are remapped to the FNV-64 prime.
 //
-// K and V must be default-constructible: rehash allocates `vector<K>(new_cap)` /
-// `vector<V>(new_cap)` and erase assigns `K{}` / `V{}` over killed slots. This
+// K and V must be default-constructible: rehash allocates `das::vector<K>(new_cap)` /
+// `das::vector<V>(new_cap)` and erase assigns `K{}` / `V{}` over killed slots. This
 // matches runtime_table.h's design and daslang's actual call sites (all AST /
 // pointer / primitive types). Supporting non-default-constructible K/V would need
 // uninitialized slot storage with placement-new-on-demand — out of scope here.
 
-#include <cstddef>
-#include <cstdint>
-#include <vector>
-#include <utility>
-#include <functional>
-#include <type_traits>
-#include <iterator>
-#include <stdexcept>
-#include <string>
-#include <new>
-
-// This header is pulled in by das_config.h, which is itself pulled in through
-// platform.h before platform.h finishes declaring __forceinline / NO_ASAN_INLINE /
-// DAS_SUPPRESS_UB. So we stay dependency-free and provide a local __forceinline
-// fallback for non-MSVC and inline the FNV-64 hash directly.
+// This header is pulled in by das_config.h, which already includes <vector>, <utility>,
+// <functional>, <string>, <type_traits>, etc. before reaching us. Platform.h's
+// __forceinline / NO_ASAN_INLINE / DAS_SUPPRESS_UB are NOT yet defined at this point,
+// so we provide a local __forceinline fallback below and inline the FNV-64 hash
+// directly (cannot pull in anyhash.h for the same reason). The same constraint
+// is why at() routes its missing-key path through das::das_throw (declared by
+// das_config.h itself, just above us) rather than raw `throw`: games embedding
+// daslang frequently disable C++ exceptions entirely.
 #if !defined(_MSC_VER) && !defined(__forceinline)
     #define __forceinline inline __attribute__((always_inline))
 #endif
 
 namespace das {
-
-// harmless if caller already did `using namespace std` inside das::
-using std::vector;
-using std::pair;
-using std::hash;
-using std::equal_to;
-using std::move;
-using std::forward;
-using std::forward_iterator_tag;
 
 namespace daslang_hash_map_detail {
 
@@ -72,7 +56,7 @@ namespace daslang_hash_map_detail {
     // block[1]; fast path does a 2-byte read and tolerates the 1-byte overread.
     //
     // Under ASAN, default DAS_SAFE_HASH to 1 — the fast path's overread crosses the
-    // std::string allocation boundary (heap allocs are sized to chars+null exactly),
+    // das::string allocation boundary (heap allocs are sized to chars+null exactly),
     // which ASAN flags. Cannot use NO_ASAN_INLINE here because this header is pulled
     // in before platform.h sets it up.
     //
@@ -126,24 +110,24 @@ namespace daslang_hash_map_detail {
 //    AST hash keys are already hash-quality (wyhash outputs used as keys),
 //    so no further mixing is needed. to_hash_key still guards collisions
 //    with 0/1 just in case.
-//  * null-terminated C strings and std::string: hash_blockz64 (FNV-64 from anyhash.h).
-//  * anything else: std::hash<T> fallback.
+//  * null-terminated C strings and das::string: hash_blockz64 (FNV-64 from anyhash.h).
+//  * anything else: das::hash<T> fallback.
 //
 
 template <class T, class Enable = void>
 struct daslang_hash {
-    size_t operator () ( const T & x ) const { return std::hash<T>{}(x); }
+    size_t operator () ( const T & x ) const { return das::hash<T>{}(x); }
 };
 
 template <class T>
-struct daslang_hash<T, std::enable_if_t<std::is_integral<T>::value>> {
+struct daslang_hash<T, das::enable_if_t<das::is_integral<T>::value>> {
     __forceinline size_t operator () ( T x ) const noexcept {
         return size_t(x) + 2;
     }
 };
 
 // Pointer keys: raw `ptr >> 4` clusters catastrophically on tight-stride
-// allocations (1M short heap strings: 36× regression). std::hash<T*> (raw ptr)
+// allocations (1M short heap strings: 36× regression). das::hash<T*> (raw ptr)
 // is only mediocre. Fibonacci hashing — shift-out-alignment + golden-ratio
 // multiply — is the winner in our benchmarks:
 //   N=100: 0.48× ska   N=10k: 0.77× ska   N=1M: 0.87× ska
@@ -159,8 +143,8 @@ struct daslang_hash<T *, void> {
 };
 
 template <>
-struct daslang_hash<std::string> {
-    __forceinline size_t operator () ( const std::string & s ) const noexcept {
+struct daslang_hash<das::string> {
+    __forceinline size_t operator () ( const das::string & s ) const noexcept {
         return size_t(daslang_hash_map_detail::hash_blockz64(reinterpret_cast<const uint8_t *>(s.c_str())));
     }
 };
@@ -183,9 +167,9 @@ struct daslang_hash<char *> {
 //  daslang_hash_map
 //
 
-template <class K, class V, class Hash = daslang_hash<K>, class KeyEqual = equal_to<K>>
+template <class K, class V, class Hash = daslang_hash<K>, class KeyEqual = das::equal_to<K>>
 class daslang_hash_map {
-    // std::vector<bool> is specialized and returns proxy references — incompatible
+    // das::vector<bool> is specialized and returns proxy references — incompatible
     // with our iterator's V& contract. Use uint8_t storage for V=bool and cast at
     // the access points. bool and uint8_t share size and representation on every
     // platform daslang ships on.
@@ -195,14 +179,14 @@ class daslang_hash_map {
     // uint8_t, and bool values outside {0,1} are trap representations). In practice
     // MSVC/gcc/clang all compile it correctly — we only ever store 0 or 1 through
     // the bool side, and we never take addresses across the boundary. This is a
-    // conscious trade vs (a) storing real bool + dealing with vector<bool>'s proxy
+    // conscious trade vs (a) storing real bool + dealing with das::vector<bool>'s proxy
     // iterators, or (b) memcpy'ing every read/write. Revisit if a sanitizer fires.
-    static constexpr bool is_bool_value = std::is_same<V, bool>::value;
-    using value_storage_t = typename std::conditional<is_bool_value, uint8_t, V>::type;
+    static constexpr bool is_bool_value = das::is_same<V, bool>::value;
+    using value_storage_t = typename das::conditional<is_bool_value, uint8_t, V>::type;
 
-    vector<uint64_t>       hashes_;   // HASH_EMPTY / HASH_KILLED / remapped-hash
-    vector<K>              keys_;
-    vector<value_storage_t> values_;
+    das::vector<uint64_t>       hashes_;   // HASH_EMPTY / HASH_KILLED / remapped-hash
+    das::vector<K>              keys_;
+    das::vector<value_storage_t> values_;
     size_t                 size_       = 0;
     size_t                 tombstones_ = 0;
     Hash                   hash_;
@@ -220,21 +204,21 @@ public:
 
     // returned by iterator::operator* — aggregate with two reference members
     // so C++17 structured bindings (`auto [k, v] = *it`) bind directly to the
-    // underlying container slots without going through std::tuple_size.
-    // `first` is a NON-const K& — matches ska::flat_hash_map's `value_type = pair<K,V>`
-    // rather than std::unordered_map's `pair<const K, V>`. Mutating the key through
+    // underlying container slots without going through das::tuple_size.
+    // `first` is a NON-const K& — matches ska::flat_hash_map's `value_type = das::pair<K,V>`
+    // rather than das::unordered_map's `das::pair<const K, V>`. Mutating the key through
     // this reference would corrupt the hash; callers must not do that (matches the
-    // ska contract used throughout daslang). Converts implicitly to pair<K,V> so
+    // ska contract used throughout daslang). Converts implicitly to das::pair<K,V> so
     // code like `auto kv = *it; m2.insert(kv);` still compiles.
     struct reference {
         K & first;
         V & second;
-        operator pair<K, V> () const { return { first, second }; }
+        operator das::pair<K, V> () const { return { first, second }; }
     };
     struct const_reference {
         const K & first;
         const V & second;
-        operator pair<K, V> () const { return { first, second }; }
+        operator das::pair<K, V> () const { return { first, second }; }
     };
 
     class const_iterator;
@@ -252,17 +236,17 @@ public:
         // GCC's [basic.scope.class] diagnostic (-fpermissive) fires otherwise,
         // because the name's meaning would differ between enclosing-scope lookup
         // (outer struct) and complete-class-scope lookup (the alias).
-        using iterator_category = forward_iterator_tag;
-        // pair<K, V> (not pair<const K, V>): matches ska's value_type contract and
+        using iterator_category = das::forward_iterator_tag;
+        // das::pair<K, V> (not das::pair<const K, V>): matches ska's value_type contract and
         // matches what operator* actually yields (non-const K& inside reference).
-        using value_type        = pair<K, V>;
+        using value_type        = das::pair<K, V>;
         using difference_type   = ptrdiff_t;
         using pointer           = daslang_hash_map::reference *;
         using reference         = daslang_hash_map::reference;
     private:
         daslang_hash_map * owner_ = nullptr;
         size_t             index_ = 0;
-        mutable typename std::aligned_storage<sizeof(reference), alignof(reference)>::type ref_storage_;
+        mutable typename das::aligned_storage<sizeof(reference), alignof(reference)>::type ref_storage_;
         friend class daslang_hash_map;
         friend class const_iterator;
     public:
@@ -290,15 +274,15 @@ public:
 
     class const_iterator {
     public:
-        using iterator_category = forward_iterator_tag;
-        using value_type        = pair<K, V>;
+        using iterator_category = das::forward_iterator_tag;
+        using value_type        = das::pair<K, V>;
         using difference_type   = ptrdiff_t;
         using pointer           = const daslang_hash_map::const_reference *;
         using reference         = daslang_hash_map::const_reference;
     private:
         const daslang_hash_map * owner_ = nullptr;
         size_t                   index_ = 0;
-        mutable typename std::aligned_storage<sizeof(const_reference), alignof(const_reference)>::type ref_storage_;
+        mutable typename das::aligned_storage<sizeof(const_reference), alignof(const_reference)>::type ref_storage_;
         friend class daslang_hash_map;
     public:
         const_iterator () noexcept = default;
@@ -331,7 +315,7 @@ public:
     daslang_hash_map & operator = ( daslang_hash_map && ) noexcept = default;
     ~ daslang_hash_map () = default;
 
-    daslang_hash_map ( std::initializer_list<pair<K, V>> il ) {
+    daslang_hash_map ( das::initializer_list<das::pair<K, V>> il ) {
         reserve(il.size());
         for ( const auto & kv : il ) insert(kv);
     }
@@ -393,12 +377,12 @@ public:
 
     V & at ( const K & key ) {
         const size_t idx = find_index(key, hash_(key));
-        if ( idx == SIZE_MAX ) throw std::out_of_range("daslang_hash_map::at");
+        if ( idx == SIZE_MAX ) das::das_throw("daslang_hash_map::at");
         return val_at(idx);
     }
     const V & at ( const K & key ) const {
         const size_t idx = find_index(key, hash_(key));
-        if ( idx == SIZE_MAX ) throw std::out_of_range("daslang_hash_map::at");
+        if ( idx == SIZE_MAX ) das::das_throw("daslang_hash_map::at");
         return val_at(idx);
     }
 
@@ -414,12 +398,12 @@ public:
     //  modification
     //
 
-    pair<iterator, bool> insert ( const pair<K, V> & kv ) {
+    das::pair<iterator, bool> insert ( const das::pair<K, V> & kv ) {
         auto r = reserve_slot(kv.first, hash_(kv.first));
         if ( r.second ) val_at(r.first) = kv.second;
         return { iterator{this, r.first}, r.second };
     }
-    pair<iterator, bool> insert ( pair<K, V> && kv ) {
+    das::pair<iterator, bool> insert ( das::pair<K, V> && kv ) {
         auto h = hash_(kv.first);
         auto r = reserve_slot(das::move(kv.first), h);
         if ( r.second ) val_at(r.first) = das::move(kv.second);
@@ -427,19 +411,19 @@ public:
     }
 
     template <class... Args>
-    pair<iterator, bool> emplace ( Args &&... args ) {
-        pair<K, V> kv(das::forward<Args>(args)...);
+    das::pair<iterator, bool> emplace ( Args &&... args ) {
+        das::pair<K, V> kv(das::forward<Args>(args)...);
         return insert(das::move(kv));
     }
 
     template <class... Args>
-    pair<iterator, bool> try_emplace ( const K & key, Args &&... args ) {
+    das::pair<iterator, bool> try_emplace ( const K & key, Args &&... args ) {
         auto r = reserve_slot(key, hash_(key));
         if ( r.second ) val_at(r.first) = V(das::forward<Args>(args)...);
         return { iterator{this, r.first}, r.second };
     }
     template <class... Args>
-    pair<iterator, bool> try_emplace ( K && key, Args &&... args ) {
+    das::pair<iterator, bool> try_emplace ( K && key, Args &&... args ) {
         auto h = hash_(key);
         auto r = reserve_slot(das::move(key), h);
         if ( r.second ) val_at(r.first) = V(das::forward<Args>(args)...);
@@ -497,7 +481,7 @@ private:
     // If inserted, slot is initialized with hash + key; caller is responsible for
     // writing the value. NOTE: probe loop mirrors runtime_table.h::reserve.
     template <class KFwd>
-    __forceinline pair<size_t, bool> reserve_slot ( KFwd && key, uint64_t raw_hash ) {
+    __forceinline das::pair<size_t, bool> reserve_slot ( KFwd && key, uint64_t raw_hash ) {
         if      ( size_ >= hashes_.size() / 2 )                        grow();
         else if ( (hashes_.size() - size_) / 2 < tombstones_ )         rehash_same_capacity();
         uint64_t mask = hashes_.size() - 1;
@@ -547,9 +531,9 @@ private:
 
     void rehash_into ( size_t new_cap ) {
         // new_cap must be a power of 2. grow()/rehash_same_capacity() uphold that.
-        vector<uint64_t>        new_hashes(new_cap, daslang_hash_map_detail::HASH_EMPTY);
-        vector<K>               new_keys(new_cap);
-        vector<value_storage_t> new_values(new_cap);
+        das::vector<uint64_t>        new_hashes(new_cap, daslang_hash_map_detail::HASH_EMPTY);
+        das::vector<K>               new_keys(new_cap);
+        das::vector<value_storage_t> new_values(new_cap);
         const uint64_t mask = new_cap - 1;
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];
@@ -573,10 +557,10 @@ private:
 //  daslang_hash_set
 //
 
-template <class K, class Hash = daslang_hash<K>, class KeyEqual = equal_to<K>>
+template <class K, class Hash = daslang_hash<K>, class KeyEqual = das::equal_to<K>>
 class daslang_hash_set {
-    vector<uint64_t> hashes_;
-    vector<K>        keys_;
+    das::vector<uint64_t> hashes_;
+    das::vector<K>        keys_;
     size_t           size_       = 0;
     size_t           tombstones_ = 0;
     Hash             hash_;
@@ -593,7 +577,7 @@ public:
         size_t                   index_ = 0;
         friend class daslang_hash_set;
     public:
-        using iterator_category = forward_iterator_tag;
+        using iterator_category = das::forward_iterator_tag;
         using value_type        = K;
         using difference_type   = ptrdiff_t;
         using pointer           = const K *;
@@ -628,7 +612,7 @@ public:
     daslang_hash_set & operator = ( daslang_hash_set && ) noexcept = default;
     ~ daslang_hash_set () = default;
 
-    daslang_hash_set ( std::initializer_list<K> il ) {
+    daslang_hash_set ( das::initializer_list<K> il ) {
         reserve(il.size());
         for ( const auto & k : il ) insert(k);
     }
@@ -668,17 +652,17 @@ public:
     size_type count    ( const K & key ) const { return find_index(key, hash_(key)) == SIZE_MAX ? 0 : 1; }
     bool      contains ( const K & key ) const { return find_index(key, hash_(key)) != SIZE_MAX; }
 
-    pair<iterator, bool> insert ( const K & key ) {
+    das::pair<iterator, bool> insert ( const K & key ) {
         auto r = reserve_slot(key, hash_(key));
         return { const_iterator{this, r.first}, r.second };
     }
-    pair<iterator, bool> insert ( K && key ) {
+    das::pair<iterator, bool> insert ( K && key ) {
         auto h = hash_(key);
         auto r = reserve_slot(das::move(key), h);
         return { const_iterator{this, r.first}, r.second };
     }
     template <class... Args>
-    pair<iterator, bool> emplace ( Args &&... args ) {
+    das::pair<iterator, bool> emplace ( Args &&... args ) {
         K key(das::forward<Args>(args)...);
         return insert(das::move(key));
     }
@@ -724,7 +708,7 @@ private:
     }
 
     template <class KFwd>
-    __forceinline pair<size_t, bool> reserve_slot ( KFwd && key, uint64_t raw_hash ) {
+    __forceinline das::pair<size_t, bool> reserve_slot ( KFwd && key, uint64_t raw_hash ) {
         if      ( size_ >= hashes_.size() / 2 )                        grow();
         else if ( (hashes_.size() - size_) / 2 < tombstones_ )         rehash_same_capacity();
         uint64_t mask = hashes_.size() - 1;
@@ -772,8 +756,8 @@ private:
     void rehash_same_capacity () { rehash_into(hashes_.size()); }
 
     void rehash_into ( size_t new_cap ) {
-        vector<uint64_t> new_hashes(new_cap, daslang_hash_map_detail::HASH_EMPTY);
-        vector<K>        new_keys(new_cap);
+        das::vector<uint64_t> new_hashes(new_cap, daslang_hash_map_detail::HASH_EMPTY);
+        das::vector<K>        new_keys(new_cap);
         const uint64_t mask = new_cap - 1;
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];

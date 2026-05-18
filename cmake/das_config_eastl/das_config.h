@@ -55,11 +55,11 @@ using std::thread;
 using std::unique_lock;
 } // namespace das
 
-#if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
-#define FMT_THROW(x)    das::das_throw(((x).what()))
 namespace das {
     void das_throw(const char * msg);
 }
+#if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
+#define FMT_THROW(x)    das::das_throw(((x).what()))
 #endif
 
 #if DAS_CUSTOM_HASH
