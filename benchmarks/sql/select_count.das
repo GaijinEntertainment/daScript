@@ -8,9 +8,7 @@ require _common public
 // so user-visible side effects fire. Phase-2A `_fold` matches that: the counter lane binds
 // the final projection to a discardable local per matched element (side effects preserved)
 // and skips array materialization. The optimizer DCEs the binding for pure projections
-// like `_.price * 2`, leaving a bare-loop counter for the common case. `_old_fold` lacks a
-// [select, count] pattern in g_foldSeq so it falls to the default nested-pass form
-// (pass_0 = select(...); count(pass_0)) — materializing the same way m3 does.
+// like `_.price * 2`, leaving a bare-loop counter for the common case.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -33,17 +31,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let c = _old_fold(each(arr)._select(_.price * 2).count())
-        if (c == 0) {
-            b->failNow()
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -62,11 +49,6 @@ def select_count_m1(b : B?) {
 [benchmark]
 def select_count_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def select_count_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

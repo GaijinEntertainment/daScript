@@ -4,17 +4,17 @@ Project notes and progress for the `daslib/linq_fold` macro family, modeled afte
 
 ## What this is
 
-The current `_fold(...)` macro in linq_boost wraps LINQ pipelines into intermediate `array<T>` per stage and pattern-matches a small set of common shapes (`where+count`, `where+select`, `select+where`, `order+distinct`, `where`, `select`) for ad-hoc fusion. Everything else falls through to a default emitter that builds nested `var pass_N <- pass_(N-1) |> next(...)` — one fresh array per stage, every predicate called via lambda dispatch.
+`_fold(chain)` is a three-tier cascade — always-safe, never breaks semantics, only ever faster:
 
-The goal is a planner-driven dispatch macro that emits one fused for-loop with predicates inlined (splice mode), materializing only when an operator genuinely needs random access. Three output modes:
-
-1. **Splice** (default): producer body inlined into consumer's loop. Zero allocation, zero per-element dispatch.
-2. **Array intermediate**: when a downstream op needs random access / multi-pass / length (`sort`, `reverse`, `distinct`, `groupby`). Once we go array, we stay array (iterating an array is faster than iterating an iterator).
-3. **Helper-call fallback**: when splice can't apply at all (escape into `let`, opaque source). Emits calls to named helper functions in `linq_fold`.
+1. **Splice** (tier 1): a fused for-loop with predicates and projections inlined directly. Zero per-element lambda dispatch, zero intermediate iterators. Two planners feed this tier:
+   - **`plan_order_family`** — handles chains containing any of `order` / `order_by` / `order_descending` / `order_by_descending`, optionally with `take(K)` and/or a `where_*` prefilter. Dispatches to `top_n*` helpers or emits a fused prefilter loop + `order*_inplace` on a buffer.
+   - **`plan_loop_or_count`** — handles `[where_*][select*][skip?][take?]` followed by a recognized terminator (count / sum / min / max / average / long_count / first / first_or_default / any / all / contains / to-array). Includes the where-after-select arm via `replaceVariablePeeling` for the peel-aware substitution required on typed AST.
+2. **`fold_linq_default`** (tier 2): an array-shape pipeline (`call → array → call → array`) with `_inplace` variants reusing the same buffer and explicit `delete` of the previous stage. Used when no splice arm matches but the chain has linq operators.
+3. **Raw clone** (tier 3): passthrough when `flatten_linq` finds no recognized linq operators in the chain at all.
 
 Lambda inlining is best-effort: literal `@(x) => expr` at the call site → splice the body; otherwise → call.
 
-See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
+See `~/.claude/plans/keen-hopping-balloon.md` and `~/.claude/plans/enumerated-baking-elephant.md` for the long-form plans.
 
 ## Phase status
 
@@ -27,43 +27,44 @@ See `~/.claude/plans/keen-hopping-balloon.md` for the long-form plan.
 | 2B Ring 2 | Early-exit lane: `first`, `first_or_default`, `any`, `all`, `contains` via `invoke($block { ... return val })`. Predicate-free `any` gets a `length(src) > 0` shortcut. | ✅ done |
 | 2C Ring 3 | `take(N)` / `skip(N)` in counter/array/accumulator/early-exit lanes. Canonical chain order `[where_*][select*][skip?][take?] |> terminator`. Trailing take/skip (no explicit aggregator) → ARRAY lane with implicit `to_array`. Range-form `take(start..end)` falls through (slice operator, different semantics). Buffer-required ops (`order_by`, `distinct`, `reverse`, `group_by`, `zip`, `join`, `left_join`, `group_join`) recognized by name and emit silent fallback with future-mode markers (BufferTopN / BufferDistinct / BufferReverse / BufferGroupBy / MultiSourceZip / BufferedJoin). | ✅ done |
 | 2C Ring 4 | Non-workhorse chained selects via `:=`-clone. | ✅ done |
-| 2D | Fail-loudly contract — see "Planned" section below | ⏳ |
 | 3 Phase 0 | `<algorithm>` sort-family bindings — `partial_sort`, `nth_element`, `make_heap`/`push_heap`/`pop_heap`. Both typed (19 workhorse types) and any-cblock paths (user structs via `das_qsort_r.h` introselect + binary-heap templates). `daslib/sort_boost.das` user-facing wrappers + `q*` dispatcher macros. `daslib/linq.das` `top_n` / `top_n_by` family (array + iterator sources). C++ tests, daslang tests (53/53), 6 benchmarks, doc grouping, `33_algorithm` tutorial expansion. Unblocks BufferTopN. | ✅ done |
-| 3+ | Buffer-required emit modes: BufferTopN (sort/order_by/take), BufferDistinct, BufferGroupBy, BufferReverse, MultiSourceZip, BufferedJoin. Once we go array, we stay array | ⏳ |
-| 4 | Final coverage pass + docs; full 4-way comparison table refresh; parity-test sweep | ⏳ |
+| 1 cascade | Retire `_old_fold`, drop the 7 `g_foldSeq` patterns, restructure `_fold` into a three-tier cascade (splice → `fold_linq_default` → raw clone). Cascade is always-safe — `_fold(chain)` is observationally equivalent to `chain`. `_select|_where` etc. cases that used to fall to raw clone now cascade to tier 2 array-shape with `_inplace` reuse. Phase 2D "fail-loudly contract" scrapped — always-safe cascade obviates it. | ✅ done |
+| 3a/b/c | BufferTopN splice arm via new `plan_order_family` planner: `[where_*]* + order/order_by/order_descending/order_by_descending [+ take(K)]`. No `take` → direct call to `order*` helper (or fused prefilter loop + `order*_inplace` when where is present). With `take(K)` → dispatch to `top_n[_by][_descending]` (or fused prefilter loop + `top_n*` on the buffer when where is present). New `top_n_by_descending` + `top_n_descending` library helpers added to `daslib/linq.das` (4 functions, mirrors of `top_n_by` / `top_n` with flipped comparator). | ✅ done |
+| 3d | `select + where + terminator` splice arm via `replaceVariablePeeling` (new helper in `daslib/templates_boost.das`). Substitutes the projection into the where predicate, peeling the typer-inserted ExprRef2Value wrappers that would otherwise be left orphaned around a non-reference value. Bails to tier 2 when the projection has side effects (would double-evaluate). Lands all four terminator lanes (ARRAY / COUNTER / ACCUMULATOR / EARLY_EXIT). | ✅ done |
+| 3+ | Remaining buffer-required emit modes (deferred): BufferDistinct, BufferGroupBy, BufferReverse, MultiSourceZip, BufferedJoin. Currently cascade to tier 2 array-shape. | ⏳ |
+| 4 | Final coverage pass + docs; full 3-way comparison table refresh; parity-test sweep | ⏳ |
 
 ## Baselines (100K rows, INTERP mode)
 
-Captured 2026-05-16 on commit `e691abe1b` + foundation PR. ns/op is **per element** (chunk_size = n = 100K), so 30 ns/op means ~3ms for the full operation. Smaller is better. m3f and m3f_old are intentionally identical in this PR — they diverge once Phase 2 lands.
+Foundation captured 2026-05-16 on commit `e691abe1b`. Phase 1 cascade + Phase 3 splice arms (PR retiring `_old_fold`) refresh the m3f column with new splice numbers — see "Headline benchmarks" below for the refreshed delta. ns/op is **per element** (chunk_size = n = 100K), so 30 ns/op means ~3ms for the full operation. Smaller is better.
 
 Notation: `—` means the variant is not applicable for this benchmark (operator has no clean form in that mode).
 
-| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f_old | m3f |
-|---|---|---:|---:|---:|---:|
-| count_aggregate | `where → count` | 29 | 29 | 5 | 5 |
-| sum_aggregate | `select → sum` | 29 | 30 | 8 | 8 |
-| sum_where | `where → select → sum` | 33 | 43 | 12 | 12 |
-| min_aggregate | `select → min` | 30 | 38 | 25 | 25 |
-| max_aggregate | `select → max` | 31 | 36 | 23 | 23 |
-| average_aggregate | `select → average` | 30 | 34 | 20 | 20 |
-| first_match | `where → first` | 0\* | 28 | 15 | 15 |
-| any_match | `where → first_opt`/`any` | 0\* | 0\* | 0\* | 0\* |
-| all_match | `count(where ¬p)==0` / `all` | 27 | 20 | 24 | 25 |
-| to_array_filter | `where → select → to_array` | 70 | 43 | 11 | 11 |
-| take_count | `take → to_array` | 3 | 0\* | 0\* | 0\* |
-| skip_take | `skip → take → to_array` | 0\* | 16 | 23 | 23 |
-| distinct_count | `select → distinct → to_array` | 41 | 43 | 33 | 33 |
-| sort_first | `order_by → first` | 37 | 2170 | 2206 | 2238 |
-| sort_take | `order_by → take` | 38 | 2188 | 2247 | 2269 |
-| groupby_count | `group_by → select(_, length)` | 140 | 70 | 76 | 76 |
-| groupby_sum | `group_by → select(_, sum)` | 172 | 101 | 107 | 107 |
-| chained_where | `where → where → count` | 36 | 45 | 17 | 17 |
-| zip_dot_product | `zip → select → sum` | — | 53 | 37 | 37 |
-| join_count | `join → count` | —\*\* | 116 | 121 | 122 |
-| count_aggregate (existing) | `where → count` | 29 | 29 | 5 | 5 |
-| select_where (existing) | `where → to_array` | 7 | 50 | 12 | 12 |
-| select_where_order_take (existing) | `where → order_by → take` | 36 | 1024 | 1007 | 1014 |
-| indexed_lookup (existing) | `where id==k → count` | 1460\*\*\* | 2003299 | 336129 | 328207 |
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (foundation) |
+|---|---|---:|---:|---:|
+| count_aggregate | `where → count` | 29 | 29 | 5 |
+| sum_aggregate | `select → sum` | 29 | 30 | 8 |
+| sum_where | `where → select → sum` | 33 | 43 | 12 |
+| min_aggregate | `select → min` | 30 | 38 | 25 |
+| max_aggregate | `select → max` | 31 | 36 | 23 |
+| average_aggregate | `select → average` | 30 | 34 | 20 |
+| first_match | `where → first` | 0\* | 28 | 15 |
+| any_match | `where → first_opt`/`any` | 0\* | 0\* | 0\* |
+| all_match | `count(where ¬p)==0` / `all` | 27 | 20 | 25 |
+| to_array_filter | `where → select → to_array` | 70 | 43 | 11 |
+| take_count | `take → to_array` | 3 | 0\* | 0\* |
+| skip_take | `skip → take → to_array` | 0\* | 16 | 23 |
+| distinct_count | `select → distinct → to_array` | 41 | 43 | 33 |
+| sort_first | `order_by → first` | 37 | 2170 | 2238 |
+| sort_take | `order_by → take` | 38 | 2188 | 2269 |
+| groupby_count | `group_by → select(_, length)` | 140 | 70 | 76 |
+| groupby_sum | `group_by → select(_, sum)` | 172 | 101 | 107 |
+| chained_where | `where → where → count` | 36 | 45 | 17 |
+| zip_dot_product | `zip → select → sum` | — | 53 | 37 |
+| join_count | `join → count` | —\*\* | 116 | 122 |
+| select_where (existing) | `where → to_array` | 7 | 50 | 12 |
+| select_where_order_take (existing) | `where → order_by → take` | 36 | 1024 | 1014 |
+| indexed_lookup (existing) | `where id==k → count` | 1460\*\*\* | 2003299 | 328207 |
 
 \* Sub-nanosecond per element — early-exit operation hits answer in O(1) regardless of N; per-element timing collapses to 0/near-0 noise.
 
@@ -74,8 +75,7 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 ### Reading the table
 
 - **m1 vs m3** shows the SQLite-vs-in-memory-LINQ cost gap. SQL wins on `indexed_lookup` (b-tree) and on sorted-take patterns (engine partial-sort + LIMIT). Arrays win on raw aggregates where the SQL overhead exceeds the in-memory work.
-- **m3 vs m3f_old** shows what the *current* `_fold` macro already achieves. Big wins on the patterns it explicitly recognizes (`where+count` 6×, `where+select+to_array` ~4×, `chained_where+count` 2.6×). Negligible difference where it falls through to the default emitter.
-- **m3f vs m3f_old** is the target of Phase 2+. Each PR in the splice series adds a path for one operator family and updates this table with the new ratio.
+- **m3 vs m3f** shows what `_fold`'s splice cascade gains over plain LINQ. The headline shapes that now splice (after the Phase 1+3 cascade PR): order-family + take → `top_n*` dispatch, where + order [+ take] → fused prefilter + sort, select + where → peel-substituted fused loop, plus all the existing `[where_*][select*][skip?][take?]` patterns from Phase 2.
 
 ## Phase 2A — Loop planner (2026-05-16)
 
@@ -234,26 +234,51 @@ No further workhorse branches in the splice path.
 
 Ring 4 is a correctness gate (chained non-workhorse selects now splice instead of falling through), not a per-benchmark improvement on the existing 100K suite. Coverage tracked via test `test_chained_non_workhorse_select` in `tests/linq/test_linq_fold.das` (3 subtests: int → ComplexType → int → sum / where + ComplexType chain + sum / workhorse → ComplexType → workhorse → max).
 
-## Planned: fail-loudly contract
+## Phase 1 — three-tier cascade + `_old_fold` retirement (this PR)
 
-The current contract: when `_fold` can't splice a chain (out-of-scope terminator, buffer-required op, multiple take/skip, range-form take/skip, etc.), it falls through to plain linq — same as today's master. This is **temporary**. The planned contract (Boris design directive 2026-05-17): `_fold` will emit `macro_error("_fold: cannot splice — <reason>")` for any unsupported shape, mirroring the sqlite_linq `_sql(...)` "splice or error" contract.
+`_fold(chain)` is now a three-tier cascade. Tier 1 splice handles the hot patterns; tier 2 (`fold_linq_default`, the body that used to power `_old_fold`) emits an array-shape pipeline with `_inplace` reuse and explicit `delete`; tier 3 is a raw `clone_expression` passthrough. All three tiers preserve semantics — `_fold(chain)` is observationally equivalent to `chain`, just faster when patterns match. **Always safe to apply.**
 
-When the switch lands, every `m3f` variant currently relying on silent fallback breaks. Approximate accounting from the current benchmark suite (8 affected `m3f` variants), grouped by future emit mode that would resolve each:
+This obviates the previously-planned "fail-loudly contract" (Phase 2D) — the cascade always produces a valid output, so there's no need for explicit error emission on unsupported shapes.
 
-| Benchmark | Future mode |
+The 7 specific `FoldSequence` patterns (`fold_where_count`, `fold_where_select`, `fold_select_where`, `fold_where`, `fold_select`, `fold_order_distinct` × 2) and their `g_foldSeq` dispatch table are deleted — splice arms (existing + new in Phase 3 below) cover every shape they recognized. The `_old_fold` macro itself is deleted; the m3f_old benchmark column is dropped from all 29 files.
+
+## Phase 3 — order-family splice + select+where peel (this PR)
+
+**New planner: `plan_order_family`.** Called before `plan_loop_or_count` in the cascade. Recognizes chains containing any of `order` / `order_by` / `order_descending` / `order_by_descending`, optionally with one `take(K)`, optionally with `where_*` prefilters:
+
+| Chain shape | Emission |
 |---|---|
-| `distinct_count` | BufferDistinct (hash set) |
-| `sort_first` | BufferTopN (order_by + early-exit) |
-| `sort_take` | BufferTopN (order_by + take/skip) |
-| `select_where_order_take` | BufferTopN with predicate prefix |
-| `groupby_count` | BufferGroupBy (hash multi-bucket) |
-| `groupby_sum` | BufferGroupBy + nested fold inside select |
-| `zip_dot_product` | MultiSourceZip (2 cursors advanced lockstep) |
-| `join_count` | BufferedJoin (hash-build + probe) |
+| `arr \|> order[_descending]?` (bare) | Direct call: `order[_descending](arr)` |
+| `arr \|> order_by[_descending]?(key)` (bare) | Direct call: `order_by[_descending](arr, key)` |
+| `src \|> order[_descending]? \|> take(K)` | `top_n[_descending](src, K)` (existing helpers from PR #2707) |
+| `src \|> order_by[_descending]?(key) \|> take(K)` | `top_n_by[_descending](src, K, key)` (new descending helpers in this PR) |
+| `src \|> where_*(p)+ \|> order[_by]?[_descending]?[(key)]` | Fused: prefilter into pre-allocated buffer, then `order*_inplace` |
+| `src \|> where_*(p)+ \|> order[_by]?[_descending]?[(key)] \|> take(K)` | Fused: prefilter into buffer, then `top_n*` on the buffer |
 
-The fail-loudly PR will either (a) comment out `m3f` in the affected benchmarks until the corresponding emit mode lands, or (b) deliver one or more emit modes alongside the switch. Decision deferred to that PR.
+New `top_n_by_descending` (array + iterator) + `top_n_descending` (array + iterator) added to `daslib/linq.das` — mirror `top_n_by` / `top_n` with flipped comparator (partial_sort + reversed less for array; bounded min-heap for iterator).
 
-Tracking issue: the planner's `is_buffer_required_op` recognition + the named-arm `// TODO Phase 2X: <FutureMode>` markers are the in-code TODOs.
+**New splice arm: `select + where + terminator`.** Previously rejected by `plan_loop_or_count` (where-after-select hit the ExprRef2Value substitution blocker). Unblocked via the new `replaceVariablePeeling` helper in `daslib/templates_boost.das` — substitutes the projection into the where predicate, peeling the typer-inserted `ExprRef2Value` wrapper as part of the substitution (mirrors `ast_match`'s `qm_peel_ref2value` pattern). Bails to tier 2 cascade when the projection has side effects (would double-evaluate, once in the substituted where and again at the terminator emission). Lands all four lanes: ARRAY (to_array / bare), COUNTER (count), ACCUMULATOR (sum / min / max / avg / long_count), EARLY_EXIT (first / first_or_default / any / all / contains).
+
+**Concurrent runtime fix:** [`src/builtin/module_builtin_runtime_sort.cpp:84`](../../src/builtin/module_builtin_runtime_sort.cpp#L84) — `builtin_sort_string` switched from unqualified `sort()` (= `std::sort` via `using namespace std`) to `das_sort` (the in-tree block-partition pdqsort from PR #2707). This is the runtime path `order_by<string>` takes; on Linux/libstdc++ users see the same ~1.5× sort speedup PR #2707 delivered for typed sorts.
+
+### Headline benchmarks (100K rows, INTERP, this PR)
+
+Refreshed m3f column after Phase 1 cascade + Phase 3 splice arms land. m3 is plain LINQ baseline; m3f is `_fold(...)` over the same chain.
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|
+| order_take_desc | `order_by_desc → take(K)` | 38 | 698 | **56** | **12.5×** |
+| sort_take | `order_by → take(K)` | 38 | 713 | **56** | **12.7×** |
+| select_where_order_take | `where → order_by → take(K)` | 36 | 354 | **39** | **9.1×** |
+| select_where_count | `select → where → count` (NEW: peel) | 32 | 57 | **5** | **11.4×** |
+| select_where | `where → select → to_array` | 191 | 28 | **11** | **2.5×** |
+| bare_order_where | `where → order_by` (no take) | 273 | 357 | **340** | **1.05×** |
+| chained_where | `where → where → count` | 36 | 45 | **6** | **7.5×** |
+| sum_where | `where → select → sum` | 32 | 44 | **4** | **11×** |
+
+The order+take rows (`order_take_desc`, `sort_take`, `select_where_order_take`) come within ~1.5× of SQLite's index-aware plans by dispatching `_fold` directly to the `top_n_by[_descending]` partial-sort helpers from PR #2707 (asc dispatches to existing; desc is new in this PR). The `bare_order_where` win is small because full sort dominates — the splice saves only one intermediate allocation, not the sort cost.
+
+`select_where_count` is the first **select+where** splice landing: previously rejected by the planner (the typer-inserted `ExprRef2Value` wrapper around `it` orphaned during substitution → `30921: can only dereference a reference`). The new `replaceVariablePeeling` helper in `templates_boost.das` peels the wrapper as part of the substitution, mirroring `ast_match`'s `qm_peel_ref2value`. All four terminator lanes (array / counter / accumulator / early-exit) covered.
 
 ## Operator-coverage checklist (parity tests)
 
@@ -292,12 +317,12 @@ dastest reports `ns/op` in INTERP mode by default. To bump dataset size as the s
 
 ## Design decisions
 
-**`_old_fold` lives alongside `_fold` in `linq_fold`, not in `linq_boost`.** Both macros share the entire dispatch infrastructure (`linqCalls`, `g_foldSeq`, `fold_*`, `flatten_linq`, `fold_linq_default`). Keeping them in one module avoids duplication; the only difference today is the macro-name string passed into `fold_linq_default`'s recursive sub-fold call.
+**Three-tier cascade, always safe.** `_fold(chain)` is observationally equivalent to `chain` — never breaks semantics, only ever faster. Splice arms cover the hot paths; `fold_linq_default` (tier 2) emits an array-shape pipeline with `_inplace` reuse for anything splice can't handle; raw clone (tier 3) handles the empty-chain edge. This obviates the fail-loudly contract that earlier plans considered.
 
-**Recursive macro-name is parameterized.** `fold_linq_default(expr, recursiveMacroName)` — `_fold` passes `"_fold"`, `_old_fold` passes `"_old_fold"`. This keeps the frozen baseline truly frozen once `_fold` diverges in Phase 2+: when `_fold` starts emitting splice loops, `_old_fold` keeps emitting the historical comprehension/invoke shape because its recursive sub-folds still target `_old_fold`.
+**`fold_linq_default` is load-bearing.** Its array-shape emission (`var pass_0 = call0(src); var pass_1 = call1_inplace(pass_0); delete pass_0; ...`) with explicit `delete` of intermediates and `_inplace` variant routing is genuinely better than plain LINQ (one buffer at a time, reused; no iterator wrappers). Kept as the cascade's tier 2.
 
 **100K rows.** daslang is interpreter-first; 100K gives sub-second-per-variant benchmark turnaround and clearly shows the asymmetries we care about. Bump later if AOT/JIT numbers warrant.
 
-**`PERF009` suppression in `fold_linq_default`.** The macro's `var pass_N = call` + later `return <- pass_N` pattern triggers PERF009 on single-pass chains (e.g. `take_count`). Rewriting to direct `return <- call` would change `_old_fold`'s baseline; we suppress inline at the qmacro_expr emission site and document why.
+**`PERF009` suppression in `fold_linq_default`.** The macro's `var pass_N = call` + later `return <- pass_N` pattern triggers PERF009 on single-pass chains. The shape is load-bearing for the array-pipeline semantics (every stage binds so the next can reuse the buffer in-place), so we suppress inline at the qmacro_expr emission site and document why.
 
 **Benchmark variants where SQL has no clean form.** `zip` (not a relational op), `_all(pred)` (no direct `_all` chain terminal in sqlite_linq), `join` with inner-select-from (wiring not exposed), `distinct |> count` (no `COUNT(DISTINCT col)` yet), `take/skip` before aggregate (LIMIT/OFFSET semantics conflict with aggregate-collapse). We either reformulate to a SQL-friendly shape (`count(where ¬p)` for all_match), omit the m1 column (zip, join), or terminate the chain in `to_array` instead of an aggregate (take/skip/distinct).

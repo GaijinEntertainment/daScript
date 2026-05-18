@@ -509,6 +509,62 @@ def top_n(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> {
     return <- top_n_by(a, n, $(v : TT -&) => v)
 }
 
+// ============================================================================
+// top_n_descending / top_n_by_descending — return the N largest elements in
+// descending order. Mirror of top_n / top_n_by with flipped comparator.
+//
+// Array source: partial_sort on a clone with reversed less, then resize to N.
+// Iterator source: bounded min-heap of size N tracks the N largest seen so far;
+// when an element greater than the heap min arrives, evict and insert.
+// ============================================================================
+
+def top_n_by_descending(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
+    //! Returns the ``n`` largest elements of ``arr`` by ``key(element)``,
+    //! sorted descending. ``n <= 0`` or empty ``arr`` yields an empty result.
+    var buf : array<TT -const -&>
+    if (n <= 0 || empty(arr)) return <- buf
+    let take_count = min(n, length(arr))
+    buf |> reserve(length(arr))
+    for (it in arr) {
+        buf |> push_clone(it)
+    }
+    sort_boost::partial_sort(buf, take_count, $(v1, v2) => _::less(key(v2), key(v1)))
+    buf |> resize(take_count)
+    return <- buf
+}
+
+def top_n_by_descending(var a : iterator<auto(TT)>; n : int; key) : array<TT -const -&> {
+    //! Returns the ``n`` largest elements of an iterator by ``key(element)``,
+    //! sorted descending. Uses a bounded min-heap of size ``n`` during the scan;
+    //! at most ``n`` elements resident.
+    var buf : array<TT -const -&>
+    if (n <= 0) return <- buf
+    // Heap is ordered by reversed less — top is the MIN element seen so far.
+    // When an element greater than the heap min arrives, evict and insert.
+    for (it in a) {
+        if (length(buf) < n) {
+            buf |> push_clone(it)
+            sort_boost::push_heap(buf, $(v1, v2) => _::less(key(v2), key(v1)))
+        } elif (_::less(key(buf[0]), key(it))) {
+            sort_boost::pop_heap(buf, $(v1, v2) => _::less(key(v2), key(v1)))
+            buf[length(buf) - 1] := it
+            sort_boost::push_heap(buf, $(v1, v2) => _::less(key(v2), key(v1)))
+        }
+    }
+    sort(buf, $(v1, v2) => _::less(key(v2), key(v1)))
+    return <- buf
+}
+
+def top_n_descending(arr : array<auto(TT)>; n : int) : array<TT -const -&> {
+    //! Returns the ``n`` largest elements of ``arr`` (by ``<``), sorted descending.
+    return <- top_n_by_descending(arr, n, $(v : TT -&) => v)
+}
+
+def top_n_descending(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> {
+    //! Returns the ``n`` largest elements of an iterator (by ``<``), descending.
+    return <- top_n_by_descending(a, n, $(v : TT -&) => v)
+}
+
 def unique_key(a) {
     //! generates unique key of workhorse type for the value
     static_if (typeinfo is_workhorse(a)) {

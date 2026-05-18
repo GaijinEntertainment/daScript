@@ -26,18 +26,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let xs <- make_ints(n)
-    let ys <- make_ints(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let s = _old_fold(zip(xs, ys)._select(_._0 * _._1).sum())
-        if (s == 0) {
-            b->failNow()
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let xs <- make_ints(n)
     let ys <- make_ints(n)
@@ -52,11 +40,6 @@ def run_m3f(b : B?; n : int) {
 [benchmark]
 def zip_dot_product_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def zip_dot_product_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

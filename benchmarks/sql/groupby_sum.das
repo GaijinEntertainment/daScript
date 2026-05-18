@@ -33,21 +33,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let groups <- _old_fold(each(arr)
-                                ._group_by(_.brand)
-                                ._select((Brand = _._0,
-                                          TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum()))
-                                .to_array())
-        if (empty(groups)) {
-            b->failNow()
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -70,11 +55,6 @@ def groupby_sum_m1(b : B?) {
 [benchmark]
 def groupby_sum_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def groupby_sum_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

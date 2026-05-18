@@ -31,17 +31,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let s = _old_fold(each(arr)._where(_.price > THRESHOLD)._select(_.price).sum())
-        if (s == 0) {
-            b->failNow()
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -60,11 +49,6 @@ def sum_where_m1(b : B?) {
 [benchmark]
 def sum_where_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def sum_where_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

@@ -84,7 +84,7 @@ namespace das
     void builtin_sort_string ( void * data, int32_t length ) {
         if ( length<=1 ) return;
         const char ** pdata = (const char **) data;
-        sort ( pdata, pdata + length, [&](const char * a, const char * b){
+        das_sort ( pdata, pdata + length, [&](const char * a, const char * b){
             return strcmp(to_rts(a), to_rts(b))<0;
         });
     }
