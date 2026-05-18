@@ -1,0 +1,1 @@
+Attaches a structure annotation to the specified module. The annotation is moved from the provided smart pointer.

@@ -1879,7 +1879,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                 if (grp.hidden) {
                     document_warning(doc_file, "This group of functions is hidden. It will not be in the final documentation.")
                 }
-                grp.func |> sort($(a, b) => function_name(a.fn) < function_name(b.fn))
+                grp.func |> sort($(a, b) => rst_describe_function_short(a.fn) < rst_describe_function_short(b.fn))
                 for (func in grp.func) {
                     if (!key_exists(tab, func.fn)) {
                         let descr = rst_describe_function_short(func.fn)
