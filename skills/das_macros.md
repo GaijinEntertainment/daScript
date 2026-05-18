@@ -40,6 +40,25 @@ If you find yourself reading older guidance about `var inscope`, `<-`,
 `move_new`, `add_ptr_ref` for AST types, the source is pre-migration.
 The post-migration rules above are correct as of daslang 0.6.x.
 
+### Pre-set `_type` on emitted `ExprVar` (and similar nodes) that flow into typed positions
+
+`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1094](src/ast/ast.cpp#L1094): `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
+
+Don't rely on the typer's later local-variable-resolution pass to fix this — its generic-instantiation pass runs **first** and commits to `auto`, cascading errors up through every downstream consumer.
+
+Fix at emission time:
+
+```das
+var pvar = new ExprVar(at = at, name := boundName)
+pvar._type = clone_type(boundElementType)
+pvar._type.flags.ref = true
+// now any clone_expression(pvar) downstream carries the type into push_clone et al.
+```
+
+Same family of trap as the [ExprRef2Value blocker](#peel-exprref2value-before-qmatch) — the typer doesn't repair what macro substitution introduces, when the substitution lands in an already-typed AST fragment.
+
+Canonical example: `try_make_inline_cmp` and the `_where`-arm projection-bind rewrite in `daslib/linq_fold.das` (PR #2714).
+
 ## The few residual smart_ptr types — `Program`, `Context`, `FileAccess`
 
 A small set of types are still `smart_ptr<T>` (refcounted with manual
