@@ -386,15 +386,31 @@ def test_select_count_fold_result(t : T?) {
 // the for-loop is dropped entirely. For impure projections (function call w/
 // side effects), the per-element loop is preserved with the discardable bind.
 
+// Resolves the invoke wrapper's *effective* outer block. When the body uses
+// `var inscope` (smart_ptr / table lifetimes), the typer wraps the whole body
+// in an inner ExprBlock so its finally clause is scoped correctly. This helper
+// returns the inner block in that case so for/let counting works the same way
+// regardless of whether the splice used `var inscope`. Returns null if the body
+// isn't the canonical invoke($block, $src) shape.
+def invoke_outer_list(body_expr : Expression?) : ExprBlock? {
+    if (!(body_expr is ExprInvoke)) return null
+    let inv = body_expr as ExprInvoke
+    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return null
+    let mb = inv.arguments[0] as ExprMakeBlock
+    var outer = mb._block as ExprBlock
+    if (outer == null) return null
+    // Typer-inserted single-nested-block for `var inscope` finally scoping: unwrap once.
+    if (length(outer.list) == 1 && outer.list[0] is ExprBlock) {
+        outer = outer.list[0] as ExprBlock
+    }
+    return outer
+}
+
 // Returns the number of ExprLet/ExprFor statements in the counter-lane invoke's
 // inner block. Pure shortcut: `[var src, return length(src)]` → 0 for-loops.
 // Impure loop: `[var src, var acc=0, for {...}, return acc]` → 1 for-loop.
 def count_inner_for_loops(body_expr : Expression?) : int {
-    if (!(body_expr is ExprInvoke)) return -1
-    let inv = body_expr as ExprInvoke
-    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return -1
-    let mb = inv.arguments[0] as ExprMakeBlock
-    let outer = mb._block as ExprBlock
+    let outer = invoke_outer_list(body_expr)
     if (outer == null) return -1
     var n = 0
     for (stmt in outer.list) {
@@ -407,11 +423,7 @@ def count_inner_for_loops(body_expr : Expression?) : int {
 
 // Returns the number of stmts in the for-body, or -1 if no for loop exists.
 def count_for_body_stmts(body_expr : Expression?) : int {
-    if (!(body_expr is ExprInvoke)) return -1
-    let inv = body_expr as ExprInvoke
-    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return -1
-    let mb = inv.arguments[0] as ExprMakeBlock
-    let outer = mb._block as ExprBlock
+    let outer = invoke_outer_list(body_expr)
     if (outer == null) return -1
     for (stmt in outer.list) {
         if (stmt is ExprFor) {
@@ -614,6 +626,13 @@ def count_op2(expr : Expression?; op : string) : int {
     } elif (expr is ExprOp1) {
         let o = expr as ExprOp1
         n += count_op2(o.subexpr, op)
+    } elif (expr is ExprLet) {
+        let l = expr as ExprLet
+        for (v in l.variables) {
+            if (v != null && v.init != null) {
+                n += count_op2(v.init, op)
+            }
+        }
     }
     return n
 }
@@ -678,6 +697,13 @@ def count_call(expr : Expression?; funcName : string) : int {
     } elif (expr is ExprOp1) {
         let o = expr as ExprOp1
         n += count_call(o.subexpr, funcName)
+    } elif (expr is ExprLet) {
+        let l = expr as ExprLet
+        for (v in l.variables) {
+            if (v != null && v.init != null) {
+                n += count_call(v.init, funcName)
+            }
+        }
     }
     return n
 }
@@ -730,6 +756,13 @@ def count_op1(expr : Expression?; op : string) : int {
     } elif (expr is ExprOp1) {
         let o = expr as ExprOp1
         n += count_op1(o.subexpr, op)
+    } elif (expr is ExprLet) {
+        let l = expr as ExprLet
+        for (v in l.variables) {
+            if (v != null && v.init != null) {
+                n += count_op1(v.init, op)
+            }
+        }
     }
     return n
 }
@@ -801,11 +834,7 @@ def count_const_int(expr : Expression?; value : int) : int {
 // sum/long_count emit one accumulator; min/max emit two (first flag + best); average
 // emits two (sum acc + count).
 def count_outer_let_vars(body_expr : Expression?) : int {
-    if (!(body_expr is ExprInvoke)) return -1
-    let inv = body_expr as ExprInvoke
-    if (empty(inv.arguments) || !(inv.arguments[0] is ExprMakeBlock)) return -1
-    let mb = inv.arguments[0] as ExprMakeBlock
-    let outer = mb._block as ExprBlock
+    let outer = invoke_outer_list(body_expr)
     if (outer == null) return -1
     var n = 0
     for (stmt in outer.list) {
@@ -1057,8 +1086,9 @@ def target_order_by_take_falls_through() : array<int> {
 }
 
 [export, marker(no_coverage)]
-def target_distinct_falls_through() : array<int> {
-    // distinct is buffer-required — splice planner returns null → silent fallback.
+def target_distinct_to_array_fold() : array<int> {
+    // Phase 3+ / D1: plan_distinct splices into streaming dedup (seen-set + buffer
+    // populated in a single pass). Prior to D1 this chain cascaded to tier 2.
     return <- _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().to_array())
 }
 
@@ -1178,20 +1208,30 @@ def test_order_by_take_cascades_to_tier2(t : T?) {
 }
 
 [test]
-def test_distinct_cascades_to_tier2(t : T?) {
-    // `distinct` is buffer-required (hash set) — splice planner returns null.
-    // Cascade falls to tier 2 (fold_linq_default), which emits the array-shape
-    // invoke wrapper. BufferDistinct splice mode is deferred to a later PR.
+def test_distinct_to_array_emits_streaming_dedup(t : T?) {
+    // D1: bare distinct + to_array splices into streaming dedup — single fused for-loop
+    // with one key_exists check + one insert + one push_clone per source element. No
+    // call to the runtime distinct/distinct_inplace helpers. Anti-cascade gate:
+    // exactly two outer let-vars (the seen-set + the buffer).
     ast_gc_guard() {
-        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_falls_through)
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_to_array_fold)
         if (func == null) return
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
-            return $e(body_expr)
+            return <- $e(body_expr)
         }
-        t |> success(r.matched, "should have return expression")
-        t |> success(body_expr is ExprInvoke,
-            "distinct chain should cascade to fold_linq_default (invoke wrapper)")
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> equal(0, count_call(body_expr, "distinct"),
+            "distinct runtime helper must NOT be called (splice elides it)")
+        t |> equal(0, count_call(body_expr, "distinct_inplace"),
+            "distinct_inplace must NOT be called (streaming dedup, not eager)")
+        t |> success(count_call(body_expr, "key_exists") >= 1,
+            "must emit key_exists check on the seen-set")
+        t |> success(count_call(body_expr, "push_clone") >= 1,
+            "must push unique elements into the buffer")
+        t |> equal(2, count_outer_let_vars(body_expr),
+            "exactly two outer vars (seen-set + buffer) — anti-cascade gate")
     }
 }
 
@@ -1549,6 +1589,455 @@ def test_order_by_take_side_effecting_key_correct_result(t : T?) {
         for (v, e in got, expected) {
             t |> equal(v, e)
         }
+    }
+}
+
+// ── Phase 3+ — buffer-required splice arms (plan_reverse) ──────────────
+
+[export, marker(no_coverage)]
+def target_reverse_to_array_fold() : array<int> {
+    return <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> to_array())
+}
+
+[test]
+def test_reverse_to_array_emits_single_loop_plus_inplace(t : T?) {
+    // R1: bare reverse + to_array splices into a single fused for-loop that pushes the
+    // source into a buffer, then calls reverse_inplace. Anti-cascade gate: tier-2 cascade
+    // would emit `var pass_0 = ...; delete pass_0; var pass_1 = ...` with multiple outer
+    // vars, so the single-buffer assertion proves splice fired.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
+            "must emit reverse_inplace call on the buffer")
+        t |> equal(0, count_call(body_expr, "reverse"),
+            "reverse runtime helper must NOT be called (splice elides it)")
+        t |> equal(1, count_outer_let_vars(body_expr),
+            "single outer var (the buffer) — anti-cascade gate")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_where_reverse_to_array_fold() : array<int> {
+    return <- _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> to_array())
+}
+
+[test]
+def test_reverse_with_where_fuses_into_loop(t : T?) {
+    // R2: where_ before reverse fuses into the prefilter loop. Buffer accumulates only
+    // matching elements; reverse_inplace then mutates that buffer.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_reverse_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
+            "must emit reverse_inplace call")
+        t |> equal(0, count_call(body_expr, "where_"),
+            "where_ runtime helper must NOT be called (predicate inlined)")
+        t |> equal(1, count_outer_let_vars(body_expr),
+            "single outer var (the buffer) — anti-cascade gate")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_select_reverse_to_array_fold() : array<int> {
+    return <- _fold(each([1, 2, 3, 4, 5])._select(_ * 10) |> reverse() |> to_array())
+}
+
+[export, marker(no_coverage)]
+def target_reverse_take_to_array_fold() : array<int> {
+    return <- _fold(each([1, 2, 3, 4, 5, 6, 7, 8]) |> reverse() |> take(3) |> to_array())
+}
+
+[test]
+def test_reverse_take_emits_resize(t : T?) {
+    // R4: take(N) after reverse — buffer + reverse_inplace + resize. The resize call
+    // proves we kept the buffer single-pass instead of cascading to a take-iterator.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_take_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
+            "must emit reverse_inplace call")
+        t |> success(count_call(body_expr, "resize") >= 1,
+            "must emit resize call for take(N) post-reverse truncation")
+        t |> equal(0, count_call(body_expr, "take"),
+            "take runtime helper must NOT be called (resize replaces it)")
+        t |> equal(1, count_outer_let_vars(body_expr),
+            "single outer var (the buffer) — anti-cascade gate")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_reverse_count_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> count())
+}
+
+[test]
+def test_reverse_count_elides_buffer_and_reverse(t : T?) {
+    // R5: reverse |> count — reverse is identity for count. No buffer, no reverse_inplace,
+    // just a counter loop over surviving elements.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "reverse_inplace"),
+            "reverse_inplace must NOT be emitted — reverse is identity for count")
+        t |> equal(0, count_call(body_expr, "push_clone"),
+            "no buffer pushes — count elides the buffer entirely")
+        t |> success(count_op1(body_expr, "++") >= 1, "counter increment must be present")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_reverse_first_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> first())
+}
+
+[test]
+def test_reverse_first_uses_last_survivor_tracker(t : T?) {
+    // R5: reverse |> first = LAST survivor in source order. Walk forward, overwrite
+    // `last` on every match, return `last` (panic if no matches). No buffer, no reverse.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_first_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "reverse_inplace"),
+            "reverse_inplace must NOT be emitted — last-survivor walk replaces it")
+        t |> equal(0, count_call(body_expr, "push_clone"),
+            "no buffer pushes — first elides the buffer entirely")
+        t |> success(count_call(body_expr, "panic") >= 1,
+            "first must emit panic for the empty-sequence case")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_reverse_first_or_default_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ > 100) |> reverse() |> first_or_default(-1))
+}
+
+[test]
+def test_reverse_first_or_default_returns_default_when_empty(t : T?) {
+    // R5: reverse |> first_or_default returns the default expression when no element
+    // survives the filter. No panic.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_first_or_default_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "reverse_inplace"),
+            "reverse_inplace must NOT be emitted")
+        t |> equal(0, count_call(body_expr, "panic"),
+            "first_or_default must NOT panic")
+    }
+}
+
+// ── Phase 3+ — plan_distinct stages D2-D7 ──────────────────────────────
+
+[export, marker(no_coverage)]
+def target_where_distinct_to_array_fold() : array<int> {
+    return <- _fold([1, 2, 3, 2, 4, 1, 5].to_sequence()._where(_ > 1).distinct().to_array())
+}
+
+[test]
+def test_distinct_with_where_fuses_into_loop(t : T?) {
+    // D2: where_ before distinct fuses into the prefilter loop. Single for, single seen-set + buffer.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_distinct_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> equal(0, count_call(body_expr, "where_"), "where_ runtime helper must NOT be called (predicate inlined)")
+        t |> equal(0, count_call(body_expr, "distinct"), "distinct runtime helper must NOT be called")
+        t |> equal(2, count_outer_let_vars(body_expr), "exactly seen-set + buffer")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_select_distinct_to_array_fold() : array<int> {
+    return <- _fold([1, 2, 3, 4].to_sequence()._select(_ % 3).distinct().to_array())
+}
+
+[test]
+def test_distinct_select_uses_projection_as_key(t : T?) {
+    // D3: select before distinct — projection inlined into both unique_key and push_clone.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_distinct_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> equal(0, count_call(body_expr, "select"), "select runtime helper must NOT be called")
+        t |> equal(0, count_call(body_expr, "distinct"), "distinct runtime helper must NOT be called")
+        t |> success(count_op2(body_expr, "%") >= 1, "projection modulo must appear inline in body")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_distinct_by_to_array_fold() : array<int> {
+    return <- _fold([10, 21, 32, 11, 23, 42].to_sequence()._distinct_by(_ % 10).to_array())
+}
+
+[test]
+def test_distinct_by_with_key_substitutes_keyfn(t : T?) {
+    // D4: distinct_by — key block invoked per element; key drives dedup but the raw
+    // (or projected) value is what gets pushed to the buffer.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_by_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> equal(0, count_call(body_expr, "distinct_by"), "distinct_by runtime helper must NOT be called")
+        t |> success(count_op2(body_expr, "%") >= 1, "key modulo operation must appear inline (via let init walk)")
+        t |> equal(2, count_outer_let_vars(body_expr), "exactly seen-set + buffer")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_distinct_take_to_array_fold() : array<int> {
+    return <- _fold([1, 1, 2, 2, 3, 3, 4, 4, 5, 5].to_sequence().distinct().take(3).to_array())
+}
+
+[test]
+def test_distinct_take_emits_early_exit(t : T?) {
+    // D5: take(N) on distinct early-exits the prefilter loop after N distinct hits.
+    // Anti-cascade gate: tier-2 cascade would emit multiple outer vars + delete stmts.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_take_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_break_continue(body_expr, true) >= 1, "take guard must emit a break")
+        t |> equal(0, count_call(body_expr, "take"), "take runtime helper must NOT be called")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_distinct_count_fold() : int {
+    return _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().count())
+}
+
+[test]
+def test_distinct_count_elides_buffer(t : T?) {
+    // D6: distinct → count returns length(seen). No buffer, no push_clone — the
+    // seen-set IS the answer source.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "push_clone"),
+            "no buffer pushes — count elides the buffer entirely")
+        t |> equal(0, count_call(body_expr, "distinct"), "distinct runtime helper must NOT be called")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_distinct_sum_fold() : int {
+    return _fold([1, 2, 2, 3, 3, 3, 4].to_sequence().distinct().sum())
+}
+
+[test]
+def test_distinct_sum_emits_inline_accumulator(t : T?) {
+    // D7: distinct → sum maintains seen-set + accumulator; each fresh element contributes
+    // to acc via `+=`. No buffer.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_distinct_sum_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> success(count_op2(body_expr, "+=") >= 1, "sum accumulator must emit +=")
+        t |> equal(0, count_call(body_expr, "push_clone"),
+            "no buffer pushes — sum folds inline")
+    }
+}
+
+// ── Phase 3+ — plan_group_by stages G2-G3 (count reducer + named-tuple wrap) ───
+
+[export, marker(no_coverage)]
+def target_group_by_count_bare_reducer_fold() : array<int> {
+    // Bare reducer body — group_proj is just `_._1 |> length`, no named-tuple wrap.
+    // Result is array<int> of per-bucket counts. Bucket count is 3 (mod 3 = 0,1,2).
+    // _group_by on array → array<tuple<K; array<V>>>; _select then yields array<int>;
+    // no trailing .to_array() since the chain already produces an array.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select(_._1 |> length))
+}
+
+[test]
+def test_group_by_count_emits_table_no_bucket_arrays(t : T?) {
+    // G2: group_by(key) + select(_._1|>length) + to_array splices into a table-driven
+    // emission with NO per-bucket array materialization. Table value is `tuple<KeyT; int>`
+    // (Acc is int for count) rather than `tuple<KeyT; array<elem>>`.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_count_bare_reducer_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        // No call to the runtime group_by_lazy / group_by_lazy_impl helpers; the
+        // splice replaces them with a per-element table update.
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "group_by_lazy_impl"), "must NOT call impl")
+        // unique_key must be invoked per element to derive the seen-table key.
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        // For-loop count: table-update loop + result-build loop = 2.
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_count_named_tuple_fold() : array<tuple<K : int; N : int>> {
+    // Named-tuple wrap: select(@(g) => (K=g._0, N=g._1|>length)) — preserves both
+    // the key AND the aggregate in each output tuple element. v1 emission rebuilds
+    // as positional `tuple<KT; AccT>` — user-written field names (K, N) collapse to
+    // positional access; full name-hint preservation is a future enhancement.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)))
+}
+
+[test]
+def test_group_by_count_named_tuple_preserves_keys(t : T?) {
+    // G3: named-tuple wrap recognized; output type preserves user shape.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_count_named_tuple_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        // For-loops: table-update + result-build = 2 (incremental-aggregate's tell).
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+        // unique_key per element — splice's per-element hash. (Note: not asserting
+        // absence of `length` here — `length(tab)` legitimately appears in the
+        // reserve hint and would false-positive.)
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_count_terminator_fold() : int {
+    // G8: count terminator — total number of buckets. Should return length(tab) directly.
+    return _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)).count())
+}
+
+[test]
+def test_group_by_count_terminator_returns_table_length(t : T?) {
+    // G8: count terminator on group_by + select — return length(tab) without
+    // materializing the result buffer.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_count_terminator_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy")
+        // Only ONE for-loop (the table-update). Result-build loop is elided when
+        // terminator is count (we just return length(tab)).
+        t |> equal(1, count_inner_for_loops(body_expr), "single table-update loop, no result loop")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_having_falls_through() : array<int> {
+    // BAIL: where_ between group_by and select (HAVING clause shape) → cascade to tier 2.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._where(_._1 |> length >= 2)._select(_._1 |> length))
+}
+
+[test]
+def test_group_by_having_cascades_to_tier2(t : T?) {
+    // Bail-trigger: where_ between group_by and select — plan_group_by must reject;
+    // chain cascades to tier 2 (which emits the array-shape pipeline with pass_N
+    // vars + delete intermediates).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_falls_through)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        // Tier 2 cascade emits pass_0/pass_1/... let-vars. Splice would have exactly 1
+        // (the table). So having_ → tier 2 produces 3+ outer let-vars (where, group, select).
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
+[test]
+def test_reverse_select_pushes_projection_not_source(t : T?) {
+    // R3: select before reverse — the loop pushes the projected value, not the
+    // iteration variable. ExprMul / ExprOp2 "*" presence in body indicates the
+    // projection got inlined into push_clone.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_reverse_to_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
+            "must emit reverse_inplace call")
+        t |> equal(0, count_call(body_expr, "select"),
+            "select runtime helper must NOT be called (projection inlined)")
+        t |> success(count_op2(body_expr, "*") >= 1,
+            "projection multiplication must appear inline in push_clone")
+        t |> equal(1, count_outer_let_vars(body_expr),
+            "single outer var (the buffer) — anti-cascade gate")
     }
 }
 
