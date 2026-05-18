@@ -236,12 +236,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
         var res : auto(EnumTT) = default<EnumT>
         let ti = typeinfo rtti_typeinfo(type<EnumT>)
         for (ef in *ti.enumType) {
-            if (name == ef.name) {
-                unsafe {
-                    res = reinterpret<EnumTT>(ef.value)
-                }
-                return res
-            }
+            return unsafe(reinterpret<EnumTT>(ef.value)) if (name == ef.name)
         }
         panic("not a valid enumeration {name} in {typeinfo typename(type<EnumT>)}")
     } else {
@@ -493,9 +488,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         let vv : JsonValue? = (v.value as _object)?["$variant"] ?? default<JsonValue?>
         if (vv == null || !((vv.value is _number) || (vv.value is _longint))) return <- ret
         let index = (vv.value is _number) ? int(vv.value as _number) : int(vv.value as _longint)
-        unsafe {
-            set_variant_index(ret, index)
-        }
+        unsafe(set_variant_index(ret, index))
         apply(ret) $(name : string; var field) {
             (v as _object) |> get(name) $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))

@@ -188,9 +188,7 @@ def type_info(vinfo : VarInfo) : TypeInfo const? {
 [generic]
 def RttiValue_nothing {
     var t : RttiValue
-    unsafe {
-        set_variant_index(t, typeinfo variant_index<nothing>(t))
-    }
+    unsafe(set_variant_index(t, typeinfo variant_index<nothing>(t)))
     return t
 }
 
