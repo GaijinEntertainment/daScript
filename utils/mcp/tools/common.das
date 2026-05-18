@@ -347,14 +347,26 @@ def subtool_user_args(args : array<string>) : array<string> {
     return <- out
 }
 
-def run_mcp_subtool(subtool_name : string; args : array<string>; timeout_sec : float = 120.0) : string {
+def run_mcp_subtool(subtool_name : string; args : array<string>;
+                    project_root : string = "";
+                    timeout_sec : float = 120.0) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let subtool_path = path_join(get_das_root(), "utils/mcp/subtools/{subtool_name}.das")
+    // daslang.exe CLI flags must come BEFORE the script path. `-project_root <P>`
+    // triggers `require_dynamic_modules` at daslang startup against <P>/modules/*/.das_module,
+    // so the subtool's compile_file() picks up daspkg-style native paths
+    // (e.g. require imgui/X resolving via D:/IMGUI_DEMO/modules/dasImgui/.das_module).
     // `--` is critical: without it, daslang treats positional argv as extra
     // .das files to load AND auto-runs each. With `--`, daslang stops parsing
     // its own options and just exposes the rest via get_command_line_arguments().
-    var argv <- [exe, subtool_path, "--"]
+    var argv <- [exe]
+    if (!empty(project_root)) {
+        argv |> push("-project_root")
+        argv |> push(project_root)
+    }
+    argv |> push(subtool_path)
+    argv |> push("--")
     argv |> reserve(length(argv) + length(args))
     for (a in args) {
         argv |> push(a)

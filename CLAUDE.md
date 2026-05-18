@@ -67,6 +67,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/writing_benchmarks.md` | Writing/running `benchmarks/` files |
 | `skills/daspkg.md` | Running daspkg commands, `.das_package` manifests |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
+| `skills/external_module_debugging.md` | Working on an external daslang module (dasImgui, dasPUGIXML, dasSQLITE, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
 | `skills/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
 | `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
 | `skills/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |

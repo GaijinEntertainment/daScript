@@ -107,7 +107,7 @@ def live_is_running(port : string) : bool {
     return running
 }
 
-def do_live_launch(file, project, port : string) : string {
+def do_live_launch(file, project, project_root, port : string) : string {
     let p = empty(port) ? "9090" : port
     // Check if already running
     if (live_is_running(p)) {
@@ -128,14 +128,19 @@ def do_live_launch(file, project, port : string) : string {
     var launch_exe = clone_string(live_exe)
     var launch_file = clone_string(file)
     var launch_project = clone_string(project)
+    var launch_project_root = clone_string(project_root)
     if (is_windows) {
         launch_exe = replace(launch_exe, "/", "\\")
         launch_file = replace(launch_file, "/", "\\")
         launch_project = replace(launch_project, "/", "\\")
+        launch_project_root = replace(launch_project_root, "/", "\\")
     }
     var script_args = "-cwd \"{launch_file}\""
     if (!empty(launch_project)) {
         script_args = "-project \"{launch_project}\" {script_args}"
+    }
+    if (!empty(launch_project_root)) {
+        script_args = "-project_root \"{launch_project_root}\" {script_args}"
     }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
