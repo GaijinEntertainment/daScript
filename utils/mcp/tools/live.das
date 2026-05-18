@@ -107,7 +107,30 @@ def live_is_running(port : string) : bool {
     return running
 }
 
-def do_live_launch(file, project, port : string) : string {
+// daslang-live script_args composition. Extracted so tests can pin the
+// flag-ordering invariants without spawning a subprocess. Slash-replace on
+// Windows happens here so the resulting string is shell-ready for Start-Process.
+def public build_live_script_args(file, project, project_root : string;
+                                  is_windows : bool) : string {
+    var launch_file = clone_string(file)
+    var launch_project = clone_string(project)
+    var launch_project_root = clone_string(project_root)
+    if (is_windows) {
+        launch_file = replace(launch_file, "/", "\\")
+        launch_project = replace(launch_project, "/", "\\")
+        launch_project_root = replace(launch_project_root, "/", "\\")
+    }
+    var script_args = "-cwd \"{launch_file}\""
+    if (!empty(launch_project)) {
+        script_args = "-project \"{launch_project}\" {script_args}"
+    }
+    if (!empty(launch_project_root)) {
+        script_args = "-project_root \"{launch_project_root}\" {script_args}"
+    }
+    return script_args
+}
+
+def do_live_launch(file, project, project_root, port : string) : string {
     let p = empty(port) ? "9090" : port
     // Check if already running
     if (live_is_running(p)) {
@@ -124,19 +147,20 @@ def do_live_launch(file, project, port : string) : string {
         live_exe = "{root}/bin/{exe_name}"
     }
     if (!stat(live_exe).is_valid) return make_tool_result("daslang-live not found in {root}/bin/Release/ or {root}/bin/", true)
-    // Build launch command — daslang-live -cwd handles working directory
+    // Build launch command — daslang-live -cwd handles working directory.
+    // CRITICAL: resolve file / project / project_root to absolute paths BEFORE
+    // composing the args. daslang-live's `-cwd` flag chdir's to the script's
+    // folder (utils/daslang-live/main.cpp:696-707) BEFORE running
+    // require_dynamic_modules — so a relative `-project_root <P>` would
+    // re-resolve against the new cwd and fail to find <P>/modules/.
     var launch_exe = clone_string(live_exe)
-    var launch_file = clone_string(file)
-    var launch_project = clone_string(project)
     if (is_windows) {
         launch_exe = replace(launch_exe, "/", "\\")
-        launch_file = replace(launch_file, "/", "\\")
-        launch_project = replace(launch_project, "/", "\\")
     }
-    var script_args = "-cwd \"{launch_file}\""
-    if (!empty(launch_project)) {
-        script_args = "-project \"{launch_project}\" {script_args}"
-    }
+    let abs_file = resolve_path(file)
+    let abs_project = empty(project) ? "" : resolve_path(project)
+    let abs_project_root = empty(project_root) ? "" : resolve_path(project_root)
+    let script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
         let ps1 = replace("{launcher}.ps1", "/", "\\")

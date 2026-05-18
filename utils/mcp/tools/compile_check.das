@@ -10,6 +10,6 @@ require common public
 //! [call_macro] state across calls. The subtool's stdout (already a
 //! make_tool_result(...) JSON envelope) is returned verbatim.
 
-def do_compile_check(file : string; project : string = ""; json : bool = false) : string {
-    return run_mcp_subtool("compile_check", [file, project, json ? "true" : "false"])
+def do_compile_check(file : string; project : string = ""; project_root : string = ""; json : bool = false) : string {
+    return run_mcp_subtool("compile_check", [file, project, json ? "true" : "false"], project_root)
 }
