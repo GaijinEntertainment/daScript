@@ -133,6 +133,7 @@ var private linqCalls = {
     "top_n_by" => LinqCall(name = "top_n_by", noToArrayVariant = true),
     "top_n_descending" => LinqCall(name = "top_n_descending", noToArrayVariant = true),
     "top_n_by_descending" => LinqCall(name = "top_n_by_descending", noToArrayVariant = true),
+    "top_n_by_with_cmp" => LinqCall(name = "top_n_by_with_cmp", noToArrayVariant = true),
 // aggregate
     "count" => LinqCall(name = "count"),
     "long_count" => LinqCall(name = "long_count"),
@@ -525,6 +526,23 @@ def private wrap_with_condition(var body : Expression?; var cond : Expression?) 
 }
 
 [macro_function]
+def private prepend_precond(var body : Expression?; var preCondStmts : array<Expression?>) : Expression? {
+    // Splice per-element unconditional binds BEFORE the body. Used by the select+where
+    // splice arm to bind a pure projection once per element so the rewritten predicate
+    // (peel-substituted to reference the bind var) and the terminator's valueExpr (cloned
+    // from `projection`) share that single eval. intermediateBinds, by contrast, go INSIDE
+    // the if-wrap — correct for chained-select chains with no where.
+    if (empty(preCondStmts)) return body
+    var stmts : array<Expression?>
+    stmts |> reserve(length(preCondStmts) + 1)
+    for (s in preCondStmts) {
+        stmts |> push(s)
+    }
+    stmts |> push(body)
+    return stmts_to_expr(stmts)
+}
+
+[macro_function]
 def private append_skip_take_prelude(var preludeStmts : array<Expression?>; var skipExpr : Expression?; var takeExpr : Expression?;
                                      skipName, takeCountName : string) {
     // Loop-level counters for skip/take. Both live in the outer invoke block, alongside any
@@ -697,6 +715,7 @@ def private emit_accumulator_lane(
                                   var projection : Expression?;
                                   var whereCond : Expression?;
                                   var intermediateBinds : array<Expression?>;
+                                  var preCondStmts : array<Expression?>;
                                   var elementType : TypeDeclPtr;
                                   srcName, accName, itName, skipName, takeCountName : string;
                                   var skipExpr : Expression?; var takeExpr : Expression?;
@@ -797,7 +816,7 @@ def private emit_accumulator_lane(
     }
     prepend_binds(perMatchStmts, intermediateBinds)
     wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
-    var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
+    var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Collect all body statements into one list so they share scope when spliced via $b.
     // Splitting decls / for / return into separate splice tags would put each in its own
     // sub-block, hiding the accumulator from later statements (caught by AST dump under
@@ -847,6 +866,7 @@ def private emit_early_exit_lane(
                                  var projection : Expression?;
                                  var whereCond : Expression?;
                                  var intermediateBinds : array<Expression?>;
+                                 var preCondStmts : array<Expression?>;
                                  var elementType : TypeDeclPtr;
                                  terminatorCall : ExprCall?;
                                  srcName, itName, skipName, takeCountName : string;
@@ -956,7 +976,7 @@ def private emit_early_exit_lane(
     }
     prepend_binds(perMatchStmts, intermediateBinds)
     wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
-    var loopBody = wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond)
+    var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Single-$b body so all stmts (skip/take counters + prelude + for + tail) share scope
     // under one wrapping block.
     var bodyStmts : array<Expression?>
@@ -990,6 +1010,66 @@ def private order_top_n_call_name(orderName : string) : string {
     if (orderName == "order_by") return "top_n_by"
     if (orderName == "order_by_descending") return "top_n_by_descending"
     return ""
+}
+
+[macro_function]
+def private try_make_inline_cmp(orderKey : Expression?; orderName : string;
+                                elemType : TypeDeclPtr; at : LineInfo) : Expression? {
+    //! When ``orderKey`` is a single-arg, single-return-statement lambda whose body has
+    //! no side effects, return a comparator block that inlines the body twice with the
+    //! lambda argument renamed to ``v1`` and ``v2``. Direction is encoded by emit order:
+    //! asc → ``_::less(body[v1], body[v2])``; desc → ``_::less(body[v2], body[v1])``.
+    //!
+    //! Returns null when the key is multi-statement, has side effects, or isn't a
+    //! recognizable lambda shape — caller falls through to the lambda-passing emission.
+    //!
+    //! What this saves: indirect-dispatch overhead. The original comparator does two
+    //! `key(v)` indirect lambda calls per comparison (one per side); the inlined version
+    //! evaluates the body twice as direct expressions (one per side). Net: 2 fewer lambda
+    //! dispatches per comparison. For trivial keys (`$(_) => _.price` — a field load)
+    //! that dispatch IS the dominant cost. For expensive keys both forms still evaluate
+    //! the body twice per comparison, so the relative win shrinks.
+    //!
+    //! `has_sideeffects` is a **semantic** gate, not a perf gate: side-effecting bodies
+    //! can't be safely re-substituted into a fresh syntactic position because the typer-
+    //! inserted ExprRef2Value wrappers and ordering guarantees aren't preserved across
+    //! `replaceVariable`. (Schwartzian-style precompute-once is an orthogonal optimization
+    //! that would help expensive keys; not in scope here.)
+    if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
+    var mblk = orderKey as ExprMakeBlock
+    var blk = mblk._block as ExprBlock
+    if (blk.arguments |> length != 1 || blk.list |> length != 1
+            || !(blk.list[0] is ExprReturn)) return null
+    var ret = blk.list[0] as ExprReturn
+    if (ret.subexpr == null || has_sideeffects(ret.subexpr)) return null
+    let argName = string(blk.arguments[0].name)
+    var b1 = clone_expression(ret.subexpr)
+    var b2 = clone_expression(ret.subexpr)
+    var r1 : Template
+    r1 |> renameVariable(argName, "v1")
+    var r2 : Template
+    r2 |> renameVariable(argName, "v2")
+    apply_template(r1, b1.at, b1)
+    apply_template(r2, b2.at, b2)
+    var cmpExpr : Expression?
+    if (orderName == "order_by_descending") {
+        cmpExpr = qmacro(_::less($e(b2), $e(b1)))
+    } else {
+        cmpExpr = qmacro(_::less($e(b1), $e(b2)))
+    }
+    // Emit untyped block args (`$(v1, v2) { ... }`). The typer infers v1/v2 types from
+    // the dispatch's block-arg signature (`block<(v1 : TT -&, v2 : TT -&) : bool>` in
+    // `order(arr, block)` / `top_n_by_with_cmp(arr, n, block)`), and renders them as the
+    // const-ref shape (`TT const -&`) at the call site — which is what the candidate
+    // signature matches. Typed-explicitly emission via `$($i(a) : $t(T) -&, ...)` is
+    // possible after the parser_impl.cpp tagged-block-arg fix (error 30701), but the
+    // type-flag bookkeeping to make the emitted args match the candidate `TT const -&`
+    // exactly is fragile (must propagate clone_type, removeConstant, and ref flags
+    // through a parser path that flattens them differently per modifier order). Untyped
+    // sidesteps that entirely.
+    return qmacro($(v1, v2) {
+        return $e(cmpExpr)
+    })
 }
 
 [macro_function]
@@ -1051,6 +1131,15 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     let needIterWrap = expr._type.isIterator
     let topNName = order_top_n_call_name(orderName)
     let inplaceName = "{orderName}_inplace"
+    // Inline-key path: when the key is a pure single-expression lambda, splice the body
+    // twice into a comparator block (asc: `_::less(body[v1], body[v2])`; desc: flip
+    // arg order). Eliminates the per-comparison `key(v)` indirect dispatch — dominant
+    // cost on trivial keys like `$(_) => _.field`. Null when key is multi-statement /
+    // side-effecting / not a recognizable lambda — caller falls through.
+    var inlineCmp : Expression?
+    if (hasKey) {
+        inlineCmp = try_make_inline_cmp(orderKey, orderName, orderElemType, at)
+    }
     if (whereCond == null) {
         // No prefilter — direct call to daslib helper.
         var topExpr = clone_expression(top)
@@ -1059,14 +1148,20 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         if (takeExpr == null) {
             // Bare order family — emit the direct call. Same shape as plain LINQ, but via
             // splice so `_fold` doesn't fall through to tier 2.
-            if (hasKey) {
+            if (inlineCmp != null) {
+                // Inlined comparator dispatches to the asc `order(src, block)` overload —
+                // direction encoded in the comparator (flip embedded for descending).
+                emission = qmacro(_::order($e(topExpr), $e(inlineCmp)))
+            } elif (hasKey) {
                 emission = qmacro($c(orderName)($e(topExpr), $e(orderKey)))
             } else {
                 emission = qmacro($c(orderName)($e(topExpr)))
             }
         } else {
             // order + take → top_n* dispatch.
-            if (hasKey) {
+            if (inlineCmp != null) {
+                emission = qmacro(_::top_n_by_with_cmp($e(topExpr), $e(takeExpr), $e(inlineCmp)))
+            } elif (hasKey) {
                 emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr), $e(orderKey)))
             } else {
                 emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr)))
@@ -1116,7 +1211,10 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         // Sort the prefilter buffer in place and return it. order*_inplace is void
         // (mutates the buffer in place), so we move the buffer out for the final result.
         var sortCall : Expression?
-        if (hasKey) {
+        if (inlineCmp != null) {
+            // Asc `order_inplace(buf, block)` overload + embedded-flip cmp for descending.
+            sortCall = qmacro(_::order_inplace($i(bufName), $e(inlineCmp)))
+        } elif (hasKey) {
             sortCall = qmacro($c(inplaceName)($i(bufName), $e(orderKey)))
         } else {
             sortCall = qmacro($c(inplaceName)($i(bufName)))
@@ -1128,7 +1226,9 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     } else {
         // top_n* on the prefilter buffer.
         var topNCall : Expression?
-        if (hasKey) {
+        if (inlineCmp != null) {
+            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), $e(takeExpr), $e(inlineCmp)))
+        } elif (hasKey) {
             topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr), $e(orderKey)))
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr)))
@@ -1184,6 +1284,13 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     var whereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
+    // preConditionStmts evaluate UNCONDITIONALLY per element, BEFORE the where filter —
+    // used by the select+where splice arm to bind a pure projection once per element so
+    // both the predicate (which is rewritten to read the bind var via peel-substitution)
+    // AND the terminator's valueExpr (which clones the projection) share that single
+    // eval. intermediateBinds, by contrast, prepend INSIDE the if(whereCond) wrap, so
+    // they evaluate only on matching elements — correct for chained-select bind chains.
+    var preCondStmts : array<Expression?>
     var skipExpr : Expression?
     var takeExpr : Expression?
     var seenSelect = false
@@ -1201,20 +1308,36 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             if (seenSkip || seenTake) return null
             var predicate : Expression?
             if (seenSelect) {
-                // Phase 3d: where-after-select. Substitute the predicate's bound variable
-                // with the current projection via peel-aware substitution. The substitution
-                // inlines the projection into the predicate, which would re-evaluate any
-                // side effects (since the terminator also references projection) — bail to
-                // tier 2 cascade on side-effecty projections.
+                // Phase 3d / single-eval: where-after-select. Bind the current projection
+                // to a fresh local in `preCondStmts` (evaluated per-element, OUTSIDE the
+                // if-wrap), then rewrite `projection` to reference that local — peel-
+                // substituted into the predicate AND cloned into the terminator's
+                // valueExpr. Both reference the bind ⇒ projection evaluates exactly once
+                // per element. Side-effecty projections still bail to tier 2: moving them
+                // outside the if would visibly fire side effects on filter-rejected
+                // elements.
                 //
-                // KNOWN PERF GAP (deferred to splice-with-cmp follow-up PR): pure projections
-                // currently re-evaluate per element for ARRAY/ACCUMULATOR/EARLY_EXIT lanes —
-                // once in the inlined predicate and once in valueExpr. COUNTER lane is unaffected
-                // (no body use). Fix shape: emit a pre-condition `var v := projection` bind in
-                // the loop body (outside the if-wrap) and rewrite both predicate and valueExpr
-                // to reference `v`. Bundled with the `_with_cmp` inline-key follow-up since
-                // both share the "single-eval splice" theme.
+                // COUNTER lane (count) is excluded: it never reads valueExpr, so the
+                // dedup brings no benefit, and the extra per-element bind would regress
+                // the lane's single-stmt fast path (predicate already inlines projection,
+                // result is just discarded).
                 if (has_sideeffects(projection)) return null
+                if (lane != LinqLane.COUNTER) {
+                    let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
+                    var projType = clone_type(elementType)
+                    preCondStmts |> push <| qmacro_expr() {
+                        var $i(wbName) : $t(projType) := $e(projection)
+                    }
+                    // Replace projection with a typed ExprVar so downstream typer passes
+                    // can resolve the reference without re-walking the loop body's local
+                    // decls. Untyped ExprVars here propagate `auto` into push_clone /
+                    // accumulator paths and surface as "cannot infer push_clone return
+                    // type" at the typer.
+                    var pvar = new ExprVar(at = at, name := wbName)
+                    pvar._type = clone_type(elementType)
+                    pvar._type.flags.ref = true
+                    projection = pvar
+                }
                 predicate = fold_linq_cond_peel(cll._0.arguments[1], projection)
             } else {
                 predicate = fold_linq_cond(cll._0.arguments[1], itName)
@@ -1290,7 +1413,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // COUNTER/ARRAY loopBody construction.
     if (lane == LinqLane.ACCUMULATOR)
         return emit_accumulator_lane(lastName, top, projection, whereCond,
-            intermediateBinds, elementType, srcName, accName, itName, skipName, takeCountName,
+            intermediateBinds, preCondStmts, elementType, srcName, accName, itName, skipName, takeCountName,
             skipExpr, takeExpr, at)
     // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
     // source gets the empty-shortcut; everything else dispatches to the loop emitter.
@@ -1301,7 +1424,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 && type_has_length(top._type))
             return emit_any_empty_shortcut(top, srcName, at)
         return emit_early_exit_lane(lastName, top, projection, whereCond,
-            intermediateBinds, elementType, terminatorCall, srcName, itName, skipName,
+            intermediateBinds, preCondStmts, elementType, terminatorCall, srcName, itName, skipName,
             takeCountName, skipExpr, takeExpr, at)
     }
     // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
@@ -1328,7 +1451,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         }
         prepend_binds(stmts, intermediateBinds)
         wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
-        loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
+        loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     } else {
         // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
         // byte copy (same cost as `push`); for non-workhorse it deep-clones, avoiding the
@@ -1354,7 +1477,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         }
         prepend_binds(stmts, intermediateBinds)
         wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
-        loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
+        loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     }
     if (counterLane) {
         return emit_counter_lane(top, srcName, accName, itName, skipName, takeCountName,
