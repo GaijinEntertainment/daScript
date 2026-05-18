@@ -1,4 +1,4 @@
-// Template-level tests for the sort family in src/builtin/das_qsort_r.h.
+// Template-level tests for the sort family in daScript/simulate/das_qsort_r.h.
 //
 // Covers:
 //   - das_qsort_r        (baseline — existed pre-Phase-0 but had no cpp test)
@@ -13,11 +13,12 @@
 
 #include <doctest/doctest.h>
 
-#include "../../src/builtin/das_qsort_r.h"
+#include "daScript/simulate/das_qsort_r.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <vector>
 
 using namespace das;
@@ -101,6 +102,124 @@ TEST_CASE("das_qsort_r baseline") {
             return *static_cast<const int32_t*>(x) > *static_cast<const int32_t*>(y);
         };
         das_qsort_r(a.data(), a.size(), sizeof(int32_t), desc);
+        CHECK(a[0] == 5); CHECK(a[1] == 4); CHECK(a[2] == 3); CHECK(a[3] == 2); CHECK(a[4] == 1);
+    }
+    // The hybrid switches to block-partition when hi-lo >= 128. Small arrays
+    // above never enter that branch, so cover it explicitly.
+    SUBCASE("large random — exercises block-partition branch") {
+        std::vector<int32_t> a;
+        a.reserve(1024);
+        uint32_t s = 0xC0FFEEu;
+        for (size_t i = 0; i < 1024; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back(int32_t(s));
+        }
+        das_qsort_r(a.data(), a.size(), sizeof(int32_t), less_cmp<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large duplicate-heavy — block-partition with few unique keys") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        uint32_t s = 0xDEADBEEFu;
+        for (size_t i = 0; i < 512; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back(int32_t(s % 8u));
+        }
+        das_qsort_r(a.data(), a.size(), sizeof(int32_t), less_cmp<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large already-sorted — block-partition fast path") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        for (int32_t i = 0; i < 512; i++) a.push_back(i);
+        das_qsort_r(a.data(), a.size(), sizeof(int32_t), less_cmp<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large reverse-sorted — block-partition") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        for (int32_t i = 511; i >= 0; i--) a.push_back(i);
+        das_qsort_r(a.data(), a.size(), sizeof(int32_t), less_cmp<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large 16-byte struct — block-partition on Quad payload") {
+        std::vector<Quad> a;
+        a.reserve(512);
+        uint32_t s = 0xBADC0DEu;
+        for (size_t i = 0; i < 512; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back({int32_t(s), int32_t(s + 1), int32_t(s + 2), int32_t(s + 3)});
+        }
+        das_qsort_r(a.data(), a.size(), sizeof(Quad), less_quad());
+        // Sorted by key, and payload follows each key (key+1 == payload_a).
+        for (size_t i = 1; i < a.size(); i++) CHECK(a[i].key >= a[i-1].key);
+        for (size_t i = 0; i < a.size(); i++) CHECK(a[i].payload_a == a[i].key + 1);
+    }
+}
+
+// ============================================================================
+// das_sort<T> typed — production path used by aot.h typed-sort bindings.
+// Mirrors the byte-pointer block-partition coverage above on the typed path.
+// ============================================================================
+
+TEST_CASE("das_sort<T> typed") {
+    SUBCASE("int random") {
+        std::vector<int32_t> a = { 5, 2, 8, 1, 9, 3, 7, 4, 6, 0 };
+        das_sort(a.data(), a.data() + a.size(), std::less<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large random — exercises typed block-partition branch") {
+        std::vector<int32_t> a;
+        a.reserve(1024);
+        uint32_t s = 0xC0FFEEu;
+        for (size_t i = 0; i < 1024; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back(int32_t(s));
+        }
+        das_sort(a.data(), a.data() + a.size(), std::less<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large duplicate-heavy — typed block-partition with few unique keys") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        uint32_t s = 0xDEADBEEFu;
+        for (size_t i = 0; i < 512; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back(int32_t(s % 8u));
+        }
+        das_sort(a.data(), a.data() + a.size(), std::less<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large already-sorted") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        for (int32_t i = 0; i < 512; i++) a.push_back(i);
+        das_sort(a.data(), a.data() + a.size(), std::less<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large reverse-sorted") {
+        std::vector<int32_t> a;
+        a.reserve(512);
+        for (int32_t i = 511; i >= 0; i--) a.push_back(i);
+        das_sort(a.data(), a.data() + a.size(), std::less<int32_t>());
+        CHECK(is_sorted_range(a.data(), a.size()));
+    }
+    SUBCASE("large 16-byte struct by key field") {
+        std::vector<Quad> a;
+        a.reserve(512);
+        uint32_t s = 0xBADC0DEu;
+        auto less_by_key = [](const Quad & x, const Quad & y) { return x.key < y.key; };
+        for (size_t i = 0; i < 512; i++) {
+            s = s * 1664525u + 1013904223u;
+            a.push_back({int32_t(s), int32_t(s + 1), int32_t(s + 2), int32_t(s + 3)});
+        }
+        das_sort(a.data(), a.data() + a.size(), less_by_key);
+        for (size_t i = 1; i < a.size(); i++) CHECK(a[i].key >= a[i-1].key);
+        for (size_t i = 0; i < a.size(); i++) CHECK(a[i].payload_a == a[i].key + 1);
+    }
+    SUBCASE("descending comparator") {
+        std::vector<int32_t> a = { 1, 2, 3, 4, 5 };
+        das_sort(a.data(), a.data() + a.size(), std::greater<int32_t>());
         CHECK(a[0] == 5); CHECK(a[1] == 4); CHECK(a[2] == 3); CHECK(a[3] == 2); CHECK(a[4] == 1);
     }
 }

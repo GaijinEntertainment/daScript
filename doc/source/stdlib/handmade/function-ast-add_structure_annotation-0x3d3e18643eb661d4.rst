@@ -1,0 +1,1 @@
+Attaches a structure annotation to the specified structure. The annotation is moved from the provided smart pointer.
