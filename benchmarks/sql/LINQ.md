@@ -280,6 +280,26 @@ The order+take rows (`order_take_desc`, `sort_take`, `select_where_order_take`) 
 
 `select_where_count` is the first **select+where** splice landing: previously rejected by the planner (the typer-inserted `ExprRef2Value` wrapper around `it` orphaned during substitution → `30921: can only dereference a reference`). The new `replaceVariablePeeling` helper in `templates_boost.das` peels the wrapper as part of the substitution, mirroring `ast_match`'s `qm_peel_ref2value`. All four terminator lanes (array / counter / accumulator / early-exit) covered.
 
+### Headline benchmarks (100K rows, INTERP, single-eval splice PR)
+
+Follow-up to the order-family + select+where landing. Closes two single-eval gaps the previous PR documented as `KNOWN PERF GAP`:
+
+**Gap 1 — comparator key double-call inside `partial_sort`.** Before this PR, `top_n_by(arr, K, key)` ran `_::less(key(v1), key(v2))` per comparison → 2 indirect lambda dispatches per `cmp`. For pure single-expression keys (the common case, e.g. `$(_) => _.price`), the planner now inlines the key body twice into a comparator block and dispatches to the new `top_n_by_with_cmp(arr, K) <| <cmp_block>` library entry — zero per-comparison lambda dispatch. Descending direction is encoded by flipping the comparator arg order (`less(body[v2], body[v1])`), eliminating the secondary wrapper-lambda the `_descending` family used. Falls back to keyed `top_n_by` when the key has side effects or isn't a single-expression lambda.
+
+**Gap 2 — projection double-eval in `select + where + terminator`.** Phase 3d inlined `projection` into `predicate` via peel-substitution; lane emitters then *also* cloned `projection` into `valueExpr` → projection evaluated twice per element on ARRAY / ACCUMULATOR / EARLY_EXIT lanes (COUNTER unaffected — no body use). Fix: the where-after-select arm now binds `projection` to a fresh local via a new `preConditionStmts` slot (evaluated per-element, OUTSIDE the if-wrap), then rewrites `projection` to reference that bind. Both predicate (via peel) and valueExpr (via clone) share the single eval. Side-effecty projections still bail to tier 2 (moving them outside the if would visibly fire side effects on filter-rejected elements). COUNTER lane is explicitly excluded — the dedup has no benefit there and the bind decl would regress the single-stmt fast path.
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (prev PR) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|---:|
+| sort_take | `order_by → take(K)` | 38 | 710 | 56 | **27** | **2.1× over prev / 26× over m3 / faster than m1 SQL** |
+| order_take_desc | `order_by_desc → take(K)` | 38 | 704 | 56 | **27** | **2.1× over prev / 26× over m3 / faster than m1 SQL** |
+| select_where_order_take | `where → order_by → take(K)` | 36 | 356 | 39 | **24** | **1.6× over prev / 15× over m3 / faster than m1 SQL** |
+| select_where_sum (NEW Gap 2) | `select → where → sum` | 37 | 59 | — | **7** | **8.4× over m3 / 5.3× over m1 SQL** |
+| select_where_count (regression check) | `select → where → count` (COUNTER, dedup off) | 32 | 58 | 5 | **5** | unchanged (correctly excluded from dedup) |
+
+The sort/order rows now BEAT `m1` SQLite by ~30%. PR #2707 closed the comparator-throughput gap vs SQL; this PR's inline-key splice closes the per-iteration lambda dispatch gap.
+
+**Parser bonus:** the multi-arg `$($i(a) : T, $i(b) : T) { ... }` qmacro form failed parse with `30701: block argument is already declared MACRO``TAG` because the parser stamped every `$i(...)` in block-arg position with the literal placeholder name and dup-checked them before macro tag resolution. Fixed in `src/parser/parser_impl.cpp:885` by skipping the dup check when `name_at.tag != nullptr` (genuine post-resolution dups surface as ordinary local-lookup conflicts during type inference). General-purpose fix — usable by any macro that needs to emit a typed block with N tagged-name args.
+
 ## Operator-coverage checklist (parity tests)
 
 The 24 benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.

@@ -565,6 +565,51 @@ def top_n_descending(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> 
     return <- top_n_by_descending(a, n, $(v : TT -&) => v)
 }
 
+// ============================================================================
+// top_n_by_with_cmp — take a comparator block directly instead of a key
+// lambda. The splice planner uses this when an order-by key body is pure and
+// inlineable: the body is spliced into the comparator twice (once per side),
+// eliminating both the per-comparison lambda dispatch (`cmp(v1, v2)`) AND the
+// per-side `key(v)` dispatch nested inside the standard comparator.
+//
+// Direction is encoded in the comparator: asc emits `less(body[v1], body[v2])`,
+// desc emits `less(body[v2], body[v1])`. The output is sorted ascending by the
+// comparator, so a reversed comparator yields a descending natural-key order.
+// ============================================================================
+
+def top_n_by_with_cmp(arr : array<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v2 : TT -&) : bool>) : array<TT -const -&> {
+    //! Returns the ``n`` smallest-per-``cmp`` elements of ``arr``.
+    //! Pass a reversed comparator to extract the ``n`` largest instead.
+    var buf : array<TT -const -&>
+    if (n <= 0 || empty(arr)) return <- buf
+    let take_count = min(n, length(arr))
+    buf |> reserve(length(arr))
+    for (it in arr) {
+        buf |> push_clone(it)
+    }
+    sort_boost::partial_sort(buf, take_count, cmp)
+    buf |> resize(take_count)
+    return <- buf
+}
+
+def top_n_by_with_cmp(var a : iterator<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v2 : TT -&) : bool>) : array<TT -const -&> {
+    //! Iterator variant — bounded heap of size ``n`` maintained during scan.
+    var buf : array<TT -const -&>
+    if (n <= 0) return <- buf
+    for (it in a) {
+        if (length(buf) < n) {
+            buf |> push_clone(it)
+            sort_boost::push_heap(buf, cmp)
+        } elif (cmp(it, buf[0])) {
+            sort_boost::pop_heap(buf, cmp)
+            buf[length(buf) - 1] := it
+            sort_boost::push_heap(buf, cmp)
+        }
+    }
+    sort(buf, cmp)
+    return <- buf
+}
+
 def unique_key(a) {
     //! generates unique key of workhorse type for the value
     static_if (typeinfo is_workhorse(a)) {

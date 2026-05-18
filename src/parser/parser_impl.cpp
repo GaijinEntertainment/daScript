@@ -882,7 +882,14 @@ namespace das {
             for ( auto pDecl : *list ) {
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name_at : *pDecl->pNameList ) {
-                        if ( !closure->findArgument(name_at.name) ) {
+                        // Macro-tagged names (`$i(expr)` in block-arg position) all parse to the
+                        // literal placeholder "``MACRO``TAG``"; the actual name is resolved later
+                        // when the macro processor substitutes the tag expression. Skip the dup
+                        // check for tagged names so multi-arg lists like
+                        // `$($i(a) : T, $i(b) : T) { ... }` aren't false-positive at parse time.
+                        // After resolution, duplicate names surface as ordinary local-lookup
+                        // conflicts during type inference.
+                        if ( name_at.tag || !closure->findArgument(name_at.name) ) {
                             VariablePtr pVar = new Variable();
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;

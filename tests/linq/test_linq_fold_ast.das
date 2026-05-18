@@ -734,6 +734,69 @@ def count_op1(expr : Expression?; op : string) : int {
     return n
 }
 
+// Count ExprConstInt(value) occurrences anywhere in the expression tree. Used by the
+// select+where dedup tests to prove that a pure projection's signature constant
+// (`_ * 7919`) appears exactly once in the emission (in the projection-bind statement),
+// rather than twice (inlined into predicate + cloned into valueExpr).
+def count_const_int(expr : Expression?; value : int) : int {
+    if (expr == null) return 0
+    var n = 0
+    if (expr is ExprConstInt && (expr as ExprConstInt).value == value) {
+        n ++
+    }
+    if (expr is ExprBlock) {
+        let b = expr as ExprBlock
+        for (s in b.list) {
+            n += count_const_int(s, value)
+        }
+        for (s in b.finalList) {
+            n += count_const_int(s, value)
+        }
+    } elif (expr is ExprFor) {
+        let f = expr as ExprFor
+        for (s in f.sources) {
+            n += count_const_int(s, value)
+        }
+        n += count_const_int(f.body, value)
+    } elif (expr is ExprIfThenElse) {
+        let i = expr as ExprIfThenElse
+        n += count_const_int(i.cond, value)
+        n += count_const_int(i.if_true, value)
+        n += count_const_int(i.if_false, value)
+    } elif (expr is ExprOp2) {
+        let o = expr as ExprOp2
+        n += count_const_int(o.left, value)
+        n += count_const_int(o.right, value)
+    } elif (expr is ExprOp1) {
+        let o = expr as ExprOp1
+        n += count_const_int(o.subexpr, value)
+    } elif (expr is ExprCall) {
+        let c = expr as ExprCall
+        for (a in c.arguments) {
+            n += count_const_int(a, value)
+        }
+    } elif (expr is ExprMakeBlock) {
+        let mb = expr as ExprMakeBlock
+        n += count_const_int(mb._block, value)
+    } elif (expr is ExprInvoke) {
+        let inv = expr as ExprInvoke
+        for (a in inv.arguments) {
+            n += count_const_int(a, value)
+        }
+    } elif (expr is ExprReturn) {
+        let r = expr as ExprReturn
+        n += count_const_int(r.subexpr, value)
+    } elif (expr is ExprLet) {
+        let l = expr as ExprLet
+        for (v in l.variables) {
+            if (v != null && v.init != null) {
+                n += count_const_int(v.init, value)
+            }
+        }
+    }
+    return n
+}
+
 // Counts top-level `var` declarations in the outer block of an invoke wrapper.
 // sum/long_count emit one accumulator; min/max emit two (first flag + best); average
 // emits two (sum acc + count).
@@ -1160,9 +1223,10 @@ def target_where_order_by_take_splices_fold() : array<int> {
 }
 
 [test]
-def test_order_by_take_emits_top_n_by(t : T?) {
-    // `order_by |> take(K)` splices via plan_order_family to a direct top_n_by(src, K, key) call.
-    // No invoke wrapper, no order_by call in the emission.
+def test_order_by_take_emits_top_n_by_with_cmp(t : T?) {
+    // `order_by(key) |> take(K)` with an inlineable key body now splices to
+    // top_n_by_with_cmp(src, K, $(v1, v2) => _::less(body[v1], body[v2])) — the comparator
+    // block embeds the key body twice, eliminating the per-comparison key() dispatch.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_take_splices_fold)
         if (func == null) return
@@ -1171,14 +1235,18 @@ def test_order_by_take_emits_top_n_by(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "top_n_by") >= 1, "should emit a top_n_by call")
+        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1, "should emit a top_n_by_with_cmp call")
+        t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit non-cmp top_n_by")
         t |> equal(0, count_call(body_expr, "order_by"), "should not emit order_by")
         t |> equal(0, count_call(body_expr, "take"), "should not emit take")
     }
 }
 
 [test]
-def test_order_by_descending_take_emits_top_n_by_descending(t : T?) {
+def test_order_by_descending_take_emits_top_n_by_with_cmp(t : T?) {
+    // `order_by_descending(key) |> take(K)` with an inlineable key dispatches to the same
+    // top_n_by_with_cmp entry as ascending — direction is encoded by flipping the
+    // comparator argument order (`_::less(body[v2], body[v1])`), no `_descending` helper.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(),
             @@target_order_by_descending_take_splices_fold)
@@ -1188,8 +1256,10 @@ def test_order_by_descending_take_emits_top_n_by_descending(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "top_n_by_descending") >= 1,
-            "should emit a top_n_by_descending call")
+        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1,
+            "should emit a top_n_by_with_cmp call (flipped comparator embeds direction)")
+        t |> equal(0, count_call(body_expr, "top_n_by_descending"),
+            "should not emit the key-taking top_n_by_descending")
         t |> equal(0, count_call(body_expr, "order_by_descending"),
             "should not emit order_by_descending")
     }
@@ -1197,7 +1267,8 @@ def test_order_by_descending_take_emits_top_n_by_descending(t : T?) {
 
 [test]
 def test_bare_order_by_emits_direct_call(t : T?) {
-    // Bare `order_by(key)` splices to a direct order_by call (no invoke wrapper, no top_n).
+    // Bare `order_by(key)` with an inlineable key dispatches to the asc `order(src, cmp)`
+    // block-taking overload — the key body is spliced into the comparator twice.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_bare_order_by_splices_fold)
         if (func == null) return
@@ -1206,14 +1277,16 @@ def test_bare_order_by_emits_direct_call(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "order_by") >= 1, "should emit an order_by call")
+        t |> success(count_call(body_expr, "order") >= 1, "should emit an order(src, cmp) call")
+        t |> equal(0, count_call(body_expr, "order_by"), "should not emit the key-taking order_by")
         t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit top_n_by")
     }
 }
 
 [test]
-def test_where_order_by_emits_fused_loop(t : T?) {
-    // `where |> order_by` splices into a fused prefilter loop + order_by_inplace on the buffer.
+def test_where_order_by_emits_fused_loop_with_inline_cmp(t : T?) {
+    // `where |> order_by(key)` splices into a fused prefilter loop + order_inplace(buf, cmp)
+    // when the key is inlineable — the comparator embeds the key body twice.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_where_order_by_splices_fold)
         if (func == null) return
@@ -1223,14 +1296,16 @@ def test_where_order_by_emits_fused_loop(t : T?) {
         }
         t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for fused emission")
         t |> equal(1, count_inner_for_loops(body_expr), "single fused prefilter loop")
-        t |> success(count_call(body_expr, "order_by_inplace") >= 1, "should call order_by_inplace on the buffer")
+        t |> success(count_call(body_expr, "order_inplace") >= 1, "should call order_inplace(buf, cmp)")
+        t |> equal(0, count_call(body_expr, "order_by_inplace"), "should not emit the key-taking order_by_inplace")
         t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the buffer")
     }
 }
 
 [test]
-def test_where_order_by_take_emits_fused_top_n(t : T?) {
-    // `where |> order_by |> take(K)` splices into a fused prefilter loop + top_n_by on the buffer.
+def test_where_order_by_take_emits_fused_top_n_with_cmp(t : T?) {
+    // `where |> order_by(key) |> take(K)` splices into a fused prefilter loop +
+    // top_n_by_with_cmp(buf, K, cmp) when the key is inlineable.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(),
             @@target_where_order_by_take_splices_fold)
@@ -1241,7 +1316,8 @@ def test_where_order_by_take_emits_fused_top_n(t : T?) {
         }
         t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for fused emission")
         t |> equal(1, count_inner_for_loops(body_expr), "single fused prefilter loop")
-        t |> success(count_call(body_expr, "top_n_by") >= 1, "should call top_n_by on the buffer")
+        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1, "should call top_n_by_with_cmp on the buffer")
+        t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit non-cmp top_n_by")
         t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the buffer")
     }
 }
@@ -1359,6 +1435,116 @@ def test_select_where_to_array_correct_result(t : T?) {
         // src = [1..5], projected = [2,4,6,8,10], filtered >4 = [6,8,10]
         let got <- target_select_where_to_array_splices_fold()
         let expected = [6, 8, 10]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+}
+
+// ── Gap 2 — select + where projection dedup (single-eval splice) ───────
+
+[export, marker(no_coverage)]
+def target_select_where_sum_dedup() : int {
+    // Pure projection with a distinctive constant (7919, prime). After the splice the
+    // constant appears EXACTLY ONCE in the body — in the projection-bind statement.
+    // Without the dedup the constant would appear twice: once inlined into the predicate
+    // via peel-substitution, and once cloned into the sum's valueExpr.
+    return _fold(each([1, 2, 3, 4, 5])._select(_ * 7919)._where(_ > 0).sum())
+}
+
+[test]
+def test_select_where_projection_dedup(t : T?) {
+    // Single-eval splice: the projection constant 7919 must appear exactly once in the
+    // body — proves the projection is bound to a local once per element rather than
+    // inlined twice (once in predicate, once in valueExpr).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_where_sum_dedup)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> equal(1, count_const_int(body_expr, 7919),
+            "projection constant should appear exactly once (single-eval dedup)")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
+        t |> equal(0, count_call(body_expr, "select"), "select should be inlined")
+        t |> equal(0, count_call(body_expr, "where_"), "where_ should be inlined")
+    }
+}
+
+[test]
+def test_select_where_dedup_correct_result(t : T?) {
+    t |> run("select+where dedup preserves arithmetic") @(t : T?) {
+        // [1,2,3,4,5] * 7919 = [7919, 15838, 23757, 31676, 39595], all > 0,
+        // sum = 7919 * (1+2+3+4+5) = 7919 * 15 = 118785
+        t |> equal(118785, target_select_where_sum_dedup())
+    }
+}
+
+[export, marker(no_coverage)]
+def target_select_where_impure_falls_to_tier2() : int {
+    // Impure projection (side-effecting function call) must NOT be moved outside the
+    // where if-wrap — that would visibly fire side effects on filter-rejected elements.
+    // The splice arm bails to tier 2 cascade in this case.
+    return _fold(each([1, 2, 3, 4, 5])._select(side_effect_select_proj(_))._where(_ > 5).count())
+}
+
+[test]
+def test_select_where_impure_correctness(t : T?) {
+    t |> run("impure projection in select+where preserves per-element call count") @(t : T?) {
+        // Plain LINQ semantics: select runs the projection for EVERY element before the
+        // where filter sees the result. 5 input elements → 5 projection invocations,
+        // regardless of how many survive the filter.
+        g_select_count_proj_hits = 0
+        let n = target_select_where_impure_falls_to_tier2()
+        // projected: [2,4,6,8,10]; filtered >5: [6,8,10]; count = 3
+        t |> equal(3, n)
+        t |> equal(5, g_select_count_proj_hits, "projection must fire once per source element")
+    }
+}
+
+// ── Gap 1 — inlineable key fallback when key is side-effecting ───────────
+
+var g_order_key_hits = 0
+
+def side_effect_order_key(x : int) : int {
+    g_order_key_hits ++
+    return -x
+}
+
+[export, marker(no_coverage)]
+def target_order_by_take_side_effecting_key() : array<int> {
+    // Side-effecting key — try_make_inline_cmp's has_sideeffects gate must bail; the
+    // splice falls back to the keyed top_n_by entry point (not _with_cmp).
+    return <- _fold(each([3, 1, 4, 1, 5, 9, 2, 6])._order_by(side_effect_order_key(_)).take(3).to_array())
+}
+
+[test]
+def test_order_by_take_side_effecting_key_falls_back(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(),
+            @@target_order_by_take_side_effecting_key)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> success(count_call(body_expr, "top_n_by") >= 1,
+            "side-effecting key should fall back to keyed top_n_by")
+        t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"),
+            "side-effecting key must NOT use the inline-cmp variant")
+    }
+}
+
+[test]
+def test_order_by_take_side_effecting_key_correct_result(t : T?) {
+    t |> run("side-effecting order_by key produces correct top-N by -key") @(t : T?) {
+        let got <- target_order_by_take_side_effecting_key()
+        // -key sorts ascending by -x ⇒ descending by x; take 3 largest.
+        let expected = [9, 6, 5]
         t |> equal(length(got), length(expected))
         for (v, e in got, expected) {
             t |> equal(v, e)
