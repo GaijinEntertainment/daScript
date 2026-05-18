@@ -39,6 +39,14 @@ namespace das
         }
         *g_throwBuf = nullptr;
     }
+    #else
+
+    // DAS_ENABLE_EXCEPTIONS=1: route das_throw through the project's exception class
+    // so catch (dasException&) handlers picked up by simulate_exceptions.cpp catch
+    // C++-side throws from low-level headers (daslang_hash_map::at, etc.) too.
+    void das_throw(const char * msg) {
+        throw dasException(msg ? msg : "", LineInfo());
+    }
     #endif
 
     template <typename TT>
