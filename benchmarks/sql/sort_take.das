@@ -15,7 +15,7 @@ let TAKE_N = 10
 // uses ``partial_sort`` under the hood (O(M log N)), iterator source uses a
 // bounded heap of size N during the scan (max N elements resident).
 //
-// m3f / m3f_old are intentionally identical for top-N here — Phase 0 only adds
+// m3f are intentionally identical for top-N here — Phase 0 only adds
 // the library function; PR B (BufferTopN emit mode in linq_fold) is what makes
 // the m3f column move.
 
@@ -40,19 +40,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        unsafe {
-            let rows <- _old_fold(each(arr)._order_by(_.price).take(TAKE_N).to_array())
-            if (empty(rows)) {
-                b->failNow()
-            }
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -93,11 +80,6 @@ def sort_take_m1(b : B?) {
 [benchmark]
 def sort_take_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def sort_take_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

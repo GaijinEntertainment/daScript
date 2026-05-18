@@ -5,16 +5,23 @@ options no_unused_function_arguments = false
 
 module linq_fold shared public
 
-//! LINQ ``_fold`` and ``_old_fold`` macro pair — fuse-time-aware pipeline rewriting.
+//! LINQ ``_fold`` macro — fuse-time-aware pipeline rewriting.
 //!
-//! ``_fold(expr)`` is the active fusion macro. ``_old_fold(expr)`` is a frozen
-//! baseline that preserves the pre-rewrite behavior; benchmarks compare the two
-//! to track performance work as ``_fold`` evolves toward splice-mode fusion.
+//! ``_fold(expr)`` is a three-tier cascade:
 //!
-//! Both macros share the same dispatch infrastructure (``linqCalls`` dict,
-//! ``flatten_linq``, ``g_foldSeq``, ``fold_*`` helpers, ``fold_linq_default``);
-//! the only difference today is the macro-name string they pass into the
-//! recursive sub-fold call inside ``fold_linq_default``.
+//! 1. **Splice** — when the chain matches a recognized pattern, emit a single
+//!    fused for-loop with predicates and projections inlined (best perf,
+//!    no intermediate iterators or buffers).
+//! 2. **``fold_linq_default``** — when splice can't fire, emit an
+//!    array-shape pipeline (``call → array → call → array``) with
+//!    ``_inplace`` variants reusing the same buffer and explicit ``delete``
+//!    on the previous stage. One buffer at a time, no iterator overhead.
+//! 3. **``clone_expression``** — raw passthrough when the chain has no
+//!    recognized linq operators (``flatten_linq`` returns empty).
+//!
+//! All three tiers preserve semantics — ``_fold(chain)`` is observationally
+//! equivalent to ``chain``, just faster when patterns match. The macro is
+//! always safe to apply.
 //!
 //! Requires the ``linq`` module for the backing operator functions.
 
@@ -23,6 +30,7 @@ require daslib/linq public
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
+require strings
 
 def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
     if (expr is ExprCall) {
@@ -61,12 +69,36 @@ def private fold_linq_cond(var expr : Expression?; argName : string) : Expressio
     return qmacro(invoke($e(expr), $i(argName)))
 }
 
+def private fold_linq_cond_peel(var expr : Expression?; var replacement : Expression?) : Expression? {
+    // Variant of fold_linq_cond that substitutes the lambda's bound variable with an
+    // arbitrary expression (not just a rename to another identifier). Uses peel-aware
+    // substitution to strip the ExprRef2Value wrappers the typer inserts around `var`
+    // reads on already-typed AST. Used by the select-then-where splice arm — see
+    // `templates_boost::replaceVariablePeeling`.
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var res = clone_expression(ret.subexpr)
+                var rules : Template
+                rules |> replaceVariablePeeling(string(blk.arguments[0].name), replacement)
+                apply_template(rules, res.at, res)
+                return res
+            }
+        }
+    }
+    return qmacro(invoke($e(expr), $e(replacement)))
+}
+
 struct private LinqCall {
     //! Internal struct representing a chained LINQ method call.
     name : string
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
     inplace : bool = false          // if specified, expression is inplace and does not create new variable
+    noToArrayVariant : bool = false // if specified, no `_to_array` variant exists (function already returns array regardless of input shape)
     recursive : array<int>          // indices of arguments to apply fold_linq_default on
 }
 
@@ -92,6 +124,15 @@ var private linqCalls = {
     "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
     "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
+// top-N terminal forms — always return array regardless of input shape, so no
+// `_to_array` / `_inplace` variants exist (would alias to the same function).
+// `noToArrayVariant=true` so first-position iterator-source rewrite is skipped.
+// Not marked inplace: rename to `<name>_inplace` at non-first positions would
+// fail at lookup time. Registered so flatten_linq recognizes them in chains.
+    "top_n" => LinqCall(name = "top_n", noToArrayVariant = true),
+    "top_n_by" => LinqCall(name = "top_n_by", noToArrayVariant = true),
+    "top_n_descending" => LinqCall(name = "top_n_descending", noToArrayVariant = true),
+    "top_n_by_descending" => LinqCall(name = "top_n_by_descending", noToArrayVariant = true),
 // aggregate
     "count" => LinqCall(name = "count"),
     "long_count" => LinqCall(name = "long_count"),
@@ -226,207 +267,27 @@ def private flatten_linq(var expr : Expression?)  {
     return <- (top, calls)
 }
 
-struct private FoldSequence {
-    //! Internal struct representing a fold operation sequence.
-    calls : array<string>
-    folder : function<(
-        argIndex : int;
-        var topValue : Expression?;
-        var blk : ExprBlock?;
-        var calls : array<tuple<ExprCall?; LinqCall?>>
-    ) : Expression?>
-}
-
-var private g_foldSeq = [               // those are applied in order
-// order and distinct (for both orders)
-    FoldSequence(
-        calls = ["order", "distinct" ],
-        folder = @@fold_order_distinct
-    ),
-    FoldSequence(
-        calls = ["distinct", "order" ],
-        folder = @@fold_order_distinct
-    ),
-// where + count (single-pass count, no intermediate filter array)
-    FoldSequence(
-        calls = ["where_", "count"],
-        folder = @@fold_where_count
-    ),
-// select and where
-    FoldSequence(
-        calls = ["where_", "select" ],
-        folder = @@fold_where_select
-    ),
-    FoldSequence(
-        calls = ["select", "where_"],
-        folder = @@fold_select_where
-    ),
-    FoldSequence(
-        calls = ["where_"],
-        folder = @@fold_where
-    ),
-    FoldSequence(
-        calls = ["select"],
-        folder = @@fold_select
-    ),
-]
-
 [macro_function]
-def private append_comprehension(argIndex : int; var topValue : Expression?; var comprehension : Expression?; var blk : ExprBlock?; at : LineInfo) : Expression? {
-    comprehension.force_at(at)
-    comprehension.force_generated(true)
-    let newArgName = "pass_{argIndex}"
-    blk.list |> emplace_new <| qmacro_expr() {
-        var $i(newArgName) <- $e(comprehension)
-    }
-    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
-    if (argIndex != 0) {
-        blk.list |> emplace_new <| qmacro_expr() {
-            delete $e(topValue)
-        }
-    }
-    return qmacro($i(newArgName))
-}
-
-[macro_function]
-def private fold_order_distinct(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! replaces order + distinct into a single order + unique
-    if (argIndex == 0) {
-        var comprehension = qmacro(order_unique_folded($e(topValue)))
-        return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
-    } else {
-        blk.list |> emplace_new <| qmacro(order_unique_folded_inplace($e(topValue)))
-        return clone_expression(topValue)
-    }
-}
-
-[macro_function]
-def private fold_where_select(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! folds where + select into a single comprehension
-    var eWhere = calls[0]._0
-    var eSelect = calls[1]._0
-    var iterType = clone_type(eWhere.arguments[0]._type.firstType)
-    var whereCond = fold_linq_cond(eWhere.arguments[1], "it")
-    var selectExpr : Expression?
-    if (eSelect != null) {
-        selectExpr = fold_linq_cond(eSelect.arguments[1], "it")
-    } else {
-        selectExpr = new ExprVar(name := "it", at = topValue.at, _type := iterType)
-    }
-    var comprehension = qmacro([for (it in $e(topValue)); $e(selectExpr); where $e(whereCond)])
-    return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
-}
-
-[macro_function]
-def private fold_where(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! folds where + select into a single comprehension
-    var eWhere = calls[0]._0
-    var whereCond = fold_linq_cond(eWhere.arguments[1], "it")
-    var comprehension = qmacro([for (it in $e(topValue)); it; where $e(whereCond)])
-    return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
-}
-
-[macro_function]
-def private fold_where_count(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! folds `_where(p) |> count()` into a single-pass loop with the predicate inlined — no intermediate filter array, no block-call overhead
-    var eWhere = calls[0]._0
-    let srcName = "`source`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
-    let itName  = "`it`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
-    let nName   = "`n`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
-    var whereCond = fold_linq_cond(eWhere.arguments[1], itName)
-    var fusedCall : Expression? = qmacro(invoke($($i(srcName) : typedecl($e(topValue)) - const) {
-        var $i(nName) = 0
-        for ($i(itName) in $i(srcName)) {
-            if ($e(whereCond)) {
-                $i(nName) ++
-            }
-        }
-        return $i(nName)
-    }, $e(topValue)))
-    fusedCall.force_at(calls[0]._0.at)
-    fusedCall.force_generated(true)
-    let newArgName = "pass_{argIndex}"
-    blk.list |> emplace_new <| qmacro_expr() {
-        var $i(newArgName) = $e(fusedCall)
-    }
-    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
-    if (argIndex != 0) {
-        blk.list |> emplace_new <| qmacro_expr() {
-            delete $e(topValue)
-        }
-    }
-    return qmacro($i(newArgName))
-}
-
-[macro_function]
-def private fold_select(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! folds select into a single comprehension
-    var eSelect = calls[0]._0
-    var selectExpr = fold_linq_cond(eSelect.arguments[1], "it")
-    var comprehension = qmacro([for (it in $e(topValue)); $e(selectExpr)])
-    return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
-}
-
-[macro_function]
-def private fold_select_where(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
-    //! folds where + select into a single comprehension-like expression
-    //! note, order of select and where is reversed
-    var eWhere = calls[1]._0
-    var eSelect = calls[0]._0
-    var iterType = clone_type(eWhere.arguments[0]._type.firstType)
-    var whereCond : Expression?
-    let srcName = "`source`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
-    let valName = "`value`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
-    let itName = "`it`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
-    let arrName = "`arr`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
-    whereCond = fold_linq_cond(eWhere.arguments[1], valName)
-    var selectExpr : Expression?
-    if (eSelect != null) {
-        selectExpr = fold_linq_cond(eSelect.arguments[1], itName)
-    } else {
-        selectExpr = new ExprVar(name := itName, at = topValue.at, _type := iterType)
-    }
-    var comprehension = qmacro(invoke($($i(srcName) : typedecl($e(topValue)) - const) {
-            var $i(arrName) : array<$t(iterType)>
-            for ($i(itName) in $i(srcName)) {
-                static_if (typeinfo is_workhorse($e(selectExpr))) {
-                    var $i(valName) = $e(selectExpr)
-                    if ($e(whereCond)) {
-                        $i(arrName).emplace($i(valName))
-                    }
-                } else {
-                    var $i(valName) <- $e(selectExpr)
-                    if ($e(whereCond)) {
-                        $i(arrName).emplace($i(valName))
-                    }
-                }
-            }
-            return <- $i(arrName)
-        }, $e(topValue)))
-    return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
-}
-
-[macro_function]
-def private fold_linq_default(var expr : Expression?; recursiveMacroName : string) : Expression? {
-    //! fold sequence into
-    //!   invoke ( top, $ ( it ) : auto {
-    //!      var pass_0 = call0(it,...) // or call0_to_array(it,...)
-    //!      var pass_1 = call1(pass_0,...)
-    //!      ...
-    //!      return <- pass_N // or pass_N.to_sequence() if expr is iterator
-    //!   } )
-    //!   skip var if call is inplace
-    //!   skip delete if call is not first
-    //!   if call is first and source is iterator, then call is call_to_array
-    //!   if call is last and expr is iterator, then return is pass_N.to_sequence()
-    //!   if expr is not linq call, return null
+def private fold_linq_default(var expr : Expression?) : Expression? {
+    //! Tier-2 fallback emitter for ``_fold``. Emits the chain in array shape:
     //!
-    //! ``recursiveMacroName`` is the macro name used to wrap sub-pipeline
-    //! arguments (e.g. ``zip``'s second arg, ``concat``'s tail) so that each
-    //! top-level fold macro keeps recursing into itself: ``_fold`` recurses
-    //! into ``_fold``, ``_old_fold`` into ``_old_fold``. Threading the name
-    //! through this single call site keeps the frozen baseline truly frozen
-    //! once ``_fold`` diverges in later PRs.
+    //!   invoke ( top, $ ( source ) : auto {
+    //!      var pass_0 = call0(source,...) // or call0_to_array(...) if source is iterator
+    //!      var pass_1 = call1(pass_0,...) // or call1_inplace(pass_0,...) when callable inplace
+    //!      delete pass_0                  // free previous intermediate
+    //!      ...
+    //!      return <- pass_N               // or pass_N.to_sequence_move() if expr is iterator
+    //!   } )
+    //!
+    //! Rules:
+    //! - skip ``var pass_N`` binding if call is inplace
+    //! - skip ``delete pass_{N-1}`` if N == 0 (no previous intermediate to free)
+    //! - if first call and source is iterator, rename to ``call_to_array`` (materialize once)
+    //! - if last call and expr is iterator, return ``pass_N.to_sequence_move()``
+    //! - if expr has no linq calls (``flatten_linq`` returns empty), return ``null`` so the
+    //!   ``_fold`` cascade can fall through to tier 3 (raw clone)
+    //! - recursive linq sub-args (e.g. ``zip``'s second arg) are wrapped in a fresh
+    //!   ``_fold`` call so the cascade applies to them too
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
@@ -441,69 +302,51 @@ def private fold_linq_default(var expr : Expression?; recursiveMacroName : strin
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name
             var inplace = false
-            // lets find folding sequences
-            var found : FoldSequence?
-            for (fs in g_foldSeq) {
-                if (fs.calls |> length + argIndex - 1 < argMax) {
-                    var match = true
-                    for (i in 0 .. fs.calls |> length) {
-                        if (fs.calls[i] != unsafe(calls[argIndex + i]._1.name)) {
-                            match = false
-                            break
-                        }
-                    }
-                    if (match) {
-                        found = unsafe(addr(fs))
-                        break
-                    }
+            if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
+                // Canonical names that end in `_` (e.g. `where_`, to avoid the daslang
+                // `where` keyword) need the suffix joined without a connecting `_`,
+                // since the actual function names are `where_to_array` / `where_inplace`
+                // (single underscore between the base and the suffix).
+                let sep : string = ends_with(callName, "_") ? "" : "_"
+                if (argIndex == 0 && top._type.isIterator && !cll._1.noToArrayVariant) {
+                    callName = "{callName}{sep}to_array"
+                } elif (argIndex != 0 && cll._1.inplace) {
+                    callName = "{callName}{sep}inplace"
+                    inplace = true
                 }
             }
-            if (found != null) {
-                var sub = subarray(calls, argIndex .. argIndex + found.calls |> length)
-                topValue = found.folder(argIndex, topValue, blk, sub)
-                argIndex += found.calls |> length
+            for (i in cll._1.recursive) {   // recurse into sub-pipeline args (e.g. zip's second arg)
+                if (i >= 1 && i < cll._0.arguments |> length && is_linq_call(cll._0.arguments[i])) {
+                    var argExpr = make_call(cll._0.at, "_fold")
+                    (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
+                    cll._0.arguments[i] = argExpr
+                }
+            }
+            var newCall = qmacro($c(callName)($e(topValue)))
+            let numArgs = cll._0.arguments |> length
+            for (i in 1..numArgs) {
+                (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
+            }
+            if (inplace) {
+                blk.list |> emplace(newCall)
             } else {
-                if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
-                    if (argIndex == 0 && top._type.isIterator) {
-                        callName = "{callName}_to_array"
-                    } elif (argIndex != 0 && cll._1.inplace) {
-                        callName = "{callName}_inplace"
-                        inplace = true
-                    }
+                // Macro emits `var pass_N = call` and a later `return <- pass_N`;
+                // for single-pass chains this triggers PERF009 (move-into-then-return)
+                // at the user call site. The shape is load-bearing for the array-pipeline
+                // semantics (every stage binds so the next can reuse the buffer in-place),
+                // so suppress the rule inline below.
+                blk.list |> emplace_new <| qmacro_expr() {
+                    var $i(newArgName) = $e(newCall)  // nolint:PERF009
                 }
-                for (i in cll._1.recursive) {   // this is where we make recursion
-                    if (i >= 1 && i < cll._0.arguments |> length && is_linq_call(cll._0.arguments[i])) {
-                        var argExpr = make_call(cll._0.at, recursiveMacroName)
-                        (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
-                        cll._0.arguments[i] = argExpr
-                    }
-                }
-                var newCall = qmacro($c(callName)($e(topValue)))
-                let numArgs = cll._0.arguments |> length
-                for (i in 1..numArgs) {
-                    (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
-                }
-                if (inplace) {
-                    blk.list |> emplace(newCall)
-                } else {
-                    // Macro emits `var pass_N = call` and a later `return <- pass_N`;
-                    // for single-pass chains this triggers PERF009 (move-into-then-return)
-                    // at the user call site. Rewriting to direct `return <- call` would
-                    // change the historical `_old_fold` baseline that benchmarks compare
-                    // against, so we keep the shape and suppress the rule inline below.
+                (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
+                if (argIndex != 0) {
                     blk.list |> emplace_new <| qmacro_expr() {
-                        var $i(newArgName) = $e(newCall)  // nolint:PERF009
+                        delete $e(topValue)
                     }
-                    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
-                    if (argIndex != 0) {
-                        blk.list |> emplace_new <| qmacro_expr() {
-                            delete $e(topValue)
-                        }
-                    }
-                    topValue = qmacro($i(newArgName))
                 }
-                argIndex ++
+                topValue = qmacro($i(newArgName))
             }
+            argIndex ++
         }
     }
     if (expr._type.isIterator) {
@@ -1140,6 +983,174 @@ def private emit_early_exit_lane(
 }
 
 [macro_function]
+def private order_top_n_call_name(orderName : string) : string {
+    //! Maps an order-family operator name to the corresponding ``top_n*`` helper from linq.das.
+    if (orderName == "order") return "top_n"
+    if (orderName == "order_descending") return "top_n_descending"
+    if (orderName == "order_by") return "top_n_by"
+    if (orderName == "order_by_descending") return "top_n_by_descending"
+    return ""
+}
+
+[macro_function]
+def private plan_order_family(var expr : Expression?) : Expression? {
+    //! Phase 3 splice planner for chains containing an order-family operator.
+    //! Recognized chain shapes (terminator can be the order/take op itself, or implicit
+    //! ``to_array`` which is ``skip=true`` so flatten_linq elides it):
+    //!
+    //! - ``src |> order[_descending]?``                                    → direct call
+    //! - ``src |> order_by[_descending]?(key)``                            → direct call
+    //! - ``src |> order[_by]?[_descending]?[(key)] |> take(K)``            → ``top_n*`` helper
+    //! - ``src |> where_*(p)+ |> order[_by]?[_descending]?[(key)]``        → fused prefilter + ``order*_inplace``
+    //! - ``src |> where_*(p)+ |> order[_by]?[_descending]?[(key)] |> take(K)`` → fused prefilter + ``top_n*``
+    //!
+    //! Combinations with ``select`` / ``skip`` / non-ARRAY terminators (sum/count/etc. after
+    //! the order op) are out of scope and fall through to cascade tier 2.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    top = peel_each(top)
+    var whereCond : Expression?
+    var orderName : string
+    var orderKey : Expression?
+    var orderElemType : TypeDeclPtr
+    var takeExpr : Expression?
+    var hasOrder = false
+    let at = calls[0]._0.at
+    let itName = "`it`{at.line}`{at.column}"
+    for (i in 0 .. length(calls)) {
+        var cll & = unsafe(calls[i])
+        let name = cll._1.name
+        if (name == "where_") {
+            if (hasOrder) return null   // where-after-order not in scope
+            var pred = fold_linq_cond(cll._0.arguments[1], itName)
+            if (whereCond == null) {
+                whereCond = pred
+            } else {
+                whereCond = qmacro($e(whereCond) && $e(pred))
+            }
+        } elif (name == "order" || name == "order_descending"
+                || name == "order_by" || name == "order_by_descending") {
+            if (hasOrder) return null
+            hasOrder = true
+            orderName = name
+            if ((cll._0.arguments |> length) >= 2) {
+                orderKey = clone_expression(cll._0.arguments[1])
+            }
+            orderElemType = clone_type(cll._0._type.firstType)
+        } elif (name == "take") {
+            if (!hasOrder || takeExpr != null) return null
+            var arg = cll._0.arguments[1]
+            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
+            takeExpr = clone_expression(arg)
+        } else {
+            return null
+        }
+    }
+    if (!hasOrder) return null
+    let hasKey = orderName == "order_by" || orderName == "order_by_descending"
+    let needIterWrap = expr._type.isIterator
+    let topNName = order_top_n_call_name(orderName)
+    let inplaceName = "{orderName}_inplace"
+    if (whereCond == null) {
+        // No prefilter — direct call to daslib helper.
+        var topExpr = clone_expression(top)
+        topExpr.genFlags.alwaysSafe = true
+        var emission : Expression?
+        if (takeExpr == null) {
+            // Bare order family — emit the direct call. Same shape as plain LINQ, but via
+            // splice so `_fold` doesn't fall through to tier 2.
+            if (hasKey) {
+                emission = qmacro($c(orderName)($e(topExpr), $e(orderKey)))
+            } else {
+                emission = qmacro($c(orderName)($e(topExpr)))
+            }
+        } else {
+            // order + take → top_n* dispatch.
+            if (hasKey) {
+                emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr), $e(orderKey)))
+            } else {
+                emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr)))
+            }
+        }
+        // Wrap with to_sequence_move only when emission is array-shaped: take dispatches to
+        // top_n* (always returns array) or the source was peeled to an array. For an
+        // iterator source on the bare-order path, daslib's order_*(iter,…) overload already
+        // returns iterator — wrapping would compile-fail (to_sequence_move is array-only).
+        let emissionIsArray = takeExpr != null || top._type.isGoodArrayType
+        if (needIterWrap && emissionIsArray) {
+            emission = qmacro($e(emission).to_sequence_move())
+        }
+        emission.force_generated(true)
+        return emission
+    }
+    // where_* + order_*[+take] — emit a single fused loop that prefilters into a fresh
+    // buffer, then sorts in place (no take) or extracts top-N (take). This collapses what
+    // plain LINQ would do as two array allocations + iterator dispatch into one allocation
+    // and one sort pass.
+    let srcName = "`source`{at.line}`{at.column}"
+    let bufName = "`buf`{at.line}`{at.column}"
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var bufElemType = clone_type(orderElemType)
+    var loopBody = qmacro_expr() {
+        if ($e(whereCond)) {
+            $i(bufName) |> push_clone($i(itName))
+        }
+    }
+    var stmts : array<Expression?>
+    stmts |> push <| qmacro_expr() {
+        var $i(bufName) : array<$t(bufElemType)>
+    }
+    if (type_has_length(top._type)) {
+        stmts |> push <| qmacro_expr() {
+            $i(bufName) |> reserve(length($i(srcName)))
+        }
+    }
+    stmts |> push <| qmacro_expr() {
+        for ($i(itName) in $i(srcName)) {
+            $e(loopBody)
+        }
+    }
+    if (takeExpr == null) {
+        // Sort the prefilter buffer in place and return it. order*_inplace is void
+        // (mutates the buffer in place), so we move the buffer out for the final result.
+        var sortCall : Expression?
+        if (hasKey) {
+            sortCall = qmacro($c(inplaceName)($i(bufName), $e(orderKey)))
+        } else {
+            sortCall = qmacro($c(inplaceName)($i(bufName)))
+        }
+        stmts |> push(sortCall)
+        stmts |> push <| qmacro_expr() {
+            return <- $i(bufName)
+        }
+    } else {
+        // top_n* on the prefilter buffer.
+        var topNCall : Expression?
+        if (hasKey) {
+            topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr), $e(orderKey)))
+        } else {
+            topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr)))
+        }
+        stmts |> push <| qmacro_expr() {
+            return <- $e(topNCall)
+        }
+    }
+    var bodyBlock = new ExprBlock(at = at)
+    for (s in stmts) {
+        bodyBlock.list |> emplace(s)
+    }
+    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $e(bodyBlock);
+    }, $e(topExpr)))
+    if (needIterWrap) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    return finalize_invoke(emission, at)
+}
+
+[macro_function]
 def private plan_loop_or_count(var expr : Expression?) : Expression? {
     // Phase-2C loop planner. Recognizes chains of shape `[where_*][select*][skip?][take?]`
     // plus a terminator, dispatched by `classify_terminator` into one of four lanes:
@@ -1185,10 +1196,29 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
         if (opName == "where_") {
-            // where-after-select / -after-skip / -after-take is rejected — canonical chain
-            // order is [where_*][select*][skip?][take?].
-            if (seenSelect || seenSkip || seenTake) return null
-            var predicate = fold_linq_cond(cll._0.arguments[1], itName)
+            // skip/take-after-where is rejected — canonical chain order is
+            // [where_*][select*][skip?][take?].
+            if (seenSkip || seenTake) return null
+            var predicate : Expression?
+            if (seenSelect) {
+                // Phase 3d: where-after-select. Substitute the predicate's bound variable
+                // with the current projection via peel-aware substitution. The substitution
+                // inlines the projection into the predicate, which would re-evaluate any
+                // side effects (since the terminator also references projection) — bail to
+                // tier 2 cascade on side-effecty projections.
+                //
+                // KNOWN PERF GAP (deferred to splice-with-cmp follow-up PR): pure projections
+                // currently re-evaluate per element for ARRAY/ACCUMULATOR/EARLY_EXIT lanes —
+                // once in the inlined predicate and once in valueExpr. COUNTER lane is unaffected
+                // (no body use). Fix shape: emit a pre-condition `var v := projection` bind in
+                // the loop body (outside the if-wrap) and rewrite both predicate and valueExpr
+                // to reference `v`. Bundled with the `_with_cmp` inline-key follow-up since
+                // both share the "single-eval splice" theme.
+                if (has_sideeffects(projection)) return null
+                predicate = fold_linq_cond_peel(cll._0.arguments[1], projection)
+            } else {
+                predicate = fold_linq_cond(cll._0.arguments[1], itName)
+            }
             if (whereCond == null) {
                 whereCond = predicate
             } else {
@@ -1337,40 +1367,40 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
 
 [call_macro(name="_fold")]
 class private LinqFold : AstCallMacro {
-    //! implements _fold(expression) that folds LINQ expressions into optimized sequnences
-    //! for example::
+    //! ``_fold(expr)`` — three-tier cascade over a LINQ chain.
     //!
-    //!     _fold(each(foo)._where(_ > 5)._select(_ * 2))
+    //! 1. **Splice** (``plan_loop_or_count``) — fused for-loop with predicates
+    //!    and projections inlined, when the chain matches a recognized pattern.
+    //! 2. **Array-shape pipeline** (``fold_linq_default``) — ``call → array →
+    //!    call → array`` with ``_inplace`` reuse and explicit ``delete`` of
+    //!    previous stages, when the chain has linq operators but splice can't fire.
+    //! 3. **Raw clone** — passthrough when ``flatten_linq`` finds no recognized
+    //!    linq operators in the chain.
     //!
-    //! expands into a single comprehension that does all operations in one pass
+    //! All tiers preserve semantics. ``_fold(chain)`` is observationally equivalent
+    //! to ``chain``, just faster when patterns match. Always safe to apply.
+    //!
+    //! Example::
+    //!
+    //!     _fold(each(foo)._where(_ > 5)._select(_ * 2).sum())
+    //!
+    //! Expands tier-1 into a single fused loop accumulating the sum directly.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        //! Visits the _fold macro call and folds LINQ expressions into optimized sequences.
+        //! Visits the _fold macro call and runs the three-tier cascade.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var res : Expression? = plan_loop_or_count(call.arguments[0])
+        // Tier 1 splice — try the dedicated order-family planner first (handles
+        // chains containing order / order_by / order_descending / order_by_descending,
+        // optionally followed by take(K)), then the general loop planner for the
+        // [where_*][select*][skip?][take?] + terminator shapes.
+        var res : Expression? = plan_order_family(call.arguments[0])
         if (res != null) return res
+        res = plan_loop_or_count(call.arguments[0])
+        if (res != null) return res
+        // Tier 2 — array-shape pipeline with `_inplace` reuse + explicit `delete`.
+        res = fold_linq_default(call.arguments[0])
+        if (res != null) return res
+        // Tier 3 — raw passthrough.
         return clone_expression(call.arguments[0])
-    }
-}
-
-[call_macro(name="_old_fold")]
-class private LinqOldFold : AstCallMacro {
-    //! Frozen pre-rewrite baseline of ``_fold``. Same expansion as ``_fold``
-    //! today; the two diverge only when later PRs add splice-mode fusion to
-    //! ``_fold``. Benchmarks compare ``_fold`` vs ``_old_fold`` to track
-    //! performance work — ``_old_fold`` must keep producing the historical
-    //! shape so the comparison stays meaningful.
-    //! for example::
-    //!
-    //!     _old_fold(each(foo)._where(_ > 5)._select(_ * 2))
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _old_fold(expression)")
-        macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var res : Expression? = fold_linq_default(call.arguments[0], "_old_fold")
-        if (res == null) {
-            prog |> macro_error(call.at, "cannot fold LINQ expression\n{describe(call.arguments[0])}")
-            return res
-        }
-        return res
     }
 }

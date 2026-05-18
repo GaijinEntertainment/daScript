@@ -7,7 +7,6 @@ let THRESHOLD = 500
 
 // SQL pushes COUNT(*) to the engine returning one row.
 // m3 must materialize the full filtered array, then walk to count it.
-// m3f_old is the pre-rewrite baseline fold (frozen — diverges as splice mode lands).
 // m3f folds where+count into a single fused pass (no intermediate array).
 
 // --- m1: _sql over :memory: ---
@@ -34,17 +33,6 @@ def run_m3(b : B?; n : int) {
     }
 }
 
-// --- m3f_old: pre-rewrite baseline fold ---
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let c = _old_fold(each(arr)._where(_.price > THRESHOLD).count())
-        if (c == 0) {
-            b->failNow()
-        }
-    }
-}
-
 // --- m3f: array LINQ folded into a single fused pass ---
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -64,11 +52,6 @@ def count_aggregate_m1(b : B?) {
 [benchmark]
 def count_aggregate_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def count_aggregate_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

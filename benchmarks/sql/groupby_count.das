@@ -32,20 +32,6 @@ def run_m3(b : B?; n : int) {
         }
     }
 }
-
-def run_m3f_old(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3f_old_array_fold/{n}", n) {
-        let groups <- _old_fold(each(arr)
-                                ._group_by(_.brand)
-                                ._select((Brand = _._0, N = _._1 |> length))
-                                .to_array())
-        if (empty(groups)) {
-            b->failNow()
-        }
-    }
-}
-
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -67,11 +53,6 @@ def groupby_count_m1(b : B?) {
 [benchmark]
 def groupby_count_m3(b : B?) {
     run_m3(b, 100000)
-}
-
-[benchmark]
-def groupby_count_m3f_old(b : B?) {
-    run_m3f_old(b, 100000)
 }
 
 [benchmark]

@@ -800,9 +800,6 @@ def test_sum_accumulator(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
         let s = _fold(each(arr).sum())
         t |> equal(15, s)
-        // parity vs _old_fold
-        let s_old = _old_fold(each(arr).sum())
-        t |> equal(s_old, s)
     }
     t |> run("sum: where filter") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -838,8 +835,6 @@ def test_min_accumulator(t : T?) {
         let arr <- [5, 3, 8, 1, 4]
         let m = _fold(each(arr).min())
         t |> equal(1, m)
-        let m_old = _old_fold(each(arr).min())
-        t |> equal(m_old, m)
     }
     t |> run("min: where filter") @(t : T?) {
         let arr <- [5, 3, 8, 1, 4]
@@ -869,8 +864,6 @@ def test_max_accumulator(t : T?) {
         let arr <- [5, 3, 8, 1, 4]
         let m = _fold(each(arr).max())
         t |> equal(8, m)
-        let m_old = _old_fold(each(arr).max())
-        t |> equal(m_old, m)
     }
     t |> run("max: where filter") @(t : T?) {
         let arr <- [5, 3, 8, 1, 4]
@@ -900,8 +893,6 @@ def test_average_accumulator(t : T?) {
         let arr <- [2, 4, 6, 8]
         let a = _fold(each(arr).average())
         t |> equal(5.0lf, a)
-        let a_old = _old_fold(each(arr).average())
-        t |> equal(a_old, a)
     }
     t |> run("average: where filter") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -927,8 +918,6 @@ def test_long_count_accumulator(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
         let c = _fold(each(arr).long_count())
         t |> equal(5l, c)
-        let c_old = _old_fold(each(arr).long_count())
-        t |> equal(c_old, c)
     }
     t |> run("long_count: where filter") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -954,8 +943,6 @@ def test_first_early_exit(t : T?) {
         let arr <- [7, 8, 9]
         let f = _fold(each(arr).first())
         t |> equal(7, f)
-        let f_old = _old_fold(each(arr).first())
-        t |> equal(f_old, f)
     }
     t |> run("first: where matches returns first match") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -980,8 +967,6 @@ def test_first_or_default_early_exit(t : T?) {
         let arr <- [7, 8, 9]
         let f = _fold(each(arr).first_or_default(99))
         t |> equal(7, f)
-        let f_old = _old_fold(each(arr).first_or_default(99))
-        t |> equal(f_old, f)
     }
     t |> run("first_or_default: where matches returns first match") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -1306,5 +1291,39 @@ def test_chained_non_workhorse_select(t : T?) {
             .max())
         // _ * 2 → [2,4,6,8,10]; .a[1] → [3,5,7,9,11]; max = 11
         t |> equal(11, r)
+    }
+}
+
+[test]
+def test_iterator_source_bare_order(t : T?) {
+    // Regression — splice path for bare order family on an iterator source. peel_each only
+    // unwraps `each(<array>)`; `each(<iterator-yielding source>)` leaves an iterator on top.
+    // Old planner unconditionally wrapped the emission with `to_sequence_move()` whenever
+    // `expr._type.isIterator`, which compile-errored because daslib's `order_*(iter,…)`
+    // overloads already return iterator and `to_sequence_move` is array-only.
+    t |> run("each(range) |> order_by — splice emits iter-returning overload") @(tt : T?) {
+        var query = _fold(each(range(0, 5))._order_by(-_))
+        // range(0,5) = [0,1,2,3,4]; ordered by -v = [4,3,2,1,0]
+        let expected = [4, 3, 2, 1, 0]
+        for (v, i in query, 0 .. 5) {
+            tt |> equal(expected[i], v)
+        }
+    }
+}
+
+[test]
+def test_top_n_mid_chain_iterator_source(t : T?) {
+    // Regression — `top_n_*` registered in linqCalls but always returns array regardless of
+    // input shape, so no `_to_array` variant exists. `fold_linq_default`'s first-position
+    // iterator-source rewrite must skip the `_to_array` suffix for these. Hits when the user
+    // hand-pipes `top_n_*(...)` mid-chain (it isn't a comprehension form, so this is the
+    // only way to land here, but the path is real and the bug was a compile error.)
+    t |> run("each(range) |> top_n_by |> _select — top_n_by stays unrewritten") @(tt : T?) {
+        var query = _fold(each(range(0, 10)) |> top_n_by(3, @@(v : int) => -v) |> _select(_ + 100))
+        // top_n_by smallest 3 by -v ⇒ largest 3 by v = [9, 8, 7]; + 100 ⇒ [109, 108, 107]
+        let expected = [109, 108, 107]
+        for (v, i in query, 0 .. 3) {
+            tt |> equal(expected[i], v)
+        }
     }
 }

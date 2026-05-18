@@ -464,6 +464,118 @@ def test_top_n_by(t : T?) {
 }
 
 [test]
+def test_top_n_by_descending(t : T?) {
+    t |> run("top_n_by_descending on array source — N largest descending") @(t : T?) {
+        let src <- [10, 20, 5, 8, 30, 15, 2, 25]
+        let got <- top_n_by_descending(src, 3, @@(v : int -&) => v)
+        let expected = [30, 25, 20]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+    t |> run("top_n_by_descending on iterator source — bounded min-heap") @(t : T?) {
+        let src <- [10, 20, 5, 8, 30, 15, 2, 25]
+        let got <- top_n_by_descending(src.to_sequence(), 3, @@(v : int -&) => v)
+        let expected = [30, 25, 20]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+    t |> run("top_n_by_descending N=0 yields empty") @(t : T?) {
+        let src <- [10, 20, 5]
+        let got <- top_n_by_descending(src, 0, @@(v : int -&) => v)
+        t |> equal(length(got), 0)
+    }
+    t |> run("top_n_by_descending N<0 yields empty") @(t : T?) {
+        let src <- [10, 20, 5]
+        let got <- top_n_by_descending(src, -1, @@(v : int -&) => v)
+        t |> equal(length(got), 0)
+    }
+    t |> run("top_n_by_descending N > length yields all elements sorted descending") @(t : T?) {
+        let src <- [10, 20, 5]
+        let got <- top_n_by_descending(src, 100, @@(v : int -&) => v)
+        let expected = [20, 10, 5]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+    t |> run("top_n_by_descending N=1 picks single maximum") @(t : T?) {
+        let src <- [7, 3, 1, 9, 5]
+        let got <- top_n_by_descending(src, 1, @@(v : int -&) => v)
+        t |> equal(length(got), 1)
+        t |> equal(got[0], 9)
+    }
+    t |> run("top_n_by_descending on iterator source — empty") @(t : T?) {
+        let src : array<int>
+        let got <- top_n_by_descending(src.to_sequence(), 3, @@(v : int -&) => v)
+        t |> equal(length(got), 0)
+    }
+    t |> run("top_n_by_descending on user struct by field key") @(t : T?) {
+        let src <- [
+            ComplexType(a = [10, 0]),
+            ComplexType(a = [5, 0]),
+            ComplexType(a = [25, 0]),
+            ComplexType(a = [2, 0]),
+            ComplexType(a = [15, 0])
+        ]
+        let got <- top_n_by_descending(src, 3, @@(c : ComplexType) => c.a[0])
+        t |> equal(length(got), 3)
+        t |> equal(got[0].a[0], 25)
+        t |> equal(got[1].a[0], 15)
+        t |> equal(got[2].a[0], 10)
+    }
+    t |> run("top_n_by_descending parity vs sort+take direct reference") @(t : T?) {
+        let src <- [42, 7, 13, 88, 21, 4, 99, 56, 33, 71]
+        let got <- top_n_by_descending(src, 4, @@(v : int -&) => v)
+        // hand-rolled reference: clone, sort descending, take first 4
+        var refSorted : array<int>
+        refSorted := src
+        sort(refSorted, $(a, b) => a > b)
+        t |> equal(length(got), 4)
+        for (i in 0..4) {
+            t |> equal(got[i], refSorted[i])
+        }
+    }
+}
+
+[test]
+def test_top_n_descending(t : T?) {
+    t |> run("top_n_descending on array source — N largest descending") @(t : T?) {
+        let src <- [10, 20, 5, 8, 30, 15, 2, 25]
+        let got <- top_n_descending(src, 3)
+        let expected = [30, 25, 20]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+    t |> run("top_n_descending on iterator source") @(t : T?) {
+        let src <- [10, 20, 5, 8, 30, 15, 2, 25]
+        let got <- top_n_descending(src.to_sequence(), 3)
+        let expected = [30, 25, 20]
+        t |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            t |> equal(v, e)
+        }
+    }
+    t |> run("top_n_descending N=0 yields empty") @(t : T?) {
+        let src <- [10, 20, 5]
+        let got <- top_n_descending(src, 0)
+        t |> equal(length(got), 0)
+    }
+    t |> run("top_n_descending on floats") @(t : T?) {
+        let src <- [3.14, 1.41, 2.71, 0.57, 1.61]
+        let got <- top_n_descending(src, 2)
+        t |> equal(length(got), 2)
+        t |> equal(got[0], 3.14)
+        t |> equal(got[1], 2.71)
+    }
+}
+
+[test]
 def test_heap_ops(t : T?) {
     t |> run("make_heap → max at root") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7]
