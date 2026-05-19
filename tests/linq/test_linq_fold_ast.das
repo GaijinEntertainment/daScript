@@ -1951,6 +1951,9 @@ def test_group_by_count_emits_table_no_bucket_arrays(t : T?) {
         t |> equal(0, count_call(body_expr, "group_by_lazy_impl"), "must NOT call impl")
         // unique_key must be invoked per element to derive the seen-table key.
         t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        // Single-hash hot path: key_exists must NOT appear (the `tab?[uk] ?? dummy` +
+        // addr-compare pattern avoids the extra membership check). See PR #2721.
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
         // For-loop count: table-update loop + result-build loop = 2.
         t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
     }
@@ -1982,6 +1985,8 @@ def test_group_by_count_named_tuple_preserves_keys(t : T?) {
         // absence of `length` here — `length(tab)` legitimately appears in the
         // reserve hint and would false-positive.)
         t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        // Single-hash hot path: no key_exists. See PR #2721.
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
     }
 }
 
@@ -2007,6 +2012,64 @@ def test_group_by_count_terminator_returns_table_length(t : T?) {
         // Only ONE for-loop (the table-update). Result-build loop is elided when
         // terminator is count (we just return length(tab)).
         t |> equal(1, count_inner_for_loops(body_expr), "single table-update loop, no result loop")
+        // Single-hash hot path: no key_exists. See PR #2721.
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_inner_select_sum_bare_fold() : array<int> {
+    // G4 (PR-A1): bare inner-select-sum body. is_bucket_reducer_call's new arm matches
+    // `sum(select(<bind>._1, <lambda>))`; the inner lambda body is peeled by fold_linq_cond
+    // and inlined into the per-element `entry._1 += <body>` site.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> select(@(x : int) => x * 2) |> sum))
+}
+
+[test]
+def test_group_by_inner_select_sum_emits_table_no_inner_select_call(t : T?) {
+    // G4: bare inner-select-sum splices through the new arm. Body must NOT contain
+    // a runtime call to `select` (the inner select is peeled + inlined) and must
+    // preserve the single-hash hot-path fingerprint from PR #2721.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_inner_select_sum_bare_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "select"), "inner select must be inlined, not called")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_inner_select_sum_named_fold() : array<tuple<K : int; T : int>> {
+    // G4b: named-tuple-wrap form `(K=_._0, T=_._1|>select(<inner>)|>sum)`. Splice fires
+    // via Case B (named-tuple recognizer); table value type = user's named tuple,
+    // accumulator slot = inner projection result type.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, T = _._1 |> select(@(x : int) => x * 2) |> sum)))
+}
+
+[test]
+def test_group_by_inner_select_sum_named_preserves_key(t : T?) {
+    // G4b: named-tuple wrap with inner-select-sum splices and keeps the user's field names.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_inner_select_sum_named_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "select"), "inner select must be inlined, not called")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
     }
 }
 
