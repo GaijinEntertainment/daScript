@@ -296,10 +296,16 @@ namespace das {
             Enum(value,info);
         }
         virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) override {
-            Enum(value,info);
+            // For uint8-backed enums the byte represents an unsigned value; promoting via int8_t
+            // sign-extends so the lookup against the int64_t-stored field value would miss.
+            int64_t v = (info && (info->flags & EnumInfo::flag_unsigned))
+                ? int64_t(uint8_t(value)) : int64_t(value);
+            Enum(v,info);
         }
         virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) override {
-            Enum(value,info);
+            int64_t v = (info && (info->flags & EnumInfo::flag_unsigned))
+                ? int64_t(uint16_t(value)) : int64_t(value);
+            Enum(v,info);
         }
         virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * info ) override {
             Enum(value,info);

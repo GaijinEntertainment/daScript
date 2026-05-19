@@ -485,10 +485,14 @@ namespace das
     };
 
     struct EnumInfo {
+        enum {
+            flag_unsigned = (1<<0)    // underlying type is uint8/uint16/uint32/uint64 (not int*)
+        };
         const char *        name;
         const char *        module_name;
         EnumValueInfo **    fields;
         uint32_t            count;
+        uint32_t            flags;
         uint64_t            hash;
     };
 

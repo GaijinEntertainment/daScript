@@ -219,9 +219,14 @@ namespace das {
     };
 
     typedef EnumStubAny<int32_t> EnumStub;
-    typedef EnumStubAny<int8_t> EnumStub8;
-    typedef EnumStubAny<int16_t> EnumStub16;
-    typedef EnumStubAny<int64_t> EnumStub64;
+    typedef EnumStubAny<int8_t>   EnumStub8;
+    typedef EnumStubAny<int16_t>  EnumStub16;
+    typedef EnumStubAny<int64_t>  EnumStub64;
+    // unsigned-underlying variants — used by the typer to dispatch `int(uint8Enum)` / `uint(uint8Enum)`
+    // (and 16/64-bit) so the byte zero-extends instead of sign-extending via int8_t/int16_t/int64_t.
+    typedef EnumStubAny<uint8_t>  EnumStub8u;
+    typedef EnumStubAny<uint16_t> EnumStub16u;
+    typedef EnumStubAny<uint64_t> EnumStub64u;
 
     template <typename ST>
     struct BitfieldAny {

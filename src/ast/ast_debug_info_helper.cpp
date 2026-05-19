@@ -74,6 +74,11 @@ namespace das {
         eni->name = debugInfo->allocateCachedName(en.name);
         eni->module_name = debugInfo->allocateCachedName(en.module->name);
         eni->count = uint32_t(en.list.size());
+        eni->flags = 0;
+        if ( en.baseType==Type::tUInt8 || en.baseType==Type::tUInt16
+                || en.baseType==Type::tUInt || en.baseType==Type::tUInt64 ) {
+            eni->flags |= EnumInfo::flag_unsigned;
+        }
         eni->fields = (EnumValueInfo **) debugInfo->allocate(sizeof(EnumValueInfo *) * eni->count);
         uint32_t i = 0;
         for ( auto & ev : en.list ) {

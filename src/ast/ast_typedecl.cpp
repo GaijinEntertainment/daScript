@@ -1711,6 +1711,24 @@ namespace das
             if ( enumType && decl.enumType && enumType!=decl.enumType ) {
                 return false;
             }
+            // Stub-binding parameters are signedness-typed for 8/16/64-bit enums (see
+            // typeFactory<EnumStub8/16/64> and typeFactory<EnumStub*u>). When the binding side carries
+            // the marker, only match a concrete enum whose underlying signedness lines up — so that
+            // `int(uint8Enum)` dispatches to enum8u_to_int (zero-extending) rather than enum8_to_int.
+            // Either side may be the binding (isSameType callers swap argType<->passType depending on
+            // direction), so check both. Falls through unchanged for user-typed enum params and for
+            // generic AST-side TypeDecls (no enumType, no binding marker).
+            if ( baseType==Type::tEnumeration8 || baseType==Type::tEnumeration16 || baseType==Type::tEnumeration64 ) {
+                auto signednessMismatch = [](const TypeDecl & stub, const TypeDecl & concrete) -> bool {
+                    if ( !stub.enumStubBinding || !concrete.enumType ) return false;
+                    bool concreteIsUnsigned = concrete.enumType->baseType==Type::tUInt8
+                                           || concrete.enumType->baseType==Type::tUInt16
+                                           || concrete.enumType->baseType==Type::tUInt64;
+                    return stub.enumStubIsUnsigned != concreteIsUnsigned;
+                };
+                if ( signednessMismatch(*this, decl) ) return false;
+                if ( signednessMismatch(decl, *this) ) return false;
+            }
             break;
         case Type::tArray:
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
@@ -3244,6 +3262,10 @@ namespace das
             if ( baseType==Type::tEnumeration8 ) ss << "8";
             else if ( baseType==Type::tEnumeration16 ) ss << "16";
             else if ( baseType==Type::tEnumeration64 ) ss << "64";
+            // EnumStub binding marker + signedness — distinguishes enum8u_to_int(EnumStub8u) from
+            // enum8_to_int(EnumStub8) at function-mangling time so both bindings coexist in the same module.
+            if ( enumStubBinding )    ss << "b";
+            if ( enumStubIsUnsigned ) ss << "u";
             if ( enumType ) {
                 ss << "<" << enumType->getMangledName() << ">";
             }
