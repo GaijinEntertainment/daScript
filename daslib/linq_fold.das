@@ -430,7 +430,10 @@ def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? 
 def private finalize_lane_emission(var topExprs : array<Expression?>; srcNames : array<string>;
                                    var bodyStmts : array<Expression?>; at : LineInfo) : Expression? {
     // Multi-source-aware invoke wrap used by emit_accumulator_lane / emit_early_exit_lane. 1-source clones top + derives param type + emits 1-arg invoke; 2-source (zip) does both sides + emits 2-arg invoke. Caller has already pushed the for-loop into bodyStmts.
-    if (length(srcNames) == 1) {
+    let nSrcs = length(srcNames)
+    if (nSrcs != 1 && nSrcs != 2) panic("finalize_lane_emission: only 1- or 2-source supported (got {nSrcs}); higher-arity zip planners must extend this branch (or build the invoke wrap directly)")
+    if (length(topExprs) != nSrcs) panic("finalize_lane_emission: topExprs length {length(topExprs)} != srcNames length {nSrcs}")
+    if (nSrcs == 1) {
         var topExpr = clone_expression(topExprs[0])
         topExpr.genFlags.alwaysSafe = true
         var srcParamType = invoke_src_param_type(topExprs[0])
