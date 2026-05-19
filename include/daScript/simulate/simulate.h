@@ -356,7 +356,7 @@ namespace das
         void onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at );
         void onFree ( void * ptr, const LineInfo & at );
 
-        __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at ) {
+        __forceinline char * allocateIterator ( uint64_t size, const char * iterName, const LineInfo * at ) {
             auto aptr = heap->impl_allocateIterator(size, iterName);
             if ( !aptr ) throw_out_of_memory(false, size + 16, at);
             if ( instrumentAllocations ) onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
@@ -368,26 +368,26 @@ namespace das
             heap->impl_freeIterator(ptr);
         }
 
-        __forceinline char * allocate ( uint32_t size, const LineInfo * at = nullptr ) {
+        __forceinline char * allocate ( uint64_t size, const LineInfo * at = nullptr ) {
             auto aptr = heap->impl_allocate(size);
             if ( !aptr && size ) throw_out_of_memory(false, size, at);
             if ( instrumentAllocations ) onAllocate(aptr, size, at ? *at : LineInfo());
             return aptr;
         }
 
-        __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at ) {
+        __forceinline char * reallocate ( char * ptr, uint64_t oldSize, uint64_t size, const LineInfo * at ) {
             auto aptr = heap->impl_reallocate(ptr, oldSize, size);
             if ( !aptr && size ) throw_out_of_memory(false, size, at);
             if ( instrumentAllocations ) onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
             return aptr;
         }
 
-        __forceinline void free ( char * ptr, uint32_t size, const LineInfo * at = nullptr ) {
+        __forceinline void free ( char * ptr, uint64_t size, const LineInfo * at = nullptr ) {
             if ( instrumentAllocations ) onFree(ptr, at ? *at : LineInfo());
             heap->impl_free(ptr, size);
         }
 
-        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at, bool tempString = false ) {
+        __forceinline char * allocateString ( const char * text, uint64_t length, const LineInfo * at, bool tempString = false ) {
             auto astr = stringHeap->impl_allocateString(this, text, length, at);
             if ( !astr && length ) throw_out_of_memory(true, length+1, at);
             if ( instrumentAllocations ) onAllocateString(astr, length, tempString, at ? *at : LineInfo());
@@ -395,18 +395,18 @@ namespace das
         }
 
         __forceinline char * allocateString ( const string & str, const LineInfo * at, bool tempString = false ) {
-            auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
-            if ( !astr && str.size() ) throw_out_of_memory(true, uint32_t(str.size()+1), at);
+            auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint64_t(str.size()), at);
+            if ( !astr && str.size() ) throw_out_of_memory(true, uint64_t(str.size()+1), at);
             if ( instrumentAllocations ) onAllocateString(astr, str.size(), tempString, at ? *at : LineInfo());
             return astr;
         }
 
-        __forceinline char * allocateTempString ( const char * text, uint32_t length, const LineInfo * at ) {
+        __forceinline char * allocateTempString ( const char * text, uint64_t length, const LineInfo * at ) {
             return allocateString(text, length, at, /*temp*/true);
         }
 
-        __forceinline bool freeString ( char * ptr, uint32_t length, const LineInfo * at, bool tempString = false ) {
-            uint32_t size = length + 1;
+        __forceinline bool freeString ( char * ptr, uint64_t length, const LineInfo * at, bool tempString = false ) {
+            uint64_t size = length + 1;
             size = (size + 15) & ~15;
             if (stringHeap->isOwnPtr(ptr, size)) {
                 if ( instrumentAllocations ) onFreeString(ptr, tempString, at ? *at : LineInfo());
@@ -418,7 +418,7 @@ namespace das
 
         __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
             if ( stringHeap->isIntern() ) return;
-            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue),at, /*temp*/true);
+            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint64_t)strlen(stringDisposeQue),at, /*temp*/true);
             stringDisposeQue = ptr;
         }
 
@@ -502,7 +502,7 @@ namespace das
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);
         DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
-        DAS_NORETURN_PREFIX void throw_out_of_memory ( bool stringHeap, uint32_t size, const LineInfo * at=nullptr ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_out_of_memory ( bool stringHeap, uint64_t size, const LineInfo * at=nullptr ) DAS_NORETURN_SUFFIX;
 
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;

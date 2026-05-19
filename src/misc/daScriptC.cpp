@@ -1070,6 +1070,36 @@ void das_context_free ( das_context * context, void * ptr, uint32_t size ) {
     ((Context *)context)->free((char *)ptr, size, nullptr);
 }
 
+// --- Context heap (64-bit size) ---
+
+void * das_context_allocate_i64 ( das_context * context, uint64_t size ) {
+    if ( !size ) return nullptr;
+    return ((Context *)context)->allocate(size, nullptr);
+}
+
+void * das_context_reallocate_i64 ( das_context * context, void * ptr, uint64_t old_size, uint64_t new_size ) {
+    if ( !new_size ) {
+        if ( ptr ) {
+            if ( !old_size ) {
+                ((Context *)context)->throw_error("das_context_reallocate_i64: old_size must be non-zero when ptr is non-null");
+                return nullptr;
+            }
+            ((Context *)context)->free((char *)ptr, old_size, nullptr);
+        }
+        return nullptr;
+    }
+    return ((Context *)context)->reallocate((char *)ptr, old_size, new_size, nullptr);
+}
+
+void das_context_free_i64 ( das_context * context, void * ptr, uint64_t size ) {
+    if ( !ptr ) return;
+    if ( !size ) {
+        ((Context *)context)->throw_error("das_context_free_i64: size must be non-zero when ptr is non-null");
+        return;
+    }
+    ((Context *)context)->free((char *)ptr, size, nullptr);
+}
+
 // --- Arrays ---
 
 void das_array_init ( das_array * arr ) {

@@ -80,7 +80,7 @@ namespace das {
 #endif
     }
 
-    void MemoryModel::setInitialSize ( uint32_t size ) {
+    void MemoryModel::setInitialSize ( uint64_t size ) {
         initialSize = size;
     }
 
@@ -113,7 +113,7 @@ namespace das {
         }
     }
 
-    char * MemoryModel::allocate ( uint32_t size ) {
+    char * MemoryModel::allocate ( uint64_t size ) {
         if ( !size ) return nullptr;
         size = (size + alignMask) & ~alignMask;
         totalAllocated += size;
@@ -130,19 +130,19 @@ namespace das {
 #endif
             return ptr;
         } else {
-            if ( char * res = shoe.allocate(size) ) {
+            if ( char * res = shoe.allocate(uint32_t(size)) ) {
                 return res;
             }
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            uint32_t si = (size >> 4) - 1;
+            uint32_t si = uint32_t((size >> 4) - 1);
             uint32_t total = grow(si);
-            shoe.chunks[si] = new Deck(total, size, shoe.chunks[si]);
+            shoe.chunks[si] = new Deck(total, uint32_t(size), shoe.chunks[si]);
             return shoe.chunks[si]->allocate();
         }
     }
 
-    bool MemoryModel::free ( char * ptr, uint32_t size ) {
+    bool MemoryModel::free ( char * ptr, uint64_t size ) {
         if ( !size ) return true;
         size = (size + alignMask) & ~alignMask;
 
@@ -150,7 +150,7 @@ namespace das {
         memset(ptr, 0xcd, size);
 #endif
         if ( size <= maxShoeAllocation ) {
-            shoe.free(ptr, size);
+            shoe.free(ptr, uint32_t(size));
             totalAllocated -= size;
             return true;
         }
@@ -162,7 +162,7 @@ namespace das {
 #endif
         auto itb = bigStuff.find(ptr);
         if ( itb!=bigStuff.end() ) {
-            DAS_ASSERTF(itb->second==size, "free size mismatch, %u allocated vs %u freed", itb->second, size );
+            DAS_ASSERTF(itb->second==size, "free size mismatch, %llu allocated vs %llu freed", (unsigned long long)itb->second, (unsigned long long)size );
 #if DAS_SANITIZER
             memset(ptr, 0xcd, size);
             deletedBigStuff[itb->first] = itb->second;
@@ -185,7 +185,7 @@ namespace das {
         return false;
     }
 
-    char * MemoryModel::reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
+    char * MemoryModel::reallocate ( char * ptr, uint64_t size, uint64_t nsize ) {
         if ( !ptr ) return allocate(nsize);
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
@@ -296,7 +296,7 @@ namespace das {
         }
     }
 
-    char * LinearChunkAllocator::reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
+    char * LinearChunkAllocator::reallocate ( char * ptr, uint64_t size, uint64_t nsize ) {
         if ( !ptr ) return allocate(nsize);
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
@@ -307,11 +307,12 @@ namespace das {
         return nptr;
     }
 
-    void LinearChunkAllocator::free ( char * ptr, uint32_t s ) {
+    void LinearChunkAllocator::free ( char * ptr, uint64_t s ) {
         s = (s + alignMask) & ~alignMask;
+        DAS_ASSERTF(s <= UINT32_MAX, "LinearChunkAllocator chunks are uint32-bounded; free of >4GB block makes no sense");
         for ( auto ch=chunk; ch; ch=ch->next ) {
             if ( ch->isOwnPtr(ptr) ) {
-                ch->free(ptr,s);
+                ch->free(ptr,uint32_t(s));
                 break;
             }
         }
@@ -321,29 +322,30 @@ namespace das {
         return customGrow ? customGrow(size) : size * 2;
     }
 
-    char * LinearChunkAllocator::allocate ( uint32_t s ) {
+    char * LinearChunkAllocator::allocate ( uint64_t s ) {
         if ( !s ) return nullptr;
         s = (s + alignMask) & ~alignMask;
+        DAS_VERIFYF(s <= UINT32_MAX, "LinearChunkAllocator: single allocation of %llu bytes exceeds the per-chunk uint32 cap; >4GB allocations must go through PersistentHeapAllocator", (unsigned long long)s);
         if ( !chunk ) {
             if ( !initialSize ) {
                 initialSize = default_initial_size;
             }
-            chunk = new HeapChunk ( das::max(initialSize, s), nullptr );
+            chunk = new HeapChunk ( uint32_t(das::max(initialSize, s)), nullptr );
             // printf("[HC] %i\n", chunk->size);
         }
         for ( ;; ) {
-            if ( char * res = chunk->allocate(s) ) {
+            if ( char * res = chunk->allocate(uint32_t(s)) ) {
                 // printf("[A] %i bytes, offs=%i\n", int(s), int(res-chunk->data));
                 return res;
             }
-            chunk = new HeapChunk ( das::max(grow(chunk->size), s), chunk);
+            chunk = new HeapChunk ( uint32_t(das::max(uint64_t(grow(chunk->size)), s)), chunk);
             // printf("[HC] %i bytes\n", chunk->size);
         }
     }
 
     void LinearChunkAllocator::reset() {
         if ( chunk && chunk->next ) {
-            auto maxAllocated = (uint32_t(bytesAllocated())+1023) & ~1023;
+            auto maxAllocated = (bytesAllocated()+1023) & ~uint64_t(1023);
             initialSize = das::max(initialSize, maxAllocated);
             delete chunk;
             chunk = nullptr;
