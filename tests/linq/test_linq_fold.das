@@ -1865,6 +1865,125 @@ def test_group_by_multi_reducer_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_average_fold_parity(t : T?) {
+    // PR-A2 follow-up: average reducer splices via 2-slot per-key accumulator
+    // (sum : double + count : uint64) with post-process division at result-build.
+    // Each bucket is non-empty by construction → no divide-by-zero guard needed.
+    t |> run("bare _._1 |> average") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> average))
+        // Buckets: 0→{30,21,12} avg=21.0; 1→{10,31} avg=20.5; 2→{20,11} avg=15.5
+        tt |> equal(3, length(got))
+        var sumAll = 0lf
+        for (v in got) {
+            sumAll += v
+        }
+        tt |> equal(57lf, sumAll)
+    }
+    t |> run("named (K=_._0, Avg=_._1|>average) — field name + key preserved") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; double>
+        for (item in got) {
+            perKey[item.K] = item.Avg
+        }
+        tt |> equal(21.0lf, perKey[0])
+        tt |> equal(20.5lf, perKey[1])
+        tt |> equal(15.5lf, perKey[2])
+    }
+    t |> run("inner-select-average — bare with inner projection") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> select(@(x : int) => x * 2) |> average))
+        // Inner projects x→x*2. Bucket sums double, count stays the same → averages also double.
+        tt |> equal(3, length(got))
+        var perCount : table<int; int>
+        for (v in got) {
+            perCount[int(v)] = (perCount?[int(v)] ?? 0) + 1
+        }
+        // Avgs (doubled): 42.0, 41.0, 31.0 — all integers in this fixture so int round-trip is safe.
+        tt |> equal(1, perCount[42])
+        tt |> equal(1, perCount[41])
+        tt |> equal(1, perCount[31])
+    }
+    t |> run("inner-select-average (named): (K, Avg = select(x*2) |> average)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> select(@(x : int) => x * 2) |> average)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; double>
+        for (item in got) {
+            perKey[item.K] = item.Avg
+        }
+        tt |> equal(42.0lf, perKey[0])
+        tt |> equal(41.0lf, perKey[1])
+        tt |> equal(31.0lf, perKey[2])
+    }
+    t |> run("multi-reducer with average: (K, N, S, Avg)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+            (K = _._0, N = _._1 |> length, S = _._1 |> sum, Avg = _._1 |> average)))
+        tt |> equal(3, length(got))
+        var keysSeen = 0
+        for (item in got) {
+            if (item.K == 0) { tt |> equal(3, item.N); tt |> equal(63, item.S); tt |> equal(21.0lf, item.Avg); keysSeen ++; }
+            elif (item.K == 1) { tt |> equal(2, item.N); tt |> equal(41, item.S); tt |> equal(20.5lf, item.Avg); keysSeen ++; }
+            elif (item.K == 2) { tt |> equal(2, item.N); tt |> equal(31, item.S); tt |> equal(15.5lf, item.Avg); keysSeen ++; }
+        }
+        tt |> equal(3, keysSeen)
+    }
+    t |> run("multi-reducer with 2 averages: (K, AvgRaw, AvgDoubled)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+            (K = _._0, AvgRaw = _._1 |> average, AvgDoubled = _._1 |> select(@(x : int) => x * 2) |> average)))
+        tt |> equal(3, length(got))
+        for (item in got) {
+            // Doubled inner-select gives 2× raw average.
+            tt |> equal(item.AvgRaw * 2.0lf, item.AvgDoubled)
+        }
+    }
+    t |> run("average on empty source → empty result") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by(_ % 3)._select(_._1 |> average))
+        tt |> equal(0, length(got))
+    }
+    t |> run("average parity with reference plain LINQ") @(tt : T?) {
+        let foldGot <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
+        let refGot  <- ([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
+        tt |> equal(length(refGot), length(foldGot))
+        var refAvg, foldAvg : table<int; double>
+        for (r in refGot) {
+            refAvg[r.K] = r.Avg
+        }
+        for (f in foldGot) {
+            foldAvg[f.K] = f.Avg
+        }
+        for (k in keys(refAvg)) {
+            tt |> equal(refAvg?[k] ?? -1.0lf, foldAvg?[k] ?? -1.0lf)
+        }
+    }
+    t |> run("float source — average over array<float>") @(tt : T?) {
+        let got <- _fold([1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f]._group_by(int(_) % 2)._select((K = _._0, Avg = _._1 |> average)))
+        tt |> equal(2, length(got))
+        var perKey : table<int; double>
+        for (item in got) {
+            perKey[item.K] = item.Avg
+        }
+        // Bucket 0: {2,4,6}=12/3=4.0; bucket 1: {1,3,5}=9/3=3.0.
+        tt |> equal(4.0lf, perKey[0])
+        tt |> equal(3.0lf, perKey[1])
+    }
+    t |> run("positional tuple with average: (_._0, _._1|>average) — no field names") @(tt : T?) {
+        // Recognizer accepts positional tuples (ExprMakeTuple with bind._0 at slot 0); the
+        // result-build synthesis must not assume argNames is populated (it's empty for
+        // positional). Use length(argTypes) for slot count, only fill recordNames when names
+        // are present.
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((_._0, _._1 |> average)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; double>
+        for (item in got) {
+            perKey[item._0] = item._1
+        }
+        tt |> equal(21.0lf, perKey[0])
+        tt |> equal(20.5lf, perKey[1])
+        tt |> equal(15.5lf, perKey[2])
+    }
+}
+
+[test]
 def test_group_by_upstream_fusion_fold_parity(t : T?) {
     // PR-B: upstream where_/select fuses into the per-element loop. Where guards the
     // table update; select binds projected values that the key/reducer chain references.
