@@ -23,16 +23,22 @@ The ``->`` operator can be used instead of ``:`` for the return type:
 If no type signature is specified, ``lambda`` alone represents a lambda that takes no
 arguments and returns nothing.
 
-Lambdas can be local or global variables, and can be passed as an argument by reference.
-Lambdas can be moved, but can't be copied or cloned:
+Lambdas can be local or global variables, and can be passed by value or by reference.
+A lambda value is a fat pointer to a heap-allocated capture frame, so assignment
+``=`` aliases the same capture (cheap, no allocation); ``<-`` is the explicit move
+form. Cloning is not supported.
 
 .. code-block:: das
 
     def foo ( x : lambda < (arg1:int;arg2:float&):bool > ) {
         ...
-        var y <- x
+        var y = x       // copy — y and x now alias the same capture frame
+        var z <- x      // move — alternative when x is no longer needed
         ...
     }
+
+Because copies alias the capture frame, ``delete lam`` requires ``unsafe`` —
+otherwise sibling copies would be left dangling. See :ref:`finalizer notes below <lambdas_finalizer>`.
 
 Lambdas can be invoked via ``invoke`` or call-like syntax:
 
@@ -46,7 +52,8 @@ Lambdas can be invoked via ``invoke`` or call-like syntax:
         return x(14)
     }
 
-Lambdas are typically declared via move syntax:
+Lambdas are typically declared via move syntax (since ``@(...) { ... }`` produces a
+fresh capture frame that the binding owns initially):
 
 .. code-block:: das
 
@@ -94,11 +101,13 @@ By default, capture by copy is used. If copy is not available, the ``unsafe`` ke
 
 .. _lambdas_finalizer:
 
-Lambdas can be deleted, which causes finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`):
+Lambdas can be deleted, which causes finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`).
+Because copies alias the same capture frame, ``delete`` requires ``unsafe`` —
+the caller is asserting no other live copy exists:
 
 .. code-block:: das
 
-    delete lam
+    unsafe { delete lam; }
 
 Lambdas can specify a custom finalizer which is invoked before the default finalizer:
 
@@ -111,7 +120,7 @@ Lambdas can specify a custom finalizer which is invoked before the default final
         print("CNT = {CNT}\n")
     }
     var x = invoke(counter,13)
-    delete counter                  // this is when the finalizer is called
+    unsafe { delete counter; }      // this is when the finalizer is called
 
 .. _lambdas_iterator:
 
@@ -207,12 +216,16 @@ The C++ Lambda class contains single void pointer for the capture data:
         ...
     };
 
-The rationale behind passing lambdas by reference is that when ``delete`` is called:
+When ``delete`` is called on a lambda:
 
     1. the finalizer is invoked for the capture data
-    2. the capture is replaced with null
+    2. the capture pointer is replaced with null in the local variable
 
-The lack of copy or move semantics ensures that multiple pointers to a single instance of captured data cannot exist.
+A lambda value is one machine word — the ``char *capture`` pointer above — so
+copy is a cheap pointer alias and pass-by-value is free. Because copies
+share the capture frame, ``delete lam`` requires ``unsafe`` (mirroring how raw
+pointer ``delete`` is gated). Under the default GC the capture frame is freed
+automatically once no copy is reachable.
 
 .. seealso::
 

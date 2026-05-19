@@ -150,6 +150,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - Structs/arrays/tables always pass by reference — no `&` needed.
 - Only **workhorse types** (`int`, `float`, `bool`, `string`, …, `isWorkhorseType` on the C++ side) pass by value.
 - **AST pointers (gc_node) pass by value** — copying the pointer, no refcount, no allocation. `def foo(p : ExpressionPtr)` shares the node; `var p` lets you reassign locally; `var p : ExpressionPtr&` propagates reassignment back. For mutable field access, take the param as `var`.
+- **Lambdas pass by value (copy aliases the capture frame).** A `lambda<…>` is a fat pointer to a heap-allocated capture frame, so `=` copies the pointer (creates an alias) and pass-by-value is free. **`delete lam` requires `unsafe`** since other aliases may still be live — same rule as raw pointer / class `delete`. The rule cascades: `array<lambda<…>>`, structs with a lambda field, tuple/variant containing a lambda — all inherit the unsafe-delete requirement.
 - **Strings:** `var s : string` is a writable local copy (no propagation). `var s : string&` propagates. `:=` clones into current context's heap (required across contexts); plain `=` copies the pointer.
 - **Residual `smart_ptr` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) still use refcount semantics — variables holding them need `var inscope`. AST types do NOT — see below.
 

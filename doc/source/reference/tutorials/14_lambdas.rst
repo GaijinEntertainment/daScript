@@ -70,14 +70,22 @@ Use ``capture()`` for other modes:
 Storing lambdas
 ===============
 
-Lambdas must be **moved** with ``<-``, not copied::
+A lambda value is a fat pointer to a heap-allocated capture frame.
+``=`` copies the pointer (both bindings now alias the same capture frame),
+``<-`` moves (source becomes null)::
 
   var a <- @() { print("hello\n") }
-  var b <- a          // a is now empty
-  b()
+  var b = a           // b and a now alias the same lambda
+  var c <- a          // c takes ownership, a becomes null
+  c()
 
-Lambdas cannot be copied, but they **can** be stored in arrays using
-``emplace``, which moves the lambda into the container::
+Because copies share the capture frame, ``delete lam`` requires
+``unsafe { ... }`` — the caller asserts no other live copy exists. Under
+the default GC the capture frame is freed automatically when no copy
+remains reachable.
+
+Lambdas can be stored in arrays using ``emplace``, which moves the
+lambda into the container::
 
   var callbacks : array<lambda<():void>>
   var greet <- @() { print("hello from callback\n") }
@@ -87,6 +95,7 @@ Lambdas cannot be copied, but they **can** be stored in arrays using
   for (cb in callbacks) {
       invoke(cb)
   }
+  unsafe { delete callbacks; }   // array<lambda<...>> inherits the unsafe-delete rule
 
 Blocks **cannot** be stored in arrays or variables — they live on the
 stack and are only valid as function arguments.
@@ -165,7 +174,7 @@ Lambda vs block vs function pointer
      - By reference
    * - Storable
      - Yes
-     - Yes (move only)
+     - Yes (copy aliases capture)
      - No
    * - Returnable
      - Yes

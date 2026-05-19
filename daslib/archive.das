@@ -158,7 +158,7 @@ def public serialize(var arch : Archive; var value : float4x4) {
 def public serialize(var arch : Archive; var value : auto(TT)&) {
     //! Serializes struct by serializing each field.
     if (arch.reading) {
-        delete value
+        unsafe { delete value; }
     }
     apply(value) $ [unused_argument(name)] (name : string; field) {
         arch |> _::serialize(field)
@@ -169,7 +169,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 def public serialize(var arch : Archive; var value : auto(TT)&) {
     //! Serializes tuple by serializing each field.
     if (arch.reading) {
-        delete value
+        unsafe { delete value; }
     }
     apply(value) $ [unused_argument(name)] (name : string; field) {
         arch |> _::serialize(field)
@@ -180,7 +180,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 def public serialize(var arch : Archive; var value : auto(TT)&) {
     //! Serializes variant by serializing the index and the active field.
     if (arch.reading) {
-        delete value
+        unsafe { delete value; }
         var index : int
         arch |> read_raw(index)
         unsafe(value |> set_variant_index(index))
@@ -358,7 +358,7 @@ def public serialize(var arch : Archive; var value : table<auto(KT); auto(VT)>) 
     if (arch.reading) {
         var len : int
         arch |> read_raw(len)
-        delete value
+        unsafe { delete value; }
         for (_ in range(len)) {
             var k : KT -const -& -#
             arch |> _::serialize(k)

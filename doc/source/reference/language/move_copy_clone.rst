@@ -45,8 +45,10 @@ The source value is not modified:
 Copy works for all POD types (``int``, ``float``, ``bool``, ``string``, pointers, etc.) and for
 structs whose fields are all copyable.
 
-Types that manage owned resources — ``array``, ``table``, ``lambda``, and ``iterator`` — cannot
-be copied. Attempting to copy them produces:
+Types that manage owned resources — ``array``, ``table``, and ``iterator`` — cannot
+be copied. ``lambda`` *is* copyable (a copy aliases the capture frame, the same way a
+raw pointer copy aliases its target), but ``delete lam`` then requires ``unsafe``.
+Attempting to copy a non-copyable type produces:
 
 .. code-block:: das
 
@@ -233,7 +235,7 @@ The following table summarizes which operators work with which types:
      - ✓
      - ✓
    * - ``lambda``
-     - ✗
+     - ✓ (alias)
      - ✓
      - ✗
    * - ``block``

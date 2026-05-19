@@ -116,7 +116,13 @@ FILE(GLOB DAS_AOT_DASLIB_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/daslib
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS})
     set(all_outputs "")
-    set(command_args "")
+    # Per-batch arg buffer; chunked to keep each invocation under Windows'
+    # 32K command-line limit when worktree paths are long.
+    set(_DAS_AOT_BATCH_SIZE 60)
+    set(_batches "")
+    set(_batch_idx 0)
+    set(_batch_count 0)
+    set(_current_batch "")
     list(LENGTH input_files num_files)
 
     foreach(input ${input_files})
@@ -140,18 +146,36 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
         list(APPEND all_outputs ${out_src})
         list(APPEND ${genList} ${out_src})
 
-        # Build command arguments: tool_arg input1 output1 tool_arg input2 output2 ...
-        list(APPEND command_args ${dasAotToolArg} ${input_src} ${out_arg})
+        # Build command arguments for the current batch
+        list(APPEND _current_batch ${dasAotToolArg} ${input_src} ${out_arg})
 
         file(MAKE_DIRECTORY ${out_dir})
         set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
+
+        math(EXPR _batch_count "${_batch_count} + 1")
+        if(_batch_count GREATER_EQUAL ${_DAS_AOT_BATCH_SIZE})
+            set(_batches_${_batch_idx} "${_current_batch}")
+            list(APPEND _batches ${_batch_idx})
+            math(EXPR _batch_idx "${_batch_idx} + 1")
+            set(_current_batch "")
+            set(_batch_count 0)
+        endif()
+    endforeach()
+    if(_batch_count GREATER 0)
+        set(_batches_${_batch_idx} "${_current_batch}")
+        list(APPEND _batches ${_batch_idx})
+    endif()
+
+    set(_commands "")
+    foreach(i ${_batches})
+        list(APPEND _commands COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das -- ${_batches_${i}} ${CROSS_PLATFORM})
     endforeach()
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  ${all_outputs}
         DEPENDS ${all_depends}
         COMMENT "AOT compiling files..."
-        COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das -- ${command_args} ${CROSS_PLATFORM}
+        ${_commands}
     )
     set(custom_name ${mainTarget}_genaot)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${all_outputs})
