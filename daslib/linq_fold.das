@@ -1751,27 +1751,43 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     }
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
+    var keyBlkD = clone_expression(keyBlock)
     var stmts : array<Expression?>
-    // Table type: key is typedecl(keyBlock(default<elemT>)) wrapped in _::unique_key for the hash slot.
+    let dummyName = "`dummy`{at.line}`{at.column}"
+    // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem).
     if (usesNamedTuple) {
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
+        }
+        var tabValueType2 = clone_type(tabValueType)
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : $t(tabValueType2)
         }
     } elif (isLongCountReducer) {
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int64>>
         }
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int64>
+        }
     } elif (isSumReducer) {
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(elemType)>>
+        }
+        var elemType2 = clone_type(elemType)
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(elemType2)>
         }
     } else {
         // count / length — Acc=int
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int>>
         }
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int>
+        }
     }
-    // Per-element update — get-or-default the entry, set key (idempotent), update acc.
+    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare detects the dummy path and commits.
     var keyBlk3 = clone_expression(keyBlock)
     var accUpdate : Expression?
     if (isSumReducer) {
@@ -1789,12 +1805,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             let $i(kName) = invoke($e(keyBlk3), $i(itName))
             let $i(ukName) = _::unique_key($i(kName))
             unsafe {
-                let isNew = !$i(tabName) |> key_exists($i(ukName))
-                var $i(entryName) & = $i(tabName)[$i(ukName)]
-                if (isNew) {
-                    $i(entryName)._0 = $i(kName)
-                }
+                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
                 $e(accUpdate)
+                if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $i(dummyName)._0 = $i(kName)
+                    $i(tabName)[$i(ukName)] = $i(dummyName)
+                    $i(dummyName) = default<typedecl($i(dummyName))>
+                }
             }
         }
     }
