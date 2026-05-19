@@ -877,6 +877,53 @@ def private emit_early_exit_lane(
 }
 
 [macro_function]
+def private merge_where_cond(var curr : Expression?; var pred : Expression?) : Expression? {
+    if (curr == null) return pred
+    return <- qmacro($e(curr) && $e(pred))
+}
+
+[macro_function]
+def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
+    if (t != null) {
+        t.flags.constant = false
+        t.flags.ref = false
+    }
+    return t
+}
+
+[macro_function]
+def private finalize_emission(var top : Expression?; srcName : string; at : LineInfo; var body : Expression?) : Expression? {
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $e(body)
+    }, $e(topExpr)))
+    return finalize_invoke(emission, at)
+}
+
+[macro_function]
+def private finalize_emission_stmts(var top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+        $b(stmts)
+    }, $e(topExpr)))
+    return finalize_invoke(emission, at)
+}
+
+[macro_function]
+def private buffer_return(bufName : string; isIterator : bool) : Expression? {
+    if (isIterator) return <- qmacro_expr() {
+        return <- $i(bufName).to_sequence_move()
+    }
+    return <- qmacro_expr() {
+        return <- $i(bufName)
+    }
+}
+
+[macro_function]
 def private order_top_n_call_name(orderName : string) : string {
     if (orderName == "order") return "top_n"
     if (orderName == "order_descending") return "top_n_descending"
@@ -1245,7 +1292,6 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     top = peel_each(top)
-    // Pop terminator (count / first / first_or_default) from the tail of the chain when
     var terminatorName : string  = ""
     var terminatorCall : ExprCall?
     {
@@ -1256,7 +1302,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             calls |> pop
         }
     }
-    if (empty(calls)) return null   // chain was just a terminator — not ours
+    if (empty(calls)) return null
     var whereCond : Expression?
     var projection : Expression?
     var hasReverse = false
@@ -1275,16 +1321,10 @@ def private plan_reverse(var expr : Expression?) : Expression? {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
         if (name == "where_") {
-            // Canonical chain order: [where_*][select?][reverse][take?]. where-after-select
             if (hasReverse || seenSelect) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], itName)
-            if (whereCond == null) {
-                whereCond = pred
-            } else {
-                whereCond = qmacro($e(whereCond) && $e(pred))
-            }
+            whereCond = merge_where_cond(whereCond, fold_linq_cond(cll._0.arguments[1], itName))
         } elif (name == "select") {
-            if (hasReverse || seenSelect) return null   // chained selects deferred (per-element binds)
+            if (hasReverse || seenSelect) return null
             seenSelect = true
             projection = fold_linq_cond(cll._0.arguments[1], itName)
         } elif (name == "reverse") {
@@ -1292,7 +1332,6 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             hasReverse = true
             reverseCall = cll._0
         } elif (name == "take") {
-            // take(N) only valid AFTER reverse — pre-reverse take would mean "first N
             if (!hasReverse || takeExpr != null) return null
             var arg = cll._0.arguments[1]
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
@@ -1301,69 +1340,33 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // take(N) + count/first/first_or_default chains out of scope for v1 — they need
     if (!hasReverse || (takeExpr != null && terminatorName != "")) return null
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var stmts : array<Expression?>
+    var body : Expression?
     if (terminatorName == "count") {
-        // reverse |> count: reverse is identity for count. Counter loop, no buffer.
-        stmts |> push <| qmacro_expr() {
-            var $i(cntName) = 0
-        }
+        // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
         var perElement : Expression?
         if (projection != null && has_sideeffects(projection)) {
             let vfinalName = "`vfinal`{at.line}`{at.column}"
-            var bindStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
-            bindStmts |> push <| qmacro_expr() {
+            perElement = qmacro_block() {
                 var $i(vfinalName) = $e(projection)
-            }
-            bindStmts |> push <| qmacro_expr() {
                 $i(cntName) ++
             }
-            perElement = stmts_to_expr(bindStmts)
         } else {
             perElement = qmacro_expr() {
                 $i(cntName) ++
             }
         }
         perElement = wrap_with_condition(perElement, whereCond)
-        stmts |> push <| qmacro_expr() {
+        body = qmacro_block() {
+            var $i(cntName) = 0
             for ($i(itName) in $i(srcName)) {
                 $e(perElement)
             }
-        }
-        stmts |> push <| qmacro_expr() {
             return $i(cntName)
         }
     } elif (terminatorName == "first" || terminatorName == "first_or_default") {
-        // reverse |> first / first_or_default: "first of reversed" is the LAST surviving
-        var lastType : TypeDeclPtr
-        if (projection != null) {
-            lastType = clone_type(projection._type)
-        } else {
-            lastType = clone_type(top._type.firstType)
-        }
-        if (lastType != null) {
-            // Accumulator slot is a writeable owned value, not a ref into the source.
-            lastType.flags.constant = false
-            lastType.flags.ref = false
-        }
-        var defaultExpr : Expression?
-        if (terminatorName == "first_or_default") {
-            // first_or_default has the default value as arg[1].
-            defaultExpr = clone_expression(terminatorCall.arguments[1])
-            stmts |> push <| qmacro_expr() {
-                let $i(dBindName) = $e(defaultExpr)
-            }
-        }
-        stmts |> push <| qmacro_expr() {
-            var $i(foundName) = false
-        }
-        stmts |> push <| qmacro_expr() {
-            var $i(lastName) : $t(lastType) = default<$t(lastType)>
-        }
+        // "first of reversed" = LAST surviving element. Walk source, overwrite `last` on each match. No buffer.
+        var lastType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
         var valueExpr : Expression?
         if (projection != null) {
             valueExpr = clone_expression(projection)
@@ -1372,49 +1375,39 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                 $i(itName)
             }
         }
-        var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
-        perMatchStmts |> push <| qmacro_expr() {
+        var matchBlock : Expression? = qmacro_block() {
             $i(lastName) := $e(valueExpr)
-        }
-        perMatchStmts |> push <| qmacro_expr() {
             $i(foundName) = true
         }
-        var perElement = stmts_to_expr(perMatchStmts)
-        perElement = wrap_with_condition(perElement, whereCond)
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
-        }
+        var perElement = wrap_with_condition(matchBlock, whereCond)
         if (terminatorName == "first") {
-            stmts |> push <| qmacro_expr() {
+            body = qmacro_block() {
+                var $i(foundName) = false
+                var $i(lastName) : $t(lastType) = default<$t(lastType)>
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
                 if (!$i(foundName)) {
                     panic("sequence contains no elements")
                 }
-            }
-            stmts |> push <| qmacro_expr() {
                 return $i(lastName)
             }
         } else {
-            stmts |> push <| qmacro_expr() {
+            var defaultExpr = clone_expression(terminatorCall.arguments[1])
+            body = qmacro_block() {
+                let $i(dBindName) = $e(defaultExpr)
+                var $i(foundName) = false
+                var $i(lastName) : $t(lastType) = default<$t(lastType)>
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
                 return $i(foundName) ? $i(lastName) : $i(dBindName)
             }
         }
     } else {
         // R1-R4 path: buffer + reverse_inplace + optional resize + return buffer.
         let needIterWrap = expr._type.isIterator
-        // Buffer element type: reverse preserves its input element type, so the projection's
-        var bufElemType = clone_type(reverseCall._type.firstType)
-        stmts |> push <| qmacro_expr() {
-            var $i(bufName) : array<$t(bufElemType)>
-        }
-        if (type_has_length(top._type) && whereCond == null) {
-            // Length-bearing source with no prefilter — exact size known; reserve tight.
-            stmts |> push <| qmacro_expr() {
-                $i(bufName) |> reserve(length($i(srcName)))
-            }
-        }
-        // Per-element work: push (the projection, or the iterator var) into the buffer.
+        var bufElemType = strip_const_ref(clone_type(reverseCall._type.firstType))
         var pushExpr : Expression?
         if (projection != null) {
             pushExpr = qmacro_expr() {
@@ -1426,41 +1419,35 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             }
         }
         pushExpr = wrap_with_condition(pushExpr, whereCond)
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                $e(pushExpr)
+        var reserveStmts : array<Expression?>
+        if (type_has_length(top._type) && whereCond == null) {
+            reserveStmts |> push <| qmacro_expr() {
+                $i(bufName) |> reserve(length($i(srcName)))
             }
         }
-        stmts |> push <| qmacro_expr() {
-            _::reverse_inplace($i(bufName))
-        }
+        var resizeStmts : array<Expression?>
         if (takeExpr != null) {
-            // take(N) of reversed-buffer = first N of reversed = last N of source reversed.
+            // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
             var takeA = clone_expression(takeExpr)
             var takeB = clone_expression(takeExpr)
             var takeC = clone_expression(takeExpr)
-            stmts |> push <| qmacro_expr() {
+            resizeStmts |> push <| qmacro_expr() {
                 $i(bufName) |> resize($e(takeA) <= 0 ? 0 : ($e(takeB) < length($i(bufName)) ? $e(takeC) : length($i(bufName))))
             }
         }
-        if (needIterWrap) {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName).to_sequence_move()
+        var returnExpr = buffer_return(bufName, needIterWrap)
+        body = qmacro_block() {
+            var $i(bufName) : array<$t(bufElemType)>
+            $b(reserveStmts)
+            for ($i(itName) in $i(srcName)) {
+                $e(pushExpr)
             }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName)
-            }
+            _::reverse_inplace($i(bufName))
+            $b(resizeStmts)
+            $e(returnExpr)
         }
     }
-    var bodyBlock = new ExprBlock(at = at)
-    for (s in stmts) {
-        bodyBlock.list |> emplace(s)
-    }
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $e(bodyBlock);
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
+    return finalize_emission(top, srcName, at, body)
 }
 
 [macro_function]
@@ -1468,7 +1455,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     top = peel_each(top)
-    // Pop recognized terminator from chain tail.
     var terminatorName : string  = ""
     {
         let lastName = calls.back()._1.name
@@ -1497,16 +1483,10 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
         if (name == "where_") {
-            // Canonical chain order: [where_*][select?][distinct[_by]][take?][terminator].
             if (hasDistinct || seenSelect) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], itName)
-            if (whereCond == null) {
-                whereCond = pred
-            } else {
-                whereCond = qmacro($e(whereCond) && $e(pred))
-            }
+            whereCond = merge_where_cond(whereCond, fold_linq_cond(cll._0.arguments[1], itName))
         } elif (name == "select") {
-            if (hasDistinct || seenSelect) return null     // chained selects deferred
+            if (hasDistinct || seenSelect) return null
             seenSelect = true
             projection = fold_linq_cond(cll._0.arguments[1], itName)
         } elif (name == "distinct") {
@@ -1516,7 +1496,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             if (hasDistinct) return null
             hasDistinct = true
             isDistinctBy = true
-            // Keep the key block intact; splice with `invoke(keyBlock, pushExpr)`.
             distinctKeyBlock = clone_expression(cll._0.arguments[1])
         } elif (name == "take") {
             if (!hasDistinct || takeExpr != null) return null
@@ -1527,24 +1506,9 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // take(N) combined with count/sum/long_count terminator chains have subtle counting
     if (!hasDistinct || (takeExpr != null && terminatorName != "")) return null
-    // Element type drives both the buffer (when used) and the accumulator type.
-    var elemType : TypeDeclPtr
-    if (projection != null) {
-        elemType = clone_type(projection._type)
-    } else {
-        elemType = clone_type(top._type.firstType)
-    }
-    if (elemType != null) {
-        elemType.flags.constant = false
-        elemType.flags.ref = false
-    }
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
+    var elemType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
     var stmts : array<Expression?>
-    // seen-set declaration — keys are unique_key(pushExpr) for distinct, or
     if (isDistinctBy) {
         var keyTypeBlock = clone_expression(distinctKeyBlock)
         stmts |> push <| qmacro_expr() {
@@ -1572,7 +1536,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             var $i(takenName) = 0
         }
     }
-    // Build pushExpr (the projected-or-raw value) once and clone-share across uses.
     var pushExpr : Expression?
     if (projection != null) {
         pushExpr = clone_expression(projection)
@@ -1591,7 +1554,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     } else {
         keyExpr = clone_expression(pushExpr)
     }
-    // Per-match consume body (inside the if-not-seen wrap). Order is critical:
+    // Per-match consume order is critical: take-guard `break` BEFORE consume so take(0)/take(-1) short-circuit.
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
         var takeLim = clone_expression(takeExpr)
@@ -1636,7 +1599,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             $e(perElement)
         }
     }
-    // Lane-specific return.
     if (terminatorName == "count") {
         stmts |> push <| qmacro_expr() {
             return length($i(seenName))
@@ -1650,21 +1612,9 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             return $i(accName)
         }
     } else {
-        let needIterWrap = expr._type.isIterator
-        if (needIterWrap) {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName).to_sequence_move()
-            }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName)
-            }
-        }
+        stmts |> push(buffer_return(bufName, expr._type.isIterator))
     }
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(stmts)
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
+    return finalize_emission_stmts(top, srcName, at, stmts)
 }
 
 // ── Group-by helpers ──────────────────────────────────────────────────
@@ -1773,27 +1723,11 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             || (reducerName != "length" && reducerName != "count" && reducerName != "long_count" && reducerName != "sum")) return null
     let isLongCountReducer = reducerName == "long_count"
     let isSumReducer = reducerName == "sum"
-    // Element type drives the source iteration; key type and acc type derive from
-    var elemType = clone_type(top._type.firstType)
-    if (elemType != null) {
-        elemType.flags.constant = false
-        elemType.flags.ref = false
-    }
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    // Table value type: use the user's group_proj result type directly so kv flowing
+    var elemType = strip_const_ref(clone_type(top._type.firstType))
+    // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; ResultT> below.
     var tabValueType : TypeDeclPtr
     if (usesNamedTuple) {
-        // User wrote `(K=_._0, V=<reducer>)` → groupProjBody._type IS the desired
-        tabValueType = clone_type(groupProjBody._type)
-    } else {
-        // Bare reducer body → output is `tuple<KeyT; ResultT>` synthesized below.
-        tabValueType = null
-    }
-    if (tabValueType != null) {
-        tabValueType.flags.constant = false
-        tabValueType.flags.ref = false
+        tabValueType = strip_const_ref(clone_type(groupProjBody._type))
     }
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
@@ -1877,21 +1811,9 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 $i(bufName) |> push_clone($e(outputExpr))
             }
         }
-        let needIterWrap = expr._type.isIterator
-        if (needIterWrap) {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName).to_sequence_move()
-            }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                return <- $i(bufName)
-            }
-        }
+        stmts |> push(buffer_return(bufName, expr._type.isIterator))
     }
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(stmts)
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
+    return finalize_emission_stmts(top, srcName, at, stmts)
 }
 
 [call_macro(name="_fold")]
