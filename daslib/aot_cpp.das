@@ -837,7 +837,12 @@ class public AotDebugInfoHelper {
     def describeCppEnumInfoValues(var writer : StringBuilderWriter?; einfo : EnumInfo?) {
         for (v in range(einfo.count)) {
             let val = unsafe(einfo.fields[v]);
-            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", {val.value} \};\n")
+            // Emit the int64 value as a bit pattern through uint64 — decimal `-9223372036854775808`
+            // (INT64_MIN, e.g. for `enum X : uint64 { HIGH_BIT = 0x8000000000000000ul }`) overflows
+            // the C++ int64 literal parser and trips clang's -Wc++11-narrowing under MSVC even though
+            // MSVC accepts it. The `int64_t(uint64_t(0x...ull))` round-trip is well-defined modulo 2^64.
+            let bits = uint64(val.value)
+            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", int64_t(UINT64_C(0x{bits:x})) \};\n")
         }
         let enum_vals = (each(range(einfo.count))
             ._select("&{enumInfoName(einfo)}_value_{_}")
