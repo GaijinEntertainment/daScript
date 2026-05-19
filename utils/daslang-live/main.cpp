@@ -569,6 +569,19 @@ static int run_lifecycle(const string & fn) {
 
 // --- Arg parsing ---
 
+// Strict port parse: rejects trailing garbage (atoi would silently accept
+// "9090abc" → 9090). Returns 0 on any failure; caller treats 0 as "no override".
+// Matches the .das side's `try_to_int` semantics so CLI / env / config all
+// reject the same inputs.
+static int parse_port_strict(const char * s) {
+    if (!s || !*s) return 0;
+    char * end = nullptr;
+    long v = strtol(s, &end, 10);
+    if (end == s || *end != '\0') return 0;
+    if (v <= 0 || v > 65535) return 0;
+    return int(v);
+}
+
 static void print_help() {
     tout << "daslang-live version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n";
     tout << "daslang-live - live-reloading application host for daScript\n";
@@ -687,9 +700,18 @@ int main(int argc, char * argv[]) {
         } else if (arg == "--no-dump-leaks") {
             dumpLeaks = false;
         } else if (arg == "--live-port" && i + 1 < argc) {
-            int port = atoi(argv[++i]);
-            if (port <= 0 || port > 65535) {
+            int port = parse_port_strict(argv[++i]);
+            if (port == 0) {
                 tout << "invalid --live-port value: " << argv[i] << " (expected 1-65535)\n";
+                return 1;
+            }
+            g_resolvedLivePort = port;
+        } else if (arg.compare(0, 12, "--live-port=") == 0 && arg.size() > 12) {
+            // Accept `--live-port=N` form for parity with the .das side
+            // (`find_flag_raw_value` handles both).
+            int port = parse_port_strict(arg.c_str() + 12);
+            if (port == 0) {
+                tout << "invalid --live-port value: " << (arg.c_str() + 12) << " (expected 1-65535)\n";
                 return 1;
             }
             g_resolvedLivePort = port;
@@ -731,8 +753,7 @@ int main(int argc, char * argv[]) {
     // can never disagree.
     if (g_resolvedLivePort == 0) {
         if (const char * envPort = getenv("DASLANG_LIVE_PORT")) {
-            int port = atoi(envPort);
-            if (port > 0 && port <= 65535) g_resolvedLivePort = port;
+            g_resolvedLivePort = parse_port_strict(envPort);
         }
     }
     if (g_resolvedLivePort == 0) g_resolvedLivePort = 9090;
