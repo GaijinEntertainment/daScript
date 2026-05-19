@@ -1666,6 +1666,205 @@ def test_group_by_inner_select_sum_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_min_max_first_fold_parity(t : T?) {
+    // PR-A2: min/max/first bare + named + inner-select reducers. Each splices into the
+    // miss/hit emission with per-reducer init+update shapes (min/max compare; first no-op on hit).
+    t |> run("bare min: per-bucket workhorse min") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> min))
+        // Buckets: 0→{30,21,12}=12, 1→{10,31}=10, 2→{20,11}=11. Total of mins = 33.
+        tt |> equal(3, length(got))
+        var totalMin = 0
+        for (m in got) {
+            totalMin += m
+        }
+        tt |> equal(33, totalMin)
+    }
+    t |> run("named min: preserves K + Min") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Min = _._1 |> min)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.Min
+        }
+        tt |> equal(12, perKey[0])
+        tt |> equal(10, perKey[1])
+        tt |> equal(11, perKey[2])
+    }
+    t |> run("bare max: per-bucket workhorse max") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> max))
+        // Buckets: 0→30, 1→31, 2→20. Sum = 81.
+        tt |> equal(3, length(got))
+        var totalMax = 0
+        for (m in got) {
+            totalMax += m
+        }
+        tt |> equal(81, totalMax)
+    }
+    t |> run("named max: preserves K + Max") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Max = _._1 |> max)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.Max
+        }
+        tt |> equal(30, perKey[0])
+        tt |> equal(31, perKey[1])
+        tt |> equal(20, perKey[2])
+    }
+    t |> run("bare first: per-bucket FIRST source element (first-key-wins)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> first))
+        // Buckets, in source order: 1→{10,31}=10, 2→{20,11}=20, 0→{30,21,12}=30. Sum = 60.
+        tt |> equal(3, length(got))
+        var totalFirst = 0
+        for (f in got) {
+            totalFirst += f
+        }
+        tt |> equal(60, totalFirst)
+    }
+    t |> run("named first: preserves K + First (first source elem per key)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, First = _._1 |> first)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.First
+        }
+        tt |> equal(30, perKey[0])    // 30 is the first elem for key 0
+        tt |> equal(10, perKey[1])    // 10 is the first elem for key 1
+        tt |> equal(20, perKey[2])    // 20 is the first elem for key 2
+    }
+    t |> run("inner-select-min: bare min of projected values") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> select(@(x : int) => x * 2) |> min))
+        // Buckets *2: 0→{60,42,24}=24, 1→{20,62}=20, 2→{40,22}=22. Sum = 66.
+        tt |> equal(3, length(got))
+        var totalMin = 0
+        for (m in got) {
+            totalMin += m
+        }
+        tt |> equal(66, totalMin)
+    }
+    t |> run("inner-select-max: named (K, M) with projected max") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, M = _._1 |> select(@(x : int) => x * 2) |> max)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.M
+        }
+        tt |> equal(60, perKey[0])    // max(30,21,12)*2 = 60
+        tt |> equal(62, perKey[1])    // max(10,31)*2 = 62
+        tt |> equal(40, perKey[2])    // max(20,11)*2 = 40
+    }
+    t |> run("inner-select-first: named (K, F) with projected first") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, F = _._1 |> select(@(x : int) => x * 2) |> first)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.F
+        }
+        tt |> equal(60, perKey[0])    // first elem 30, *2 = 60
+        tt |> equal(20, perKey[1])    // first elem 10, *2 = 20
+        tt |> equal(40, perKey[2])    // first elem 20, *2 = 40
+    }
+    t |> run("min/max/first on empty source → empty result") @(tt : T?) {
+        var empty : array<int>
+        let g1 <- _fold(empty._group_by(_ % 3)._select(_._1 |> min))
+        tt |> equal(0, length(g1))
+        let g2 <- _fold(empty._group_by(_ % 3)._select(_._1 |> max))
+        tt |> equal(0, length(g2))
+        let g3 <- _fold(empty._group_by(_ % 3)._select(_._1 |> first))
+        tt |> equal(0, length(g3))
+    }
+    t |> run("min on struct (non-workhorse) Person.age via inner-select: parity with reference") @(tt : T?) {
+        let foldGot <- _fold(_common::people._group_by(_.name)._select((K = _._0, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min)))
+        let refGot  <- (_common::people._group_by(_.name)._select((K = _._0, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min)))
+        tt |> equal(length(refGot), length(foldGot))
+        var refMap  : table<string; int>
+        var foldMap : table<string; int>
+        for (r in refGot) {
+            refMap[r.K] = r.MinAge
+        }
+        for (f in foldGot) {
+            foldMap[f.K] = f.MinAge
+        }
+        for (k in keys(refMap)) {
+            tt |> equal(refMap?[k] ?? -1, foldMap?[k] ?? -1)
+        }
+    }
+}
+
+[test]
+def test_group_by_multi_reducer_fold_parity(t : T?) {
+    // PR-A2 A.4: N-slot named tuples fuse multiple reducers into a single per-element pass.
+    t |> run("3-slot (K, N=length, S=sum): two reducers per bucket") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length, S = _._1 |> sum)))
+        tt |> equal(3, length(got))
+        var perKeyN : table<int; int>
+        var perKeyS : table<int; int>
+        for (item in got) {
+            perKeyN[item.K] = item.N
+            perKeyS[item.K] = item.S
+        }
+        // Per key: 0→{30,21,12} N=3 S=63; 1→{10,31} N=2 S=41; 2→{20,11} N=2 S=31.
+        tt |> equal(3, perKeyN[0])
+        tt |> equal(63, perKeyS[0])
+        tt |> equal(2, perKeyN[1])
+        tt |> equal(41, perKeyS[1])
+        tt |> equal(2, perKeyN[2])
+        tt |> equal(31, perKeyS[2])
+    }
+    t |> run("4-slot (K, N, S, MX): count + sum + max fused into one pass") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+            (K = _._0, N = _._1 |> length, S = _._1 |> sum, MX = _._1 |> max)))
+        tt |> equal(3, length(got))
+        // Compare slot-by-slot since named tuples lack a default operator==.
+        var keysSeen = 0
+        for (item in got) {
+            if (item.K == 0) { tt |> equal(3, item.N); tt |> equal(63, item.S); tt |> equal(30, item.MX); keysSeen ++; }
+            elif (item.K == 1) { tt |> equal(2, item.N); tt |> equal(41, item.S); tt |> equal(31, item.MX); keysSeen ++; }
+            elif (item.K == 2) { tt |> equal(2, item.N); tt |> equal(31, item.S); tt |> equal(20, item.MX); keysSeen ++; }
+        }
+        tt |> equal(3, keysSeen)
+    }
+    t |> run("multi-reducer with inner-select: (K, N, Total = sum of *2)") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+            (K = _._0, N = _._1 |> length, Total = _._1 |> select(@(x : int) => x * 2) |> sum)))
+        tt |> equal(3, length(got))
+        var keysSeen = 0
+        for (item in got) {
+            if (item.K == 0) { tt |> equal(3, item.N); tt |> equal(126, item.Total); keysSeen ++; }
+            elif (item.K == 1) { tt |> equal(2, item.N); tt |> equal(82,  item.Total); keysSeen ++; }
+            elif (item.K == 2) { tt |> equal(2, item.N); tt |> equal(62,  item.Total); keysSeen ++; }
+        }
+        tt |> equal(3, keysSeen)
+    }
+    t |> run("multi-reducer on empty source → empty result") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by(_ % 3)._select((K = _._0, N = _._1 |> length, S = _._1 |> sum)))
+        tt |> equal(0, length(got))
+    }
+    t |> run("multi-reducer parity with reference (Person)") @(tt : T?) {
+        let foldGot <- _fold(_common::people._group_by(_.name)._select(
+            (K = _._0, N = _._1 |> length, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min, MaxAge = _._1 |> select(@(p : _common::Person) => p.age) |> max)))
+        let refGot  <- (_common::people._group_by(_.name)._select(
+            (K = _._0, N = _._1 |> length, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min, MaxAge = _._1 |> select(@(p : _common::Person) => p.age) |> max)))
+        tt |> equal(length(refGot), length(foldGot))
+        // Three separate tables — daslang tuples lack a default `==` operator.
+        var refN, refMin, refMax : table<string; int>
+        var foldN, foldMin, foldMax : table<string; int>
+        for (r in refGot) {
+            refN[r.K] = r.N; refMin[r.K] = r.MinAge; refMax[r.K] = r.MaxAge
+        }
+        for (f in foldGot) {
+            foldN[f.K] = f.N; foldMin[f.K] = f.MinAge; foldMax[f.K] = f.MaxAge
+        }
+        for (k in keys(refN)) {
+            tt |> equal(refN?[k] ?? -1,   foldN?[k] ?? -1)
+            tt |> equal(refMin?[k] ?? -1, foldMin?[k] ?? -1)
+            tt |> equal(refMax?[k] ?? -1, foldMax?[k] ?? -1)
+        }
+    }
+}
+
+[test]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {

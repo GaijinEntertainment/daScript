@@ -2074,6 +2074,127 @@ def test_group_by_inner_select_sum_named_preserves_key(t : T?) {
 }
 
 [export, marker(no_coverage)]
+def target_group_by_min_workhorse_fold() : array<int> {
+    // G5a (PR-A2): bare min on workhorse int → direct `<` compare, no `_::less`.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> min))
+}
+
+[test]
+def test_group_by_min_workhorse_emits_direct_compare(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_min_workhorse_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "less"), "workhorse min must use direct `<`, not _::less")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_min_non_workhorse_fold() : array<tuple<int; int>> {
+    // G5b (PR-A2): bare min on `tuple<int;int>` (non-workhorse) → `_::less` dispatch.
+    return <- _fold([(1, 2), (0, 5), (2, 3), (0, 1), (1, 4)]._group_by(_._0 % 2)._select(_._1 |> min))
+}
+
+[test]
+def test_group_by_min_non_workhorse_uses_less(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_min_non_workhorse_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> success(count_call(body_expr, "less") >= 1, "non-workhorse min: at least one _::less call")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_first_fold() : array<int> {
+    // G6 (PR-A2): bare first → miss-branch captures, hit-branch is empty (no compare).
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> first))
+}
+
+[test]
+def test_group_by_first_no_hit_compare(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_first_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "less"), "first hit branch is empty: no _::less call")
+        t |> equal(0, count_call(body_expr, "first"), "must NOT call runtime first()")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_multi_reducer_fold() : array<tuple<K : int; N : int; S : int; MX : int>> {
+    // G7 (PR-A2): 4-slot named tuple → multi-reducer specs array fuses count+sum+max into one pass.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+        (K = _._0, N = _._1 |> length, S = _._1 |> sum, MX = _._1 |> max)))
+}
+
+[test]
+def test_group_by_multi_reducer_emits_fused_pass(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_multi_reducer_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "sum"), "must NOT call runtime sum()")
+        t |> equal(0, count_call(body_expr, "max"), "must NOT call runtime max()")
+        // Note: 1 `length(tab)` survives for reserve() — that's not the reducer.
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(2, count_inner_for_loops(body_expr), "single fused table-update loop + result-build")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_first_or_default_falls_through() : array<int> {
+    // G10 (PR-A2): `first_or_default(_._1, def)` has 2 args → recognizer rejects (only 1-arg
+    // bucket reducers are spliced). Cascades to tier 2.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> first_or_default(-1)))
+}
+
+[test]
+def test_group_by_first_or_default_cascades_to_tier2(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_first_or_default_falls_through)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        // Cascade emits pass_0/pass_1/... — splice would have exactly 1 outer let (the table).
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
+[export, marker(no_coverage)]
 def target_group_by_having_falls_through() : array<int> {
     // BAIL: where_ between group_by and select (HAVING clause shape) → cascade to tier 2.
     return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._where(_._1 |> length >= 2)._select(_._1 |> length))
