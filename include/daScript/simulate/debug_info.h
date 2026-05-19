@@ -492,8 +492,8 @@ namespace das
         const char *        module_name;
         EnumValueInfo **    fields;
         uint32_t            count;
-        uint32_t            flags;
         uint64_t            hash;
+        uint32_t            flags;
     };
 
     struct LocalVariableInfo : TypeInfo {

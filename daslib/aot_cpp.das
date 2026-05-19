@@ -846,7 +846,7 @@ class public AotDebugInfoHelper {
         write(*writer, "EnumValueInfo * {enumInfoName(einfo)}_values [] = \{ {enum_vals} \};\n");
     }
     def describeCppEnumInfo(info : EnumInfo?) {
-        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x})";
+        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x}), {info.flags:d}";
     }
     def describeCppTypeInfo(info : TypeInfo?; suffix : string = "") {
         return build_string() $(writer) {

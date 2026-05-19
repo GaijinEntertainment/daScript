@@ -1,5 +1,7 @@
 options gen2
+options rtti
 require dastest/testing_boost public
+require daslib/json_boost
 
 // Casts of uint8/uint16/uint64-backed enums must zero-extend, not sign-extend.
 // Signed-underlying enums must keep their existing sign-extending bit-reinterpret
@@ -18,6 +20,13 @@ enum Channel : uint16 {
     SYS = 100ul
     USER = 5000ul
     BROADCAST = 60000ul     // > 32767, triggers the bug
+}
+
+// uint32-backed — the WalkEnumeration (32-bit) path also needed the zero-extend fix.
+enum Mask32 : uint {
+    NONE = 0u
+    LOW = 0x1u
+    HIGH_BIT = 0x80000000u  // > INT32_MAX, exercises the WalkEnumeration (32-bit) fix
 }
 
 // Signed counterparts — behaviour preserved.
@@ -93,5 +102,40 @@ def test_string_interpolation_names(t : T?) {
     }
     t |> run("uint16 enum interpolates value name") @(t : T?) {
         t |> equal("{Channel.BROADCAST}", "BROADCAST")
+    }
+    t |> run("uint32 enum interpolates value name (high bit set)") @(t : T?) {
+        t |> equal("{Mask32.HIGH_BIT}", "HIGH_BIT")
+    }
+}
+
+// JSON serialization of a struct containing a uint-backed enum field — exercises
+// json_print.cpp's WalkEnumeration*/Enum() value-name lookup. Before the fix the
+// uint8 byte 0xC8 was read as int8(-56) and the lookup against the int64-stored
+// field value (200) missed, producing {"op":} with an empty value.
+struct PktU8 {
+    op : Opcode
+}
+
+struct PktU16 {
+    ch : Channel
+}
+
+struct PktU32 {
+    mk : Mask32
+}
+
+[test]
+def test_sprint_json_unsigned_enum_field(t : T?) {
+    t |> run("sprint_json: uint8 enum HEARTBEAT renders by name") @(t : T?) {
+        let p = PktU8(op = Opcode.HEARTBEAT)
+        t |> equal(sprint_json(p, false), "\{\"op\":\"HEARTBEAT\"\}")
+    }
+    t |> run("sprint_json: uint16 enum BROADCAST renders by name") @(t : T?) {
+        let p = PktU16(ch = Channel.BROADCAST)
+        t |> equal(sprint_json(p, false), "\{\"ch\":\"BROADCAST\"\}")
+    }
+    t |> run("sprint_json: uint32 enum HIGH_BIT renders by name") @(t : T?) {
+        let p = PktU32(mk = Mask32.HIGH_BIT)
+        t |> equal(sprint_json(p, false), "\{\"mk\":\"HIGH_BIT\"\}")
     }
 }

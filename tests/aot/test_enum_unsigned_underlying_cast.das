@@ -1,8 +1,10 @@
 options gen2
+options rtti
 require dastest/testing_boost public
+require daslib/json_boost
 
 // AOT mirror of tests/language/enum_unsigned_underlying_cast.das — exercises the same
-// uint8/uint16-backed enum cast cases through the AOT codegen path. Post-fix the generated
+// uint8/uint16/uint32-backed enum cast cases through the AOT codegen path. Post-fix the generated
 // C++ should call enum8u_to_uint/enum16u_to_uint (zero-extending) rather than the signed
 // helpers.
 
@@ -17,6 +19,12 @@ enum Channel : uint16 {
     SYS = 100ul
     USER = 5000ul
     BROADCAST = 60000ul
+}
+
+enum Mask32 : uint {
+    NONE = 0u
+    LOW = 0x1u
+    HIGH_BIT = 0x80000000u
 }
 
 enum Signed8 : int8 {
@@ -86,5 +94,36 @@ def test_aot_string_interpolation_names(t : T?) {
     }
     t |> run("aot: uint16 enum interpolates value name") @(t : T?) {
         t |> equal("{Channel.BROADCAST}", "BROADCAST")
+    }
+    t |> run("aot: uint32 enum interpolates value name (high bit set)") @(t : T?) {
+        t |> equal("{Mask32.HIGH_BIT}", "HIGH_BIT")
+    }
+}
+
+struct PktU8 {
+    op : Opcode
+}
+
+struct PktU16 {
+    ch : Channel
+}
+
+struct PktU32 {
+    mk : Mask32
+}
+
+[test]
+def test_aot_sprint_json_unsigned_enum_field(t : T?) {
+    t |> run("aot: sprint_json uint8 enum renders by name") @(t : T?) {
+        let p = PktU8(op = Opcode.HEARTBEAT)
+        t |> equal(sprint_json(p, false), "\{\"op\":\"HEARTBEAT\"\}")
+    }
+    t |> run("aot: sprint_json uint16 enum renders by name") @(t : T?) {
+        let p = PktU16(ch = Channel.BROADCAST)
+        t |> equal(sprint_json(p, false), "\{\"ch\":\"BROADCAST\"\}")
+    }
+    t |> run("aot: sprint_json uint32 enum renders by name") @(t : T?) {
+        let p = PktU32(mk = Mask32.HIGH_BIT)
+        t |> equal(sprint_json(p, false), "\{\"mk\":\"HIGH_BIT\"\}")
     }
 }
