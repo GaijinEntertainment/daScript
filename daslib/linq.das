@@ -1068,8 +1068,8 @@ def take(var src : iterator<auto(TT)>; from : range) : iterator<TT -& -const> {
 def take(src : array<auto(TT)>; from : range) : array<TT -& -const> {
     //! Yields a range of elements from an array
     let len = length(src)
-    let start = (from.x < 0) ? 0 : ((from.x > len) ? len : from.x)
-    var end = (from.y < 0) ? 0 : ((from.y > len) ? len : from.y)
+    let start = clamp(from.x, 0, len)
+    var end = clamp(from.y, 0, len)
     if (end < start) {
         end = start
     }
