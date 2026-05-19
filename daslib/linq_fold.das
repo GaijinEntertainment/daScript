@@ -1789,8 +1789,11 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             let $i(kName) = invoke($e(keyBlk3), $i(itName))
             let $i(ukName) = _::unique_key($i(kName))
             unsafe {
+                let isNew = !$i(tabName) |> key_exists($i(ukName))
                 var $i(entryName) & = $i(tabName)[$i(ukName)]
-                $i(entryName)._0 = $i(kName)
+                if (isNew) {
+                    $i(entryName)._0 = $i(kName)
+                }
                 $e(accUpdate)
             }
         }
@@ -1814,7 +1817,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 $i(kvName)
             }
         }
-        // Buffer type: deduce from the user's group_proj body type (it's already
+        // Buffer type: deduce from group_proj body type (already shaped as the named-tuple / reducer result).
         var bufElemType = clone_type(groupProjBody._type)
         if (bufElemType != null) {
             bufElemType.flags.constant = false
