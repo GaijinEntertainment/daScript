@@ -1966,6 +1966,21 @@ def test_group_by_average_fold_parity(t : T?) {
         tt |> equal(4.0lf, perKey[0])
         tt |> equal(3.0lf, perKey[1])
     }
+    t |> run("positional tuple with average: (_._0, _._1|>average) — no field names") @(tt : T?) {
+        // Recognizer accepts positional tuples (ExprMakeTuple with bind._0 at slot 0); the
+        // result-build synthesis must not assume argNames is populated (it's empty for
+        // positional). Use length(argTypes) for slot count, only fill recordNames when names
+        // are present.
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((_._0, _._1 |> average)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; double>
+        for (item in got) {
+            perKey[item._0] = item._1
+        }
+        tt |> equal(21.0lf, perKey[0])
+        tt |> equal(20.5lf, perKey[1])
+        tt |> equal(15.5lf, perKey[2])
+    }
 }
 
 [test]

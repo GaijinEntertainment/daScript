@@ -2380,12 +2380,17 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 }
             }
         } elif (hasAvg) {
-            // Named-tuple with avg slot(s): table value type stores tuple<double;uint64> per avg slot, so re-synthesize the user's named tuple at result-build, dividing avg slots.
+            // Tuple with avg slot(s): table value type stores tuple<double;uint64> per avg slot, so re-synthesize the user's tuple at result-build, dividing avg slots. Positional tuples (no field names) and named tuples both pass through recognize_reducer_specs — slot count comes from argTypes; recordNames only get filled when argNames is populated.
             var mt = new ExprMakeTuple(at = at)
-            let slotCount = (groupProjBody._type.argNames |> length)
-            mt.recordNames |> resize(slotCount)
+            let slotCount = (groupProjBody._type.argTypes |> length)
+            let hasNames = (groupProjBody._type.argNames |> length) == slotCount
+            if (hasNames) {
+                mt.recordNames |> resize(slotCount)
+            }
             mt.values |> push(mk_slot_ref(at, kvName, 0))
-            mt.recordNames[0] := string(groupProjBody._type.argNames[0])
+            if (hasNames) {
+                mt.recordNames[0] := string(groupProjBody._type.argNames[0])
+            }
             for (i in 1 .. slotCount) {
                 var v : Expression?
                 for (sp in specs) {
@@ -2394,7 +2399,9 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                     }
                 }
                 mt.values |> push(v)
-                mt.recordNames[i] := string(groupProjBody._type.argNames[i])
+                if (hasNames) {
+                    mt.recordNames[i] := string(groupProjBody._type.argNames[i])
+                }
             }
             outputExpr = mt
         } else {
