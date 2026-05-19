@@ -27,9 +27,11 @@ def run_m1(b : B?; n : int) {
 def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
-        let rows <- (arr |> _select(_.brand) |> distinct() |> take(TAKE_N))
-        if (empty(rows)) {
-            b->failNow()
+        unsafe {
+            let rows <- (each(arr) |> _select(_.brand) |> distinct() |> take(TAKE_N) |> to_array())
+            if (empty(rows)) {
+                b->failNow()
+            }
         }
     }
 }
@@ -37,9 +39,11 @@ def run_m3(b : B?; n : int) {
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
-        let rows <- _fold(arr.to_sequence()._select(_.brand).distinct().take(TAKE_N).to_array())
-        if (empty(rows)) {
-            b->failNow()
+        unsafe {
+            let rows <- _fold(each(arr)._select(_.brand).distinct().take(TAKE_N).to_array())
+            if (empty(rows)) {
+                b->failNow()
+            }
         }
     }
 }
