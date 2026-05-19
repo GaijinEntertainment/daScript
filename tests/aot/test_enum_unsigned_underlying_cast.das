@@ -27,6 +27,11 @@ enum Mask32 : uint {
     HIGH_BIT = 0x80000000u
 }
 
+enum Wide64 : uint64 {
+    LOW = 100ul
+    HIGH_BIT = 0x8000000000000000ul
+}
+
 enum Signed8 : int8 {
     LOW = 50
     NEGATIVE = -50
@@ -47,6 +52,11 @@ def test_aot_unsigned_underlying_zero_extends(t : T?) {
     t |> run("aot: uint16-backed enum cast preserves half-word value") @(t : T?) {
         t |> equal(uint(Channel.BROADCAST), 60000u)
         t |> equal(int(Channel.BROADCAST), 60000)
+    }
+    t |> run("aot: uint64-backed enum cast preserves bit pattern (top bit set)") @(t : T?) {
+        t |> equal(uint64(Wide64.HIGH_BIT), 0x8000000000000000ul)
+        t |> equal(int64(Wide64.HIGH_BIT), -9223372036854775807l - 1l)
+        t |> equal(uint64(Wide64.LOW), 100ul)
     }
 }
 
@@ -73,6 +83,19 @@ def test_aot_runtime_iteration(t : T?) {
         }
         t |> equal(sum, 250u)
     }
+    t |> run("aot: runtime uint64 enum cast (top bit set)") @(t : T?) {
+        var arr : array<Wide64>
+        arr |> push(Wide64.LOW)
+        arr |> push(Wide64.HIGH_BIT)
+        var hit_high = false
+        for (w in arr) {
+            if (w == Wide64.HIGH_BIT) {
+                hit_high = true
+                t |> equal(uint64(w), 0x8000000000000000ul)
+            }
+        }
+        t |> equal(hit_high, true)
+    }
 }
 
 [test]
@@ -95,10 +118,20 @@ def test_aot_unsigned_enum_equality(t : T?) {
         t |> equal(a == a, true)
         t |> equal(a != c, true)
     }
+    t |> run("aot: uint64 enum == operator works (top bit set)") @(t : T?) {
+        let a = Wide64.HIGH_BIT
+        let c = Wide64.LOW
+        t |> equal(a == a, true)
+        t |> equal(a != c, true)
+    }
 }
 
 struct Pkt {
     op : Opcode
+}
+
+struct Pkt64 {
+    w : Wide64
 }
 
 [test]
@@ -106,6 +139,10 @@ def test_aot_struct_field_cast(t : T?) {
     t |> run("aot: struct field of uint8 enum, cast to uint") @(t : T?) {
         let p = Pkt(op = Opcode.HEARTBEAT)
         t |> equal(uint(p.op), 200u)
+    }
+    t |> run("aot: struct field of uint64 enum, cast to uint64") @(t : T?) {
+        let p = Pkt64(w = Wide64.HIGH_BIT)
+        t |> equal(uint64(p.w), 0x8000000000000000ul)
     }
 }
 
@@ -119,6 +156,9 @@ def test_aot_string_interpolation_names(t : T?) {
     }
     t |> run("aot: uint32 enum interpolates value name (high bit set)") @(t : T?) {
         t |> equal("{Mask32.HIGH_BIT}", "HIGH_BIT")
+    }
+    t |> run("aot: uint64 enum interpolates value name (top bit set)") @(t : T?) {
+        t |> equal("{Wide64.HIGH_BIT}", "HIGH_BIT")
     }
 }
 
@@ -134,6 +174,10 @@ struct PktU32 {
     mk : Mask32
 }
 
+struct PktU64 {
+    w : Wide64
+}
+
 [test]
 def test_aot_sprint_json_unsigned_enum_field(t : T?) {
     t |> run("aot: sprint_json uint8 enum renders by name") @(t : T?) {
@@ -147,5 +191,9 @@ def test_aot_sprint_json_unsigned_enum_field(t : T?) {
     t |> run("aot: sprint_json uint32 enum renders by name") @(t : T?) {
         let p = PktU32(mk = Mask32.HIGH_BIT)
         t |> equal(sprint_json(p, false), "\{\"mk\":\"HIGH_BIT\"\}")
+    }
+    t |> run("aot: sprint_json uint64 enum renders by name (top bit set)") @(t : T?) {
+        let p = PktU64(w = Wide64.HIGH_BIT)
+        t |> equal(sprint_json(p, false), "\{\"w\":\"HIGH_BIT\"\}")
     }
 }
