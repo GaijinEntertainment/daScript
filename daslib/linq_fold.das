@@ -2012,6 +2012,36 @@ def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string;
     return expr
 }
 
+class private HbScanner : AstVisitor {
+    // Safety net for rewrite_having_pred — flags any ExprVar reference that survived
+    // the targeted rewrite (e.g., because the predicate contained a node type the walker
+    // doesn't recurse into, like ExprAt or ExprInvoke from a non-peelable lambda).
+    vname : string
+    hit : bool = false
+    def HbScanner(n : string) {
+        vname = n
+    }
+    def override visitExprVar(var expr : ExprVar?) : Expression? {
+        if (expr.name == vname) {
+            hit = true
+        }
+        return expr
+    }
+}
+
+def private expr_uses_var(var e : Expression?; name : string) : bool {
+    if (e == null) return false
+    var astVisitor = new HbScanner(name)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_expression(e, astVisitorAdapter)
+    }
+    let hit = astVisitor.hit
+    unsafe {
+        delete astVisitor
+    }
+    return hit
+}
+
 [macro_function]
 def private plan_group_by(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
@@ -2126,7 +2156,8 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
         if (rawPred == null) return null
         havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
-        if (havingPred == null) return null
+        // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
+        if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
     }
     // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
     var keyBlk1 = clone_expression(keyBlock)

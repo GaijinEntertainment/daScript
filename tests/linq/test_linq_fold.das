@@ -2077,6 +2077,27 @@ def test_group_by_having_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_having_unhandled_node_cascades(t : T?) {
+    // PR-D safety: any unhandled node type that references `hb` (ExprAt for `_._1[0]`,
+    // ExprInvoke from a non-peelable lambda, etc.) must NOT silently leak `hbName` into
+    // the result-build splice — instead the planner bails and the chain cascades.
+    t |> run("ExprAt on bucket (_._1[0]) cascades to tier 2") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6]
+        // _._1[0] is ExprAt indexing into the bucket array. Without the post-rewrite scan
+        // the bare `hb._1[0]` reference would survive into the splice (compile-time
+        // failure at the splice site rather than a graceful cascade).
+        let got <- _fold(nums._group_by_lazy(_ % 2)._having(_._1[0] == 1)._select((K = _._0, N = _._1 |> length)))
+        // Bucket 0=[2,4,6] first=2≠1 fails; bucket 1=[1,3,5] first=1 passes.
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(1, seen |> length)
+        tt |> equal(3, seen[1])
+    }
+}
+
+[test]
 def test_group_by_having_unmatched_reducer_cascades(t : T?) {
     // PR-D bail: having references a reducer not present in select. Splice cascades to tier 2;
     // semantics must still be correct via the array-shape pipeline.
