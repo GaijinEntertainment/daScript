@@ -3,10 +3,10 @@ options persistent_heap
 
 require _common public
 
-// User-supplied binary reducer: max(price - min) over a where-filtered slice. SQL
-// can express this as `SELECT (MAX(price) - MIN(price))`. m3 traverses the array
-// with the user-block invoked per element; m3f peels the block body and inlines
-// alongside the where predicate — single pass with no per-element block invoke.
+// User-supplied binary reducer: sum of prices over a where-filtered slice. SQL
+// can express this as `SELECT SUM(price)`. m3 traverses the array with the
+// user-block invoked per element; m3f peels the block body and inlines alongside
+// the where predicate — single pass with no per-element block invoke.
 
 let THRESHOLD = 200
 
