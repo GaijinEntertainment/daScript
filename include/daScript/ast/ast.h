@@ -221,6 +221,8 @@ namespace das
                     bool            sealed : 1;
                     bool            implemented : 1;
                     bool            classMethod : 1;
+                    bool            _abstract : 1;
+                    bool            inherited : 1;
                 };
                 uint32_t            flags = 0;
             };
