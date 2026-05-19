@@ -249,6 +249,14 @@ def target_zip_contains_proj_miss_fold() : bool {
     return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(999))
 }
 
+// PR #2742 Copilot review #r3270337476 — DEFERRED: emit_accumulator_lane.average semantics divergence from linq.das. Pre-existing in helper (affects plan_loop_or_count's single-source path too): accumulates in accType (often int → overflow risk) and returns NaN on empty cnt, while linq.das average accumulates in double and returns 0.0lf on empty. Follow-up PR must fix the helper uniformly AND update the existing fold test "average: empty → NaN" in test_linq_fold.das to expect 0.0lf.
+[export, marker(no_coverage)]
+def target_zip_average_empty_fold() : double {
+    var emptyA : array<int>
+    var emptyB : array<int>
+    return _fold(emptyA.zip(emptyB) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
+}
+
 [export, marker(no_coverage)]
 def target_zip3_fold() : array<tuple<int; int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
@@ -820,6 +828,12 @@ def test_zip_contains_proj_miss_fold_result(t : T?) {
     t |> run("zip+select+contains returns false on miss") @(t : T?) {
         t |> equal(target_zip_contains_proj_miss_fold(), false)
     }
+}
+
+// PR #2742 Copilot review #r3270337476 — DEFERRED-fix tracking test. Documents the desired post-fix behavior (zip+select+average on empty source should return 0.0lf per linq.das semantics). Currently emit_accumulator_lane returns NaN, so this test is skipped until the helper is aligned (uniform fix across plan_loop_or_count + plan_zip; also requires updating "average: empty → NaN" in test_linq_fold.das to expect 0.0lf).
+[test]
+def test_zip_average_empty_returns_zero_when_fixed(t : T?) {
+    t->skip("DEFERRED: zip+select+average on empty source should return 0.0lf per linq.das semantics. Blocked on follow-up PR aligning emit_accumulator_lane.average with linq.das (double accumulator + cnt==0 guard); pre-existing helper divergence — affects single-source plan_loop_or_count too. Un-skip + assert `equal(target_zip_average_empty_fold(), 0.0lf)` when fix lands.")
 }
 
 // AST-shape: zip+accumulator splices into a single for-loop with no surviving runtime `sum`/`zip` calls.
