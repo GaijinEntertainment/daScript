@@ -57,8 +57,8 @@ target_link_libraries(example_hash_func_bench PRIVATE
     absl::strings)
 
 # Insert-only isolation bench: find x10, daslang_hash_{map,set} vs
-# daslang_insert_only_hash_{map,set}. Does NOT need Abseil — pure das.
-# Build just this: `--target example_hash_insert_only_bench`.
+# daslang_insert_only_hash_{map,set}. Build just this:
+# `--target example_hash_insert_only_bench`.
 add_executable(example_hash_insert_only_bench bench_hash_insert_only.cpp)
 target_include_directories(example_hash_insert_only_bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include)

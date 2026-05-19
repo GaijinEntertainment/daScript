@@ -369,6 +369,9 @@ namespace das {
         return *this;
     }
 
+    // Guarded: see ast_serializer.h note. Under DAS_CUSTOM_HASH=0 these would
+    // duplicate the das_hash_map definitions above (identical aliases).
+#if DAS_CUSTOM_HASH
     template <typename K, typename V, typename H, typename E>
     void AstSerializer::serialize_hash_map ( das_insert_only_hash_map<K, V, H, E> & value ) {
         dtag(HASH_TAG("DasHashmap"));
@@ -394,6 +397,7 @@ namespace das {
         serialize_hash_map<K, V, H, E>(value);
         return *this;
     }
+#endif
 
     template <typename V>
     AstSerializer & AstSerializer::operator << ( safebox_map<V> & box ) {
@@ -2694,7 +2698,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 83;
+        static constexpr uint32_t currentVersion = 84;
         return currentVersion;
     }
 

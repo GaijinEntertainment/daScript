@@ -34,6 +34,10 @@ namespace das {
 
     // Insert-only variant — same body, different parameter type. Two overloads
     // rather than a generic template so the static_assert / signature stay symmetric.
+    // Guarded: under DAS_CUSTOM_HASH=0, das_insert_only_hash_map aliases to the
+    // same std::unordered_map as das_hash_map, so the regular overload above
+    // already serves insert-only args.
+#if DAS_CUSTOM_HASH
     template <typename K, typename V, typename Compare = std::less<K>>
     vector<pair<K, V>> ordered(const das_insert_only_hash_map<K, V> &unsorted_map, Compare cmp = {}) {
         static_assert(!is_pointer_v<K> ||
@@ -45,6 +49,7 @@ namespace das {
                   [&cmp](const auto &p1, const auto &p2) { return cmp(p1.first, p2.first); } );
         return sorted_vector;
     }
+#endif
 
     template <typename K, typename Compare = less<K>>
     vector<K> ordered(const das_set<K> &unsorted_map, Compare cmp = {}) {
@@ -59,6 +64,8 @@ namespace das {
         return sorted_vector;
     }
 
+    // See note on the insert-only map overload above.
+#if DAS_CUSTOM_HASH
     template <typename K, typename Compare = less<K>>
     vector<K> ordered(const das_insert_only_hash_set<K> &unsorted_map, Compare cmp = {}) {
         static_assert(!is_pointer_v<K> ||
@@ -69,6 +76,7 @@ namespace das {
         sort(sorted_vector.begin(), sorted_vector.end(), cmp);
         return sorted_vector;
     }
+#endif
 
 
     bool starts_with ( const string & name, const char * template_name );

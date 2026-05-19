@@ -255,11 +255,16 @@ namespace das {
         template <typename K, typename V, typename H, typename E>
         AstSerializer & operator << ( das_hash_map<K, V, H, E> & value );
 
+        // Guarded: under DAS_CUSTOM_HASH=0 das_insert_only_hash_map aliases to
+        // std::unordered_map (same as das_hash_map), so the regular overloads
+        // above already match insert-only args.
+#if DAS_CUSTOM_HASH
         template <typename K, typename V, typename H, typename E>
         void serialize_hash_map ( das_insert_only_hash_map<K, V, H, E> & value );
 
         template <typename K, typename V, typename H, typename E>
         AstSerializer & operator << ( das_insert_only_hash_map<K, V, H, E> & value );
+#endif
 
         template <typename V>
         AstSerializer & operator << ( safebox_map<V> & box );
