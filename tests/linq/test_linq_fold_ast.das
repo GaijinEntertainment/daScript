@@ -2628,3 +2628,244 @@ def test_reverse_select_pushes_projection_not_source(t : T?) {
     }
 }
 
+// ── Phase 3+ terminal-walk lane: last / single / element_at / aggregate ─────
+
+[export, marker(no_coverage)]
+def target_last_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ < 4).last())
+}
+
+[export, marker(no_coverage)]
+def target_last_or_default_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ > 99).last_or_default(-1))
+}
+
+[export, marker(no_coverage)]
+def target_single_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ == 3).single())
+}
+
+[export, marker(no_coverage)]
+def target_single_or_default_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ > 99).single_or_default(-1))
+}
+
+[export, marker(no_coverage)]
+def target_element_at_fold() : int {
+    return _fold(each([10, 20, 30, 40, 50]).element_at(3))
+}
+
+[export, marker(no_coverage)]
+def target_element_at_or_default_fold() : int {
+    return _fold(each([10, 20, 30]).element_at_or_default(100))
+}
+
+[export, marker(no_coverage)]
+def target_aggregate_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5]).aggregate(0, $(acc : int, x : int) => acc + x * 2))
+}
+
+[export, marker(no_coverage)]
+def target_aggregate_with_where_fold() : int {
+    return _fold(each([1, 2, 3, 4, 5])._where(_ % 2 == 1).aggregate(0, $(acc : int, x : int) => acc + x * x))
+}
+
+[test]
+def test_last_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_last_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "last: one for-loop (full walk)")
+        // `last` tail panics on empty source; verify the splice emitted it.
+        t |> success(count_call(body_expr, "panic") >= 1, "last: panic call in tail for empty case")
+    }
+}
+
+[test]
+def test_last_or_default_no_panic(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_last_or_default_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "last_or_default: one for-loop")
+        // `last_or_default` returns the bound default; never panics.
+        t |> equal(0, count_call(body_expr, "panic"), "last_or_default: no panic call")
+    }
+}
+
+[test]
+def test_single_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_single_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "single: one for-loop")
+        // `single` panics twice in the splice: once for >1 match (in-loop), once for empty (tail).
+        t |> success(count_call(body_expr, "panic") >= 2, "single: two panic call sites")
+    }
+}
+
+[test]
+def test_single_or_default_no_panic(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_single_or_default_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "single_or_default: one for-loop")
+        t |> equal(0, count_call(body_expr, "panic"), "single_or_default: no panic")
+    }
+}
+
+[test]
+def test_element_at_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_element_at_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "element_at: one for-loop")
+        // `element_at` emits two panic call sites in the splice (pre-loop for `idx < 0`,
+        // tail for "index out of range"); const-fold may eliminate the pre-loop branch
+        // when the literal index is non-negative, so >= 1 is the guarantee.
+        t |> success(count_call(body_expr, "panic") >= 1, "element_at: at least the tail panic survives")
+        // Counter `++` increments the in-flight match counter.
+        t |> success(count_op1(body_expr, "++") >= 1, "element_at: counter increment present")
+    }
+}
+
+[test]
+def test_element_at_or_default_no_panic(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_element_at_or_default_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "element_at_or_default: one for-loop")
+        t |> equal(0, count_call(body_expr, "panic"), "element_at_or_default: no panic")
+    }
+}
+
+// Count ExprInvoke nodes anywhere in the subtree. The outer `_fold` splice wrapper
+// is an ExprInvoke; per-element block calls (when peel fails) also emit ExprInvoke.
+// Peeled aggregate bodies inline the block expression and emit zero inner invokes.
+def count_invoke_nodes(expr : Expression?) : int {
+    if (expr == null) return 0
+    var n = 0
+    if (expr is ExprInvoke) {
+        n ++
+    }
+    if (expr is ExprBlock) {
+        let b = expr as ExprBlock
+        for (s in b.list) {
+            n += count_invoke_nodes(s)
+        }
+        for (s in b.finalList) {
+            n += count_invoke_nodes(s)
+        }
+    } elif (expr is ExprFor) {
+        let f = expr as ExprFor
+        for (s in f.sources) {
+            n += count_invoke_nodes(s)
+        }
+        n += count_invoke_nodes(f.body)
+    } elif (expr is ExprIfThenElse) {
+        let i = expr as ExprIfThenElse
+        n += count_invoke_nodes(i.cond)
+        n += count_invoke_nodes(i.if_true)
+        n += count_invoke_nodes(i.if_false)
+    } elif (expr is ExprOp2) {
+        let o = expr as ExprOp2
+        n += count_invoke_nodes(o.left)
+        n += count_invoke_nodes(o.right)
+    } elif (expr is ExprCall) {
+        let c = expr as ExprCall
+        for (a in c.arguments) {
+            n += count_invoke_nodes(a)
+        }
+    } elif (expr is ExprMakeBlock) {
+        let mb = expr as ExprMakeBlock
+        n += count_invoke_nodes(mb._block)
+    } elif (expr is ExprInvoke) {
+        let inv = expr as ExprInvoke
+        for (a in inv.arguments) {
+            n += count_invoke_nodes(a)
+        }
+    } elif (expr is ExprReturn) {
+        let r = expr as ExprReturn
+        n += count_invoke_nodes(r.subexpr)
+    } elif (expr is ExprOp1) {
+        let o = expr as ExprOp1
+        n += count_invoke_nodes(o.subexpr)
+    } elif (expr is ExprLet) {
+        let l = expr as ExprLet
+        for (v in l.variables) {
+            if (v != null && v.init != null) {
+                n += count_invoke_nodes(v.init)
+            }
+        }
+    }
+    return n
+}
+
+[test]
+def test_aggregate_splices_peeled(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_aggregate_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "aggregate: one for-loop")
+        // Single-return block body `acc + x * 2` peeled into `+` and `*` ops; the only
+        // ExprInvoke is the outer `_fold` splice wrapper. A non-peeled splice would emit
+        // a per-element ExprInvoke against the user's block.
+        t |> equal(1, count_invoke_nodes(body_expr),
+            "aggregate: only the outer invoke wrapper, NOT a per-element block invoke")
+        t |> success(count_op2(body_expr, "+") >= 1, "aggregate: `+` from peeled body")
+        t |> success(count_op2(body_expr, "*") >= 1, "aggregate: `*` from peeled body")
+    }
+}
+
+[test]
+def test_aggregate_with_where_fuses(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_aggregate_with_where_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "aggregate+where: one for-loop")
+        // Where predicate (`_ % 2 == 1`) inlined alongside peeled aggregate body. The
+        // `where_` library helper must NOT appear as a runtime call.
+        t |> equal(0, count_call(body_expr, "where_"), "aggregate+where: where_ helper inlined")
+        t |> equal(1, count_invoke_nodes(body_expr), "aggregate+where: only outer invoke wrapper")
+    }
+}
+
