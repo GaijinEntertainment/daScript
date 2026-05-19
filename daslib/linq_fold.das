@@ -87,6 +87,27 @@ def private fold_linq_cond_peel(var expr : Expression?; var replacement : Expres
     return qmacro(invoke($e(expr), $e(replacement)))
 }
 
+[macro_function]
+def private fold_linq_cond2(var expr : Expression?; arg0Name, arg1Name : string) : Expression? {
+    // 2-arg peel for aggregate's block<(acc, x):AGG>; returns null if non-peelable so caller falls back to invoke.
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 2 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var res = clone_expression(ret.subexpr)
+                var rules : Template
+                rules |> renameVariable(string(blk.arguments[0].name), arg0Name)
+                rules |> renameVariable(string(blk.arguments[1].name), arg1Name)
+                apply_template(rules, res.at, res)
+                return res
+            }
+        }
+    }
+    return null
+}
+
 struct private LinqCall {
     name : string
     moduleName : string = "linq"
@@ -359,7 +380,12 @@ def private classify_terminator(name : string) : LinqLane {
     // take/skip trailing (after to_array strip) → ARRAY lane with implicit materialization.
     if (name == "where_" || name == "select" || name == "take" || name == "skip") return LinqLane.ARRAY
     if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
-    if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains") return LinqLane.EARLY_EXIT
+    // EARLY_EXIT is also the dispatch lane for full-walk single-return terminators (last/single/element_at/aggregate) — same emit_early_exit_lane shape, different per-op state.
+    if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains"
+            || name == "last" || name == "last_or_default"
+            || name == "single" || name == "single_or_default"
+            || name == "element_at" || name == "element_at_or_default"
+            || name == "aggregate") return LinqLane.EARLY_EXIT
     return LinqLane.UNKNOWN
 }
 
@@ -845,6 +871,219 @@ def private emit_early_exit_lane(
         }
         tailStmts |> push <| qmacro_expr() {
             return false
+        }
+    } elif (opName == "last" || opName == "last_or_default") {
+        // Full walk; per-match overwrites a single bind; tail returns it after found-check (panic/default for empty).
+        var retType : TypeDeclPtr
+        if (projection != null) {
+            retType = clone_type(projection._type)
+        } else {
+            retType = clone_type(elementType)
+        }
+        if (retType != null) {
+            retType.flags.constant = false
+            retType.flags.ref = false
+        }
+        let foundName = "`found`{at.line}`{at.column}"
+        let lastBindName = "`lst`{at.line}`{at.column}"
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(foundName) = false
+        }
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(lastBindName) : $t(retType)
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            $i(foundName) = true
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            $i(lastBindName) := $i(valueName)
+        }
+        if (opName == "last") {
+            tailStmts <- qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("sequence contains no elements")
+                }
+                return <- $i(lastBindName)
+            }
+        } else {
+            // Bind `d` once at the top (eager, matches linq.das line 2621).
+            let defaultName = "`dval`{at.line}`{at.column}"
+            var defaultExpr = clone_expression(terminatorCall.arguments[1])
+            preludeStmts |> push <| qmacro_expr() {
+                let $i(defaultName) = $e(defaultExpr)
+            }
+            tailStmts <- qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    return $i(defaultName)
+                }
+                return <- $i(lastBindName)
+            }
+        }
+    } elif (opName == "single" || opName == "single_or_default") {
+        // Full walk; on the SECOND match `single` panics and `single_or_default` returns the default; same for empty source.
+        var retType : TypeDeclPtr
+        if (projection != null) {
+            retType = clone_type(projection._type)
+        } else {
+            retType = clone_type(elementType)
+        }
+        if (retType != null) {
+            retType.flags.constant = false
+            retType.flags.ref = false
+        }
+        let foundName = "`found`{at.line}`{at.column}"
+        let bindName = "`sng`{at.line}`{at.column}"
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(foundName) = false
+        }
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(bindName) : $t(retType)
+        }
+        if (opName == "single") {
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($i(foundName)) {
+                    panic("sequence contains more than one element")
+                }
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(foundName) = true
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(bindName) := $i(valueName)
+            }
+            tailStmts <- qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("sequence contains no elements")
+                }
+                return <- $i(bindName)
+            }
+        } else {
+            let defaultName = "`dval`{at.line}`{at.column}"
+            var defaultExpr = clone_expression(terminatorCall.arguments[1])
+            preludeStmts |> push <| qmacro_expr() {
+                let $i(defaultName) = $e(defaultExpr)
+            }
+            // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($i(foundName)) {
+                    return $i(defaultName)
+                }
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(foundName) = true
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(bindName) := $i(valueName)
+            }
+            tailStmts <- qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    return $i(defaultName)
+                }
+                return <- $i(bindName)
+            }
+        }
+    } elif (opName == "element_at" || opName == "element_at_or_default") {
+        // Counter-style early-exit: return the N-th element that survives upstream where/select. Negative index panics or returns default pre-loop.
+        var retType : TypeDeclPtr
+        if (projection != null) {
+            retType = clone_type(projection._type)
+        } else {
+            retType = clone_type(elementType)
+        }
+        if (retType != null) {
+            retType.flags.constant = false
+            retType.flags.ref = false
+        }
+        let idxName = "`idx`{at.line}`{at.column}"
+        let cntName = "`ec`{at.line}`{at.column}"
+        var idxExpr = clone_expression(terminatorCall.arguments[1])
+        preludeStmts |> push <| qmacro_expr() {
+            let $i(idxName) = $e(idxExpr)
+        }
+        if (opName == "element_at") {
+            preludeStmts |> push <| qmacro_expr() {
+                if ($i(idxName) < 0) {
+                    panic("element index out of range")
+                }
+            }
+        } else {
+            preludeStmts |> push <| qmacro_expr() {
+                if ($i(idxName) < 0) {
+                    return default<$t(retType)>
+                }
+            }
+        }
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(cntName) = 0
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            if ($i(cntName) == $i(idxName)) {
+                return $i(valueName)
+            }
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            $i(cntName) ++
+        }
+        if (opName == "element_at") {
+            tailStmts <- qmacro_block_to_array() {
+                panic("element index out of range")
+                return default<$t(retType)>
+            }
+        } else {
+            tailStmts |> push <| qmacro_expr() {
+                return default<$t(retType)>
+            }
+        }
+    } elif (opName == "aggregate") {
+        // Peel single-return `block<(acc, x):AGG>` body inline; fall back to invoke on multi-stmt. Workhorse seed picks `=` / `return`; non-workhorse uses `<-` / `return <-` (matches linq.das:1466 static_if).
+        var seedExpr = clone_expression(terminatorCall.arguments[1])
+        var aggFn = clone_expression(terminatorCall.arguments[2])
+        var accType = clone_type(seedExpr._type)
+        if (accType != null) {
+            accType.flags.constant = false
+            accType.flags.ref = false
+        }
+        let aggAccName = "`agg`{at.line}`{at.column}"
+        let aggIsWorkhorse = (seedExpr._type != null && seedExpr._type.isWorkhorseType)
+        if (aggIsWorkhorse) {
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(aggAccName) : $t(accType) = $e(seedExpr)
+            }
+        } else {
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(aggAccName) : $t(accType) <- $e(seedExpr)
+            }
+        }
+        var peeled = fold_linq_cond2(aggFn, aggAccName, valueName)
+        if (peeled != null) {
+            if (aggIsWorkhorse) {
+                perMatchStmts |> push <| qmacro_expr() {
+                    $i(aggAccName) = $e(peeled)
+                }
+            } else {
+                perMatchStmts |> push <| qmacro_expr() {
+                    $i(aggAccName) <- $e(peeled)
+                }
+            }
+        } else {
+            if (aggIsWorkhorse) {
+                perMatchStmts |> push <| qmacro_expr() {
+                    $i(aggAccName) = invoke($e(aggFn), $i(aggAccName), $i(valueName))
+                }
+            } else {
+                perMatchStmts |> push <| qmacro_expr() {
+                    $i(aggAccName) <- invoke($e(aggFn), $i(aggAccName), $i(valueName))
+                }
+            }
+        }
+        if (aggIsWorkhorse) {
+            tailStmts |> push <| qmacro_expr() {
+                return $i(aggAccName)
+            }
+        } else {
+            tailStmts |> push <| qmacro_expr() {
+                return <- $i(aggAccName)
+            }
         }
     } else {
         return null

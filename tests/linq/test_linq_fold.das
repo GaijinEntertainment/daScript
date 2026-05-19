@@ -1060,6 +1060,188 @@ def test_contains_early_exit(t : T?) {
 }
 
 [test]
+def test_last_terminal_walk(t : T?) {
+    t |> run("last: many returns final element") @(t : T?) {
+        let arr <- [7, 8, 9]
+        let l = _fold(each(arr).last())
+        t |> equal(9, l)
+    }
+    t |> run("last: where matches returns final survivor") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let l = _fold(each(arr)._where(_ < 4).last())
+        t |> equal(3, l)
+    }
+    t |> run("last: select projection returns projected last") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let l = _fold(each(arr)._select(_ * 10).last())
+        t |> equal(30, l)
+    }
+    t |> run("last: parity vs plain linq") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6]
+        let spliced = _fold(each(arr)._where(_ % 2 == 0).last())
+        let reference = arr |> where_($(x : int) => x % 2 == 0) |> last()
+        t |> equal(reference, spliced)
+    }
+}
+
+[test]
+def test_last_or_default_terminal_walk(t : T?) {
+    t |> run("last_or_default: empty returns default") @(t : T?) {
+        let arr : array<int>
+        let l = _fold(each(arr).last_or_default(99))
+        t |> equal(99, l)
+    }
+    t |> run("last_or_default: non-empty returns last") @(t : T?) {
+        let arr <- [7, 8, 9]
+        let l = _fold(each(arr).last_or_default(99))
+        t |> equal(9, l)
+    }
+    t |> run("last_or_default: where no match returns default") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let l = _fold(each(arr)._where(_ > 100).last_or_default(-1))
+        t |> equal(-1, l)
+    }
+    t |> run("last_or_default: where matches returns last survivor") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let l = _fold(each(arr)._where(_ < 4).last_or_default(-1))
+        t |> equal(3, l)
+    }
+}
+
+[test]
+def test_single_terminal_walk(t : T?) {
+    t |> run("single: exactly one match returns it") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let s = _fold(each(arr)._where(_ == 3).single())
+        t |> equal(3, s)
+    }
+    t |> run("single: select projection on single element") @(t : T?) {
+        let arr <- [4]
+        let s = _fold(each(arr)._select(_ * 10).single())
+        t |> equal(40, s)
+    }
+}
+
+[test]
+def test_single_or_default_terminal_walk(t : T?) {
+    t |> run("single_or_default: empty returns default") @(t : T?) {
+        let arr : array<int>
+        let s = _fold(each(arr).single_or_default(99))
+        t |> equal(99, s)
+    }
+    t |> run("single_or_default: exactly one match returns it") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let s = _fold(each(arr)._where(_ == 3).single_or_default(-1))
+        t |> equal(3, s)
+    }
+    t |> run("single_or_default: more than one match returns default") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let s = _fold(each(arr)._where(_ > 2).single_or_default(-1))
+        t |> equal(-1, s)
+    }
+    t |> run("single_or_default: where no match returns default") @(t : T?) {
+        let arr <- [1, 2, 3]
+        let s = _fold(each(arr)._where(_ > 100).single_or_default(-1))
+        t |> equal(-1, s)
+    }
+}
+
+[test]
+def test_element_at_terminal_walk(t : T?) {
+    t |> run("element_at: index 0 returns first") @(t : T?) {
+        let arr <- [10, 20, 30]
+        let e = _fold(each(arr).element_at(0))
+        t |> equal(10, e)
+    }
+    t |> run("element_at: index N returns N-th") @(t : T?) {
+        let arr <- [10, 20, 30, 40, 50]
+        let e = _fold(each(arr).element_at(3))
+        t |> equal(40, e)
+    }
+    t |> run("element_at: with where filter") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7]
+        // Evens: [2,4,6]. element_at(1) → 4.
+        let e = _fold(each(arr)._where(_ % 2 == 0).element_at(1))
+        t |> equal(4, e)
+    }
+    t |> run("element_at: with select projection") @(t : T?) {
+        let arr <- [1, 2, 3]
+        // Projected: [10,20,30]. element_at(2) → 30.
+        let e = _fold(each(arr)._select(_ * 10).element_at(2))
+        t |> equal(30, e)
+    }
+    t |> run("element_at: parity vs plain linq") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7]
+        let spliced = _fold(each(arr)._where(_ > 2).element_at(2))
+        let reference = arr |> where_($(x : int) => x > 2) |> element_at(2)
+        t |> equal(reference, spliced)
+    }
+}
+
+[test]
+def test_element_at_or_default_terminal_walk(t : T?) {
+    t |> run("element_at_or_default: empty returns default") @(t : T?) {
+        let arr : array<int>
+        let e = _fold(each(arr).element_at_or_default(0))
+        t |> equal(0, e)
+    }
+    t |> run("element_at_or_default: in-range returns it") @(t : T?) {
+        let arr <- [10, 20, 30]
+        let e = _fold(each(arr).element_at_or_default(1))
+        t |> equal(20, e)
+    }
+    t |> run("element_at_or_default: out-of-range returns default") @(t : T?) {
+        let arr <- [10, 20, 30]
+        let e = _fold(each(arr).element_at_or_default(100))
+        t |> equal(0, e)
+    }
+    t |> run("element_at_or_default: negative index returns default (no panic)") @(t : T?) {
+        let arr <- [10, 20, 30]
+        let e = _fold(each(arr).element_at_or_default(-5))
+        t |> equal(0, e)
+    }
+}
+
+[test]
+def test_aggregate_terminal_walk(t : T?) {
+    t |> run("aggregate: empty returns seed") @(t : T?) {
+        let arr : array<int>
+        let a = _fold(each(arr).aggregate(42, $(acc : int, x : int) => acc + x))
+        t |> equal(42, a)
+    }
+    t |> run("aggregate: sum of doubles") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let a = _fold(each(arr).aggregate(0, $(acc : int, x : int) => acc + x * 2))
+        t |> equal(30, a)
+    }
+    t |> run("aggregate: with where filter") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        // Odds: 1,3,5. sum-of-squares: 1+9+25 = 35.
+        let a = _fold(each(arr)._where(_ % 2 == 1).aggregate(0, $(acc : int, x : int) => acc + x * x))
+        t |> equal(35, a)
+    }
+    t |> run("aggregate: with select chain") @(t : T?) {
+        let arr <- [1, 2, 3]
+        // After select(*10): [10,20,30]. sum: 60.
+        let a = _fold(each(arr)._select(_ * 10).aggregate(0, $(acc : int, x : int) => acc + x))
+        t |> equal(60, a)
+    }
+    t |> run("aggregate: non-workhorse string seed") @(t : T?) {
+        let arr <- [1, 2, 3]
+        // String join — exercises the non-workhorse `<-` init/update/return path.
+        let a = _fold(each(arr).aggregate("",
+            $(acc : string, x : int) => acc == "" ? "{x}" : "{acc},{x}"))
+        t |> equal("1,2,3", a)
+    }
+    t |> run("aggregate: parity vs plain linq") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6]
+        let spliced = _fold(each(arr)._where(_ % 2 == 0).aggregate(1, $(acc : int, x : int) => acc * x))
+        let reference = arr |> where_($(x : int) => x % 2 == 0) |> aggregate(1, $(acc : int, x : int) => acc * x)
+        t |> equal(reference, spliced)
+    }
+}
+
+[test]
 def test_take_skip_counter_lane(t : T?) {
     t |> run("counter: where.take.count") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

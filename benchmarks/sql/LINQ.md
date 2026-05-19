@@ -626,6 +626,53 @@ Closes the explicit "having predicate references a reducer absent from the selec
 - Inner-select reducer in having that uses a different lambda from a same-named select-side inner-select reducer — currently match-by-name conflates them (already a v1 limitation since PR-D; structural lambda compare TBD).
 - Two same-named inner-select reducers in the same having clause currently bail to cascade — a structural lambda compare would let us splice both correctly (sharing a slot when identical, splitting into two hidden slots when different).
 
+## Phase 3+ terminal-walk lane: last / single / element_at / aggregate (PR-F)
+
+Closes the `test_linq_element.das` (last / last_or_default / single / single_or_default / element_at / element_at_or_default) and `test_linq_aggregation.das` (aggregate(seed, fn)) gaps. Builds on the existing EARLY_EXIT lane infrastructure (`emit_early_exit_lane`): the function name is now a misnomer (last/single/aggregate walk the entire source), but the structural shape — one for-loop + prelude/per-match/tail statements + optional skip/take wrap — fits all seven new operators perfectly. The lane classifier is extended; `emit_early_exit_lane` gains 7 per-op arms.
+
+**How it lands:**
+
+1. **`classify_terminator` extension.** Adds `last`, `last_or_default`, `single`, `single_or_default`, `element_at`, `element_at_or_default`, `aggregate` to the EARLY_EXIT bucket. The bucket name covers any single-return terminator whose emission shape is "one for-loop + tail return".
+
+2. **`fold_linq_cond2` helper.** 2-arg sibling of `fold_linq_cond` that peels `block<(acc, x):AGG>` bodies — single-return blocks get their formals renamed via `Template.renameVariable` on both `acc` and `x`. Non-peelable bodies (multi-stmt blocks) return `null` so the caller falls back to `invoke(fn, acc, val)`. Mirrors PR-A1's inner-select-sum peel philosophy.
+
+3. **Per-op emission arms (in `emit_early_exit_lane`):**
+   - **`last` / `last_or_default`**: prelude `var found = false; var lastBind : T`; per-match `found = true; lastBind := val`; tail `if (!found) panic | return default; return <- lastBind`.
+   - **`single` / `single_or_default`**: prelude `var found = false; var bind : T`; per-match `if (found) panic | return default; found = true; bind := val`; tail `if (!found) panic | return default; return <- bind`. Note: `single_or_default` early-exits on the SECOND match (returns default), but `single` continues to panic — both still walk to the second match before deciding.
+   - **`element_at` / `element_at_or_default`**: prelude binds idx, validates `idx < 0` (panic / return default), then `var counter = 0`; per-match `if (counter == idx) return val; counter ++`; tail panic / return default.
+   - **`aggregate`**: prelude `var acc = seed` (workhorse) or `var acc <- seed` (non-workhorse); per-match `acc = peeledBody` (workhorse) or `acc <- peeledBody` (non-workhorse), where `peeledBody` is the inlined block body or `invoke(fn, acc, val)` if peel failed; tail `return acc` / `return <- acc`. Workhorse-vs-non-workhorse switching mirrors the user-side `aggregate`'s static_if (linq.das:1466).
+
+4. **Daslib bugfix (collateral).** `aggregate_impl_const` (linq.das:1458) had a static_if checking `is_workhorse(type<TT>)` where TT is the element type — but move-vs-return is decided by AGG (return/accumulator type), not TT. Surfaced when adding a parity benchmark with non-workhorse element type (`Car`) and workhorse seed (`int`): the impl tried `return <- int_from_const` which fails. Fixed by checking `is_workhorse(type<AGG>)` to match the public `aggregate(array, ...)` overload's static_if.
+
+**Bail cases (cascade to tier 2):**
+- Aggregate with a non-peelable block body (multi-statement). Cascade preserves correctness via runtime `invoke`.
+- All upstream bail cases from Phase 2A/2B still apply (`is_buffer_required_op` source, skip/take ordering).
+
+**Edge cases worth noting:**
+- `aggregate` with a peelable single-return block emits zero per-element invokes (proven by `test_aggregate_splices_peeled`'s `count_invoke_nodes` assertion).
+- `element_at` const-folds away the `idx < 0` pre-loop panic when the index is a positive literal — `panic` call count drops from 2 to 1. AST test asserts `>= 1`.
+- `single_or_default` deviates from `single`'s "walk-to-second-match" by early-exiting on the second match (matches the user-side `single_or_default(iterator)` semantics at linq.das:2713).
+- `last` / `last_or_default` work cleanly with `_select` projection — the bind captures the projected value, not the source element.
+
+### Headline (PR-F)
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|
+| last_match | `each(arr) → where(price > T) → last` | 0\* | 29 | **5** | **5.8× over m3** |
+| single_match | `each(arr) → where(id == K) → single` | 0\* | 19 | **2** | **9.5× over m3** |
+| element_at_match | `each(arr) → where(price > T) → element_at(100)` | 0\* | 29 | **0\*\*** | **early-exit at ~100 source elements** |
+| aggregate_match | `each(arr) → where(price > T) → aggregate(0, $(a, c) => a + c.price)` | 34 | 51 | **5** | **10.2× over m3 / 6.8× over m1 SQL** |
+
+\* m1 SQL benchmarks here have a primary-key (`id`) lookup or LIMIT-1 fast path that bottoms out below the dastest timer resolution.
+\*\* m3f `element_at_match` bottoms out at 0 ns/op because the splice exits after visiting `INDEX + matching_density` source elements (~100 of 100K), so total time divided by source size is effectively 0 — this is the early-exit win.
+
+`aggregate_match` is the standout: peeling the block body inline + fusing the upstream where filter into the same per-element loop eliminates BOTH the per-element block invoke AND the where-iterator allocation. m3 pays for both; m3f pays for neither.
+
+### Deferred for follow-ups
+
+- Aggregate with non-peelable block body cascades to tier 2 (correct but slower) — a `return $b(stmts)` pattern recognizer would let multi-statement blocks splice too.
+- Skip-family (`skip_last` / `take_last`) — these need buffer state similar to PR-C's reverse_take; separate follow-up.
+
 ## Operator-coverage checklist (parity tests)
 
 The benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
@@ -633,7 +680,7 @@ The benchmarks above cover the most common shapes. The end-game target is one be
 | Source test file | Operator group | Covered by benchmark | Status |
 |---|---|---|---|
 | `test_linq.das` | comprehension basics | count_aggregate, sum_aggregate | ✅ |
-| `test_linq_aggregation.das` | count/sum/min/max/avg/aggregate | count/sum/min/max/average_aggregate, sum_where, long_count_aggregate | ✅ core; `aggregate(seed, fn)` ⏳ |
+| `test_linq_aggregation.das` | count/sum/min/max/avg/aggregate | count/sum/min/max/average_aggregate, sum_where, long_count_aggregate, aggregate_match | ✅ core; ✅ `aggregate(seed, fn)` with peeled block body + workhorse/non-workhorse seed split (PR-F) |
 | `test_linq_querying.das` | any/all/contains | any_match, all_match, contains_match | ✅ core |
 | `test_linq_transform.das` | select/select_many/zip | to_array_filter, zip_dot_product | ✅ select/zip; `select_many` ⏳ |
 | `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (Phase 3+); ✅ `reverse \|> take(N)` backward index loop on array sources (PR-C — closes the prior regression) |
@@ -641,7 +688,7 @@ The benchmarks above cover the most common shapes. The end-game target is one be
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
 | `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
 | `test_linq_set.das` | distinct/union/except/intersect/unique | distinct_count, distinct_take | ✅ distinct + distinct_by (streaming dedup, this PR); union/except/intersect/unique ⏳ |
-| `test_linq_element.das` | first/last/single/element_at + _or_default | first_match, first_or_default_match | ✅ first/first_or_default; last/single/element_at ⏳ |
+| `test_linq_element.das` | first/last/single/element_at + _or_default | first_match, first_or_default_match, last_match, single_match, element_at_match | ✅ first/first_or_default; ✅ last/last_or_default/single/single_or_default/element_at/element_at_or_default (PR-F terminal-walk lane) |
 | `test_linq_concat.das` | concat/prepend/append | — | ⏳ |
 | `test_linq_generation.das` | range/repeat/etc. | — | ⏳ |
 | `test_linq_bugs.das` | regression cases | — | ⏳ as bugs surface |
