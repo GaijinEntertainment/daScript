@@ -161,7 +161,7 @@ def target_zip_impure_select_skip_bails() : array<int> {
 }
 
 // ── PR Phase 2B+ — accumulator (sum/min/max/average) terminators on zip ──
-// All require a `select` projection to scalarize the tuple element (accumulator ops aren't defined on tuples).
+// sum/min/max/average require a `select` projection to scalarize the tuple element (accumulator ops aren't defined on tuples). `long_count` is the exception: it routes through the COUNTER path locally (length shortcut + counter loop) since the accumulator is just `int64 acc++` regardless of element type.
 [export, marker(no_coverage)]
 def target_zip_sum_proj_fold() : int {
     return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
@@ -428,6 +428,9 @@ def test_zip_long_count_uses_length_shortcut(t : T?) {
         t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
         let n = count_inner_for_loops(body_expr)
         t |> equal(n, 0, "zip(arr,arr).long_count() must use length shortcut (no for-loop)")
+        // Distinguish length-shortcut splice from tier-2 cascade by elimination: for_loops==0 rules out the counter-loop splice path; long_count==0 rules out tier-2 (which leaves the long_count call in place). Both together ⇒ length shortcut. (Can't grep for length() directly: count_call doesn't recurse into ExprOp3 ternary where length() lives in the min(...) expression.)
+        let longCountCalls = count_call(body_expr, "long_count")
+        t |> equal(longCountCalls, 0, "long_count must be inlined into the splice (no runtime call)")
     }
 }
 
@@ -706,6 +709,26 @@ def test_zip_where_long_count_fold_result(t : T?) {
     t |> run("zip+where+long_count returns int64 survivor count") @(t : T?) {
         // 3 survivors
         t |> equal(target_zip_where_long_count_fold(), 3l)
+    }
+}
+
+// long_count + chain op (where) must emit a single multi-iter counter for-loop, not cascade to tier-2. Regression guard against routing long_count through the ACCUMULATOR projection-required branch (PR #2742 Copilot review #r3270242609).
+[test]
+def test_zip_where_long_count_emits_counter_loop(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_where_long_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "zip+where+long_count must emit one multi-iter counter for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined into the splice")
+        let longCountCalls = count_call(body_expr, "long_count")
+        t |> equal(longCountCalls, 0, "long_count terminator must be fused (no runtime call)")
     }
 }
 

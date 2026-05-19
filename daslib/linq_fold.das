@@ -3428,9 +3428,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
     let isCounter = lastName == "count" || lastName == "long_count"
     // Semantic guard: impure `select` projection AHEAD of a range op (skip/take/skip_while/take_while). The eager `select(proj)|>skip(K)` pipeline runs proj on every element; our spliced order (skip-then-push) would drop the side effects on skipped items. Bail to tier-2 which preserves eager semantics. Plan_loop_or_count has the analogous gap (see PR #2741 review thread #r3269663361); fixing both planners uniformly is a separate follow-up.
     if (seenSelect && !allProjectionsPure && !noLimits) return null
-    // Accumulator + early-exit lane dispatch: reuses the generalized emit_*_lane helpers (parallel-array form). preCondStmts threads `let it = (itA, itB)` so itName resolves inside the loop body when the where/projection/predicate/value references the tuple element.
+    // Accumulator + early-exit lane dispatch: reuses the generalized emit_*_lane helpers (parallel-array form). preCondStmts threads `let it = (itA, itB)` so itName resolves inside the loop body when the where/projection/predicate/value references the tuple element. `long_count` is classified ACCUMULATOR but routes through the COUNTER path locally (existing length-shortcut + counter loop already cover it); `!isCounter` excludes it from this branch.
     let lane = classify_terminator(lastName)
-    if (lane == LinqLane.ACCUMULATOR) {
+    if (lane == LinqLane.ACCUMULATOR && !isCounter) {
         // sum/min/max/average without projection: elementType is tuple<...>, accumulator op would not typecheck — bail to tier-2 (typer rejects anyway, but explicit bail keeps the error inside linq's normal cascade rather than the splice).
         if (projection == null) return null
         var preCondStmts : array<Expression?>
