@@ -2964,6 +2964,11 @@ def private iter_type(src : array<auto(TT)>) : TT -const -& {
 def private select_many_impl(var src; tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(type<TT>))) -const -&>
+    // Lower-bound reserve when the outer source is length-bearing — flat-map produces ≥ length(src) elements
+    // for non-degenerate inner sequences; reduces realloc count even when the actual output is larger.
+    static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
+        buffer |> reserve(length(src))
+    }
     for (it in src) {
         for (innerIt in it) {
             buffer.push_clone(result_selector(innerIt))
@@ -3157,6 +3162,356 @@ def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; result_se
 def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
     //! Merges three iterators into an array by applying a specified function
     return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, result_selector)
+}
+
+// zip with 4 sources
+
+[unused_argument(tt, uu, ww, xx)]
+def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
+    //! Merges four iterators into an array of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), length(d)))))
+    }
+    for (itA, itB, itC, itD in a, b, c, d) {
+        buffer.emplace((itA, itB, itC, itD))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx)]
+def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
+    return <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
+    //! Merges four iterators into an iterator of tuples
+    return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
+    //! Merges four arrays into an array of tuples
+    return <- zip4_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
+    //! Merges four iterators into an array of tuples
+    return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>)
+}
+
+// zip4 with result selector
+
+[unused_argument(tt, uu, ww, xx)]
+def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
+    //! Merges four iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), length(d)))))
+    }
+    for (itA, itB, itC, itD in a, b, c, d) {
+        buffer.push_clone(result_selector(itA, itB, itC, itD))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx)]
+def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
+    return <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
+    //! Merges four iterators into an iterator by applying a specified function
+    return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
+    //! Merges four arrays into an array by applying a specified function
+    return <- zip4_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
+    //! Merges four iterators into an array by applying a specified function
+    return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, result_selector)
+}
+
+// zip with 5 sources
+
+[unused_argument(tt, uu, ww, xx, yy)]
+def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
+    //! Merges five iterators into an array of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), length(e))))))
+    }
+    for (itA, itB, itC, itD, itE in a, b, c, d, e) {
+        buffer.emplace((itA, itB, itC, itD, itE))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy)]
+def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
+    return <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
+    //! Merges five iterators into an iterator of tuples
+    return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
+    //! Merges five arrays into an array of tuples
+    return <- zip5_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
+    //! Merges five iterators into an array of tuples
+    return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>)
+}
+
+// zip5 with result selector
+
+[unused_argument(tt, uu, ww, xx, yy)]
+def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
+    //! Merges five iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), length(e))))))
+    }
+    for (itA, itB, itC, itD, itE in a, b, c, d, e) {
+        buffer.push_clone(result_selector(itA, itB, itC, itD, itE))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy)]
+def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
+    return <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
+    //! Merges five iterators into an iterator by applying a specified function
+    return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
+    //! Merges five arrays into an array by applying a specified function
+    return <- zip5_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
+    //! Merges five iterators into an array by applying a specified function
+    return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, result_selector)
+}
+
+// zip with 6 sources
+
+[unused_argument(tt, uu, ww, xx, yy, zz)]
+def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
+    //! Merges six iterators into an array of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), length(f)))))))
+    }
+    for (itA, itB, itC, itD, itE, itF in a, b, c, d, e, f) {
+        buffer.emplace((itA, itB, itC, itD, itE, itF))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz)]
+def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
+    return <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
+    //! Merges six iterators into an iterator of tuples
+    return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
+    //! Merges six arrays into an array of tuples
+    return <- zip6_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
+    //! Merges six iterators into an array of tuples
+    return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>)
+}
+
+// zip6 with result selector
+
+[unused_argument(tt, uu, ww, xx, yy, zz)]
+def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
+    //! Merges six iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), length(f)))))))
+    }
+    for (itA, itB, itC, itD, itE, itF in a, b, c, d, e, f) {
+        buffer.push_clone(result_selector(itA, itB, itC, itD, itE, itF))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz)]
+def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
+    return <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
+    //! Merges six iterators into an iterator by applying a specified function
+    return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
+    //! Merges six arrays into an array by applying a specified function
+    return <- zip6_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
+    //! Merges six iterators into an array by applying a specified function
+    return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, result_selector)
+}
+
+// zip with 7 sources
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr)]
+def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
+    //! Merges seven iterators into an array of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f)) && (typeinfo is_array(g) || typeinfo is_dim(g))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), length(g))))))))
+    }
+    for (itA, itB, itC, itD, itE, itF, itG in a, b, c, d, e, f, g) {
+        buffer.emplace((itA, itB, itC, itD, itE, itF, itG))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr)]
+def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
+    return <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
+    //! Merges seven iterators into an iterator of tuples
+    return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>; g : array<auto(RR)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
+    //! Merges seven arrays into an array of tuples
+    return <- zip7_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
+    //! Merges seven iterators into an array of tuples
+    return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>)
+}
+
+// zip7 with result selector
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr)]
+def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
+    //! Merges seven iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f)) && (typeinfo is_array(g) || typeinfo is_dim(g))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), length(g))))))))
+    }
+    for (itA, itB, itC, itD, itE, itF, itG in a, b, c, d, e, f, g) {
+        buffer.push_clone(result_selector(itA, itB, itC, itD, itE, itF, itG))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr)]
+def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
+    return <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
+    //! Merges seven iterators into an iterator by applying a specified function
+    return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>; g : array<auto(RR)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
+    //! Merges seven arrays into an array by applying a specified function
+    return <- zip7_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
+    //! Merges seven iterators into an array by applying a specified function
+    return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, result_selector)
+}
+
+// zip with 8 sources
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
+def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); var h; ss : auto(SS)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
+    //! Merges eight iterators into an array of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f)) && (typeinfo is_array(g) || typeinfo is_dim(g)) && (typeinfo is_array(h) || typeinfo is_dim(h))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), min(length(g), length(h)))))))))
+    }
+    for (itA, itB, itC, itD, itE, itF, itG, itH in a, b, c, d, e, f, g, h) {
+        buffer.emplace((itA, itB, itC, itD, itE, itF, itG, itH))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
+def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
+    return <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
+    //! Merges eight iterators into an iterator of tuples
+    return <- zip8_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>; g : array<auto(RR)>; h : array<auto(SS)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
+    //! Merges eight arrays into an array of tuples
+    return <- zip8_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
+    //! Merges eight iterators into an array of tuples
+    return <- zip8_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>)
+}
+
+// zip8 with result selector
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
+def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); var h; ss : auto(SS); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
+    //! Merges eight iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c)) && (typeinfo is_array(d) || typeinfo is_dim(d)) && (typeinfo is_array(e) || typeinfo is_dim(e)) && (typeinfo is_array(f) || typeinfo is_dim(f)) && (typeinfo is_array(g) || typeinfo is_dim(g)) && (typeinfo is_array(h) || typeinfo is_dim(h))) {
+        buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), min(length(g), length(h)))))))))
+    }
+    for (itA, itB, itC, itD, itE, itF, itG, itH in a, b, c, d, e, f, g, h) {
+        buffer.push_clone(result_selector(itA, itB, itC, itD, itE, itF, itG, itH))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
+def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
+    return <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
+    //! Merges eight iterators into an iterator by applying a specified function
+    return <- zip8_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; d : array<auto(XX)>; e : array<auto(YY)>; f : array<auto(ZZ)>; g : array<auto(RR)>; h : array<auto(SS)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
+    //! Merges eight arrays into an array by applying a specified function
+    return <- zip8_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
+    //! Merges eight iterators into an array by applying a specified function
+    return <- zip8_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>, result_selector)
 }
 
 def public order_unique_folded(var a : array<auto(TT)>) : array<TT -const -&> {

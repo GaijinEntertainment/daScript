@@ -159,7 +159,8 @@ Set operations
 Zip
 ===
 
-``zip`` merges two or three sequences into tuples::
+``zip`` merges 2 to 8 sequences into tuples; iteration stops at the shortest
+source::
 
   var names = ["Alice", "Bob", "Charlie"]
   var ages  = [25, 35, 30]
@@ -169,6 +170,18 @@ Zip
   var scores = [95, 87, 91]
   var zipped3 = zip(names, ages, scores)
   // zipped3: [(Alice,25,95), (Bob,35,87), (Charlie,30,91)]
+
+Each arity (2..8) has four overloads: lockstep and result-selector forms, each
+on iterator and array sources. A result-selector block runs per element and
+returns a custom projection (the tuple is replaced by whatever the block
+returns)::
+
+  var sums = zip(a, b, c, d, $(p, q, r, s : int) => p + q + r + s)
+
+Add ``_to_array`` to force materialization of an iterator-source zip into an
+``array``::
+
+  var arr = zip_to_array(seqA, seqB, seqC)
 
 Joining
 =======
