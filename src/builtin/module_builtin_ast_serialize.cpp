@@ -369,6 +369,32 @@ namespace das {
         return *this;
     }
 
+    template <typename K, typename V, typename H, typename E>
+    void AstSerializer::serialize_hash_map ( das_insert_only_hash_map<K, V, H, E> & value ) {
+        dtag(HASH_TAG("DasHashmap"));
+        if ( writing ) {
+            uint64_t size = value.size(); *this << size;
+            for ( auto & item : value ) {
+                *this << item.first << item.second;
+            }
+            return;
+        }
+        uint64_t size = 0; *this << size;
+        das_insert_only_hash_map<K, V, H, E> deser;
+        deser.reserve(size);
+        for ( uint64_t i = 0; i < size; i++ ) {
+            K k; V v; *this << k << v;
+            deser.emplace(das::move(k),das::move(v));
+        }
+        value = das::move(deser);
+    }
+
+    template <typename K, typename V, typename H, typename E>
+    AstSerializer & AstSerializer::operator << ( das_insert_only_hash_map<K, V, H, E> & value ) {
+        serialize_hash_map<K, V, H, E>(value);
+        return *this;
+    }
+
     template <typename V>
     AstSerializer & AstSerializer::operator << ( safebox_map<V> & box ) {
         serialize_hash_map<uint64_t, V, skip_hash, das::equal_to<uint64_t>>(box);

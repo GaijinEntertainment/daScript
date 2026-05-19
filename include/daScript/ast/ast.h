@@ -1205,7 +1205,7 @@ namespace das
     public:
         smart_ptr<Context>                          macroContext;
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
-        das_hash_map<uint64_t, Annotation *>            handleTypes;
+        das_insert_only_hash_map<uint64_t, Annotation *>    handleTypes;
         safebox<Structure, StructurePtr>             structures;
         safebox<Enumeration, EnumerationPtr>        enumerations;
         safebox<Variable, VariablePtr>              globals;
@@ -1213,10 +1213,10 @@ namespace das
         fragile_hash<vector<Function*>>             functionsByName;    // all functions of the same name
         safebox<Function, FunctionPtr>              generics;           // mangled name 2 generic name
         fragile_hash<vector<Function*>>             genericsByName;     // all generics of the same name
-        mutable das_map<string, ExprCallFactory>    callThis;
-        das_map<string, unique_ptr<TypeInfoMacro>>   typeInfoMacros;
-        das_map<uint64_t, uint64_t>                 annotationData;
-        das_hash_map<Module *,bool>                 requireModule;      // visibility modules
+        mutable das_insert_only_map<string, ExprCallFactory>    callThis;
+        das_insert_only_map<string, unique_ptr<TypeInfoMacro>>  typeInfoMacros;
+        das_insert_only_map<uint64_t, uint64_t>             annotationData;
+        das_insert_only_hash_map<Module *,bool>             requireModule;  // visibility modules
         vector<unique_ptr<PassMacro>>               macros;             // infer macros (clean infer, assume no errors)
         vector<unique_ptr<PassMacro>>               inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<unique_ptr<PassMacro>>               optimizationMacros; // optimization macros
@@ -1226,13 +1226,13 @@ namespace das
         vector<unique_ptr<ForLoopMacro>>            forLoopMacros;      // for loop macros (for every for loop)
         vector<unique_ptr<CaptureMacro>>            captureMacros;      // lambda capture macros
         vector<unique_ptr<SimulateMacro>>           simulateMacros;     // simulate macros (every time we simulate context)
-        das_map<string,unique_ptr<TypeMacro>>       typeMacros;         // type macros (every time we infer type)
-        das_map<string,unique_ptr<ReaderMacro>>     readMacros;         // %foo "blah"
+        das_insert_only_map<string,unique_ptr<TypeMacro>>   typeMacros; // type macros (every time we infer type)
+        das_insert_only_map<string,unique_ptr<ReaderMacro>> readMacros; // %foo "blah"
         unique_ptr<CommentReader>                   commentReader;      // /* blah */ or // blah
         vector<unique_ptr<CallMacro>>               ownedCallMacros;    // call macros (owned here, referenced from callThis lambdas)
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
-        das_hash_map<string,Type>                   options;            // options
+        das_insert_only_hash_map<string,Type>       options;            // options
         gc_root                                     module_gc_root;     // gc_node root for this module's gc-managed AST nodes
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
