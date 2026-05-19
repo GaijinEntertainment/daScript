@@ -169,7 +169,19 @@ Auto-installs as a debug agent. Polls `stat()` on watched files and triggers rel
 
 ## REST API (`live/live_api`)
 
-When `require live/live_api` is present, an HTTP server starts on port 9090 (configurable via `live_api_set_port()`). Auto-installs as a debug agent.
+When `require live/live_api` is present, an HTTP server starts on port 9090. Auto-installs as a debug agent.
+
+### Port override
+
+The bound port is resolved at module init by this precedence (highest first):
+
+1. **Programmatic** — `live_api_set_port(p)` after init; always wins.
+2. **Script argv** — `--live-port N` anywhere in `get_command_line_arguments()`. Use `daslang script.das -- --live-port 19090` or `daslang-live my.das --live-port 19090`.
+3. **Env var** — `DASLANG_LIVE_PORT=19090`. `daslang-live` itself re-exports its resolved port into this env var so the .das side and the C++ single-instance lock can never disagree.
+4. **Config file** — `<get_das_root()>/daslang-live.cfg.json` with key `"port"`: `{"port": 19090}`.
+5. **Default** — `9090`.
+
+Invalid values (out of `[1, 65535]`, non-numeric, wrong JSON type) fall through to the next source. The `daslang-live` binary's `--live-port` flag also re-keys its single-instance lock (`daslang-live-single-instance-<port>` on Windows, `/tmp/daslang-live-<port>.lock` on POSIX), so two binaries on different ports coexist; same port still serializes.
 
 ### MCP Tools (preferred)
 

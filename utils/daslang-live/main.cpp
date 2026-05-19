@@ -27,6 +27,9 @@
 #include <dlfcn.h>
 #endif
 
+#include <cstdlib>
+#include <cstdio>
+
 using namespace das;
 
 void require_project_specific_modules();
@@ -38,6 +41,9 @@ static string project_root;
 static bool version2syntax = true;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
+// Resolved live-API port for the single-instance lock key and DASLANG_LIVE_PORT env handoff.
+// 0 means "not yet resolved"; resolved to default (9090) before lock acquire.
+static int g_resolvedLivePort = 0;
 
 // --- DLL function pointers (loaded at runtime from dasModuleLiveHost) ---
 // All use POD types only — safe across DLL boundary.
@@ -576,6 +582,7 @@ static void print_help() {
     tout << "  -heap-report       - dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules   - skip loading dynamic modules\n";
     tout << "  --no-dump-leaks    - silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
+    tout << "  --live-port <N>    - port for the REST API (overrides config + env; default 9090)\n";
     tout << "  --                 - separator; everything after is forwarded to the script (get_user_args)\n";
     tout << "  -h, --help         - this help\n";
 }
@@ -590,9 +597,14 @@ static HANDLE g_singleInstanceMutex = nullptr;
 static int g_lockFd = -1;
 #endif
 
-static bool acquire_single_instance() {
+static bool acquire_single_instance(int port) {
+    // Lock key includes the port so two daslang-live instances on different ports
+    // can coexist. Same port still serializes — port conflict on bind would
+    // fail anyway, so the lock just gives a cleaner error.
 #ifdef _WIN32
-    g_singleInstanceMutex = CreateMutexA(nullptr, TRUE, "daslang-live-single-instance");
+    char mutexName[64];
+    snprintf(mutexName, sizeof(mutexName), "daslang-live-single-instance-%d", port);
+    g_singleInstanceMutex = CreateMutexA(nullptr, TRUE, mutexName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         if (g_singleInstanceMutex) {
             CloseHandle(g_singleInstanceMutex);
@@ -602,7 +614,8 @@ static bool acquire_single_instance() {
     }
     return g_singleInstanceMutex != nullptr;
 #else
-    const char * lockPath = "/tmp/daslang-live.lock";
+    char lockPath[64];
+    snprintf(lockPath, sizeof(lockPath), "/tmp/daslang-live-%d.lock", port);
     g_lockFd = open(lockPath, O_CREAT | O_RDWR, 0600);
     if (g_lockFd < 0) return true;  // can't create lock file — allow running
     if (flock(g_lockFd, LOCK_EX | LOCK_NB) != 0) {
@@ -673,6 +686,13 @@ int main(int argc, char * argv[]) {
             dumpLeaks = true;
         } else if (arg == "--no-dump-leaks") {
             dumpLeaks = false;
+        } else if (arg == "--live-port" && i + 1 < argc) {
+            int port = atoi(argv[++i]);
+            if (port <= 0 || port > 65535) {
+                tout << "invalid --live-port value: " << argv[i] << " (expected 1-65535)\n";
+                return 1;
+            }
+            g_resolvedLivePort = port;
         } else if (arg == "-h" || arg == "--help") {
             print_help();
             return 0;
@@ -706,8 +726,31 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    if (!acquire_single_instance()) {
-        fprintf(stderr, "ERROR: another instance of daslang-live is already running\n");
+    // Resolve port: explicit --live-port wins; else env DASLANG_LIVE_PORT; else default 9090.
+    // The .das side (live_api module) re-reads the same env so the lock key and HTTP bind
+    // can never disagree.
+    if (g_resolvedLivePort == 0) {
+        if (const char * envPort = getenv("DASLANG_LIVE_PORT")) {
+            int port = atoi(envPort);
+            if (port > 0 && port <= 65535) g_resolvedLivePort = port;
+        }
+    }
+    if (g_resolvedLivePort == 0) g_resolvedLivePort = 9090;
+
+    // Re-export the resolved port so the .das module init picks it up as a single
+    // source of truth (otherwise an empty env + explicit --live-port would drift).
+    {
+        char portStr[16];
+        snprintf(portStr, sizeof(portStr), "%d", g_resolvedLivePort);
+#ifdef _WIN32
+        _putenv_s("DASLANG_LIVE_PORT", portStr);
+#else
+        setenv("DASLANG_LIVE_PORT", portStr, 1);
+#endif
+    }
+
+    if (!acquire_single_instance(g_resolvedLivePort)) {
+        fprintf(stderr, "ERROR: another instance of daslang-live is already running on port %d\n", g_resolvedLivePort);
         return 1;
     }
 

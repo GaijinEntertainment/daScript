@@ -6,6 +6,10 @@ last_verified: 2026-05-18
 links: []
 ---
 
+> **RESOLVED 2026-05-18.** daslang-live now accepts `--live-port <N>` and the single-instance lock is keyed on the resolved port. The MCP `do_live_launch` also forwards its `port` arg to the spawned binary, so polling and bind now match. Historical body preserved below.
+
+---
+
 **daslang-live has no `-port` CLI flag** — the HTTP server port is hardcoded to 9090 in the binary. The MCP `port` argument (in `do_live_launch`, `do_live_status`, etc.) only changes which port the MCP *polls*, not what daslang-live *binds*. So a test using an isolated high port like 19090:
 
 1. Calls `do_live_launch(file, ..., port="19090")`. The launcher spawns daslang-live which binds 9090.

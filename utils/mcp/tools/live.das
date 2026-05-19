@@ -160,7 +160,13 @@ def do_live_launch(file, project, project_root, port : string) : string {
     let abs_file = resolve_path(file)
     let abs_project = empty(project) ? "" : resolve_path(project)
     let abs_project_root = empty(project_root) ? "" : resolve_path(project_root)
-    let script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
+    var script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
+    if (!empty(port)) {
+        // Make the spawned binary actually bind the requested port (matching the
+        // poll URL above). Without this, the binary uses its own default and we'd
+        // either get an "already running" false-positive or a never-responds timeout.
+        script_args = "--live-port {port} {script_args}"
+    }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
         let ps1 = replace("{launcher}.ps1", "/", "\\")
