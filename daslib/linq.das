@@ -1456,7 +1456,10 @@ def private aggregate_impl(var src; tt : auto(TT); seed : auto(AGG); func : bloc
 
 [unused_argument(tt)]
 def private aggregate_impl_const(src : auto(ARGT); tt : auto(TT); seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
-    static_if (typeinfo is_workhorse(type<TT>)) {
+    // Move-vs-return is decided by the accumulator type AGG (the return type), NOT the
+    // element type TT — those differ for aggregates that produce a workhorse acc from a
+    // non-workhorse element (e.g. summing prices off `array<Car>` with int seed).
+    static_if (typeinfo is_workhorse(type<AGG>)) {
         return aggregate_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, seed, func)
     } else {
         return <- aggregate_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, seed, func)
