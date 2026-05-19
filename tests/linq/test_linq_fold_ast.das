@@ -1682,9 +1682,10 @@ def target_reverse_take_to_array_fold() : array<int> {
 }
 
 [test]
-def test_reverse_take_emits_resize(t : T?) {
-    // R4: take(N) after reverse — buffer + reverse_inplace + resize. The resize call
-    // proves we kept the buffer single-pass instead of cascading to a take-iterator.
+def test_reverse_take_emits_backward_index_loop(t : T?) {
+    // R6: array-typed source + reverse |> take(N) — backward index loop instead of
+    // (push all → reverse_inplace → resize). Visits only the last N indices, skipping
+    // the O(length) push and O(length) reverse pass. Closes the m3 lazy-yield regression.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_take_to_array_fold)
         if (func == null) return
@@ -1694,14 +1695,44 @@ def test_reverse_take_emits_resize(t : T?) {
         }
         t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
         t |> equal(1, count_inner_for_loops(body_expr), "single fused for-loop")
-        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
-            "must emit reverse_inplace call")
-        t |> success(count_call(body_expr, "resize") >= 1,
-            "must emit resize call for take(N) post-reverse truncation")
+        t |> equal(0, count_call(body_expr, "reverse_inplace"),
+            "must NOT emit reverse_inplace (backward index loop replaces it)")
+        t |> equal(0, count_call(body_expr, "resize"),
+            "must NOT emit resize (reserve(takeN) replaces it)")
         t |> equal(0, count_call(body_expr, "take"),
-            "take runtime helper must NOT be called (resize replaces it)")
-        t |> equal(1, count_outer_let_vars(body_expr),
-            "single outer var (the buffer) — anti-cascade gate")
+            "take runtime helper must NOT be called")
+        t |> success(count_call(body_expr, "reserve") >= 1,
+            "must emit reserve(takeN) to pre-size the buffer")
+        t |> success(count_call(body_expr, "length") >= 1,
+            "must call length(src) to bound the backward walk")
+        t |> equal(3, count_outer_let_vars(body_expr),
+            "three outer vars: source-length, clamped-takeN, buffer")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_reverse_take_iterator_fold() : array<int> {
+    // Iterator source (range) — backward index loop is NOT applicable, falls back
+    // to R1-R4 path (push all → reverse_inplace → resize).
+    return <- _fold(each(range(1, 9)) |> reverse() |> take(3) |> to_array())
+}
+
+[test]
+def test_reverse_take_iterator_source_uses_reverse_inplace(t : T?) {
+    // R6 negative: when source is not indexable (range / iterator), the R1-R4 fallback
+    // path stays in place — reverse_inplace + resize, single outer var.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_take_iterator_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> success(count_call(body_expr, "reverse_inplace") >= 1,
+            "iterator source must use reverse_inplace fallback")
+        t |> success(count_call(body_expr, "resize") >= 1,
+            "iterator source must use resize fallback")
     }
 }
 
