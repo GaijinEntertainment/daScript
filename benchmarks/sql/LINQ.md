@@ -75,6 +75,7 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 | groupby_where_sum | `where → group_by → select((K, select → sum))` | 86 | 80 | **23** (PR-B upstream where + inner-select-sum fused) |
 | groupby_select_sum | `select → group_by → select((K, sum))` | — | 110 | **58** (PR-B upstream select fused via intermediate var bind) |
 | groupby_having_count | `group_by → having(len>=5) → select((K, length))` | 141 | 78 | **36** (PR-D having predicate rewritten to slot ref) |
+| groupby_having_hidden_sum | `group_by → having(select(price) → sum > N) → select((K, length))` | 175 | 109 | **40** (PR-E synthesized hidden accumulator slot for the having-only inner-select-sum) |
 | groupby_average | `group_by → select((K, select → average))` | 173 | 106 | **52** (PR-A2 follow-up: 2-slot acc + post-process divide) |
 | chained_where | `where → where → count` | 36 | 45 | 17 |
 | zip_dot_product | `zip → select → sum` | — | 53 | 37 |
@@ -507,7 +508,7 @@ Closes the SQL `HAVING` shape against the splice path: any `_having(pred)` betwe
 
 ### Deferred for follow-ups
 
-- Having predicates that reference a reducer absent from the select (would need a hidden accumulator slot in the table value type).
+- Having predicates that reference a reducer absent from the select on the **bare-form** select shape (the bare table layout uses `tuple<KeyT; AccT>` synthesized inside a qmacro with embedded `typedecl(invoke(...))` for the key type — can't be extended with a dynamic count of additional acc slots; named-tuple form is handled by PR-E below).
 - Having predicates that touch the raw bucket array (would require materializing the per-bucket array, defeating the splice).
 
 ## Phase 3+ groupby reducer expansion — average reducer (PR-A2 follow-up)
@@ -582,9 +583,49 @@ Only the last `min(N, length)` indices are visited; the entire `reverse_inplace`
 
 \* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index. The m3f 0 ns/op result means sub-nanosecond per element averaged across 10/100K visited elements — the backward index loop runs only 10 iterations regardless of N.
 
+## Phase 3+ groupby reducer expansion — hidden-slot reducer-in-having (PR-E)
+
+Closes the explicit "having predicate references a reducer absent from the select" cascade case deferred since PR-D. The named-tuple select-shape now extends its internal table value type with one extra acc slot per having-only reducer; the per-element loop updates the hidden slot alongside the user-visible ones; result-build re-synthesizes the user's tuple via `ExprMakeTuple` (omitting hidden slots) while the having predicate substitutes hidden-slot references via the same `mk_slot_output_expr` helper PR-D already used for matched slots.
+
+**How it lands:**
+
+1. **Scan-then-rewrite the having predicate.** A new `extend_specs_for_missing_having_reducers` walks the having pred AST first. For each `<reducer>(<hb>._1)` or `<reducer>(select(<hb>._1, <lam>))` call whose reducer name doesn't match any existing select-side spec, it appends a new hidden `ReducerSpec` to the specs array with a fresh slot index (starting at `userVisibleSlotCount + 1`). Then the existing PR-D `rewrite_having_pred` runs unchanged — every reducer reference now has a matching spec to bind to.
+
+2. **`mk_hidden_acc_type` helper.** Derives the acc TypeDecl for hidden slots from the reducer name + bucket-element type (and the peeled inner-body type for inner-select forms). Mirrors the per-reducer-name logic of `slot_acc_type` but takes the source types directly (hidden slots have no user-visible group_proj body to drill into). `length`/`count` → `int`; `long_count` → `int64`; `average` → `tuple<double; uint64>` via `mk_avg_acc_type`; `sum`/`min`/`max`/`first` → bucket element type (or inner-body type).
+
+3. **Extend `tabValueType.argTypes` (and `argNames`).** After the existing avg-slot type swap, the named-tuple's tabValueType gets each hidden spec's accType appended at the end. argNames grow in lockstep with auto-generated `_hidden_{slot}` names to keep the named-tuple shape valid.
+
+4. **Unify result-build ExprMakeTuple synthesis.** What was `elif (hasAvg)` becomes `elif (hasAvg || hasHidden)` — the same loop that re-synthesizes the user's tuple slot-by-slot (dividing avg slots, copying others) naturally omits hidden slots because it iterates `1 .. groupProjBody._type.argTypes |> length` (the user's slot count, NOT the internal table's extended count).
+
+5. **Bare-form bail.** When the user's group_proj is a single bare reducer (not a named tuple) AND having needs a hidden slot, the planner returns null and the chain cascades. The bare table layout uses `tuple<KeyT; AccT>` synthesized inside a qmacro with embedded `typedecl(invoke(...))` for the key type, which can't be dynamically extended with additional acc slots. Pinned by `test_group_by_having_hidden_bare_form_cascades_to_tier2`.
+
+**Bail cases (cascade to tier 2):**
+- Bare-form select with hidden-slot reducer in having (per above).
+- Inner-select reducer in having whose lambda is non-peelable (peel failure returns null).
+- All upstream bail cases from PR-A1/A2/B/D still apply.
+
+**Edge cases worth noting:**
+- Same-name reducer in select AND having reuses the select slot (existing PR-D match-by-name behavior preserved). Hidden slot only added when no name match exists. The "inner-select reducer with different lambdas at select vs having" case still match-by-name in v1 — structural lambda compare deferred.
+- Multiple references to the SAME hidden reducer in the predicate dedup naturally: the first walk adds the spec; subsequent walks see a matching spec and skip.
+- 2+ hidden reducers fall into the same scan pass; each gets its own slot.
+
+### Headline (PR-E)
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|
+| groupby_having_hidden_sum | `each(arr) → group_by(brand) → having(sum(price) > 50000) → select((K, length)) → to_array` | 175 | 109 | **40** | **2.7× over m3 / 4.4× over m1 SQL** |
+| groupby_having_count (regression check) | `group_by → having(len>=5) → select((K, length))` | 141 | 92 | **36** | parity — PR-E scan-then-rewrite preserves the matching-slot splice |
+
+`groupby_having_hidden_sum` lands at ~40 ns/op vs `groupby_having_count`'s ~36 — the extra ~4 ns/op is the hidden inner-select-sum's per-element `entry._{hidden} += c.price` (one extra add per source element) alongside the visible `length++`.
+
+### Deferred for follow-ups
+
+- Bare-form select with hidden slot (requires restructuring the bare-table key-type qmacro to programmatic TypeDecl construction).
+- Inner-select reducer in having that uses a different lambda from a same-named select-side inner-select reducer — currently match-by-name conflates them (already a v1 limitation since PR-D; structural lambda compare TBD).
+
 ## Operator-coverage checklist (parity tests)
 
-The 24 benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
+The benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
 
 | Source test file | Operator group | Covered by benchmark | Status |
 |---|---|---|---|
@@ -593,7 +634,7 @@ The 24 benchmarks above cover the most common shapes. The end-game target is one
 | `test_linq_querying.das` | any/all/contains | any_match, all_match, contains_match | ✅ core |
 | `test_linq_transform.das` | select/select_many/zip | to_array_filter, zip_dot_product | ✅ select/zip; `select_many` ⏳ |
 | `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (Phase 3+); ✅ `reverse \|> take(N)` backward index loop on array sources (PR-C — closes the prior regression) |
-| `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer, groupby_where_count, groupby_where_sum, groupby_select_sum, groupby_having_count, groupby_average | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ✅ upstream where_/select* fusion (PR-B); ✅ `having_` with matching slot (PR-D); ✅ `average` + inner-select-average + multi-reducer-with-average (PR-A2 follow-up) |
+| `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer, groupby_where_count, groupby_where_sum, groupby_select_sum, groupby_having_count, groupby_having_hidden_sum, groupby_average | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ✅ upstream where_/select* fusion (PR-B); ✅ `having_` with matching slot (PR-D); ✅ `average` + inner-select-average + multi-reducer-with-average (PR-A2 follow-up); ✅ hidden-slot reducer-in-having on named-tuple select shape (PR-E) |
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
 | `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
 | `test_linq_set.das` | distinct/union/except/intersect/unique | distinct_count, distinct_take | ✅ distinct + distinct_by (streaming dedup, this PR); union/except/intersect/unique ⏳ |
