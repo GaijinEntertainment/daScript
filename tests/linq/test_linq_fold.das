@@ -1312,6 +1312,360 @@ def test_iterator_source_bare_order(t : T?) {
 }
 
 [test]
+def test_reverse_basic_parity(t : T?) {
+    // Phase 3+ / R1: bare reverse + to_array splices into buffer + reverse_inplace.
+    // Parity test — output element-by-element matches plain reverse().
+    t |> run("reverse → to_array: 5-element array") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> to_array())
+        let expected = [5, 4, 3, 2, 1]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("reverse → to_array: empty source") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(each(empty) |> reverse() |> to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("reverse → to_array: single-element source") @(tt : T?) {
+        let got <- _fold(each([42]) |> reverse() |> to_array())
+        tt |> equal(1, length(got))
+        tt |> equal(42, got[0])
+    }
+}
+
+[test]
+def test_reverse_with_where_parity(t : T?) {
+    // R2: where_ before reverse — buffer accumulates filtered survivors, then reverses.
+    t |> run("where(>2).reverse: [1..5] → survivors [3,4,5] reversed = [5,4,3]") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> to_array())
+        let expected = [5, 4, 3]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("where(false).reverse: empty survivor list → empty result") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._where(_ > 999) |> reverse() |> to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("where(true).reverse: identity filter equivalent to bare reverse") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._where(_ > 0) |> reverse() |> to_array())
+        let expected = [5, 4, 3, 2, 1]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("where.where.reverse: fused predicates with &&") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._where(_ > 1)._where(_ < 5) |> reverse() |> to_array())
+        let expected = [4, 3, 2]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+}
+
+[test]
+def test_reverse_with_select_parity(t : T?) {
+    // R3: select before reverse — projected values land in the buffer, then reverse.
+    t |> run("select(x*10).reverse: [1..5] → [10,20,30,40,50] reversed = [50,40,30,20,10]") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._select(_ * 10) |> reverse() |> to_array())
+        let expected = [50, 40, 30, 20, 10]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("where.select.reverse: filter then project then reverse") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5])._where(_ > 2)._select(_ * 10) |> reverse() |> to_array())
+        let expected = [50, 40, 30]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("select(non-workhorse ComplexType).reverse parity") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3])._select(ComplexType(a = [_ * 100, _ * 200])) |> reverse() |> to_array())
+        tt |> equal(3, length(got))
+        // [{a=[100,200]}, {a=[200,400]}, {a=[300,600]}] reversed
+        tt |> equal(300, got[0].a[0])
+        tt |> equal(200, got[1].a[0])
+        tt |> equal(100, got[2].a[0])
+    }
+}
+
+[test]
+def test_reverse_with_take_parity(t : T?) {
+    // R4: take(N) after reverse — resize the reversed buffer to keep first N.
+    // Equivalent to "last N of source in reverse".
+    t |> run("reverse.take(3): [1..8] → reversed [8,7,6,5,4,3,2,1] take 3 = [8,7,6]") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5, 6, 7, 8]) |> reverse() |> take(3) |> to_array())
+        let expected = [8, 7, 6]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("reverse.take(0): empty result") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> take(0) |> to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("reverse.take(-1): non-positive N → empty (matches take_impl)") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> take(-1) |> to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("reverse.take(N > length): no truncation, just reversed") @(tt : T?) {
+        let got <- _fold(each([1, 2, 3]) |> reverse() |> take(999) |> to_array())
+        let expected = [3, 2, 1]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("where.reverse.take: filter then reverse-take last 2 survivors") @(tt : T?) {
+        // survivors: [3,4,5,6]; reversed: [6,5,4,3]; take 2: [6,5]
+        let got <- _fold(each([1, 2, 3, 4, 5, 6])._where(_ > 2) |> reverse() |> take(2) |> to_array())
+        let expected = [6, 5]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+}
+
+[test]
+def test_distinct_fold_parity(t : T?) {
+    // D1: bare distinct → to_array splices into streaming dedup. Verify identical
+    // output to plain distinct(). Uses `.to_sequence()` (const-iterator source) instead
+    // of `each(...)` (non-const-iterator) to dodge the iterator-variance mangler ICE
+    // documented in iterator_variance_and_mangler_ice — distinct ships both flavors
+    // and a non-const-flavored caller currently hash-collides.
+    t |> run("distinct: [1,2,2,3,3,3] → [1,2,3]") @(tt : T?) {
+        let got <- _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().to_array())
+        let expected = [1, 2, 3]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("distinct preserves first-seen order") @(tt : T?) {
+        let got <- _fold([3, 1, 4, 1, 5, 9, 2, 6, 5, 3].to_sequence().distinct().to_array())
+        let expected = [3, 1, 4, 5, 9, 2, 6]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("distinct: empty source") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty.to_sequence().distinct().to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("distinct: all-unique source = identity") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5].to_sequence().distinct().to_array())
+        tt |> equal(5, length(got))
+        for (v, e in got, [1, 2, 3, 4, 5]) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("distinct: all-same source = single element") @(tt : T?) {
+        let got <- _fold([7, 7, 7, 7, 7].to_sequence().distinct().to_array())
+        tt |> equal(1, length(got))
+        tt |> equal(7, got[0])
+    }
+}
+
+[test]
+def test_distinct_extended_parity(t : T?) {
+    // D2: where_ before distinct
+    t |> run("where(>1).distinct: [1,2,3,2,4,1,5] → survivors [2,3,4,5] distinct") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 2, 4, 1, 5].to_sequence()._where(_ > 1).distinct().to_array())
+        let expected = [2, 3, 4, 5]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    // D3: select before distinct
+    t |> run("select(_%3).distinct: [1,2,3,4] → projected [1,2,0,1] distinct = [1,2,0]") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4].to_sequence()._select(_ % 3).distinct().to_array())
+        let expected = [1, 2, 0]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    // D4: distinct_by — dedup keyed by mod-10. Keys: 0,1,2,1,3,2 → first per bucket
+    t |> run("distinct_by(x%10): [10,21,32,11,23,42] → first per bucket [10,21,32,23]") @(tt : T?) {
+        let got <- _fold([10, 21, 32, 11, 23, 42].to_sequence()._distinct_by(_ % 10).to_array())
+        let expected = [10, 21, 32, 23]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    // D5: take(N) early-exit
+    t |> run("distinct.take(3): [1,1,2,2,3,3,4,4,5,5] → first 3 distinct = [1,2,3]") @(tt : T?) {
+        let got <- _fold([1, 1, 2, 2, 3, 3, 4, 4, 5, 5].to_sequence().distinct().take(3).to_array())
+        let expected = [1, 2, 3]
+        tt |> equal(length(got), length(expected))
+        for (v, e in got, expected) {
+            tt |> equal(v, e)
+        }
+    }
+    t |> run("distinct.take(0): zero early-exit yields empty") @(tt : T?) {
+        let got <- _fold([1, 2, 3].to_sequence().distinct().take(0).to_array())
+        tt |> equal(0, length(got))
+    }
+    t |> run("distinct.take(-1): negative N → empty (matches take_impl)") @(tt : T?) {
+        let got <- _fold([1, 2, 3].to_sequence().distinct().take(-1).to_array())
+        tt |> equal(0, length(got))
+    }
+    // D6: count terminator
+    t |> run("distinct.count: [1,2,2,3,3,3] → 3 distinct values") @(tt : T?) {
+        tt |> equal(3, _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().count()))
+    }
+    t |> run("where.distinct.count: filter then count distinct") @(tt : T?) {
+        tt |> equal(3, _fold([1, 2, 2, 3, 3, 3, 1].to_sequence()._where(_ > 0).distinct().count()))
+    }
+    t |> run("distinct.count on empty source: 0") @(tt : T?) {
+        var empty : array<int>
+        tt |> equal(0, _fold(empty.to_sequence().distinct().count()))
+    }
+    // D7: sum / long_count
+    t |> run("distinct.sum: [1,2,2,3,3,3,4] → 1+2+3+4 = 10") @(tt : T?) {
+        tt |> equal(10, _fold([1, 2, 2, 3, 3, 3, 4].to_sequence().distinct().sum()))
+    }
+    t |> run("distinct.long_count: [1,2,2,3,3,3] → int64 3") @(tt : T?) {
+        tt |> equal(3l, _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().long_count()))
+    }
+}
+
+[test]
+def test_group_by_count_fold_parity(t : T?) {
+    // G2/G3: group_by + select(count) splice should produce same per-bucket counts
+    // as the plain LINQ chain.
+    t |> run("group_by(x%3).select(_._1|>length): [1..7] → counts of buckets") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select(_._1 |> length))
+        // Source by mod 3: 0→{3,6}, 1→{1,4,7}, 2→{2,5}. Counts: 2, 3, 2 (table order varies).
+        tt |> equal(3, length(got))
+        var total = 0
+        for (c in got) {
+            total += c
+        }
+        tt |> equal(7, total)
+    }
+    t |> run("group_by + named tuple wrap preserves key + count") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)))
+        tt |> equal(3, length(got))
+        // Per-key expectations: 0→{3,6}=2, 1→{1,4,7}=3, 2→{2,5}=2. Tests bucket assignment, not just total.
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.N
+        }
+        tt |> equal(2, perKey[0])
+        tt |> equal(3, perKey[1])
+        tt |> equal(2, perKey[2])
+    }
+    t |> run("group_by on empty source → empty result") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by(_ % 3)._select(_._1 |> length))
+        tt |> equal(0, length(got))
+    }
+    // G8: count terminator → number of buckets
+    t |> run("group_by.count: number of distinct buckets") @(tt : T?) {
+        tt |> equal(3, _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)).count()))
+    }
+    // G4: sum reducer — per-bucket sum of elements
+    t |> run("group_by.select(_._1|>sum): bare-sum bucket reducer") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> sum))
+        // Buckets: 0→{30,21,12}=63, 1→{10,31}=41, 2→{20,11}=31. Total = 135.
+        tt |> equal(3, length(got))
+        var totalSum = 0
+        for (s in got) {
+            totalSum += s
+        }
+        tt |> equal(135, totalSum)
+    }
+    t |> run("group_by + named tuple sum: preserves K + Sum") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Sum = _._1 |> sum)))
+        tt |> equal(3, length(got))
+        // Per-key expectations: 0→63, 1→41, 2→31. Tests bucket assignment, not just total.
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.Sum
+        }
+        tt |> equal(63, perKey[0])
+        tt |> equal(41, perKey[1])
+        tt |> equal(31, perKey[2])
+    }
+    // G5: long_count reducer — per-bucket int64 count
+    t |> run("group_by.select(_._1|>long_count): per-bucket int64 count") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select(_._1 |> long_count))
+        tt |> equal(3, length(got))
+        var totalCount = 0l
+        for (c in got) {
+            totalCount += c
+        }
+        tt |> equal(7l, totalCount)
+    }
+}
+
+[test]
+def test_reverse_count_parity(t : T?) {
+    // R5: reverse |> count — counter loop, no reverse work.
+    t |> run("reverse.count: identity") @(tt : T?) {
+        tt |> equal(5, _fold(each([1, 2, 3, 4, 5]) |> reverse() |> count()))
+    }
+    t |> run("where(>2).reverse.count: counter over survivors") @(tt : T?) {
+        tt |> equal(3, _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> count()))
+    }
+    t |> run("reverse.count on empty source: 0") @(tt : T?) {
+        var empty : array<int>
+        tt |> equal(0, _fold(each(empty) |> reverse() |> count()))
+    }
+    t |> run("where(false).reverse.count: 0 survivors") @(tt : T?) {
+        tt |> equal(0, _fold(each([1, 2, 3, 4, 5])._where(_ > 999) |> reverse() |> count()))
+    }
+}
+
+[test]
+def test_reverse_first_parity(t : T?) {
+    // R5: reverse |> first = LAST survivor in source order.
+    t |> run("reverse.first: [1..5] → 5 (last element)") @(tt : T?) {
+        tt |> equal(5, _fold(each([1, 2, 3, 4, 5]) |> reverse() |> first()))
+    }
+    t |> run("where(>2).reverse.first: 5 (last survivor)") @(tt : T?) {
+        tt |> equal(5, _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> first()))
+    }
+    t |> run("select(*10).reverse.first: 50 (last projected)") @(tt : T?) {
+        tt |> equal(50, _fold(each([1, 2, 3, 4, 5])._select(_ * 10) |> reverse() |> first()))
+    }
+    t |> run("where.select.reverse.first: 60 (last survivor projected)") @(tt : T?) {
+        // survivors: [3,4,5,6]; projected*10: [30,40,50,60]; last = 60
+        tt |> equal(60, _fold(each([1, 2, 3, 4, 5, 6])._where(_ > 2)._select(_ * 10) |> reverse() |> first()))
+    }
+}
+
+[test]
+def test_reverse_first_or_default_parity(t : T?) {
+    // R5: reverse |> first_or_default — return default if no survivor, else last survivor.
+    t |> run("non-empty source returns last survivor") @(tt : T?) {
+        tt |> equal(5, _fold(each([1, 2, 3, 4, 5]) |> reverse() |> first_or_default(-1)))
+    }
+    t |> run("filter rejects all → default") @(tt : T?) {
+        tt |> equal(-1, _fold(each([1, 2, 3, 4, 5])._where(_ > 999) |> reverse() |> first_or_default(-1)))
+    }
+    t |> run("empty source → default") @(tt : T?) {
+        var empty : array<int>
+        tt |> equal(42, _fold(each(empty) |> reverse() |> first_or_default(42)))
+    }
+}
+
+[test]
 def test_top_n_mid_chain_iterator_source(t : T?) {
     // Regression — `top_n_*` registered in linqCalls but always returns array regardless of
     // input shape, so no `_to_array` variant exists. `fold_linq_default`'s first-position
