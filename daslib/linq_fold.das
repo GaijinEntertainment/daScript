@@ -377,8 +377,9 @@ enum private LinqLane {
 [macro_function]
 def private classify_terminator(name : string) : LinqLane {
     if (name == "count") return LinqLane.COUNTER
-    // take/skip trailing (after to_array strip) → ARRAY lane with implicit materialization.
-    if (name == "where_" || name == "select" || name == "take" || name == "skip") return LinqLane.ARRAY
+    // take/skip/take_while/skip_while trailing (after to_array strip) → ARRAY lane with implicit materialization.
+    if (name == "where_" || name == "select" || name == "take" || name == "skip"
+            || name == "take_while" || name == "skip_while") return LinqLane.ARRAY
     if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
     // EARLY_EXIT is also the dispatch lane for full-walk single-return terminators (last/single/element_at/aggregate) — same emit_early_exit_lane shape, different per-op state.
     if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains"
@@ -494,9 +495,9 @@ def private prepend_precond(var body : Expression?; var preCondStmts : array<Exp
 }
 
 [macro_function]
-def private append_skip_take_prelude(var preludeStmts : array<Expression?>; var skipExpr : Expression?; var takeExpr : Expression?;
-                                     skipName, takeCountName : string) {
-    // Loop-level counters for skip/take. Both live in the outer invoke block, alongside any
+def private append_ranges_prelude(var preludeStmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond : Expression?;
+                                  skipName, takeCountName, skippingName : string) {
+    // Loop-level state for skip/take counters + skip_while flag (one-way, flips on first false-pred).
     if (skipExpr != null) {
         var skipInit = clone_expression(skipExpr)
         preludeStmts |> push <| qmacro_expr() {
@@ -508,15 +509,20 @@ def private append_skip_take_prelude(var preludeStmts : array<Expression?>; var 
             var $i(takeCountName) = 0
         }
     }
+    if (skipWhileCond != null) {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(skippingName) = true
+        }
+    }
 }
 
 [macro_function]
-def private wrap_with_skip_take(var stmts : array<Expression?>; var skipExpr : Expression?; var takeExpr : Expression?;
-                                skipName, takeCountName : string) {
-    // Per-match-block wrapping. Order at the head of the block is:
-    if (skipExpr == null && takeExpr == null) return
+def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
+                             skipName, takeCountName, skippingName : string) {
+    // Per-match prefix order: take-guard → skip counter → skip_while flip → take_while break → takeCount++ → body. takeCount++ sits AFTER skip_while/take_while so gated-out elements don't eat the take(N) budget.
+    if (skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null) return
     var prefixed : array<Expression?>
-    prefixed |> reserve(length(stmts) + 3)
+    prefixed |> reserve(length(stmts) + 5)
     if (takeExpr != null) {
         var takeLimit = clone_expression(takeExpr)
         // `>=` (not `==`) so non-positive N short-circuits on the first iteration —
@@ -531,6 +537,25 @@ def private wrap_with_skip_take(var stmts : array<Expression?>; var skipExpr : E
             if ($i(skipName) > 0) {
                 $i(skipName) --
                 continue
+            }
+        }
+    }
+    if (skipWhileCond != null) {
+        var swPred = clone_expression(skipWhileCond)
+        prefixed |> push <| qmacro_expr() {
+            if ($i(skippingName)) {
+                if ($e(swPred)) {
+                    continue
+                }
+                $i(skippingName) = false
+            }
+        }
+    }
+    if (takeWhileCond != null) {
+        var twPred = clone_expression(takeWhileCond)
+        prefixed |> push <| qmacro_expr() {
+            if (!($e(twPred))) {
+                break
             }
         }
     }
@@ -555,15 +580,15 @@ def private min_max_compare(workhorse : bool; opName : string; valName, accName 
 }
 
 [macro_function]
-def private emit_counter_lane(var top : Expression?; srcName, accName, itName, skipName, takeCountName : string;
-                              var skipExpr : Expression?; var takeExpr : Expression?;
+def private emit_counter_lane(var top : Expression?; srcName, accName, itName, skipName, takeCountName, skippingName : string;
+                              var skipExpr, takeExpr, skipWhileCond : Expression?;
                               var loopBody : Expression?; at : LineInfo) : Expression? {
     // Counter lane: `[skip/take init]; var acc = 0; for (it in src) { $loopBody }; return acc`
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
-    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
     bodyStmts |> push <| qmacro_expr() {
         var $i(accName) = 0
     }
@@ -583,8 +608,8 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName, s
 
 [macro_function]
 def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
-                            srcName, accName, itName, skipName, takeCountName : string;
-                            var skipExpr : Expression?; var takeExpr : Expression?;
+                            srcName, accName, itName, skipName, takeCountName, skippingName : string;
+                            var skipExpr, takeExpr, skipWhileCond : Expression?;
                             at : LineInfo) : Expression? {
     // Array lane: `[skip/take init]; var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
     let isIter = expr._type.isIterator
@@ -593,7 +618,7 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
-    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
     bodyStmts |> push <| qmacro_expr() {
         var $i(accName) : array<$t(elementType)>
     }
@@ -640,8 +665,8 @@ def private emit_accumulator_lane(
                                   var intermediateBinds : array<Expression?>;
                                   var preCondStmts : array<Expression?>;
                                   var elementType : TypeDeclPtr;
-                                  srcName, accName, itName, skipName, takeCountName : string;
-                                  var skipExpr : Expression?; var takeExpr : Expression?;
+                                  srcName, accName, itName, skipName, takeCountName, skippingName : string;
+                                  var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                   at : LineInfo
                                   ) : Expression? {
     // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
@@ -733,12 +758,12 @@ def private emit_accumulator_lane(
         return null
     }
     prepend_binds(perMatchStmts, intermediateBinds)
-    wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
+    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
     var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Collect all body statements into one list so they share scope when spliced via $b.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + 4)
-    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
@@ -780,8 +805,8 @@ def private emit_early_exit_lane(
                                  var preCondStmts : array<Expression?>;
                                  var elementType : TypeDeclPtr;
                                  terminatorCall : ExprCall?;
-                                 srcName, itName, skipName, takeCountName : string;
-                                 var skipExpr : Expression?; var takeExpr : Expression?;
+                                 srcName, itName, skipName, takeCountName, skippingName : string;
+                                 var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                  at : LineInfo
                                  ) : Expression? {
     // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
@@ -1089,12 +1114,12 @@ def private emit_early_exit_lane(
         return null
     }
     prepend_binds(perMatchStmts, intermediateBinds)
-    wrap_with_skip_take(perMatchStmts, skipExpr, takeExpr, skipName, takeCountName)
+    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
     var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Single-$b body so all stmts (skip/take counters + prelude + for + tail) share scope
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 3)
-    append_skip_take_prelude(bodyStmts, skipExpr, takeExpr, skipName, takeCountName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
@@ -1374,6 +1399,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     let accName = "`acc`{at.line}`{at.column}"
     let skipName = "`skip`{at.line}`{at.column}"
     let takeCountName = "`tc`{at.line}`{at.column}"
+    let skippingName = "`skipping`{at.line}`{at.column}"
     var whereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
@@ -1381,8 +1407,13 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     var preCondStmts : array<Expression?>
     var skipExpr : Expression?
     var takeExpr : Expression?
+    // skip_while / take_while: predicate-driven ranges. Both peel with itName (source elem); seenSelect bails to tier 2.
+    var skipWhileCond : Expression?
+    var takeWhileCond : Expression?
     var seenSelect = false
     var seenSkip = false
+    var seenSkipWhile = false
+    var seenTakeWhile = false
     var seenTake = false
     var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
@@ -1391,8 +1422,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
         if (opName == "where_") {
-            // skip/take-after-where is rejected — canonical chain order is
-            if (seenSkip || seenTake) return null
+            // skip/take/skip_while/take_while-after-where is rejected — canonical chain order is
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
             var predicate : Expression?
             if (seenSelect) {
                 // Phase 3d / single-eval: where-after-select. Bind the current projection
@@ -1419,7 +1450,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 whereCond = qmacro($e(whereCond) && $e(predicate))
             }
         } elif (opName == "select") {
-            if (seenSkip || seenTake) return null
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
             // Chained selects: bind the previous projection to a fresh local now so the next
             if (projection != null) {
                 if (has_sideeffects(projection)) {
@@ -1435,12 +1466,28 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             elementType = clone_type(cll._0._type.firstType)
             seenSelect = true
         } elif (opName == "skip") {
-            // Canonical chain: at most one skip, before any take. Multiple skips / skip-after-
-            if (seenSkip || seenTake) return null
+            // Canonical chain: at most one skip, before any skip_while/take_while/take.
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
             var skipArg = cll._0.arguments[1]
             if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
             skipExpr = clone_expression(skipArg)
             seenSkip = true
+        } elif (opName == "skip_while") {
+            // pred uses itName; seenSelect bails (chained-bind peel is a follow-up). Canonical: after skip, before take_while/take.
+            if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
+            var swArg = cll._0.arguments[1]
+            if (swArg == null) return null
+            skipWhileCond = fold_linq_cond(swArg, itName)
+            if (skipWhileCond == null) return null
+            seenSkipWhile = true
+        } elif (opName == "take_while") {
+            // take_while pred sees source element (itName). Same select-cascade rule as skip_while.
+            if (seenSelect || seenTakeWhile || seenTake) return null
+            var twArg = cll._0.arguments[1]
+            if (twArg == null) return null
+            takeWhileCond = fold_linq_cond(twArg, itName)
+            if (takeWhileCond == null) return null
+            seenTakeWhile = true
         } elif (opName == "take") {
             if (seenTake) return null
             var takeArg = cll._0.arguments[1]
@@ -1457,7 +1504,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
-    let noLimits = skipExpr == null && takeExpr == null
+    let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
     // Count-shaped shortcut: when terminator is `count` (→ int) or `long_count` (→ int64),
     let isCountShaped = (lane == LinqLane.COUNTER
         || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
@@ -1468,7 +1515,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     if (lane == LinqLane.ACCUMULATOR)
         return emit_accumulator_lane(lastName, top, projection, whereCond,
             intermediateBinds, preCondStmts, elementType, srcName, accName, itName, skipName, takeCountName,
-            skipExpr, takeExpr, at)
+            skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = calls.back()._0
@@ -1478,7 +1525,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             return emit_any_empty_shortcut(top, srcName, at)
         return emit_early_exit_lane(lastName, top, projection, whereCond,
             intermediateBinds, preCondStmts, elementType, terminatorCall, srcName, itName, skipName,
-            takeCountName, skipExpr, takeExpr, at)
+            takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
     var loopBody : Expression?
@@ -1495,7 +1542,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             $i(accName) ++
         }
         prepend_binds(stmts, intermediateBinds)
-        wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     } else {
         // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
@@ -1504,7 +1551,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             stmts |> push <| qmacro_expr() {
                 $i(accName) |> push_clone($e(projection))
             }
-        } elif (whereCond != null || skipExpr != null || takeExpr != null) {
+        } elif (whereCond != null || skipExpr != null || takeExpr != null
+                || skipWhileCond != null || takeWhileCond != null) {
             // Identity push: `it` aliases the source element. Reached when chain is bare
             stmts |> push <| qmacro_expr() {
                 $i(accName) |> push_clone($i(itName))
@@ -1514,15 +1562,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             return null
         }
         prepend_binds(stmts, intermediateBinds)
-        wrap_with_skip_take(stmts, skipExpr, takeExpr, skipName, takeCountName)
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     }
     if (counterLane) {
-        return emit_counter_lane(top, srcName, accName, itName, skipName, takeCountName,
-            skipExpr, takeExpr, loopBody, at)
+        return emit_counter_lane(top, srcName, accName, itName, skipName, takeCountName, skippingName,
+            skipExpr, takeExpr, skipWhileCond, loopBody, at)
     } else {
         return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName,
-            skipName, takeCountName, skipExpr, takeExpr, at)
+            skipName, takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, at)
     }
 }
 

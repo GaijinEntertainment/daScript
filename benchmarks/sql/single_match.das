@@ -6,7 +6,7 @@ require _common public
 // Fixture car ids run 1..n so id=42 is unique. `single` walks the full source
 // (semantically — exactly-one-match), but the splice still fuses upstream where.
 //
-// SQL: SELECT * FROM Cars WHERE id = 42 LIMIT 2 — read at most 2 to assert uniqueness.
+// SQL: SELECT * FROM Cars WHERE id = 42 — pk lookup returns the single row.
 // m3/m3f traverse the array filtering and asserting one survivor.
 
 let TARGET_ID = 42

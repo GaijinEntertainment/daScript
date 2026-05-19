@@ -1209,7 +1209,7 @@ def test_aggregate_terminal_walk(t : T?) {
         let a = _fold(each(arr).aggregate(42, $(acc : int, x : int) => acc + x))
         t |> equal(42, a)
     }
-    t |> run("aggregate: sum of doubles") @(t : T?) {
+    t |> run("aggregate: sum with multiplier") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
         let a = _fold(each(arr).aggregate(0, $(acc : int, x : int) => acc + x * 2))
         t |> equal(30, a)
@@ -2626,5 +2626,153 @@ def test_top_n_mid_chain_iterator_source(t : T?) {
         for (v, i in query, 0 .. 3) {
             tt |> equal(expected[i], v)
         }
+    }
+}
+
+[test]
+def test_take_while_skip_while_splice_parity(t : T?) {
+    t |> run("take_while array lane") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).to_array())
+        let expected = [5, 3]
+        tt |> equal(2, length(got))
+        for (v, i in got, 0 .. 2) {
+            tt |> equal(expected[i], v)
+        }
+    }
+    t |> run("take_while count lane") @(tt : T?) {
+        let n = _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).count())
+        tt |> equal(2, n)
+    }
+    t |> run("take_while sum (accumulator)") @(tt : T?) {
+        let s = _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).sum())
+        tt |> equal(8, s)
+    }
+    t |> run("take_while max (accumulator)") @(tt : T?) {
+        let m = _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).max())
+        tt |> equal(5, m)
+    }
+    t |> run("take_while first (early-exit)") @(tt : T?) {
+        let f = _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).first())
+        tt |> equal(5, f)
+    }
+    t |> run("take_while first_or_default with no survivor") @(tt : T?) {
+        // First source element fails pred → take_while breaks before any emit → first_or_default(99).
+        let f = _fold(each([10, 5, 3])._take_while(_ < 8).first_or_default(99))
+        tt |> equal(99, f)
+    }
+    t |> run("take_while any") @(tt : T?) {
+        let a = _fold(each([5, 3, 8])._take_while(_ < 8).any())
+        tt |> equal(true, a)
+        let b = _fold(each([10, 5, 3])._take_while(_ < 8).any())
+        tt |> equal(false, b)
+    }
+    t |> run("take_while pred-always-true emits whole source") @(tt : T?) {
+        let n = _fold(each([1, 2, 3])._take_while(_ < 100).count())
+        tt |> equal(3, n)
+    }
+    t |> run("take_while pred-always-false emits nothing") @(tt : T?) {
+        let n = _fold(each([1, 2, 3])._take_while(_ > 100).count())
+        tt |> equal(0, n)
+    }
+    t |> run("take_while empty source") @(tt : T?) {
+        var empty : array<int>
+        let n = _fold(each(empty)._take_while(_ < 100).count())
+        tt |> equal(0, n)
+    }
+    t |> run("skip_while array lane") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).to_array())
+        let expected = [3, 8, 1, 4]
+        tt |> equal(4, length(got))
+        for (v, i in got, 0 .. 4) {
+            tt |> equal(expected[i], v)
+        }
+    }
+    t |> run("skip_while count lane") @(tt : T?) {
+        let n = _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).count())
+        tt |> equal(4, n)
+    }
+    t |> run("skip_while min (accumulator)") @(tt : T?) {
+        let m = _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).min())
+        tt |> equal(1, m)
+    }
+    t |> run("skip_while pred-always-true skips whole source") @(tt : T?) {
+        let n = _fold(each([1, 2, 3])._skip_while(_ < 100).count())
+        tt |> equal(0, n)
+    }
+    t |> run("skip_while pred-always-false emits everything") @(tt : T?) {
+        let n = _fold(each([1, 2, 3])._skip_while(_ > 100).count())
+        tt |> equal(3, n)
+    }
+    t |> run("skip_while empty source") @(tt : T?) {
+        var empty : array<int>
+        let n = _fold(each(empty)._skip_while(_ < 100).count())
+        tt |> equal(0, n)
+    }
+    t |> run("skip_while + take_while compose") @(tt : T?) {
+        // Skip leading >3 (skip 5), then take while <8 (emit 3, break on 8).
+        let got <- _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3)._take_while(_ < 8).to_array())
+        tt |> equal(1, length(got))
+        tt |> equal(3, got[0])
+    }
+    t |> run("where + take_while compose") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1, 4])._where(_ != 3)._take_while(_ < 8).to_array())
+        tt |> equal(1, length(got))
+        tt |> equal(5, got[0])
+    }
+    t |> run("skip + take_while compose") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1, 4]).skip(1)._take_while(_ < 8).to_array())
+        tt |> equal(1, length(got))
+        tt |> equal(3, got[0])
+    }
+    t |> run("take_while + take compose — take_while breaks first") @(tt : T?) {
+        // Source: [5, 3, 1, 4, 8]; take_while<8 keeps [5, 3, 1, 4]; take(2) limits to [5, 3].
+        let got <- _fold(each([5, 3, 1, 4, 8])._take_while(_ < 8).take(2).to_array())
+        tt |> equal(2, length(got))
+        tt |> equal(5, got[0])
+        tt |> equal(3, got[1])
+    }
+    t |> run("take_while + take compose — take(N) hits first") @(tt : T?) {
+        // Source: [5, 3, 1, 4, 8]; take_while<8 keeps [5, 3, 1, 4]; take(10) is wider → output = take_while output.
+        let got <- _fold(each([5, 3, 1, 4, 8])._take_while(_ < 8).take(10).to_array())
+        tt |> equal(4, length(got))
+    }
+    t |> run("skip_while + skip compose") @(tt : T?) {
+        // Source: [5, 5, 3, 1, 4]; skip_while>3 skips [5, 5] then emits [3, 1, 4]; skip(1) drops 3; output [1, 4].
+        // Canonical order is skip then skip_while, so this writes skip BEFORE skip_while in the chain.
+        let got <- _fold(each([5, 5, 3, 1, 4]).skip(1)._skip_while(_ > 3).to_array())
+        // skip(1) drops first 5 → [5, 3, 1, 4]; skip_while>3 skips [5] then emits [3, 1, 4].
+        tt |> equal(3, length(got))
+        tt |> equal(3, got[0])
+        tt |> equal(1, got[1])
+        tt |> equal(4, got[2])
+    }
+}
+
+[test]
+def test_take_while_skip_while_cascade_bails(t : T?) {
+    // Cascades to tier 2 (still semantically correct, just no splice). These confirm the
+    // bail conditions don't break observable behavior.
+    t |> run("select before take_while cascades — values still match reference") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1])._select(_ * 2)._take_while(_ < 16).to_array())
+        let expected = [10, 6]
+        tt |> equal(2, length(got))
+        for (v, i in got, 0 .. 2) {
+            tt |> equal(expected[i], v)
+        }
+    }
+    t |> run("select before skip_while cascades — values still match reference") @(tt : T?) {
+        let got <- _fold(each([5, 3, 8, 1])._select(_ * 2)._skip_while(_ > 6).to_array())
+        let expected = [6, 16, 2]
+        tt |> equal(3, length(got))
+        for (v, i in got, 0 .. 3) {
+            tt |> equal(expected[i], v)
+        }
+    }
+    t |> run("multiple take_while cascades — only first one spliced semantics") @(tt : T?) {
+        // Reference would AND the two breaks; splice rejects (multiple take_while). Values:
+        // take_while<8 keeps [5, 3]; take_while<4 of those keeps [] (3 is the first to fail).
+        // Actually [5,3]: 5<4 false → break → [].
+        let got <- _fold(each([5, 3, 1, 8])._take_while(_ < 8)._take_while(_ < 4).to_array())
+        tt |> equal(0, length(got))
     }
 }

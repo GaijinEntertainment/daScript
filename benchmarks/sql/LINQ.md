@@ -673,6 +673,65 @@ Closes the `test_linq_element.das` (last / last_or_default / single / single_or_
 - Aggregate with non-peelable block body cascades to tier 2 (correct but slower) — a `return $b(stmts)` pattern recognizer would let multi-statement blocks splice too.
 - Skip-family (`skip_last` / `take_last`) — these need buffer state similar to PR-C's reverse_take; separate follow-up.
 
+## Phase 3+ predicate-driven ranges: take_while / skip_while (PR-G)
+
+Closes the `_while` row in the `test_linq_partition.das` coverage checklist. `take_while(pred)` breaks the loop on the first element where `pred` returns false; `skip_while(pred)` flips a one-way `skipping` flag on the first false, emitting that element and everything after. Both fit alongside the existing skip/take counters in the per-element wrap.
+
+**How it lands:**
+
+1. **Helper rename + unification.** `wrap_with_skip_take` → `wrap_with_ranges`, `append_skip_take_prelude` → `append_ranges_prelude`. The new helpers gain three args: `skipWhileCond`, `takeWhileCond`, `skippingName`. All four lane builders (`emit_counter_lane`, `emit_array_lane`, `emit_accumulator_lane`, `emit_early_exit_lane`) thread the new state through their signatures — predicate-driven ranges are now first-class alongside count-driven ranges.
+
+2. **Per-element prefix ordering** (in `wrap_with_ranges`, final emission order):
+   ```
+   if (takeCount >= takeLimit) break        # (1) take-guard
+   if (skip > 0) { skip--; continue }       # (2) skip counter
+   if (skipping) {                          # (3) skip_while flip — NEW
+       if (sw_pred) continue
+       skipping = false
+   }
+   if (!tw_pred) break                      # (4) take_while break — NEW
+   takeCount ++                             # (5) take-inc — MOVED below (3)(4)
+   <body>
+   ```
+   takeCount++ moved from "right after skip" to "after all gates" so skip_while-skipped and take_while-rejected elements don't eat the `take(N)` budget. Pure `skip(N).take(M)` chains keep their existing behavior — steps (3)(4) are no-ops when both predicates are null.
+
+3. **Lane classification extension.** `take_while` / `skip_while` join `where_` / `select` / `take` / `skip` in the ARRAY-trailing arm of `classify_terminator`. This makes `_take_while(p).to_array()` (and the bare `_take_while_to_array` variant) splice into the array lane instead of cascading.
+
+4. **Canonical chain order** (intermediate ops walked by `plan_loop_or_count`):
+   ```
+   [where_/select]* → skip? → skip_while? → take_while? → take? → terminator
+   ```
+   Each op type rejects any successor that violates this order — `seenSkipWhile` blocks subsequent skip/where/select; `seenTakeWhile` blocks subsequent take_while/skip_while/where/select; etc. Out-of-order chains cascade to tier 2 (still correct, just no splice).
+
+**Bail cases (cascade to tier 2):**
+- `_select(...) ._take_while(...)` or `_select(...) ._skip_while(...)` — predicate currently peels with `itName` (source element). Lifting to chained-bind names is a small follow-up that requires moving select binds above the predicate gates in the wrap.
+- Multiple `take_while` or multiple `skip_while` in one chain.
+- `skip` / `take` appearing AFTER `skip_while` / `take_while` (the takeCount budget would be ordering-sensitive).
+- Any chain that previously cascaded (buffer-required upstream, unrecognized ops) — unchanged.
+
+**Edge cases worth noting:**
+- `take_while` with all-true predicate is a no-op gate — the loop iterates to completion just like a chain without `take_while`. Verified by parity test `take_while pred-always-true emits whole source`.
+- `take_while` with first-element-false predicate breaks immediately — `count` returns 0, `first_or_default(d)` returns `d` (the splice's bind variable was never written). Pinned by `take_while first_or_default with no survivor`.
+- `skip_while` with all-true predicate skips the entire source — flag never flips, so `count` returns 0. Pinned by `skip_while pred-always-true skips whole source`.
+- `skip_while` with first-element-false predicate emits everything — flag flips on element 0, no element is gated. Equivalent to no `skip_while` at all.
+- Chained `skip(N).skip_while(p)`: skip absorbs first N source elements, then skip_while gates the next prefix. Reversed order (`skip_while(p).skip(N)`) cascades to tier 2 because the takeCount-style accumulator can't represent "skip N of skip_while-survivors" without an extra counter (deferred).
+
+### Headline (PR-G)
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|
+| take_while_match | `each(arr) → take_while(id < THRESHOLD) → count` | 7 | 23 | **2** | **11.5× over m3 / 3.5× over m1 SQL** |
+| skip_while_match | `each(arr) → skip_while(id < THRESHOLD) → count` | 3 | 20 | **5** | **4× over m3** (m1 SQL still 1.67× faster — index-scan COUNT* is hard to beat) |
+
+THRESHOLD = 50000 against n = 100000, so take_while breaks halfway and skip_while flips halfway.
+
+`take_while_match` is the standout: the splice exits the for-loop on the first false-pred element (~50k of 100k source rows), while m3 still pays for the full `take_while_impl` array allocation + the subsequent `count` length read. `skip_while_match` shows the buffer-elision win — splice fuses the gate into the counter lane (no allocation), while m3 materializes the survivor tail as an `array<Car>` then `count`s its length. SQL pulls ahead on `skip_while_match` because SQLite's planner uses the primary-key index to skip the head without touching rows, an optimization the in-process splice can't match.
+
+### Deferred for follow-ups (PR-G)
+
+- `select(proj)._take_while(p)` / `select(proj)._skip_while(p)` — lift predicate peeling to chained-bind names + move select-side binds above the predicate gates in the wrap.
+- `skip_while(p).skip(N)` (or `.take(N)`) reverse order — requires an extra counter for "N of skip_while-survivors".
+
 ## Operator-coverage checklist (parity tests)
 
 The benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
@@ -686,7 +745,7 @@ The benchmarks above cover the most common shapes. The end-game target is one be
 | `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (Phase 3+); ✅ `reverse \|> take(N)` backward index loop on array sources (PR-C — closes the prior regression) |
 | `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer, groupby_where_count, groupby_where_sum, groupby_select_sum, groupby_having_count, groupby_having_hidden_sum, groupby_average | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ✅ upstream where_/select* fusion (PR-B); ✅ `having_` with matching slot (PR-D); ✅ `average` + inner-select-average + multi-reducer-with-average (PR-A2 follow-up); ✅ hidden-slot reducer-in-having on named-tuple select shape (PR-E) |
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
-| `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
+| `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered, take_while_match, skip_while_match | ✅ take/skip in splice lanes; ✅ `take_while` / `skip_while` (PR-G); `chunk` ⏳ |
 | `test_linq_set.das` | distinct/union/except/intersect/unique | distinct_count, distinct_take | ✅ distinct + distinct_by (streaming dedup, this PR); union/except/intersect/unique ⏳ |
 | `test_linq_element.das` | first/last/single/element_at + _or_default | first_match, first_or_default_match, last_match, single_match, element_at_match | ✅ first/first_or_default; ✅ last/last_or_default/single/single_or_default/element_at/element_at_or_default (PR-F terminal-walk lane) |
 | `test_linq_concat.das` | concat/prepend/append | — | ⏳ |
