@@ -1670,7 +1670,7 @@ def private is_bind_field_access(expr : Expression?; bindName : string; fieldInd
 
 [macro_function]
 def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; string; Expression?> {
-    // Returns (matched, reducerName, innerLambda). innerLambda is non-null only for sum_inner_select.
+    // Returns (matched, reducerName, innerLambda). innerLambda is non-null for *_inner_select forms.
     if (expr == null || !(expr is ExprCall)) return (false, "", null)
     let c = expr as ExprCall
     if (c.func == null) return (false, "", null)
@@ -1679,10 +1679,13 @@ def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tupl
         fnName = string(c.func.fromGeneric.name)
     }
     if ((c.arguments |> length) != 1) return (false, "", null)
-    if (fnName == "length" || fnName == "count" || fnName == "sum" || fnName == "long_count") {
+    // Bare reducer: `<reducer>(<bind>._1)`
+    if (fnName == "length" || fnName == "count" || fnName == "long_count"
+            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first") {
         if (is_bind_field_access(c.arguments[0], bindName, 1)) return (true, fnName, null)
     }
-    if (fnName == "sum") {
+    // Inner-select reducer: `<reducer>(select(<bind>._1, <lambda>))`
+    if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first") {
         let inner = c.arguments[0]
         if (inner != null && inner is ExprCall) {
             let innerCall = inner as ExprCall
@@ -1693,11 +1696,222 @@ def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tupl
                 }
                 if (innerName == "select"
                         && (innerCall.arguments |> length) == 2
-                        && is_bind_field_access(innerCall.arguments[0], bindName, 1)) return (true, "sum_inner_select", innerCall.arguments[1])
+                        && is_bind_field_access(innerCall.arguments[0], bindName, 1)) return (true, "{fnName}_inner_select", innerCall.arguments[1])
             }
         }
     }
     return (false, "", null)
+}
+
+struct private ReducerSpec {
+    slot : int                  // target tuple slot: entry._{slot}
+    name : string               // bare reducer or "<reducer>_inner_select"
+    innerBody : Expression?     // peeled inner-select body, null for bare reducer
+    accType : TypeDeclPtr       // type of entry._{slot} (for synth table type + workhorse check)
+}
+
+[macro_function]
+def private slot_acc_type(bodyType : TypeDeclPtr; slot : int; isBareForm : bool) : TypeDeclPtr {
+    // Bare form: bodyType IS the reducer's return type. Named-tuple: drill into argTypes[slot].
+    if (isBareForm) return strip_const_ref(clone_type(bodyType))
+    if (bodyType == null || (bodyType.argTypes |> length) <= slot) return null
+    return strip_const_ref(clone_type(bodyType.argTypes[slot]))
+}
+
+[macro_function]
+def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, itName : string) {
+    // Returns (specs, usesNamedTuple). Empty specs = unrecognized → caller cascades.
+    var specs : array<ReducerSpec>
+    if (groupProjBody == null) return <- (<- specs, false)
+    // Bare form: body is the reducer call directly.
+    let (okBare, rnBare, innerBare) = is_bucket_reducer_call(groupProjBody, bindName)
+    if (okBare) {
+        var innerBody : Expression?
+        if (innerBare != null) {
+            innerBody = fold_linq_cond(clone_expression(innerBare), itName)
+            if (innerBody == null) return <- (<- specs, false)
+        }
+        var accType = slot_acc_type(groupProjBody._type, 1, true)
+        if (accType == null) return <- (<- specs, false)
+        var spec = ReducerSpec(slot = 1, name = rnBare, innerBody = innerBody, accType = accType)
+        specs |> push(spec)
+        return <- (<- specs, false)
+    }
+    // Named-tuple form: slot 0 = key (must be _._0), slots 1..N = reducers.
+    if (!(groupProjBody is ExprMakeTuple)) return <- (<- specs, false)
+    let mt = groupProjBody as ExprMakeTuple
+    let n = mt.values |> length
+    if (n < 2 || !is_bind_field_access(mt.values[0], bindName, 0)) return <- (<- specs, false)
+    specs |> reserve(n - 1)
+    for (i in range(1, n)) {
+        let (ok, rn, innerLam) = is_bucket_reducer_call(mt.values[i], bindName)
+        if (!ok) {
+            specs |> clear
+            return <- (<- specs, false)
+        }
+        var innerBody : Expression?
+        if (innerLam != null) {
+            innerBody = fold_linq_cond(clone_expression(innerLam), itName)
+            if (innerBody == null) {
+                specs |> clear
+                return <- (<- specs, false)
+            }
+        }
+        var accType = slot_acc_type(groupProjBody._type, i, false)
+        if (accType == null) {
+            specs |> clear
+            return <- (<- specs, false)
+        }
+        var spec = ReducerSpec(slot = i, name = rn, innerBody = innerBody, accType = accType)
+        specs |> push(spec)
+    }
+    return <- (<- specs, true)
+}
+
+[macro_function]
+def private mk_slot_ref(at : LineInfo; entryName : string; slot : int) : Expression? {
+    // Programmatic `entry._{slot}` — qmacro has no dynamic-field-name splice.
+    var ev = new ExprVar(at = at)
+    ev.name := entryName
+    var ef = new ExprField(at = at)
+    ef.name := "_{slot}"
+    ef.value = ev
+    return ef
+}
+
+[macro_function]
+def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // (missInit, hitUpdate); hitUpdate null for first* (subsequent same-key elements ignored).
+    var missInit : Expression?
+    var hitUpdate : Expression?
+    let nm = spec.name
+    if (nm == "length" || nm == "count") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        var l2 = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(l1) = 1
+        }
+        hitUpdate = qmacro_expr() {
+            $e(l2) ++
+        }
+    } elif (nm == "long_count") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        var l2 = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(l1) = 1l
+        }
+        hitUpdate = qmacro_expr() {
+            $e(l2) ++
+        }
+    } elif (nm == "sum") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        var l2 = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(l1) = $i(itName)
+        }
+        hitUpdate = qmacro_expr() {
+            $e(l2) += $i(itName)
+        }
+    } elif (nm == "sum_inner_select") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        var l2 = mk_slot_ref(at, entryName, spec.slot)
+        var b1 = clone_expression(spec.innerBody)
+        var b2 = clone_expression(spec.innerBody)
+        missInit = qmacro_expr() {
+            $e(l1) = $e(b1)
+        }
+        hitUpdate = qmacro_expr() {
+            $e(l2) += $e(b2)
+        }
+    } elif (nm == "min" || nm == "max") {
+        let workhorse = spec.accType != null && spec.accType.isWorkhorseType
+        let isMin = nm == "min"
+        var lInit = mk_slot_ref(at, entryName, spec.slot)
+        var lCmp  = mk_slot_ref(at, entryName, spec.slot)
+        var lAsn  = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(lInit) := $i(itName)
+        }
+        if (workhorse && isMin) {
+            hitUpdate = qmacro_expr() {
+                if ($i(itName) < $e(lCmp)) {
+                    $e(lAsn) := $i(itName)
+                }
+            }
+        } elif (workhorse) {
+            hitUpdate = qmacro_expr() {
+                if ($i(itName) > $e(lCmp)) {
+                    $e(lAsn) := $i(itName)
+                }
+            }
+        } elif (isMin) {
+            hitUpdate = qmacro_expr() {
+                if (_::less($i(itName), $e(lCmp))) {
+                    $e(lAsn) := $i(itName)
+                }
+            }
+        } else {
+            hitUpdate = qmacro_expr() {
+                if (_::less($e(lCmp), $i(itName))) {
+                    $e(lAsn) := $i(itName)
+                }
+            }
+        }
+    } elif (nm == "min_inner_select" || nm == "max_inner_select") {
+        let workhorse = spec.accType != null && spec.accType.isWorkhorseType
+        let isMin = nm == "min_inner_select"
+        // Hit branch evaluates innerBody once into a temp — matches reference's single-eval-per-element.
+        let tmp = "`vis`{at.line}`{at.column}`{spec.slot}"
+        var lInit = mk_slot_ref(at, entryName, spec.slot)
+        var lCmp  = mk_slot_ref(at, entryName, spec.slot)
+        var lAsn  = mk_slot_ref(at, entryName, spec.slot)
+        var bMiss = clone_expression(spec.innerBody)
+        var bHit  = clone_expression(spec.innerBody)
+        missInit = qmacro_expr() {
+            $e(lInit) := $e(bMiss)
+        }
+        if (workhorse && isMin) {
+            hitUpdate = qmacro_block() {
+                let $i(tmp) = $e(bHit)
+                if ($i(tmp) < $e(lCmp)) {
+                    $e(lAsn) := $i(tmp)
+                }
+            }
+        } elif (workhorse) {
+            hitUpdate = qmacro_block() {
+                let $i(tmp) = $e(bHit)
+                if ($i(tmp) > $e(lCmp)) {
+                    $e(lAsn) := $i(tmp)
+                }
+            }
+        } elif (isMin) {
+            hitUpdate = qmacro_block() {
+                let $i(tmp) = $e(bHit)
+                if (_::less($i(tmp), $e(lCmp))) {
+                    $e(lAsn) := $i(tmp)
+                }
+            }
+        } else {
+            hitUpdate = qmacro_block() {
+                let $i(tmp) = $e(bHit)
+                if (_::less($e(lCmp), $i(tmp))) {
+                    $e(lAsn) := $i(tmp)
+                }
+            }
+        }
+    } elif (nm == "first") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(l1) := $i(itName)
+        }
+    } elif (nm == "first_inner_select") {
+        var l1 = mk_slot_ref(at, entryName, spec.slot)
+        var b1 = clone_expression(spec.innerBody)
+        missInit = qmacro_expr() {
+            $e(l1) := $e(b1)
+        }
+    }
+    return (missInit, hitUpdate)
 }
 
 [macro_function]
@@ -1739,61 +1953,12 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     let bindName = "`gpb`{at.line}`{at.column}"   // group_proj lambda's bound variable
     // Substitute the lambda's bound var with `bindName` so we can pattern-match.
     var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
-    var reducerName : string  = ""
-    var usesNamedTuple = false
-    var innerLambda : Expression?     // for sum_inner_select: raw inner select lambda, peeled below
-    // Case A: body is the reducer itself (bare form, no key in output)
-    {
-        let (ok, rn, innerLam) = is_bucket_reducer_call(groupProjBody, bindName)
-        if (ok) {
-            reducerName = rn
-            // Clone to drop const propagated through tuple destructure; planner mutates innerBody later.
-            if (innerLam != null) {
-                innerLambda = clone_expression(innerLam)
-            }
-        }
-    }
-    // Case B: body is an ExprMakeTuple(isKeyValue=true) with 2 fields:
-    if (reducerName == "" && (groupProjBody is ExprMakeTuple)) {
-        let mt = groupProjBody as ExprMakeTuple
-        if ((mt.values |> length) == 2) {
-            if (is_bind_field_access(mt.values[0], bindName, 0)) {
-                let (ok, rn, innerLam) = is_bucket_reducer_call(mt.values[1], bindName)
-                if (ok) {
-                    reducerName = rn
-                    if (innerLam != null) {
-                innerLambda = clone_expression(innerLam)
-            }
-                    usesNamedTuple = true
-                }
-            }
-        }
-    }
-    // Recognized: length/count (Acc=int), long_count (Acc=int64), sum (Acc=elemT), sum_inner_select (Acc=innerBodyT).
-    if (reducerName == ""
-            || (reducerName != "length" && reducerName != "count" && reducerName != "long_count"
-                && reducerName != "sum" && reducerName != "sum_inner_select")) return null
-    let isLongCountReducer = reducerName == "long_count"
-    let isSumReducer = reducerName == "sum" || reducerName == "sum_inner_select"
-    let isSumInnerSelectReducer = reducerName == "sum_inner_select"
+    if (groupProjBody == null || groupProjBody._type == null) return null
+    var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
+    if (empty(specs)) return null
     var sourceElemType = strip_const_ref(clone_type(top._type.firstType))
-    var innerBody : Expression?
-    var accType : TypeDeclPtr
-    if (isSumInnerSelectReducer) {
-        // Peel inner select's lambda body, renaming `_` → itName for direct splice into `entry._1 += <body>`.
-        innerBody = fold_linq_cond(innerLambda, itName)
-        if (innerBody == null || groupProjBody._type == null) return null
-        // accType from outer sum's _type (peeled body's _type is null — apply_template doesn't re-type-infer).
-        accType = strip_const_ref(clone_type(groupProjBody._type))
-    } else {
-        accType = clone_type(sourceElemType)
-    }
     var elemType = sourceElemType
-    // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; ResultT> below.
-    var tabValueType : TypeDeclPtr
-    if (usesNamedTuple) {
-        tabValueType = strip_const_ref(clone_type(groupProjBody._type))
-    }
+    // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
     var keyBlkD = clone_expression(keyBlock)
@@ -1801,87 +1966,74 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     let dummyName = "`dummy`{at.line}`{at.column}"
     // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem).
     if (usesNamedTuple) {
+        var tabValueType  = strip_const_ref(clone_type(groupProjBody._type))
+        var tabValueType2 = clone_type(tabValueType)
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
         }
-        var tabValueType2 = clone_type(tabValueType)
         stmts |> push <| qmacro_expr() {
             var $i(dummyName) : $t(tabValueType2)
         }
-    } elif (isLongCountReducer) {
-        stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int64>>
-        }
-        stmts |> push <| qmacro_expr() {
-            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int64>
-        }
-    } elif (isSumReducer) {
-        var accType2 = clone_type(accType)
+    } else {
+        var accType  = clone_type(specs[0].accType)
+        var accType2 = clone_type(specs[0].accType)
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(accType)>>
         }
         stmts |> push <| qmacro_expr() {
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
-    } else {
-        // count / length — Acc=int
-        stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int>>
-        }
-        stmts |> push <| qmacro_expr() {
-            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int>
-        }
     }
-    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare splits into miss-branch (init+commit) and hit-branch (incremental update); the split lets each reducer pick its own init vs update shape independently.
+    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare splits into miss-branch (init+commit) and hit-branch (incremental update); each reducer slot contributes one init stmt and (optionally) one update stmt.
     var keyBlk3 = clone_expression(keyBlock)
-    var missInit : Expression?
-    var hitUpdate : Expression?
-    if (isLongCountReducer) {
-        missInit = qmacro_expr() {
-            $i(entryName)._1 = 1l
+    var missInitStmts : array<Expression?>
+    var hitUpdateStmts : array<Expression?>
+    for (s in specs) {
+        // Clone to drop const propagated through tuple destructure.
+        let (mi, hu) = emit_reducer_branches(s, at, entryName, itName)
+        if (mi != null) {
+            missInitStmts |> push(clone_expression(mi))
         }
-        hitUpdate = qmacro_expr() {
-            $i(entryName)._1 ++
-        }
-    } elif (isSumInnerSelectReducer) {
-        // Two clones — each $e(...) splice consumes its expression.
-        var innerBody1 = clone_expression(innerBody)
-        var innerBody2 = clone_expression(innerBody)
-        missInit = qmacro_expr() {
-            $i(entryName)._1 = $e(innerBody1)
-        }
-        hitUpdate = qmacro_expr() {
-            $i(entryName)._1 += $e(innerBody2)
-        }
-    } elif (isSumReducer) {
-        missInit = qmacro_expr() {
-            $i(entryName)._1 = $i(itName)
-        }
-        hitUpdate = qmacro_expr() {
-            $i(entryName)._1 += $i(itName)
-        }
-    } else {
-        // count / length — int accumulator
-        missInit = qmacro_expr() {
-            $i(entryName)._1 = 1
-        }
-        hitUpdate = qmacro_expr() {
-            $i(entryName)._1 ++
+        if (hu != null) {
+            hitUpdateStmts |> push(clone_expression(hu))
         }
     }
-    stmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            let $i(kName) = invoke($e(keyBlk3), $i(itName))
-            let $i(ukName) = _::unique_key($i(kName))
-            unsafe {
-                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
-                if (addr($i(entryName)) == addr($i(dummyName))) {
-                    $e(missInit)
-                    $i(dummyName)._0 = $i(kName)
-                    $i(tabName)[$i(ukName)] = $i(dummyName)
-                    $i(dummyName) = default<typedecl($i(dummyName))>
-                } else {
-                    $e(hitUpdate)
+    if (empty(missInitStmts)) return null
+    var missInit  = stmts_to_expr(missInitStmts)
+    let hasHitUpdate = !empty(hitUpdateStmts)
+    if (hasHitUpdate) {
+        var hitUpdate = stmts_to_expr(hitUpdateStmts)
+        stmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcName)) {
+                let $i(kName) = invoke($e(keyBlk3), $i(itName))
+                let $i(ukName) = _::unique_key($i(kName))
+                unsafe {
+                    var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                    if (addr($i(entryName)) == addr($i(dummyName))) {
+                        $e(missInit)
+                        $i(dummyName)._0 = $i(kName)
+                        $i(tabName)[$i(ukName)] = $i(dummyName)
+                        $i(dummyName) = default<typedecl($i(dummyName))>
+                    } else {
+                        $e(hitUpdate)
+                    }
+                }
+            }
+        }
+    } else {
+        // All reducers are first* — no hit update needed.
+        stmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcName)) {
+                let $i(kName) = invoke($e(keyBlk3), $i(itName))
+                let $i(ukName) = _::unique_key($i(kName))
+                unsafe {
+                    var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                    if (addr($i(entryName)) == addr($i(dummyName))) {
+                        $e(missInit)
+                        $i(dummyName)._0 = $i(kName)
+                        $i(tabName)[$i(ukName)] = $i(dummyName)
+                        $i(dummyName) = default<typedecl($i(dummyName))>
+                    }
                 }
             }
         }
