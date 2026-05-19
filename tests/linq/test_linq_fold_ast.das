@@ -2195,6 +2195,101 @@ def test_group_by_first_or_default_cascades_to_tier2(t : T?) {
 }
 
 [export, marker(no_coverage)]
+def target_group_by_upstream_where_fold() : array<int> {
+    // G11 (PR-B): upstream where_ fuses into the per-element loop. No runtime where_ call;
+    // body contains `if (predicate) { ... }` guarding the key + table-update splice.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ % 2 == 0)._group_by(_ % 3)._select(_._1 |> length))
+}
+
+[test]
+def test_group_by_upstream_where_no_runtime_where_call(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_upstream_where_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "where_"), "upstream where_ must be inlined, not called")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_upstream_select_fold() : array<tuple<K : int; S : int>> {
+    // G12 (PR-B): upstream select_ fuses; the key references the projected value via an
+    // intermediate var bind inside the per-element loop.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._select(_ * 2)._group_by(_ % 3)._select((K = _._0, S = _._1 |> sum)))
+}
+
+[test]
+def test_group_by_upstream_select_no_runtime_select_call(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_upstream_select_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "select"), "upstream select must be inlined, not called")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "must call _::unique_key per element")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_upstream_where_select_fold() : array<tuple<K : int; S : int>> {
+    // G13 (PR-B): chained upstream where_ + select_ fuse together. Where guards, select binds.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ > 3)._select(_ * 10)._group_by(_ % 3)._select((K = _._0, S = _._1 |> sum)))
+}
+
+[test]
+def test_group_by_upstream_where_select_combined(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_upstream_where_select_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy runtime")
+        t |> equal(0, count_call(body_expr, "where_"), "upstream where_ must be inlined")
+        t |> equal(0, count_call(body_expr, "select"), "upstream select must be inlined")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path: no key_exists")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_upstream_distinct_falls_through() : array<int> {
+    // BAIL (PR-B): distinct upstream is NOT where_/select* → plan_group_by rejects; cascades to tier 2.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7].to_sequence().distinct()._group_by(_ % 3)._select(_._1 |> length).to_array())
+}
+
+[test]
+def test_group_by_upstream_distinct_cascades_to_tier2(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_upstream_distinct_falls_through)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
+[export, marker(no_coverage)]
 def target_group_by_having_falls_through() : array<int> {
     // BAIL: where_ between group_by and select (HAVING clause shape) → cascade to tier 2.
     return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._where(_._1 |> length >= 2)._select(_._1 |> length))

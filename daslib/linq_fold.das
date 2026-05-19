@@ -1938,26 +1938,70 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     calls |> pop
     if ((groupByCall.arguments |> length) < 2) return null
     var keyBlock = clone_expression(groupByCall.arguments[1])
-    // v1: only empty upstream segment (no where_/select* between source and group_by).
-    if (!empty(calls)) return null
-    // Recognize the group_proj body's reducer shape.
+    // Setup names + walk upstream segment (where_/select*) for fusion into per-element loop.
     let at = groupByCall.at
-    let srcName  = "`source`{at.line}`{at.column}"
-    let itName   = "`it`{at.line}`{at.column}"
-    let tabName  = "`tab`{at.line}`{at.column}"
-    let kName    = "`k`{at.line}`{at.column}"
-    let ukName   = "`uk`{at.line}`{at.column}"
+    let srcName   = "`source`{at.line}`{at.column}"
+    let srcItName = "`it`{at.line}`{at.column}"
+    let tabName   = "`tab`{at.line}`{at.column}"
+    let kName     = "`k`{at.line}`{at.column}"
+    let ukName    = "`uk`{at.line}`{at.column}"
     let entryName = "`entry`{at.line}`{at.column}"
-    let kvName   = "`kv`{at.line}`{at.column}"
-    let bufName  = "`buf`{at.line}`{at.column}"
-    let bindName = "`gpb`{at.line}`{at.column}"   // group_proj lambda's bound variable
-    // Substitute the lambda's bound var with `bindName` so we can pattern-match.
+    let kvName    = "`kv`{at.line}`{at.column}"
+    let bufName   = "`buf`{at.line}`{at.column}"
+    let bindName  = "`gpb`{at.line}`{at.column}"   // group_proj lambda's bound variable
+    // Walk upstream calls (between source and group_by_lazy): fuse where_/select into per-element loop; bail otherwise.
+    var whereCond : Expression?
+    var intermediateBinds : array<Expression?>
+    var projection : Expression?
+    var lastBindName = srcItName
+    var elemType = strip_const_ref(clone_type(top._type.firstType))
+    for (i in 0 .. (calls |> length)) {
+        let opName = calls[i]._1.name
+        if (opName == "where_") {
+            // Bind any pending projection so the predicate references a stable name (no double-eval).
+            if (projection != null) {
+                let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
+                intermediateBinds |> push <| qmacro_expr() {
+                    var $i(bn) := $e(projection)
+                }
+                lastBindName = bn
+                projection = null
+            }
+            var predicate = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            if (predicate == null) return null
+            whereCond = merge_where_cond(whereCond, predicate)
+        } elif (opName == "select") {
+            // Bind previous projection (if any) before computing the next.
+            if (projection != null) {
+                let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
+                intermediateBinds |> push <| qmacro_expr() {
+                    var $i(bn) := $e(projection)
+                }
+                lastBindName = bn
+            }
+            projection = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            if (projection == null) return null
+            elemType = strip_const_ref(clone_type(calls[i]._0._type.firstType))
+        } else {
+            return null
+        }
+    }
+    // Final bind: stable itName for the recognizer/emission to reference.
+    var itName = srcItName
+    if (projection != null) {
+        let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
+        intermediateBinds |> push <| qmacro_expr() {
+            var $i(bn) := $e(projection)
+        }
+        itName = bn
+    } else {
+        itName = lastBindName
+    }
+    // Recognize the group_proj body's reducer shape (uses post-projection itName for inner-select fold).
     var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
     if (groupProjBody == null || groupProjBody._type == null) return null
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
-    var sourceElemType = strip_const_ref(clone_type(top._type.firstType))
-    var elemType = sourceElemType
     // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
@@ -2001,41 +2045,49 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     if (empty(missInitStmts)) return null
     var missInit  = stmts_to_expr(missInitStmts)
     let hasHitUpdate = !empty(hitUpdateStmts)
+    // Per-element table-update splice — variant on hasHitUpdate (first* chains have no else branch).
+    var tableUpdate : Expression?
     if (hasHitUpdate) {
         var hitUpdate = stmts_to_expr(hitUpdateStmts)
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                let $i(kName) = invoke($e(keyBlk3), $i(itName))
-                let $i(ukName) = _::unique_key($i(kName))
-                unsafe {
-                    var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
-                    if (addr($i(entryName)) == addr($i(dummyName))) {
-                        $e(missInit)
-                        $i(dummyName)._0 = $i(kName)
-                        $i(tabName)[$i(ukName)] = $i(dummyName)
-                        $i(dummyName) = default<typedecl($i(dummyName))>
-                    } else {
-                        $e(hitUpdate)
-                    }
+        tableUpdate = qmacro_expr() {
+            unsafe {
+                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $e(missInit)
+                    $i(dummyName)._0 = $i(kName)
+                    $i(tabName)[$i(ukName)] = $i(dummyName)
+                    $i(dummyName) = default<typedecl($i(dummyName))>
+                } else {
+                    $e(hitUpdate)
                 }
             }
         }
     } else {
-        // All reducers are first* — no hit update needed.
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                let $i(kName) = invoke($e(keyBlk3), $i(itName))
-                let $i(ukName) = _::unique_key($i(kName))
-                unsafe {
-                    var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
-                    if (addr($i(entryName)) == addr($i(dummyName))) {
-                        $e(missInit)
-                        $i(dummyName)._0 = $i(kName)
-                        $i(tabName)[$i(ukName)] = $i(dummyName)
-                        $i(dummyName) = default<typedecl($i(dummyName))>
-                    }
+        tableUpdate = qmacro_expr() {
+            unsafe {
+                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $e(missInit)
+                    $i(dummyName)._0 = $i(kName)
+                    $i(tabName)[$i(ukName)] = $i(dummyName)
+                    $i(dummyName) = default<typedecl($i(dummyName))>
                 }
             }
+        }
+    }
+    // Per-element core: key derive + unique_key derive + table-update splice.
+    var coreBody = qmacro_block() {
+        let $i(kName) = invoke($e(keyBlk3), $i(itName))
+        let $i(ukName) = _::unique_key($i(kName))
+        $e(tableUpdate)
+    }
+    // Wrap core with whereCond (if any), prepend intermediateBinds, splice into for-loop body.
+    var guardedCore = wrap_with_condition(coreBody, whereCond)
+    var bodyStmts <- intermediateBinds
+    bodyStmts |> push(guardedCore)
+    stmts |> push <| qmacro_block() {
+        for ($i(srcItName) in $i(srcName)) {
+            $b(bodyStmts)
         }
     }
     // Lane: count terminator returns length(tab) directly (number of groups).

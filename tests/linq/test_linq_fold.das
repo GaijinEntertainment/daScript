@@ -1865,6 +1865,97 @@ def test_group_by_multi_reducer_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_upstream_fusion_fold_parity(t : T?) {
+    // PR-B: upstream where_/select fuses into the per-element loop. Where guards the
+    // table update; select binds projected values that the key/reducer chain references.
+    t |> run("where → group_by → count: only survivors enter the table") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ % 2 == 0)._group_by(_ % 3)._select(_._1 |> length))
+        // Survivors: [2,4,6,8,10]; buckets: 0→{6}, 1→{4,10}, 2→{2,8}. Counts: 1,2,2 = 5.
+        tt |> equal(3, length(got))
+        var total = 0
+        for (c in got) {
+            total += c
+        }
+        tt |> equal(5, total)
+    }
+    t |> run("select → group_by → sum: key on projected value") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._select(_ * 2)._group_by(_ % 3)._select((K = _._0, S = _._1 |> sum)))
+        // Projected: [20,40,60,22,42,62,24]. Mod 3: 20%3=2, 40%3=1, 60%3=0, 22%3=1, 42%3=0, 62%3=2, 24%3=0.
+        // Buckets: 0→{60,42,24}=126; 1→{40,22}=62; 2→{20,62}=82.
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.S
+        }
+        tt |> equal(126, perKey[0])
+        tt |> equal(62,  perKey[1])
+        tt |> equal(82,  perKey[2])
+    }
+    t |> run("where → select → group_by → sum: filter then project") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ > 3)._select(_ * 10)._group_by(_ % 3)._select((K = _._0, S = _._1 |> sum)))
+        // Survivors: [4,5,6,7,8,9,10]; projected: [40,50,60,70,80,90,100]; mod 3: 40%3=1, 50%3=2, 60%3=0, 70%3=1, 80%3=2, 90%3=0, 100%3=1.
+        // Buckets: 0→{60,90}=150; 1→{40,70,100}=210; 2→{50,80}=130.
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.S
+        }
+        tt |> equal(150, perKey[0])
+        tt |> equal(210, perKey[1])
+        tt |> equal(130, perKey[2])
+    }
+    t |> run("select → where → group_by → sum: project then filter") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._select(_ * 2)._where(_ > 30)._group_by(_ % 3)._select((K = _._0, S = _._1 |> sum)))
+        // Projected: [20,40,60,22,42,62,24]; survivors (>30): [40,60,42,62]; mod 3: 1, 0, 0, 2.
+        // Buckets: 0→{60,42}=102; 1→{40}=40; 2→{62}=62.
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.S
+        }
+        tt |> equal(102, perKey[0])
+        tt |> equal(40,  perKey[1])
+        tt |> equal(62,  perKey[2])
+    }
+    t |> run("chained selects → group_by: v0 → v1 → ... → final bind") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7]._select(_ * 2)._select(_ + 1)._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)))
+        // [1..7] * 2: [2,4,6,8,10,12,14]; +1: [3,5,7,9,11,13,15]; mod 3: 0,2,1,0,2,1,0.
+        // Buckets: 0→{3,9,15}=3; 1→{7,13}=2; 2→{5,11}=2.
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.N
+        }
+        tt |> equal(3, perKey[0])
+        tt |> equal(2, perKey[1])
+        tt |> equal(2, perKey[2])
+    }
+    t |> run("upstream where + named tuple reducer on Person.age") @(tt : T?) {
+        let foldGot <- _fold(_common::people._where(_.age >= 25)._group_by(_.name)._select((K = _._0, N = _._1 |> length, S = _._1 |> select(@(p : _common::Person) => p.age) |> sum)))
+        let refGot  <- (_common::people._where(_.age >= 25)._group_by(_.name)._select((K = _._0, N = _._1 |> length, S = _._1 |> select(@(p : _common::Person) => p.age) |> sum)))
+        tt |> equal(length(refGot), length(foldGot))
+        var refN, refS, foldN, foldS : table<string; int>
+        for (r in refGot) {
+            refN[r.K] = r.N; refS[r.K] = r.S
+        }
+        for (f in foldGot) {
+            foldN[f.K] = f.N; foldS[f.K] = f.S
+        }
+        for (k in keys(refN)) {
+            tt |> equal(refN?[k] ?? -1, foldN?[k] ?? -1)
+            tt |> equal(refS?[k] ?? -1, foldS?[k] ?? -1)
+        }
+    }
+    t |> run("upstream where filters out all → empty result") @(tt : T?) {
+        let got <- _fold([1, 2, 3]._where(_ > 100)._group_by(_ % 3)._select(_._1 |> length))
+        tt |> equal(0, length(got))
+    }
+    t |> run("upstream where + count terminator: number of distinct survivor keys") @(tt : T?) {
+        tt |> equal(3, _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ % 2 == 0)._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)).count()))
+    }
+}
+
+[test]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {
