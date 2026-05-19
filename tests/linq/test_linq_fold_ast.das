@@ -2869,3 +2869,177 @@ def test_aggregate_with_where_fuses(t : T?) {
     }
 }
 
+// ── take_while / skip_while splice targets (PR-G) ──────────────────────
+
+[export, marker(no_coverage)]
+def target_take_while_array_fold() : array<int> {
+    return <- _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_take_while_count_fold() : int {
+    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).count())
+}
+
+[export, marker(no_coverage)]
+def target_take_while_sum_fold() : int {
+    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).sum())
+}
+
+[export, marker(no_coverage)]
+def target_take_while_first_fold() : int {
+    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).first())
+}
+
+[export, marker(no_coverage)]
+def target_skip_while_array_fold() : array<int> {
+    return <- _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_skip_while_count_fold() : int {
+    return _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_skip_while_then_take_while_fold() : int {
+    return _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3)._take_while(_ < 8).count())
+}
+
+[export, marker(no_coverage)]
+def target_select_then_take_while_cascades_fold() : array<int> {
+    // Cascade fingerprint: select precedes take_while → splice bails, tier-2 cascade runs.
+    return <- _fold(each([5, 3, 8, 1])._select(_ * 2)._take_while(_ < 16).to_array())
+}
+
+[test]
+def test_take_while_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_take_while_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "take_while: expected invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "take_while: one for-loop")
+        // take_while is spliced inline as `if (!pred) break` — the library `take_while_impl`
+        // helper must NOT appear as a runtime call.
+        t |> equal(0, count_call(body_expr, "take_while"), "take_while: helper inlined")
+        t |> equal(0, count_call(body_expr, "take_while_impl"), "take_while: impl inlined")
+        t |> equal(0, count_call(body_expr, "take_while_impl_const"), "take_while: impl_const inlined")
+    }
+}
+
+[test]
+def test_take_while_count_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_take_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "take_while count: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "take_while count: one for-loop")
+        t |> equal(0, count_call(body_expr, "take_while"), "take_while count: helper inlined")
+    }
+}
+
+[test]
+def test_take_while_sum_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_take_while_sum_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "take_while sum: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "take_while sum: one for-loop (accumulator lane)")
+        t |> equal(0, count_call(body_expr, "take_while"), "take_while sum: helper inlined")
+        t |> equal(0, count_call(body_expr, "sum"), "take_while sum: sum_impl inlined")
+    }
+}
+
+[test]
+def test_take_while_first_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_take_while_first_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "take_while first: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "take_while first: one for-loop (early-exit lane)")
+        t |> equal(0, count_call(body_expr, "take_while"), "take_while first: helper inlined")
+        t |> equal(0, count_call(body_expr, "first"), "take_while first: first inlined")
+    }
+}
+
+[test]
+def test_skip_while_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_skip_while_array_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "skip_while: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "skip_while: one for-loop")
+        t |> equal(0, count_call(body_expr, "skip_while"), "skip_while: helper inlined")
+        t |> equal(0, count_call(body_expr, "skip_while_impl"), "skip_while: impl inlined")
+        t |> equal(0, count_call(body_expr, "skip_while_impl_const"), "skip_while: impl_const inlined")
+    }
+}
+
+[test]
+def test_skip_while_count_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_skip_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "skip_while count: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "skip_while count: one for-loop")
+        t |> equal(0, count_call(body_expr, "skip_while"), "skip_while count: helper inlined")
+    }
+}
+
+[test]
+def test_skip_while_then_take_while_compose_splices(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_skip_while_then_take_while_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "skip_while+take_while: invoke wrapper")
+        t |> equal(1, count_inner_for_loops(body_expr), "skip_while+take_while: one for-loop")
+        t |> equal(0, count_call(body_expr, "skip_while"), "skip_while+take_while: skip_while inlined")
+        t |> equal(0, count_call(body_expr, "take_while"), "skip_while+take_while: take_while inlined")
+    }
+}
+
+[test]
+def test_select_then_take_while_cascades_to_tier2(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_then_take_while_cascades_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched, "select-then-take_while: target found")
+        // Cascade tier-2 fingerprint: multiple outer let-vars from fold_linq_default's
+        // intermediate-pass pipeline. Distinct from the single-invoke splice shape.
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "select-then-take_while: tier-2 cascade fingerprint (>=2 outer lets)")
+    }
+}
+
