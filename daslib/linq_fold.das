@@ -2957,8 +2957,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
                 }
             }
             if (projElemType == null) return null
-            // Strip constness: the projection returns an int-valued (or similar) expression typed as `T const`, but `array<T const>` is unwritable.
-            projElemType.flags.constant = false
+            // Strip both constness and ref-ness — `array<T const>` is unwritable, `array<T&>` is invalid as buffer element. Matches the canonical pattern used by plan_reverse/plan_distinct/etc.
+            projElemType = strip_const_ref(projElemType)
             projection = fold_linq_cond(cll._0.arguments[1], itName)
             if (projection == null) return null
             elementType = projElemType
