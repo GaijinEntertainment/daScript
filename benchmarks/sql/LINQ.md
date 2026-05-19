@@ -36,6 +36,7 @@ See `~/.claude/plans/keen-hopping-balloon.md` and `~/.claude/plans/enumerated-ba
 | 3+ BufferGroupBy | `src \|> group_by[_lazy](key) \|> select(group_proj) [\|> {to_array, count}]?` — incremental-aggregate fusion: emits `table<unique_key; tuple<KT; AccT>>` updated per element. Recognized reducers: `_._1 \|> {length, count, sum, long_count}`. Bare + named-tuple wrap `(K=_._0, V=_._1\|>reducer)` both supported. Bails to tier 2 for multi-reducer, `having_*`, **or any upstream `where_*`/`select*` between source and group_by** (upstream fusion deferred). | ✅ core |
 | 3+ BufferGroupBy — inner-select-sum (PR-A1) | Recognizes `_._1 \|> select(<lambda>) \|> sum` after `group_by_lazy(key)`. Splice peels the inner lambda body and inlines it directly into the per-element `entry._1 += <body>` site, accumulator type derived from the outer sum's resolved return type. Per-element emission split into miss-branch (init) and hit-branch (incremental update) to support this and the future min/max/first arms in PR-A2. Bare body and named-tuple wrap both supported. | ✅ |
 | 3+ BufferGroupBy — min/max/first + multi-reducer (PR-A2) | Recognizer generalized to bare + inner-select `{sum, min, max, first}` (8 reducer shapes). Planner walks an `array<ReducerSpec>` so the named-tuple wrap extends from 2-slot to N+1-slot (key at slot 0, reducers at slots 1..N) — a single per-element pass fuses N reducers. min/max use direct `<`/`>` on workhorse acc types, fall back to `_::less` for non-workhorse. first emits miss-init only (no hit update); `first_or_default(d)` rejects on the 2-arg arity check and cascades. `average` and key-not-at-slot-0 cascade. | ✅ |
+| 3+ BufferGroupBy — upstream where/select fusion (PR-B) | `plan_group_by` walks calls between source and `group_by_lazy`, fusing chains of `where_*` and `select*` into the per-element loop. Selects bind projected values to intermediate vars (referenced by key, table value type, and reducer splices); wheres AND-merge into a guard around the table update. Bails on any other upstream op (distinct/order_by/etc. cascade to tier 2). Closes the `arr \|> where \|> group_by \|> aggregate` shape — one of the most common shapes in the operator catalogue. | ✅ |
 | 3+ Buffer remainder | MultiSourceZip, BufferedJoin, group_by `average` reducer (2-slot per-key acc + post-process division). Currently cascade to tier 2 array-shape. | ⏳ |
 | 4 | Final coverage pass + docs; full 3-way comparison table refresh; parity-test sweep | ⏳ |
 
@@ -68,6 +69,9 @@ Notation: `—` means the variant is not applicable for this benchmark (operator
 | groupby_max | `group_by → select((K, select → max))` | 173 | 108 | **43** (PR-A2 inner-select-max) |
 | groupby_first | `group_by → select((K, first))` | — | 71 | **36** (PR-A2 bare-first) |
 | groupby_multi_reducer | `group_by → select((K, length, select → sum, select → max))` | 189 | 139 | **53** (PR-A2 multi-reducer fused pass) |
+| groupby_where_count | `where → group_by → select((K, length))` | 75 | 65 | **23** (PR-B upstream where fused) |
+| groupby_where_sum | `where → group_by → select((K, select → sum))` | 86 | 80 | **23** (PR-B upstream where + inner-select-sum fused) |
+| groupby_select_sum | `select → group_by → select((K, sum))` | — | 110 | **58** (PR-B upstream select fused via intermediate var bind) |
 | chained_where | `where → where → count` | 36 | 45 | 17 |
 | zip_dot_product | `zip → select → sum` | — | 53 | 37 |
 | join_count | `join → count` | —\*\* | 116 | 122 |
@@ -425,11 +429,45 @@ Closes the remaining BufferGroupBy gaps from PR-A1's deferred-follow-up list. Tw
 
 All 6 splice variants land within ~36–53 ns/op — the per-element work is bounded by the single hash op + slot mutations regardless of which reducer or how many. The multi-reducer ~53 ns/op pays a small overhead per extra slot (~5 ns each), still beats SQL by 3.6×.
 
-### Deferred for PR-B / PR-C / follow-ups
+### Deferred for PR-C / follow-ups
 
 - `average` reducer (2-slot per-key acc + post-process division — separate follow-up)
-- Upstream `where_*` / `select*` fusion into `group_by` (PR-B)
 - `reverse_take` backward index loop on array sources (PR-C)
+- `having_*` between `group_by` and `select(group_proj)` (still cascades to tier 2)
+
+## Phase 3+ groupby reducer expansion — upstream where/select fusion (PR-B)
+
+Closes the explicit deferred-bail from PR #2721 onward: any upstream call between source and `group_by_lazy` would cascade to tier 2. PR-B walks the upstream segment and fuses chains of `where_*` / `select*` into the per-element loop.
+
+**How it lands:**
+
+1. **Walk upstream calls** (between `top` and `group_by_lazy`) in source-to-leaf order. For `select`: bind the previous projection (if any) to a fresh `var v_N := projection_{N-1}` intermediate, then compute the new projection peeled to reference the latest bind name. Update `elemType` to the post-projection type so the table value type witness (`default<elemType>`) matches what the key block will receive. For `where_`: bind any pending projection first (so the predicate references a stable name — no double-eval), then AND-merge the peeled predicate into `whereCond`. For anything else (`distinct`, `order_by`, etc.): bail to tier 2.
+
+2. **Final bind** before recognizer call: if a projection is still unbound after the walk, bind it now so `itName` (the post-projection name) is stable. Inner-select reducer recognition uses this `itName` to fold the inner lambda body — without the bind, the recognizer would dangle on a name that the typer hasn't seen.
+
+3. **Per-element emission split into core + wrapping.** The 3-stmt core (`let k = invoke(key, it); let uk = unique_key(k); unsafe { table update }`) is wrapped with `if (whereCond) { core }`, then prepended with `intermediateBinds`. The result splices into the for-loop body via `$b(bodyStmts)`.
+
+**Bail cases (cascade to tier 2):**
+- Any upstream op other than `where_*` / `select*` (distinct, order_by, take, skip, etc.)
+- All recognized bail cases from PR-A1/PR-A2 still apply (having_, unrecognized reducer, key not at slot 0, etc.)
+
+### Headline (PR-B)
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|
+| groupby_where_count | `each(arr) → where(price>500) → group_by(brand) → select((K, length)) → to_array` | 75 | 65 | **23** | **2.8× over m3 / 3.3× over m1 SQL** |
+| groupby_where_sum | `each(arr) → where(price>500) → group_by(brand) → select((K, select(price) → sum)) → to_array` | 86 | 80 | **23** | **3.5× over m3 / 3.7× over m1 SQL** |
+| groupby_select_sum | `each(arr) → select(c.price) → group_by(_ % 100) → select((K, sum)) → to_array` | — | 110 | **58** | **1.9× over m3** (100 bucket keys vs 5 for brand → result-build cost dominates; m1 omitted: `_sql` requires `_group_by(_.Field)`, no expression keys) |
+| groupby_count (regression check) | `each(arr) → group_by(brand) → select((K, length)) → to_array` | 142 | 71 | **36** | parity — PR-B core refactor preserves the count splice |
+| groupby_sum (regression check) | inner-select-sum chain | 170 | 101 | **36** | parity — PR-A1 splice preserved |
+| groupby_multi_reducer (regression check) | 4-slot named tuple | 189 | 139 | **53** | parity — PR-A2 multi-reducer preserved |
+
+The `where`-fused benchmarks (groupby_where_count and groupby_where_sum) drop to ~23 ns/op — even faster than the no-upstream `groupby_count` (36 ns/op) because the where filter reduces the table-update count (only ~50% of source elements pass `price > 500`). The win formula: fewer hash ops × the same per-survivor cost = lower per-element averaged time.
+
+### Deferred for PR-C / follow-ups
+
+- `having_*` between `group_by` and `select(group_proj)` (HAVING-clause shape — needs to defer the predicate to the result-build loop, not the per-element table-update loop)
+- Other upstream ops: `distinct`, `order_by`, `skip`/`take` (skip/take before group_by is rare; distinct/order_by would need streaming dedup / pre-sort integration)
 
 ## Operator-coverage checklist (parity tests)
 
@@ -442,7 +480,7 @@ The 24 benchmarks above cover the most common shapes. The end-game target is one
 | `test_linq_querying.das` | any/all/contains | any_match, all_match, contains_match | ✅ core |
 | `test_linq_transform.das` | select/select_many/zip | to_array_filter, zip_dot_product | ✅ select/zip; `select_many` ⏳ |
 | `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (this PR; `reverse \|> take(N)` shape is a regression vs lazy iterator — see Phase 3+ notes) |
-| `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ⏳ `average`, `having_`, upstream where/select fusion |
+| `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer, groupby_where_count, groupby_where_sum, groupby_select_sum | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ✅ upstream where_/select* fusion (PR-B); ⏳ `average`, `having_` |
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
 | `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
 | `test_linq_set.das` | distinct/union/except/intersect/unique | distinct_count, distinct_take | ✅ distinct + distinct_by (streaming dedup, this PR); union/except/intersect/unique ⏳ |
