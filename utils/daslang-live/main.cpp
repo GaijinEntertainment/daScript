@@ -29,6 +29,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 using namespace das;
 
@@ -571,8 +572,8 @@ static int run_lifecycle(const string & fn) {
 
 // Strict port parse: rejects trailing garbage (atoi would silently accept
 // "9090abc" → 9090). Returns 0 on any failure; caller treats 0 as "no override".
-// Matches the .das side's `try_to_int` semantics so CLI / env / config all
-// reject the same inputs.
+// Matches the .das side's `try_to_int` semantics so both sides reject the
+// same inputs.
 static int parse_port_strict(const char * s) {
     if (!s || !*s) return 0;
     char * end = nullptr;
@@ -580,6 +581,30 @@ static int parse_port_strict(const char * s) {
     if (end == s || *end != '\0') return 0;
     if (v <= 0 || v > 65535) return 0;
     return int(v);
+}
+
+// Scan the FULL argv (including any post-`--` slice) for `--live-port N` /
+// `--live-port=N`. Last occurrence wins, matching `clargs::find_flag_raw_value`
+// on the .das side. Returns 0 if no valid value found — caller defaults.
+//
+// Why full-argv: daslang-live's own arg loop stops at `--` and forwards the
+// rest to the script, but `live_api`'s [init] scans the full argv. Both
+// sides MUST agree on the same source; otherwise the lock would key on one
+// port while the HTTP server binds another (the original review-round-2
+// Thread 5 bug).
+static int find_live_port_in_argv(int argc, char * argv[]) {
+    int port = 0;
+    for (int i = 1; i < argc; ++i) {
+        const char * a = argv[i];
+        if (strcmp(a, "--live-port") == 0 && i + 1 < argc) {
+            int p = parse_port_strict(argv[++i]);
+            if (p > 0) port = p;  // continue scanning — last valid wins
+        } else if (strncmp(a, "--live-port=", 12) == 0) {
+            int p = parse_port_strict(a + 12);
+            if (p > 0) port = p;
+        }
+    }
+    return port;
 }
 
 static void print_help() {
@@ -595,7 +620,7 @@ static void print_help() {
     tout << "  -heap-report       - dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules   - skip loading dynamic modules\n";
     tout << "  --no-dump-leaks    - silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
-    tout << "  --live-port <N>    - port for the REST API (overrides config + env; default 9090)\n";
+    tout << "  --live-port <N>    - port for the REST API (default 9090, range 1-65535); recognized pre or post `--`\n";
     tout << "  --                 - separator; everything after is forwarded to the script (get_user_args)\n";
     tout << "  -h, --help         - this help\n";
 }
@@ -700,21 +725,13 @@ int main(int argc, char * argv[]) {
         } else if (arg == "--no-dump-leaks") {
             dumpLeaks = false;
         } else if (arg == "--live-port" && i + 1 < argc) {
-            int port = parse_port_strict(argv[++i]);
-            if (port == 0) {
-                tout << "invalid --live-port value: " << argv[i] << " (expected 1-65535)\n";
-                return 1;
-            }
-            g_resolvedLivePort = port;
-        } else if (arg.compare(0, 12, "--live-port=") == 0 && arg.size() > 12) {
-            // Accept `--live-port=N` form for parity with the .das side
-            // (`find_flag_raw_value` handles both).
-            int port = parse_port_strict(arg.c_str() + 12);
-            if (port == 0) {
-                tout << "invalid --live-port value: " << (arg.c_str() + 12) << " (expected 1-65535)\n";
-                return 1;
-            }
-            g_resolvedLivePort = port;
+            // Consume both flag and value here so the unknown-option branch
+            // doesn't reject them. Real parsing happens in
+            // find_live_port_in_argv() after the loop — that scan also covers
+            // post-`--` occurrences which this loop never sees.
+            ++i;
+        } else if (arg.compare(0, 12, "--live-port=") == 0) {
+            // Consume `--live-port=N` for the same reason; value parsed below.
         } else if (arg == "-h" || arg == "--help") {
             print_help();
             return 0;
@@ -748,27 +765,11 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    // Resolve port: explicit --live-port wins; else env DASLANG_LIVE_PORT; else default 9090.
-    // The .das side (live_api module) re-reads the same env so the lock key and HTTP bind
-    // can never disagree.
-    if (g_resolvedLivePort == 0) {
-        if (const char * envPort = getenv("DASLANG_LIVE_PORT")) {
-            g_resolvedLivePort = parse_port_strict(envPort);
-        }
-    }
+    // Resolve port from full argv (pre AND post `--`) so the lock key here
+    // and the HTTP bind on the .das side both see the same source. No env,
+    // no config file — keep this stateless. Default to 9090 if no override.
+    g_resolvedLivePort = find_live_port_in_argv(argc, argv);
     if (g_resolvedLivePort == 0) g_resolvedLivePort = 9090;
-
-    // Re-export the resolved port so the .das module init picks it up as a single
-    // source of truth (otherwise an empty env + explicit --live-port would drift).
-    {
-        char portStr[16];
-        snprintf(portStr, sizeof(portStr), "%d", g_resolvedLivePort);
-#ifdef _WIN32
-        _putenv_s("DASLANG_LIVE_PORT", portStr);
-#else
-        setenv("DASLANG_LIVE_PORT", portStr, 1);
-#endif
-    }
 
     if (!acquire_single_instance(g_resolvedLivePort)) {
         fprintf(stderr, "ERROR: another instance of daslang-live is already running on port %d\n", g_resolvedLivePort);

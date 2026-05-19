@@ -35,7 +35,6 @@ require daslib/debugger
 require daslib/clargs
 require daslib/strings_convert
 require strings
-require daslib/fio
 require live_host
 
 var live_api_port : int = 9090
@@ -44,7 +43,11 @@ var live_api_port : int = 9090
 
 [export]
 def live_api_set_port(port : int) {
-    //! Sets the port for the HTTP server. Must be called before agent installs.
+    //! Sets the port for the HTTP server. Must be called BEFORE the
+    //! LiveApiAgent constructor runs — the server binds at construction
+    //! time and never rebinds. Later setter calls only update the global
+    //! (visible to ``live_api_help_json``'s URL interpolation); the actual
+    //! listening socket stays on the construction-time port.
     live_api_port = port
 }
 
@@ -57,45 +60,34 @@ def parse_port_string(s : string) : int {
 }
 
 def parse_argv_port(argv : array<string>) : int {
-    //! Scans ``argv`` for ``--live-port N`` and returns the parsed port, else 0.
+    //! Scans ``argv`` for ``--live-port N`` (or ``--live-port=N``) and
+    //! returns the parsed port, else 0. Scans the FULL argv, including
+    //! any post-``--`` portion, so daslang-live's C++ arg loop (which
+    //! stops at ``--``) and this scan must agree on the same source.
     let argv_val = find_flag_raw_value(argv, "--live-port")
     if (argv_val |> is_some) return parse_port_string(argv_val |> unwrap)
     return 0
 }
 
-def parse_config_json_port(json_text : string) : int {
-    //! Parses ``json_text`` as a JSON object and returns its ``"port"`` field as int, else 0.
-    //! Empty / unparseable / missing-key / out-of-range all return 0.
-    if (empty(json_text)) return 0
-    var err = ""
-    let jv = read_json(json_text, err)
-    let p = jv?.port ?? 0
-    return (p > 0 && p < 65536) ? p : 0
-}
-
-def resolve_port_override_from(argv : array<string>; env_val : string; config_text : string) : int {
-    //! Pure precedence resolver. Returns the first valid port from
-    //! argv (``--live-port``) → env value → config-file JSON; 0 if none.
-    let p1 = parse_argv_port(argv)
-    if (p1 > 0) return p1
-    let p2 = parse_port_string(env_val)
-    if (p2 > 0) return p2
-    return parse_config_json_port(config_text)
+def resolve_port_override_from(argv : array<string>) : int {
+    //! Pure precedence resolver. Returns the argv ``--live-port`` value,
+    //! or 0 if none / invalid (caller keeps its default).
+    return parse_argv_port(argv)
 }
 
 def resolve_port_override() : int {
-    //! Reads real argv, env, and config-file and returns the resolved override.
-    //! Returns 0 if no source produced a valid port (caller should keep its default).
+    //! Reads real argv and returns the override. 0 = no override.
     let argv <- get_command_line_arguments()
-    let env_val = has_env_variable("DASLANG_LIVE_PORT") ? string(get_env_variable("DASLANG_LIVE_PORT")) : ""
-    let cfg_text = fread("{get_das_root()}/daslang-live.cfg.json")
-    return resolve_port_override_from(argv, env_val, cfg_text)
+    return resolve_port_override_from(argv)
 }
 
 [init]
 def init_live_api_port() {
-    //! Module init: seed live_api_port from override chain. Caller's later
-    //! live_api_set_port() still wins (runs after init).
+    //! Module init: seed ``live_api_port`` from argv ``--live-port`` if
+    //! present. A ``live_api_set_port(p)`` call BEFORE the agent constructs
+    //! still wins (the [init] runs at module load; user-script ``main()``
+    //! can override it). Calls AFTER the constructor only update the global,
+    //! not the bound socket (see ``live_api_set_port`` doc).
     let p = resolve_port_override()
     if (p > 0) {
         live_api_port = p

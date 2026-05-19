@@ -130,26 +130,31 @@ def public build_live_script_args(file, project, project_root : string;
     return script_args
 }
 
-def private port_is_safe(s : string) : bool {
+def private port_in_range(s : string) : bool {
     // Used before interpolating `port` into a shell-ready argv string (see
-    // `script_args` below). Restrict to digits + length cap (65535 is 5 chars)
-    // so quotes / spaces / shell metacharacters can never reach `system()`.
+    // `script_args` below). Reject anything that isn't digits-only AND in
+    // [1, 65535], so:
+    //   - shell metacharacters (quotes / spaces / `$`) can never reach
+    //     `system()`,
+    //   - out-of-range ports ("0", "65536", "99999") fail fast here instead
+    //     of through a 10s daslang-live "did not respond" timeout.
     if (empty(s) || length(s) > 5) return false
-    var ok = true
+    var n = 0
     peek_data(s) $(bytes) {
         for (b in bytes) {
             let c = int(b)
             if (c < int('0') || c > int('9')) {
-                ok = false
+                n = -1
                 return
             }
+            n = n * 10 + (c - int('0'))
         }
     }
-    return ok
+    return n > 0 && n <= 65535
 }
 
 def do_live_launch(file, project, project_root, port : string) : string {
-    if (!empty(port) && !port_is_safe(port)) return make_tool_result("invalid port '{port}': expected digits 1-65535", true)
+    if (!empty(port) && !port_in_range(port)) return make_tool_result("invalid port '{port}': expected 1-65535", true)
     let p = empty(port) ? "9090" : port
     // Check if already running
     if (live_is_running(p)) {

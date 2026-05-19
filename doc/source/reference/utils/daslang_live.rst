@@ -497,8 +497,21 @@ typical script requires only one:
 REST API (``live/live_api``)
 ----------------------------
 
-``require live/live_api`` starts an HTTP server on port 9090.
-Configure the port with ``live_api_set_port()`` before ``init()``.
+``require live/live_api`` starts an HTTP server on port 9090. The bound
+port is resolved at module init by:
+
+1. ``live_api_set_port(p)`` --- programmatic; must be called BEFORE
+   the agent constructs (the server binds at construction time and
+   never rebinds).
+2. Script argv ``--live-port N`` (or ``--live-port=N``) anywhere in
+   ``get_command_line_arguments()``, including the post-``--`` slice.
+3. Default ``9090``.
+
+For ``daslang-live`` (the binary), pass ``--live-port N`` to the binary
+itself --- the C++ side scans the same full argv and keys its
+single-instance lock on the resolved port, so two daslang-live
+instances on different ports coexist on the same host. Invalid values
+(non-numeric, out of ``[1, 65535]``) fall through to the default.
 
 Endpoints
 ^^^^^^^^^
@@ -685,18 +698,41 @@ CLI reference
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 75
+   :widths: 30 70
 
    * - Flag
      - Description
    * - ``-project <file>``
-     - Project file (``.das_project``).
+     - Project file (``.das_project``) for module resolution.
+   * - ``-project_root <path>``
+     - Project root --- the parent of ``modules/`` for daspkg-style
+       module resolution. Equivalent to passing ``project_root`` to
+       MCP tools.
    * - ``-dasroot <path>``
      - Override ``DAS_ROOT``.
    * - ``-cwd``
      - Change to the script's directory before loading.
+   * - ``-v1syntax``
+     - Use v1 syntax (default: v2).
+   * - ``-track-allocations``
+     - Track where heap allocations came from.
+   * - ``-heap-report``
+     - Dump heap contents on shutdown.
+   * - ``--no-dyn-modules``
+     - Skip loading dynamic modules.
+   * - ``--dump-leaks`` / ``--no-dump-leaks``
+     - Toggle JobStatus / HandleRegistry leak dumps at exit (default:
+       dump).
+   * - ``--live-port <N>``
+     - REST API port. Default 9090; range ``[1, 65535]``. The
+       single-instance lock is keyed on this value, so two binaries on
+       different ports coexist on the same host.
    * - ``--``
-     - Separator: everything after is passed to the script.
+     - Separator: everything after is passed to the script. Note that
+       ``--live-port`` is recognized BOTH before and after ``--`` so
+       the C++ lock and the .das HTTP server agree on the same source.
+   * - ``-h``, ``--help``
+     - Print help.
 
 
 Examples
@@ -751,7 +787,10 @@ Tips and gotchas
 - Failed reload pauses the host --- check ``GET /error`` or
   ``get_last_error()``.
 - A single-instance lock prevents running two ``daslang-live.exe``
-  processes on the same script.
+  processes on the same port. The lock key includes the resolved port
+  (``daslang-live-single-instance-<port>`` on Windows /
+  ``/tmp/daslang-live-<port>.lock`` on POSIX), so two instances on
+  different ports coexist.
 - Guard ``decs::restart()`` with ``if (!is_reload())`` to avoid
   wiping restored entities.
 
