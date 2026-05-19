@@ -1915,6 +1915,134 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
 }
 
 [macro_function]
+def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
+    // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` against matching specs; any other use of `<hb>` returns null and cascades.
+    if (expr == null) return expr
+    // Peel typer-inserted ExprRef2Value wrappers (same pattern as is_bind_field_access).
+    while (expr is ExprRef2Value) {
+        expr = (expr as ExprRef2Value).subexpr
+    }
+    if (expr is ExprCall) {
+        var c = expr as ExprCall
+        if (c.func != null && (c.arguments |> length) == 1) {
+            var fnName = string(c.func.name)
+            if (c.func.fromGeneric != null) {
+                fnName = string(c.func.fromGeneric.name)
+            }
+            if (is_bind_field_access(c.arguments[0], hbName, 1)) {
+                for (s in specs) {
+                    if (s.innerBody == null && s.name == fnName) return mk_slot_ref(expr.at, kvName, s.slot)
+                }
+                return null
+            }
+            let inner = c.arguments[0]
+            if (inner != null && inner is ExprCall) {
+                let ic = inner as ExprCall
+                if (ic.func != null && (ic.arguments |> length) == 2 && is_bind_field_access(ic.arguments[0], hbName, 1)) {
+                    var innerName = string(ic.func.name)
+                    if (ic.func.fromGeneric != null) {
+                        innerName = string(ic.func.fromGeneric.name)
+                    }
+                    if (innerName == "select") {
+                        let comboName = "{fnName}_inner_select"
+                        for (s in specs) {
+                            if (s.name == comboName) return mk_slot_ref(expr.at, kvName, s.slot)
+                        }
+                        return null
+                    }
+                }
+            }
+        }
+        for (i in 0 .. (c.arguments |> length)) {
+            var sub = rewrite_having_pred(c.arguments[i], hbName, kvName, specs)
+            if (sub == null) return null
+            c.arguments[i] = sub
+        }
+        return expr
+    }
+    if (expr is ExprField) {
+        var f = expr as ExprField
+        if (f.value != null && f.value is ExprVar) {
+            let v = f.value as ExprVar
+            if (v.name == hbName) {
+                if (f.name == "_0") return mk_slot_ref(expr.at, kvName, 0)
+                return null
+            }
+        }
+        var sub = rewrite_having_pred(f.value, hbName, kvName, specs)
+        if (sub == null) return null
+        f.value = sub
+        return expr
+    }
+    if (expr is ExprVar) {
+        let v = expr as ExprVar
+        if (v.name == hbName) return null
+        return expr
+    }
+    if (expr is ExprOp1) {
+        var op = expr as ExprOp1
+        var sub = rewrite_having_pred(op.subexpr, hbName, kvName, specs)
+        if (sub == null) return null
+        op.subexpr = sub
+        return expr
+    }
+    if (expr is ExprOp2) {
+        var op = expr as ExprOp2
+        var l = rewrite_having_pred(op.left, hbName, kvName, specs)
+        if (l == null) return null
+        op.left = l
+        var r = rewrite_having_pred(op.right, hbName, kvName, specs)
+        if (r == null) return null
+        op.right = r
+        return expr
+    }
+    if (expr is ExprOp3) {
+        var op = expr as ExprOp3
+        var s = rewrite_having_pred(op.subexpr, hbName, kvName, specs)
+        if (s == null) return null
+        op.subexpr = s
+        var l = rewrite_having_pred(op.left, hbName, kvName, specs)
+        if (l == null) return null
+        op.left = l
+        var r = rewrite_having_pred(op.right, hbName, kvName, specs)
+        if (r == null) return null
+        op.right = r
+        return expr
+    }
+    return expr
+}
+
+class private HbScanner : AstVisitor {
+    // Safety net for rewrite_having_pred — flags any ExprVar reference that survived
+    // the targeted rewrite (e.g., because the predicate contained a node type the walker
+    // doesn't recurse into, like ExprAt or ExprInvoke from a non-peelable lambda).
+    vname : string
+    hit : bool = false
+    def HbScanner(n : string) {
+        vname = n
+    }
+    def override visitExprVar(var expr : ExprVar?) : Expression? {
+        if (expr.name == vname) {
+            hit = true
+        }
+        return expr
+    }
+}
+
+def private expr_uses_var(var e : Expression?; name : string) : bool {
+    if (e == null) return false
+    var astVisitor = new HbScanner(name)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_expression(e, astVisitorAdapter)
+    }
+    let hit = astVisitor.hit
+    unsafe {
+        delete astVisitor
+    }
+    return hit
+}
+
+[macro_function]
 def private plan_group_by(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
@@ -1932,7 +2060,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     if (empty(calls) || calls.back()._1.name != "select") return null
     var groupProjCall = calls.back()._0
     calls |> pop
-    // The call immediately before select must be group_by_lazy with a key arg.
+    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten below against accumulator slots.
+    var havingCall : ExprCall?
+    if (!empty(calls) && calls.back()._1.name == "having_") {
+        havingCall = calls.back()._0
+        calls |> pop
+    }
+    // The call immediately before must be group_by_lazy with a key arg.
     if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
     var groupByCall = calls.back()._0
     calls |> pop
@@ -2015,6 +2149,16 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     if (groupProjBody == null || groupProjBody._type == null) return null
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
+    // Rewrite optional having predicate against accumulator slots; bails on anything other than _._0 / reducer(_._1) matched to a select slot.
+    var havingPred : Expression?
+    if (havingCall != null) {
+        let hbName = "`hb`{at.line}`{at.column}"
+        var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
+        if (rawPred == null) return null
+        havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
+        // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
+        if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
+    }
     // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
@@ -2115,8 +2259,21 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     }
     // Lane: count terminator returns length(tab) directly (number of groups).
     if (terminatorName == "count") {
-        stmts |> push <| qmacro_expr() {
-            return length($i(tabName))
+        if (havingPred != null) {
+            let cntName = "`cnt`{at.line}`{at.column}"
+            stmts |> push <| qmacro_block() {
+                var $i(cntName) = 0
+                for ($i(kvName) in values($i(tabName))) {
+                    if ($e(havingPred)) {
+                        $i(cntName) ++
+                    }
+                }
+                return $i(cntName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return length($i(tabName))
+            }
         }
     } else {
         // to_array lane: build result buffer by walking the table. Each output element
@@ -2144,9 +2301,19 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         stmts |> push <| qmacro_expr() {
             $i(bufName) |> reserve(length($i(tabName)))
         }
-        stmts |> push <| qmacro_expr() {
-            for ($i(kvName) in values($i(tabName))) {
-                $i(bufName) |> push_clone($e(outputExpr))
+        if (havingPred != null) {
+            stmts |> push <| qmacro_expr() {
+                for ($i(kvName) in values($i(tabName))) {
+                    if ($e(havingPred)) {
+                        $i(bufName) |> push_clone($e(outputExpr))
+                    }
+                }
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                for ($i(kvName) in values($i(tabName))) {
+                    $i(bufName) |> push_clone($e(outputExpr))
+                }
             }
         }
         stmts |> push(buffer_return(bufName, expr._type.isIterator))

@@ -2315,6 +2315,101 @@ def test_group_by_having_cascades_to_tier2(t : T?) {
     }
 }
 
+[export, marker(no_coverage)]
+def target_group_by_having_length_match_fold() : array<tuple<K : int; N : int>> {
+    // PR-D splice: `_having(_._1|>length>=N)` between group_by_lazy and select where the select
+    // has a matching length slot — predicate rewrites to `kv._{slot}>=N` and wraps push_clone.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._group_by_lazy(_ % 3)._having(_._1 |> length >= 4)._select((K = _._0, N = _._1 |> length)))
+}
+
+[test]
+def test_group_by_having_length_match_splices(t : T?) {
+    // Single-hash hot path (no key_exists) + no runtime having_/select call in the splice body.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_length_match_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "expected splice wrapper")
+        t |> equal(0, count_call(body_expr, "key_exists"))
+        t |> success(count_call(body_expr, "unique_key") >= 1, "table-update uses unique_key")
+        t |> equal(0, count_call(body_expr, "having_"))
+        t |> equal(0, count_call(body_expr, "group_by_lazy"))
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_having_count_terminator_fold() : int {
+    // PR-D count terminator: result-build counts only the buckets passing the rewritten predicate.
+    return _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._group_by_lazy(_ % 3)._having(_._1 |> length >= 4)._select((K = _._0, N = _._1 |> length)) |> count())
+}
+
+[test]
+def test_group_by_having_count_terminator_splices(t : T?) {
+    // count + having: no length(tab) shortcut (we have to inspect each entry); the splice emits
+    // a counter loop instead — `having_` and `group_by_lazy` should still be absent.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_count_terminator_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "expected splice wrapper")
+        t |> equal(0, count_call(body_expr, "having_"))
+        t |> equal(0, count_call(body_expr, "group_by_lazy"))
+        t |> equal(0, count_call(body_expr, "key_exists"))
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_having_unmatched_cascades() : array<tuple<K : int; N : int>> {
+    // BAIL: having uses sum but the select has only length — no matching slot, so the planner
+    // returns null and the chain cascades to tier 2.
+    return <- _fold([1, 2, 3, 4, 5, 6]._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)))
+}
+
+[test]
+def test_group_by_having_unmatched_cascades_to_tier2(t : T?) {
+    // Cascade fingerprint: multiple pass_N let-vars (group, having, select all separate).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_unmatched_cascades)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_having_raw_bucket_cascades() : array<tuple<K : int; N : int>> {
+    // BAIL: predicate touches _._1 outside any matched reducer (raw bucket-array length probe).
+    // is_bind_field_access on _._1 alone (used as condition value) is not in the recognized set.
+    return <- _fold([1, 2, 3, 4, 5, 6]._group_by_lazy(_ % 2)._having(empty(_._1))._select((K = _._0, N = _._1 |> length)))
+}
+
+[test]
+def test_group_by_having_raw_bucket_cascades_to_tier2(t : T?) {
+    // Cascade fingerprint: multiple pass_N let-vars.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_raw_bucket_cascades)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
 [test]
 def test_reverse_select_pushes_projection_not_source(t : T?) {
     // R3: select before reverse — the loop pushes the projected value, not the

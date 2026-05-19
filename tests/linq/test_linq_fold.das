@@ -1987,6 +1987,134 @@ def test_group_by_upstream_select_after_where_is_lazy(t : T?) {
 }
 
 [test]
+def test_group_by_having_fold_parity(t : T?) {
+    // PR-D: `_group_by_lazy(k) |> _having(p) |> _select(group_proj) [|> count]` — having filters
+    // groups at result-build time. The predicate references _._0 (key) and/or reducer calls on _._1
+    // that match an existing select-side reducer slot; everything else cascades to tier 2.
+    t |> run("bare-form length-match: filter buckets by size") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let got <- _fold(nums._group_by_lazy(_ % 3)._having(_._1 |> length >= 4)._select(_._1 |> length))
+        // Buckets %3: 0=[3,6,9](3), 1=[1,4,7,10](4), 2=[2,5,8](3). Keep len>=4 → bucket 1 only.
+        var total = 0
+        for (c in got) {
+            total += c
+        }
+        tt |> equal(4, total)
+        var cnt = 0
+        for (_x in got) {
+            cnt ++
+        }
+        tt |> equal(1, cnt)
+    }
+    t |> run("named-tuple form: length-match preserves output shape") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let got <- _fold(nums._group_by_lazy(_ % 3)._having(_._1 |> length >= 4)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(1, seen |> length)
+        tt |> equal(4, seen[1])
+    }
+    t |> run("count terminator with having") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let c = _fold(nums._group_by_lazy(_ % 3)._having(_._1 |> length >= 4)._select((K = _._0, N = _._1 |> length)) |> count())
+        tt |> equal(1, c)
+    }
+    t |> run("predicate references key (_._0)") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // Keep buckets where length >= key. key 0 → len 3 ≥ 0 ✓; key 1 → 4 ≥ 1 ✓; key 2 → 3 ≥ 2 ✓ (all three pass).
+        let got <- _fold(nums._group_by_lazy(_ % 3)._having(_._1 |> length >= _._0)._select((K = _._0, N = _._1 |> length)))
+        var cnt = 0
+        for (_x in got) {
+            cnt ++
+        }
+        tt |> equal(3, cnt)
+    }
+    t |> run("all buckets filtered out") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5]
+        let got <- _fold(nums._group_by_lazy(_ % 5)._having(_._1 |> length > 1)._select(_._1 |> length))
+        var cnt = 0
+        for (_x in got) {
+            cnt ++
+        }
+        tt |> equal(0, cnt)
+    }
+    t |> run("empty source") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by_lazy(_)._having(_._1 |> length > 0)._select(_._1 |> length))
+        var cnt = 0
+        for (_x in got) {
+            cnt ++
+        }
+        tt |> equal(0, cnt)
+    }
+    t |> run("upstream where + having: both fuse") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // where >2 then group %3: 0=[3,6,9](3), 1=[4,7,10](3), 2=[5,8](2); having len>=3 → 0,1.
+        let got <- _fold(nums._where(_ > 2)._group_by_lazy(_ % 3)._having(_._1 |> length >= 3)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(3, seen[1])
+    }
+    t |> run("inner-select-sum reducer matches in having") @(tt : T?) {
+        // Both select and having reference _._1 |> select(...) |> sum on the same projection.
+        let arr = [1, 2, 3, 4, 5, 6, 7, 8]
+        // Buckets %3: 0=[3,6](sum=9), 1=[1,4,7](sum=12), 2=[2,5,8](sum=15). Having sum>10 → 1,2.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> select($(x : int) => x * 1) |> sum > 10)._select((K = _._0, S = _._1 |> select($(x : int) => x * 1) |> sum)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.S
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(12, seen[1])
+        tt |> equal(15, seen[2])
+    }
+}
+
+[test]
+def test_group_by_having_unhandled_node_cascades(t : T?) {
+    // PR-D safety: any unhandled node type that references `hb` (ExprAt for `_._1[0]`,
+    // ExprInvoke from a non-peelable lambda, etc.) must NOT silently leak `hbName` into
+    // the result-build splice — instead the planner bails and the chain cascades.
+    t |> run("ExprAt on bucket (_._1[0]) cascades to tier 2") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6]
+        // _._1[0] is ExprAt indexing into the bucket array. Without the post-rewrite scan
+        // the bare `hb._1[0]` reference would survive into the splice (compile-time
+        // failure at the splice site rather than a graceful cascade).
+        let got <- _fold(nums._group_by_lazy(_ % 2)._having(_._1[0] == 1)._select((K = _._0, N = _._1 |> length)))
+        // Bucket 0=[2,4,6] first=2≠1 fails; bucket 1=[1,3,5] first=1 passes.
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(1, seen |> length)
+        tt |> equal(3, seen[1])
+    }
+}
+
+[test]
+def test_group_by_having_unmatched_reducer_cascades(t : T?) {
+    // PR-D bail: having references a reducer not present in select. Splice cascades to tier 2;
+    // semantics must still be correct via the array-shape pipeline.
+    t |> run("having uses sum but select only has length") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        // Buckets %2: 0=[2,4,6](sum=12, len=3), 1=[1,3,5](sum=9, len=3). Having sum > 10 → 0.
+        let got <- _fold(arr._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(1, seen |> length)
+        tt |> equal(3, seen[0])
+    }
+}
+
+[test]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {
