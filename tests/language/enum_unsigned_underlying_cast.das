@@ -81,6 +81,33 @@ def test_runtime_iteration(t : T?) {
     }
 }
 
+// Equality on uint-backed enums — the isSameType tightening must NOT remove the ==/!= operator.
+[test]
+def test_unsigned_enum_equality(t : T?) {
+    t |> run("uint8 enum == operator works") @(t : T?) {
+        let a = Opcode.HEARTBEAT
+        let b = Opcode.HEARTBEAT
+        let c = Opcode.PING
+        t |> equal(a == b, true)
+        t |> equal(a == c, false)
+        t |> equal(a != c, true)
+    }
+    t |> run("uint16 enum == operator works") @(t : T?) {
+        let a = Channel.BROADCAST
+        let b = Channel.BROADCAST
+        let c = Channel.SYS
+        t |> equal(a == b, true)
+        t |> equal(a != c, true)
+    }
+    t |> run("uint32 enum == operator works") @(t : T?) {
+        let a = Mask32.HIGH_BIT
+        let b = Mask32.HIGH_BIT
+        let c = Mask32.LOW
+        t |> equal(a == b, true)
+        t |> equal(a != c, true)
+    }
+}
+
 // Struct field access — exercises SimNode_GetField lowering.
 struct Pkt {
     op : Opcode

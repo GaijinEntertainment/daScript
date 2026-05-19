@@ -75,6 +75,28 @@ def test_aot_runtime_iteration(t : T?) {
     }
 }
 
+[test]
+def test_aot_unsigned_enum_equality(t : T?) {
+    t |> run("aot: uint8 enum == operator works") @(t : T?) {
+        let a = Opcode.HEARTBEAT
+        let c = Opcode.PING
+        t |> equal(a == a, true)
+        t |> equal(a != c, true)
+    }
+    t |> run("aot: uint16 enum == operator works") @(t : T?) {
+        let a = Channel.BROADCAST
+        let c = Channel.SYS
+        t |> equal(a == a, true)
+        t |> equal(a != c, true)
+    }
+    t |> run("aot: uint32 enum == operator works") @(t : T?) {
+        let a = Mask32.HIGH_BIT
+        let c = Mask32.LOW
+        t |> equal(a == a, true)
+        t |> equal(a != c, true)
+    }
+}
+
 struct Pkt {
     op : Opcode
 }
