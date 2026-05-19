@@ -1545,6 +1545,27 @@ def test_select_where_impure_correctness(t : T?) {
     }
 }
 
+[export, marker(no_coverage)]
+def target_select_distinct_impure() : array<int> {
+    // Side-effecting projection before distinct. Splice MUST bind the projected value once
+    // per source element (and use the bind for both the seen-key and the buffer push) so
+    // the projection fires once per element — matching plain LINQ's iterator-pipeline behavior.
+    return <- _fold([1, 2, 3, 4, 5].to_sequence()._select(side_effect_select_proj(_)).distinct().to_array())
+}
+
+[test]
+def test_select_distinct_impure_correctness(t : T?) {
+    t |> run("impure projection in select+distinct fires once per source element") @(t : T?) {
+        // Naive emission evaluates `side_effect_select_proj(it)` twice per element (once for
+        // the unique_key lookup, once for push_clone into the buffer) → counter would hit
+        // 5 * 2 = 10. The per-element bind fix keeps it at 5.
+        g_select_count_proj_hits = 0
+        let out <- target_select_distinct_impure()
+        t |> equal(5, length(out))
+        t |> equal(5, g_select_count_proj_hits, "projection must fire once per source element (not twice)")
+    }
+}
+
 // ── Gap 1 — inlineable key fallback when key is side-effecting ───────────
 
 var g_order_key_hits = 0
@@ -1937,10 +1958,9 @@ def test_group_by_count_emits_table_no_bucket_arrays(t : T?) {
 
 [export, marker(no_coverage)]
 def target_group_by_count_named_tuple_fold() : array<tuple<K : int; N : int>> {
-    // Named-tuple wrap: select(@(g) => (K=g._0, N=g._1|>length)) — preserves both
-    // the key AND the aggregate in each output tuple element. v1 emission rebuilds
-    // as positional `tuple<KT; AccT>` — user-written field names (K, N) collapse to
-    // positional access; full name-hint preservation is a future enhancement.
+    // Named-tuple wrap: select(@(g) => (K=g._0, N=g._1|>length)) preserves both the key
+    // AND the aggregate. Splice uses the user's group_proj body type as the table value
+    // type, so the K/N field names survive end-to-end (see test below).
     return <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)))
 }
 

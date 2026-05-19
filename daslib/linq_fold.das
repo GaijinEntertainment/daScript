@@ -1531,14 +1531,29 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             var $i(accName) : $t(elemType) = default<$t(elemType)>
         }
     }
+    // Bind take(N) limit once at outer scope so a side-effecting arg fires once, not on every fresh-key check.
+    let takeLimName = "`takeLim`{at.line}`{at.column}"
     if (takeExpr != null) {
+        var takeBind = clone_expression(takeExpr)
+        stmts |> push <| qmacro_expr() {
+            let $i(takeLimName) = $e(takeBind)
+        }
         stmts |> push <| qmacro_expr() {
             var $i(takenName) = 0
         }
     }
+    // Bind side-effecting projection once per element; key + buffer/acc share the bind (matches original LINQ's one-eval per source elem).
+    let pvName = "`pv`{at.line}`{at.column}"
+    let bindProjection = projection != null && has_sideeffects(projection)
     var pushExpr : Expression?
     if (projection != null) {
-        pushExpr = clone_expression(projection)
+        if (bindProjection) {
+            pushExpr = qmacro_expr() {
+                $i(pvName)
+            }
+        } else {
+            pushExpr = clone_expression(projection)
+        }
     } else {
         pushExpr = qmacro_expr() {
             $i(itName)
@@ -1557,9 +1572,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     // Per-match consume order is critical: take-guard `break` BEFORE consume so take(0)/take(-1) short-circuit.
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
-        var takeLim = clone_expression(takeExpr)
         consumeStmts |> push <| qmacro_expr() {
-            if ($i(takenName) >= $e(takeLim)) {
+            if ($i(takenName) >= $i(takeLimName)) {
                 break
             }
         }
@@ -1588,6 +1602,12 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         }
     }
     var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    if (bindProjection) {
+        var pvBind = clone_expression(projection)
+        perMatchStmts |> push <| qmacro_expr() {
+            let $i(pvName) = $e(pvBind)
+        }
+    }
     perMatchStmts |> push <| qmacro_expr() {
         let $i(keyName) = _::unique_key($e(keyExpr))
     }
