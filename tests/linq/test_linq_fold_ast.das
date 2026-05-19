@@ -2410,6 +2410,107 @@ def test_group_by_having_raw_bucket_cascades_to_tier2(t : T?) {
     }
 }
 
+[export, marker(no_coverage)]
+def target_group_by_average_bare_fold() : array<double> {
+    // PR-A2 follow-up: bare `_._1 |> average` splices via tuple<double;uint64> per-key acc.
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> average))
+}
+
+[test]
+def test_group_by_average_bare_emits_avg_acc(t : T?) {
+    // Average splice fingerprint: no runtime average call (inlined into += / count loop),
+    // single-hash hot path (no key_exists), per-element unique_key.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_average_bare_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy")
+        t |> equal(0, count_call(body_expr, "average"), "reducer inlined; no runtime average call")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "per-element unique_key")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_average_named_fold() : array<tuple<K : int; Avg : double>> {
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
+}
+
+[test]
+def test_group_by_average_named_preserves_field_name(t : T?) {
+    // Named form: table stores tuple<K:int;Avg:tuple<double;uint64>> internally; result-build
+    // synthesizes user-facing tuple<K;Avg:double> with field names preserved (compiler-checked
+    // by the function's declared return type — would fail compilation if shape diverged).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_average_named_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy")
+        t |> equal(0, count_call(body_expr, "average"), "reducer inlined; no runtime average call")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_average_inner_select_fold() : array<tuple<K : int; Avg : double>> {
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+        (K = _._0, Avg = _._1 |> select(@(x : int) => x * 2) |> average)))
+}
+
+[test]
+def test_group_by_average_inner_select_inlines_projection(t : T?) {
+    // Inner select inlined — neither inner `select` call nor the reducer survives.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_average_inner_select_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy")
+        t |> equal(0, count_call(body_expr, "average"), "reducer inlined")
+        t |> equal(0, count_call(body_expr, "select"), "inner select inlined")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_multi_reducer_with_avg_fold() : array<tuple<K : int; N : int; S : int; Avg : double>> {
+    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(
+        (K = _._0, N = _._1 |> length, S = _._1 |> sum, Avg = _._1 |> average)))
+}
+
+[test]
+def test_group_by_multi_reducer_with_avg_splices(t : T?) {
+    // 4-slot named tuple combining length + sum + average — single fused pass, no runtime reducer calls.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_multi_reducer_with_avg_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"), "must NOT call group_by_lazy")
+        t |> equal(0, count_call(body_expr, "average"), "reducer inlined")
+        t |> equal(0, count_call(body_expr, "sum"), "reducer inlined")
+        // length(tab) legitimately appears in the reserve hint — don't assert absence.
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path")
+        t |> equal(2, count_inner_for_loops(body_expr), "table-update + result-build loops")
+    }
+}
+
 [test]
 def test_reverse_select_pushes_projection_not_source(t : T?) {
     // R3: select before reverse — the loop pushes the projected value, not the

@@ -1681,11 +1681,11 @@ def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tupl
     if ((c.arguments |> length) != 1) return (false, "", null)
     // Bare reducer: `<reducer>(<bind>._1)`
     if (fnName == "length" || fnName == "count" || fnName == "long_count"
-            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first") {
+            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
         if (is_bind_field_access(c.arguments[0], bindName, 1)) return (true, fnName, null)
     }
     // Inner-select reducer: `<reducer>(select(<bind>._1, <lambda>))`
-    if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first") {
+    if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
         let inner = c.arguments[0]
         if (inner != null && inner is ExprCall) {
             let innerCall = inner as ExprCall
@@ -1711,7 +1711,23 @@ struct private ReducerSpec {
 }
 
 [macro_function]
-def private slot_acc_type(bodyType : TypeDeclPtr; slot : int; isBareForm : bool) : TypeDeclPtr {
+def private is_average_spec(spec : ReducerSpec) : bool {
+    return spec.name == "average" || spec.name == "average_inner_select"
+}
+
+[macro_function]
+def private mk_avg_acc_type(at : LineInfo) : TypeDeclPtr {
+    // tuple<double; uint64> — sum + count, lives in one entry slot for cache locality.
+    var t = new TypeDecl(baseType = Type.tTuple, at = at)
+    t.argTypes |> emplace_new <| new TypeDecl(baseType = Type.tDouble, at = at)
+    t.argTypes |> emplace_new <| new TypeDecl(baseType = Type.tUInt64, at = at)
+    return t
+}
+
+[macro_function]
+def private slot_acc_type(bodyType : TypeDeclPtr; slot : int; isBareForm, isAverage : bool; at : LineInfo) : TypeDeclPtr {
+    // average overrides the user-facing type (double) with the 2-slot tuple acc.
+    if (isAverage) return mk_avg_acc_type(at)
     // Bare form: bodyType IS the reducer's return type. Named-tuple: drill into argTypes[slot].
     if (isBareForm) return strip_const_ref(clone_type(bodyType))
     if (bodyType == null || (bodyType.argTypes |> length) <= slot) return null
@@ -1731,7 +1747,8 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
             innerBody = fold_linq_cond(clone_expression(innerBare), itName)
             if (innerBody == null) return <- (<- specs, false)
         }
-        var accType = slot_acc_type(groupProjBody._type, 1, true)
+        let isAvgBare = rnBare == "average" || rnBare == "average_inner_select"
+        var accType : TypeDeclPtr = slot_acc_type(groupProjBody._type, 1, true, isAvgBare, groupProjBody.at)
         if (accType == null) return <- (<- specs, false)
         var spec = ReducerSpec(slot = 1, name = rnBare, innerBody = innerBody, accType = accType)
         specs |> push(spec)
@@ -1757,7 +1774,8 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
                 return <- (<- specs, false)
             }
         }
-        var accType = slot_acc_type(groupProjBody._type, i, false)
+        let isAvg = rn == "average" || rn == "average_inner_select"
+        var accType : TypeDeclPtr = slot_acc_type(groupProjBody._type, i, false, isAvg, groupProjBody.at)
         if (accType == null) {
             specs |> clear
             return <- (<- specs, false)
@@ -1910,13 +1928,73 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
         missInit = qmacro_expr() {
             $e(l1) := $e(b1)
         }
+    } elif (nm == "average") {
+        // 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source-element cast to double once per side.
+        var lInit = mk_slot_ref(at, entryName, spec.slot)
+        var lSum  = mk_slot_ref(at, entryName, spec.slot)
+        var lCnt  = mk_slot_ref(at, entryName, spec.slot)
+        missInit = qmacro_expr() {
+            $e(lInit) = (double($i(itName)), 1ul)
+        }
+        hitUpdate = qmacro_block() {
+            $e(lSum)._0 += double($i(itName))
+            $e(lCnt)._1 ++
+        }
+    } elif (nm == "average_inner_select") {
+        // Inner projection evaluated once into a temp — matches reference single-eval-per-element.
+        let tmp = "`vavg`{at.line}`{at.column}`{spec.slot}"
+        var lInit = mk_slot_ref(at, entryName, spec.slot)
+        var lSum  = mk_slot_ref(at, entryName, spec.slot)
+        var lCnt  = mk_slot_ref(at, entryName, spec.slot)
+        var bMiss = clone_expression(spec.innerBody)
+        var bHit  = clone_expression(spec.innerBody)
+        missInit = qmacro_block() {
+            let $i(tmp) = $e(bMiss)
+            $e(lInit) = (double($i(tmp)), 1ul)
+        }
+        hitUpdate = qmacro_block() {
+            let $i(tmp) = $e(bHit)
+            $e(lSum)._0 += double($i(tmp))
+            $e(lCnt)._1 ++
+        }
     }
     return (missInit, hitUpdate)
 }
 
 [macro_function]
+def private mk_avg_subfield(at : LineInfo; entryName : string; slot, sub : int) : Expression? {
+    // entry._{slot}._{sub} — 2-level field access into a tuple<double; uint64> avg accumulator.
+    var ev = new ExprVar(at = at)
+    ev.name := entryName
+    var ef1 = new ExprField(at = at)
+    ef1.name := "_{slot}"
+    ef1.value = ev
+    var ef2 = new ExprField(at = at)
+    ef2.name := "_{sub}"
+    ef2.value = ef1
+    return ef2
+}
+
+[macro_function]
+def private mk_avg_divide_expr(at : LineInfo; entryName : string; slot : int) : Expression? {
+    // entry._{slot}._0 / double(entry._{slot}._1) — average from the 2-slot per-key acc. Bucket is non-empty by construction (only keys with ≥1 source element enter the table), so count is always ≥1.
+    var sumRef = mk_avg_subfield(at, entryName, slot, 0)
+    var cntRef = mk_avg_subfield(at, entryName, slot, 1)
+    return qmacro_expr() {
+        $e(sumRef) / double($e(cntRef))
+    }
+}
+
+[macro_function]
+def private mk_slot_output_expr(at : LineInfo; entryName : string; spec : ReducerSpec) : Expression? {
+    // Per-spec output value: divide for average slots, plain field ref otherwise.
+    if (is_average_spec(spec)) return mk_avg_divide_expr(at, entryName, spec.slot)
+    return mk_slot_ref(at, entryName, spec.slot)
+}
+
+[macro_function]
 def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
-    // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` against matching specs; any other use of `<hb>` returns null and cascades.
+    // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` (or divide expr for average) against matching specs; any other use of `<hb>` returns null and cascades.
     if (expr == null) return expr
     // Peel typer-inserted ExprRef2Value wrappers (same pattern as is_bind_field_access).
     while (expr is ExprRef2Value) {
@@ -1931,7 +2009,7 @@ def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string;
             }
             if (is_bind_field_access(c.arguments[0], hbName, 1)) {
                 for (s in specs) {
-                    if (s.innerBody == null && s.name == fnName) return mk_slot_ref(expr.at, kvName, s.slot)
+                    if (s.innerBody == null && s.name == fnName) return mk_slot_output_expr(expr.at, kvName, s)
                 }
                 return null
             }
@@ -1946,7 +2024,7 @@ def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string;
                     if (innerName == "select") {
                         let comboName = "{fnName}_inner_select"
                         for (s in specs) {
-                            if (s.name == comboName) return mk_slot_ref(expr.at, kvName, s.slot)
+                            if (s.name == comboName) return mk_slot_output_expr(expr.at, kvName, s)
                         }
                         return null
                     }
@@ -2149,6 +2227,12 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     if (groupProjBody == null || groupProjBody._type == null) return null
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
+    var hasAvg = false
+    for (s in specs) {
+        if (is_average_spec(s)) {
+            hasAvg = true
+        }
+    }
     // Rewrite optional having predicate against accumulator slots; bails on anything other than _._0 / reducer(_._1) matched to a select slot.
     var havingPred : Expression?
     if (havingCall != null) {
@@ -2167,7 +2251,15 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     let dummyName = "`dummy`{at.line}`{at.column}"
     // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem).
     if (usesNamedTuple) {
-        var tabValueType  = strip_const_ref(clone_type(groupProjBody._type))
+        var tabValueType = strip_const_ref(clone_type(groupProjBody._type))
+        // Average slots store the 2-tuple <sum;count> internally; result-build divides at output.
+        if (hasAvg) {
+            for (s in specs) {
+                if (is_average_spec(s) && s.slot < (tabValueType.argTypes |> length)) {
+                    tabValueType.argTypes[s.slot] = mk_avg_acc_type(at)
+                }
+            }
+        }
         var tabValueType2 = clone_type(tabValueType)
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
@@ -2279,10 +2371,32 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         // to_array lane: build result buffer by walking the table. Each output element
         var outputExpr : Expression?
         if (!usesNamedTuple) {
-            // Whole body was `<bind>._1 |> length`; result element is just acc (int).
-            outputExpr = qmacro_expr() {
-                $i(kvName)._1
+            // Bare reducer: avg slot needs sum/count divide; everything else is the raw acc value.
+            if (hasAvg) {
+                outputExpr = mk_avg_divide_expr(at, kvName, 1)
+            } else {
+                outputExpr = qmacro_expr() {
+                    $i(kvName)._1
+                }
             }
+        } elif (hasAvg) {
+            // Named-tuple with avg slot(s): table value type stores tuple<double;uint64> per avg slot, so re-synthesize the user's named tuple at result-build, dividing avg slots.
+            var mt = new ExprMakeTuple(at = at)
+            let slotCount = (groupProjBody._type.argNames |> length)
+            mt.recordNames |> resize(slotCount)
+            mt.values |> push(mk_slot_ref(at, kvName, 0))
+            mt.recordNames[0] := string(groupProjBody._type.argNames[0])
+            for (i in 1 .. slotCount) {
+                var v : Expression?
+                for (sp in specs) {
+                    if (sp.slot == i) {
+                        v = mk_slot_output_expr(at, kvName, sp)
+                    }
+                }
+                mt.values |> push(v)
+                mt.recordNames[i] := string(groupProjBody._type.argNames[i])
+            }
+            outputExpr = mt
         } else {
             // Named-tuple wrap `(K = bind._0, V = bind._1|>length)` — table value type already shaped via tabValueType; emit the entry directly.
             outputExpr = qmacro_expr() {
