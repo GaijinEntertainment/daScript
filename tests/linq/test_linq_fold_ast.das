@@ -39,6 +39,49 @@ def target_zip_fold() : array<tuple<int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1))._fold()
 }
 
+// Phase 2 Z1 targets — bare zip (no upstream select) hits plan_zip splice.
+[export, marker(no_coverage)]
+def target_zip_bare_arr_fold() : array<tuple<int; int>> {
+    return <- [1, 2, 3].zip([10, 20, 30])._fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_bare_iter_fold() : array<tuple<int; int>> {
+    return <- zip([1, 2, 3].each(), [10, 20, 30].each()).to_array()._fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_bare_iter_seq_fold() : iterator<tuple<int; int>> {
+    return <- zip([1, 2, 3].each(), [10, 20, 30].each())._fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_bare_unequal_fold() : array<tuple<int; int>> {
+    return <- [1, 2, 3, 4, 5].zip([10, 20, 30])._fold()
+}
+
+// Phase 2 Z2 targets — count / long_count terminators on bare zip.
+[export, marker(no_coverage)]
+def target_zip_count_fold() : int {
+    return _fold([1, 2, 3].zip([10, 20, 30]).count())
+}
+
+[export, marker(no_coverage)]
+def target_zip_long_count_fold() : int64 {
+    return _fold([1, 2, 3].zip([10, 20, 30]).long_count())
+}
+
+[export, marker(no_coverage)]
+def target_zip_count_iter_fold() : int {
+    // to_sequence_move yields a real iterator (no peel, no length) → counter loop fallback.
+    return _fold(zip([1, 2, 3, 4, 5].to_sequence_move(), [10, 20, 30].to_sequence_move()).count())
+}
+
+[export, marker(no_coverage)]
+def target_zip_count_unequal_fold() : int {
+    return _fold([1, 2, 3, 4, 5].zip([10, 20, 30]).count())
+}
+
 [export, marker(no_coverage)]
 def target_zip3_fold() : array<tuple<int; int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
@@ -78,6 +121,165 @@ def test_zip3_predicate_fold_result(t : T?) {
         t |> equal(result[0], 23)
         t |> equal(result[1], 45)
         t |> equal(result[2], 67)
+    }
+}
+
+// Phase 2 Z1 — behavioral + AST-shape coverage for bare zip splice.
+
+[test]
+def test_zip_bare_arr_fold_result(t : T?) {
+    t |> run("bare zip(arr, arr) produces matched tuples") @(t : T?) {
+        let result <- target_zip_bare_arr_fold()
+        t |> equal(length(result), 3)
+        t |> equal(result[0]._0, 1);  t |> equal(result[0]._1, 10)
+        t |> equal(result[1]._0, 2);  t |> equal(result[1]._1, 20)
+        t |> equal(result[2]._0, 3);  t |> equal(result[2]._1, 30)
+    }
+}
+
+[test]
+def test_zip_bare_iter_fold_result(t : T?) {
+    t |> run("bare zip(iter, iter) |> to_array produces matched tuples") @(t : T?) {
+        let result <- target_zip_bare_iter_fold()
+        t |> equal(length(result), 3)
+        t |> equal(result[0]._0, 1);  t |> equal(result[0]._1, 10)
+        t |> equal(result[2]._0, 3);  t |> equal(result[2]._1, 30)
+    }
+}
+
+[test]
+def test_zip_bare_iter_seq_fold_result(t : T?) {
+    t |> run("bare zip(iter, iter) returns iterator that yields matched tuples") @(t : T?) {
+        var n = 0
+        for (pair in target_zip_bare_iter_seq_fold()) {
+            t |> equal(pair._0, n + 1)
+            t |> equal(pair._1, (n + 1) * 10)
+            n ++
+        }
+        t |> equal(n, 3)
+    }
+}
+
+[test]
+def test_zip_bare_unequal_fold_result(t : T?) {
+    t |> run("bare zip truncates to shorter source") @(t : T?) {
+        let result <- target_zip_bare_unequal_fold()
+        t |> equal(length(result), 3)
+        t |> equal(result[0]._0, 1);  t |> equal(result[0]._1, 10)
+        t |> equal(result[2]._0, 3);  t |> equal(result[2]._1, 30)
+    }
+}
+
+[test]
+def test_zip_bare_arr_emits_single_for(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_bare_arr_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "bare zip splice must emit exactly one (multi-iter) for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined into the for-loop, not preserved")
+    }
+}
+
+[test]
+def test_zip_bare_iter_emits_single_for(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_bare_iter_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "iter+iter zip splice must emit exactly one for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined, not preserved")
+    }
+}
+
+// Phase 2 Z2 — behavioral + AST-shape for count/long_count terminators.
+
+[test]
+def test_zip_count_fold_result(t : T?) {
+    t |> run("zip(arr, arr).count() returns matched length") @(t : T?) {
+        t |> equal(target_zip_count_fold(), 3)
+    }
+}
+
+[test]
+def test_zip_long_count_fold_result(t : T?) {
+    t |> run("zip(arr, arr).long_count() returns int64 matched length") @(t : T?) {
+        t |> equal(target_zip_long_count_fold(), 3l)
+    }
+}
+
+[test]
+def test_zip_count_iter_fold_result(t : T?) {
+    t |> run("zip(iter, iter).count() walks both and returns min length") @(t : T?) {
+        t |> equal(target_zip_count_iter_fold(), 3)
+    }
+}
+
+[test]
+def test_zip_count_unequal_fold_result(t : T?) {
+    t |> run("zip(arr, arr).count() truncates to shorter source") @(t : T?) {
+        t |> equal(target_zip_count_unequal_fold(), 3)
+    }
+}
+
+[test]
+def test_zip_count_uses_length_shortcut(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 0, "zip(arr,arr).count() must use length shortcut (no for-loop)")
+    }
+}
+
+[test]
+def test_zip_long_count_uses_length_shortcut(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_long_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 0, "zip(arr,arr).long_count() must use length shortcut (no for-loop)")
+    }
+}
+
+[test]
+def test_zip_count_iter_emits_counter_loop(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_count_iter_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "iter+iter source: count must walk both via counter loop (1 for)")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip must be inlined")
+        let countCalls = count_call(body_expr, "count")
+        t |> equal(countCalls, 0, "count must be inlined into acc++")
     }
 }
 
