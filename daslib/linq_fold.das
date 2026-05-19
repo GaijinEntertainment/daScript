@@ -1569,14 +1569,9 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     } else {
         keyExpr = clone_expression(pushExpr)
     }
-    // Per-match consume order is critical: take-guard `break` BEFORE consume so take(0)/take(-1) short-circuit.
+    // Per-match consume: only inside the fresh-key branch; take-break is the outer-loop guard below.
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
-        consumeStmts |> push <| qmacro_expr() {
-            if ($i(takenName) >= $i(takeLimName)) {
-                break
-            }
-        }
         consumeStmts |> push <| qmacro_expr() {
             $i(takenName) ++
         }
@@ -1614,9 +1609,21 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     perMatchStmts |> push(ifNew)
     var perElement = stmts_to_expr(perMatchStmts)
     perElement = wrap_with_condition(perElement, whereCond)
-    stmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            $e(perElement)
+    // Outer-loop take guard: top-of-loop break for true O(N)-source streaming exit (skips duplicates after Nth distinct).
+    if (takeExpr != null) {
+        stmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcName)) {
+                if ($i(takenName) >= $i(takeLimName)) {
+                    break
+                }
+                $e(perElement)
+            }
+        }
+    } else {
+        stmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
         }
     }
     if (terminatorName == "count") {
@@ -1738,7 +1745,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             }
         }
     }
-    // v1: length/count (Acc=int), long_count (Acc=int64), sum (Acc=elemT). Inner-select
+    // v1 reducers: length/count (Acc=int), long_count (Acc=int64), sum (Acc=elemT). Inner-select-sum is deferred (see groupby_sum follow-up).
     if (reducerName == ""
             || (reducerName != "length" && reducerName != "count" && reducerName != "long_count" && reducerName != "sum")) return null
     let isLongCountReducer = reducerName == "long_count"
@@ -1829,7 +1836,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 $i(kvName)._1
             }
         } else {
-            // Named-tuple wrap `(K = bind._0, V = bind._1|>length)` — table value type
+            // Named-tuple wrap `(K = bind._0, V = bind._1|>length)` — table value type already shaped via tabValueType; emit the entry directly.
             outputExpr = qmacro_expr() {
                 $i(kvName)
             }

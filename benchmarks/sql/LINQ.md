@@ -305,7 +305,7 @@ The sort/order rows now BEAT `m1` SQLite by ~30%. PR #2707 closed the comparator
 
 ## Phase 3+ — buffer-required splice arms (this PR)
 
-Three new planners — `plan_reverse`, `plan_distinct`, `plan_group_by` — slot into the cascade between `plan_order_family` and `plan_loop_or_count`. Each is name-gated and rejects early on shape mismatch. `is_buffer_required_op` still lists all buffer-required ops (`order_by`, `distinct`/`distinct_by`, `reverse`, `group_by`/`group_by_lazy`, `zip`, `join`/`left_join`/`group_join`); for the first four families the marker is now pure defense-in-depth — they should never fire because the dedicated planners catch the op first — and `zip`/`join`/`left_join`/`group_join` remain as real fallthrough markers awaiting BufferZip / BufferedJoin in a future PR.
+Three new planners — `plan_reverse`, `plan_distinct`, `plan_group_by` — slot into the cascade between `plan_order_family` and `plan_loop_or_count`. Each is name-gated and rejects early on shape mismatch. `is_buffer_required_op` still lists all buffer-required ops (`order_by`, `distinct`/`distinct_by`, `reverse`, `group_by`/`group_by_lazy`, `zip`, `join`/`left_join`/`group_join`); it acts as a fallback marker for the shapes the dedicated planners don't cover (`distinct().first()`, `order_by(...).first()`, etc. — terminators outside the spliced set cascade to `is_buffer_required_op` which triggers the tier-2 fallthrough). `zip`/`join`/`left_join`/`group_join` cascade unconditionally pending BufferZip / BufferedJoin.
 
 ### plan_reverse
 

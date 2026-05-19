@@ -7,10 +7,13 @@ let TAKE_N = 3
 
 // _select(_.brand) |> distinct() |> take(N) — early-exit dedup pattern.
 // SQL: SELECT DISTINCT brand FROM Cars LIMIT N — engine bounds the dedup hashset.
-// m3 (plain LINQ) materializes full distinct array first, then slices.
-// m3f (spliced via plan_distinct): streaming dedup with break-after-N. With BRAND_COUNT=5
-// and TAKE_N=3, this exits the source scan as soon as 3 unique brands have been observed —
-// in worst case ~3 elements (first 3 distinct brands at indices 0,1,2).
+// Both m3 and m3f use each(arr) for apples-to-apples comparison.
+// m3 (plain LINQ on iterator) routes through linq.das:668 — a lazy `distinct()` generator
+// composed with lazy `take(N)`, both yielding per element. Stops at N distinct yields.
+// m3f (spliced via plan_distinct): single fused for-loop with outer-loop take-guard
+// at the top — breaks as soon as the Nth distinct value has been consumed (true O(N)
+// source elements worst-case). No generator overhead. With BRAND_COUNT=5 and TAKE_N=3
+// the splice exits at source position ~3.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
