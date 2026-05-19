@@ -50,6 +50,16 @@ def test_parse_argv_port(t : T?) {
     t |> run("last occurrence wins (clargs convention)") @(t : T?) {
         t |> equal(parse_argv_port(["--live-port", "9090", "--live-port", "19090"]), 19090)
     }
+    t |> run("last-occurrence-wins applies even when the last value is invalid") @(t : T?) {
+        // Bug shape (Copilot #2726 R3 / Thread 9): if C++ kept "last VALID"
+        // while .das kept "last RAW (validated to 0 on bad input)", a tail
+        // like `--live-port 19090 --live-port abc` would have C++ key its
+        // lock on 19090 while .das defaults to 9090 -- lock-vs-bind drift.
+        // Both sides must coerce invalid trailing occurrences to 0.
+        t |> equal(parse_argv_port(["--live-port", "19090", "--live-port", "abc"]), 0)
+        t |> equal(parse_argv_port(["--live-port", "9090", "--live-port", "65536"]), 0)
+        t |> equal(parse_argv_port(["--live-port=19091", "--live-port", "0"]), 0)
+    }
     t |> run("--live-port after `--` is still found") @(t : T?) {
         // Bug shape (Copilot #2726 R2 / Thread 5): daslang-live's C++ arg
         // loop stops at `--`, but find_flag_raw_value scans the full argv.

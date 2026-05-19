@@ -42,8 +42,11 @@ static string project_root;
 static bool version2syntax = true;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
-// Resolved live-API port for the single-instance lock key and DASLANG_LIVE_PORT env handoff.
-// 0 means "not yet resolved"; resolved to default (9090) before lock acquire.
+// Resolved live-API port for the single-instance lock key. Populated from
+// the full argv via find_live_port_in_argv() before acquire_single_instance().
+// 0 means "not yet resolved"; defaults to 9090 if no --live-port was passed.
+// No env / config-file path — the .das side scans the same argv so both
+// agree without any state handoff.
 static int g_resolvedLivePort = 0;
 
 // --- DLL function pointers (loaded at runtime from dasModuleLiveHost) ---
@@ -584,24 +587,26 @@ static int parse_port_strict(const char * s) {
 }
 
 // Scan the FULL argv (including any post-`--` slice) for `--live-port N` /
-// `--live-port=N`. Last occurrence wins, matching `clargs::find_flag_raw_value`
-// on the .das side. Returns 0 if no valid value found — caller defaults.
+// `--live-port=N`. Last occurrence wins UNCONDITIONALLY — even when the
+// last occurrence's value is invalid the result becomes 0 (caller defaults).
+// This matches `daslib/clargs.find_flag_raw_value`, which returns the raw
+// value from the last occurrence regardless of validity; `parse_port_string`
+// on the .das side then maps invalid values to 0. If C++ kept "last VALID"
+// while .das kept "last RAW (then validated)", a tail like
+// `--live-port 19090 --live-port abc` would have C++ lock on 19090 and
+// .das default to 9090, reintroducing the lock-vs-bind mismatch.
 //
 // Why full-argv: daslang-live's own arg loop stops at `--` and forwards the
 // rest to the script, but `live_api`'s [init] scans the full argv. Both
-// sides MUST agree on the same source; otherwise the lock would key on one
-// port while the HTTP server binds another (the original review-round-2
-// Thread 5 bug).
+// sides MUST agree on the same source.
 static int find_live_port_in_argv(int argc, char * argv[]) {
     int port = 0;
     for (int i = 1; i < argc; ++i) {
         const char * a = argv[i];
         if (strcmp(a, "--live-port") == 0 && i + 1 < argc) {
-            int p = parse_port_strict(argv[++i]);
-            if (p > 0) port = p;  // continue scanning — last valid wins
+            port = parse_port_strict(argv[++i]);  // last-occurrence-wins, invalid → 0
         } else if (strncmp(a, "--live-port=", 12) == 0) {
-            int p = parse_port_strict(a + 12);
-            if (p > 0) port = p;
+            port = parse_port_strict(a + 12);
         }
     }
     return port;
