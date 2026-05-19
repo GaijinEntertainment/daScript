@@ -1561,17 +1561,14 @@ def test_group_by_count_fold_parity(t : T?) {
     t |> run("group_by + named tuple wrap preserves key + count") @(tt : T?) {
         let got <- _fold([1, 2, 3, 4, 5, 6, 7]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length)))
         tt |> equal(3, length(got))
-        var totalCount = 0
-        var keysSeen : table<int>
+        // Per-key expectations: 0→{3,6}=2, 1→{1,4,7}=3, 2→{2,5}=2. Tests bucket assignment, not just total.
+        var perKey : table<int; int>
         for (item in got) {
-            totalCount += item.N
-            keysSeen |> insert(item.K)
+            perKey[item.K] = item.N
         }
-        tt |> equal(7, totalCount)
-        tt |> equal(3, length(keysSeen))   // 3 distinct buckets
-        tt |> success(keysSeen |> key_exists(0))
-        tt |> success(keysSeen |> key_exists(1))
-        tt |> success(keysSeen |> key_exists(2))
+        tt |> equal(2, perKey[0])
+        tt |> equal(3, perKey[1])
+        tt |> equal(2, perKey[2])
     }
     t |> run("group_by on empty source → empty result") @(tt : T?) {
         var empty : array<int>
@@ -1585,7 +1582,7 @@ def test_group_by_count_fold_parity(t : T?) {
     // G4: sum reducer — per-bucket sum of elements
     t |> run("group_by.select(_._1|>sum): bare-sum bucket reducer") @(tt : T?) {
         let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> sum))
-        // Buckets: 0→{30}, 1→{10,31}, 2→{20,11,21,12}. Sums: 30, 41, 64. Total = 135
+        // Buckets: 0→{30,21,12}=63, 1→{10,31}=41, 2→{20,11}=31. Total = 135.
         tt |> equal(3, length(got))
         var totalSum = 0
         for (s in got) {
@@ -1596,11 +1593,14 @@ def test_group_by_count_fold_parity(t : T?) {
     t |> run("group_by + named tuple sum: preserves K + Sum") @(tt : T?) {
         let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Sum = _._1 |> sum)))
         tt |> equal(3, length(got))
-        var totalSum = 0
+        // Per-key expectations: 0→63, 1→41, 2→31. Tests bucket assignment, not just total.
+        var perKey : table<int; int>
         for (item in got) {
-            totalSum += item.Sum
+            perKey[item.K] = item.Sum
         }
-        tt |> equal(135, totalSum)
+        tt |> equal(63, perKey[0])
+        tt |> equal(41, perKey[1])
+        tt |> equal(31, perKey[2])
     }
     // G5: long_count reducer — per-bucket int64 count
     t |> run("group_by.select(_._1|>long_count): per-bucket int64 count") @(tt : T?) {

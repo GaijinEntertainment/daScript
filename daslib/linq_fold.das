@@ -1701,7 +1701,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     calls |> pop
     if ((groupByCall.arguments |> length) < 2) return null
     var keyBlock = clone_expression(groupByCall.arguments[1])
-    // What remains in `calls` is the upstream segment — for v1 we accept the empty
+    // v1: only empty upstream segment (no where_/select* between source and group_by).
     if (!empty(calls)) return null
     // Recognize the group_proj body's reducer shape.
     let at = groupByCall.at
@@ -1759,16 +1759,16 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         }
     } elif (isLongCountReducer) {
         stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) - const - &; int64>>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int64>>
         }
     } elif (isSumReducer) {
         stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) - const - &; $t(elemType)>>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(elemType)>>
         }
     } else {
         // count / length — Acc=int
         stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) - const - &; int>>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; int>>
         }
     }
     // Per-element update — get-or-default the entry, set key (idempotent), update acc.

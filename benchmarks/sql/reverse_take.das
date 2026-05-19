@@ -7,11 +7,12 @@ let TAKE_N = 10
 
 // _reverse() |> take(N) — last N rows of the source, reversed.
 // SQL: SELECT * FROM Cars ORDER BY id DESC LIMIT N — engine indexes-and-limits.
-// m3 (plain LINQ): materializes full reverse via runtime _reverse(), then slices first N.
-// m3f (spliced via plan_reverse): single prefilter pass into a buffer, reverse_inplace,
-// then resize(min(N, length(buf))). For TAKE_N << length, the buffer is still full —
-// the headline win comes from eliding the intermediate iterator-array materialization,
-// not from early-exit.
+// m3 (plain LINQ iterator-reverse): generator captures the source, fills an internal buffer,
+// then yields buffer[len-i-1] lazily — take(N) only triggers N yields.
+// m3f (spliced via plan_reverse): single prefilter pass into a buffer + reverse_inplace
+// + resize(min(N, length(buf))). The full O(length) reverse is paid before resize, so for
+// TAKE_N << length this is a REGRESSION vs m3 (~34 vs ~22 ns/op at 100K). See LINQ.md
+// "Phase 3+" notes — a backward-index-loop optimization is deferred.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
