@@ -338,11 +338,11 @@ if ($e(whereCond)) {
 }
 ```
 
-**B. Buffer-not-required terminators** (`count`, `sum`, `long_count`): elide the buffer; only the seen-table is materialized. `count` returns `length(seen)`; `sum`/`long_count` fold inline at the freshly-inserted site. `first`/`first_or_default` after `distinct` are not yet spliced — they cascade to tier 2.
+**B. Buffer-not-required terminators** (`count`, `sum`, `long_count`): elide the buffer; only the seen-table is materialized. `count` returns `length(seen)`; `long_count` returns `int64(length(seen))` (both are count-shaped — no per-element accumulator); `sum` folds inline at the freshly-inserted site with `acc += <projection>`. `first`/`first_or_default` after `distinct` are not yet spliced — they cascade to tier 2.
 
 ### plan_group_by
 
-Recognized chain: `src |> group_by[_lazy](key) |> select(group_proj) [|> {to_array, count}]?`. Avoids bucket-array materialization entirely by emitting `table<unique_key; tuple<KT; AccT>>` updated per element. Two-pass rewriter `try_recognize_group_reducer(body, accField)` returns `(recognized, accType, accUpdate, accInit)`:
+Recognized chain: `src |> group_by[_lazy](key) |> select(group_proj) [|> {to_array, count}]?`. Avoids bucket-array materialization entirely by emitting `table<unique_key; tuple<KT; AccT>>` updated per element. The `select(group_proj)` body is recognized via `is_bucket_reducer_call` ([linq_fold.das:1666](daslib/linq_fold.das#L1666)); recognized shapes are:
 
 | `group_proj` body shape | Acc | Per-element update |
 |---|---|---|

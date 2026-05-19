@@ -1691,7 +1691,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             calls |> pop
         }
     }
-    // Required tail: select(group_proj) — without it the chain just yields bucket
+    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
     if (empty(calls) || calls.back()._1.name != "select") return null
     var groupProjCall = calls.back()._0
     calls |> pop
@@ -1752,7 +1752,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
     var stmts : array<Expression?>
-    // Table type: keyType is typedecl(keyBlock(default<elemT>)); UniqKeyType wraps with
+    // Table type: key is typedecl(keyBlock(default<elemT>)) wrapped in _::unique_key for the hash slot.
     if (usesNamedTuple) {
         stmts |> push <| qmacro_expr() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
