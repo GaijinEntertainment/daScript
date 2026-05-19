@@ -1408,43 +1408,66 @@ def private plan_reverse(var expr : Expression?) : Expression? {
         // R1-R4 path: buffer + reverse_inplace + optional resize + return buffer.
         let needIterWrap = expr._type.isIterator
         var bufElemType = strip_const_ref(clone_type(reverseCall._type.firstType))
-        var pushExpr : Expression?
-        if (projection != null) {
-            pushExpr = qmacro_expr() {
-                $i(bufName) |> push_clone($e(projection))
-            }
-        } else {
-            pushExpr = qmacro_expr() {
-                $i(bufName) |> push_clone($i(itName))
-            }
-        }
-        pushExpr = wrap_with_condition(pushExpr, whereCond)
-        var reserveStmts : array<Expression?>
-        if (type_has_length(top._type) && whereCond == null) {
-            reserveStmts |> push <| qmacro_expr() {
-                $i(bufName) |> reserve(length($i(srcName)))
-            }
-        }
-        var resizeStmts : array<Expression?>
-        if (takeExpr != null) {
-            // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
+        let canBackwardIndex = (takeExpr != null && projection == null && whereCond == null
+                && (top._type.isGoodArrayType || top._type.isArray))
+        if (canBackwardIndex) {
+            // R6: visit only the last takeN indices — skips full-source push + O(length) reverse_inplace.
+            let lenName   = "`rlen`{at.line}`{at.column}"
+            let takeNName = "`rtn`{at.line}`{at.column}"
+            let kName     = "`rk`{at.line}`{at.column}"
             var takeA = clone_expression(takeExpr)
             var takeB = clone_expression(takeExpr)
             var takeC = clone_expression(takeExpr)
-            resizeStmts |> push <| qmacro_expr() {
-                $i(bufName) |> resize($e(takeA) <= 0 ? 0 : ($e(takeB) < length($i(bufName)) ? $e(takeC) : length($i(bufName))))
+            var returnExpr = buffer_return(bufName, needIterWrap)
+            body = qmacro_block() {
+                let $i(lenName) = length($i(srcName))
+                let $i(takeNName) = $e(takeA) <= 0 ? 0 : ($e(takeB) < $i(lenName) ? $e(takeC) : $i(lenName))
+                var $i(bufName) : array<$t(bufElemType)>
+                $i(bufName) |> reserve($i(takeNName))
+                for ($i(kName) in 0 .. $i(takeNName)) {
+                    $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+                }
+                $e(returnExpr)
             }
-        }
-        var returnExpr = buffer_return(bufName, needIterWrap)
-        body = qmacro_block() {
-            var $i(bufName) : array<$t(bufElemType)>
-            $b(reserveStmts)
-            for ($i(itName) in $i(srcName)) {
-                $e(pushExpr)
+        } else {
+            var pushExpr : Expression?
+            if (projection != null) {
+                pushExpr = qmacro_expr() {
+                    $i(bufName) |> push_clone($e(projection))
+                }
+            } else {
+                pushExpr = qmacro_expr() {
+                    $i(bufName) |> push_clone($i(itName))
+                }
             }
-            _::reverse_inplace($i(bufName))
-            $b(resizeStmts)
-            $e(returnExpr)
+            pushExpr = wrap_with_condition(pushExpr, whereCond)
+            var reserveStmts : array<Expression?>
+            if (type_has_length(top._type) && whereCond == null) {
+                reserveStmts |> push <| qmacro_expr() {
+                    $i(bufName) |> reserve(length($i(srcName)))
+                }
+            }
+            var resizeStmts : array<Expression?>
+            if (takeExpr != null) {
+                // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
+                var takeA = clone_expression(takeExpr)
+                var takeB = clone_expression(takeExpr)
+                var takeC = clone_expression(takeExpr)
+                resizeStmts |> push <| qmacro_expr() {
+                    $i(bufName) |> resize($e(takeA) <= 0 ? 0 : ($e(takeB) < length($i(bufName)) ? $e(takeC) : length($i(bufName))))
+                }
+            }
+            var returnExpr = buffer_return(bufName, needIterWrap)
+            body = qmacro_block() {
+                var $i(bufName) : array<$t(bufElemType)>
+                $b(reserveStmts)
+                for ($i(itName) in $i(srcName)) {
+                    $e(pushExpr)
+                }
+                _::reverse_inplace($i(bufName))
+                $b(resizeStmts)
+                $e(returnExpr)
+            }
         }
     }
     return finalize_emission(top, srcName, at, body)
