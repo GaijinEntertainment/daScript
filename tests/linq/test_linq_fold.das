@@ -2217,19 +2217,23 @@ def test_group_by_having_unhandled_node_cascades(t : T?) {
 }
 
 [test]
-def test_group_by_having_unmatched_reducer_cascades(t : T?) {
-    // PR-D bail: having references a reducer not present in select. Splice cascades to tier 2;
-    // semantics must still be correct via the array-shape pipeline.
-    t |> run("having uses sum but select only has length") @(tt : T?) {
+def test_group_by_having_bare_form_with_hidden_cascades(t : T?) {
+    // PR-E bail: bare-form group_proj combined with a having reducer that needs a hidden slot
+    // falls back to tier 2 (the bare table layout uses `tuple<KeyT; AccT>` synthesized inside a
+    // qmacro with embedded `typedecl(invoke(...))` for the key type, which we can't extend with
+    // a dynamic count of additional acc slots). Semantics must still be correct via cascade.
+    t |> run("bare-form select with hidden sum in having cascades") @(tt : T?) {
         let arr = [1, 2, 3, 4, 5, 6]
         // Buckets %2: 0=[2,4,6](sum=12, len=3), 1=[1,3,5](sum=9, len=3). Having sum > 10 → 0.
-        let got <- _fold(arr._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)))
-        var seen : table<int; int>
-        for (kv in got) {
-            seen[kv.K] = kv.N
+        let got <- _fold(arr._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select(_._1 |> length))
+        var cnt = 0
+        var total = 0
+        for (v in got) {
+            cnt ++
+            total += v
         }
-        tt |> equal(1, seen |> length)
-        tt |> equal(3, seen[0])
+        tt |> equal(1, cnt)
+        tt |> equal(3, total)
     }
 }
 
@@ -2281,6 +2285,123 @@ def test_reverse_first_or_default_parity(t : T?) {
     t |> run("empty source → default") @(tt : T?) {
         var empty : array<int>
         tt |> equal(42, _fold(each(empty) |> reverse() |> first_or_default(42)))
+    }
+}
+
+[test]
+def test_group_by_having_hidden_slot_fold_parity(t : T?) {
+    // PR-E: having references a reducer not present in select — splice synthesizes a hidden
+    // accumulator slot in the internal table value type; result-build projects only the
+    // user-visible slots.
+    t |> run("hidden sum: having sum>N, select length") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        // Buckets %2: 0=[2,4,6](sum=12, len=3), 1=[1,3,5](sum=9, len=3). Having sum > 10 → 0.
+        let got <- _fold(arr._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(1, seen |> length)
+        tt |> equal(3, seen[0])
+    }
+    t |> run("hidden min: having min<K, select length") @(tt : T?) {
+        let arr = [10, 20, 30, 11, 21, 31, 12, 22, 32]
+        // Buckets %3: 0=[30,21,12](min=12), 1=[10,31,22](min=10), 2=[20,11,32](min=11). Having min<12 → 1,2.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> min < 12)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[1])
+        tt |> equal(3, seen[2])
+    }
+    t |> run("hidden max: having max>=N, select length") @(tt : T?) {
+        let arr = [10, 20, 30, 11, 21, 31, 12]
+        // Buckets %3: 0=[30,21,12](max=30), 1=[10,31](max=31), 2=[20,11](max=20). Having max>=30 → 0,1.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> max >= 30)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(2, seen[1])
+    }
+    t |> run("hidden average: having average>F, select length") @(tt : T?) {
+        let arr = [10, 20, 30, 11, 21, 31, 12]
+        // Buckets %3: 0=[30,21,12](avg=21.0), 1=[10,31](avg=20.5), 2=[20,11](avg=15.5). Having avg>16 → 0,1.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> average > 16.0lf)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(2, seen[1])
+    }
+    t |> run("hidden sum + visible length used in same predicate") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        // 0=[2,4,6](sum=12, len=3), 1=[1,3,5](sum=9, len=3). Having sum>=9 && len>=3 → both pass.
+        let got <- _fold(arr._group_by_lazy(_ % 2)._having((_._1 |> sum) >= 9 && (_._1 |> length) >= 3)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(3, seen[1])
+    }
+    t |> run("two hidden reducers: sum + min, select length") @(tt : T?) {
+        let arr = [10, 20, 30, 11, 21, 31, 12]
+        // 0=[30,21,12](sum=63, min=12), 1=[10,31](sum=41, min=10), 2=[20,11](sum=31, min=11). Having sum>40 && min<15 → 0,1.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having((_._1 |> sum) > 40 && (_._1 |> min) < 15)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(2, seen[1])
+    }
+    t |> run("hidden inner-select sum (lambda peelable)") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6, 7, 8]
+        // Buckets %3: 0=[3,6] doubled=[6,12](sum=18), 1=[1,4,7] doubled=[2,8,14](sum=24), 2=[2,5,8] doubled=[4,10,16](sum=30). Having sum>20 → 1,2.
+        let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> select($(x : int) => x * 2) |> sum > 20)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[1])
+        tt |> equal(3, seen[2])
+    }
+    t |> run("count terminator with hidden sum") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        // 0=[2,4,6](sum=12), 1=[1,3,5](sum=9). Having sum>10 → 1 bucket.
+        let c = _fold(arr._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)) |> count())
+        tt |> equal(1, c)
+    }
+    t |> run("upstream where + hidden sum in having") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // where >2 then group %3: 0=[3,6,9](sum=18), 1=[4,7,10](sum=21), 2=[5,8](sum=13). Having sum>=18 → 0,1.
+        let got <- _fold(arr._where(_ > 2)._group_by_lazy(_ % 3)._having(_._1 |> sum >= 18)._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[0])
+        tt |> equal(3, seen[1])
+    }
+    t |> run("empty source") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by_lazy(_)._having(_._1 |> sum > 0)._select((K = _._0, N = _._1 |> length)))
+        var cnt = 0
+        for (_x in got) {
+            cnt ++
+        }
+        tt |> equal(0, cnt)
     }
 }
 

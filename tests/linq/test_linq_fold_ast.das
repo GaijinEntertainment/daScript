@@ -2403,17 +2403,45 @@ def test_group_by_having_count_terminator_splices(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_group_by_having_unmatched_cascades() : array<tuple<K : int; N : int>> {
-    // BAIL: having uses sum but the select has only length — no matching slot, so the planner
-    // returns null and the chain cascades to tier 2.
+def target_group_by_having_hidden_sum_fold() : array<tuple<K : int; N : int>> {
+    // PR-E: having uses sum but select has only length — planner synthesizes a hidden sum slot
+    // in the internal table value type; result-build projects only the user-visible (K, N).
     return <- _fold([1, 2, 3, 4, 5, 6]._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select((K = _._0, N = _._1 |> length)))
 }
 
 [test]
-def test_group_by_having_unmatched_cascades_to_tier2(t : T?) {
+def test_group_by_having_hidden_sum_splices(t : T?) {
+    // PR-E splice fingerprint: no group_by_lazy or having_ runtime calls; single-hash hot path.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_hidden_sum_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "expected splice wrapper")
+        t |> equal(0, count_call(body_expr, "group_by_lazy"))
+        t |> equal(0, count_call(body_expr, "having_"))
+        t |> equal(0, count_call(body_expr, "sum"), "hidden sum inlined into += hit branch")
+        t |> equal(0, count_call(body_expr, "key_exists"), "single-hash hot path")
+        t |> success(count_call(body_expr, "unique_key") >= 1, "per-element unique_key")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_group_by_having_hidden_bare_form_cascades() : array<int> {
+    // PR-E bail: bare-form group_proj (`_._1 |> length`, not a named tuple) combined with a
+    // having reducer that needs a hidden slot — the bare table layout uses `tuple<KeyT; AccT>`
+    // synthesized inside a qmacro with embedded `typedecl(invoke(...))`, which can't be
+    // extended with a dynamic count of additional acc slots. Falls back to tier 2.
+    return <- _fold([1, 2, 3, 4, 5, 6]._group_by_lazy(_ % 2)._having(_._1 |> sum > 10)._select(_._1 |> length))
+}
+
+[test]
+def test_group_by_having_hidden_bare_form_cascades_to_tier2(t : T?) {
     // Cascade fingerprint: multiple pass_N let-vars (group, having, select all separate).
     ast_gc_guard() {
-        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_unmatched_cascades)
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_hidden_bare_form_cascades)
         if (func == null) return
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {

@@ -2016,6 +2016,106 @@ def private mk_slot_output_expr(at : LineInfo; entryName : string; spec : Reduce
 }
 
 [macro_function]
+def private mk_hidden_acc_type(reducerName : string; isInnerSelect : bool;
+                               bucketElemType, innerBodyType : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
+    // Hidden-slot acc type: like slot_acc_type but takes source types directly (hidden slots have no group_proj body to drill into).
+    if (reducerName == "length" || reducerName == "count") return new TypeDecl(baseType = Type.tInt, at = at)
+    if (reducerName == "long_count") return new TypeDecl(baseType = Type.tInt64, at = at)
+    if (reducerName == "average" || reducerName == "average_inner_select") return mk_avg_acc_type(at)
+    let src = isInnerSelect ? innerBodyType : bucketElemType
+    if (src == null) return null
+    return strip_const_ref(clone_type(src))
+}
+
+[macro_function]
+def private having_reducer_append_if_missing(var expr : Expression?; hbName, itName : string;
+                                             var specs : array<ReducerSpec>; bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
+    // Append a hidden ReducerSpec when `expr` is a bare/inner-select reducer on the having bind that has no name-match in `specs`. Returns false only on inner-select peel failure (caller cascades).
+    if (expr == null || !(expr is ExprCall)) return true
+    let c = expr as ExprCall
+    if (c.func == null || (c.arguments |> length) != 1) return true
+    var fnName = string(c.func.name)
+    if (c.func.fromGeneric != null) {
+        fnName = string(c.func.fromGeneric.name)
+    }
+    let isReducer = (fnName == "length" || fnName == "count" || fnName == "long_count"
+            || fnName == "sum" || fnName == "min" || fnName == "max"
+            || fnName == "first" || fnName == "average")
+    if (!isReducer) return true
+    if (is_bind_field_access(c.arguments[0], hbName, 1)) {
+        for (s in specs) {
+            if (s.innerBody == null && s.name == fnName) return true
+        }
+        var accType = mk_hidden_acc_type(fnName, false, bucketElemType, null, at)
+        if (accType == null) return true
+        let newSlot = (specs |> length) + 1
+        specs |> push <| ReducerSpec(slot = newSlot, name = fnName, innerBody = null, accType = accType)
+        return true
+    }
+    let canInnerSelect = (fnName == "sum" || fnName == "min" || fnName == "max"
+            || fnName == "first" || fnName == "average")
+    if (!canInnerSelect) return true
+    let inner = c.arguments[0]
+    if (inner == null || !(inner is ExprCall)) return true
+    let ic = inner as ExprCall
+    if (ic.func == null || (ic.arguments |> length) != 2 || !is_bind_field_access(ic.arguments[0], hbName, 1)) return true
+    var innerName = string(ic.func.name)
+    if (ic.func.fromGeneric != null) {
+        innerName = string(ic.func.fromGeneric.name)
+    }
+    if (innerName != "select") return true
+    let comboName = "{fnName}_inner_select"
+    for (s in specs) {
+        if (s.name == comboName) return true
+    }
+    var innerBody = fold_linq_cond(clone_expression(ic.arguments[1]), itName)
+    if (innerBody == null || innerBody._type == null) return false
+    var accType = mk_hidden_acc_type(comboName, true, bucketElemType, innerBody._type, at)
+    if (accType == null) return false
+    let newSlot = (specs |> length) + 1
+    specs |> push <| ReducerSpec(slot = newSlot, name = comboName, innerBody = innerBody, accType = accType)
+    return true
+}
+
+[macro_function]
+def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbName, itName : string;
+                                                     var specs : array<ReducerSpec>; bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
+    // Pre-rewrite walker that appends hidden ReducerSpecs for having-only reducers; unrecognized shapes leak to rewrite_having_pred (which bails on any surviving raw `<hb>`).
+    if (expr == null) return true
+    while (expr is ExprRef2Value) {
+        expr = (expr as ExprRef2Value).subexpr
+    }
+    if (expr is ExprCall) {
+        var c = expr as ExprCall
+        if (!having_reducer_append_if_missing(expr, hbName, itName, specs, bucketElemType, at)) return false
+        for (i in 0 .. (c.arguments |> length)) {
+            if (!extend_specs_for_missing_having_reducers(c.arguments[i], hbName, itName, specs, bucketElemType, at)) return false
+        }
+        return true
+    }
+    if (expr is ExprField) {
+        var f = expr as ExprField
+        return extend_specs_for_missing_having_reducers(f.value, hbName, itName, specs, bucketElemType, at)
+    }
+    if (expr is ExprOp1) {
+        var op = expr as ExprOp1
+        return extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
+    }
+    if (expr is ExprOp2) {
+        var op = expr as ExprOp2
+        if (!extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)) return false
+        return extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at)
+    }
+    if (expr is ExprOp3) {
+        var op = expr as ExprOp3
+        return (extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at))
+    }
+    return true
+}
+
+[macro_function]
 def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
     // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` (or divide expr for average) against matching specs; any other use of `<hb>` returns null and cascades.
     if (expr == null) return expr
@@ -2250,21 +2350,26 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     if (groupProjBody == null || groupProjBody._type == null) return null
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
+    let userVisibleSlotCount = specs |> length
+    // Rewrite optional having predicate against accumulator slots; bails on anything other than _._0 / reducer(_._1) matched to a select-side slot or a synthesized hidden slot (PR-E).
+    var havingPred : Expression?
+    if (havingCall != null) {
+        let hbName = "`hb`{at.line}`{at.column}"
+        var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
+        // PR-E: scan first to add hidden slots for reducers referenced by having but absent from select.
+        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, elemType, at)) return null
+        havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
+        // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
+        if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
+    }
+    let hasHidden = (specs |> length) > userVisibleSlotCount
+    // Bare form + hidden slot would require extending `tuple<KeyT; AccT>` synthesized inside a qmacro with embedded `typedecl(invoke(...))` for the key type — can't dynamically grow that. Cascade.
+    if (hasHidden && !usesNamedTuple) return null
     var hasAvg = false
     for (s in specs) {
         if (is_average_spec(s)) {
             hasAvg = true
         }
-    }
-    // Rewrite optional having predicate against accumulator slots; bails on anything other than _._0 / reducer(_._1) matched to a select slot.
-    var havingPred : Expression?
-    if (havingCall != null) {
-        let hbName = "`hb`{at.line}`{at.column}"
-        var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
-        if (rawPred == null) return null
-        havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
-        // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
-        if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
     }
     // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
     var keyBlk1 = clone_expression(keyBlock)
@@ -2278,8 +2383,22 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         // Average slots store the 2-tuple <sum;count> internally; result-build divides at output.
         if (hasAvg) {
             for (s in specs) {
-                if (is_average_spec(s) && s.slot < (tabValueType.argTypes |> length)) {
+                if (is_average_spec(s) && s.slot <= userVisibleSlotCount && s.slot < (tabValueType.argTypes |> length)) {
                     tabValueType.argTypes[s.slot] = mk_avg_acc_type(at)
+                }
+            }
+        }
+        // PR-E: append hidden slots (synthesized for having-only reducers) after the user-visible slots; result-build re-synthesizes the user's tuple shape via ExprMakeTuple, omitting them.
+        if (hasHidden) {
+            let preserveNames = (tabValueType.argNames |> length) == (tabValueType.argTypes |> length)
+            for (s in specs) {
+                if (s.slot > userVisibleSlotCount) {
+                    tabValueType.argTypes |> push <| clone_type(s.accType)
+                    if (preserveNames) {
+                        let nameIdx = tabValueType.argNames |> length
+                        tabValueType.argNames |> resize(nameIdx + 1)
+                        tabValueType.argNames[nameIdx] := "_hidden_{s.slot}"
+                    }
                 }
             }
         }
@@ -2402,8 +2521,8 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                     $i(kvName)._1
                 }
             }
-        } elif (hasAvg) {
-            // Tuple with avg slot(s): table value type stores tuple<double;uint64> per avg slot, so re-synthesize the user's tuple at result-build, dividing avg slots. Positional tuples (no field names) and named tuples both pass through recognize_reducer_specs — slot count comes from argTypes; recordNames only get filled when argNames is populated.
+        } elif (hasAvg || hasHidden) {
+            // Re-synthesize the user's tuple slot-by-slot: avg slots divide, hidden slots are omitted by iterating only user-visible argTypes; recordNames only when argNames are populated.
             var mt = new ExprMakeTuple(at = at)
             let slotCount = (groupProjBody._type.argTypes |> length)
             let hasNames = (groupProjBody._type.argNames |> length) == slotCount
