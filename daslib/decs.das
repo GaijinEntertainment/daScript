@@ -398,8 +398,10 @@ def public restart {
     if (insideQuery != 0) {
         panic("decs: can't call `restart` from inside query")
     }
-    delete deferActions
-    delete decsState
+    unsafe {
+        delete deferActions
+        delete decsState
+    }
 }
 
 def private new_entity_id() {
@@ -443,7 +445,7 @@ def public after_gc {
         if (arch.size > 0) {
             for (comp in arch.components) {
                 if (comp.gc_dummy != null) {
-                    delete comp.gc_dummy
+                    unsafe { delete comp.gc_dummy; }
                 }
             }
         }
@@ -1043,7 +1045,7 @@ def public commit {
     for (da in actions) {
         da.action |> invoke(da)
     }
-    delete actions
+    unsafe { delete actions; }
 }
 
 def public is_alive(eid : EntityId) : bool {

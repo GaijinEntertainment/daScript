@@ -97,14 +97,27 @@ finalizes its own scoped variables before the next one begins::
       // delete f runs here, at the end of each iteration
   }
 
-Heap pointers
-=============
+Heap pointers and lambdas
+==========================
 
 For class instances created with ``new``, ``delete`` requires ``unsafe``::
 
   var p = new MyClass()
   // ... use p ...
-  unsafe { delete p }
+  unsafe { delete p; }
+
+Lambdas follow the same rule: a lambda value is a fat pointer to a
+heap-allocated capture frame, and ``=`` copies it (creating an alias).
+``delete lam`` therefore requires ``unsafe`` — the caller asserts no
+other live copy exists::
+
+  var fn <- @(x : int) : int { return x * 2 }
+  // ... use fn ...
+  unsafe { delete fn; }
+
+This rule cascades: ``array<lambda<...>>``, structures with a lambda
+field, and any composite containing a lambda all inherit the
+unsafe-delete requirement.
 
 Or use ``var inscope`` for automatic cleanup::
 
@@ -133,8 +146,9 @@ When to use what
 
 .. note::
 
-   For heap pointers (from ``new``), ``delete`` requires ``unsafe``.
-   For local variables, ``delete`` is safe.
+   For heap pointers (from ``new``) and lambdas, ``delete`` requires
+   ``unsafe``. For local container variables (``array``, ``table``,
+   ``string``) without lambda fields, ``delete`` is safe.
 
 .. seealso::
 

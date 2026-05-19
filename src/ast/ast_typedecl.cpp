@@ -1153,7 +1153,7 @@ namespace das
         } else if (baseType == Type::tPointer) {
             return !smartPtr;
         } else if ( baseType == Type::tLambda ) {
-            return false;
+            return true;
         } else if ( baseType == Type::tString ) {
             return tempMatters ? false : true;
         } else {
@@ -1519,6 +1519,8 @@ namespace das
             }
             return true;
         } else if ( baseType==Type::tBlock ) {
+            return false;
+        } else if ( baseType==Type::tLambda ) {
             return false;
         } else if ( baseType==Type::tTable ) {
             if ( secondType && !secondType->isSafeToDelete(dep) ) return false;

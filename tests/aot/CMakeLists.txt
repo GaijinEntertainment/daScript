@@ -33,6 +33,11 @@ FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPEN
 #                                that subclasses `vector<MakeFieldDeclPtr>` in C++) which
 #                                has no `das_iterator<MakeStruct>` AOT specialization
 list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network|style_lint)\\.das$")
+# just_in_time bootstraps the LLVM-backed JIT module via [extern](library=LLVM.dll).
+# Without DAS_LLVM_DISABLED=OFF, the [extern] macro fails at compile time.
+IF(DAS_LLVM_DISABLED)
+    list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/just_in_time\\.das$")
+ENDIF()
 
 add_custom_target(test_aot_daslib_modules)
 SET(DASLIB_MODULES_AOT_GENERATED_SRC)
@@ -99,17 +104,22 @@ SET(AOT_DECS_MODULE_FILES
     tests/decs/test_stages_extra.das
 )
 
-# AOT for live_host test files
-FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
+# AOT for live_host test files — dasLiveHost transitively requires dashv,
+# so AOT them only when HV is enabled.
+SET(AOT_LIVE_HOST_FILES)
+SET(AOT_LIVE_HOST_MODULE_FILES)
+IF(NOT DAS_HV_DISABLED)
+    FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
 
-# Live host module files (libraries required by live_host tests)
-SET(AOT_LIVE_HOST_MODULE_FILES
-    modules/dasLiveHost/live/live_commands.das
-    modules/dasLiveHost/live/live_vars.das
-    modules/dasLiveHost/live/live_api.das
-    modules/dasLiveHost/live/live_api_builtins.das
-    modules/dasLiveHost/live/live_api_stdio.das
-)
+    # Live host module files (libraries required by live_host tests)
+    SET(AOT_LIVE_HOST_MODULE_FILES
+        modules/dasLiveHost/live/live_commands.das
+        modules/dasLiveHost/live/live_vars.das
+        modules/dasLiveHost/live/live_api.das
+        modules/dasLiveHost/live/live_api_builtins.das
+        modules/dasLiveHost/live/live_api_stdio.das
+    )
+ENDIF()
 
 # AOT for dasSQLITE module library files (required by dasSQLITE tests)
 SET(AOT_DASSQLITE_MODULE_FILES)
@@ -449,11 +459,15 @@ DAS_AOT_LIB("${AOT_DECS_MODULE_FILES}" DECS_MODULES_AOT_GENERATED_SRC test_aot_d
 
 add_custom_target(test_aot_live_host)
 SET(LIVE_HOST_AOT_GENERATED_SRC)
-DAS_AOT("${AOT_LIVE_HOST_FILES}" LIVE_HOST_AOT_GENERATED_SRC test_aot_live_host daslang)
+IF(NOT DAS_HV_DISABLED)
+    DAS_AOT("${AOT_LIVE_HOST_FILES}" LIVE_HOST_AOT_GENERATED_SRC test_aot_live_host daslang)
+ENDIF()
 
 add_custom_target(test_aot_live_host_modules)
 SET(LIVE_HOST_MODULES_AOT_GENERATED_SRC)
-DAS_AOT_LIB("${AOT_LIVE_HOST_MODULE_FILES}" LIVE_HOST_MODULES_AOT_GENERATED_SRC test_aot_live_host_modules daslang)
+IF(NOT DAS_HV_DISABLED)
+    DAS_AOT_LIB("${AOT_LIVE_HOST_MODULE_FILES}" LIVE_HOST_MODULES_AOT_GENERATED_SRC test_aot_live_host_modules daslang)
+ENDIF()
 
 add_custom_target(test_aot_strudel_modules)
 SET(STRUDEL_MODULES_AOT_GENERATED_SRC)
