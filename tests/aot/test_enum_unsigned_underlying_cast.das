@@ -4,9 +4,9 @@ require dastest/testing_boost public
 require daslib/json_boost
 
 // AOT mirror of tests/language/enum_unsigned_underlying_cast.das — exercises the same
-// uint8/uint16/uint32-backed enum cast cases through the AOT codegen path. Post-fix the generated
-// C++ should call enum8u_to_uint/enum16u_to_uint (zero-extending) rather than the signed
-// helpers.
+// uint8/uint16/uint32/uint64-backed enum cast cases through the AOT codegen path. Post-fix the
+// generated C++ should call enum8u_to_uint/enum16u_to_uint/enum64u_to_uint (zero-extending)
+// rather than the signed helpers.
 
 enum Opcode : uint8 {
     NOP = 0u8
@@ -34,12 +34,12 @@ enum Wide64 : uint64 {
 
 enum Signed8 : int8 {
     LOW = 50
-    NEGATIVE = -50
+    NEGATIVE = 0xce              // int8 bit-reinterpret = -50
 }
 
 enum Signed16 : int16 {
     LOW = 1000l
-    NEGATIVE = -1000l
+    NEGATIVE = 0xfc18l           // int16 bit-reinterpret = -1000
 }
 
 [test]

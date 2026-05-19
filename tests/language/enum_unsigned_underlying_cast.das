@@ -37,15 +37,16 @@ enum Wide64 : uint64 {
     HIGH_BIT = 0x8000000000000000ul   // 2^63 — top bit set
 }
 
-// Signed counterparts — behaviour preserved.
+// Signed counterparts — behaviour preserved. Hex literals avoid the unary-minus form
+// (daslang's lint pass treats `-N` as an expression, not an integer constant, in enum values).
 enum Signed8 : int8 {
     LOW = 50
-    NEGATIVE = -50
+    NEGATIVE = 0xce              // int8 bit-reinterpret = -50
 }
 
 enum Signed16 : int16 {
     LOW = 1000l
-    NEGATIVE = -1000l
+    NEGATIVE = 0xfc18l           // int16 bit-reinterpret = -1000
 }
 
 [test]
