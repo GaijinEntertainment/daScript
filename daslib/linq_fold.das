@@ -2875,25 +2875,36 @@ def private plan_group_by(var expr : Expression?) : Expression? {
 
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
-    // Phase 2 Z1+Z2: 2-ary lockstep zip splice + no-pred count/long_count + length shortcut.
+    // Phase 2 Z1/Z2/Z3: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip), accumulator terminators (sum/min/max/etc.), and chained selects bail to tier-2 cascade.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls) || calls[0]._1.name != "zip") return null
     var zipCall = calls[0]._0
     let zipArgCount = zipCall.arguments |> length
-    if (zipArgCount != 2 || length(calls) > 2) return null
+    // Z6 bail: result-selector form (3-arg zip = 2 sources + selector) yields scalar element stream — different splice shape, defer.
+    if (zipArgCount != 2) return null
+    // Identify recognized terminator (count/long_count). Anything else: if it's a recognized chain op, treat as no-terminator (bare); else bail.
     var lastName = ""
-    var lastCall : ExprCall?
-    if (length(calls) == 2) {
-        lastName = calls.back()._1.name
-        lastCall = calls.back()._0
-        // Z2 supports only no-pred count / long_count. Other terminators bail to tier-2.
-        if ((lastName != "count" && lastName != "long_count") || lastCall.arguments |> length != 1) return null
+    var intermediateEnd = length(calls)
+    if (length(calls) > 1) {
+        let candidateName = calls.back()._1.name
+        let candidateCall = calls.back()._0
+        if (candidateName == "count" || candidateName == "long_count") {
+            // No-pred form only (1 arg = the source). Predicate-form bails (would change per-element work).
+            if (candidateCall.arguments |> length != 1) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        }
     }
     let at = zipCall.at
     let srcAName = "`srcA`{at.line}`{at.column}"
     let srcBName = "`srcB`{at.line}`{at.column}"
     let bufName  = "`buf`{at.line}`{at.column}"
     let accName  = "`acc`{at.line}`{at.column}"
+    let skipName = "`skip`{at.line}`{at.column}"
+    let takeCountName = "`tc`{at.line}`{at.column}"
+    let skippingName = "`skipping`{at.line}`{at.column}"
+    // itName binds the tuple `(itA, itB)` at the top of the for-body; chain ops (where_/select/while-family) reference it by name.
+    let itName = "`it`{at.line}`{at.column}"
     var srcAExpr = peel_each(clone_expression(zipCall.arguments[0]))
     var srcBExpr = peel_each(clone_expression(zipCall.arguments[1]))
     if (srcAExpr == null || srcAExpr._type == null || srcBExpr == null || srcBExpr._type == null) return null
@@ -2901,56 +2912,196 @@ def private plan_zip(var expr : Expression?) : Expression? {
     srcBExpr.genFlags.alwaysSafe = true
     var srcAType = invoke_src_param_type(srcAExpr)
     var srcBType = invoke_src_param_type(srcBExpr)
+    // elementType starts as the tuple-of-refs (zip's natural element) and is rebound by `select`.
     var elementType = clone_type(zipCall._type.firstType)
+    var whereCond : Expression?
+    var projection : Expression?
+    var skipExpr : Expression?
+    var takeExpr : Expression?
+    var skipWhileCond : Expression?
+    var takeWhileCond : Expression?
+    var seenSelect = false
+    var seenSkip = false
+    var seenSkipWhile = false
+    var seenTakeWhile = false
+    var seenTake = false
+    var allProjectionsPure = true
+    // Z3 chain walk: fuse where_/select/take/skip/take_while/skip_while between zip and terminator. Predicates/projections receive the tuple element via fold_linq_cond_peel substitution with `(itA, itB)` — typer collapses `t._0/_1` to the raw iter vars.
+    for (i in 1 .. intermediateEnd) {
+        var cll & = unsafe(calls[i])
+        let opName = cll._1.name
+        if (opName == "where_") {
+            // Canonical chain order: skip/take/while-family come after where_/select. After-select chained where: defer (would require chained-bind dedup, see Phase 3d for single-source analog).
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
+            var predicate : Expression? = fold_linq_cond(cll._0.arguments[1], itName)
+            if (predicate == null) return null
+            if (whereCond == null) {
+                whereCond = predicate
+            } else {
+                whereCond = qmacro($e(whereCond) && $e(predicate))
+            }
+        } elif (opName == "select") {
+            // Skip/take/while come after select; chained selects on zip stream defer (would mirror plan_loop_or_count `intermediateBinds`).
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
+            // Pull elementType from the projection block's return expression — the SELECT call's `_type.firstType` is a typedecl(result_selector(...)) formula that doesn't resolve when the chain is wrapped in _fold (call-macro context defers generic typedecl evaluation).
+            var projElemType : TypeDeclPtr
+            var projBody = cll._0.arguments[1]
+            if (projBody is ExprMakeBlock) {
+                var projMblk = projBody as ExprMakeBlock
+                var projBlk = projMblk._block as ExprBlock
+                if (projBlk.list |> length == 1 && projBlk.list[0] is ExprReturn) {
+                    var projRet = projBlk.list[0] as ExprReturn
+                    if (projRet.subexpr != null && projRet.subexpr._type != null) {
+                        projElemType = clone_type(projRet.subexpr._type)
+                    }
+                }
+            }
+            if (projElemType == null) return null
+            // Strip constness: the projection returns an int-valued (or similar) expression typed as `T const`, but `array<T const>` is unwritable.
+            projElemType.flags.constant = false
+            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            if (projection == null) return null
+            elementType = projElemType
+            seenSelect = true
+            if (has_sideeffects(projection)) {
+                allProjectionsPure = false
+            }
+        } elif (opName == "skip") {
+            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
+            var skipArg = cll._0.arguments[1]
+            if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
+            skipExpr = clone_expression(skipArg)
+            seenSkip = true
+        } elif (opName == "skip_while") {
+            if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
+            var swArg = cll._0.arguments[1]
+            if (swArg == null) return null
+            skipWhileCond = fold_linq_cond(swArg, itName)
+            if (skipWhileCond == null) return null
+            seenSkipWhile = true
+        } elif (opName == "take_while") {
+            if (seenSelect || seenTakeWhile || seenTake) return null
+            var twArg = cll._0.arguments[1]
+            if (twArg == null) return null
+            takeWhileCond = fold_linq_cond(twArg, itName)
+            if (takeWhileCond == null) return null
+            seenTakeWhile = true
+        } elif (opName == "take") {
+            if (seenTake) return null
+            var takeArg = cll._0.arguments[1]
+            if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
+            takeExpr = clone_expression(takeArg)
+            seenTake = true
+        } else {
+            // Any other intermediate op (group_by, distinct, order_*, second zip, etc.): bail to tier-2.
+            return null
+        }
+    }
+    let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
+    let noChain = whereCond == null && projection == null && noLimits
     let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
-    var bodyStmts : array<Expression?>
-    if (lastName == "count" && bothHaveLength) {
-        bodyStmts |> push <| qmacro_expr() {
-            return int(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
-        }
-    } elif (lastName == "long_count" && bothHaveLength) {
-        bodyStmts |> push <| qmacro_expr() {
-            return int64(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
-        }
-    } elif (lastName == "count") {
-        bodyStmts |> push <| qmacro_expr() {
-            var $i(accName) = 0
-        }
-        bodyStmts |> push <| qmacro_expr() {
-            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
-                $i(accName) ++
+    let isCounter = lastName == "count" || lastName == "long_count"
+    // Length shortcut: count/long_count, no chain, both length-bearing → return min(lenA, lenB) without entering the loop.
+    if (noChain && bothHaveLength && isCounter) {
+        var bodyStmts : array<Expression?>
+        if (lastName == "count") {
+            bodyStmts |> push <| qmacro_expr() {
+                return int(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return int64(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
             }
         }
-        bodyStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } elif (lastName == "long_count") {
-        bodyStmts |> push <| qmacro_expr() {
-            var $i(accName) : int64 = 0l
-        }
-        bodyStmts |> push <| qmacro_expr() {
-            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
-                $i(accName) ++
+        return finalize_zip_invoke(bodyStmts, srcAName, srcBName, srcAType, srcBType, srcAExpr, srcBExpr, at)
+    }
+    // Build per-element body inside the for-loop. wrap_with_ranges adds skip/take/while guards; wrap_with_condition wraps with `if (whereCond)`.
+    var perStmts : array<Expression?>
+    if (isCounter) {
+        // Counter lane: if projection has side effects, evaluate it for those effects; then `acc++`.
+        if (seenSelect && !allProjectionsPure) {
+            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            perStmts |> push <| qmacro_expr() {
+                var $i(finalBindName) = $e(projection)
             }
         }
-        bodyStmts |> push <| qmacro_expr() {
-            return $i(accName)
+        perStmts |> push <| qmacro_expr() {
+            $i(accName) ++
         }
     } else {
-        // No terminator — Z1 array/iterator output.
+        // Array lane: push projection (if select fused), bound tuple `it` (when any chain op needs it), or raw `(itA, itB)` tuple (bare zip with no chain). needsItBind below decides whether `it` is bound.
+        let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
+        if (projection != null) {
+            perStmts |> push <| qmacro_expr() {
+                $i(bufName) |> push_clone($e(projection))
+            }
+        } elif (needsItBindLocal) {
+            perStmts |> push <| qmacro_expr() {
+                $i(bufName) |> push_clone($i(itName))
+            }
+        } else {
+            perStmts |> push <| qmacro_expr() {
+                $i(bufName) |> push_clone((itA, itB))
+            }
+        }
+    }
+    wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+    var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
+    // Bind `it = (itA, itB)` ahead of all chain logic when any op (where/projection/while-family) consumes it. Counter/array-identity with no fused ops skip the bind (zero-cost).
+    let needsItBind = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
+    if (needsItBind) {
+        var preStmts : array<Expression?>
+        preStmts |> reserve(2)
+        preStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            let $i(itName) = (itA, itB)
+        }
+        preStmts |> push(perBody)
+        perBody = stmts_to_expr(preStmts)
+    }
+    // Outer body assembly.
+    var bodyStmts : array<Expression?>
+    if (isCounter) {
+        if (lastName == "count") {
+            bodyStmts |> push <| qmacro_expr() {
+                var $i(accName) = 0
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                var $i(accName) : int64 = 0l
+            }
+        }
+    } else {
         bodyStmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(elementType)>
         }
-        if (bothHaveLength) {
+        // Reserve: only when noChain (no filters/limits) and both sources length-bearing — otherwise size unknown or smaller than min(len).
+        if (noChain && bothHaveLength) {
             bodyStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
             }
         }
+    }
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    // Underscore-prefix iter vars (LINT002) only when neither needsItBind nor identity-tuple push references them.
+    let bodyReferencesIterVars = needsItBind || !isCounter
+    if (isCounter && !bodyReferencesIterVars) {
         bodyStmts |> push <| qmacro_expr() {
-            for (itA, itB in $i(srcAName), $i(srcBName)) {
-                $i(bufName) |> push_clone((itA, itB))
+            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
+                $e(perBody)
             }
         }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for (itA, itB in $i(srcAName), $i(srcBName)) {
+                $e(perBody)
+            }
+        }
+    }
+    if (isCounter) {
+        bodyStmts |> push <| qmacro_expr() {
+            return $i(accName)
+        }
+    } else {
         if (expr._type.isIterator) {
             bodyStmts |> push <| qmacro_expr() {
                 return <- $i(bufName).to_sequence_move()
@@ -2961,6 +3112,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
             }
         }
     }
+    return finalize_zip_invoke(bodyStmts, srcAName, srcBName, srcAType, srcBType, srcAExpr, srcBExpr, at)
+}
+
+[macro_function]
+def private finalize_zip_invoke(var bodyStmts : array<Expression?>; srcAName, srcBName : string; var srcAType, srcBType : TypeDeclPtr;
+                                var srcAExpr, srcBExpr : Expression?; at : LineInfo) : Expression? {
     var res = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
         $b(bodyStmts)
     }, $e(srcAExpr), $e(srcBExpr)))
