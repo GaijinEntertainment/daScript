@@ -238,6 +238,8 @@ namespace das {
 
     char * StringHeapAllocator::intern(const char * str, uint64_t length) const {
         if ( needIntern ) {
+            // Intern caps at 4GB string length — StrHashEntry stores length as uint32.
+            DAS_ASSERTF(length <= UINT32_MAX, "intern requires length < 4GB, got %llu", (unsigned long long)length);
             auto it = internMap.find(StrHashEntry(str,uint32_t(length)));
             return it != internMap.end() ? (char *)it->ptr : nullptr;
         } else {
@@ -256,6 +258,7 @@ namespace das {
     }
 
     char * ConstStringAllocator::intern(const char * str, uint64_t length) const {
+        DAS_ASSERTF(length <= UINT32_MAX, "intern requires length < 4GB, got %llu", (unsigned long long)length);
         auto it = internMap.find(StrHashEntry(str,uint32_t(length)));
         return it != internMap.end() ? (char*)it->ptr : nullptr;
     }
@@ -268,6 +271,9 @@ namespace das {
 
     char * ConstStringAllocator::impl_allocateString ( const char * text, uint64_t length ) {
         if ( length ) {
+            // ConstStringAllocator only stores interned strings; the StrHashEntry
+            // length field caps at uint32. Const strings >4GB are pathological.
+            DAS_ASSERTF(length <= UINT32_MAX, "ConstStringAllocator caps at 4GB string length, got %llu", (unsigned long long)length);
             if ( text ) {
                 auto it = internMap.find(StrHashEntry(text,uint32_t(length)));
                 if ( it != internMap.end() ) {
@@ -286,7 +292,11 @@ namespace das {
 
     char * StringHeapAllocator::impl_allocateString ( Context * context, const char * text, uint64_t length, const LineInfo * at ) {
         if ( length ) {
-            if ( needIntern && text ) {
+            // Interning caps at 4GB string length (StrHashEntry::length is uint32).
+            // The underlying allocation path itself is 64-bit-safe; only the intern
+            // hash map cares. Bypass interning gracefully for huge strings.
+            const bool internOk = needIntern && length <= UINT32_MAX;
+            if ( internOk && text ) {
                 auto it = internMap.find(StrHashEntry(text,uint32_t(length)));
                 if ( it != internMap.end() ) {
                     return (char *) it->ptr;
@@ -298,7 +308,7 @@ namespace das {
 #endif
                 if ( text ) memmove(str, text, length);
                 str[length] = 0;
-                if ( needIntern && text ) internMap.insert(StrHashEntry(str,uint32_t(length)));
+                if ( internOk && text ) internMap.insert(StrHashEntry(str,uint32_t(length)));
                 return str;
             } else if ( context ) {
                 context->throw_out_of_memory(true, length + 1, at);
@@ -308,7 +318,9 @@ namespace das {
     }
 
     void StringHeapAllocator::impl_freeString ( char * text, uint64_t length ) {
-        if ( needIntern ) internMap.erase(StrHashEntry(text,uint32_t(length)));
+        // Symmetric with impl_allocateString: huge strings are never interned,
+        // so the erase is a no-op for them. Guard the cast to make that explicit.
+        if ( needIntern && length <= UINT32_MAX ) internMap.erase(StrHashEntry(text,uint32_t(length)));
         impl_free ( text, length + 1 );
     }
 

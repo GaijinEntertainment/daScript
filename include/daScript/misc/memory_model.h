@@ -396,6 +396,11 @@ namespace das {
         uint64_t bytesAllocated() const;
         uint64_t totalAlignedMemoryAllocated() const;
         __forceinline void setInitialSize ( uint64_t size ) {
+            // HeapChunk allocation is uint32-bounded; LinearChunkAllocator never
+            // serves >4GB single allocations (those go through PersistentHeapAllocator
+            // / MemoryModel::bigStuff). Setting a larger initial size would silently
+            // truncate when the first chunk is created — fail loud instead.
+            DAS_VERIFYF(size <= UINT32_MAX, "LinearChunkAllocator::setInitialSize(%llu) exceeds the per-chunk uint32 cap", (unsigned long long)size);
             unadjustedInitialSize = size;
             initialSize = size;
         }

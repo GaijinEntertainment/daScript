@@ -346,7 +346,9 @@ namespace das {
     void LinearChunkAllocator::reset() {
         if ( chunk && chunk->next ) {
             auto maxAllocated = (bytesAllocated()+1023) & ~uint64_t(1023);
-            initialSize = das::max(initialSize, maxAllocated);
+            // Clamp at UINT32_MAX so the next allocate() cast to uint32_t doesn't
+            // silently truncate a large cumulative footprint to a tiny initial chunk.
+            initialSize = das::min<uint64_t>(UINT32_MAX, das::max(initialSize, maxAllocated));
             delete chunk;
             chunk = nullptr;
         } else if ( chunk ) {
