@@ -106,6 +106,7 @@ FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "
 SET(AOT_LIVE_HOST_MODULE_FILES
     modules/dasLiveHost/live/live_commands.das
     modules/dasLiveHost/live/live_vars.das
+    modules/dasLiveHost/live/live_api.das
     modules/dasLiveHost/live/live_api_builtins.das
     modules/dasLiveHost/live/live_api_stdio.das
 )
