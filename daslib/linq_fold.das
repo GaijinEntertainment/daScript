@@ -398,7 +398,6 @@ def private is_buffer_required_op(name : string) : bool {
         || name == "distinct" || name == "distinct_by"
         || name == "reverse"
         || name == "group_by" || name == "group_by_lazy"
-        || name == "zip"
         || name == "join" || name == "left_join" || name == "group_join")
 }
 
@@ -2874,6 +2873,105 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     return finalize_emission_stmts(top, srcName, at, stmts)
 }
 
+[macro_function]
+def private plan_zip(var expr : Expression?) : Expression? {
+    // Phase 2 Z1+Z2: 2-ary lockstep zip splice + no-pred count/long_count + length shortcut.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls) || calls[0]._1.name != "zip") return null
+    var zipCall = calls[0]._0
+    let zipArgCount = zipCall.arguments |> length
+    if (zipArgCount != 2 || length(calls) > 2) return null
+    var lastName = ""
+    var lastCall : ExprCall?
+    if (length(calls) == 2) {
+        lastName = calls.back()._1.name
+        lastCall = calls.back()._0
+        // Z2 supports only no-pred count / long_count. Other terminators bail to tier-2.
+        if ((lastName != "count" && lastName != "long_count") || lastCall.arguments |> length != 1) return null
+    }
+    let at = zipCall.at
+    let srcAName = "`srcA`{at.line}`{at.column}"
+    let srcBName = "`srcB`{at.line}`{at.column}"
+    let bufName  = "`buf`{at.line}`{at.column}"
+    let accName  = "`acc`{at.line}`{at.column}"
+    var srcAExpr = peel_each(clone_expression(zipCall.arguments[0]))
+    var srcBExpr = peel_each(clone_expression(zipCall.arguments[1]))
+    if (srcAExpr == null || srcAExpr._type == null || srcBExpr == null || srcBExpr._type == null) return null
+    srcAExpr.genFlags.alwaysSafe = true
+    srcBExpr.genFlags.alwaysSafe = true
+    var srcAType = invoke_src_param_type(srcAExpr)
+    var srcBType = invoke_src_param_type(srcBExpr)
+    var elementType = clone_type(zipCall._type.firstType)
+    let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
+    var bodyStmts : array<Expression?>
+    if (lastName == "count" && bothHaveLength) {
+        bodyStmts |> push <| qmacro_expr() {
+            return int(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+        }
+    } elif (lastName == "long_count" && bothHaveLength) {
+        bodyStmts |> push <| qmacro_expr() {
+            return int64(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+        }
+    } elif (lastName == "count") {
+        bodyStmts |> push <| qmacro_expr() {
+            var $i(accName) = 0
+        }
+        bodyStmts |> push <| qmacro_expr() {
+            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
+                $i(accName) ++
+            }
+        }
+        bodyStmts |> push <| qmacro_expr() {
+            return $i(accName)
+        }
+    } elif (lastName == "long_count") {
+        bodyStmts |> push <| qmacro_expr() {
+            var $i(accName) : int64 = 0l
+        }
+        bodyStmts |> push <| qmacro_expr() {
+            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
+                $i(accName) ++
+            }
+        }
+        bodyStmts |> push <| qmacro_expr() {
+            return $i(accName)
+        }
+    } else {
+        // No terminator — Z1 array/iterator output.
+        bodyStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(elementType)>
+        }
+        if (bothHaveLength) {
+            bodyStmts |> push <| qmacro_expr() {
+                $i(bufName) |> reserve(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+            }
+        }
+        bodyStmts |> push <| qmacro_expr() {
+            for (itA, itB in $i(srcAName), $i(srcBName)) {
+                $i(bufName) |> push_clone((itA, itB))
+            }
+        }
+        if (expr._type.isIterator) {
+            bodyStmts |> push <| qmacro_expr() {
+                return <- $i(bufName).to_sequence_move()
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return <- $i(bufName)
+            }
+        }
+    }
+    var res = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
+        $b(bodyStmts)
+    }, $e(srcAExpr), $e(srcBExpr)))
+    res.force_at(at)
+    res.force_generated(true)
+    let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
+    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+    (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
+    return res
+}
+
 [call_macro(name="_fold")]
 class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
@@ -2887,6 +2985,8 @@ class private LinqFold : AstCallMacro {
         res = plan_distinct(call.arguments[0])
         if (res != null) return res
         res = plan_group_by(call.arguments[0])
+        if (res != null) return res
+        res = plan_zip(call.arguments[0])
         if (res != null) return res
         res = plan_loop_or_count(call.arguments[0])
         if (res != null) return res
