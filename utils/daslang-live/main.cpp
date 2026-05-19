@@ -27,6 +27,10 @@
 #include <dlfcn.h>
 #endif
 
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+
 using namespace das;
 
 void require_project_specific_modules();
@@ -38,6 +42,12 @@ static string project_root;
 static bool version2syntax = true;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
+// Resolved live-API port for the single-instance lock key. Populated from
+// the full argv via find_live_port_in_argv() before acquire_single_instance().
+// 0 means "not yet resolved"; defaults to 9090 if no --live-port was passed.
+// No env / config-file path — the .das side scans the same argv so both
+// agree without any state handoff.
+static int g_resolvedLivePort = 0;
 
 // --- DLL function pointers (loaded at runtime from dasModuleLiveHost) ---
 // All use POD types only — safe across DLL boundary.
@@ -563,6 +573,45 @@ static int run_lifecycle(const string & fn) {
 
 // --- Arg parsing ---
 
+// Strict port parse: rejects trailing garbage (atoi would silently accept
+// "9090abc" → 9090). Returns 0 on any failure; caller treats 0 as "no override".
+// Matches the .das side's `try_to_int` semantics so both sides reject the
+// same inputs.
+static int parse_port_strict(const char * s) {
+    if (!s || !*s) return 0;
+    char * end = nullptr;
+    long v = strtol(s, &end, 10);
+    if (end == s || *end != '\0') return 0;
+    if (v <= 0 || v > 65535) return 0;
+    return int(v);
+}
+
+// Scan the FULL argv (including any post-`--` slice) for `--live-port N` /
+// `--live-port=N`. Last occurrence wins UNCONDITIONALLY — even when the
+// last occurrence's value is invalid the result becomes 0 (caller defaults).
+// This matches `daslib/clargs.find_flag_raw_value`, which returns the raw
+// value from the last occurrence regardless of validity; `parse_port_string`
+// on the .das side then maps invalid values to 0. If C++ kept "last VALID"
+// while .das kept "last RAW (then validated)", a tail like
+// `--live-port 19090 --live-port abc` would have C++ lock on 19090 and
+// .das default to 9090, reintroducing the lock-vs-bind mismatch.
+//
+// Why full-argv: daslang-live's own arg loop stops at `--` and forwards the
+// rest to the script, but `live_api`'s [init] scans the full argv. Both
+// sides MUST agree on the same source.
+static int find_live_port_in_argv(int argc, char * argv[]) {
+    int port = 0;
+    for (int i = 1; i < argc; ++i) {
+        const char * a = argv[i];
+        if (strcmp(a, "--live-port") == 0 && i + 1 < argc) {
+            port = parse_port_strict(argv[++i]);  // last-occurrence-wins, invalid → 0
+        } else if (strncmp(a, "--live-port=", 12) == 0) {
+            port = parse_port_strict(a + 12);
+        }
+    }
+    return port;
+}
+
 static void print_help() {
     tout << "daslang-live version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n";
     tout << "daslang-live - live-reloading application host for daScript\n";
@@ -576,6 +625,7 @@ static void print_help() {
     tout << "  -heap-report       - dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules   - skip loading dynamic modules\n";
     tout << "  --no-dump-leaks    - silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
+    tout << "  --live-port <N>    - port for the REST API (default 9090, range 1-65535); recognized pre or post `--`\n";
     tout << "  --                 - separator; everything after is forwarded to the script (get_user_args)\n";
     tout << "  -h, --help         - this help\n";
 }
@@ -590,9 +640,14 @@ static HANDLE g_singleInstanceMutex = nullptr;
 static int g_lockFd = -1;
 #endif
 
-static bool acquire_single_instance() {
+static bool acquire_single_instance(int port) {
+    // Lock key includes the port so two daslang-live instances on different ports
+    // can coexist. Same port still serializes — port conflict on bind would
+    // fail anyway, so the lock just gives a cleaner error.
 #ifdef _WIN32
-    g_singleInstanceMutex = CreateMutexA(nullptr, TRUE, "daslang-live-single-instance");
+    char mutexName[64];
+    snprintf(mutexName, sizeof(mutexName), "daslang-live-single-instance-%d", port);
+    g_singleInstanceMutex = CreateMutexA(nullptr, TRUE, mutexName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         if (g_singleInstanceMutex) {
             CloseHandle(g_singleInstanceMutex);
@@ -602,7 +657,8 @@ static bool acquire_single_instance() {
     }
     return g_singleInstanceMutex != nullptr;
 #else
-    const char * lockPath = "/tmp/daslang-live.lock";
+    char lockPath[64];
+    snprintf(lockPath, sizeof(lockPath), "/tmp/daslang-live-%d.lock", port);
     g_lockFd = open(lockPath, O_CREAT | O_RDWR, 0600);
     if (g_lockFd < 0) return true;  // can't create lock file — allow running
     if (flock(g_lockFd, LOCK_EX | LOCK_NB) != 0) {
@@ -673,6 +729,14 @@ int main(int argc, char * argv[]) {
             dumpLeaks = true;
         } else if (arg == "--no-dump-leaks") {
             dumpLeaks = false;
+        } else if (arg == "--live-port" && i + 1 < argc) {
+            // Consume both flag and value here so the unknown-option branch
+            // doesn't reject them. Real parsing happens in
+            // find_live_port_in_argv() after the loop — that scan also covers
+            // post-`--` occurrences which this loop never sees.
+            ++i;
+        } else if (arg.compare(0, 12, "--live-port=") == 0) {
+            // Consume `--live-port=N` for the same reason; value parsed below.
         } else if (arg == "-h" || arg == "--help") {
             print_help();
             return 0;
@@ -706,8 +770,14 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    if (!acquire_single_instance()) {
-        fprintf(stderr, "ERROR: another instance of daslang-live is already running\n");
+    // Resolve port from full argv (pre AND post `--`) so the lock key here
+    // and the HTTP bind on the .das side both see the same source. No env,
+    // no config file — keep this stateless. Default to 9090 if no override.
+    g_resolvedLivePort = find_live_port_in_argv(argc, argv);
+    if (g_resolvedLivePort == 0) g_resolvedLivePort = 9090;
+
+    if (!acquire_single_instance(g_resolvedLivePort)) {
+        fprintf(stderr, "ERROR: another instance of daslang-live is already running on port %d\n", g_resolvedLivePort);
         return 1;
     }
 

@@ -130,7 +130,31 @@ def public build_live_script_args(file, project, project_root : string;
     return script_args
 }
 
+def private port_in_range(s : string) : bool {
+    // Used before interpolating `port` into a shell-ready argv string (see
+    // `script_args` below). Reject anything that isn't digits-only AND in
+    // [1, 65535], so:
+    //   - shell metacharacters (quotes / spaces / `$`) can never reach
+    //     `system()`,
+    //   - out-of-range ports ("0", "65536", "99999") fail fast here instead
+    //     of through a 10s daslang-live "did not respond" timeout.
+    if (empty(s) || length(s) > 5) return false
+    var n = 0
+    peek_data(s) $(bytes) {
+        for (b in bytes) {
+            let c = int(b)
+            if (c < int('0') || c > int('9')) {
+                n = -1
+                return
+            }
+            n = n * 10 + (c - int('0'))
+        }
+    }
+    return n > 0 && n <= 65535
+}
+
 def do_live_launch(file, project, project_root, port : string) : string {
+    if (!empty(port) && !port_in_range(port)) return make_tool_result("invalid port '{port}': expected 1-65535", true)
     let p = empty(port) ? "9090" : port
     // Check if already running
     if (live_is_running(p)) {
@@ -160,7 +184,13 @@ def do_live_launch(file, project, project_root, port : string) : string {
     let abs_file = resolve_path(file)
     let abs_project = empty(project) ? "" : resolve_path(project)
     let abs_project_root = empty(project_root) ? "" : resolve_path(project_root)
-    let script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
+    var script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
+    if (!empty(port)) {
+        // Make the spawned binary actually bind the requested port (matching the
+        // poll URL above). Without this, the binary uses its own default and we'd
+        // either get an "already running" false-positive or a never-responds timeout.
+        script_args = "--live-port {port} {script_args}"
+    }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
         let ps1 = replace("{launcher}.ps1", "/", "\\")

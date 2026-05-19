@@ -68,6 +68,33 @@ Tools
 
 Each tool is invoked via MCP's ``tools/call`` method.
 
+Common parameters
+-----------------
+
+Several tools share the same module-resolution arguments. Tools that
+take them are marked below; the meaning is identical everywhere.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Parameter
+     - Description
+   * - ``project``
+     - Path to a ``.das_project`` file. Equivalent to daslang's
+       ``-project <file>`` CLI flag. Use when the target source belongs
+       to a project that pins module roots / source-resolver options.
+   * - ``project_root``
+     - Project root directory --- the parent of ``modules/`` for
+       daspkg-style module resolution. Equivalent to daslang's
+       ``-project_root <path>`` CLI flag. Use when working on an
+       external module via a ``<DummyRoot>/modules/<your-module>``
+       junction.
+
+Both default to empty (no project / cwd-based resolution). Most
+compilation, navigation, introspection, execution, code-generation,
+and tree-sitter tools accept both arguments.
+
 Compilation and diagnostics
 ---------------------------
 
@@ -349,38 +376,54 @@ Live-reload control
 -------------------
 
 These tools interact with a running :ref:`daslang-live <utils_daslang_live>`
-instance via its REST API.  All accept an optional ``port`` parameter
-(default 9090).
+instance via its REST API. All accept an optional ``port`` parameter
+(default ``"9090"``); to drive a daslang-live started with
+``--live-port N``, pass the same value here so polling matches the bind.
+``live_launch`` forwards a non-empty ``port`` to the spawned binary as
+``--live-port <port>``, and rejects values outside ``[1, 65535]``
+before composing the spawn argv.
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 75
+   :widths: 20 80
 
    * - Tool
-     - Description
+     - Args + description
    * - ``live_launch``
-     - Launch ``daslang-live.exe`` on a script if not already running.
-       Sets working directory to the script's folder.  Optional
-       ``project`` is forwarded to ``daslang-live`` as
-       ``-project <file>`` for ``.das_project``-bound module
-       resolution.
+     - ``file`` (required), optional ``project``, ``project_root``,
+       ``port``. Launches ``daslang-live.exe`` on a script if not
+       already running, then polls up to 10 s for the HTTP server. The
+       working directory is set to the script's folder via the
+       ``-cwd`` flag; ``project`` and ``project_root`` are forwarded as
+       ``-project`` / ``-project_root``; ``port`` is forwarded as
+       ``--live-port``.
    * - ``live_status``
-     - Query the running instance for fps, uptime, paused state, and
-       error status.
+     - Optional ``port``. Returns JSON with ``fps``, ``uptime``,
+       ``paused``, ``dt``, ``has_error``. Returns 503 JSON if the script
+       failed to compile.
    * - ``live_error``
-     - Retrieve the last compilation error (plain text).
+     - Optional ``port``. Returns the last compilation error as plain
+       text (or JSON ``null`` if none).
    * - ``live_reload``
-     - Trigger an incremental or full reload.
+     - ``full`` (``"true"`` for full recompile, anything else for
+       incremental), optional ``port``. Works even when there is a
+       compile error.
    * - ``live_pause``
-     - Pause or unpause execution.
+     - ``paused`` (``"true"`` to pause, ``"false"`` to resume) (required),
+       optional ``port``. Returns 503 if a compile error is active.
    * - ``live_command``
-     - Dispatch a ``[live_command]`` by name with JSON arguments.
+     - ``name`` (required), optional ``args`` (JSON object string,
+       e.g. ``'{"x":1}'``), optional ``port``. Dispatches a
+       ``[live_command]`` by name. Use ``name="help"`` to list all
+       registered commands. Returns 503 on compile error.
    * - ``live_commands``
-     - Dispatch a batch of ``[live_command]``\ s in one round-trip;
-       continue-on-error semantics, response is a JSON array
-       preserving input order.
+     - ``commands`` (required, JSON array of ``{name, args}`` objects),
+       optional ``port``. Dispatches the batch in one round-trip with
+       continue-on-error semantics --- the response is a JSON array
+       preserving input order, with malformed entries surfacing
+       ``{"error":...}`` in their slot.
    * - ``live_shutdown``
-     - Gracefully shut down the running instance.
+     - Optional ``port``. Gracefully shuts the instance down.
 
 
 ast-grep / tree-sitter setup

@@ -32,6 +32,8 @@ require daslib/json
 require daslib/json_boost
 require daslib/jobque_boost
 require daslib/debugger
+require daslib/clargs
+require daslib/strings_convert
 require strings
 require live_host
 
@@ -41,8 +43,55 @@ var live_api_port : int = 9090
 
 [export]
 def live_api_set_port(port : int) {
-    //! Sets the port for the HTTP server. Must be called before agent installs.
+    //! Sets the port for the HTTP server. Must be called BEFORE the
+    //! LiveApiAgent constructor runs — the server binds at construction
+    //! time and never rebinds. Later setter calls only update the global
+    //! (visible to ``live_api_help_json``'s URL interpolation); the actual
+    //! listening socket stays on the construction-time port.
     live_api_port = port
+}
+
+def parse_port_string(s : string) : int {
+    //! Parses ``s`` as a port number. Returns the int if in [1, 65535], else 0.
+    let r = try_to_int(s)
+    if (!is_ok(r)) return 0
+    let p = unwrap(r)
+    return (p > 0 && p < 65536) ? p : 0
+}
+
+def parse_argv_port(argv : array<string>) : int {
+    //! Scans ``argv`` for ``--live-port N`` (or ``--live-port=N``) and
+    //! returns the parsed port, else 0. Scans the FULL argv, including
+    //! any post-``--`` portion, so daslang-live's C++ arg loop (which
+    //! stops at ``--``) and this scan must agree on the same source.
+    let argv_val = find_flag_raw_value(argv, "--live-port")
+    if (argv_val |> is_some) return parse_port_string(argv_val |> unwrap)
+    return 0
+}
+
+def resolve_port_override_from(argv : array<string>) : int {
+    //! Pure precedence resolver. Returns the argv ``--live-port`` value,
+    //! or 0 if none / invalid (caller keeps its default).
+    return parse_argv_port(argv)
+}
+
+def resolve_port_override() : int {
+    //! Reads real argv and returns the override. 0 = no override.
+    let argv <- get_command_line_arguments()
+    return resolve_port_override_from(argv)
+}
+
+[init]
+def init_live_api_port() {
+    //! Module init: seed ``live_api_port`` from argv ``--live-port`` if
+    //! present. A ``live_api_set_port(p)`` call BEFORE the agent constructs
+    //! still wins (the [init] runs at module load; user-script ``main()``
+    //! can override it). Calls AFTER the constructor only update the global,
+    //! not the bound socket (see ``live_api_set_port`` doc).
+    let p = resolve_port_override()
+    if (p > 0) {
+        live_api_port = p
+    }
 }
 
 // --- Response types ---
