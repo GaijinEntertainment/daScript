@@ -62,6 +62,7 @@ namespace das {
         bool                    isStatic = false;
         bool                    isTupleExpansion = false;
         bool                    isClassMethod = false;
+        bool                    isAbstract = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
 

@@ -325,8 +325,10 @@ namespace das {
                         virtfin->at, CompilationError::internal_function);
                 }
             }
+            const bool hasParent = (pStruct->parent != nullptr);
             for ( auto & ffd : pStruct->fields ) {
                 ffd.implemented = false;
+                ffd.inherited   = hasParent;
             }
             for ( auto pDecl : *list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
@@ -386,6 +388,8 @@ namespace das {
                                 ffd.sealed = pDecl->sealed;
                                 ffd.implemented = true;
                                 ffd.classMethod = pDecl->isClassMethod;
+                                ffd._abstract = pDecl->isAbstract;
+                                ffd.inherited = false;
                             }
                         }
                     } else {
@@ -410,6 +414,8 @@ namespace das {
                             oldFd->sealed = pDecl->sealed;
                             oldFd->implemented = true;
                             oldFd->classMethod = pDecl->isClassMethod;
+                            oldFd->_abstract = false;
+                            oldFd->inherited = false;
                         } else {
                             das_yyerror(scanner,"structure field is already declared "+name_at.name
                                 +", use override to replace initial value instead",name_at.at,
@@ -673,6 +679,7 @@ namespace das {
                 );
                 decl->isPrivate = isPrivate;
                 decl->isClassMethod = true;
+                decl->isAbstract = true;
                 list->push_back(decl);
             }
         }
