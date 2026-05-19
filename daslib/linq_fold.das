@@ -415,12 +415,40 @@ def private peel_each(var top : Expression?) : Expression? {
 
 [macro_function]
 def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? {
-    // Post-emit cleanup: stamp loc+generated for diagnostics; set can_shadow so gensym src coexists with user scope.
+    // Post-emit cleanup: stamp loc+generated for diagnostics; set can_shadow on every block arg so gensym sources coexist with user scope. Loop handles 1-source single planners and N-source zip emission uniformly.
     res.force_at(at)
     res.force_generated(true)
     let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
-    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+    var blkBlock = blk._block as ExprBlock
+    for (i in 0 .. length(blkBlock.arguments)) {
+        blkBlock.arguments[i].flags.can_shadow = true
+    }
     return res
+}
+
+[macro_function]
+def private finalize_lane_emission(var topExprs : array<Expression?>; srcNames : array<string>;
+                                   var bodyStmts : array<Expression?>; at : LineInfo) : Expression? {
+    // Multi-source-aware invoke wrap used by emit_accumulator_lane / emit_early_exit_lane. 1-source clones top + derives param type + emits 1-arg invoke; 2-source (zip) does both sides + emits 2-arg invoke. Caller has already pushed the for-loop into bodyStmts.
+    if (length(srcNames) == 1) {
+        var topExpr = clone_expression(topExprs[0])
+        topExpr.genFlags.alwaysSafe = true
+        var srcParamType = invoke_src_param_type(topExprs[0])
+        var res = qmacro(invoke($($i(srcNames[0]) : $t(srcParamType)) {
+            $b(bodyStmts)
+        }, $e(topExpr)))
+        return finalize_invoke(res, at)
+    }
+    var topAExpr = clone_expression(topExprs[0])
+    topAExpr.genFlags.alwaysSafe = true
+    var topBExpr = clone_expression(topExprs[1])
+    topBExpr.genFlags.alwaysSafe = true
+    var srcAType = invoke_src_param_type(topExprs[0])
+    var srcBType = invoke_src_param_type(topExprs[1])
+    var res = qmacro(invoke($($i(srcNames[0]) : $t(srcAType), $i(srcNames[1]) : $t(srcBType)) {
+        $b(bodyStmts)
+    }, $e(topAExpr), $e(topBExpr)))
+    return finalize_invoke(res, at)
 }
 
 [macro_function]
@@ -658,13 +686,14 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
 [macro_function]
 def private emit_accumulator_lane(
                                   opName : string;
-                                  var top : Expression?;
+                                  var topExprs : array<Expression?>;
                                   var projection : Expression?;
                                   var whereCond : Expression?;
                                   var intermediateBinds : array<Expression?>;
                                   var preCondStmts : array<Expression?>;
                                   var elementType : TypeDeclPtr;
-                                  srcName, accName, itName, skipName, takeCountName, skippingName : string;
+                                  srcNames : array<string>;
+                                  accName, itName, skipName, takeCountName, skippingName : string;
                                   var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                   at : LineInfo
                                   ) : Expression? {
@@ -766,21 +795,24 @@ def private emit_accumulator_lane(
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
-    bodyStmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            $e(loopBody)
+    // For-loop emission: single-source uses one iter var (itName); 2-source (zip) uses literal `itA, itB` parallel iter vars (qmacro for-loop iter-var position doesn't accept $i(...) splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts so itName resolves inside the loop body.
+    if (length(srcNames) == 1) {
+        bodyStmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcNames[0])) {
+                $e(loopBody)
+            }
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for (itA, itB in $i(srcNames[0]), $i(srcNames[1])) {
+                $e(loopBody)
+            }
         }
     }
     bodyStmts |> push <| qmacro_expr() {
         return $e(returnExpr)
     }
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var srcParamType = invoke_src_param_type(top)
-    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(bodyStmts)
-    }, $e(topExpr)))
-    return finalize_invoke(res, at)
+    return finalize_lane_emission(topExprs, srcNames, bodyStmts, at)
 }
 
 [macro_function]
@@ -797,14 +829,15 @@ def private emit_any_empty_shortcut(var top : Expression?; srcName : string; at 
 [macro_function]
 def private emit_early_exit_lane(
                                  opName : string;
-                                 var top : Expression?;
+                                 var topExprs : array<Expression?>;
                                  var projection : Expression?;
                                  var whereCond : Expression?;
                                  var intermediateBinds : array<Expression?>;
                                  var preCondStmts : array<Expression?>;
                                  var elementType : TypeDeclPtr;
                                  terminatorCall : ExprCall?;
-                                 srcName, itName, skipName, takeCountName, skippingName : string;
+                                 srcNames : array<string>;
+                                 itName, skipName, takeCountName, skippingName : string;
                                  var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                  at : LineInfo
                                  ) : Expression? {
@@ -1122,21 +1155,24 @@ def private emit_early_exit_lane(
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
-    bodyStmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            $e(loopBody)
+    // For-loop emission: 1-source uses itName; 2-source (zip) uses literal `itA, itB` (qmacro for-iter-var position doesn't accept $i splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts.
+    if (length(srcNames) == 1) {
+        bodyStmts |> push <| qmacro_expr() {
+            for ($i(itName) in $i(srcNames[0])) {
+                $e(loopBody)
+            }
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for (itA, itB in $i(srcNames[0]), $i(srcNames[1])) {
+                $e(loopBody)
+            }
         }
     }
     for (s in tailStmts) {
         bodyStmts |> push(s)
     }
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var srcParamType = invoke_src_param_type(top)
-    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(bodyStmts)
-    }, $e(topExpr)))
-    return finalize_invoke(res, at)
+    return finalize_lane_emission(topExprs, srcNames, bodyStmts, at)
 }
 
 [macro_function]
@@ -1511,10 +1547,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             && type_has_length(top._type))
         return emit_length_shortcut(lastName, top, srcName, at)
     // Ring 1: accumulator lane builds its own per-op loop body (typed accumulator, optional
-    if (lane == LinqLane.ACCUMULATOR)
-        return emit_accumulator_lane(lastName, top, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, srcName, accName, itName, skipName, takeCountName,
+    if (lane == LinqLane.ACCUMULATOR) {
+        var laneTops : array<Expression?>
+        laneTops |> push(top)
+        var laneSrcs : array<string>
+        laneSrcs |> push(srcName)
+        return emit_accumulator_lane(lastName, laneTops, projection, whereCond,
+            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, skipName, takeCountName,
             skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
     // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = calls.back()._0
@@ -1522,8 +1563,12 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         if (isAnyNoPred && whereCond == null && allProjectionsPure && noLimits
                 && type_has_length(top._type))
             return emit_any_empty_shortcut(top, srcName, at)
-        return emit_early_exit_lane(lastName, top, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, terminatorCall, srcName, itName, skipName,
+        var laneTops : array<Expression?>
+        laneTops |> push(top)
+        var laneSrcs : array<string>
+        laneSrcs |> push(srcName)
+        return emit_early_exit_lane(lastName, laneTops, projection, whereCond,
+            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, skipName,
             takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
@@ -2875,22 +2920,47 @@ def private plan_group_by(var expr : Expression?) : Expression? {
 
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
-    // Phase 2 Z1/Z2/Z3: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip), accumulator terminators (sum/min/max/etc.), and chained selects bail to tier-2 cascade.
+    // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls) || calls[0]._1.name != "zip") return null
     var zipCall = calls[0]._0
     let zipArgCount = zipCall.arguments |> length
     // Z6 bail: result-selector form (3-arg zip = 2 sources + selector) yields scalar element stream — different splice shape, defer.
     if (zipArgCount != 2) return null
-    // Identify recognized terminator (count/long_count). Anything else: if it's a recognized chain op, treat as no-terminator (bare); else bail.
+    // Identify recognized terminator. Counter: count/long_count. Accumulator: sum/min/max/average. Early-exit: first/first_or_default/any/all/contains. Anything else: treat as no-terminator (bare → ARRAY lane); unrecognized chain op bails inside the chain walk.
     var lastName = ""
     var intermediateEnd = length(calls)
     if (length(calls) > 1) {
         let candidateName = calls.back()._1.name
         let candidateCall = calls.back()._0
+        let candidateArgs = candidateCall.arguments |> length
         if (candidateName == "count" || candidateName == "long_count") {
             // No-pred form only (1 arg = the source). Predicate-form bails (would change per-element work).
-            if (candidateCall.arguments |> length != 1) return null
+            if (candidateArgs != 1) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        } elif (candidateName == "sum" || candidateName == "min" || candidateName == "max" || candidateName == "average") {
+            // Accumulator: no-arg form only (1 arg = the source).
+            if (candidateArgs != 1) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        } elif (candidateName == "first") {
+            if (candidateArgs != 1) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        } elif (candidateName == "first_or_default" || candidateName == "contains") {
+            // first_or_default(d): 1 default arg. contains(v): 1 value arg.
+            if (candidateArgs != 2) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        } elif (candidateName == "any") {
+            // any(): no pred. any(p): 1 predicate arg. Both forms recognized.
+            if (candidateArgs != 1 && candidateArgs != 2) return null
+            lastName = candidateName
+            intermediateEnd = length(calls) - 1
+        } elif (candidateName == "all") {
+            // all(p): must have predicate.
+            if (candidateArgs != 2) return null
             lastName = candidateName
             intermediateEnd = length(calls) - 1
         }
@@ -3003,6 +3073,35 @@ def private plan_zip(var expr : Expression?) : Expression? {
     let isCounter = lastName == "count" || lastName == "long_count"
     // Semantic guard: impure `select` projection AHEAD of a range op (skip/take/skip_while/take_while). The eager `select(proj)|>skip(K)` pipeline runs proj on every element; our spliced order (skip-then-push) would drop the side effects on skipped items. Bail to tier-2 which preserves eager semantics. Plan_loop_or_count has the analogous gap (see PR #2741 review thread #r3269663361); fixing both planners uniformly is a separate follow-up.
     if (seenSelect && !allProjectionsPure && !noLimits) return null
+    // Accumulator + early-exit lane dispatch: reuses the generalized emit_*_lane helpers (parallel-array form). preCondStmts threads `let it = (itA, itB)` so itName resolves inside the loop body when the where/projection/predicate/value references the tuple element.
+    let lane = classify_terminator(lastName)
+    if (lane == LinqLane.ACCUMULATOR) {
+        // sum/min/max/average without projection: elementType is tuple<...>, accumulator op would not typecheck — bail to tier-2 (typer rejects anyway, but explicit bail keeps the error inside linq's normal cascade rather than the splice).
+        if (projection == null) return null
+        var preCondStmts : array<Expression?>
+        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            let $i(itName) = (itA, itB)
+        }
+        var intermediateBinds : array<Expression?>
+        var laneTops <- [srcAExpr, srcBExpr]
+        let laneSrcs <- [srcAName, srcBName]
+        return emit_accumulator_lane(lastName, laneTops, projection, whereCond,
+            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, skipName, takeCountName,
+            skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
+    if (lane == LinqLane.EARLY_EXIT) {
+        var preCondStmts : array<Expression?>
+        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            let $i(itName) = (itA, itB)
+        }
+        var intermediateBinds : array<Expression?>
+        let terminatorCall = calls.back()._0
+        var laneTops <- [srcAExpr, srcBExpr]
+        let laneSrcs <- [srcAName, srcBName]
+        return emit_early_exit_lane(lastName, laneTops, projection, whereCond,
+            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, skipName,
+            takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
     // Length shortcut: count/long_count, no chain, both length-bearing → return min(lenA, lenB) without entering the loop.
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
