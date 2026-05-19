@@ -1615,6 +1615,57 @@ def test_group_by_count_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_inner_select_sum_fold_parity(t : T?) {
+    // G4 (PR-A1): inner-select-sum recognized via is_bucket_reducer_call's new arm.
+    // Splice inlines the inner projection into the per-element accumulator update so the
+    // bucket array is never materialized and the inner select-call disappears from the body.
+    t |> run("bare inner-select-sum: per-bucket sum of projected values") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> select(@(x : int) => x * 2) |> sum))
+        // Buckets: 0→{30,21,12} *2 = 126; 1→{10,31} *2 = 82; 2→{20,11} *2 = 62. Total = 270.
+        tt |> equal(3, length(got))
+        var total = 0
+        for (s in got) {
+            total += s
+        }
+        tt |> equal(270, total)
+    }
+    t |> run("named inner-select-sum: preserves K + projected sum") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, T = _._1 |> select(@(x : int) => x * 2) |> sum)))
+        tt |> equal(3, length(got))
+        var perKey : table<int; int>
+        for (item in got) {
+            perKey[item.K] = item.T
+        }
+        tt |> equal(126, perKey[0])   // (30+21+12)*2
+        tt |> equal(82,  perKey[1])   // (10+31)*2
+        tt |> equal(62,  perKey[2])   // (20+11)*2
+    }
+    t |> run("inner-select-sum on empty source → empty result") @(tt : T?) {
+        var empty : array<int>
+        let got <- _fold(empty._group_by(_ % 3)._select(_._1 |> select(@(x : int) => x * 2) |> sum))
+        tt |> equal(0, length(got))
+    }
+    t |> run("inner-select-sum matches plain LINQ reference (parity)") @(tt : T?) {
+        let arr = [10, 20, 30, 11, 21, 31, 12, 22, 32, 13]
+        let foldGot <- _fold(arr._group_by(_ % 4)._select((K = _._0, T = _._1 |> select(@(x : int) => x + 1) |> sum)))
+        let refGot  <- (arr._group_by(_ % 4)._select((K = _._0, T = _._1 |> select(@(x : int) => x + 1) |> sum)))
+        tt |> equal(length(refGot), length(foldGot))
+        var refMap : table<int; int>
+        var foldMap : table<int; int>
+        for (r in refGot) {
+            refMap[r.K] = r.T
+        }
+        for (f in foldGot) {
+            foldMap[f.K] = f.T
+        }
+        // Use ?[k] (safe lookup, no auto-insert) to avoid locking refMap while iterating its keys.
+        for (k in keys(refMap)) {
+            tt |> equal(refMap?[k] ?? -1, foldMap?[k] ?? -1)
+        }
+    }
+}
+
+[test]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {

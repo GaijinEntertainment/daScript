@@ -1669,19 +1669,35 @@ def private is_bind_field_access(expr : Expression?; bindName : string; fieldInd
 }
 
 [macro_function]
-def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; string> {
-    // Detects `<bindName>._1 |> reducer` where reducer ∈ {length, count, sum, long_count}.
-    if (expr == null || !(expr is ExprCall)) return (false, "")
+def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; string; Expression?> {
+    // Returns (matched, reducerName, innerLambda). innerLambda is non-null only for sum_inner_select.
+    if (expr == null || !(expr is ExprCall)) return (false, "", null)
     let c = expr as ExprCall
-    if (c.func == null) return (false, "")
+    if (c.func == null) return (false, "", null)
     var fnName = string(c.func.name)
     if (c.func.fromGeneric != null) {
         fnName = string(c.func.fromGeneric.name)
     }
-    if ((fnName != "length" && fnName != "count" && fnName != "sum" && fnName != "long_count")
-            || (c.arguments |> length) != 1
-            || !is_bind_field_access(c.arguments[0], bindName, 1)) return (false, "")
-    return (true, fnName)
+    if ((c.arguments |> length) != 1) return (false, "", null)
+    if (fnName == "length" || fnName == "count" || fnName == "sum" || fnName == "long_count") {
+        if (is_bind_field_access(c.arguments[0], bindName, 1)) return (true, fnName, null)
+    }
+    if (fnName == "sum") {
+        let inner = c.arguments[0]
+        if (inner != null && inner is ExprCall) {
+            let innerCall = inner as ExprCall
+            if (innerCall.func != null) {
+                var innerName = string(innerCall.func.name)
+                if (innerCall.func.fromGeneric != null) {
+                    innerName = string(innerCall.func.fromGeneric.name)
+                }
+                if (innerName == "select"
+                        && (innerCall.arguments |> length) == 2
+                        && is_bind_field_access(innerCall.arguments[0], bindName, 1)) return (true, "sum_inner_select", innerCall.arguments[1])
+            }
+        }
+    }
+    return (false, "", null)
 }
 
 [macro_function]
@@ -1725,11 +1741,16 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
     var reducerName : string  = ""
     var usesNamedTuple = false
+    var innerLambda : Expression?     // for sum_inner_select: raw inner select lambda, peeled below
     // Case A: body is the reducer itself (bare form, no key in output)
     {
-        let (ok, rn) = is_bucket_reducer_call(groupProjBody, bindName)
+        let (ok, rn, innerLam) = is_bucket_reducer_call(groupProjBody, bindName)
         if (ok) {
             reducerName = rn
+            // Clone to drop const propagated through tuple destructure; planner mutates innerBody later.
+            if (innerLam != null) {
+                innerLambda = clone_expression(innerLam)
+            }
         }
     }
     // Case B: body is an ExprMakeTuple(isKeyValue=true) with 2 fields:
@@ -1737,20 +1758,37 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         let mt = groupProjBody as ExprMakeTuple
         if ((mt.values |> length) == 2) {
             if (is_bind_field_access(mt.values[0], bindName, 0)) {
-                let (ok, rn) = is_bucket_reducer_call(mt.values[1], bindName)
+                let (ok, rn, innerLam) = is_bucket_reducer_call(mt.values[1], bindName)
                 if (ok) {
                     reducerName = rn
+                    if (innerLam != null) {
+                innerLambda = clone_expression(innerLam)
+            }
                     usesNamedTuple = true
                 }
             }
         }
     }
-    // v1 reducers: length/count (Acc=int), long_count (Acc=int64), sum (Acc=elemT). Inner-select-sum is deferred (see groupby_sum follow-up).
+    // Recognized: length/count (Acc=int), long_count (Acc=int64), sum (Acc=elemT), sum_inner_select (Acc=innerBodyT).
     if (reducerName == ""
-            || (reducerName != "length" && reducerName != "count" && reducerName != "long_count" && reducerName != "sum")) return null
+            || (reducerName != "length" && reducerName != "count" && reducerName != "long_count"
+                && reducerName != "sum" && reducerName != "sum_inner_select")) return null
     let isLongCountReducer = reducerName == "long_count"
-    let isSumReducer = reducerName == "sum"
-    var elemType = strip_const_ref(clone_type(top._type.firstType))
+    let isSumReducer = reducerName == "sum" || reducerName == "sum_inner_select"
+    let isSumInnerSelectReducer = reducerName == "sum_inner_select"
+    var sourceElemType = strip_const_ref(clone_type(top._type.firstType))
+    var innerBody : Expression?
+    var accType : TypeDeclPtr
+    if (isSumInnerSelectReducer) {
+        // Peel inner select's lambda body, renaming `_` → itName for direct splice into `entry._1 += <body>`.
+        innerBody = fold_linq_cond(innerLambda, itName)
+        if (innerBody == null || groupProjBody._type == null) return null
+        // accType from outer sum's _type (peeled body's _type is null — apply_template doesn't re-type-infer).
+        accType = strip_const_ref(clone_type(groupProjBody._type))
+    } else {
+        accType = clone_type(sourceElemType)
+    }
+    var elemType = sourceElemType
     // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; ResultT> below.
     var tabValueType : TypeDeclPtr
     if (usesNamedTuple) {
@@ -1778,12 +1816,12 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int64>
         }
     } elif (isSumReducer) {
+        var accType2 = clone_type(accType)
         stmts |> push <| qmacro_expr() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(elemType)>>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(accType)>>
         }
-        var elemType2 = clone_type(elemType)
         stmts |> push <| qmacro_expr() {
-            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(elemType2)>
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     } else {
         // count / length — Acc=int
@@ -1794,16 +1832,40 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; int>
         }
     }
-    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare detects the dummy path and commits.
+    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare splits into miss-branch (init+commit) and hit-branch (incremental update); the split lets each reducer pick its own init vs update shape independently.
     var keyBlk3 = clone_expression(keyBlock)
-    var accUpdate : Expression?
-    if (isSumReducer) {
-        accUpdate = qmacro_expr() {
+    var missInit : Expression?
+    var hitUpdate : Expression?
+    if (isLongCountReducer) {
+        missInit = qmacro_expr() {
+            $i(entryName)._1 = 1l
+        }
+        hitUpdate = qmacro_expr() {
+            $i(entryName)._1 ++
+        }
+    } elif (isSumInnerSelectReducer) {
+        // Two clones — each $e(...) splice consumes its expression.
+        var innerBody1 = clone_expression(innerBody)
+        var innerBody2 = clone_expression(innerBody)
+        missInit = qmacro_expr() {
+            $i(entryName)._1 = $e(innerBody1)
+        }
+        hitUpdate = qmacro_expr() {
+            $i(entryName)._1 += $e(innerBody2)
+        }
+    } elif (isSumReducer) {
+        missInit = qmacro_expr() {
+            $i(entryName)._1 = $i(itName)
+        }
+        hitUpdate = qmacro_expr() {
             $i(entryName)._1 += $i(itName)
         }
     } else {
-        // count / length / long_count all use postfix ++
-        accUpdate = qmacro_expr() {
+        // count / length — int accumulator
+        missInit = qmacro_expr() {
+            $i(entryName)._1 = 1
+        }
+        hitUpdate = qmacro_expr() {
             $i(entryName)._1 ++
         }
     }
@@ -1813,11 +1875,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             let $i(ukName) = _::unique_key($i(kName))
             unsafe {
                 var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
-                $e(accUpdate)
                 if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $e(missInit)
                     $i(dummyName)._0 = $i(kName)
                     $i(tabName)[$i(ukName)] = $i(dummyName)
                     $i(dummyName) = default<typedecl($i(dummyName))>
+                } else {
+                    $e(hitUpdate)
                 }
             }
         }
