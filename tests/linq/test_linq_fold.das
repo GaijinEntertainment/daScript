@@ -2217,6 +2217,31 @@ def test_group_by_having_unhandled_node_cascades(t : T?) {
 }
 
 [test]
+def test_group_by_having_two_same_named_inner_select_diff_lambdas(t : T?) {
+    // PR-E + Copilot review: when having has TWO same-named inner-select reducers with
+    // DIFFERENT lambdas, naive dedup-by-name would route both predicate terms to the same
+    // accumulator slot — silently wrong. Pinning correct semantics.
+    t |> run("two hidden inner-select sums (different lambdas) compute distinctly") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6, 7, 8]
+        // Bucket %3: 0=[3,6]: sum(x*2)=18, sum(x*3)=27, total=45.
+        //            1=[1,4,7]: sum(x*2)=24, sum(x*3)=36, total=60.
+        //            2=[2,5,8]: sum(x*2)=30, sum(x*3)=45, total=75.
+        // Having: sum(x*2) + sum(x*3) > 50 → buckets 1 (60>50) and 2 (75>50) pass; bucket 0 (45) fails.
+        let got <- _fold(arr._group_by_lazy(_ % 3)
+                            ._having((_._1 |> select($(x : int) => x * 2) |> sum)
+                                + (_._1 |> select($(x : int) => x * 3) |> sum) > 50)
+                            ._select((K = _._0, N = _._1 |> length)))
+        var seen : table<int; int>
+        for (kv in got) {
+            seen[kv.K] = kv.N
+        }
+        tt |> equal(2, seen |> length)
+        tt |> equal(3, seen[1])
+        tt |> equal(3, seen[2])
+    }
+}
+
+[test]
 def test_group_by_having_bare_form_with_hidden_cascades(t : T?) {
     // PR-E bail: bare-form group_proj combined with a having reducer that needs a hidden slot
     // falls back to tier 2 (the bare table layout uses `tuple<KeyT; AccT>` synthesized inside a

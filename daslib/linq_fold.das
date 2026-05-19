@@ -2029,8 +2029,9 @@ def private mk_hidden_acc_type(reducerName : string; isInnerSelect : bool;
 
 [macro_function]
 def private having_reducer_append_if_missing(var expr : Expression?; hbName, itName : string;
-                                             var specs : array<ReducerSpec>; bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
-    // Append a hidden ReducerSpec when `expr` is a bare/inner-select reducer on the having bind that has no name-match in `specs`. Returns false only on inner-select peel failure (caller cascades).
+                                             var specs : array<ReducerSpec>; userVisibleSlotCount : int;
+                                             bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
+    // Append a hidden ReducerSpec when `expr` is a bare/inner-select reducer on the having bind that has no name-match in `specs`. Returns false only on inner-select peel failure or on a second same-named hidden inner-select reducer (caller cascades — the splice can't distinguish two different inner lambdas, so we'd silently route both predicate terms to the first hidden slot).
     if (expr == null || !(expr is ExprCall)) return true
     let c = expr as ExprCall
     if (c.func == null || (c.arguments |> length) != 1) return true
@@ -2066,7 +2067,8 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
     if (innerName != "select") return true
     let comboName = "{fnName}_inner_select"
     for (s in specs) {
-        if (s.name == comboName) return true
+        // Match against a select-side spec (visible slot): v1 trusts the user wrote identical lambdas (pre-existing PR-D limitation, documented in LINQ.md). Match against an already-added hidden spec from this having scan would silently route two different inner lambdas to the same slot — bail to tier 2 instead, where each select() is evaluated separately.
+        if (s.name == comboName) return s.slot <= userVisibleSlotCount
     }
     var innerBody = fold_linq_cond(clone_expression(ic.arguments[1]), itName)
     if (innerBody == null || innerBody._type == null) return false
@@ -2079,7 +2081,8 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
 
 [macro_function]
 def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbName, itName : string;
-                                                     var specs : array<ReducerSpec>; bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
+                                                     var specs : array<ReducerSpec>; userVisibleSlotCount : int;
+                                                     bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
     // Pre-rewrite walker that appends hidden ReducerSpecs for having-only reducers; unrecognized shapes leak to rewrite_having_pred (which bails on any surviving raw `<hb>`).
     if (expr == null) return true
     while (expr is ExprRef2Value) {
@@ -2087,30 +2090,30 @@ def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbN
     }
     if (expr is ExprCall) {
         var c = expr as ExprCall
-        if (!having_reducer_append_if_missing(expr, hbName, itName, specs, bucketElemType, at)) return false
+        if (!having_reducer_append_if_missing(expr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
         for (i in 0 .. (c.arguments |> length)) {
-            if (!extend_specs_for_missing_having_reducers(c.arguments[i], hbName, itName, specs, bucketElemType, at)) return false
+            if (!extend_specs_for_missing_having_reducers(c.arguments[i], hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
         }
         return true
     }
     if (expr is ExprField) {
         var f = expr as ExprField
-        return extend_specs_for_missing_having_reducers(f.value, hbName, itName, specs, bucketElemType, at)
+        return extend_specs_for_missing_having_reducers(f.value, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
     }
     if (expr is ExprOp1) {
         var op = expr as ExprOp1
-        return extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
+        return extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
     }
     if (expr is ExprOp2) {
         var op = expr as ExprOp2
-        if (!extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)) return false
-        return extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at)
+        if (!extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
+        return extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
     }
     if (expr is ExprOp3) {
         var op = expr as ExprOp3
-        return (extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
-                && extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)
-                && extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at))
+        return (extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at))
     }
     return true
 }
@@ -2357,7 +2360,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         let hbName = "`hb`{at.line}`{at.column}"
         var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
         // PR-E: scan first to add hidden slots for reducers referenced by having but absent from select.
-        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, elemType, at)) return null
+        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
         havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
         // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
         if (havingPred == null || expr_uses_var(havingPred, hbName)) return null

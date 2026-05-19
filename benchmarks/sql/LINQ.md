@@ -602,19 +602,21 @@ Closes the explicit "having predicate references a reducer absent from the selec
 **Bail cases (cascade to tier 2):**
 - Bare-form select with hidden-slot reducer in having (per above).
 - Inner-select reducer in having whose lambda is non-peelable (peel failure returns null).
+- Two same-named inner-select reducer references in the same having clause (e.g., `_._1|>select(λ1)|>sum + _._1|>select(λ2)|>sum > N`). The splice can't tell `λ1` and `λ2` apart without structural compare; routing both to the first hidden slot would silently conflate them. Cascade tier 2 evaluates each `select()` separately and stays correct.
 - All upstream bail cases from PR-A1/A2/B/D still apply.
 
 **Edge cases worth noting:**
-- Same-name reducer in select AND having reuses the select slot (existing PR-D match-by-name behavior preserved). Hidden slot only added when no name match exists. The "inner-select reducer with different lambdas at select vs having" case still match-by-name in v1 — structural lambda compare deferred.
-- Multiple references to the SAME hidden reducer in the predicate dedup naturally: the first walk adds the spec; subsequent walks see a matching spec and skip.
-- 2+ hidden reducers fall into the same scan pass; each gets its own slot.
+- Bare reducer with same name in select AND having reuses the select slot (existing PR-D match-by-name behavior preserved).
+- Inner-select reducer in having that name-matches a select-side spec routes to that visible slot (PR-D limitation: v1 trusts the user wrote identical lambdas; structural lambda compare deferred).
+- Multiple references to the SAME bare reducer (e.g., `sum`) in the predicate dedup naturally: the first walk adds the spec; subsequent walks see a matching spec and skip.
+- 2+ DIFFERENT-named hidden reducers fall into the same scan pass; each gets its own slot.
 
 ### Headline (PR-E)
 
 | Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (this PR) | Win |
 |---|---|---:|---:|---:|---:|
 | groupby_having_hidden_sum | `each(arr) → group_by(brand) → having(sum(price) > 50000) → select((K, length)) → to_array` | 175 | 109 | **40** | **2.7× over m3 / 4.4× over m1 SQL** |
-| groupby_having_count (regression check) | `group_by → having(len>=5) → select((K, length))` | 141 | 92 | **36** | parity — PR-E scan-then-rewrite preserves the matching-slot splice |
+| groupby_having_count (regression check) | `group_by → having(len>=5) → select((K, length))` | 141 | 78 | **36** | parity — PR-E scan-then-rewrite preserves the matching-slot splice |
 
 `groupby_having_hidden_sum` lands at ~40 ns/op vs `groupby_having_count`'s ~36 — the extra ~4 ns/op is the hidden inner-select-sum's per-element `entry._{hidden} += c.price` (one extra add per source element) alongside the visible `length++`.
 
@@ -622,6 +624,7 @@ Closes the explicit "having predicate references a reducer absent from the selec
 
 - Bare-form select with hidden slot (requires restructuring the bare-table key-type qmacro to programmatic TypeDecl construction).
 - Inner-select reducer in having that uses a different lambda from a same-named select-side inner-select reducer — currently match-by-name conflates them (already a v1 limitation since PR-D; structural lambda compare TBD).
+- Two same-named inner-select reducers in the same having clause currently bail to cascade — a structural lambda compare would let us splice both correctly (sharing a slot when identical, splitting into two hidden slots when different).
 
 ## Operator-coverage checklist (parity tests)
 

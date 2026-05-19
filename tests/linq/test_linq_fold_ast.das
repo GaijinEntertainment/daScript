@@ -2429,6 +2429,32 @@ def test_group_by_having_hidden_sum_splices(t : T?) {
 }
 
 [export, marker(no_coverage)]
+def target_group_by_having_two_same_named_inner_select_cascades() : array<tuple<K : int; N : int>> {
+    // PR-E bail: two same-named inner-select reducers in the same having clause can't be
+    // distinguished by name alone — splicing would silently conflate the two lambdas onto
+    // one hidden slot. Bail to tier 2 so each select() is evaluated separately.
+    return <- _fold([1, 2, 3, 4, 5, 6, 7, 8]._group_by_lazy(_ % 3)
+                       ._having((_._1 |> select($(x : int) => x * 2) |> sum)
+                           + (_._1 |> select($(x : int) => x * 3) |> sum) > 50)
+                       ._select((K = _._0, N = _._1 |> length)))
+}
+
+[test]
+def test_group_by_having_two_same_named_inner_select_cascades_to_tier2(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_group_by_having_two_same_named_inner_select_cascades)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper from cascade")
+        t |> success(count_outer_let_vars(body_expr) >= 2,
+            "cascade fingerprint: multiple pass_N outer vars")
+    }
+}
+
+[export, marker(no_coverage)]
 def target_group_by_having_hidden_bare_form_cascades() : array<int> {
     // PR-E bail: bare-form group_proj (`_._1 |> length`, not a named tuple) combined with a
     // having reducer that needs a hidden slot — the bare table layout uses `tuple<KeyT; AccT>`
