@@ -1720,7 +1720,9 @@ def target_reverse_take_iterator_fold() : array<int> {
 [test]
 def test_reverse_take_iterator_source_uses_reverse_inplace(t : T?) {
     // R6 negative: when source is not indexable (range / iterator), the R1-R4 fallback
-    // path stays in place — reverse_inplace + resize, single outer var.
+    // path stays in place. Pins the full fallback shape (not just reverse_inplace/resize
+    // presence) so the test catches both directions of drift: (a) R6 starts mis-firing on
+    // iterator sources, (b) the R1-R4 emission shape changes (e.g. cascades to take helper).
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_take_iterator_fold)
         if (func == null) return
@@ -1729,10 +1731,15 @@ def test_reverse_take_iterator_source_uses_reverse_inplace(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for splice")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused prefilter loop (R1-R4)")
         t |> success(count_call(body_expr, "reverse_inplace") >= 1,
             "iterator source must use reverse_inplace fallback")
         t |> success(count_call(body_expr, "resize") >= 1,
             "iterator source must use resize fallback")
+        t |> equal(0, count_call(body_expr, "take"),
+            "take runtime helper must NOT be called (resize replaces it)")
+        t |> equal(1, count_outer_let_vars(body_expr),
+            "single outer var (the buffer) — anti-cascade gate")
     }
 }
 

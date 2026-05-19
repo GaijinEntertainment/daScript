@@ -328,7 +328,8 @@ Recognized chain: `src [|> where_(p)]* [|> select(proj)]? |> reverse [|> take(N)
 | Terminator | Emission |
 |---|---|
 | `to_array` (default) | prefilter loop → push into buffer → `reverse_inplace(buf)` → `return <- buf` |
-| `take(N) \|> to_array` | prefilter → push → `reverse_inplace` → `resize(min(N, length(buf)))` → `return <- buf` (semantics: "last N of source in reverse order") |
+| `take(N) \|> to_array`, **array source, no where/select** (R6) | backward index loop visiting `src[len-1 .. max(0, len-N))` directly into a `reserve(takeN)`'d buffer — skips `reverse_inplace` and the full-source push. See "Phase 3+ reverse_take backward index loop (PR-C)" section below |
+| `take(N) \|> to_array`, **iterator source or with where/select** (R1-R4 fallback) | prefilter → push → `reverse_inplace` → `resize(min(N, length(buf)))` → `return <- buf` (semantics: "last N of source in reverse order") |
 | `count` | counter loop only (no buffer, no reverse) — reverse doesn't change count |
 | `first` | last-survivor tracker — keep last element seen, `panic` if none |
 | `first_or_default(d)` | last-survivor tracker — keep last element seen, return `d` if none |
@@ -377,7 +378,8 @@ Bails to tier 2 cascade on: inner-select-sum (`_._1 |> select(<inner>) |> sum` �
 | distinct_count | `each(arr) → select(brand) → distinct → to_array` | 41 | 43 | 33 | **16** | **2.7× over m3 / 2.1× over prev / faster than m1 SQL** |
 | distinct_take (NEW) | `each(arr) → select(brand) → distinct → take(3) → to_array` | 0 | 30 | — | **0** | early-exit at 3 unique brands — splice eliminates generator-dispatch overhead |
 | groupby_count | `each(arr) → group_by(brand) → select(brand, length) → to_array` | 141 | 71 | 76 | **37** | **2.1× over prev / 1.9× over m3 / 3.8× over m1 SQL** |
-| reverse_take (NEW) | `each(arr) → reverse → take(10) → to_array` | 0\* | 22 | — | **34** | regression vs m3 — see footnote (closed in PR-C with backward index loop, see Phase 3+ notes) |
+| reverse_take (NEW) | `each(arr) → reverse → take(10) → to_array` | 0\* | 22 | — | **34** | regression vs m3 — see footnote (closed in PR-C below) |
+| reverse_take (PR-C, backward index loop) | same chain on array source | 0\* | 22 | 34 | **0** | **closes the regression — backward index loop visits only last N indices** |
 | groupby_sum (deferred) | `each(arr) → group_by(brand) → select(brand, select(price) → sum) → to_array` | 173 | 98 | 107 | **108** | unchanged — inner-select-sum (see follow-up) |
 | groupby_sum (PR-A1, inner-select-sum) | same chain | 174 | 101 | 108 | **36** | **3× over prev / 2.8× over m3 / 4.8× over m1 SQL** — closes the deferred follow-up |
 
