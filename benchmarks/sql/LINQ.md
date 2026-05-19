@@ -377,7 +377,7 @@ Bails to tier 2 cascade on: inner-select-sum (`_._1 |> select(<inner>) |> sum` �
 | distinct_count | `each(arr) → select(brand) → distinct → to_array` | 41 | 43 | 33 | **16** | **2.7× over m3 / 2.1× over prev / faster than m1 SQL** |
 | distinct_take (NEW) | `each(arr) → select(brand) → distinct → take(3) → to_array` | 0 | 30 | — | **0** | early-exit at 3 unique brands — splice eliminates generator-dispatch overhead |
 | groupby_count | `each(arr) → group_by(brand) → select(brand, length) → to_array` | 141 | 71 | 76 | **37** | **2.1× over prev / 1.9× over m3 / 3.8× over m1 SQL** |
-| reverse_take (NEW) | `each(arr) → reverse → take(10) → to_array` | 0\* | 22 | — | **34** | regression vs m3 — see footnote |
+| reverse_take (NEW) | `each(arr) → reverse → take(10) → to_array` | 0\* | 22 | — | **34** | regression vs m3 — see footnote (closed in PR-C with backward index loop, see Phase 3+ notes) |
 | groupby_sum (deferred) | `each(arr) → group_by(brand) → select(brand, select(price) → sum) → to_array` | 173 | 98 | 107 | **108** | unchanged — inner-select-sum (see follow-up) |
 | groupby_sum (PR-A1, inner-select-sum) | same chain | 174 | 101 | 108 | **36** | **3× over prev / 2.8× over m3 / 4.8× over m1 SQL** — closes the deferred follow-up |
 
@@ -385,7 +385,7 @@ Bails to tier 2 cascade on: inner-select-sum (`_._1 |> select(<inner>) |> sum` �
 
 **`groupby_count` win**: plain LINQ materializes per-bucket arrays then counts each. The splice keeps only `table<brand → int>` updated per element with `entry._1++`. The result-build loop iterates `values(tab)` (5 entries) — total work is one source pass + 5 emplaces vs tier 2's per-bucket array allocation+push+length-call. Result beats SQL by 4.3× because no engine round-trip overhead.
 
-**`reverse_take` regression vs m3** (34 vs 22 ns/op): both variants materialize the full source into a buffer (the iterator-form `reverse()` in [linq.das:234](daslib/linq.das#L234) does it via `generator capture` + per-yield indexing; the splice does it via `push_clone` in the prefilter loop). The cost difference is the second pass: m3's generator yields `buffer[len-i-1]` lazily, so `take(TAKE_N)` only triggers N yields; the splice instead calls `reverse_inplace(buf)` (full O(length) swap) and then `resize(N)`. For TAKE_N << length the lazy-yield approach wins because the reverse is bounded to N instead of length. The splice still wins the headline shape (`reverse |> to_array` without take) where both variants pay full-length cost but the splice avoids the generator-dispatch overhead. A future optimization could detect `reverse |> take(N)` on array-typed sources and emit a backward index loop bounded to `[max(0, len-N), len)` — deferred. \* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index.
+**`reverse_take` regression vs m3** (originally 34 vs 22 ns/op, closed in PR-C — see "backward index loop" section below): both variants materialize the full source into a buffer (the iterator-form `reverse()` in [linq.das:234](daslib/linq.das#L234) does it via `generator capture` + per-yield indexing; the splice did it via `push_clone` in the prefilter loop). The cost difference was the second pass: m3's generator yields `buffer[len-i-1]` lazily, so `take(TAKE_N)` only triggered N yields; the splice instead called `reverse_inplace(buf)` (full O(length) swap) and then `resize(N)`. PR-C detects `reverse |> take(N)` on array-typed sources at macro time and emits a backward index loop bounded to `[max(0, len-N), len)`, visiting only the last N indices — m3f now lands at ~0 ns/op for TAKE_N=10 at 100K. \* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index.
 
 **`groupby_sum` unchanged**: the benchmark uses `g._1 |> _select($(c : Car) => c.price) |> _sum()` — an inner-select-sum chain. The G4 recognizer covers bare `_._1 |> sum` but doesn't yet inline the inner projection into the `+=` site. Falls back to tier 2 array-shape (correct but slow). Deferred to follow-up (~80 LOC; see plan).
 
@@ -433,10 +433,9 @@ Closes the remaining BufferGroupBy gaps from PR-A1's deferred-follow-up list. Tw
 
 All 6 splice variants land within ~36–53 ns/op — the per-element work is bounded by the single hash op + slot mutations regardless of which reducer or how many. The multi-reducer ~53 ns/op pays a small overhead per extra slot (~5 ns each), still beats SQL by 3.6×.
 
-### Deferred for PR-C / follow-ups
+### Deferred for follow-ups
 
 - `average` reducer (2-slot per-key acc + post-process division — separate follow-up)
-- `reverse_take` backward index loop on array sources (PR-C)
 - `having_*` between `group_by` and `select(group_proj)` (still cascades to tier 2)
 
 ## Phase 3+ groupby reducer expansion — upstream where/select fusion (PR-B)
@@ -539,6 +538,48 @@ Closes the explicit `average` cascade deferred since PR-A1 / PR-A2 / PR-D. `aver
 
 `groupby_average` lands at ~52 ns/op vs `groupby_sum`'s ~36 — the extra ~16 ns/op is the 2-slot accumulator update (one extra `double(...) += ...` and `++` per source element) plus the per-bucket division at result-build (runs O(num distinct keys), not O(N)).
 
+## Phase 3+ reverse_take backward index loop (PR-C)
+
+Closes the documented `reverse_take` regression (34 vs 22 ns/op m3f-vs-m3 at TAKE_N=10/N=100K). The original R1–R4 emit shape pushed every source element into the buffer, ran an O(length) `reverse_inplace`, then `resize(N)` truncated everything past the first N — wasting work proportional to `length - N`.
+
+**How it lands:**
+
+`plan_reverse` adds an R6 arm taken when *all* of these hold:
+
+- `take(N)` is present at the chain tail
+- no upstream `where_`
+- no upstream `select`
+- source type is `isGoodArrayType || isArray` (need O(1) indexing — iterator/range sources don't qualify and fall through to R1-R4)
+
+The emission becomes:
+
+```
+let __len = length(src)
+let __takeN = N <= 0 ? 0 : (N < __len ? N : __len)
+var buf : array<T>
+buf |> reserve(__takeN)
+for (k in 0 .. __takeN) {
+    buf |> push_clone(src[__len - 1 - k])
+}
+return buf
+```
+
+Only the last `min(N, length)` indices are visited; the entire `reverse_inplace` + truncate pass is skipped. The take-bound clamp keeps the original `take(N <= 0)` and `take(N > length)` semantics.
+
+**Bail conditions (cascade to R1-R4):**
+- Iterator source (no O(1) index access). Verified by AST test `test_reverse_take_iterator_source_uses_reverse_inplace`.
+- Upstream `where_` — can't predict which indices survive without visiting all elements.
+- Upstream `select` — eager-projection semantics differ from per-index lazy projection; the R1-R4 path preserves current behavior.
+- `reverse |> to_array` without take — full-length materialization is unavoidable.
+
+### Headline (PR-C)
+
+| Benchmark | Shape | m1 (sql) | m3 (linq) | m3f (prev) | m3f (this PR) | Win |
+|---|---|---:|---:|---:|---:|---:|
+| reverse_take | `each(arr) → reverse → take(10) → to_array` | 0\* | 22 | 34 | **0** | **closes the regression — beats m3 too** |
+
+\* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index. The m3f 0 ns/op result means sub-nanosecond per element averaged across 10/100K visited elements — the backward index loop runs only 10 iterations regardless of N.
+
 ## Operator-coverage checklist (parity tests)
 
 The 24 benchmarks above cover the most common shapes. The end-game target is one benchmark per `_fold`-applicable scenario in the broader `tests/linq/` operator suite. Tracking the long-tail coverage below; PRs that add splice support for new operators should add a benchmark here if not already present.
@@ -549,7 +590,7 @@ The 24 benchmarks above cover the most common shapes. The end-game target is one
 | `test_linq_aggregation.das` | count/sum/min/max/avg/aggregate | count/sum/min/max/average_aggregate, sum_where, long_count_aggregate | ✅ core; `aggregate(seed, fn)` ⏳ |
 | `test_linq_querying.das` | any/all/contains | any_match, all_match, contains_match | ✅ core |
 | `test_linq_transform.das` | select/select_many/zip | to_array_filter, zip_dot_product | ✅ select/zip; `select_many` ⏳ |
-| `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (this PR; `reverse \|> take(N)` shape is a regression vs lazy iterator — see Phase 3+ notes) |
+| `test_linq_sorting.das` | order/order_by/reverse | sort_first, sort_take, select_where_order_take, reverse_take | ✅ ascending + `order_descending` (Phase 3); ✅ `reverse` (Phase 3+); ✅ `reverse \|> take(N)` backward index loop on array sources (PR-C — closes the prior regression) |
 | `test_linq_group_by.das` | group_by/group_by_lazy/having | groupby_count, groupby_sum, groupby_min, groupby_max, groupby_first, groupby_multi_reducer, groupby_where_count, groupby_where_sum, groupby_select_sum, groupby_having_count, groupby_average | ✅ count/long_count/sum + inner-select-sum (PR-A1); ✅ min/max/first + inner-select-{min,max,first} + multi-reducer (PR-A2); ✅ upstream where_/select* fusion (PR-B); ✅ `having_` with matching slot (PR-D); ✅ `average` + inner-select-average + multi-reducer-with-average (PR-A2 follow-up) |
 | `test_linq_join.das` | join/left_join/right_join/full_outer/cross | join_count | ✅ inner; outer joins + cross ⏳ |
 | `test_linq_partition.das` | take/skip/take_while/skip_while/chunk | take_count, skip_take, take_sum_aggregate, take_count_filtered | ✅ take/skip in splice lanes; `_while` + `chunk` ⏳ |
