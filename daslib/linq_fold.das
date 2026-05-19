@@ -3001,6 +3001,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
     let noChain = whereCond == null && projection == null && noLimits
     let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
     let isCounter = lastName == "count" || lastName == "long_count"
+    // Semantic guard: impure `select` projection AHEAD of a range op (skip/take/skip_while/take_while). The eager `select(proj)|>skip(K)` pipeline runs proj on every element; our spliced order (skip-then-push) would drop the side effects on skipped items. Bail to tier-2 which preserves eager semantics. Plan_loop_or_count has the analogous gap (see PR #2741 review thread #r3269663361); fixing both planners uniformly is a separate follow-up.
+    if (seenSelect && !allProjectionsPure && !noLimits) return null
     // Length shortcut: count/long_count, no chain, both length-bearing → return min(lenA, lenB) without entering the loop.
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
@@ -3047,8 +3049,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
     }
     wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
     var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
-    // Bind `it = (itA, itB)` ahead of all chain logic when any op (where/projection/while-family) consumes it. Counter/array-identity with no fused ops skip the bind (zero-cost).
-    let needsItBind = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
+    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path.
+    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure)
+    let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null
     if (needsItBind) {
         var preStmts : array<Expression?>
         preStmts |> reserve(2)

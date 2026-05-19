@@ -147,6 +147,19 @@ def target_zip_order_bail() : array<int> {
     return <- [30, 10, 40, 20, 50].zip([3, 1, 4, 2, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> order() |> _fold()
 }
 
+// PR #2741 Copilot review thread #r3269663361 — impure select projection ahead of a range op. Eager pipeline runs proj on every element; spliced order would skip it on dropped items, so plan_zip bails. Track proj-eval count via a global counter to assert tier-2 semantics survived.
+var g_zip_proj_hits = 0
+
+def private side_effect_zip_proj(p : int) : int {
+    g_zip_proj_hits++
+    return p
+}
+
+[export, marker(no_coverage)]
+def target_zip_impure_select_skip_bails() : array<int> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => side_effect_zip_proj(t._0)) |> skip(2) |> _fold()
+}
+
 [export, marker(no_coverage)]
 def target_zip3_fold() : array<tuple<int; int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
@@ -522,6 +535,37 @@ def test_zip_order_bail_correct(t : T?) {
         t |> equal(length(result), 5)
         t |> equal(result[0], 11)
         t |> equal(result[4], 55)
+    }
+}
+
+// PR #2741 Copilot review #r3269663361: impure projection + range op must bail so the projection runs on every element (eager pipeline semantics).
+[test]
+def test_zip_impure_select_skip_bails_to_tier2(t : T?) {
+    t |> run("impure select + skip bails to tier-2; projection runs on every element") @(t : T?) {
+        g_zip_proj_hits = 0
+        let result <- target_zip_impure_select_skip_bails()
+        // skip(2) on a length-5 stream → 3 surviving elements [30, 40, 50]
+        t |> equal(length(result), 3)
+        // Critical: projection must have fired 5 times (once per input), not 3 (only survivors)
+        t |> equal(g_zip_proj_hits, 5)
+    }
+}
+
+// PR #2741 Copilot review #r3269663397: pure `zip+select+count` skips the `let it = (itA, itB)` body bind. Inner for-body should be a single stmt (`acc++`), not 2 (bind + acc++).
+[test]
+def test_zip_select_count_pure_skips_it_bind(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_select_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "pure zip+select+count uses counter for-loop")
+        let nbody = count_for_body_stmts(body_expr)
+        t |> equal(nbody, 1, "pure zip+select+count counter body is just `acc++` — no `let it = (itA, itB)` bind")
     }
 }
 
