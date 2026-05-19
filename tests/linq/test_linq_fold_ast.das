@@ -82,6 +82,84 @@ def target_zip_count_unequal_fold() : int {
     return _fold([1, 2, 3, 4, 5].zip([10, 20, 30]).count())
 }
 
+// Phase 2 Z3 targets — chain ops between zip and terminator (where_/select/take/skip/take_while/skip_while).
+// All use the `$(t : tuple<int;int>)` block form so the typer accepts the chain at the inner-arg level (needed before plan_zip fires).
+[export, marker(no_coverage)]
+def target_zip_where_arr_fold() : array<tuple<int; int>> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_select_arr_fold() : array<int> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_where_select_fold() : array<int> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_take_fold() : array<tuple<int; int>> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(2) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_skip_fold() : array<tuple<int; int>> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip(3) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_take_while_fold() : array<tuple<int; int>> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_skip_while_fold() : array<tuple<int; int>> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
+}
+
+[export, marker(no_coverage)]
+def target_zip_where_count_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> count())
+}
+
+[export, marker(no_coverage)]
+def target_zip_take_count_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(3) |> count())
+}
+
+[export, marker(no_coverage)]
+def target_zip_select_count_fold() : int {
+    // Pure projection + count: the counter lane skips evaluating projection (no side effect to preserve), so this still beats a per-elem proj eval.
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> count())
+}
+
+// Phase 2 Z6 bail target — result-selector zip form. plan_zip bails on zipArgCount != 2; tier-2 cascade (fold_linq_default) handles it. Test only that result is correct end-to-end.
+[export, marker(no_coverage)]
+def target_zip_result_selector_bail() : array<int> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5], $(p : int; q : int) => p + q) |> _fold()
+}
+
+// Phase 2 Z6 bail target — chain op (order) that plan_zip doesn't fuse. Tier-2 cascade handles it.
+[export, marker(no_coverage)]
+def target_zip_order_bail() : array<int> {
+    return <- [30, 10, 40, 20, 50].zip([3, 1, 4, 2, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> order() |> _fold()
+}
+
+// PR #2741 Copilot review thread #r3269663361 — impure select projection ahead of a range op. Eager pipeline runs proj on every element; spliced order would skip it on dropped items, so plan_zip bails. Track proj-eval count via a global counter to assert tier-2 semantics survived.
+var g_zip_proj_hits = 0
+
+def private side_effect_zip_proj(p : int) : int {
+    g_zip_proj_hits++
+    return p
+}
+
+[export, marker(no_coverage)]
+def target_zip_impure_select_skip_bails() : array<int> {
+    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => side_effect_zip_proj(t._0)) |> skip(2) |> _fold()
+}
+
 [export, marker(no_coverage)]
 def target_zip3_fold() : array<tuple<int; int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
@@ -280,6 +358,214 @@ def test_zip_count_iter_emits_counter_loop(t : T?) {
         t |> equal(zipCalls, 0, "zip must be inlined")
         let countCalls = count_call(body_expr, "count")
         t |> equal(countCalls, 0, "count must be inlined into acc++")
+    }
+}
+
+// ── Phase 2 Z3 behavioral + AST shape tests (chain ops fused into zip splice) ─
+
+[test]
+def test_zip_where_arr_fold_result(t : T?) {
+    t |> run("zip + where_ filters by tuple element") @(t : T?) {
+        let result <- target_zip_where_arr_fold()
+        // a=[10,20,30,40,50], b=[1..5]: pairs where a>20 → [(30,3),(40,4),(50,5)]
+        t |> equal(length(result), 3)
+        t |> equal(result[0]._0, 30)
+        t |> equal(result[0]._1, 3)
+        t |> equal(result[2]._0, 50)
+        t |> equal(result[2]._1, 5)
+    }
+}
+
+[test]
+def test_zip_select_arr_fold_result(t : T?) {
+    t |> run("zip + select projects per element") @(t : T?) {
+        let result <- target_zip_select_arr_fold()
+        // sum each pair: [11, 22, 33, 44, 55]
+        t |> equal(length(result), 5)
+        t |> equal(result[0], 11)
+        t |> equal(result[4], 55)
+    }
+}
+
+[test]
+def test_zip_where_select_fold_result(t : T?) {
+    t |> run("zip + where + select chains predicate and projection") @(t : T?) {
+        let result <- target_zip_where_select_fold()
+        // filter a>20, then sum: [33, 44, 55]
+        t |> equal(length(result), 3)
+        t |> equal(result[0], 33)
+        t |> equal(result[2], 55)
+    }
+}
+
+[test]
+def test_zip_take_fold_result(t : T?) {
+    t |> run("zip + take limits to N pairs") @(t : T?) {
+        let result <- target_zip_take_fold()
+        t |> equal(length(result), 2)
+        t |> equal(result[0]._0, 10)
+        t |> equal(result[1]._0, 20)
+    }
+}
+
+[test]
+def test_zip_skip_fold_result(t : T?) {
+    t |> run("zip + skip drops K pairs from the front") @(t : T?) {
+        let result <- target_zip_skip_fold()
+        t |> equal(length(result), 2)
+        t |> equal(result[0]._0, 40)
+        t |> equal(result[1]._0, 50)
+    }
+}
+
+[test]
+def test_zip_take_while_fold_result(t : T?) {
+    t |> run("zip + take_while yields prefix that matches predicate") @(t : T?) {
+        let result <- target_zip_take_while_fold()
+        // take while a < 30 → [(10,1),(20,2)]
+        t |> equal(length(result), 2)
+        t |> equal(result[0]._0, 10)
+        t |> equal(result[1]._0, 20)
+    }
+}
+
+[test]
+def test_zip_skip_while_fold_result(t : T?) {
+    t |> run("zip + skip_while yields tail after first false") @(t : T?) {
+        let result <- target_zip_skip_while_fold()
+        // skip while a < 30 → [(30,3),(40,4),(50,5)]
+        t |> equal(length(result), 3)
+        t |> equal(result[0]._0, 30)
+        t |> equal(result[2]._0, 50)
+    }
+}
+
+[test]
+def test_zip_where_count_fold_result(t : T?) {
+    t |> run("zip + where + count returns matched count") @(t : T?) {
+        t |> equal(target_zip_where_count_fold(), 3)
+    }
+}
+
+[test]
+def test_zip_take_count_fold_result(t : T?) {
+    t |> run("zip + take + count returns min(N, len)") @(t : T?) {
+        t |> equal(target_zip_take_count_fold(), 3)
+    }
+}
+
+[test]
+def test_zip_select_count_fold_result(t : T?) {
+    t |> run("zip + select + count returns full length (pure projection)") @(t : T?) {
+        t |> equal(target_zip_select_count_fold(), 5)
+    }
+}
+
+[test]
+def test_zip_where_emits_single_for_with_filter(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_where_arr_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "zip+where must emit exactly one for-loop")
+        let whereCalls = count_call(body_expr, "where_")
+        t |> equal(whereCalls, 0, "where_ call must be inlined into if-wrap, not preserved")
+    }
+}
+
+[test]
+def test_zip_select_emits_inline_projection(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_select_arr_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "zip+select must emit one for-loop with inline projection")
+        let selectCalls = count_call(body_expr, "select")
+        t |> equal(selectCalls, 0, "select call must be inlined into push_clone(projection)")
+    }
+}
+
+[test]
+def test_zip_take_emits_break_in_loop(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_take_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let n = count_inner_for_loops(body_expr)
+        t |> equal(n, 1, "zip+take emits a single for-loop with break-guard")
+        let breaks = count_break_continue(body_expr, true)
+        t |> success(breaks >= 1, "zip+take must splice a `break` into the for-body")
+        let takeCalls = count_call(body_expr, "take")
+        t |> equal(takeCalls, 0, "take call must be inlined as counter+break")
+    }
+}
+
+// Phase 2 Z6 bail behavioral tests — these compile and run through tier-2 cascade (fold_linq_default), not plan_zip. Verify correctness only.
+
+[test]
+def test_zip_result_selector_bail_correct(t : T?) {
+    t |> run("zip(a, b, selector) form bails to tier-2 cascade and computes correct result") @(t : T?) {
+        let result <- target_zip_result_selector_bail()
+        // [10..50].zip([1..5], p+q) = [11, 22, 33, 44, 55]
+        t |> equal(length(result), 5)
+        t |> equal(result[0], 11)
+        t |> equal(result[4], 55)
+    }
+}
+
+[test]
+def test_zip_order_bail_correct(t : T?) {
+    t |> run("zip + select + order bails to tier-2 cascade and produces sorted result") @(t : T?) {
+        let result <- target_zip_order_bail()
+        // a=[30,10,40,20,50] b=[3,1,4,2,5]: pair sums [33,11,44,22,55] sorted ascending → [11,22,33,44,55]
+        t |> equal(length(result), 5)
+        t |> equal(result[0], 11)
+        t |> equal(result[4], 55)
+    }
+}
+
+// PR #2741 Copilot review #r3269663361: impure projection + range op must bail so the projection runs on every element (eager pipeline semantics).
+[test]
+def test_zip_impure_select_skip_bails_to_tier2(t : T?) {
+    t |> run("impure select + skip bails to tier-2; projection runs on every element") @(t : T?) {
+        g_zip_proj_hits = 0
+        let result <- target_zip_impure_select_skip_bails()
+        // skip(2) on a length-5 stream → 3 surviving elements [30, 40, 50]
+        t |> equal(length(result), 3)
+        // Critical: projection must have fired 5 times (once per input), not 3 (only survivors)
+        t |> equal(g_zip_proj_hits, 5)
+    }
+}
+
+// PR #2741 Copilot review #r3269663397: pure `zip+select+count` skips the `let it = (itA, itB)` body bind. Inner for-body should be a single stmt (`acc++`), not 2 (bind + acc++).
+[test]
+def test_zip_select_count_pure_skips_it_bind(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_select_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "pure zip+select+count uses counter for-loop")
+        let nbody = count_for_body_stmts(body_expr)
+        t |> equal(nbody, 1, "pure zip+select+count counter body is just `acc++` — no `let it = (itA, itB)` bind")
     }
 }
 
