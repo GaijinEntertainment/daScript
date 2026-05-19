@@ -1956,6 +1956,37 @@ def test_group_by_upstream_fusion_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_upstream_select_after_where_is_lazy(t : T?) {
+    // PR-B correctness guard: a select that appears AFTER a where must execute ONLY for
+    // where-survivors. Eager evaluation of all upstream selects before any where guard would
+    // run the projection for filtered-out elements — wrong per reference LINQ semantics, and
+    // breaks programs whose projection depends on the filter (e.g. `where(_!=0).select(10/_)`).
+    t |> run("where → select with side-effect: select fires only on where-survivors") @(tt : T?) {
+        g_proj_hits = 0
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._where(_ > 5)._select(projection_with_side_effect(_))._group_by(_ % 3)._select(_._1 |> length))
+        // Survivors: [6,7,8,9,10] = 5 elements. Lazy select fires once per survivor.
+        tt |> equal(5, g_proj_hits, "select-after-where: projection runs only on where survivors")
+        var total = 0
+        for (c in got) {
+            total += c
+        }
+        tt |> equal(5, total)
+    }
+    t |> run("select → where → select: only the FIRST select runs unconditionally; second runs only on where-survivors") @(tt : T?) {
+        g_proj_hits = 0
+        // First select doubles; where filters projected > 10; second select counts only survivors.
+        let got <- _fold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]._select(_ * 2)._where(_ > 10)._select(projection_with_side_effect(_))._group_by(_ % 3)._select(_._1 |> length))
+        // After *2: [2,4,6,8,10,12,14,16,18,20]; >10 keeps [12,14,16,18,20] = 5 survivors.
+        tt |> equal(5, g_proj_hits, "second select runs only on where survivors")
+        var total = 0
+        for (c in got) {
+            total += c
+        }
+        tt |> equal(5, total)
+    }
+}
+
+[test]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {

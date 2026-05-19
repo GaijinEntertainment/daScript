@@ -1949,19 +1949,23 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     let kvName    = "`kv`{at.line}`{at.column}"
     let bufName   = "`buf`{at.line}`{at.column}"
     let bindName  = "`gpb`{at.line}`{at.column}"   // group_proj lambda's bound variable
-    // Walk upstream calls (between source and group_by_lazy): fuse where_/select into per-element loop; bail otherwise.
-    var whereCond : Expression?
-    var intermediateBinds : array<Expression?>
+    // Walk upstream where_/select into segments. Each where guards everything AFTER it (lazy LINQ semantics) — a select that follows a where gets its bind emitted INSIDE that where's guard.
+    var segBinds : array<array<Expression?>>
+    var segWheres : array<Expression?>
+    var currentBinds : array<Expression?>
+    var currentWhere : Expression?
     var projection : Expression?
     var lastBindName = srcItName
     var elemType = strip_const_ref(clone_type(top._type.firstType))
+    var totalBindCount = 0
     for (i in 0 .. (calls |> length)) {
         let opName = calls[i]._1.name
         if (opName == "where_") {
-            // Bind any pending projection so the predicate references a stable name (no double-eval).
+            // Bind any pending projection before the where so the predicate references a stable name (no double-eval).
             if (projection != null) {
-                let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
-                intermediateBinds |> push <| qmacro_expr() {
+                let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+                totalBindCount ++
+                currentBinds |> push <| qmacro_expr() {
                     var $i(bn) := $e(projection)
                 }
                 lastBindName = bn
@@ -1969,12 +1973,19 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             }
             var predicate = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
             if (predicate == null) return null
-            whereCond = merge_where_cond(whereCond, predicate)
+            currentWhere = merge_where_cond(currentWhere, predicate)
         } elif (opName == "select") {
+            // Select after a where belongs in a NEW segment (must execute INSIDE the where's guard) — flush first.
+            if (currentWhere != null) {
+                segBinds |> emplace(currentBinds)
+                segWheres |> push(currentWhere)
+                currentWhere = null
+            }
             // Bind previous projection (if any) before computing the next.
             if (projection != null) {
-                let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
-                intermediateBinds |> push <| qmacro_expr() {
+                let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+                totalBindCount ++
+                currentBinds |> push <| qmacro_expr() {
                     var $i(bn) := $e(projection)
                 }
                 lastBindName = bn
@@ -1987,16 +1998,18 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         }
     }
     // Final bind: stable itName for the recognizer/emission to reference.
-    var itName = srcItName
     if (projection != null) {
-        let bn = "`v`{at.line}`{at.column}`{length(intermediateBinds)}"
-        intermediateBinds |> push <| qmacro_expr() {
+        let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+        totalBindCount ++
+        currentBinds |> push <| qmacro_expr() {
             var $i(bn) := $e(projection)
         }
-        itName = bn
-    } else {
-        itName = lastBindName
+        lastBindName = bn
     }
+    // Flush trailing segment.
+    segBinds |> emplace(currentBinds)
+    segWheres |> push(currentWhere)
+    let itName = lastBindName
     // Recognize the group_proj body's reducer shape (uses post-projection itName for inner-select fold).
     var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
     if (groupProjBody == null || groupProjBody._type == null) return null
@@ -2081,13 +2094,23 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         let $i(ukName) = _::unique_key($i(kName))
         $e(tableUpdate)
     }
-    // Wrap core with whereCond (if any), prepend intermediateBinds, splice into for-loop body.
-    var guardedCore = wrap_with_condition(coreBody, whereCond)
-    var bodyStmts <- intermediateBinds
-    bodyStmts |> push(guardedCore)
+    // Walk segments in reverse, wrapping body inside-out: each where guards everything inside it.
+    var body : Expression? = coreBody
+    var idx = (segBinds |> length) - 1
+    while (idx >= 0) {
+        if (segWheres[idx] != null) {
+            body = wrap_with_condition(body, clone_expression(segWheres[idx]))
+        }
+        if (!empty(segBinds[idx])) {
+            var thisSeg <- segBinds[idx]
+            thisSeg |> push(body)
+            body = stmts_to_expr(thisSeg)
+        }
+        idx --
+    }
     stmts |> push <| qmacro_block() {
         for ($i(srcItName) in $i(srcName)) {
-            $b(bodyStmts)
+            $e(body)
         }
     }
     // Lane: count terminator returns length(tab) directly (number of groups).
