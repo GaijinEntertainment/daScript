@@ -1719,12 +1719,18 @@ namespace das
             // direction), so check both. Falls through unchanged for user-typed enum params and for
             // generic AST-side TypeDecls (no enumType, no binding marker).
             if ( baseType==Type::tEnumeration8 || baseType==Type::tEnumeration16 || baseType==Type::tEnumeration64 ) {
+                // Read via explicit `flags` mask rather than the bool : 1 bitfield members,
+                // because the bitfield-vs-uint32 union aliasing has surfaced as platform-specific
+                // dispatch bugs on Darwin clang ARM64 (uint8/uint32 cast dispatch landing on the
+                // signed-stub binding instead of the unsigned-stub). typeFactory writes both
+                // views; reads anchor on the mask.
                 auto signednessMismatch = [](const TypeDecl & stub, const TypeDecl & concrete) -> bool {
-                    if ( !stub.enumStubBinding || !concrete.enumType ) return false;
+                    if ( !(stub.flags & TDF_enumStubBinding) || !concrete.enumType ) return false;
                     bool concreteIsUnsigned = concrete.enumType->baseType==Type::tUInt8
                                            || concrete.enumType->baseType==Type::tUInt16
                                            || concrete.enumType->baseType==Type::tUInt64;
-                    return stub.enumStubIsUnsigned != concreteIsUnsigned;
+                    bool stubIsUnsigned = (stub.flags & TDF_enumStubIsUnsigned) != 0;
+                    return stubIsUnsigned != concreteIsUnsigned;
                 };
                 if ( signednessMismatch(*this, decl) ) return false;
                 if ( signednessMismatch(decl, *this) ) return false;
@@ -3264,8 +3270,10 @@ namespace das
             else if ( baseType==Type::tEnumeration64 ) ss << "64";
             // EnumStub binding marker + signedness — distinguishes enum8u_to_int(EnumStub8u) from
             // enum8_to_int(EnumStub8) at function-mangling time so both bindings coexist in the same module.
-            if ( enumStubBinding )    ss << "b";
-            if ( enumStubIsUnsigned ) ss << "u";
+            // Read via explicit `flags` mask to bypass bool : 1 bitfield-vs-uint32 union aliasing
+            // (platform-specific quirks otherwise allow both stub variants to mangle identically).
+            if ( flags & TDF_enumStubBinding )    ss << "b";
+            if ( flags & TDF_enumStubIsUnsigned ) ss << "u";
             if ( enumType ) {
                 ss << "<" << enumType->getMangledName() << ">";
             }

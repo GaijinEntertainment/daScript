@@ -276,48 +276,43 @@ namespace das {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
             ss << "null";
         }
-        void Enum ( int64_t value, EnumInfo * info ) {
+        // Enum() with both a signed and an unsigned 64-bit interpretation of the byte. The lookup
+        // succeeds as long as one of them matches the int64_t-stored EnumValueInfo::value. This
+        // sidesteps the sign-extension trap of WalkEnumeration8/16/32 (where reading the byte
+        // through int*_t and implicitly widening to int64_t sign-extends for uint*-backed enums)
+        // without depending on EnumInfo::flag_unsigned — which proved fragile in cross-platform
+        // builds. Same defence-in-depth pattern as debug_print.h.
+        void EnumLookup ( int64_t value, int64_t uvalue, EnumInfo * info ) {
             if ( enumAsInt ) {
-                ss << value;
+                ss << uvalue;
             } else {
                 for ( uint32_t t=0; t!=info->count; ++t ) {
-                    if ( info->fields[t]->value==value ) {
+                    auto fv = info->fields[t]->value;
+                    if ( fv==value || fv==uvalue ) {
                         if ( auto name = info->fields[t]->name ) {
                             ss << "\"" << name << "\"";
                         } else {
-                            ss << value;
+                            ss << fv;
                         }
                         return;
                     }
                 }
             }
         }
+        void Enum ( int64_t value, EnumInfo * info ) {
+            EnumLookup(value, value, info);
+        }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
-            // Same sign-extension trap as the 8/16-bit walkers: uint32-backed values > INT32_MAX
-            // come in as negative int32_t, promote to negative int64_t, and miss the lookup against
-            // the positive int64_t-stored field value.
-            int64_t v = (info && (info->flags & EnumInfo::flag_unsigned))
-                ? int64_t(uint32_t(value)) : int64_t(value);
-            Enum(v,info);
+            EnumLookup(int64_t(value), int64_t(uint32_t(value)), info);
         }
         virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) override {
-            // For uint8-backed enums the byte represents an unsigned value; promoting via int8_t
-            // sign-extends so the lookup against the int64_t-stored field value would miss.
-            int64_t v = (info && (info->flags & EnumInfo::flag_unsigned))
-                ? int64_t(uint8_t(value)) : int64_t(value);
-            Enum(v,info);
+            EnumLookup(int64_t(value), int64_t(uint8_t(value)), info);
         }
         virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) override {
-            int64_t v = (info && (info->flags & EnumInfo::flag_unsigned))
-                ? int64_t(uint16_t(value)) : int64_t(value);
-            Enum(v,info);
+            EnumLookup(int64_t(value), int64_t(uint16_t(value)), info);
         }
         virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * info ) override {
-            // No promotion happens here — int64_t reads at its native width, so signedness can't
-            // wrap during the implicit conversion to Enum()'s int64_t parameter. The lookup against
-            // uint64_t-backed values with the top bit set will compare bit-for-bit equal because the
-            // stored value already round-tripped through int64_t at EnumValueInfo build time.
-            Enum(value,info);
+            EnumLookup(value, value, info);
         }
 
         virtual bool revisitStructure ( char * /*ps*/, StructInfo * /*si*/ ) override {
