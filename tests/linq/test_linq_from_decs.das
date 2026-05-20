@@ -1,4 +1,5 @@
 options gen2
+options rtti
 require daslib/linq
 require dastest/testing_boost public
 require math
@@ -227,6 +228,7 @@ def test_splice_empty_archetype(t : T?) {
 def test_splice_count_uses_arch_size_shortcut(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_splice_count_template_fold)
+        t |> success(func != null, "RTTI must resolve target_splice_count_template_fold")
         if (func == null) return
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
@@ -245,6 +247,7 @@ def test_splice_count_uses_arch_size_shortcut(t : T?) {
 def test_splice_to_array_no_to_sequence(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_splice_to_array_template_fold)
+        t |> success(func != null, "RTTI must resolve target_splice_to_array_template_fold")
         if (func == null) return
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
@@ -262,6 +265,7 @@ def test_splice_to_array_no_to_sequence(t : T?) {
 def test_splice_unsupported_chain_cascades(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_splice_cascade_select_count_fold)
+        t |> success(func != null, "RTTI must resolve target_splice_cascade_select_count_fold")
         if (func == null) return
         var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {

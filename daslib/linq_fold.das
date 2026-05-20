@@ -2881,6 +2881,7 @@ struct private DecsBridgeInfo {
     archName    : string
     forExpr     : ExpressionPtr     // cloned inner ExprFor; reused as-is in to_array splice
     tupleType   : TypeDeclPtr
+    resVarName  : string            // bridge's local buffer name (e.g. "res") — captured from stmt 0 and verified to match the to_sequence target in stmt 2
 }
 
 [macro_function]
@@ -2917,6 +2918,7 @@ def private extract_eager_bridge(var top : Expression?) : DecsBridgeInfo? {
     if (!resVar._type.isGoodArrayType
             || resVar._type.firstType.baseType != Type.tTuple) return null
     var tupleType = clone_type(resVar._type.firstType)
+    let resVarName = string(resVar.name)
     // Statement 1: for_each_archetype(req_hash, erq, $(arch) { for (...) { res |> push(...) } })
     if (!(blk.list[1] is ExprCall)) return null
     var feaCall = blk.list[1] as ExprCall
@@ -2933,18 +2935,22 @@ def private extract_eager_bridge(var top : Expression?) : DecsBridgeInfo? {
             || !(feaBlk.list[0] is ExprFor)) return null
     let archName = string(feaBlk.arguments[0].name)
     let forExpr = feaBlk.list[0]
-    // Statement 2: return <- res.to_sequence()
+    // Statement 2: return <- res.to_sequence() — must reference the same variable declared in stmt 0.
     if (!(blk.list[2] is ExprReturn)) return null
     var retStmt = blk.list[2] as ExprReturn
     if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null
     let retCall = retStmt.subexpr as ExprCall
-    if (get_call_short_name(retCall) != "to_sequence") return null
+    if (get_call_short_name(retCall) != "to_sequence"
+            || empty(retCall.arguments)
+            || !(retCall.arguments[0] is ExprVar)
+            || (retCall.arguments[0] as ExprVar).name != resVarName) return null
     var info = new DecsBridgeInfo(
         reqHashExpr = clone_expression(feaCall.arguments[0]),
         erqExpr = clone_expression(feaCall.arguments[1]),
         archName := archName,
         forExpr = clone_expression(forExpr),
-        tupleType = tupleType
+        tupleType = tupleType,
+        resVarName := resVarName
     )
     return info
 }
@@ -2984,9 +2990,10 @@ def private emit_decs_to_array_splice(bridge : DecsBridgeInfo?; at : LineInfo) :
         })
         return <- $i(bufName)
     }))
-    // Rewrite the cloned for-body's `res` push-target → buffer name.
+    // Rewrite the cloned for-body's push-target (bridge's captured local) → gensym buffer name.
+    let oldName = bridge.resVarName
     apply_template(emission) $(rules) {
-        rules |> renameVariable("res", bufName)
+        rules |> renameVariable(oldName, bufName)
     }
     emission.force_at(at)
     emission.force_generated(true)

@@ -336,56 +336,49 @@ Built from:
 
 The "linq_fold doesn't require decs_boost" lock-in (decision #3 above) is **preserved**. The splice emits names (`for_each_archetype`, `for_each_archetype_find`, `get_ro`) that resolve in user scope — same `_::` / unqualified name dispatch pattern used elsewhere in linq_fold.
 
-What the splice DOES need from decs_boost: the EcsRequest construction logic. **Two valid resolutions:**
+What the splice DOES need from decs_boost: the EcsRequest construction logic. **Three considered resolutions:**
 
-- **Option A (preferred): The recognizer doesn't construct EcsRequest itself.** Instead, the `from_decs_template` macro Stage B emits a marker carrying the request shape pre-built (the field list + prefix already resolved at macro-time). The splice consumes the marker's payload, doesn't re-derive. This is cleaner: the macro already has the struct in hand and knows the prefix; encoding it once in the marker is one-time work.
+- **Option A: Marker form.** `from_decs_template` macro emits a splice-anchor `__from_decs_template_marker(...)` carrying the request shape pre-built (field list + prefix already resolved at macro-time). Splice consumes the marker's payload, doesn't re-derive.
 - **Option B: Splice re-derives via shared `[macro_function] def build_req_from_struct(st, prefix) : EcsRequest`** in decs_boost. Splice imports it. Functional but couples linq_fold to decs_boost types (`EcsRequest`).
+- **Option C (chosen, implemented in PR #2748): Pure pattern-match on the post-expansion eager-bridge AST.** Macro expansion order means `_fold` sees the fully-expanded shape (`invoke($() { var res; for_each_archetype(req_hash, erq, $(arch) { for (...) { res |> push(...) } }); return res.to_sequence() })`) — identical between `FromDecsMacro` and `FromDecsTemplateMacro`. Splice reuses `req_hash` / `erq_factory` / inner-for via `clone_expression`; no marker, no shared builder, no decs_boost change. One splice serves both source forms.
 
-**Decision: Option A.** The marker form carries everything needed.
-
-## Stage B marker shape — what the macro emits
-
-Replace the current `invoke(${ var res ; query(...) ; return res.to_sequence() })` emission with an opaque marker call the splice can recognize and peel. Candidate names: `__from_decs_template_marker(req_hash, req_factory_block, field_list_block)`. The marker call has NO runtime implementation — it's purely a splice anchor. **If the splice fails (cascade to tier 2), fall back to the eager bridge form** — same `invoke(${ var res ; query(...) ; ... })` shape from Stage A.
-
-Open question to resolve in PR: how to carry the field list through the marker. Likely a synthesized ExprMakeBlock with one Variable per field (same shape `FromDecsMacro` constructs at [decs_boost.das:684](../../daslib/decs_boost.das#L684) for the query call). The splice reads the block's `.arguments`.
+**Decision: Option C.** Single recognizer covers both source macros, no cross-module coupling, no annotation surface to maintain. Trade-off: splice depends on the eager-bridge AST shape staying stable. Mitigated by AST-gate tests + safe degradation (any pattern mismatch cascades to tier-2 eager).
 
 ## Sub-PR breakdown for Phase 4
 
 Each sub-PR is a self-contained landable slice. Ordering reflects build dependencies + risk gradient.
 
-### Sub-PR 4a (D1 + D2): Marker + simplest terminators (to_array, count)
+### Sub-PR 4a (PR #2748, ~500 LOC): `plan_decs_eager_bridge` — pattern-match splice, count + to_array
 
-**~400-600 LOC.** Establishes the architecture end-to-end with the smallest possible terminator surface.
+**Implemented via Option C.** No marker, no `FromDecsTemplateMacro` change. Splice pattern-matches the post-expansion eager-bridge AST shape (same shape from both `FromDecsMacro` and `FromDecsTemplateMacro`) and replaces it with terminator-specific emission. If pattern-match fails, returns null → tier-2 cascade runs the eager bridge unchanged.
 
-- **D1.** Switch `FromDecsTemplateMacro` from eager-bridge (current Stage A) to dual-mode: emit a splice-able marker form when in a `_fold` context; keep eager fallback for non-splice contexts (i.e. when used outside `_fold`). The splice arm always tries the marker recognizer first; if it bails (unhandled chain shape), tier-2 cascade walks back to the eager form via fold_linq_default. Net behavior: zero regression for non-fold usage (test_from_decs_template passes unchanged); fold-context usage becomes splicable.
-- **D2.** Add `plan_from_decs_template` planner to the cascade in `_fold` (slot between `plan_group_by` and `plan_zip` — semantically the source-shape arm). Recognizes `from_decs_template_marker(...) [|> chain]* |> {to_array, count}`. Emits:
+- **`extract_eager_bridge(top)`** — recognizer. Walks `invoke($() { var res; for_each_archetype(req_hash, erq_factory, $(arch) { inner_for }); return res.to_sequence() })`. Captures `req_hash` (ExprConstUInt64), `erq_factory` (ExprAddr), arch param name, cloned inner ExprFor, tuple element type, and `res` variable name (verified to match the to_sequence target). Returns `DecsBridgeInfo` or null.
+- **`emit_decs_count_splice(bridge, at)`** — arch.size shortcut. No inner for-loop, no buffer:
 
-```das
-// to_array shape:
-var inscope buf : array<tuple<TupleOfFields>>
-for_each_archetype(reqHash, reqFactory) $(arch) {
-    for (f1 in get_ro(arch, "prefix_f1", type<T1>),
-         f2 in get_ro(arch, "prefix_f2", type<T2>)) {
-        // fused chain ops here (where_, select, etc. — D5 covers; D2 is bare-chain only)
-        buf |> push_clone((f1=f1, f2=f2))
-    }
-}
-return <- buf
+  ```das
+  invoke($() : int {
+      var acc = 0
+      for_each_archetype(reqHash, erqFactory, $(arch : Archetype) {
+          acc += arch.size
+      })
+      return acc
+  })
+  ```
+- **`emit_decs_to_array_splice(bridge, at)`** — reuses cloned inner for-loop as-is; renames bridge's captured `res` (typically the gensym `res`) → splice's gensym buffer name. Returns buffer directly (skips `to_sequence()` roundtrip):
 
-// count shape:
-var cnt = 0
-for_each_archetype(reqHash, reqFactory) $(arch) {
-    cnt += arch.size      // length-shortcut when no chain filters
-}
-return cnt
-```
+  ```das
+  invoke($() : array<tuple<...>> {
+      var decs_buf : array<tuple<...>>
+      for_each_archetype(reqHash, erqFactory, $(arch : Archetype) {
+          for (...) { decs_buf |> push(...) }   // cloned from bridge, var renamed
+      })
+      return <- decs_buf
+  })
+  ```
 
-- Bail cases (cascade to tier 2 = eager bridge):
-  - Any chain op past the source (D5 lifts this — D2 is source-and-terminator only)
-  - Any terminator other than `to_array` / `count`
-  - Result-selector or REQUIRE_NOT augmentation (out of scope for Stage B v1)
+**Splice fires when:** `plan_decs_eager_bridge` peels `from_decs*(...) [no chain ops] |> {to_array, count}` (calls list empty + array result type → to_array; one trailing `count` call → count splice). Anything else: returns null → cascade.
 
-**Tests:** 2 functional parity (to_array + count vs eager bridge); 2 AST shape (verify `for_each_archetype` emission, single inner ExprFor, no `invoke($() { query(...) })` cascade leak).
+**Tests:** 4 functional parity (count over from_decs_template, count over from_decs block form, to_array, empty-archetype); 3 AST gates (count uses arch.size shortcut + no to_sequence, to_array skips to_sequence, `_select` cascades to tier-2).
 
 ### Sub-PR 4b (D3 + D4): Accumulator + early-exit terminators
 
