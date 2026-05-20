@@ -3239,34 +3239,61 @@ def private wrap_decs_chain(var action : Expression?;
 }
 
 struct private DecsRangeInfo {
-    skipExpr  : Expression?
-    takeExpr  : Expression?
-    chainEnd  : int
+    skipExpr      : Expression?
+    takeExpr      : Expression?
+    skipWhileCond : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
+    takeWhileCond : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
+    chainEnd      : int
 }
 
 [macro_function]
 def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                 intermediateEnd : int;
+                                tupName : string;
                                 at : LineInfo) : DecsRangeInfo? {
-    // Slice 5a: split intermediate chain into (where_/select prefix) + (skip? take? suffix). Mirrors array-side canonical order: skip must precede take, both must follow any where_/select. Reject mid-chain take/skip (would change splice semantics — array-side enforces same).
+    // Slice 5a/5b: split intermediate chain into (where_/select prefix) + (skip? skip_while? take_while? take? suffix). Canonical order matches array-side (linq_fold.das:1607-1634): skip → skip_while → take_while → take, all after any where_. skip_while/take_while predicates use the SOURCE tuple (tupName); bail when a select appears in the prefix (matches array-side seenSelect bail).
     var info = new DecsRangeInfo(chainEnd = intermediateEnd)
     var firstRangeIdx = intermediateEnd
     for (i in 0 .. intermediateEnd) {
         let nm = calls[i]._1.name
-        if (nm == "take" || nm == "skip") {
+        if (nm == "take" || nm == "skip" || nm == "take_while" || nm == "skip_while") {
             firstRangeIdx = i
             break
         }
     }
     if (firstRangeIdx == intermediateEnd) return info
+    // Detect whether the suffix contains any predicate-driven range (skip_while/take_while) — if so, prefix must be select-free (mirrors array-side seenSelect bail at linq_fold.das:1615/1623).
+    var hasWhilePred = false
+    for (i in firstRangeIdx .. intermediateEnd) {
+        let nm = calls[i]._1.name
+        if (nm == "skip_while" || nm == "take_while") {
+            hasWhilePred = true
+            break
+        }
+    }
+    if (hasWhilePred) {
+        for (i in 0 .. firstRangeIdx) {
+            if (calls[i]._1.name == "select") return null
+        }
+    }
     for (i in firstRangeIdx .. intermediateEnd) {
         var cll & = unsafe(calls[i])
         let nm = cll._1.name
         if (nm == "skip") {
-            if (info.skipExpr != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
+            if (info.skipExpr != null || info.skipWhileCond != null || info.takeWhileCond != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
             var arg = cll._0.arguments[1]
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
             info.skipExpr = clone_expression(arg)
+        } elif (nm == "skip_while") {
+            if (info.skipWhileCond != null || info.takeWhileCond != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
+            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (pred == null) return null
+            info.skipWhileCond = pred
+        } elif (nm == "take_while") {
+            if (info.takeWhileCond != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
+            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (pred == null) return null
+            info.takeWhileCond = pred
         } elif (nm == "take") {
             if (info.takeExpr != null || length(cll._0.arguments) < 2) return null
             var arg = cll._0.arguments[1]
@@ -3283,11 +3310,11 @@ def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
 [macro_function]
 def private wrap_inner_for_with_decs_ranges(var body : Expression?;
                                             rangeInfo : DecsRangeInfo?;
-                                            skipName, takeCountName, takeLimitName : string) : Expression? {
-    // Slice 5a: prefix per-element body with take-guard (return true to stop archetype walk) + skip counter. Counters live at invoke scope; this only emits the per-element guards. Caller switches outer iterator to for_each_archetype_find when takeExpr != null. Take limit is read from a hoisted local (takeLimitName) so the user's take(N) expression is evaluated exactly once at invoke entry, matching take(src, total:int) call-site semantics.
-    if (rangeInfo.skipExpr == null && rangeInfo.takeExpr == null) return body
+                                            skipName, takeCountName, takeLimitName, skippingName : string) : Expression? {
+    // Slice 5a/5b: prefix per-element body with range guards in canonical order: take-cap → skip-counter → skip_while flag → take_while break → takeC++. Mirrors array-side wrap_with_ranges (linq_fold.das:556). All early exits (`return true`) work both for plain inner-for break AND for the bool-lambda archetype-find — caller switches outer iterator to for_each_archetype_find when takeExpr != null OR takeWhileCond != null. Counters / flags live at invoke scope (decs_range_prelude). Take limit is read from a hoisted local (takeLimitName) so the user's take(N) expression evaluates exactly once at invoke entry.
+    if (rangeInfo.skipExpr == null && rangeInfo.takeExpr == null && rangeInfo.skipWhileCond == null && rangeInfo.takeWhileCond == null) return body
     var stmts : array<Expression?>
-    stmts |> reserve(4)
+    stmts |> reserve(6)
     if (rangeInfo.takeExpr != null) {
         // `>=` so non-positive N short-circuits on first iteration. `return true` exits both inner for AND the archetype bool lambda.
         stmts |> push <| qmacro_expr() {
@@ -3304,7 +3331,28 @@ def private wrap_inner_for_with_decs_ranges(var body : Expression?;
             }
         }
     }
+    if (rangeInfo.skipWhileCond != null) {
+        var swPred = clone_expression(rangeInfo.skipWhileCond)
+        stmts |> push <| qmacro_expr() {
+            if ($i(skippingName)) {
+                if ($e(swPred)) {
+                    continue
+                }
+                $i(skippingName) = false
+            }
+        }
+    }
+    if (rangeInfo.takeWhileCond != null) {
+        var twPred = clone_expression(rangeInfo.takeWhileCond)
+        // First false ends iteration globally (across all archetypes). `return true` exits inner-for AND archetype-find lambda.
+        stmts |> push <| qmacro_expr() {
+            if (!($e(twPred))) {
+                return true
+            }
+        }
+    }
     if (rangeInfo.takeExpr != null) {
+        // takeC++ AFTER skip_while / take_while so gated-out elements don't eat the take(N) budget (matches array-side comment at linq_fold.das:558).
         stmts |> push <| qmacro_expr() {
             $i(takeCountName) ++
         }
@@ -3314,8 +3362,8 @@ def private wrap_inner_for_with_decs_ranges(var body : Expression?;
 }
 
 [macro_function]
-def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountName, takeLimitName : string) : array<Expression?> {
-    // Counter init statements hoisted ABOVE the for_each_archetype call so they survive across archetypes. takeLimit hoisted to a local so the user's take(N) expression evaluates exactly once (matches take(src, total:int) semantics).
+def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountName, takeLimitName, skippingName : string) : array<Expression?> {
+    // Counter / flag init statements hoisted ABOVE the for_each_archetype call so they survive across archetypes (take cap, skip count, skip_while flag are all globally-stateful). takeLimit hoisted to a local so the user's take(N) expression evaluates exactly once (matches take(src, total:int) semantics).
     var stmts : array<Expression?>
     if (rangeInfo.skipExpr != null) {
         var skipInit = clone_expression(rangeInfo.skipExpr)
@@ -3332,6 +3380,12 @@ def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountNa
             var $i(takeCountName) = 0
         }
     }
+    if (rangeInfo.skipWhileCond != null) {
+        // Slice 5b: skip_while flag is one-way (flips false on first non-matching elem, stays). Hoisted so the flag persists across archetypes.
+        stmts |> push <| qmacro_expr() {
+            var $i(skippingName) = true
+        }
+    }
     return <- stmts
 }
 
@@ -3342,9 +3396,7 @@ def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) :
     let archName = "`decs_arch`{at.line}`{at.column}"
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    // arch.size is int64 (decs PR-C); count() surface returns int, so cast at
-    // the += site. Past INT_MAX entities the cast silently truncates; users
-    // who need the int64-safe total chain `long_count()` instead.
+    // arch.size is int64; count() returns int and the += site truncates past INT_MAX — chain `long_count()` when an int64-safe total is required.
     var emission : Expression? = qmacro(invoke($() : int {
         var $i(accName) = 0
         for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
@@ -3376,6 +3428,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     let skipName = "`decs_skip`{at.line}`{at.column}"
     let takeCountName = "`decs_takec`{at.line}`{at.column}"
     let takeLimitName = "`decs_takel`{at.line}`{at.column}"
+    let skippingName = "`decs_skipping`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var perElement : Expression?
     if (opName == "sum") {
@@ -3424,7 +3477,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
         }
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3479,7 +3532,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     } else {
         return null
     }
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
     for (s in preludeStmts) {
@@ -3488,7 +3541,8 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     for (s in rangeStmts) {
         bodyStmts |> push(s)
     }
-    if (rangeInfo.takeExpr != null) {
+    if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+        // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
             for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
@@ -3541,6 +3595,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let skipName = "`decs_skip`{at.line}`{at.column}"
     let takeCountName = "`decs_takec`{at.line}`{at.column}"
     let takeLimitName = "`decs_takel`{at.line}`{at.column}"
+    let skippingName = "`decs_skipping`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression?
@@ -3581,8 +3636,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         }
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
-        // When take is present, distinguish "match found" from "take-cap hit" — both produce `return true` from the inner block, so route through an explicit foundName state and use the find result only as iteration control (tail returns foundName).
-        if (rangeInfo.takeExpr != null) {
+        // When take OR take_while is present, distinguish "match found" from "iteration-stop signal" — both produce `return true` from the inner block, so route through an explicit foundName state and use the find result only as iteration control (tail returns foundName).
+        if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
             preludeStmts |> push <| qmacro_expr() {
                 var $i(foundName) = false
             }
@@ -3620,8 +3675,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     } elif (opName == "all") {
         var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
         if (predExpr == null) return null
-        if (rangeInfo.takeExpr != null) {
-            // Take-cap hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
+        if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+            // Take-cap / take_while-stop hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
             preludeStmts |> push <| qmacro_expr() {
                 var $i(foundName) = false
             }
@@ -3644,8 +3699,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         preludeStmts |> push <| qmacro_expr() {
             let $i(containsValName) = $e(valExpr)
         }
-        if (rangeInfo.takeExpr != null) {
-            // Same disambiguation as any: take-cap and "value matched" both inner-return true, route through foundName.
+        if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+            // Same disambiguation as any: take-cap / take_while-stop and "value matched" both inner-return true, route through foundName.
             preludeStmts |> push <| qmacro_expr() {
                 var $i(foundName) = false
             }
@@ -3667,7 +3722,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         return null
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3675,7 +3730,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     // Combine prelude + invocation + tail into ONE bodyStmts list — multiple $b splices in the same qmacro fragment isolate variable scope.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
@@ -3685,8 +3740,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     for (s in rangeStmts) {
         bodyStmts |> push(s)
     }
-    // When takeExpr is present, any/all/contains route their answer through explicit foundName state (set above) — the find result is unreliable because take-cap and "real match" both produce inner `return true`. In that case, treat the find call as iteration control only and emit the return via tailStmts (which already contains `return foundName` / `return !foundName`).
-    let useExplicitState = (rangeInfo.takeExpr != null && (opName == "any" || opName == "all" || opName == "contains"))
+    // When takeExpr OR takeWhileCond is present, any/all/contains route their answer through explicit foundName state (set above) — the find result is unreliable because the iteration-stop signal and "real match" both produce inner `return true`. In that case, treat the find call as iteration control only and emit the return via tailStmts (which already contains `return foundName` / `return !foundName`).
+    let useExplicitState = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) && (opName == "any" || opName == "all" || opName == "contains"))
     if (useExplicitState) {
         bodyStmts |> push <| qmacro_expr() {
             for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
@@ -3751,13 +3806,14 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     let skipName = "`decs_skip`{at.line}`{at.column}"
     let takeCountName = "`decs_takec`{at.line}`{at.column}"
     let takeLimitName = "`decs_takel`{at.line}`{at.column}"
+    let skippingName = "`decs_skipping`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(finalBind))
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3765,7 +3821,7 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 3)
     bodyStmts |> push <| qmacro_expr() {
@@ -3774,7 +3830,8 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     for (s in rangeStmts) {
         bodyStmts |> push(s)
     }
-    if (rangeInfo.takeExpr != null) {
+    if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+        // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
             for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
@@ -3817,6 +3874,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let skipName = "`decs_skip`{at.line}`{at.column}"
     let takeCountName = "`decs_takec`{at.line}`{at.column}"
     let takeLimitName = "`decs_takel`{at.line}`{at.column}"
+    let skippingName = "`decs_skipping`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var keyExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
@@ -3839,7 +3897,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
         }
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3847,7 +3905,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 5)
     bodyStmts |> push <| qmacro_expr() {
@@ -3862,7 +3920,8 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     for (s in rangeStmts) {
         bodyStmts |> push(s)
     }
-    if (rangeInfo.takeExpr != null) {
+    if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+        // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
             for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
@@ -3905,8 +3964,8 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     let isTerminator = isAccum || isEarlyExit || isMinMaxBy
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let intermediateEnd = isTerminator ? length(calls) - 1 : length(calls)
-    // Slice 5a: peel trailing take/skip into rangeInfo. chainEnd is the index past which only take/skip live (or == intermediateEnd if none).
-    let rangeInfo = extract_decs_ranges(calls, intermediateEnd, at)
+    // Slice 5a/5b: peel trailing take/skip/take_while/skip_while into rangeInfo. chainEnd is the index past which only range ops live (or == intermediateEnd if none). tupName passed so predicate-driven ranges peel against the source tuple.
+    let rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
     if (rangeInfo == null) return null
     let chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
     if (chainInfo == null) return null

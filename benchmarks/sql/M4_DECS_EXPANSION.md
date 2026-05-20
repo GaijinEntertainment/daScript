@@ -281,3 +281,15 @@ Affected emit paths (all 4 non-bare-count): `emit_decs_accumulator`, `emit_decs_
 | take_sum_aggregate | `_select.take(N).sum()` | — | 0 | 0 |
 
 m4 splice rounds to 0 ns/op alongside the m3f array splice — same shape (inline counter + early-exit), same measurement floor. Not DCE: `ast_dump --mode source` confirms `for_each_archetype_find` is emitted with `decs_takec >= 1000 → return true` and `++decs_takec; push_clone(decs_buf, decs_tup)` actively building the full 1000-element result array per bench iteration. Old m4 baseline (36-37 ns/op via eager bridge) → new 0 ns/op (~sub-1 ns/iter, indistinguishable from m3f array splice) ≈ 36× actual win, just below the bench's `body_time / n_iters` resolution floor.
+
+## Update — Slice 5b take_while/skip_while on decs (2026-05-20, plan_decs_unroll + predicate-driven ranges)
+
+`plan_decs_unroll` now recognizes trailing `take_while(pred)` / `skip_while(pred)` after the where/skip prefix. `DecsRangeInfo` gains `skipWhileCond` / `takeWhileCond`; `extract_decs_ranges` walks the suffix in canonical order (`skip → skip_while → take_while → take`) and bails when a `select` appears in the prefix (mirrors array-side `seenSelect` bail at `linq_fold.das:1615/1623`). Predicates peel against the source tuple (`tupName`), so the post-where stream is visible but selects are forbidden — same shape as array side. `skipping` flag hoists at invoke scope (one-way; flips false on first non-matching elem, persists across archetypes). When `takeWhileCond != null` the outer call switches to `for_each_archetype_find` with a `: bool` lambda just like `take(N)`, and `useExplicitState` in `emit_decs_early_exit` extends so `any/all/contains + take_while` route through explicit `foundName` (distinguishes "real match" from "take_while-stop" — both produce inner `return true`).
+
+| benchmark | shape | m1 sql | m3 | m3f (array splice) | m4 (old, eager bridge) | m4 (new, splice) | m3f→m4 gap | win vs baseline |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| take_while_match | `._take_while(_.id < 50K).count()` | 7 | 23 | 2 | 55 | **8** | 6× | 6.9× |
+
+m4 lands close to m3f (8 vs 2 ns/op — within Wave 4 known multi-component get_ro overhead). Splice fires; `ast_dump --mode source` confirms `for_each_archetype_find` with `if !(decs_tup.id < 50000) return true else ++decs_acc`.
+
+**Coverage:** take_while, skip_while, skip_while+take_while, where+take_while, take_while+sum, take_while+first, take_while+to_array, take_while always-true (no break) / always-false (immediate break), skip_while always-true (drops all) / always-false (immediate done), skip+take_while, skip_while+take, take_while+any/all/contains (regression guards for explicit-state routing under take_while), AST shape gates for take_while→`_find` routing + skip_while-only→`for_each_archetype` routing. +21 tests (60 → 81 in file).

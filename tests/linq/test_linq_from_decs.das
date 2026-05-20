@@ -954,3 +954,278 @@ def test_unroll_take_n_evaluated_once(t : T?) {
     // Single hoisted evaluation — NOT once per element across 7 entities.
     t |> equal(take_n_eval_counter, 1, "take(N) expression must evaluate exactly once per invoke")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5b: take_while / skip_while on decs. Predicate-driven ranges, predicates
+// peeled against the source tuple (matches array-side seenSelect bail rule).
+// take_while breaks iteration on first false → routes to for_each_archetype_find
+// just like take(N). skip_while sets a one-way flag (flips false on first
+// non-matching elem); flag hoisted at invoke scope so it persists across
+// archetypes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2)._take_while(_.val < 5).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._take_while(_.val < 5).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_sum_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val).sum())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_first_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val).first())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_never_fires_count_fold() : int {
+    // pred always true → take_while never breaks → full source count.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 100).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_immediate_break_count_fold() : int {
+    // pred false on first elem → break immediately → 0.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 0).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_never_done_count_fold() : int {
+    // pred always true → skip_while never flips → everything skipped → 0.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 100).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_immediate_done_count_fold() : int {
+    // pred false on first elem → flag flips on entry → nothing skipped → full count.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 0).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_take_while_count_fold() : int {
+    // skip(2) then take_while(val<5) → drops 0,1 → walks 2,3,4 stops at 5 → count 3.
+    return _fold(from_decs_template(type<UnrollChainRow>).skip(2)._take_while(_.val < 5).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_take_count_fold() : int {
+    // skip_while(val<2) drops 0,1 → take(2) windows 2,3 → count 2.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2).take(2).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_any_match_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val)._any(_ == 2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_any_after_window_fold() : bool {
+    // val 5 is outside the take_while window — must NOT report true even though take_while produces inner `return true` on val=3.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val)._any(_ == 5))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_all_pass_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val)._all(_ < 5))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_all_fail_fold() : bool {
+    // val=1 fails the all-pred. take_while-stop inner `return true` must not be misread as "no counterexample".
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val)._all(_ == 0))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_contains_hit_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val).contains(2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_contains_miss_fold() : bool {
+    // val=5 outside the window. take_while-stop must NOT be mistaken for a hit.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._select(_.val).contains(5))
+}
+
+[test]
+def test_unroll_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // vals 0,1,2 satisfy <3 → break on val=3 → count 3.
+    t |> equal(target_unroll_take_while_count_fold(), 3, "take_while breaks on first false-pred")
+}
+
+[test]
+def test_unroll_skip_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // skip 0,1,2; keep 3..6 → count 4.
+    t |> equal(target_unroll_skip_while_count_fold(), 4, "skip_while drops leading matches, keeps rest")
+}
+
+[test]
+def test_unroll_skip_while_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // skip 0,1; flag flips on val=2; take_while keeps 2,3,4; breaks on 5 → count 3.
+    t |> equal(target_unroll_skip_while_take_while_count_fold(), 3, "skip_while + take_while compose")
+}
+
+[test]
+def test_unroll_where_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // flag==1 → vals 1,3,5; take_while(val<5) keeps 1,3; breaks on 5 → count 2.
+    t |> equal(target_unroll_where_take_while_count_fold(), 2, "where + take_while applies pred to post-filter stream")
+}
+
+[test]
+def test_unroll_take_while_sum_parity(t : T?) {
+    fixture_unroll2(7)
+    // 0+1+2 = 3.
+    t |> equal(target_unroll_take_while_sum_fold(), 3, "take_while + select + sum splice parity")
+}
+
+[test]
+def test_unroll_take_while_first_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_first_fold(), 0, "take_while + first returns first source elem before break")
+}
+
+[test]
+def test_unroll_take_while_to_array_parity(t : T?) {
+    fixture_unroll2(7)
+    let got <- target_unroll_take_while_to_array_fold()
+    t |> equal(length(got), 3, "take_while.to_array() yields the prefix")
+    if (length(got) >= 3) {
+        t |> equal(got[0], 0, "first")
+        t |> equal(got[1], 1, "second")
+        t |> equal(got[2], 2, "third")
+    }
+}
+
+[test]
+def test_unroll_take_while_never_fires_returns_all(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_never_fires_count_fold(), 7, "take_while with always-true pred returns full source count")
+}
+
+[test]
+def test_unroll_take_while_immediate_break_returns_zero(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_immediate_break_count_fold(), 0, "take_while breaks on first elem when pred false")
+}
+
+[test]
+def test_unroll_skip_while_never_done_returns_zero(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_never_done_count_fold(), 0, "skip_while with always-true pred drops everything")
+}
+
+[test]
+def test_unroll_skip_while_immediate_done_returns_all(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_immediate_done_count_fold(), 7, "skip_while flag flips on first elem when pred false")
+}
+
+[test]
+def test_unroll_skip_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_take_while_count_fold(), 3, "skip(2) + take_while(val<5) walks 2,3,4")
+}
+
+[test]
+def test_unroll_skip_while_take_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_take_count_fold(), 2, "skip_while(val<2) + take(2) yields 2,3")
+}
+
+[test]
+def test_unroll_take_while_any_match(t : T?) {
+    fixture_unroll2(7)
+    // val 2 is in the window → true. Real match, not the take_while-stop signal.
+    t |> equal(target_unroll_take_while_any_match_fold(), true, "take_while + any returns true when match in window")
+}
+
+[test]
+def test_unroll_take_while_any_after_window(t : T?) {
+    fixture_unroll2(7)
+    // val 5 outside take_while window → false. take_while-stop must NOT register as a match.
+    t |> equal(target_unroll_take_while_any_after_window_fold(), false, "take_while + any returns false when match outside window")
+}
+
+[test]
+def test_unroll_take_while_all_pass(t : T?) {
+    fixture_unroll2(7)
+    // window {0,1,2}; all < 5 → true.
+    t |> equal(target_unroll_take_while_all_pass_fold(), true, "take_while + all returns true when window satisfies pred")
+}
+
+[test]
+def test_unroll_take_while_all_fail(t : T?) {
+    fixture_unroll2(7)
+    // window {0,1,2}; not all == 0 → false. take_while-stop inner true must not be misread as "no counterexample".
+    t |> equal(target_unroll_take_while_all_fail_fold(), false, "take_while + all returns false on counterexample in window")
+}
+
+[test]
+def test_unroll_take_while_contains_hit(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_contains_hit_fold(), true, "take_while + contains returns true when value in window")
+}
+
+[test]
+def test_unroll_take_while_contains_miss(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_contains_miss_fold(), false, "take_while + contains returns false when value outside window")
+}
+
+[test]
+def test_unroll_take_while_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "take_while+count splice must NOT call to_sequence")
+        // take_while present → must use the _find variant so first-false propagates across archetypes.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take_while splice routes to for_each_archetype_find")
+    }
+}
+
+[test]
+def test_unroll_skip_while_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_skip_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "skip_while+count splice must NOT call to_sequence")
+        // skip_while alone does NOT early-exit — must use plain for_each_archetype.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "skip_while-only splice does NOT route to _find")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "skip_while-only splice uses regular for_each_archetype")
+    }
+}
