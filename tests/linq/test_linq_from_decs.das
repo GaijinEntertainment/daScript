@@ -368,6 +368,13 @@ def test_unroll_average_parity(t : T?) {
 }
 
 [test]
+def test_unroll_average_empty_returns_zero(t : T?) {
+    // Regression for emit_decs_accumulator.average — empty archetype set must return 0.0lf (matches linq.das:1545 cnt==0 guard), not NaN from 0.0lf / 0.0lf.
+    fixture_unroll2(0)
+    t |> equal(target_unroll_average_fold(), 0.0lf, "average splice empty-source guard")
+}
+
+[test]
 def test_unroll_where_max_parity(t : T?) {
     fixture_unroll2(5)
     // flag==1 rows: vals 1,3 → max 3

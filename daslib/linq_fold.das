@@ -760,23 +760,24 @@ def private emit_accumulator_lane(
             $i(accName)
         }
     } elif (opName == "average") {
+        // Matches linq.das:1545 average(iterator) — always-double accumulator, uint64 counter, empty source returns 0.0lf instead of NaN. Source-element cast lifted out at macro time to avoid PERF020 redundant-cast trip when the input is already double.
         preludeStmts <- qmacro_block_to_array() {
-            var $i(accName) : $t(accType) = default<$t(accType)>
-            var $i(cntName) = 0
+            var $i(accName) : double = 0lf
+            var $i(cntName) : uint64 = 0ul
         }
-        perMatchStmts <- qmacro_block_to_array() {
-            $i(accName) += $e(valueExpr)
-            $i(cntName) ++
-        }
-        // Skip the double(accName) when accType is already double (interp doesn't fold redundant casts — would trip PERF020 and slow the inner loop tail).
         if (accType != null && accType.baseType == Type.tDouble) {
-            returnExpr = qmacro_expr() {
-                $i(accName) / double($i(cntName))
+            perMatchStmts <- qmacro_block_to_array() {
+                $i(accName) += $e(valueExpr)
+                $i(cntName) ++
             }
         } else {
-            returnExpr = qmacro_expr() {
-                double($i(accName)) / double($i(cntName))
+            perMatchStmts <- qmacro_block_to_array() {
+                $i(accName) += double($e(valueExpr))
+                $i(cntName) ++
             }
+        }
+        returnExpr = qmacro_expr() {
+            $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
         }
     } elif (opName == "min" || opName == "max") {
         preludeStmts <- qmacro_block_to_array() {
@@ -3278,9 +3279,17 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             $i(accName) += $i(finalBind)
         }
     } elif (opName == "average") {
-        perElement = qmacro_block() {
-            $i(accName) += $i(finalBind)
-            $i(cntName) ++
+        // Matches linq.das:1545 average() — always-double accumulator, uint64 counter, empty source returns 0.0lf. Cast lifted out at macro time so already-double chains don't trip PERF020.
+        if (chainInfo.finalType != null && chainInfo.finalType.baseType == Type.tDouble) {
+            perElement = qmacro_block() {
+                $i(accName) += $i(finalBind)
+                $i(cntName) ++
+            }
+        } else {
+            perElement = qmacro_block() {
+                $i(accName) += double($i(finalBind))
+                $i(cntName) ++
+            }
         }
     } elif (opName == "min" || opName == "max") {
         let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
@@ -3343,14 +3352,13 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             return $i(accName)
         }))
     } elif (opName == "average") {
-        // Empty source → 0.0 / 0.0 → IEEE NaN (numerator + denominator both cast to double before division). Matches emit_accumulator_lane.
         emission = qmacro(invoke($() : double {
-            var $i(accName) : $t(accType) = default<$t(accType)>
-            var $i(cntName) = 0
+            var $i(accName) : double = 0lf
+            var $i(cntName) : uint64 = 0ul
             for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
-            return double($i(accName)) / double($i(cntName))
+            return $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
         }))
     } elif (opName == "min" || opName == "max") {
         // No empty-panic — matches non-decs emit_accumulator_lane (returns default-initialized acc).
