@@ -160,6 +160,103 @@ def target_zip_impure_select_skip_bails() : array<int> {
     return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => side_effect_zip_proj(t._0)) |> skip(2) |> _fold()
 }
 
+// ── PR Phase 2B+ — accumulator (sum/min/max/average) terminators on zip ──
+// sum/min/max/average require a `select` projection to scalarize the tuple element (accumulator ops aren't defined on tuples). `long_count` is the exception: it routes through the COUNTER path locally (length shortcut + counter loop) since the accumulator is just `int64 acc++` regardless of element type.
+[export, marker(no_coverage)]
+def target_zip_sum_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
+}
+
+[export, marker(no_coverage)]
+def target_zip_min_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 - t._1) |> min())
+}
+
+[export, marker(no_coverage)]
+def target_zip_max_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 * t._1) |> max())
+}
+
+[export, marker(no_coverage)]
+def target_zip_average_proj_fold() : double {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
+}
+
+[export, marker(no_coverage)]
+def target_zip_where_sum_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
+}
+
+[export, marker(no_coverage)]
+def target_zip_where_long_count_fold() : int64 {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> long_count())
+}
+
+// ── PR Phase 2B+ — early-exit (first/first_or_default/any/all/contains) terminators on zip ──
+[export, marker(no_coverage)]
+def target_zip_first_no_proj_fold() : tuple<int; int> {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> first())
+}
+
+[export, marker(no_coverage)]
+def target_zip_first_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> first())
+}
+
+[export, marker(no_coverage)]
+def target_zip_where_first_fold() : tuple<int; int> {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> first())
+}
+
+[export, marker(no_coverage)]
+def target_zip_first_or_default_proj_fold() : int {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> where_($(v : int) => v > 1000) |> first_or_default(-1))
+}
+
+[export, marker(no_coverage)]
+def target_zip_any_no_pred_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any())
+}
+
+[export, marker(no_coverage)]
+def target_zip_any_no_pred_empty_fold() : bool {
+    var emptyA : array<int>
+    return _fold(emptyA.zip([1, 2, 3]) |> any())
+}
+
+[export, marker(no_coverage)]
+def target_zip_any_pred_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any($(t : tuple<int; int>) => t._0 > 30))
+}
+
+[export, marker(no_coverage)]
+def target_zip_all_pred_true_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 0))
+}
+
+[export, marker(no_coverage)]
+def target_zip_all_pred_false_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 30))
+}
+
+[export, marker(no_coverage)]
+def target_zip_contains_proj_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(33))
+}
+
+[export, marker(no_coverage)]
+def target_zip_contains_proj_miss_fold() : bool {
+    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(999))
+}
+
+// PR #2742 Copilot review #r3270337476 — DEFERRED: emit_accumulator_lane.average semantics divergence from linq.das. Pre-existing in helper (affects plan_loop_or_count's single-source path too): accumulates in accType (often int → overflow risk) and returns NaN on empty cnt, while linq.das average accumulates in double and returns 0.0lf on empty. Follow-up PR must fix the helper uniformly AND update the existing fold test "average: empty → NaN" in test_linq_fold.das to expect 0.0lf.
+[export, marker(no_coverage)]
+def target_zip_average_empty_fold() : double {
+    var emptyA : array<int>
+    var emptyB : array<int>
+    return _fold(emptyA.zip(emptyB) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
+}
+
 [export, marker(no_coverage)]
 def target_zip3_fold() : array<tuple<int; int; int>> {
     return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
@@ -339,6 +436,9 @@ def test_zip_long_count_uses_length_shortcut(t : T?) {
         t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
         let n = count_inner_for_loops(body_expr)
         t |> equal(n, 0, "zip(arr,arr).long_count() must use length shortcut (no for-loop)")
+        // Distinguish length-shortcut splice from tier-2 cascade by elimination: for_loops==0 rules out the counter-loop splice path; long_count==0 rules out tier-2 (which leaves the long_count call in place). Both together ⇒ length shortcut. (Can't grep for length() directly: count_call doesn't recurse into ExprOp3 ternary where length() lives in the min(...) expression.)
+        let longCountCalls = count_call(body_expr, "long_count")
+        t |> equal(longCountCalls, 0, "long_count must be inlined into the splice (no runtime call)")
     }
 }
 
@@ -566,6 +666,213 @@ def test_zip_select_count_pure_skips_it_bind(t : T?) {
         t |> equal(nfor, 1, "pure zip+select+count uses counter for-loop")
         let nbody = count_for_body_stmts(body_expr)
         t |> equal(nbody, 1, "pure zip+select+count counter body is just `acc++` — no `let it = (itA, itB)` bind")
+    }
+}
+
+// ── PR Phase 2B+ accumulator (sum/min/max/average) terminators on zip ──
+// Source: arrA=[10,20,30,40,50], arrB=[1,2,3,4,5]; pairs are (10,1)(20,2)(30,3)(40,4)(50,5).
+
+[test]
+def test_zip_sum_proj_fold_result(t : T?) {
+    t |> run("zip+select+sum returns scalar accumulator") @(t : T?) {
+        // (10+1)+(20+2)+(30+3)+(40+4)+(50+5) = 11+22+33+44+55 = 165
+        t |> equal(target_zip_sum_proj_fold(), 165)
+    }
+}
+
+[test]
+def test_zip_min_proj_fold_result(t : T?) {
+    t |> run("zip+select+min picks smallest projected value") @(t : T?) {
+        // diffs: 9,18,27,36,45 → min 9
+        t |> equal(target_zip_min_proj_fold(), 9)
+    }
+}
+
+[test]
+def test_zip_max_proj_fold_result(t : T?) {
+    t |> run("zip+select+max picks largest projected value") @(t : T?) {
+        // products: 10,40,90,160,250 → max 250
+        t |> equal(target_zip_max_proj_fold(), 250)
+    }
+}
+
+[test]
+def test_zip_average_proj_fold_result(t : T?) {
+    t |> run("zip+select+average returns double") @(t : T?) {
+        // (11+22+33+44+55)/5 = 33.0
+        t |> equal(target_zip_average_proj_fold(), 33.0lf)
+    }
+}
+
+[test]
+def test_zip_where_sum_proj_fold_result(t : T?) {
+    t |> run("zip+where+select+sum filters then sums") @(t : T?) {
+        // survivors where t._0>20: (30,3)(40,4)(50,5) → 33+44+55 = 132
+        t |> equal(target_zip_where_sum_proj_fold(), 132)
+    }
+}
+
+[test]
+def test_zip_where_long_count_fold_result(t : T?) {
+    t |> run("zip+where+long_count returns int64 survivor count") @(t : T?) {
+        // 3 survivors
+        t |> equal(target_zip_where_long_count_fold(), 3l)
+    }
+}
+
+// long_count + chain op (where) must emit a single multi-iter counter for-loop, not cascade to tier-2. Regression guard against routing long_count through the ACCUMULATOR projection-required branch (PR #2742 Copilot review #r3270242609).
+[test]
+def test_zip_where_long_count_emits_counter_loop(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_where_long_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "zip+where+long_count must emit one multi-iter counter for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined into the splice")
+        let longCountCalls = count_call(body_expr, "long_count")
+        t |> equal(longCountCalls, 0, "long_count terminator must be fused (no runtime call)")
+    }
+}
+
+// ── PR Phase 2B+ early-exit (first/first_or_default/any/all/contains) on zip ──
+
+[test]
+def test_zip_first_no_proj_fold_result(t : T?) {
+    t |> run("zip+first (no projection) returns first tuple") @(t : T?) {
+        let result = target_zip_first_no_proj_fold()
+        t |> equal(result._0, 10)
+        t |> equal(result._1, 1)
+    }
+}
+
+[test]
+def test_zip_first_proj_fold_result(t : T?) {
+    t |> run("zip+select+first returns first projected scalar") @(t : T?) {
+        // first pair (10,1) projected → 11
+        t |> equal(target_zip_first_proj_fold(), 11)
+    }
+}
+
+[test]
+def test_zip_where_first_fold_result(t : T?) {
+    t |> run("zip+where+first returns first survivor tuple") @(t : T?) {
+        // first pair where t._0>20: (30,3)
+        let result = target_zip_where_first_fold()
+        t |> equal(result._0, 30)
+        t |> equal(result._1, 3)
+    }
+}
+
+[test]
+def test_zip_first_or_default_proj_fold_result(t : T?) {
+    t |> run("zip+select+where+first_or_default returns default when no survivor") @(t : T?) {
+        // no projected sum > 1000, so default -1 fires
+        t |> equal(target_zip_first_or_default_proj_fold(), -1)
+    }
+}
+
+[test]
+def test_zip_any_no_pred_fold_result(t : T?) {
+    t |> run("zip+any (no pred) on non-empty pair → true") @(t : T?) {
+        t |> equal(target_zip_any_no_pred_fold(), true)
+    }
+}
+
+[test]
+def test_zip_any_no_pred_empty_fold_result(t : T?) {
+    t |> run("zip+any (no pred) on empty source → false") @(t : T?) {
+        // emptyA.zip(...) → min(0,3) = 0 iters → any returns false
+        t |> equal(target_zip_any_no_pred_empty_fold(), false)
+    }
+}
+
+[test]
+def test_zip_any_pred_fold_result(t : T?) {
+    t |> run("zip+any(pred) returns true if any pair matches") @(t : T?) {
+        // (40,4) and (50,5) satisfy t._0>30 → true
+        t |> equal(target_zip_any_pred_fold(), true)
+    }
+}
+
+[test]
+def test_zip_all_pred_true_fold_result(t : T?) {
+    t |> run("zip+all(pred) returns true when all match") @(t : T?) {
+        t |> equal(target_zip_all_pred_true_fold(), true)
+    }
+}
+
+[test]
+def test_zip_all_pred_false_fold_result(t : T?) {
+    t |> run("zip+all(pred) returns false when any fails") @(t : T?) {
+        // 10, 20, 30 fail t._0>30
+        t |> equal(target_zip_all_pred_false_fold(), false)
+    }
+}
+
+[test]
+def test_zip_contains_proj_fold_result(t : T?) {
+    t |> run("zip+select+contains returns true on hit") @(t : T?) {
+        // 30+3 = 33 matches
+        t |> equal(target_zip_contains_proj_fold(), true)
+    }
+}
+
+[test]
+def test_zip_contains_proj_miss_fold_result(t : T?) {
+    t |> run("zip+select+contains returns false on miss") @(t : T?) {
+        t |> equal(target_zip_contains_proj_miss_fold(), false)
+    }
+}
+
+// PR #2742 Copilot review #r3270337476 — DEFERRED-fix tracking test. Documents the desired post-fix behavior (zip+select+average on empty source should return 0.0lf per linq.das semantics). Currently emit_accumulator_lane returns NaN, so this test is skipped until the helper is aligned (uniform fix across plan_loop_or_count + plan_zip; also requires updating "average: empty → NaN" in test_linq_fold.das to expect 0.0lf).
+[test]
+def test_zip_average_empty_returns_zero_when_fixed(t : T?) {
+    t->skip("DEFERRED: zip+select+average on empty source should return 0.0lf per linq.das semantics. Blocked on follow-up PR aligning emit_accumulator_lane.average with linq.das (double accumulator + cnt==0 guard); pre-existing helper divergence — affects single-source plan_loop_or_count too. Un-skip + assert `equal(target_zip_average_empty_fold(), 0.0lf)` when fix lands.")
+}
+
+// AST-shape: zip+accumulator splices into a single for-loop with no surviving runtime `sum`/`zip` calls.
+[test]
+def test_zip_sum_proj_emits_inline_accumulator(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_sum_proj_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "zip+select+sum must emit exactly one multi-iter for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined into the splice")
+        let sumCalls = count_call(body_expr, "sum")
+        t |> equal(sumCalls, 0, "sum terminator must be fused (no runtime sum call)")
+    }
+}
+
+// AST-shape: zip+early-exit emits the same single-for shape with no surviving terminator call.
+[test]
+def test_zip_first_proj_emits_early_return(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_first_proj_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        let nfor = count_inner_for_loops(body_expr)
+        t |> equal(nfor, 1, "zip+select+first must emit exactly one multi-iter for-loop")
+        let zipCalls = count_call(body_expr, "zip")
+        t |> equal(zipCalls, 0, "zip call must be inlined")
+        let firstCalls = count_call(body_expr, "first")
+        t |> equal(firstCalls, 0, "first terminator must be fused (no runtime first call)")
     }
 }
 

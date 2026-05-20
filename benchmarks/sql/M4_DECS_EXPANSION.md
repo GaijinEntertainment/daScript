@@ -254,3 +254,13 @@ Extended `plan_order_family` to recognize `first` / `first_or_default` as termin
 | sort_first | 37 | 713 | 722 | **42** | 802 | **121** | 17× |
 
 Now `sort_first` lands in line with the rest of the order-family. m4_decs_fold still rides the eager bridge (Slice 5+ will close the gap).
+
+## Update — zip_dot_product fix (2026-05-20, plan_zip + accumulator/early-exit lanes)
+
+PR #2742's accumulator + early-exit terminator work on `plan_zip` was orphaned on a stacked PR base when #2741 merged. Cherry-picked the 3 commits onto fresh master (auto-merged cleanly). `plan_zip` now dispatches to the generalized multi-source `emit_accumulator_lane` (sum / min / max / average / long_count) and `emit_early_exit_lane` (first / first_or_default / any / all / contains) via parallel-array helpers (`srcNames`, `topExprs`) + new `finalize_lane_emission` wrap.
+
+| benchmark | m1 | m3 | m3f (old) | m3f (new) | m3f win |
+|---|---:|---:|---:|---:|---:|
+| zip_dot_product | — | 53 | 58 | **7** | 8.3× |
+
+`zip(xs, ys)._select(_._0 * _._1).sum()` now fuses to a single multi-iter for-loop with inline accumulator, zero alloc. Falls in line with the rest of the accumulator-class benchmarks.
