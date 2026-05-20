@@ -703,3 +703,89 @@ class FromDecsMacro : AstCallMacro {
         )
     }
 }
+
+[call_macro(name="from_decs_template")]
+class FromDecsTemplateMacro : AstCallMacro {
+    //! This macro converts a DECS query over a ``[decs_template]`` struct into an ``iterator<tuple<...>>``.
+    //! The field list (names and types) is derived from the struct definition; component names are
+    //! the struct's prefix (per ``[decs_template(prefix=...)]``) joined with each field name. For example::
+    //!
+    //!     [decs_template(prefix="particle_")]
+    //!     struct Particle { pos, vel : float3 }
+    //!     let it = from_decs_template(type<Particle>)
+    //!     for (item in it) {
+    //!         print("pos {item.pos}, vel {item.vel}\n")
+    //!     }
+    //!
+    //! This is the eager bridge form — equivalent to writing
+    //! ``from_decs($(particle_pos : float3; particle_vel : float3){})`` by hand and projecting back into
+    //! field names. Tuple element types are by-value (the query's archetype refs do not outlive the
+    //! invoke block).
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 1, prog, expr.at, "expecting from_decs_template(type<Foo>)")
+        macro_verify(expr.arguments[0] is ExprTypeDecl, prog, expr.at, "expecting from_decs_template(type<Foo>), got {expr.arguments[0].__rtti}")
+        let typeExpr = expr.arguments[0] as ExprTypeDecl
+        let td = typeExpr.typeexpr
+        macro_verify(td != null && td.baseType == Type.tStructure, prog, expr.at, "from_decs_template expects type<Struct>, got non-struct type")
+        let st = td.structType
+        macro_verify(st != null, prog, expr.at, "from_decs_template: struct type is not resolved")
+        // Resolve [decs_template] annotation + prefix
+        var prefix = ""
+        var hasTemplate = false
+        for (ann in st.annotations) {
+            if (ann.annotation.name == "decs_template") {
+                hasTemplate = true
+                let ppref = ann.arguments |> decs_prefix
+                prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
+                break
+            }
+        }
+        macro_verify(hasTemplate, prog, expr.at, "from_decs_template: struct {st.name} is not annotated with [decs_template]")
+        macro_verify(!empty(st.fields), prog, expr.at, "from_decs_template: struct {st.name} has no fields")
+        // Tuple type (field names as record names, by-value types stripped of ref/const)
+        var tupleType = new TypeDecl(baseType = Type.tTuple, at = expr.at)
+        tupleType.argNames.resize(length(st.fields))
+        for (fld, idx in st.fields, count()) {
+            var ft = clone_type(fld._type)
+            ft.flags.ref = false
+            ft.flags.constant = false
+            tupleType.argTypes |> emplace_new(ft)
+            tupleType.argNames[idx] := fld.name
+        }
+        // Tuple constructor: pull each prefixed component into a record-named field
+        var mkTuple = new ExprMakeTuple(at = expr.at)
+        mkTuple.recordNames.resize(length(st.fields))
+        for (fld, idx in st.fields, count()) {
+            mkTuple.values |> push(new ExprVar(at = fld.at, name := "{prefix}{fld.name}"))
+            mkTuple.recordNames[idx] := fld.name
+        }
+        // Query block: one arg per field, name = prefixed component, type = const non-ref
+        // fld.init (if set) clones in so the query macro picks get_default_ro
+        var qblock = qmacro(${
+            res |> push($e(mkTuple))
+        })
+        var qba = qblock as ExprMakeBlock
+        var qbb = qba._block as ExprBlock
+        qbb.blockFlags.isClosure = true
+        for (fld in st.fields) {
+            var argType = clone_type(fld._type)
+            argType.flags.ref = false
+            argType.flags.constant = true
+            qbb.arguments |> emplace_new <| new Variable(at = fld.at,
+                name := "{prefix}{fld.name}",
+                _type = argType,
+                init = clone_expression(fld.init)
+            )
+        }
+        // Call query macro and wrap in invoke
+        var callquery = make_call(expr.at, "query")
+        (callquery as ExprCallMacro).arguments |> push(clone_expression(qblock))
+        return qmacro(
+            invoke(${
+                var res : array<$t(tupleType)>
+                $e(callquery)
+                return res.to_sequence()
+            })
+        )
+    }
+}
