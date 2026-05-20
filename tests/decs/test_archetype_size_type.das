@@ -15,7 +15,7 @@ require dastest/testing_boost public
 
 [test]
 def test_archetype_size_is_int64(t : T?) {
-    static_assert(typeinfo stripped_typename(default<Archetype>.size) == "int64",
+    static_assert(typeinfo stripped_typename(default<Archetype> .size) == "int64",
                   "Archetype.size must be int64 (decs storage cap)")
     t |> equal(0, 0)
 }
