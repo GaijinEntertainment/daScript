@@ -1561,7 +1561,8 @@ namespace das {
         auto key = cast<KeyType>::to(_key);
         TableHash<KeyType> thh(context,valueTypeSize);
         auto hfn = hash_function(*context, key);
-        return thh.find(*tab, key, hfn);
+        // TODO Phase 4: surface as `long_rtti_get_value_pointer` and panic from int form on >INT_MAX.
+        return (int32_t) thh.find(*tab, key, hfn);
     }
 
     int32_t rtti_getTablePtr ( void * _table, vec4f key, Type baseType, int valueTypeSize, Context * context, LineInfoArg * at ) {

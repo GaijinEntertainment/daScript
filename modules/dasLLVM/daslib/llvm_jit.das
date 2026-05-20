@@ -1780,7 +1780,10 @@ class public LlvmJitVisitor : AstVisitor {
         var ptr_idx : LLVMOpaqueValue?
         if (elemType.isVectorType && elemType.vectorDim == 3) {
             var data_bytes = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(types.t_int8, 0u), "")
-            var data_idx = LLVMBuildMul(g_builder, tidx, types.ConstI32(12ul), "")
+            // Stride const must match tidx width — Array.size-derived `tail` is i64,
+            // dim-derived tail is i32; an i32 ConstI32 against i64 tidx is a verifier error.
+            var stride = LLVMConstInt(LLVMTypeOf(tidx), 12ul, 0)
+            var data_idx = LLVMBuildMul(g_builder, tidx, stride, "")
             ptr_idx = LLVMBuildGEP2(g_builder, types.t_int8, data_bytes, data_idx, "")
             ptr_idx = LLVMBuildPointerCast(g_builder, ptr_idx, LLVMPointerType(type_to_llvm_type(elemType), 0u), name)
         } else {

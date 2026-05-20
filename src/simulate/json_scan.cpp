@@ -614,7 +614,7 @@ namespace das {
 
         // Reserve a key in the table and return the index
         template <typename KeyT>
-        int tableReserve(Table * tab, const KeyT & key, uint32_t valueTypeSize) {
+        int64_t tableReserve(Table * tab, const KeyT & key, uint32_t valueTypeSize) {
             auto hfn = hash_function(ctx, key);
             TableHash<KeyT> thh(&ctx, valueTypeSize);
             return thh.reserve(*tab, key, hfn, at);
@@ -623,7 +623,7 @@ namespace das {
         // Parse key from string and reserve in table (for compound key types)
         template <typename KeyT>
         bool scanKeyAndReserve(Table * tab, const string & keyStr, TypeInfo * keyTi,
-                               uint32_t valueTypeSize, int & index) {
+                               uint32_t valueTypeSize, int64_t & index) {
             KeyT key;
             memset(&key, 0, sizeof(key));
             if (!scanFromStr(keyStr, (char*)&key, keyTi)) return false;
@@ -647,7 +647,7 @@ namespace das {
                 if (!readString(keyStr)) return false;
                 if (!expect(':')) return false;
                 // insert key into table based on key type
-                int index = -1;
+                int64_t index = -1;
                 bool keyOk = true;
                 switch (ti->firstType->type) {
                     // string key

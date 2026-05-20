@@ -1139,21 +1139,21 @@ namespace das {
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.reserve(*this, key, hfn);
+            int64_t index = thh.reserve(*this, key, hfn);
             return ((TV *)data)[index];
         }
         static __forceinline TV * safe_index ( THIS_TYPE * that, const TK & key, Context * __context__ ) {
             if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.find(*that, key, hfn);
+            int64_t index = thh.find(*that, key, hfn);
             return index==-1 ? nullptr : ((TV *)that->data) + index;
         }
         static __forceinline const TV * safe_index ( const THIS_TYPE * that, const TK & key, Context * __context__ ) {
             if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.find(*that, key, hfn);
+            int64_t index = thh.find(*that, key, hfn);
             return index==-1 ? nullptr : ((const TV *)that->data) + index;
         }
     };
@@ -2911,7 +2911,7 @@ namespace das {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
-        int index = thh.find(tab, key, hfn);
+        int64_t index = thh.find(tab, key, hfn);
         return (TV *) ( index!=-1 ? tab.data + index * sizeof(TV) : nullptr );
     }
 

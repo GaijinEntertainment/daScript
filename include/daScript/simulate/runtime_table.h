@@ -62,7 +62,7 @@ namespace das
             else return hash;
         }
 
-        __forceinline int find ( const Table & tab, KeyType key, uint64_t hash ) const {
+        __forceinline int64_t find ( const Table & tab, KeyType key, uint64_t hash ) const {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
             uint64_t mask = tab.capacity - 1;
@@ -75,13 +75,13 @@ namespace das
                 if ( kh==HASH_EMPTY64 ) {
                     return -1;
                 } else if ( kh==hashKey && KeyCompare<KeyType>()(pKeys[index],key) ) {
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
+        __forceinline int64_t reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
             DAS_ASSERT(hash>1);
             if ( tab.size >= (tab.capacity/2) ) grow(tab, at);
             else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab, at);
@@ -102,17 +102,17 @@ namespace das
                     pHashes[index] = hashKey;
                     pKeys[index] = key;
                     tab.size++;
-                    return (int)index;
+                    return (int64_t)index;
                 } else if (kh == HASH_KILLED64) {
                     if ( insertI == ~uint64_t(0) ) insertI = index;
                 } else if (kh == hashKey && KeyCompare<KeyType>()(pKeys[index], key)) {
-                    return (int)index;
+                    return (int64_t)index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
-        __forceinline int erase ( Table & tab, KeyType key, uint64_t hash ) {
+        __forceinline int64_t erase ( Table & tab, KeyType key, uint64_t hash ) {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
             uint64_t mask = tab.capacity - 1;
@@ -129,7 +129,7 @@ namespace das
                     tab.tombstones++;
                     pHashes[index] = HASH_KILLED64;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
@@ -164,7 +164,9 @@ namespace das
         }
 
     private:
-        __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
+        // Returns the slot index. Always finds a slot (called only during rehash on a fresh
+        // pre-allocated table), so signed int64_t can hold any value the uint64 capacity allows.
+        __forceinline int64_t insertNew ( Table & tab, uint64_t hash ) const {
             // TODO: take key under account and be less aggressive?
             DAS_ASSERT(hash>1);
             uint64_t mask = tab.capacity - 1;
@@ -173,7 +175,7 @@ namespace das
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
@@ -215,7 +217,7 @@ namespace das
                 for ( uint64_t i=0, is=tab.capacity; i!=is; ++i ) {
                     auto hash = pOldHashes[i];
                     if ( hash>HASH_KILLED64 ) {
-                        int index = insertNew(newTab, hash);
+                        int64_t index = insertNew(newTab, hash);
                         pHashes[index] = hash;
                         pKeys[index] = pOldKeys[i];
                         memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );

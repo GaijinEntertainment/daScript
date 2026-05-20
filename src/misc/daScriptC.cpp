@@ -1248,8 +1248,8 @@ void * das_table_find ( das_context * context, das_table * tab, int key_base_typ
         memcpy(&k, key, sizeof(KEY_TYPE));
         uint64_t h = hash_function(*(Context *)context, k);
         TableHash<KEY_TYPE> hh((Context *)context, value_size);
-        int idx = hh.find(*t, k, h);
-        if ( idx >= 0 ) result = t->data + size_t(idx) * size_t(value_size);
+        int64_t idx = hh.find(*t, k, h);
+        if ( idx >= 0 ) result = t->data + uint64_t(idx) * uint64_t(value_size);
     })
     return result;
 }
@@ -1262,8 +1262,8 @@ void * das_table_insert ( das_context * context, das_table * tab, int key_base_t
         memcpy(&k, key, sizeof(KEY_TYPE));
         uint64_t h = hash_function(*(Context *)context, k);
         TableHash<KEY_TYPE> hh((Context *)context, value_size);
-        int idx = hh.reserve(*t, k, h, nullptr);
-        if ( idx >= 0 ) result = t->data + size_t(idx) * size_t(value_size);
+        int64_t idx = hh.reserve(*t, k, h, nullptr);
+        if ( idx >= 0 ) result = t->data + uint64_t(idx) * uint64_t(value_size);
     })
     return result;
 }
@@ -1276,7 +1276,7 @@ int das_table_erase ( das_context * context, das_table * tab, int key_base_type,
         memcpy(&k, key, sizeof(KEY_TYPE));
         uint64_t h = hash_function(*(Context *)context, k);
         TableHash<KEY_TYPE> hh((Context *)context, value_size);
-        int idx = hh.erase(*t, k, h);
+        int64_t idx = hh.erase(*t, k, h);
         if ( idx >= 0 ) erased = 1;
     })
     return erased;
