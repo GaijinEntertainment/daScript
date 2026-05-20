@@ -554,7 +554,7 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
     //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++
     for (c, comp in arch.components, cmp) {
-        c.data |> resize(length(c.data) + c.stride)
+        c.data |> resize(long_length(c.data) + int64(c.stride))
         unsafe {
             memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
         }
@@ -983,7 +983,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
         // Pre-resize all component arrays for count entities at once
         let base = arch.size
         for (c in arch.components) {
-            c.data |> resize(length(c.data) + c.stride * count)
+            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
         }
         // Fill first entity
         for (c, comp in arch.components, cmp) {
@@ -1035,7 +1035,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         }
         let base = arch.size
         for (c in arch.components) {
-            c.data |> resize(length(c.data) + c.stride * count)
+            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
         }
         // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
         // EntityId.id to uint64 is an architectural followup.
