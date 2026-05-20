@@ -1719,7 +1719,9 @@ def lock_data(var a : array<auto(TT)> ==const | #; blk : block<(var p : TT?#; s 
     let len = length(a)
     if (len != 0) {
         __builtin_array_lock(a)
-        invoke(blk, unsafe(reinterpret<TT?#> addr(a[0])), len)
+        unsafe {   // nolint:STYLE025 addr() needs unsafe too -- not detected as an unsafe leaf by the lint
+            invoke(blk, reinterpret<TT?#> addr(a[0]), len)
+        }
         __builtin_array_unlock(a)
     } else {
         var nullT : TT?
@@ -1731,7 +1733,9 @@ def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : 
     let len = length(a)
     if (len != 0) {
         __builtin_array_lock_mutable(a)
-        invoke(blk, unsafe(reinterpret<TT const?#> addr(a[0])), len)
+        unsafe {   // nolint:STYLE025 addr() needs unsafe too -- not detected as an unsafe leaf by the lint
+            invoke(blk, reinterpret<TT const?#> addr(a[0]), len)
+        }
         __builtin_array_unlock_mutable(a)
     } else {
         invoke(blk, unsafe(reinterpret<TT const?#> null), 0)
