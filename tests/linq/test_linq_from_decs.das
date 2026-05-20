@@ -835,3 +835,122 @@ def test_unroll_skip_count_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "skip-only splice uses regular for_each_archetype")
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5a Copilot review #1 regression guards — take + any/all/contains must
+// distinguish take-cap (inner `return true`) from real match. Without explicit
+// foundName/foundCounter state these would false-positive on empty/no-match
+// sources whenever the take-cap fires before a real perElement decision.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_take_any_no_pred_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>).take(0).any())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_any_pred_no_match_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ > 100))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_any_pred_match_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ == 1))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_all_pass_fold() : bool {
+    // All val >= 0 holds; take(3) shouldn't fool `all` into returning false from the take-cap exit.
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._all(_ >= 0))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_all_fail_fold() : bool {
+    // Some val > 1 → `all <= 1` false.
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._all(_ <= 1))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_contains_hit_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(5).contains(2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_contains_miss_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).contains(100))
+}
+
+[test]
+def test_unroll_take_any_no_pred_empty(t : T?) {
+    fixture_unroll2(7)
+    // take(0).any() on non-empty source → false (the prefix-of-length-0 is empty).
+    t |> equal(target_unroll_take_any_no_pred_fold(), false, "take(0).any() returns false on non-empty source")
+}
+
+[test]
+def test_unroll_take_any_pred_no_match(t : T?) {
+    fixture_unroll2(7)
+    // take(3) gives vals 0,1,2; none > 100 → false. take-cap fires at element 3 but must not be mistaken for a match.
+    t |> equal(target_unroll_take_any_pred_no_match_fold(), false, "take(3).any(_ > 100) returns false when no match in prefix")
+}
+
+[test]
+def test_unroll_take_any_pred_match(t : T?) {
+    fixture_unroll2(7)
+    // take(3) gives vals 0,1,2; matches _==1 at element 1 → true.
+    t |> equal(target_unroll_take_any_pred_match_fold(), true, "take(3).any(_ == 1) returns true when match in prefix")
+}
+
+[test]
+def test_unroll_take_all_pass(t : T?) {
+    fixture_unroll2(7)
+    // vals 0,1,2,...,6 all >= 0; take(3) gives 0,1,2 all pass → true. Take-cap fire at element 3 must not be mistaken for "counterexample found".
+    t |> equal(target_unroll_take_all_pass_fold(), true, "take(3).all(_ >= 0) returns true when all prefix elements pass")
+}
+
+[test]
+def test_unroll_take_all_fail(t : T?) {
+    fixture_unroll2(7)
+    // take(3) gives 0,1,2; element 2 fails `_ <= 1` → false.
+    t |> equal(target_unroll_take_all_fail_fold(), false, "take(3).all(_ <= 1) returns false when prefix contains counterexample")
+}
+
+[test]
+def test_unroll_take_contains_hit(t : T?) {
+    fixture_unroll2(7)
+    // take(5) gives 0..4; contains(2) → true.
+    t |> equal(target_unroll_take_contains_hit_fold(), true, "take(5).contains(2) returns true when value in prefix")
+}
+
+[test]
+def test_unroll_take_contains_miss(t : T?) {
+    fixture_unroll2(7)
+    // take(2) gives 0,1; contains(100) → false. take-cap fires at element 2 but must not be mistaken for a hit.
+    t |> equal(target_unroll_take_contains_miss_fold(), false, "take(2).contains(100) returns false when value not in prefix")
+}
+
+// Slice 5a Copilot review #2 regression guard — take(N) expression must evaluate
+// exactly once per invoke (matches take(src, total:int) call-site semantics).
+// Side-effect counter proves the hoist works.
+
+var private take_n_eval_counter : int = 0
+
+def private take_n_with_side_effect() : int {
+    take_n_eval_counter ++
+    return 3
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_with_side_effect_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).take(take_n_with_side_effect()).count())
+}
+
+[test]
+def test_unroll_take_n_evaluated_once(t : T?) {
+    fixture_unroll2(7)
+    take_n_eval_counter = 0
+    let c = target_unroll_take_with_side_effect_fold()
+    t |> equal(c, 3, "take(3).count() returns 3")
+    // Single hoisted evaluation — NOT once per element across 7 entities.
+    t |> equal(take_n_eval_counter, 1, "take(N) expression must evaluate exactly once per invoke")
+}
