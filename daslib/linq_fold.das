@@ -3238,6 +3238,103 @@ def private wrap_decs_chain(var action : Expression?;
     return current
 }
 
+struct private DecsRangeInfo {
+    skipExpr  : Expression?
+    takeExpr  : Expression?
+    chainEnd  : int
+}
+
+[macro_function]
+def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                intermediateEnd : int;
+                                at : LineInfo) : DecsRangeInfo? {
+    // Slice 5a: split intermediate chain into (where_/select prefix) + (skip? take? suffix). Mirrors array-side canonical order: skip must precede take, both must follow any where_/select. Reject mid-chain take/skip (would change splice semantics — array-side enforces same).
+    var info = new DecsRangeInfo(chainEnd = intermediateEnd)
+    var firstRangeIdx = intermediateEnd
+    for (i in 0 .. intermediateEnd) {
+        let nm = calls[i]._1.name
+        if (nm == "take" || nm == "skip") {
+            firstRangeIdx = i
+            break
+        }
+    }
+    if (firstRangeIdx == intermediateEnd) return info
+    for (i in firstRangeIdx .. intermediateEnd) {
+        var cll & = unsafe(calls[i])
+        let nm = cll._1.name
+        if (nm == "skip") {
+            if (info.skipExpr != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
+            var arg = cll._0.arguments[1]
+            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
+            info.skipExpr = clone_expression(arg)
+        } elif (nm == "take") {
+            if (info.takeExpr != null || length(cll._0.arguments) < 2) return null
+            var arg = cll._0.arguments[1]
+            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
+            info.takeExpr = clone_expression(arg)
+        } else {
+            return null
+        }
+    }
+    info.chainEnd = firstRangeIdx
+    return info
+}
+
+[macro_function]
+def private wrap_inner_for_with_decs_ranges(var body : Expression?;
+                                            rangeInfo : DecsRangeInfo?;
+                                            skipName, takeCountName, takeLimitName : string) : Expression? {
+    // Slice 5a: prefix per-element body with take-guard (return true to stop archetype walk) + skip counter. Counters live at invoke scope; this only emits the per-element guards. Caller switches outer iterator to for_each_archetype_find when takeExpr != null. Take limit is read from a hoisted local (takeLimitName) so the user's take(N) expression is evaluated exactly once at invoke entry, matching take(src, total:int) call-site semantics.
+    if (rangeInfo.skipExpr == null && rangeInfo.takeExpr == null) return body
+    var stmts : array<Expression?>
+    stmts |> reserve(4)
+    if (rangeInfo.takeExpr != null) {
+        // `>=` so non-positive N short-circuits on first iteration. `return true` exits both inner for AND the archetype bool lambda.
+        stmts |> push <| qmacro_expr() {
+            if ($i(takeCountName) >= $i(takeLimitName)) {
+                return true
+            }
+        }
+    }
+    if (rangeInfo.skipExpr != null) {
+        stmts |> push <| qmacro_expr() {
+            if ($i(skipName) > 0) {
+                $i(skipName) --
+                continue
+            }
+        }
+    }
+    if (rangeInfo.takeExpr != null) {
+        stmts |> push <| qmacro_expr() {
+            $i(takeCountName) ++
+        }
+    }
+    stmts |> push(body)
+    return stmts_to_expr(stmts)
+}
+
+[macro_function]
+def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountName, takeLimitName : string) : array<Expression?> {
+    // Counter init statements hoisted ABOVE the for_each_archetype call so they survive across archetypes. takeLimit hoisted to a local so the user's take(N) expression evaluates exactly once (matches take(src, total:int) semantics).
+    var stmts : array<Expression?>
+    if (rangeInfo.skipExpr != null) {
+        var skipInit = clone_expression(rangeInfo.skipExpr)
+        stmts |> push <| qmacro_expr() {
+            var $i(skipName) = $e(skipInit)
+        }
+    }
+    if (rangeInfo.takeExpr != null) {
+        var takeInit = clone_expression(rangeInfo.takeExpr)
+        stmts |> push <| qmacro_expr() {
+            let $i(takeLimitName) = $e(takeInit)
+        }
+        stmts |> push <| qmacro_expr() {
+            var $i(takeCountName) = 0
+        }
+    }
+    return <- stmts
+}
+
 [macro_function]
 def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
@@ -3264,17 +3361,21 @@ def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) :
 def private emit_decs_accumulator(bridge : DecsBridgeShape?;
                                   opName : string;
                                   chainInfo : DecsChainInfo?;
+                                  rangeInfo : DecsRangeInfo?;
                                   var calls : array<tuple<ExprCall?; LinqCall?>>;
                                   intermediateEnd : int;
                                   terminatorCall : ExprCall?;
                                   var accType : TypeDeclPtr;
                                   at : LineInfo) : Expression? {
-    // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred).
+    // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred). Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope, take present → for_each_archetype_find).
     let accName = "`decs_acc`{at.line}`{at.column}"
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let cntName = "`decs_cnt`{at.line}`{at.column}"
     let firstName = "`decs_first`{at.line}`{at.column}"
     let valBindName = "`decs_val`{at.line}`{at.column}"
+    let skipName = "`decs_skip`{at.line}`{at.column}"
+    let takeCountName = "`decs_takec`{at.line}`{at.column}"
+    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var perElement : Expression?
     if (opName == "sum") {
@@ -3322,6 +3423,8 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             }
         }
     }
+    // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3329,53 +3432,92 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var emission : Expression?
+    var preludeStmts : array<Expression?>
+    var tailStmts : array<Expression?>
     if (opName == "long_count") {
-        emission = qmacro(invoke($() : int64 {
+        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) = 0l
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        }
+        tailStmts |> push <| qmacro_expr() {
             return $i(accName)
-        }))
+        }
     } elif (opName == "count") {
-        emission = qmacro(invoke($() : int {
+        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) = 0
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        }
+        tailStmts |> push <| qmacro_expr() {
             return $i(accName)
-        }))
+        }
     } elif (opName == "sum") {
-        emission = qmacro(invoke($() : $t(accType) {
+        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) : $t(accType) = default<$t(accType)>
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        }
+        tailStmts |> push <| qmacro_expr() {
             return $i(accName)
-        }))
+        }
     } elif (opName == "average") {
-        emission = qmacro(invoke($() : double {
+        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) : double = 0lf
+        }
+        preludeStmts |> push <| qmacro_expr() {
             var $i(cntName) : uint64 = 0ul
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        }
+        tailStmts |> push <| qmacro_expr() {
             return $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
-        }))
+        }
     } elif (opName == "min" || opName == "max") {
         // No empty-panic — matches non-decs emit_accumulator_lane (returns default-initialized acc).
-        emission = qmacro(invoke($() : $t(accType) {
+        preludeStmts |> push <| qmacro_expr() {
             var $i(firstName) = true
+        }
+        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) : $t(accType)
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        }
+        tailStmts |> push <| qmacro_expr() {
             return $i(accName)
-        }))
+        }
     } else {
         return null
     }
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
+    for (s in preludeStmts) {
+        bodyStmts |> push(s)
+    }
+    for (s in rangeStmts) {
+        bodyStmts |> push(s)
+    }
+    if (rangeInfo.takeExpr != null) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    for (s in tailStmts) {
+        bodyStmts |> push(s)
+    }
+    var retType : TypeDeclPtr
+    if (opName == "long_count") {
+        retType = new TypeDecl(baseType = Type.tInt64)
+    } elif (opName == "count") {
+        retType = new TypeDecl(baseType = Type.tInt)
+    } elif (opName == "average") {
+        retType = new TypeDecl(baseType = Type.tDouble)
+    } else {
+        retType = clone_type(accType)
+    }
+    var emission = qmacro(invoke($() : $t(retType) {
+        $b(bodyStmts)
+    }))
     emission.force_at(at)
     emission.force_generated(true)
     return emission
@@ -3385,16 +3527,20 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
 def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                                  opName : string;
                                  chainInfo : DecsChainInfo?;
+                                 rangeInfo : DecsRangeInfo?;
                                  var calls : array<tuple<ExprCall?; LinqCall?>>;
                                  intermediateEnd : int;
                                  terminatorCall : ExprCall?;
                                  at : LineInfo) : Expression? {
-    // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain.
+    // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain. Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope).
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let foundName = "`decs_found`{at.line}`{at.column}"
     let resultName = "`decs_result`{at.line}`{at.column}"
     let containsValName = "`decs_cv`{at.line}`{at.column}"
     let defaultName = "`decs_dv`{at.line}`{at.column}"
+    let skipName = "`decs_skip`{at.line}`{at.column}"
+    let takeCountName = "`decs_takec`{at.line}`{at.column}"
+    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression?
@@ -3435,34 +3581,93 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         }
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
-        if (argCount > 1) {
-            var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
-            if (predExpr == null) return null
-            perElement = qmacro_expr() {
-                if ($e(predExpr)) return true
+        // When take is present, distinguish "match found" from "take-cap hit" — both produce `return true` from the inner block, so route through an explicit foundName state and use the find result only as iteration control (tail returns foundName).
+        if (rangeInfo.takeExpr != null) {
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            if (argCount > 1) {
+                var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+                if (predExpr == null) return null
+                perElement = qmacro_expr() {
+                    if ($e(predExpr)) {
+                        $i(foundName) = true
+                        return true
+                    }
+                }
+            } else {
+                perElement = qmacro_block() {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return $i(foundName)
             }
         } else {
-            perElement = qmacro_expr() {
-                return true
+            if (argCount > 1) {
+                var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+                if (predExpr == null) return null
+                perElement = qmacro_expr() {
+                    if ($e(predExpr)) return true
+                }
+            } else {
+                perElement = qmacro_expr() {
+                    return true
+                }
             }
         }
     } elif (opName == "all") {
         var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
         if (predExpr == null) return null
-        perElement = qmacro_expr() {
-            if (!$e(predExpr)) return true
+        if (rangeInfo.takeExpr != null) {
+            // Take-cap hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            perElement = qmacro_expr() {
+                if (!$e(predExpr)) {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return !$i(foundName)
+            }
+        } else {
+            perElement = qmacro_expr() {
+                if (!$e(predExpr)) return true
+            }
         }
     } elif (opName == "contains") {
         var valExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
             let $i(containsValName) = $e(valExpr)
         }
-        perElement = qmacro_expr() {
-            if ($i(finalBind) == $i(containsValName)) return true
+        if (rangeInfo.takeExpr != null) {
+            // Same disambiguation as any: take-cap and "value matched" both inner-return true, route through foundName.
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            perElement = qmacro_expr() {
+                if ($i(finalBind) == $i(containsValName)) {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return $i(foundName)
+            }
+        } else {
+            perElement = qmacro_expr() {
+                if ($i(finalBind) == $i(containsValName)) return true
+            }
         }
     } else {
         return null
     }
+    // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3470,13 +3675,29 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
     // Combine prelude + invocation + tail into ONE bodyStmts list — multiple $b splices in the same qmacro fragment isolate variable scope.
     var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 1)
+    bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
     for (s in preludeStmts) {
         bodyStmts |> push(s)
     }
-    if (opName == "any" || opName == "contains") {
+    for (s in rangeStmts) {
+        bodyStmts |> push(s)
+    }
+    // When takeExpr is present, any/all/contains route their answer through explicit foundName state (set above) — the find result is unreliable because take-cap and "real match" both produce inner `return true`. In that case, treat the find call as iteration control only and emit the return via tailStmts (which already contains `return foundName` / `return !foundName`).
+    let useExplicitState = (rangeInfo.takeExpr != null && (opName == "any" || opName == "all" || opName == "contains"))
+    if (useExplicitState) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+        for (s in tailStmts) {
+            bodyStmts |> push(s)
+        }
+    } elif (opName == "any" || opName == "contains") {
         bodyStmts |> push <| qmacro_expr() {
             return for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
@@ -3520,17 +3741,23 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
 [macro_function]
 def private emit_decs_to_array(bridge : DecsBridgeShape?;
                                chainInfo : DecsChainInfo?;
+                               rangeInfo : DecsRangeInfo?;
                                var calls : array<tuple<ExprCall?; LinqCall?>>;
                                intermediateEnd : int;
                                at : LineInfo) : Expression? {
-    // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind.
+    // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind. Slice 5a adds take/skip ranges via rangeInfo.
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let bufName = "`decs_buf`{at.line}`{at.column}"
+    let skipName = "`decs_skip`{at.line}`{at.column}"
+    let takeCountName = "`decs_takec`{at.line}`{at.column}"
+    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(finalBind))
     }
+    // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3538,12 +3765,34 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var emission : Expression? = qmacro(invoke($() : array<$t(elemType)> {
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(rangeStmts) + 3)
+    bodyStmts |> push <| qmacro_expr() {
         var $i(bufName) : array<$t(elemType)>
-        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-            $e(forExprNode)
-        })
+    }
+    for (s in rangeStmts) {
+        bodyStmts |> push(s)
+    }
+    if (rangeInfo.takeExpr != null) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    bodyStmts |> push <| qmacro_expr() {
         return <- $i(bufName)
+    }
+    var emission = qmacro(invoke($() : array<$t(elemType)> {
+        $b(bodyStmts)
     }))
     emission.force_at(at)
     emission.force_generated(true)
@@ -3554,16 +3803,20 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
 def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
                                  opName : string;
                                  chainInfo : DecsChainInfo?;
+                                 rangeInfo : DecsRangeInfo?;
                                  var calls : array<tuple<ExprCall?; LinqCall?>>;
                                  intermediateEnd : int;
                                  terminatorCall : ExprCall?;
                                  at : LineInfo) : Expression? {
-    // Slice 4: min_by / max_by — track best (key, element) pair across archetypes. Element retained via `:=`, matches min_by_impl's empty→default semantics.
+    // Slice 4: min_by / max_by — track best (key, element) pair across archetypes. Element retained via `:=`, matches min_by_impl's empty→default semantics. Slice 5a adds take/skip ranges via rangeInfo.
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let firstName = "`decs_first`{at.line}`{at.column}"
     let bestKeyName = "`decs_bkey`{at.line}`{at.column}"
     let bestElemName = "`decs_belem`{at.line}`{at.column}"
     let keyBindName = "`decs_key`{at.line}`{at.column}"
+    let skipName = "`decs_skip`{at.line}`{at.column}"
+    let takeCountName = "`decs_takec`{at.line}`{at.column}"
+    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var keyExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
@@ -3585,6 +3838,8 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
             $i(bestElemName) := $i(finalBind)
         }
     }
+    // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3592,14 +3847,40 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var emission = qmacro(invoke($() : $t(elemType) {
+    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(rangeStmts) + 5)
+    bodyStmts |> push <| qmacro_expr() {
         var $i(firstName) = true
+    }
+    bodyStmts |> push <| qmacro_expr() {
         var $i(bestKeyName) : $t(keyType)
+    }
+    bodyStmts |> push <| qmacro_expr() {
         var $i(bestElemName) : $t(elemType)
-        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-            $e(forExprNode)
-        })
+    }
+    for (s in rangeStmts) {
+        bodyStmts |> push(s)
+    }
+    if (rangeInfo.takeExpr != null) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    bodyStmts |> push <| qmacro_expr() {
         return $i(bestElemName)
+    }
+    var emission = qmacro(invoke($() : $t(elemType) {
+        $b(bodyStmts)
     }))
     emission.force_at(at)
     emission.force_generated(true)
@@ -3612,7 +3893,7 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     let bridge = extract_decs_bridge(top)
     if (bridge == null) return null
     let at = expr.at
-    // Slice 1: bare count → arch.size shortcut.
+    // Slice 1: bare count → arch.size shortcut (no chain ops, no ranges).
     if (length(calls) == 1 && calls.back()._1.name == "count" && length(calls.back()._0.arguments) == 1) return emit_decs_count_archsize(bridge, at)
     // to_array is `skip = true` in linqCalls so it's already peeled — "no recognized terminator" means implicit to_array.
     let lastName = empty(calls) ? "" : calls.back()._1.name
@@ -3624,7 +3905,10 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     let isTerminator = isAccum || isEarlyExit || isMinMaxBy
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let intermediateEnd = isTerminator ? length(calls) - 1 : length(calls)
-    let chainInfo = compute_decs_chain_info(calls, intermediateEnd, tupName, bridge, at)
+    // Slice 5a: peel trailing take/skip into rangeInfo. chainEnd is the index past which only take/skip live (or == intermediateEnd if none).
+    let rangeInfo = extract_decs_ranges(calls, intermediateEnd, at)
+    if (rangeInfo == null) return null
+    let chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
     if (chainInfo == null) return null
     if (isAccum) {
         // sum/min/max/average need a scalar element — selectCount==0 keeps finalType = bridge.elementType (a tuple) which can't be summed/compared.
@@ -3633,13 +3917,13 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
             if (chainInfo.selectCount == 0 || chainInfo.finalType == null) return null
             accType = clone_type(chainInfo.finalType)
         }
-        return emit_decs_accumulator(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, accType, at)
+        return emit_decs_accumulator(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, accType, at)
     }
-    if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, at)
-    if (isMinMaxBy) return emit_decs_min_max_by(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, at)
+    if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
+    if (isMinMaxBy) return emit_decs_min_max_by(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
     // Iterator-typed chains cascade to tier-2; only fire to_array when expr is array-typed (user wrote `.to_array()`, peeled by skip=true).
     if (expr._type == null || !expr._type.isGoodArrayType) return null
-    return emit_decs_to_array(bridge, chainInfo, calls, intermediateEnd, at)
+    return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)
 }
 
 [macro_function]
