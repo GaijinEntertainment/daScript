@@ -12,6 +12,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
             let row = _sql(db |> select_from(type<Car>) |> _order_by(_.price) |> _first())
+            b |> accept(row)
             if (row.id == 0) {
                 b->failNow()
             }
@@ -23,6 +24,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let row = arr |> _order_by(_.price) |> first()
+        b |> accept(row)
         if (row.id == 0) {
             b->failNow()
         }
@@ -32,6 +34,7 @@ def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
         let row = _fold(each(arr)._order_by(_.price).first())
+        b |> accept(row)
         if (row.id == 0) {
             b->failNow()
         }
@@ -42,6 +45,7 @@ def run_m4(b : B?; n : int) {
     fixture_decs(n)
     b |> run("m4_decs_fold/{n}", n) {
         let row = _fold(from_decs_template(type<DecsCar>)._order_by(_.price).first())
+        b |> accept(row)
         if (row.id == 0) {
             b->failNow()
         }

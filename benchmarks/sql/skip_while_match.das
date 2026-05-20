@@ -20,6 +20,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
             let total = _sql(db |> select_from(type<Car>) |> _where(_.id >= THRESHOLD) |> count())
+            b |> accept(total)
             if (total == 0) {
                 b->failNow()
             }
@@ -31,6 +32,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let total = arr |> _skip_while(_.id < THRESHOLD) |> count()
+        b |> accept(total)
         if (total == 0) {
             b->failNow()
         }
@@ -40,6 +42,7 @@ def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
         let total = _fold(each(arr)._skip_while(_.id < THRESHOLD).count())
+        b |> accept(total)
         if (total == 0) {
             b->failNow()
         }
@@ -50,6 +53,7 @@ def run_m4(b : B?; n : int) {
     fixture_decs(n)
     b |> run("m4_decs_fold/{n}", n) {
         let total = _fold(from_decs_template(type<DecsCar>)._skip_while(_.id < THRESHOLD).count())
+        b |> accept(total)
         if (total == 0) {
             b->failNow()
         }

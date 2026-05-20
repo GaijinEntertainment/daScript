@@ -15,6 +15,7 @@ def run_m1(b : B?; n : int) {
         let key = n / 2
         b |> run("m1_sql/{n}") {
             let c = _sql(db |> select_from(type<Car>) |> _where(_.id == key) |> count())
+            b |> accept(c)
             if (c == 0) {
                 b->failNow()
             }
@@ -28,6 +29,7 @@ def run_m3(b : B?; n : int) {
     let key = n / 2
     b |> run("m3_array/{n}") {
         let c = arr |> _where(_.id == key) |> count()
+        b |> accept(c)
         if (c == 0) {
             b->failNow()
         }
@@ -40,6 +42,7 @@ def run_m3f(b : B?; n : int) {
     let key = n / 2
     b |> run("m3f_array_fold/{n}") {
         let c = _fold(each(arr)._where(_.id == key).count())
+        b |> accept(c)
         if (c == 0) {
             b->failNow()
         }

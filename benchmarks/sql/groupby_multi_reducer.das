@@ -18,6 +18,7 @@ def run_m1(b : B?; n : int) {
                                               N = _._1 |> length,
                                               TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                               MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max())))
+            b |> accept(groups)
             if (empty(groups)) {
                 b->failNow()
             }
@@ -32,6 +33,7 @@ def run_m3(b : B?; n : int) {
                                                        N = _._1 |> length,
                                                        TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                                        MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max())))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -47,6 +49,7 @@ def run_m3f(b : B?; n : int) {
                                       TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                       MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -63,6 +66,7 @@ def run_m4(b : B?; n : int) {
                                       TotalPrice = _._1 |> _select(_.price) |> sum(),
                                       MaxPrice   = _._1 |> _select(_.price) |> max()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }

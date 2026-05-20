@@ -15,6 +15,7 @@ def run_m1(b : B?; n : int) {
                                 |> _where(_.price > THRESHOLD)
                                 |> _order_by(_.price)
                                 |> take(TAKE_N))
+            b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
             }
@@ -29,6 +30,7 @@ def run_m3(b : B?; n : int) {
         let rows <- (arr |> _where(_.price > THRESHOLD)
                          |> _order_by(_.price)
                          |> take(TAKE_N))
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -43,6 +45,7 @@ def run_m3f(b : B?; n : int) {
                                    ._order_by(_.price)
                                    .take(TAKE_N)
                                    .to_array())
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -56,6 +59,7 @@ def run_m4(b : B?; n : int) {
                                    ._order_by(_.price)
                                    .take(TAKE_N)
                                    .to_array())
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }

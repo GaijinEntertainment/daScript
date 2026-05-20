@@ -12,6 +12,7 @@ def run_m3(b : B?; n : int) {
     b |> run("m3_array/{n}", n) {
         let groups <- (arr._group_by(_.brand)._select((Brand = _._0,
                                                        FirstCar = _._1 |> first())))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -25,6 +26,7 @@ def run_m3f(b : B?; n : int) {
                             ._select((Brand = _._0,
                                       FirstCar = _._1 |> first()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -39,6 +41,7 @@ def run_m4(b : B?; n : int) {
                             ._select((Brand = _._0,
                                       FirstCar = _._1 |> first()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
