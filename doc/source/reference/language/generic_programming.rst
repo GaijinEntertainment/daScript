@@ -90,6 +90,8 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo is_void_pointer(expr)`` — true if void pointer
 * ``typeinfo is_string(expr)`` — true if string type
 * ``typeinfo is_numeric(expr)`` — true if numeric type
+* ``typeinfo is_int(expr)`` — true if exactly ``int`` (32-bit signed, non-array)
+* ``typeinfo is_int64(expr)`` — true if exactly ``int64`` (64-bit signed, non-array)
 * ``typeinfo is_numeric_comparable(expr)`` — true if numeric-comparable
 * ``typeinfo is_vector(expr)`` — true if vector type (``float2``/``int3``/etc.)
 * ``typeinfo is_any_vector(expr)`` — true if handled vector-template type
