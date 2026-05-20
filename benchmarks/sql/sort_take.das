@@ -52,6 +52,18 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        unsafe {
+            let rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).take(TAKE_N).to_array())
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 def run_m3_topn_array(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_topn_array/{n}", n) {
@@ -95,4 +107,9 @@ def sort_take_m3_topn_array(b : B?) {
 [benchmark]
 def sort_take_m3_topn_iter(b : B?) {
     run_m3_topn_iter(b, 100000)
+}
+
+[benchmark]
+def sort_take_m4(b : B?) {
+    run_m4(b, 100000)
 }

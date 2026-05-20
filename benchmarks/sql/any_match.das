@@ -40,6 +40,16 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let yes = _fold(from_decs_template(type<DecsCar>)._any(_.price > THRESHOLD))
+        if (!yes) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def any_match_m1(b : B?) {
     run_m1(b, 100000)
@@ -53,4 +63,9 @@ def any_match_m3(b : B?) {
 [benchmark]
 def any_match_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def any_match_m4(b : B?) {
+    run_m4(b, 100000)
 }

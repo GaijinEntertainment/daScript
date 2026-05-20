@@ -37,6 +37,16 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let s = _fold(from_decs_template(type<DecsCar>)._select(_.price).sum())
+        if (s == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def sum_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -50,4 +60,9 @@ def sum_aggregate_m3(b : B?) {
 [benchmark]
 def sum_aggregate_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def sum_aggregate_m4(b : B?) {
+    run_m4(b, 100000)
 }
