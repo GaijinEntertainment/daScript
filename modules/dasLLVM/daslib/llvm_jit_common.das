@@ -919,13 +919,13 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
     } elif (t.baseType == Type.tBlock) {
         res = g_t_block
     } elif (t.baseType == Type.tArray) {
-        // array type
+        // array type — must mirror Array layout in arraytype.h byte-for-byte
         var array_fields <- fixed_array(
             g_prim_t.LLVMVoidPtrType(),// char * data
-            g_prim_t.t_int32,                    // uint32_t size
-            g_prim_t.t_int32,                    // uint32_t capacity
-            g_prim_t.t_int32,                    // uint32_t lock
+            g_prim_t.t_int64,                    // uint64_t size
+            g_prim_t.t_int64,                    // uint64_t capacity
             g_prim_t.t_int32,                    // uint32_t magic
+            g_prim_t.t_int32,                    // uint32_t lock
             g_prim_t.t_int32                     // uint32_t flags
         )
         if (t.firstType != null) {
@@ -933,17 +933,17 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
         }
         res = g_prim_t |> StructType(array_fields)
     } elif (t.baseType == Type.tTable) {
-        // table type
+        // table type — must mirror Table layout (Array base + keys/hashes/tombstones)
         var table_fields <- fixed_array(
             g_prim_t.LLVMVoidPtrType(),// char * data
-            g_prim_t.t_int32,                    // uint32_t size
-            g_prim_t.t_int32,                    // uint32_t capacity
+            g_prim_t.t_int64,                    // uint64_t size
+            g_prim_t.t_int64,                    // uint64_t capacity
+            g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.t_int32,                    // uint32_t lock
             g_prim_t.t_int32,                    // uint32_t flags
-            g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.LLVMVoidPtrType(),// char * keys
-            g_prim_t.LLVMVoidPtrType(),// char * hashes
-            g_prim_t.t_int32)
+            g_prim_t.LLVMVoidPtrType(),// TableHashKey * hashes
+            g_prim_t.t_int64)                    // uint64_t tombstones
         if (t.firstType != null) {
             table_fields[int(JIT_TABLE.KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
         }

@@ -1,0 +1,1 @@
+Returns the int64 index of the first element in `arr` equal to `key`, or ``-1`` if not present. Same semantics as :ref:`find_index` but returns `int64` and never panics on arrays larger than ``INT32_MAX``.

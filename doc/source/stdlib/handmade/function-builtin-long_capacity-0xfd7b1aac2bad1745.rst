@@ -1,0 +1,1 @@
+Returns the current capacity of a `table` — the number of key-value pairs it can hold before triggering a reallocation — as `int64`. Unlike :ref:`capacity`, never panics on tables with more than ``INT32_MAX`` reserved slots.

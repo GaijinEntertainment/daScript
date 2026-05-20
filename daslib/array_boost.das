@@ -155,7 +155,9 @@ def array_view(var bytes : array<auto(TT)> ==const; offset, length : int; blk : 
 def array_view(bytes : array<auto(TT)> ==const; offset, length : int64; blk : block<(view : array<TT>#) : void>) {
     //! int64 overload — creates a view of the array
     unsafe {
-        if (offset < 0_l || uint64(offset + length) > long_length(bytes)) {
+        // Validate non-negativity before the sum to avoid signed overflow UB,
+        // and so a negative length doesn't wrap to huge after the uint64 cast.
+        if (offset < 0_l || length < 0_l || uint64(offset) + uint64(length) > long_length(bytes)) {
             panic("array_view: out of range")
         }
         __builtin_array_lock_mutable(bytes)
@@ -169,7 +171,7 @@ def array_view(bytes : array<auto(TT)> ==const; offset, length : int64; blk : bl
 def array_view(var bytes : array<auto(TT)> ==const; offset, length : int64; blk : block<(var view : array<TT>#) : void>) {
     //! int64 overload — creates a mutable view of the array
     unsafe {
-        if (offset < 0_l || uint64(offset + length) > long_length(bytes)) {
+        if (offset < 0_l || length < 0_l || uint64(offset) + uint64(length) > long_length(bytes)) {
             panic("array_view: out of range")
         }
         __builtin_array_lock(bytes)

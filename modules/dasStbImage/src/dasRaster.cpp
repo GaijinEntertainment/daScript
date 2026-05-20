@@ -11,7 +11,7 @@ namespace das
 {
     void rast_hspan_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset, float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context ) {
         if ( uint32_t(spanOffset+_count) > Span.size ) {
-            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %i", spanOffset, _count, Span.size);
+            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %llu", spanOffset, _count, (unsigned long long)Span.size);
         }
         if ( tspanOffset<0 ) {
             context->throw_error_at(at,"rast_hspan: tspan offset is negative");
@@ -66,7 +66,7 @@ namespace das
 
     void rast_hspan_masked_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset, float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context ) {
         if ( uint32_t(spanOffset+_count) > Span.size ) {
-            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %i", spanOffset, _count, Span.size);
+            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %llu", spanOffset, _count, (unsigned long long)Span.size);
         }
         if ( tspanOffset<0 ) {
             context->throw_error_at(at,"rast_hspan: tspan offset is negative");
@@ -117,7 +117,7 @@ namespace das
 
     void rast_hspan_masked_solid_u8 ( uint8_t solid, TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset, float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context ) {
         if ( uint32_t(spanOffset+_count) > Span.size ) {
-            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %i", spanOffset, _count, Span.size);
+            context->throw_error_at(at,"rast_hspan: span out of range %i+%i >= %llu", spanOffset, _count, (unsigned long long)Span.size);
         }
         if ( tspanOffset<0 ) {
             context->throw_error_at(at,"rast_hspan: tspan offset is negative");

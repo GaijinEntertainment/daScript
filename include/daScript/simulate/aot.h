@@ -1042,12 +1042,12 @@ namespace das {
     // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
             return ((TT *)data)[index];
         }
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
             uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
             return ((const TT *)data)[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {

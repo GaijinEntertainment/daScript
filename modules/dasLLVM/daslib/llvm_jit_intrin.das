@@ -168,7 +168,10 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
     assume argType = expr.arguments[0]._type
     if (argType.isGoodArrayType) {
         var arr = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "arr")
-        return LLVMBuildExtractValue(ctx.builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
+        var size_i64 = LLVMBuildExtractValue(ctx.builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
+        // builtin length() returns int32; Array.size is uint64. Truncate.
+        // TODO Phase 7: emit panic if size > INT32_MAX to match C++ builtin_array_size.
+        return LLVMBuildTruncOrBitCast(ctx.builder, size_i64, ctx.types.t_int32, "array.size.i32")
     } else {
         return null
     }
