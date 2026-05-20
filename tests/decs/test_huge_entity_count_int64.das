@@ -1,24 +1,27 @@
 options gen2
-options persistent_heap = true   // entityLookup ~ 44 GB at 2.2 G entities
+options persistent_heap = true   // c.data > INT_MAX bytes needs PersistentHeapAllocator
 options gc
 
 require daslib/decs_boost
 require daslib/fio
 require dastest/testing_boost public
 
-// Phase 8c memory-gated probe: actually push the entity count past INT_MAX
-// and verify the int64 surface holds. Before PR-C: Archetype.size : int
-// silently wraps + entityLookup resize cascade panics, so this scenario was
-// unreachable. After PR-C: storage is int64-safe; the cascade widening
-// (commit 2) allows entityLookup growth up to UINT_MAX entries.
+// Phase 8c memory-gated probe: push component byte storage (c.data) past
+// INT_MAX bytes to exercise the long_length / int64 resize cascade widened
+// in part 3 of this branch. Before PR-C: `length(c.data) + c.stride * count`
+// in create_entities (line 986) panicked at > INT_MAX c.data bytes per the
+// long-array surface contract. With PR-C, the resize routes through int64.
 //
-// EntityId.id widening (uint -> uint64) is a separate architectural followup,
-// so the ceiling here is UINT_MAX entities, not UINT64_MAX. That's still
-// enough to push past INT_MAX (~2.14 G), which is the whole point.
+// One [decs_template] field of type float4[4] = 64 bytes stride (the max
+// per-component payload, bounded by ComponentValue.data : float4[4]).
+// 35 M entities * 64 = 2.24 GB c.data > INT_MAX (2.147 GB).
 //
-// Memory: ~46 GB at 2.2 G entities (20-byte entityLookup entries + 1-byte
-// payload per entity). CI runners would OOM, so gated on
-// DASLANG_HUGE_HEAP_TESTS=1. Run manually on a 64 GB+ workstation:
+// Entity count stays well under INT_MAX so we isolate the BYTE-storage
+// overflow (the entity-count overflow probe would require 2 G+ entities
+// for a memory-prohibitive 40+ GB).
+//
+// Memory: ~3 GB (2.24 GB c.data + 700 MB entityLookup at 35M entries).
+// Gated on DASLANG_HUGE_HEAP_TESTS=1:
 //   $env:DASLANG_HUGE_HEAP_TESTS = "1"
 //   bin/Release/daslang.exe dastest/dastest.das -- --test tests/decs/test_huge_entity_count_int64.das
 
@@ -29,45 +32,32 @@ def huge_enabled() : bool {
     return has_env_variable("DASLANG_HUGE_HEAP_TESTS") && get_env_variable("DASLANG_HUGE_HEAP_TESTS") == "1"
 }
 
+// 64-byte component payload — the maximum per ComponentValue.data : float4[4].
 [decs_template]
 struct HugePayload {
-    payload : uint8
+    payload : float4[4]
 }
 
-// Two chunks summing past INT_MAX. INT_MAX = 2,147,483,647 — each chunk fits
-// in int (the create_entities count param) without overflow, and together
-// they cross the boundary so arch.size goes past INT_MAX.
-let CHUNK_A = 1_100_000_000     // 1.1 G entities (fits in int)
-let CHUNK_B = 1_100_000_000     // 1.1 G entities (fits in int)
-// Total: 2.2 G entities — past INT_MAX (2.147 G), under UINT_MAX (4.29 G).
+let HUGE_N = 35_000_000        // 35 M entities (fits in int comfortably)
+// At sizeof(HugePayload.payload) = 64 bytes, c.data = 2.24 GB > INT_MAX.
 
 [test]
-def test_long_entity_count_past_int_max(t : T?) {
+def test_long_length_resize_cascade(t : T?) {
     if (!huge_enabled()) return
     restart()
 
-    create_entities(CHUNK_A) $(eid : EntityId; i : int; var cmp : ComponentMap) {
-        apply_decs_template(cmp, HugePayload(payload = uint8(i & int(0xFF))))
-    }
-    // The first chunk fits in int, so entity_count() (the int-returning
-    // surface) still works here.
-    t |> equal(long_entity_count(), int64(CHUNK_A))
-
-    create_entities(CHUNK_B) $(eid : EntityId; i : int; var cmp : ComponentMap) {
-        apply_decs_template(cmp, HugePayload(payload = uint8(i & int(0xFF))))
+    create_entities(HUGE_N) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, default<HugePayload>)
     }
 
-    // After the second chunk: total entities > INT_MAX. long_entity_count()
-    // returns the int64-safe total; arch.size carries it without wrap.
-    let total = int64(CHUNK_A) + int64(CHUNK_B)
-    t |> equal(long_entity_count(), total)
-    t |> equal(decsState.allArchetypes[0].size, total)
+    // long_entity_count fits in int here, but the field is int64.
+    t |> equal(long_entity_count(), int64(HUGE_N))
+    t |> equal(decsState.allArchetypes[0].size, int64(HUGE_N))
 
-    // entity_count() (int return) would panic here per the surface contract
-    // (mirrors length() / long_length()). We can't assert that with the
-    // dastest harness (try/recover is banned for panic UX testing per the
-    // soft-fail rule), so the panic side is documented in the source rather
-    // than runtime-verified.
+    // The point of the probe: at 2.24 GB c.data the WIDENED resize cascade
+    // in create_entities ran without hitting length()'s INT_MAX panic.
+    // If part 3's widening regressed, create_entities above would have
+    // panicked before we got here.
 
     restart()
 }
