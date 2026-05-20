@@ -999,18 +999,58 @@ class PerfLintVisitor : AstVisitor {
         return arg._type.baseType
     }
 
+    def cast_call_tail_args_equal(le, re : Expression?) : bool {
+        //! Compare arguments[1..] structurally between two cast calls. Skip
+        //! ExprFakeContext / ExprFakeLineInfo (auto-injected by the typer for
+        //! Context*/LineInfoArg* parameters; differ at every call site by
+        //! design). The remaining tail args — e.g. `string(int)`'s `hex` flag —
+        //! must match in count and via expr_equal_struct, otherwise the hoist
+        //! would silently lose semantically-significant arguments.
+        var lee = le
+        var ree = re
+        if (lee != null && lee is ExprRef2Value) {
+            lee = (lee as ExprRef2Value.subexpr)
+        }
+        if (ree != null && ree is ExprRef2Value) {
+            ree = (ree as ExprRef2Value.subexpr)
+        }
+        if (lee == null || ree == null || !(lee is ExprCall) || !(ree is ExprCall)) return false
+        let lc = lee as ExprCall
+        let rc = ree as ExprCall
+        var li = 1
+        var ri = 1
+        let ln = length(lc.arguments)
+        let rn = length(rc.arguments)
+        while (true) {
+            while (li < ln && (lc.arguments[li] is ExprFakeContext || lc.arguments[li] is ExprFakeLineInfo)) {
+                li++
+            }
+            while (ri < rn && (rc.arguments[ri] is ExprFakeContext || rc.arguments[ri] is ExprFakeLineInfo)) {
+                ri++
+            }
+            if (li >= ln || ri >= rn) return (li >= ln && ri >= rn)
+            if (!self->expr_equal_struct(lc.arguments[li], rc.arguments[ri], false)) return false
+            li++
+            ri++
+        }
+        return true
+    }
+
     def check_perf021_ternary_cast_hoist(expr : ExprOp3?) : void {
         if (expr == null || expr.op != "?"
             || expr.left == null || expr.right == null) return
         var lname = ""
         var rname = ""
         let lt = self->cast_call_workhorse_target(expr.left, lname)
-        if (lt == Type.none) return
         let rt = self->cast_call_workhorse_target(expr.right, rname)
-        if (rt == Type.none || lt != rt || lname != rname) return
         let la = self->cast_call_arg_basetype(expr.left)
         let ra = self->cast_call_arg_basetype(expr.right)
-        if (la == Type.none || la != ra) return
+        // Tail-args must match so the hoisted form preserves semantically-significant
+        // arguments (e.g. `string(int, hex)`'s `hex` flag). Auto-injected
+        // ExprFakeContext / ExprFakeLineInfo are skipped — they differ at every site.
+        if (lt == Type.none || rt == Type.none || lt != rt || lname != rname
+            || la == Type.none || la != ra
+            || !self->cast_call_tail_args_equal(expr.left, expr.right)) return
         self->perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary — hoist as {lname}(cond ? a : b)", expr.at)
     }
 

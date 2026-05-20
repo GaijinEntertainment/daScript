@@ -24,7 +24,7 @@ options gen2
 // dastest readers: same approach as the perf020 fixture — parameters (not
 // const literals) keep the runtime forms intact under inference-time folding.
 
-expect 31208:11
+expect 31208:12
 
 require daslib/perf_lint
 
@@ -78,6 +78,10 @@ def bad_subexpr(c : bool; a, b, d : int) : int64 {
     return c ? int64(a + b) : int64(d)                       // PERF021 — args are int / int sub-expressions
 }
 
+def bad_same_hex_string(c : bool; a, b : int) : string {
+    return c ? string(a, true) : string(b, true)             // PERF021 — same hex flag, hoist is equivalent
+}
+
 // --- Good patterns (no warnings) ---
 
 def good_one_branch_cast(c : bool; a : int; b : int64) : int64 {
@@ -106,4 +110,8 @@ def good_literal_branches(c : bool) : string {
 
 def good_call_one_side_only(c : bool; a : int) : int {
     return c ? a + 1 : a - 1                                 // ternary, no casts on either side
+}
+
+def good_different_hex_string(c : bool; a, b : int) : string {
+    return c ? string(a, true) : string(b, false)            // hex flag differs — hoisting would lose semantic info
 }
