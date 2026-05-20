@@ -152,6 +152,8 @@ var private insideQuery : int
 
 let INVALID_ENTITY_ID = decs::EntityId()  //! Entity ID which represents invalid entity.
 
+let private MAX_ENTITY_ID = int64(0xFFFF_FFFF_l)  // EntityId.id : uint -> UINT_MAX entries. Allocation panics past this; widening is an architectural followup.
+
 def operator ==(a, b : decs::EntityId implicit) {
     //! Equality operator for entity IDs.
     return a.id == b.id && a.generation == b.generation
@@ -416,7 +418,7 @@ def private new_entity_id() {
         // followup; for now the panic surfaces the limit loudly instead of
         // corrupting state.
         let next_id = long_length(decsState.entityLookup)
-        if (next_id >= int64(0xFFFF_FFFF_l)) {
+        if (next_id > MAX_ENTITY_ID) {
             panic("decs: entityLookup reached UINT_MAX entries ({next_id}); EntityId.id (uint) widening is required to allocate more")
         }
         eid.id = uint(next_id)
@@ -678,8 +680,13 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
     if (binary_search(decsState.ecsQueries[qi].archetypes, aidx - 1)) {
         var arch & = unsafe(decsState.allArchetypes[aidx - 1])
         assert(arch.size > 0_l)
-        // blk takes index:int — public API stability (same reasoning as create_entities_from_cmp:1024).
-        // Today's global entity cap (entityLookup resize cascade) keeps lookup.index ≤ INT_MAX.
+        // blk takes index:int — public API stability. After the cascade widening
+        // (commit 2), lookup.index can hold int64 values up to UINT_MAX, so the
+        // cast below would silently truncate past INT_MAX. Loudly panic instead;
+        // a long_for_eid_archetype variant with int64 block sig is the followup.
+        if (lookup.index > int64(INT_MAX)) {
+            panic("decs: for_eid_archetype index {lookup.index} exceeds INT_MAX (blk takes int); widening blk to int64 is a follow-up")
+        }
         ++insideQuery; invoke(blk, arch, int(lookup.index)); -- insideQuery
         return true
     } else {
@@ -1040,19 +1047,22 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
         // EntityId.id to uint64 is an architectural followup.
         let id_base_long = long_length(decsState.entityLookup)
-        if (id_base_long + int64(count) > int64(0xFFFF_FFFF_l)) {
+        if (id_base_long + int64(count) > MAX_ENTITY_ID) {
             panic("decs: create_entities_from_cmp would push entityLookup past UINT_MAX (current = {id_base_long}, count = {count}); EntityId.id (uint) widening is required")
         }
         let id_base = uint(id_base_long)
         decsState.entityLookup |> resize(id_base_long + int64(count))
+        // After the cascade widening, base + count can exceed INT_MAX, so a
+        // per-iteration int(eidx) cast would silently truncate. Hoist the cap
+        // check before the loop — fill_blk is part of the public API and macro-
+        // generated callers in decs_boost.das emit `eidx : int`; widening blk
+        // to int64 is the followup.
+        if (base + int64(count) > int64(INT_MAX)) {
+            panic("decs: create_entities_from_cmp eidx range [{base} .. {base + int64(count)}) exceeds INT_MAX (fill_blk takes int); widening fill_blk to int64 is a follow-up")
+        }
         for (i in range(count)) {
             let eid = EntityId(id = id_base + uint(i), generation = 1)
             let eidx = base + int64(i)
-            // fill_blk takes eidx:int (public API stability — macro-generated callers in
-            // decs_boost.das emit `eidx : int`). Today the global entity cap is enforced
-            // upstream by `decsState.entityLookup |> resize(int(id_base) + count)`, so
-            // eidx never exceeds INT_MAX in practice. When the global cap is widened,
-            // this signature follows.
             invoke(fill_blk, arch, int(eidx), eid, i)
             decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
         }

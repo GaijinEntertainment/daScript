@@ -3084,10 +3084,13 @@ def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) :
     let archName = "`decs_arch`{at.line}`{at.column}"
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
+    // arch.size is int64 (decs PR-C); count() surface returns int, so cast at
+    // the += site. Past INT_MAX entities the cast silently truncates; users
+    // who need the int64-safe total chain `long_count()` instead.
     var emission : Expression? = qmacro(invoke($() : int {
         var $i(accName) = 0
         for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
-            $i(accName) += $i(archName).size
+            $i(accName) += int($i(archName).size)
         })
         return $i(accName)
     }))
