@@ -1262,9 +1262,12 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         } elif (name == "order" || name == "order_descending"
                 || name == "order_by" || name == "order_by_descending") {
             if (hasOrder) return null
+            // bail on `order(arr, cmp)` / `order_descending(arr, cmp)` — splice helpers (min/max/top_n) can't honor a user-supplied comparator and would silently drop it.
+            let argCount = cll._0.arguments |> length
+            if ((name == "order" || name == "order_descending") && argCount >= 2) return null
             hasOrder = true
             orderName = name
-            if ((cll._0.arguments |> length) >= 2) {
+            if (argCount >= 2) {
                 orderKey = clone_expression(cll._0.arguments[1])
             }
             orderElemType = clone_type(cll._0._type.firstType)

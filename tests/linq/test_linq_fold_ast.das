@@ -3553,6 +3553,12 @@ def target_order_by_first_or_default_splices_top_n_by() : int {
     return _fold(each([10, 20, 5, 8, 30])._order_by(_).first_or_default(-1))
 }
 
+[export, marker(no_coverage)]
+def target_order_with_cmp_first_bails_to_tier2() : int {
+    // order(arr, cmp) with a custom comparator — splice must bail (min/max can't honor arbitrary cmp).
+    return _fold(each([10, 5, 20, 3]) |> order($(a : int, b : int) => a > b) |> first())
+}
+
 [test]
 def test_order_by_first_emits_min_by(t : T?) {
     // order_by + first → min_by(top, key) directly. No sort, no take, no order_by/order helpers.
@@ -3623,6 +3629,32 @@ def test_order_by_first_or_default_emits_top_n_by_first_or_default(t : T?) {
         t |> success(count_call(body_expr, "first_or_default") >= 1,
             "should emit first_or_default on the 1-elem array")
         t |> equal(0, count_call(body_expr, "order_by"), "should NOT emit order_by")
+    }
+}
+
+[test]
+def test_order_with_cmp_first_bails_no_min_max(t : T?) {
+    // `order(arr, cmp)` with a custom comparator block: splice helpers can't honor an arbitrary cmp,
+    // so plan_order_family must bail. fold_linq_default takes over and rewrites to `order_to_array` + `first`.
+    // The key invariant: NO min/max splice (which would silently drop the cmp).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_order_with_cmp_first_bails_to_tier2)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> equal(0, count_call(body_expr, "min_by"), "must NOT emit min_by (cmp can't be honored)")
+        t |> equal(0, count_call(body_expr, "max_by"), "must NOT emit max_by")
+        t |> equal(0, count_call(body_expr, "min"), "must NOT emit min")
+        t |> equal(0, count_call(body_expr, "max"), "must NOT emit max")
+        t |> equal(0, count_call(body_expr, "top_n"), "must NOT emit top_n (bare top_n would drop cmp)")
+        t |> equal(0, count_call(body_expr, "top_n_by"), "must NOT emit top_n_by")
+        // fold_linq_default rewrites the bailed chain to order_to_array + first. Confirm a sort step survives.
+        t |> success(count_call(body_expr, "order_to_array") + count_call(body_expr, "order") >= 1,
+            "sort step must survive (order_to_array or order)")
+        t |> success(count_call(body_expr, "first") >= 1, "first call must survive")
     }
 }
 

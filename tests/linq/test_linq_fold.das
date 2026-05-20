@@ -2825,4 +2825,21 @@ def test_fold_order_by_first(t : T?) {
         }
         tt |> success(didPanic, "first() on filtered-empty array panicked")
     }
+    // ── order(arr, cmp) + first — splice MUST honor the custom comparator (was emitting bare min/max, ignoring cmp)
+    t |> run("order(arr, cmp) + first preserves custom comparator (descending cmp → max)") @(tt : T?) {
+        let v = _fold(each([10, 5, 20, 3]) |> order($(a : int, b : int) => a > b) |> first())
+        tt |> equal(20, v, "cmp orders descending → first returns max")
+    }
+    t |> run("order_descending(arr, cmp) + first preserves custom comparator") @(tt : T?) {
+        // order_descending swaps cmp args, so cmp `a > b` becomes effectively `b > a` (ascending) → first → min
+        let v = _fold(each([10, 5, 20, 3]) |> order_descending($(a : int, b : int) => a > b) |> first())
+        tt |> equal(3, v, "order_descending negates cmp → first is min")
+    }
+    t |> run("order(arr, cmp) + take preserves custom comparator (pre-existing recognizer hole)") @(tt : T?) {
+        // cmp orders descending → take(2) returns top 2
+        let result <- _fold(each([10, 5, 20, 3, 25, 8]) |> order($(a : int, b : int) => a > b) |> take(2) |> to_array())
+        tt |> equal(2, length(result), "take 2 of descending order")
+        tt |> equal(25, result[0], "first is max (25)")
+        tt |> equal(20, result[1], "second is next-max (20)")
+    }
 }
