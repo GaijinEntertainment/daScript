@@ -1674,7 +1674,8 @@ namespace das
     }
 
     void builtin_make_temp_array ( Array & arr, void * data, int size ) {
-        array_mark_locked(arr, (char *)data, uint64_t(uint32_t(size)));
+        // Negative size would underflow to huge uint64 — clamp to empty array instead.
+        array_mark_locked(arr, (char *)data, size < 0 ? uint64_t(0) : uint64_t(size));
     }
 
     void builtin_make_temp_array_i64 ( Array & arr, void * data, int64_t size ) {
