@@ -524,3 +524,161 @@ def test_unroll_to_array_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 4: chained _select + interleaved _where + _count(pred) + _min_by / _max_by
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_chained_select_sum_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ * 10).sum())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_select_then_where_sum_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._where(_ > 1).sum())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_select_where_sum_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val)._where(_ > 1).sum())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_count_pred_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._count(_.val > 2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_long_count_pred_fold() : int64 {
+    return _fold(from_decs_template(type<UnrollChainRow>)._long_count(_.val >= 3))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_chained_select_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ + 100).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_min_by_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._min_by(-_))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_max_by_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._max_by(-_))
+}
+
+[test]
+def test_unroll_chained_select_sum_parity(t : T?) {
+    fixture_unroll2(5)
+    // (0+1+2+3+4)*10 = 100
+    t |> equal(target_unroll_chained_select_sum_fold(), 100, "chained select+sum splice parity")
+}
+
+[test]
+def test_unroll_select_then_where_sum_parity(t : T?) {
+    fixture_unroll2(5)
+    // select val → 0,1,2,3,4 → where >1 → 2,3,4 → sum 9
+    t |> equal(target_unroll_select_then_where_sum_fold(), 9, "select→where→sum splice parity")
+}
+
+[test]
+def test_unroll_where_select_where_sum_parity(t : T?) {
+    fixture_unroll2(6)
+    // flag==1 rows: i=1,3,5 (vals 1,3,5) → select val → 1,3,5 → where >1 → 3,5 → sum 8
+    t |> equal(target_unroll_where_select_where_sum_parity_compute(), 8, "where→select→where→sum splice parity")
+}
+
+def private target_unroll_where_select_where_sum_parity_compute() : int {
+    return target_unroll_where_select_where_sum_fold()
+}
+
+[test]
+def test_unroll_count_pred_parity(t : T?) {
+    fixture_unroll2(6)
+    // vals 0..5, pred val>2 → 3,4,5 → 3 hits
+    t |> equal(target_unroll_count_pred_fold(), 3, "_count(pred) splice parity")
+}
+
+[test]
+def test_unroll_long_count_pred_parity(t : T?) {
+    fixture_unroll2(6)
+    // vals 0..5, pred val>=3 → 3,4,5 → 3 hits
+    t |> equal(target_unroll_long_count_pred_fold(), 3l, "_long_count(pred) splice parity")
+}
+
+[test]
+def test_unroll_chained_select_to_array_parity(t : T?) {
+    fixture_unroll2(3)
+    // select val → 0,1,2 → select +100 → 100,101,102
+    let got <- target_unroll_chained_select_to_array_fold()
+    t |> equal(got |> length, 3, "chained to_array length")
+    if (length(got) == 3) {
+        t |> equal(got[0], 100, "[0]")
+        t |> equal(got[1], 101, "[1]")
+        t |> equal(got[2], 102, "[2]")
+    }
+}
+
+[test]
+def test_unroll_min_by_parity(t : T?) {
+    fixture_unroll2(5)
+    // select val → 0,1,2,3,4; min by -val → max val → 4
+    t |> equal(target_unroll_min_by_fold(), 4, "_min_by splice parity")
+}
+
+[test]
+def test_unroll_max_by_parity(t : T?) {
+    fixture_unroll2(5)
+    // select val → 0,1,2,3,4; max by -val → min val → 0
+    t |> equal(target_unroll_max_by_fold(), 0, "_max_by splice parity")
+}
+
+[test]
+def test_unroll_chained_select_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_chained_select_sum_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_chained_select_sum_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "chained-select sum splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+    }
+}
+
+[test]
+def test_unroll_count_pred_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_count_pred_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_count_pred_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "_count(pred) splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+    }
+}
+
+[test]
+def test_unroll_min_by_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_min_by_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_min_by_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "_min_by splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+    }
+}
