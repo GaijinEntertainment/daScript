@@ -24,10 +24,15 @@ namespace das {
     }
 
     int64_t builtin_array_long_size ( const Array & arr ) {
+        // The long_length surface returns int64; refuse to wrap negative if a host/interop
+        // path somehow produced a size > INT64_MAX. array_resize / array_grow already cap
+        // growth at INT64_MAX, so this catches embedder-side corruption.
+        DAS_VERIFYF(arr.size <= uint64_t(INT64_MAX), "array size %llu exceeds INT64_MAX", (unsigned long long)arr.size);
         return int64_t(arr.size);
     }
 
     int64_t builtin_array_long_capacity ( const Array & arr ) {
+        DAS_VERIFYF(arr.capacity <= uint64_t(INT64_MAX), "array capacity %llu exceeds INT64_MAX", (unsigned long long)arr.capacity);
         return int64_t(arr.capacity);
     }
 

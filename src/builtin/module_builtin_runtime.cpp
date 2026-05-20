@@ -810,10 +810,12 @@ namespace das
     }
 
     int64_t builtin_table_long_size ( const Table & arr ) {
+        DAS_VERIFYF(arr.size <= uint64_t(INT64_MAX), "table size %llu exceeds INT64_MAX", (unsigned long long)arr.size);
         return int64_t(arr.size);
     }
 
     int64_t builtin_table_long_capacity ( const Table & arr ) {
+        DAS_VERIFYF(arr.capacity <= uint64_t(INT64_MAX), "table capacity %llu exceeds INT64_MAX", (unsigned long long)arr.capacity);
         return int64_t(arr.capacity);
     }
 
@@ -1667,7 +1669,8 @@ namespace das
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
         Array arr;
-        array_mark_locked(arr, (char *)data, uint32_t(size));
+        // Negative size would wrap into a huge uint capacity; clamp to empty array instead.
+        array_mark_locked(arr, (char *)data, size < 0 ? uint64_t(0) : uint64_t(size));
         vec4f args[1];
         args[0] = cast<Array &>::from(arr);
         context->invoke(block, args, nullptr, at);

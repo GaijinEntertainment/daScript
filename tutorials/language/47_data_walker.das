@@ -193,7 +193,7 @@ class ContainerPrinter : DapiDataWalker {
     // --- arrays ---
     def override beforeArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
         self->pad()
-        print("array[{int(count)}] = [\n")
+        print("array[{int64(count)}] = [\n")
         indent++
     }
 
@@ -205,7 +205,7 @@ class ContainerPrinter : DapiDataWalker {
 
     def override beforeArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
         self->pad()
-        print("[{int(index)}] = ")
+        print("[{int64(index)}] = ")
     }
 
     def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {

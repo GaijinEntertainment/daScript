@@ -53,7 +53,7 @@ class SkipArrayWalker : DapiDataWalker {
 class SkipArrayDataWalker : DapiDataWalker {
     log : string
     def override canVisitArrayData(ti : TypeInfo; count : uint64) : bool {
-        log += "canVisitArrayData:{int(count)}\n"
+        log += "canVisitArrayData:{int64(count)}\n"
         return false
     }
     def override beforeArray(pa : DapiArray; ti : TypeInfo) : void {

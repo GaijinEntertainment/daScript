@@ -142,16 +142,16 @@ class LogWalker : DapiDataWalker {
         log += "afterArray\n"
     }
     def override beforeArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
-        log += "beforeArrayData:{int(count)}\n"
+        log += "beforeArrayData:{int64(count)}\n"
     }
     def override afterArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
-        log += "afterArrayData:{int(count)}\n"
+        log += "afterArrayData:{int64(count)}\n"
     }
     def override beforeArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
-        log += "beforeElem:{int(index)}:{last}\n"
+        log += "beforeElem:{int64(index)}:{last}\n"
     }
     def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
-        log += "afterElem:{int(index)}:{last}\n"
+        log += "afterElem:{int64(index)}:{last}\n"
     }
 
     // --- table ---
@@ -162,16 +162,16 @@ class LogWalker : DapiDataWalker {
         log += "afterTable\n"
     }
     def override beforeTableKey(pa : DapiTable; ti : TypeInfo; pk : void?; ki : TypeInfo; index : uint64; last : bool) : void {
-        log += "beforeKey:{int(index)}:{last}\n"
+        log += "beforeKey:{int64(index)}:{last}\n"
     }
     def override afterTableKey(pa : DapiTable; ti : TypeInfo; pk : void?; ki : TypeInfo; index : uint64; last : bool) : void {
-        log += "afterKey:{int(index)}:{last}\n"
+        log += "afterKey:{int64(index)}:{last}\n"
     }
     def override beforeTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint64; last : bool) : void {
-        log += "beforeVal:{int(index)}:{last}\n"
+        log += "beforeVal:{int64(index)}:{last}\n"
     }
     def override afterTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint64; last : bool) : void {
-        log += "afterVal:{int(index)}:{last}\n"
+        log += "afterVal:{int64(index)}:{last}\n"
     }
 
     // --- tuple ---

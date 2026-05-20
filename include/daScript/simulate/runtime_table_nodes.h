@@ -68,7 +68,7 @@ namespace das
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             TableHash<KeyType> thh(&context,valueTypeSize);
             auto hfn = hash_function(context, key);
-            int64_t index = thh.reserve(*tab, key, hfn, &debugInfo);    // if index==-1, it was a through, so safe to do
+            int64_t index = thh.reserve(*tab, key, hfn, &debugInfo);    // reserve always returns a valid slot or throws
             return tab->data + index * valueTypeSize + offset;
         }
         uint32_t offset;

@@ -136,6 +136,13 @@ namespace das
         }
 
         bool grow ( Table & tab, LineInfo * at ) {
+            // Guard against capacity*2 overflow — at uint64_t the wrap-to-zero produces
+            // a non-power-of-two `newCapacity` that would trip reserveInternal's verify
+            // and, before that, make `mask = capacity - 1` underflow into all-ones.
+            if ( tab.capacity > (uint64_t(1) << 62) ) {
+                context->throw_error_at(at, "table grow: capacity %llu exceeds 2^62", (unsigned long long)tab.capacity);
+                return false;
+            }
             uint64_t newCapacity = das::max(uint64_t(minCapacity), tab.capacity*2);
             return reserveInternal(tab, newCapacity, at);
         }
@@ -182,7 +189,7 @@ namespace das
         }
 
         bool reserveInternal(Table & tab, uint64_t newCapacity, LineInfo * at) {
-            DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %llu", (unsigned long long)newCapacity);
+            DAS_VERIFYF(newCapacity != 0 && (newCapacity & (newCapacity - 1)) == 0, "newCapacity must be a nonzero power of 2, and not %llu", (unsigned long long)newCapacity);
             if ( tab.magic!=0 || tab.lock!=0 ) {
                 context->throw_error_at(at, "can't grow a locked table");
                 return false;

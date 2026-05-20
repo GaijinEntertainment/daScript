@@ -69,15 +69,26 @@ namespace das
         builtin_sort_any_ref_cblock(anyData, elementSize, length, cmp, context, at);
     }
 
+    // The sort wrappers below pass arr.size (uint64_t) into inner sort functions taking
+    // int32_t length. For arrays > INT_MAX elements this would silently truncate and
+    // sort only a prefix. Panic up-front instead; users with huge arrays will need a
+    // future long_sort surface (Phase 4 follow-up).
+    static __forceinline int32_t sort_array_size_or_panic ( const Array & arr, Context * context, LineInfoArg * at, const char * op ) {
+        if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "%s: array size %llu exceeds INT_MAX; use long_%s() instead", op, (unsigned long long)arr.size, op);
+        return int32_t(arr.size);
+    }
+
     void builtin_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "sort");
         array_lock(*context,arr,at);
-        builtin_sort_any_cblock(arr.data, elementSize, arr.size, cmp, context, at);
+        builtin_sort_any_cblock(arr.data, elementSize, len, cmp, context, at);
         array_unlock(*context,arr,at);
     }
 
     void builtin_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "sort");
         array_lock(*context,arr,at);
-        builtin_sort_any_ref_cblock(arr.data, elementSize, arr.size, cmp, context, at);
+        builtin_sort_any_ref_cblock(arr.data, elementSize, len, cmp, context, at);
         array_unlock(*context,arr,at);
     }
 
@@ -151,13 +162,15 @@ namespace das
         builtin_partial_sort_any_ref_cblock(cast<void *>::to(anything), elementSize, length, n, cmp, context, at);
     }
     void builtin_partial_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "partial_sort");
         array_lock(*context, arr, at);
-        builtin_partial_sort_any_cblock(arr.data, elementSize, arr.size, n, cmp, context, at);
+        builtin_partial_sort_any_cblock(arr.data, elementSize, len, n, cmp, context, at);
         array_unlock(*context, arr, at);
     }
     void builtin_partial_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "partial_sort");
         array_lock(*context, arr, at);
-        builtin_partial_sort_any_ref_cblock(arr.data, elementSize, arr.size, n, cmp, context, at);
+        builtin_partial_sort_any_ref_cblock(arr.data, elementSize, len, n, cmp, context, at);
         array_unlock(*context, arr, at);
     }
 
@@ -212,13 +225,15 @@ namespace das
         builtin_nth_element_any_ref_cblock(cast<void *>::to(anything), elementSize, length, n, cmp, context, at);
     }
     void builtin_nth_element_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "nth_element");
         array_lock(*context, arr, at);
-        builtin_nth_element_any_cblock(arr.data, elementSize, arr.size, n, cmp, context, at);
+        builtin_nth_element_any_cblock(arr.data, elementSize, len, n, cmp, context, at);
         array_unlock(*context, arr, at);
     }
     void builtin_nth_element_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "nth_element");
         array_lock(*context, arr, at);
-        builtin_nth_element_any_ref_cblock(arr.data, elementSize, arr.size, n, cmp, context, at);
+        builtin_nth_element_any_ref_cblock(arr.data, elementSize, len, n, cmp, context, at);
         array_unlock(*context, arr, at);
     }
 

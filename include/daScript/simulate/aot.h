@@ -1849,7 +1849,7 @@ namespace das {
         static __forceinline void clear ( Context * __context__, TArray<TT> & dim ) {
             if ( dim.data ) {
                 if ( !dim.isLocked() ) {
-                    uint32_t oldSize = dim.capacity*sizeof(TT);
+                    uint64_t oldSize = uint64_t(dim.capacity)*sizeof(TT);
                     __context__->free(dim.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked array");
@@ -1864,7 +1864,7 @@ namespace das {
         static __forceinline void clear ( Context * __context__, TTable<TKey,TVal> & tab ) {
             if ( tab.data ) {
                 if ( !tab.isLocked() ) {
-                    uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(TableHashKey));
+                    uint64_t oldSize = uint64_t(tab.capacity)*(sizeof(TKey)+sizeof(TVal)+sizeof(TableHashKey));
                     __context__->free(tab.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked table");
@@ -3601,6 +3601,9 @@ namespace das {
     struct pscblk_array {
         static __forceinline void psrt ( Array & arr, int32_t, int32_t, int32_t n, CompareFn && cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 || n<=0 ) return;
+            // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
+            // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             array_lock(*context, arr, at);
             auto sdata = (TT *) arr.data;
@@ -3616,6 +3619,9 @@ namespace das {
     struct pscblk_array < const Block &, TT > {
         static __forceinline void psrtr ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 || n<=0 ) return;
+            // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
+            // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);
@@ -3638,6 +3644,9 @@ namespace das {
         }
         static __forceinline void psrt ( Array & arr, int32_t, int32_t, int32_t n, const Block & cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 || n<=0 ) return;
+            // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
+            // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);

@@ -89,13 +89,13 @@ namespace das
 
     void array_resize ( Context & context, Array & arr, uint64_t newSize, uint32_t stride, bool zero, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't resize locked array");
+        // The daslang surface contract is `long_length(arr) : int64`, so a size that doesn't
+        // fit in int64_t would wrap negative on the way out. Enforce the cap up front so the
+        // int64 API stays well-defined.
+        if ( newSize > uint64_t(INT64_MAX) ) {
+            context.throw_error_at(at, "array_resize: newSize exceeds INT64_MAX [newSize=%llu]", (unsigned long long)newSize);
+        }
         if ( newSize > arr.capacity ) {
-            // capacity must be a power of two and >= newSize. A request for
-            // > 2^63 would shift past the type width (UB), and the resulting
-            // byte count would also blow past the heap; panic early.
-            if ( newSize > (uint64_t(1) << 63) ) {
-                context.throw_error_at(at, "array_resize: newSize exceeds 2^63 [newSize=%llu]", (unsigned long long)newSize);
-            }
             uint64_t newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
             newCapacity = das::max(newCapacity, uint64_t(16));
             array_reserve(context, arr, newCapacity, stride, at);

@@ -211,10 +211,11 @@ namespace das {
     __forceinline void array_grow ( Context & context, Array & arr, uint32_t stride, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't resize locked array");
         uint64_t newSize = arr.size + 1;
+        // Keep the int64 surface contract (long_length returns int64) — refuse to grow past INT64_MAX.
+        if ( newSize > uint64_t(INT64_MAX) ) {
+            context.throw_error_at(at, "array_grow: newSize exceeds INT64_MAX [newSize=%llu]", (unsigned long long)newSize);
+        }
         if ( newSize > arr.capacity ) {
-            if ( newSize > (uint64_t(1) << 63) ) {
-                context.throw_error_at(at, "array_grow: newSize exceeds 2^63 [newSize=%llu]", (unsigned long long)newSize);
-            }
             uint64_t newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
             newCapacity = das::max(newCapacity, uint64_t(16));
             array_reserve(context, arr, newCapacity, stride, at);
