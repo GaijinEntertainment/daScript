@@ -1302,11 +1302,31 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         topExpr.genFlags.alwaysSafe = true
         var emission : Expression?
         if (firstName == "first") {
-            // order + first → min/max (or min_by/max_by). O(N) single pass; matches the eager `order(...).first()` panic-on-empty semantics via min/max_impl returning default-initialized ref.
-            if (hasKey) {
-                emission = qmacro($c(minMaxName)($e(topExpr), $e(orderKey)))
+            // order + first → preserve eager `first()` panic-on-empty. min/max return an uninitialized ref on empty, so wrap in an empty-guard for arrays (zero alloc, O(N) min scan), or use top_n*(_, 1, _) |> first() for iterators (n=1 bounded heap; first() panics on empty).
+            if (top._type.isGoodArrayType) {
+                var srcParamType = invoke_src_param_type(top)
+                let firstSrcName = "`first_src`{at.line}`{at.column}"
+                var minMaxCall : Expression?
+                if (hasKey) {
+                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName), $e(orderKey)))
+                } else {
+                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName)))
+                }
+                emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
+                    panic("sequence contains no elements") if (empty($i(firstSrcName)))
+                    return $e(minMaxCall)
+                }, $e(topExpr)))
+                emission = finalize_invoke(emission, at)
             } else {
-                emission = qmacro($c(minMaxName)($e(topExpr)))
+                var topNCall : Expression?
+                if (inlineCmp != null) {
+                    topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+                } elif (hasKey) {
+                    topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
+                } else {
+                    topNCall = qmacro($c(topNName)($e(topExpr), 1))
+                }
+                emission = qmacro(_::first($e(topNCall)))
             }
         } elif (firstName == "first_or_default") {
             // No min_by_or_default exists; route through top_n*(_, 1, _) which returns an array (empty or single-element), then first_or_default supplies the default.
@@ -1374,7 +1394,10 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         }
     }
     if (firstName == "first") {
-        // where + order + first → min/max on prefilter buffer. O(N) single pass after the filter materializes. min/max return const-refs (TT -& -const), so plain `return` — not `return <-` — matches the eager semantics.
+        // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager `first()` semantics; min/max return uninitialized refs on empty.
+        stmts |> push <| qmacro_expr() {
+            panic("sequence contains no elements") if (empty($i(bufName)))
+        }
         var minMaxCall : Expression?
         if (hasKey) {
             minMaxCall = qmacro($c(minMaxName)($i(bufName), $e(orderKey)))

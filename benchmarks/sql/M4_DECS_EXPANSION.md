@@ -244,3 +244,13 @@ Known overhead in the current splice: **6-component multi-iter for-loop walks AL
 - For single-field selects: 1-component for-loop should match the array case
 
 If implemented, m4 numbers on Cat A would close most of the 3-5× gap vs m3f, making decs effectively as fast as array for projection-heavy chains.
+
+## Update — sort_first fix (2026-05-20, plan_order_family + first arm)
+
+Extended `plan_order_family` to recognize `first` / `first_or_default` as terminators alongside `take(N)`. `order_by + first` now splices to a single-pass `min_by` (array source: zero-alloc empty-guard + `min_by`; iterator source: `top_n_by(_, 1, _) |> first()`). `order_by_descending` routes to `max_by`. Preserves the eager `first()` panic-on-empty contract.
+
+| benchmark | m1 | m3 | m3f (old) | m3f (new) | m4 (old) | m4 (new) | m3f win |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| sort_first | 37 | 713 | 722 | **42** | 802 | **121** | 17× |
+
+Now `sort_first` lands in line with the rest of the order-family. m4_decs_fold still rides the eager bridge (Slice 5+ will close the gap).

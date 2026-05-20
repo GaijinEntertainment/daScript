@@ -2804,4 +2804,25 @@ def test_fold_order_by_first(t : T?) {
         let v = _fold(each([1, 2, 3])._where(_ > 100)._order_by(_).first_or_default(-1))
         tt |> equal(-1, v, "filter excludes all → default")
     }
+    t |> run("order_by + first on empty array panics") @(tt : T?) {
+        let empty : array<int>
+        var didPanic = false
+        try {
+            let v = _fold(each(empty)._order_by(_).first())
+            tt |> success(false, "expected panic; got {v}")
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "first() on empty array panicked")
+    }
+    t |> run("where + order_by + first filtered-empty panics") @(tt : T?) {
+        var didPanic = false
+        try {
+            let v = _fold(each([1, 2, 3])._where(_ > 100)._order_by(_).first())
+            tt |> success(false, "expected panic; got {v}")
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "first() on filtered-empty array panicked")
+    }
 }
