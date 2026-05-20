@@ -126,8 +126,18 @@ class PerfLintVisitor : AstVisitor {
         return uint64(at.line) | (uint64(at.column) << uint64(20))
     }
 
+    // Filters: disabled (denylist) and enabled (whitelist; empty == all).
+    // Caller-populated via collect overload; applied alongside // nolint suppression.
+    disabled_codes : table<string>
+    enabled_codes : table<string>
+
     def is_suppressed(text : string; at : LineInfo) : bool {
-        return is_lint_suppressed(at, extract_lint_code(text))
+        let code = extract_lint_code(text)
+        if (!empty(code)) {
+            return true if (key_exists(disabled_codes, code)
+                            || (!empty(enabled_codes) && !key_exists(enabled_codes, code)))
+        }
+        return is_lint_suppressed(at, code)
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
@@ -1500,7 +1510,17 @@ def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
 def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>) : int {
     //! Runs the performance lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
+    let empty_set : table<string>
+    return perf_lint_collect(prog, warnings, empty_set, empty_set)
+}
+
+def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
+                             disabled_codes, enabled_codes : table<string>) : int {
+    //! Filter-aware overload. `disabled_codes` is a denylist; `enabled_codes`
+    //! is a whitelist (empty == all). Codes use the bare form (e.g. "PERF001").
     var astVisitor = new PerfLintVisitor(compile_time_errors = false, collect_warnings = true)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(prog, astVisitorAdapter)
     }

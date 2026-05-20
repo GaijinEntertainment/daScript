@@ -36,11 +36,23 @@ module style_lint shared private
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 
 require daslib/ast_boost
+require daslib/is_local
 require strings
 
 // ---------------------------------------------------------------------------
 // Visitor
 // ---------------------------------------------------------------------------
+
+struct UnsafeFrame {
+    //! Per-expression subtree summary tracked on `StyleLintVisitor.unsafe_stack`.
+    //! `count` is the number of inherently-unsafe leaves in the subtree.
+    //! `has_non_local_let_ref` flags an enclosing `let v & = E` where `E` is
+    //! non-local-non-temporary (per `isLocalOrGlobal` in ast_infer_type.cpp:4989)
+    //! — narrowing the enclosing `unsafe { ... }` to expression-form would
+    //! leave the let-ref binding unsatisfied, so STYLE025 must stay silent.
+    count : int
+    has_non_local_let_ref : bool
+}
 
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
@@ -58,8 +70,8 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete pending_uninit_vars : array<Variable?>
     // STYLE024/025 — tight unsafe checks.
     @do_not_delete skip_userSaidItsSafe : array<Expression?>
-    @do_not_delete unsafeExprs : table<Expression?; int>
-    unsafe_stack : array<int>
+    @do_not_delete unsafeExprs : table<Expression?; UnsafeFrame>
+    unsafe_stack : array<UnsafeFrame>
     unsafe_block_stack : array<int>
 
     def StyleLintVisitor() {
@@ -70,8 +82,18 @@ class StyleLintVisitor : AstVisitor {
         return uint64(at.line) | (uint64(at.column) << uint64(20))
     }
 
+    // Filters: disabled (denylist) and enabled (whitelist; empty == all).
+    // Caller-populated via collect overload; applied alongside // nolint suppression.
+    disabled_codes : table<string>
+    enabled_codes : table<string>
+
     def is_suppressed(text : string; at : LineInfo) : bool {
-        return is_lint_suppressed(at, extract_lint_code(text))
+        let code = extract_lint_code(text)
+        if (!empty(code)) {
+            return true if (key_exists(disabled_codes, code)
+                            || (!empty(enabled_codes) && !key_exists(enabled_codes, code)))
+        }
+        return is_lint_suppressed(at, code)
     }
 
     def style_warning(text : string; at : LineInfo) : void {
@@ -1238,40 +1260,52 @@ class StyleLintVisitor : AstVisitor {
 
     // --- STYLE024/STYLE025: redundant or over-broad `unsafe` ---
 
-    def unsafe_count_for(expr : Expression?) : int {
-        return 0 if (expr == null)
-        return unsafeExprs |> key_exists(expr) ? unsafeExprs[expr] : 0
+    def unsafe_frame_for(expr : Expression?) : UnsafeFrame {
+        return UnsafeFrame() if (expr == null)
+        return unsafeExprs |> key_exists(expr) ? unsafeExprs[expr] : UnsafeFrame()
     }
 
     def mark_unsafe_in_stack() : void {
         //! Add 1 to the current top of `unsafe_stack`.
         let n = length(unsafe_stack)
         if (n > 0) {
-            unsafe_stack[n - 1] = unsafe_stack[n - 1] + 1
+            unsafe_stack[n - 1].count++
+        }
+    }
+
+    def mark_non_local_let_ref_in_stack() : void {
+        //! Flag the current top of `unsafe_stack` as containing a non-local
+        //! let-ref binding. Propagates upward through `visitExpression`.
+        let n = length(unsafe_stack)
+        if (n > 0) {
+            unsafe_stack[n - 1].has_non_local_let_ref = true
         }
     }
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
-        //! Push a fresh 0 slot for this node.
-        unsafe_stack |> push(0)
+        //! Push a fresh frame for this node.
+        unsafe_stack |> push(UnsafeFrame())
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! Pop the slot for this node. The popped value is the subtree's
-        //! count of inherently-unsafe leaves. Use it to:
-        //!   - store `unsafeExprs[expr.at] = count` for later queries
+        //! Pop the slot for this node. The popped frame is the subtree's
+        //! summary. Use it to:
+        //!   - store `unsafeExprs[expr] = frame` for later queries
         //!     (used by `visitExprUnsafe` to decide STYLE024 vs STYLE025),
-        //!   - propagate count to the parent's slot (now top after our pop),
+        //!   - propagate count + non-local-let-ref flag to the parent slot,
         //!   - fire STYLE024 if `expr` is an `unsafe(...)` wrap target
         //!     (`userSaidItsSafe`) and its subtree had count 0.
         let n = length(unsafe_stack)
-        let count = unsafe_stack[n - 1]
+        let frame = unsafe_stack[n - 1]
         unsafe_stack |> pop
-        if (count > 0) {
-            unsafeExprs |> insert(expr, count)
+        if (frame.count > 0 || frame.has_non_local_let_ref) {
+            unsafeExprs |> insert(expr, frame)
             let m = length(unsafe_stack)
             if (m > 0) {
-                unsafe_stack[m - 1] = unsafe_stack[m - 1] + count
+                unsafe_stack[m - 1].count = unsafe_stack[m - 1].count + frame.count
+                if (frame.has_non_local_let_ref) {
+                    unsafe_stack[m - 1].has_non_local_let_ref = true
+                }
             }
         }
         // STYLE024 expression form: parser sets `userSaidItsSafe` on the
@@ -1280,10 +1314,31 @@ class StyleLintVisitor : AstVisitor {
         if (expr.genFlags.userSaidItsSafe && !expr.genFlags.generated
             && (current_function == null || current_function.fromGeneric == null)
             && !(skip_userSaidItsSafe |> has_value(expr))
-            && count == 0) {
+            && frame.count == 0) {
             self->style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe — drop the wrap", expr.at)
         }
         return expr
+    }
+
+    def override preVisitExprLet(expr : ExprLet?) : void {
+        //! Mirror `isLocalOrGlobal` check from ast_infer_type.cpp:4989 —
+        //! `let v & = E` requires unsafe at statement level when `E` is
+        //! non-local-non-temporary. Mark the let's frame so the enclosing
+        //! `unsafe { ... }` block can detect it (STYLE025 must stay silent
+        //! when narrowing would leave the let-ref binding unsatisfied).
+        if (expr.genFlags.generated) return
+        for (v in expr.variables) {
+            continue if (
+                v._type == null ||
+                !v._type.flags.ref ||
+                v.init == null ||
+                v.init.genFlags.alwaysSafe ||
+                (v.init._type != null && v.init._type.flags.temporary) ||
+                is_local_or_global_expr(v.init)
+            )
+            self->mark_non_local_let_ref_in_stack()
+            return
+        }
     }
 
     def call_func_needs_unsafe(func : Function const?; is_for_loop_src : bool) : bool {
@@ -1328,6 +1383,29 @@ class StyleLintVisitor : AstVisitor {
                 || expr.subexpr._type.baseType == Type.tPointer))
         if (unknown_subexpr_type || is_unsafe_index) {
             self->mark_unsafe_in_stack()
+        }
+    }
+
+    def override preVisitExprSafeAt(expr : ExprSafeAt?) : void {
+        // `?[]` on table<> / array<> / pointer-to-(table|array|pointer)
+        // requires unsafe — see ast_infer_type.cpp errors
+        // unsafe_table_safe_index / unsafe_array_safe_index /
+        // unsafe_pointer_safe_index. Safe-at on vector / fixed_array is OK.
+        if (expr.genFlags.generated) return
+        if (expr.subexpr == null || expr.subexpr._type == null) {
+            self->mark_unsafe_in_stack()
+            return
+        }
+        let bt = expr.subexpr._type.baseType
+        if (bt == Type.tTable || bt == Type.tArray) {
+            self->mark_unsafe_in_stack()
+            return
+        }
+        if (bt == Type.tPointer && expr.subexpr._type.firstType != null) {
+            let inner = expr.subexpr._type.firstType.baseType
+            if (inner == Type.tTable || inner == Type.tArray || inner == Type.tPointer) {
+                self->mark_unsafe_in_stack()
+            }
         }
     }
 
@@ -1408,14 +1486,15 @@ class StyleLintVisitor : AstVisitor {
             || (current_function != null && current_function.fromGeneric != null)
             || !(expr.body is ExprBlock)) return expr
         let blk = expr.body as ExprBlock
-        let count = self->unsafe_count_for(blk)
-        if (count == 0) {
+        let frame = self->unsafe_frame_for(blk)
+        if (frame.count == 0) {
             self->style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe — drop the wrap", expr.at)
-        } elif (count == 1 &&
+        } elif (frame.count == 1 &&
                 !(blk.list[0] is ExprYield ||
                   blk.list[0] is ExprDelete ||
                   blk.list[0] is ExprReturn ||
-                  blk.list[0] is ExprNew)) {
+                  blk.list[0] is ExprNew)
+                && !frame.has_non_local_let_ref) {
             self->style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
         }
         return expr
@@ -1450,7 +1529,18 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; c
     //! Runs the style lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
     //! Pass ``comment_hygiene = true`` to enable STYLE014/STYLE015 checks.
+    let empty_set : table<string>
+    return style_lint_collect(prog, warnings, empty_set, empty_set, comment_hygiene)
+}
+
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
+                              disabled_codes, enabled_codes : table<string>;
+                              comment_hygiene : bool = false) : int {
+    //! Filter-aware overload. `disabled_codes` is a denylist; `enabled_codes`
+    //! is a whitelist (empty == all). Codes use the bare form (e.g. "STYLE024").
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = comment_hygiene)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
