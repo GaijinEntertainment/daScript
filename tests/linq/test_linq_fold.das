@@ -879,10 +879,10 @@ def test_max_accumulator(t : T?) {
 
 [test]
 def test_average_accumulator(t : T?) {
-    t |> run("average: empty → NaN") @(t : T?) {
+    t |> run("average: empty → 0.0lf (matches linq.das semantics)") @(t : T?) {
         let arr : array<int>
         let a = _fold(each(arr).average())
-        t |> equal(true, is_nan(a))
+        t |> equal(0.0lf, a)
     }
     t |> run("average: singleton") @(t : T?) {
         let arr <- [42]
