@@ -265,12 +265,12 @@ class DAWalker : DapiDataWalker {
     def override canVisitArray(ps : void?; ti : TypeInfo) : bool {
         //! Returns true if the array size is within the maximum children limit.
         let arr = unsafe(reinterpret<DapiArray?> ps)
-        return maxChildrenCount < 0u || arr.size <= uint64(maxChildrenCount)
+        return arr.size <= uint64(maxChildrenCount)
     }
 
     def override canVisitArrayData(ti : TypeInfo; count : uint64) : bool {
         //! Returns true if the array data count is within the maximum children limit.
-        return maxChildrenCount < 0u || count <= uint64(maxChildrenCount)
+        return count <= uint64(maxChildrenCount)
     }
 
     def override beforeArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
@@ -341,7 +341,7 @@ class DAWalker : DapiDataWalker {
     def override canVisitTable(ps : void?; ti : TypeInfo) : bool {
         //! Returns true if the table size is within the maximum children limit.
         let pa = unsafe(reinterpret<DapiTable?> ps)
-        return maxChildrenCount < 0u || pa.size <= uint64(maxChildrenCount)
+        return pa.size <= uint64(maxChildrenCount)
     }
 
     def override beforeTableKey(pa : DapiTable; ti : TypeInfo; pk : void?; ki : TypeInfo; index : uint64; last : bool) : void {

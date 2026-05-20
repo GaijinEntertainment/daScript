@@ -218,6 +218,9 @@ namespace das {
         if ( newSize > arr.capacity ) {
             uint64_t newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
             newCapacity = das::max(newCapacity, uint64_t(16));
+            // The pow2 round-up overflows past INT64_MAX when newSize > 2^62; clamp so the
+            // resulting capacity stays representable in the int64 long_capacity() surface.
+            if ( newCapacity > uint64_t(INT64_MAX) ) newCapacity = uint64_t(INT64_MAX);
             array_reserve(context, arr, newCapacity, stride, at);
         }
         arr.size = newSize;
