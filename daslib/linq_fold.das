@@ -3099,7 +3099,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             return $i(accName)
         }))
     } elif (opName == "average") {
-        // Empty source matches eager linq (divides by zero — IEEE NaN / int division panic depending on type).
+        // Empty source → 0.0 / 0.0 → IEEE NaN (numerator + denominator both cast to double before division). Matches emit_accumulator_lane.
         emission = qmacro(invoke($() : double {
             var $i(accName) : $t(accType) = default<$t(accType)>
             var $i(cntName) = 0
@@ -3409,7 +3409,8 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
         return emit_decs_accumulator(bridge, lastName, projection, whereCond, accType, at)
     }
     if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, projection, whereCond, calls.back()._0, at)
-    // Implicit to_array: chain ends in iterator output (no terminator) → buffer up.
+    // Iterator-typed chains cascade to tier-2; only fire to_array when expr is array-typed (user wrote `.to_array()`, peeled by skip=true).
+    if (expr._type == null || !expr._type.isGoodArrayType) return null
     return emit_decs_to_array(bridge, projection, whereCond, at)
 }
 
