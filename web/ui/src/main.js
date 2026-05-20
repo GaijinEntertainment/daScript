@@ -121,27 +121,94 @@ function syncUrlToState() {
     if (url && url !== location.href) history.pushState(null, '', url);
 }
 
+// Multi-file MEMFS sync: unlink stale, write current pgState files. Returns
+// true when both prerequisites are ready (pgState mounted AND Emscripten's
+// FS is up); false when either is still pending. Callers that fall back to
+// the single-buffer path must check WASM readiness themselves before touching
+// FS — see isWasmReady() and the runCode/runTests guards below.
+function syncMemFsFromState() {
+    if (!window.pgState || typeof FS === 'undefined') return false;
+    const current = new Set(Object.keys(window.pgState.files));
+    for (const stale of __lastWrittenFiles) {
+        if (!current.has(stale)) {
+            try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
+        }
+    }
+    for (const [name, doc] of Object.entries(window.pgState.files)) {
+        FS.writeFile(name, doc.getValue());
+    }
+    __lastWrittenFiles = current;
+    return true;
+}
+
+// WASM readiness: callMain + FS both exposed by the Emscripten module. False
+// during the ~3-5s page-load window while daslang_static.{js,wasm} streams in,
+// or indefinitely if the load fails. Both Run and Test buttons stay disabled
+// until this flips to true (see updateButtonStates + Module.onRuntimeInitialized).
+function isWasmReady() {
+    return typeof FS !== 'undefined'
+        && typeof Module === 'object' && Module !== null
+        && typeof Module.callMain === 'function';
+}
+
+// Toggle Run + Test buttons. Run requires WASM ready; Test additionally
+// requires a [test] annotation in any open buffer. Called from autosave
+// (every buffer/state mutation) and from Module.onRuntimeInitialized (WASM
+// finishes loading) so both signals refresh the gating.
+var __TEST_ANNOT_RE = /\[\s*test\b/m;
+function hasTestAnnotation() {
+    if (window.pgState) {
+        for (const doc of Object.values(window.pgState.files)) {
+            if (__TEST_ANNOT_RE.test(doc.getValue())) return true;
+        }
+        return false;
+    }
+    if (typeof code === 'object' && code) {
+        return __TEST_ANNOT_RE.test(code.getValue());
+    }
+    return false;
+}
+function updateButtonStates() {
+    const ready = isWasmReady();
+    const runBtn = document.getElementById('run');
+    const testBtn = document.getElementById('test');
+    if (runBtn) runBtn.disabled = !ready;
+    if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
+}
+// Kept under the old name so playground-tabs.js's existing autosave hook
+// still works without churn — it triggers a full refresh.
+window.updateTestButtonState = updateButtonStates;
+
 runCode = function() {
-    // Multi-file: sync MEMFS with the current pgState (unlink stale, write
-    // current), then run main.das. Falls back to the single-buffer path when
-    // pgState isn't up yet.
-    if (window.pgState && typeof FS !== 'undefined') {
-        const current = new Set(Object.keys(window.pgState.files));
-        for (const stale of __lastWrittenFiles) {
-            if (!current.has(stale)) {
-                try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
-            }
-        }
-        for (const [name, doc] of Object.entries(window.pgState.files)) {
-            FS.writeFile(name, doc.getValue());
-        }
-        __lastWrittenFiles = current;
+    if (!isWasmReady()) {
+        printOutput('daslang is still loading, please wait…', '#ff9393');
+        return;
+    }
+    if (syncMemFsFromState()) {
         syncUrlToState();
         Module.callMain(['main.das']);
         return;
     }
     syncUrlToState();
     runScript(code.getValue());
+}
+
+// Invoke dastest against the current main.das. `[test]` functions in the file
+// are discovered + run by dastest/suite.das; the existing Module.print hook
+// routes stdout into the output panel. No --color: Emscripten has no TERM and
+// our printOutput doesn't render ANSI escapes. --timeout=0 disables dastest's
+// wall-clock thread (suite.das wraps each file in new_thread when timeout>0),
+// keeping the run single-threaded in the WASM build.
+runTests = function() {
+    if (!isWasmReady()) {
+        printOutput('daslang is still loading, please wait…', '#ff9393');
+        return;
+    }
+    if (!syncMemFsFromState()) {
+        FS.writeFile('main.das', code.getValue());
+    }
+    syncUrlToState();
+    Module.callMain(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
 }
 
 clearOutput = function() {
@@ -222,6 +289,12 @@ var Module = {
                 printOutput(text,'#ffffff');
             };
         })(),
+        // Re-enable the Run / Test buttons once Emscripten has finished
+        // loading daslang_static.wasm and exposing FS + callMain. Both buttons
+        // ship disabled in index.html to avoid the early-click ReferenceError.
+        onRuntimeInitialized: function() {
+            if (typeof updateButtonStates === 'function') updateButtonStates();
+        },
     }
 
 window.onerror = function(message)

@@ -49,6 +49,13 @@
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateJson()));
             } catch (e) { /* quota / disabled — ignore */ }
+            // Refresh the Test button's enabled state on the same debounced
+            // tick — covers edit / switch / add / rename / delete via one
+            // signal. Inside the setTimeout so rapid keystrokes coalesce
+            // into one regex scan instead of one per keystroke.
+            if (typeof window.updateTestButtonState === 'function') {
+                window.updateTestButtonState();
+            }
         }, AUTOSAVE_DEBOUNCE_MS);
     }
 
