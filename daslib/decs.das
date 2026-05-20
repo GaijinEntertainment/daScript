@@ -1047,7 +1047,10 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
         // EntityId.id to uint64 is an architectural followup.
         let id_base_long = long_length(decsState.entityLookup)
-        if (id_base_long + int64(count) > MAX_ENTITY_ID) {
+        // The highest id allocated is id_base + count - 1; panic only if THAT
+        // exceeds MAX_ENTITY_ID, so the boundary case (last allocatable id ==
+        // UINT_MAX) still succeeds.
+        if (id_base_long + int64(count) - 1_l > MAX_ENTITY_ID) {
             panic("decs: create_entities_from_cmp would push entityLookup past UINT_MAX (current = {id_base_long}, count = {count}); EntityId.id (uint) widening is required")
         }
         let id_base = uint(id_base_long)
@@ -1056,8 +1059,9 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         // per-iteration int(eidx) cast would silently truncate. Hoist the cap
         // check before the loop — fill_blk is part of the public API and macro-
         // generated callers in decs_boost.das emit `eidx : int`; widening blk
-        // to int64 is the followup.
-        if (base + int64(count) > int64(INT_MAX)) {
+        // to int64 is the followup. Highest eidx is `base + count - 1`; the
+        // boundary case (max eidx == INT_MAX) still succeeds.
+        if (base + int64(count) - 1_l > int64(INT_MAX)) {
             panic("decs: create_entities_from_cmp eidx range [{base} .. {base + int64(count)}) exceeds INT_MAX (fill_blk takes int); widening fill_blk to int64 is a follow-up")
         }
         for (i in range(count)) {

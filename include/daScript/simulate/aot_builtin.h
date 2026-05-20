@@ -97,6 +97,7 @@ namespace das {
     DAS_API void builtin_table_tag ( Table & tab, const char * name, Context * context );
     DAS_API void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_make_temp_array ( Array & arr, void * data, int size );
+    DAS_API void builtin_make_temp_array_i64 ( Array & arr, void * data, int64_t size );
     DAS_API void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at );
     DAS_API void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at );
     DAS_API vec4f builtin_collect_local_and_zero ( Context & context, SimNode_CallBase * call, vec4f * args );
