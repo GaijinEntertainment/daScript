@@ -500,7 +500,7 @@ def target_unroll_to_array_fold() : array<int> {
 def test_unroll_to_array_parity(t : T?) {
     fixture_unroll2(6)
     // flag==1 rows: i=1,3,5 → vals 1,3,5
-    var got <- target_unroll_to_array_fold()
+    let got <- target_unroll_to_array_fold()
     t |> equal(got |> length, 3, "to_array length")
     if (length(got) == 3) {
         t |> equal(got[0], 1, "to_array[0]")
