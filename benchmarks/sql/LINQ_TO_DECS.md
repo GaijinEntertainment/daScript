@@ -1,12 +1,17 @@
 # LINQ → DECS — design notes
 
 Sibling of [LINQ.md](LINQ.md). Captures the design horizon for stitching linq's
-`zip` family together with decs archetype iteration, so the upcoming
-**BufferZip** PR is shaped with the decs angle in mind even though it doesn't
-have to ship the decs bits.
+`zip` family together with decs archetype iteration.
 
-Status: **discussion draft** — no PR open, no plan committed. Edited in-place
-as the design firms up.
+**Status (2026-05-20):** Pieces 1-3 landed. Piece 4 is the active design surface.
+
+| Piece | Status | PR(s) |
+|---|---|---|
+| 1. N-ary `zip` arities 4-8 in `daslib/linq.das` | ✅ landed | #2737 |
+| 2. `plan_zip` splice arm in `daslib/linq_fold.das` (Phase 2A bare zip, 2B chain ops, accum + early-exit terminators) | ✅ landed | #2738, #2741, #2742 |
+| 3. `from_decs_template(type<Foo>)` macro — eager bridge (Stage A) | 🟡 in flight | #2745 |
+| 4. `plan_from_decs_template` splice in `linq_fold` + Stage B marker (the real payoff) | ⬜ next | — |
+| 5. sqlite_linq N-ary zip recognition | ⬜ deferred (no concrete use case) | — |
 
 ## What this is
 
@@ -300,3 +305,192 @@ existing per-lane planner split.
 - `from_decs` macro (current eager form): [daslib/decs_boost.das:633-705](../../daslib/decs_boost.das#L633)
 - Existing test: [tests/linq/test_linq_from_decs.das](../../tests/linq/test_linq_from_decs.das)
 - sqlite_linq (lives in dasSQLITE module): [modules/dasSQLITE/daslib/sqlite_linq.das](../../modules/dasSQLITE/daslib/sqlite_linq.das)
+
+---
+
+# Phase 4 — `plan_from_decs_template` splice (active design, 2026-05-20)
+
+## Reference template — what the query macro already builds
+
+The lowering target IS what `DecsQueryMacro.implement` already produces. From [decs_boost.das:432-510](../../daslib/decs_boost.das#L432) the relevant assembly is:
+
+```das
+// query($(pos : float3; vel : float3){ body }) lowers to:
+for_each_archetype(tag_req, tag_erq) $(arch) {
+    for (pos in get_ro(arch, "pos", type<float3>),
+         vel in get_ro(arch, "vel", type<float3>)) {
+        body
+    }
+}
+```
+
+Built from:
+1. `var req <- build_req_from_args(qblk)` — `EcsRequest` from field list. Already handles `is_decs_template` struct expansion (auto-fans `[decs_template]` struct args into per-field component names).
+2. `var erq_fun = qmacro() @@ { return <- $v(req) }` — runtime lambda producing the EcsRequest.
+3. `var qloop = new ExprFor(...)` + `append_iterator(arch_name, qloop, field, prefix, suffix, const_parent, can_be_optional)` per field — builds the inner multi-iter for-loop **directly as an ExprFor AST node**, ONE iterator slot per field. **This bypasses the qmacro multi-iter splice limitation entirely.**
+4. `quote() { for_each_archetype(tag_req, tag_erq) $(tag_arch) { tag_loop } }` — outer template. `apply_template` substitutes `tag_req`, `tag_erq`, `tag_arch`, `tag_loop` placeholders. For early-exit terminators, swap the outer template to `for_each_archetype_find(tag_req, tag_erq) $(tag_arch) { tag_loop; return false }`.
+
+**Implication:** the splice has the entire query-macro emission machinery available as a building block — `append_iterator`, `quote()` + `apply_template`, `build_req_from_args`. The Phase 4 work is mostly *assembling* these existing pieces with the linq-fold chain splice on top.
+
+## Cross-module dependency — resolved
+
+The "linq_fold doesn't require decs_boost" lock-in (decision #3 above) is **preserved**. The splice emits names (`for_each_archetype`, `for_each_archetype_find`, `get_ro`) that resolve in user scope — same `_::` / unqualified name dispatch pattern used elsewhere in linq_fold.
+
+What the splice DOES need from decs_boost: the EcsRequest construction logic. **Two valid resolutions:**
+
+- **Option A (preferred): The recognizer doesn't construct EcsRequest itself.** Instead, the `from_decs_template` macro Stage B emits a marker carrying the request shape pre-built (the field list + prefix already resolved at macro-time). The splice consumes the marker's payload, doesn't re-derive. This is cleaner: the macro already has the struct in hand and knows the prefix; encoding it once in the marker is one-time work.
+- **Option B: Splice re-derives via shared `[macro_function] def build_req_from_struct(st, prefix) : EcsRequest`** in decs_boost. Splice imports it. Functional but couples linq_fold to decs_boost types (`EcsRequest`).
+
+**Decision: Option A.** The marker form carries everything needed.
+
+## Stage B marker shape — what the macro emits
+
+Replace the current `invoke(${ var res ; query(...) ; return res.to_sequence() })` emission with an opaque marker call the splice can recognize and peel. Candidate names: `__from_decs_template_marker(req_hash, req_factory_block, field_list_block)`. The marker call has NO runtime implementation — it's purely a splice anchor. **If the splice fails (cascade to tier 2), fall back to the eager bridge form** — same `invoke(${ var res ; query(...) ; ... })` shape from Stage A.
+
+Open question to resolve in PR: how to carry the field list through the marker. Likely a synthesized ExprMakeBlock with one Variable per field (same shape `FromDecsMacro` constructs at [decs_boost.das:684](../../daslib/decs_boost.das#L684) for the query call). The splice reads the block's `.arguments`.
+
+## Sub-PR breakdown for Phase 4
+
+Each sub-PR is a self-contained landable slice. Ordering reflects build dependencies + risk gradient.
+
+### Sub-PR 4a (D1 + D2): Marker + simplest terminators (to_array, count)
+
+**~400-600 LOC.** Establishes the architecture end-to-end with the smallest possible terminator surface.
+
+- **D1.** Switch `FromDecsTemplateMacro` from eager-bridge (current Stage A) to dual-mode: emit a splice-able marker form when in a `_fold` context; keep eager fallback for non-splice contexts (i.e. when used outside `_fold`). The splice arm always tries the marker recognizer first; if it bails (unhandled chain shape), tier-2 cascade walks back to the eager form via fold_linq_default. Net behavior: zero regression for non-fold usage (test_from_decs_template passes unchanged); fold-context usage becomes splicable.
+- **D2.** Add `plan_from_decs_template` planner to the cascade in `_fold` (slot between `plan_group_by` and `plan_zip` — semantically the source-shape arm). Recognizes `from_decs_template_marker(...) [|> chain]* |> {to_array, count}`. Emits:
+
+```das
+// to_array shape:
+var inscope buf : array<tuple<TupleOfFields>>
+for_each_archetype(reqHash, reqFactory) $(arch) {
+    for (f1 in get_ro(arch, "prefix_f1", type<T1>),
+         f2 in get_ro(arch, "prefix_f2", type<T2>)) {
+        // fused chain ops here (where_, select, etc. — D5 covers; D2 is bare-chain only)
+        buf |> push_clone((f1=f1, f2=f2))
+    }
+}
+return <- buf
+
+// count shape:
+var cnt = 0
+for_each_archetype(reqHash, reqFactory) $(arch) {
+    cnt += arch.size      // length-shortcut when no chain filters
+}
+return cnt
+```
+
+- Bail cases (cascade to tier 2 = eager bridge):
+  - Any chain op past the source (D5 lifts this — D2 is source-and-terminator only)
+  - Any terminator other than `to_array` / `count`
+  - Result-selector or REQUIRE_NOT augmentation (out of scope for Stage B v1)
+
+**Tests:** 2 functional parity (to_array + count vs eager bridge); 2 AST shape (verify `for_each_archetype` emission, single inner ExprFor, no `invoke($() { query(...) })` cascade leak).
+
+### Sub-PR 4b (D3 + D4): Accumulator + early-exit terminators
+
+Once 4a lands, adding terminator support is mechanical — leverage the existing `emit_accumulator_lane` / `emit_early_exit_lane` helpers from `plan_zip` (already multi-source via parallel arrays after PR #2742). The decs splice is conceptually "N-source zip wrapped in an outer archetype loop" — the inner emission shape matches.
+
+- **D3.** Accumulator terminators: `sum`, `min`, `max`, `average`, `long_count`. Pattern: hoist accumulator above outer; per-element reduce in inner; emit accumulator-final after outer. `average` honors the existing 2-slot (sum + count) shape.
+- **D4.** Early-exit terminators: `first`, `first_or_default(d)`, `any`, `all`, `contains`, `take(N)`. Switch outer wrap from `for_each_archetype` to `for_each_archetype_find` (block returns `bool`; `true` exits archetype walk). Wrap whole emission in `invoke($() { ... })` so the `return` from inside the block can exit the outer expression. `take(N)` shares-counter across archetypes — return `true` from block when N reached.
+
+**Critical risk to validate during 4b:** the `for_each_archetype_find` block return semantics — does a `return false` inside the inner for-loop's body return from the block (exiting the inner loop but continuing per-archetype outer) or return from the surrounding function? Per the `query` macro's emission at [decs_boost.das:483-487](../../daslib/decs_boost.das#L483), the block ends with `return false` — meaning the block-return propagates to `for_each_archetype_find`. So a `return true` inside the body exits the archetype walk. Validate with a smoke AST test.
+
+### Sub-PR 4c (D5): Chain-op fusion (where_ / select / take / skip / take_while / skip_while)
+
+Once terminators work end-to-end (4a + 4b), add chain-op support — `where_`, `select`, `take(N)`, `skip(K)`, `take_while`, `skip_while` between the source and the terminator. Pattern fully mirrors `plan_zip` chain fusion from PR #2741: predicates wrap with `if (...) { continue }`; projections bind via `var inscope` in body prelude; take/skip use shared counter above outer (already in D4 for take).
+
+**Bails:** result-selector forms, impure projections combined with skip/take_while (same as plan_zip bails — see PR #2741's `impure-proj+range` cascade).
+
+### Sub-PR 4d (D6): Reverse + state-table terminators (distinct, group_by, order_by)
+
+Higher-order terminators that need a buffer or table hoisted above the outer loop, then post-process after both loops complete. Bulk of the splice infrastructure carries over from existing `plan_reverse` / `plan_distinct` / `plan_group_by` / `plan_order_family` — just add one more outer-loop level.
+
+- `distinct` / `distinct_by` — hoisted `var inscope seen : table<...>`; per-element dedup check; same shape as plan_distinct, one level deeper.
+- `group_by` / `group_by_lazy` — hoisted `var inscope tab : table<...>`; per-element table update (`tab?[uk] ?? dummy` pattern); same shape as plan_group_by.
+- `reverse` — hoisted buf; per-element push; `reverse_inplace(buf)` after both loops.
+- `order_by [+ take(N)]` — hoisted buf or top-n heap; sort / top_n after both loops.
+
+This is the largest sub-PR (~800 LOC). Could split further (4d-1 distinct/group_by/reverse, 4d-2 order_by) if too large to review.
+
+## Open questions for Phase 4 (to resolve before coding)
+
+1. **Marker payload encoding.** Synthesized ExprMakeBlock with one arg per field is the most natural shape (matches what FromDecsMacro builds internally), but the splice has to walk the block's arguments to extract names + types + prefix. Alternative: marker takes (a) prefix string + (b) struct type reference; splice walks struct fields itself. The first form is more uniform (treats from_decs and from_decs_template the same once unrolled); the second is more compact. **Lean: first form (uniform with FromDecsMacro).**
+
+2. **`get_ro` vs `get` vs `get_default_ro` selection.** Per [decs_boost.das:200 `getter_name`](../../daslib/decs_boost.das#L200) the choice depends on field const-ness, optional-ness, default value. For `from_decs_template` v1, all fields are const-ref read (no mutation through the template iterator) — defaults to `get_ro`. Defaults values use `get_default_ro`. **Lean: reuse `getter_name` directly with `const_parent=true` to force read-only.**
+
+3. **`from_decs_template` retains use outside `_fold`.** Today's eager bridge form must keep working when the macro is used outside a `_fold` expression — e.g. `let it : iterator<...> = from_decs_template(type<Foo>); for (x in it) { ... }`. The marker emission only fires inside `_fold`; otherwise emit the eager shape. Macro needs to detect whether it's inside a `_fold` call (parent context). **Open: how to detect parent context in a call_macro.** Alternative: always emit the marker, and add a separate `[lint_macro]` or pre-resolve pass that converts marker→eager outside `_fold`. Simpler at the macro level: emit BOTH forms wrapped in a `static_if (in_fold) { marker } else { eager }`-equivalent shape — but that's not a real thing. **Cleanest: have plan_from_decs_template ALWAYS recognize the marker form, and if it can't splice, emit the eager bridge as the cascade. This way the macro always emits the marker, and the splice OR cascade always gives something runnable.**
+
+4. **Empty-archetype skip.** `for_each_archetype` already skips archetypes with `arch.size == 0` per [decs.das:650](../../daslib/decs.das#L650). Confirm the splice doesn't break this — the inner for-loop should not be entered for empty archetypes. Should be free since we're using the same outer template.
+
+5. **Multi-archetype overhead vs single.** For workloads with one archetype, the splice produces `for_each_archetype` wrap overhead vs a direct single-archetype loop. Acceptable — the multi-archetype generality is the whole point. (The eager bridge has the same overhead via query macro.)
+
+## Tests + benchmarks to write alongside 4a
+
+**Functional parity:** create entities with 1, 2, 3 archetypes (mix of components); confirm splice output matches eager-bridge output element-for-element. Same test scaffold as test_linq_from_decs.das with `restart()` for isolation.
+
+**AST shape gates:**
+- Splice emission contains `for_each_archetype` call (not `query`).
+- Splice emission contains ONE inner `ExprFor` (not nested).
+- Splice emission contains NO `invoke(${ ... query ... })` cascade leak (the eager bridge fallback shape).
+- For early-exit (4b): switches to `for_each_archetype_find`; body contains `return true` at the exit point.
+
+**Benchmark:** `benchmarks/sql/decs_count_from_template.das`, `benchmarks/sql/decs_select_sum_from_template.das` — compare splice vs eager bridge vs hand-written `query` macro. Splice should match `query` and beat eager bridge by the buffer-roundtrip cost (one `array<tuple>` materialize-plus-iterator-roundtrip per matched archetype).
+
+## Validation spikes (2026-05-20 — completed)
+
+Three spikes run to confirm the approach holds. Results changed the architecture meaningfully.
+
+### Spike 1 — `for_each_archetype_find` block-return: ✅ validated by API contract
+
+[decs.das:699](../../daslib/decs.das#L699) signature: `block<(arch : Archetype) : bool>` — `return true` from block stops iteration. Existing `find_query` macro at [decs_boost.das:483-487](../../daslib/decs_boost.das#L483) uses this in production. No runtime spike needed.
+
+### Spike 3 — marker round-trip: ✅ validated, 5/5 tests pass
+
+A regular daslang function returning `iterator<T>` survives `_fold`'s planner cascade gracefully:
+- Bare `_fold(_marker_iter(30))` → tier-3 passthrough, runtime calls function.
+- `_fold(_marker_iter(0).count())` → counter-lane splice fires past the unrecognized source!
+- `_fold(_marker_iter(0) |> where_(p) |> sum())` → splice fires past unrecognized source.
+
+So an iterator-returning marker IS a viable handle for the planner to recognize — even unrecognized sources cascade safely.
+
+### Spike 2 (revised) — macro expansion order: ⚠️ critical finding
+
+`mcp__daslang__ast_dump --mode=source` on `_fold(from_decs_template(type<Foo>).count())` shows that **by the time `_fold` runs, BOTH `from_decs_template` AND `query` have already expanded fully**. `_fold` receives raw `for_each_archetype(req_hash, erq_factory, $(arch) { for (val in get_ro(arch, ...)) { res |> push(...) } })` — no `query()` call, no `from_decs_template()` call.
+
+**Implication:** "emit a `query(...)` call in the splice and let it re-expand" doesn't apply here — the splice has only AST to pattern-match against. Two reasonable resolutions:
+
+- **Walk-and-rebuild from the post-expansion AST.** Workable but brittle (depends on the exact shape of the eager bridge).
+- **Tag-the-block-with-an-annotation (recommended).** FromDecsTemplateMacro attaches `[from_decs_template_meta(prefix="...")]` to the lambda body block. Annotation is metadata-only — no compile-time effect. Planner walks AST looking for ExprInvoke whose body has this tag; finds the entry point in O(N) instead of pattern-matching the deep shape. Once found, extracts the field list from the body's `get_ro` calls (already in the AST). Then builds fresh emission for the terminator.
+
+`AnnotationArgument` is limited to `tString/tBool/tInt/tFloat` (no list type) — the annotation can carry `prefix` (string) but not the full field list. That's fine — the field list is reconstructible from the for_each_archetype's inner for-loop iterators + get_ro calls. Annotation only needs to mark the entry point.
+
+## Updated Phase 4 plan (post-validation)
+
+The work is now:
+
+1. **Add `[block_macro(name="from_decs_template_meta")]` to `daslib/decs_boost.das`.** Class extends `AstBlockAnnotation`. `apply` is a no-op (return `true`). Just a tag.
+2. **Modify FromDecsTemplateMacro** to attach the tag annotation to the lambda body block as part of the eager-bridge emission. Annotation arg: `prefix = "<resolved prefix>"`. No other behavior change.
+3. **Add `plan_from_decs_template` planner** in `daslib/linq_fold.das`. Slot between `plan_group_by` and `plan_zip`. Walks `flatten_linq(expr)` for ExprInvoke whose body block has `from_decs_template_meta` annotation. When found:
+   - Extracts `prefix` from annotation args.
+   - Walks the body's for_each_archetype call to extract:
+     - `req_hash` (uint64 constant)
+     - `erq_factory` (function pointer)
+     - Field iter names (e.g. `spike_val`)
+     - Field component names (from `get_ro(arch, "name", type<T>)` 2nd arg)
+     - Field types (from get_ro 3rd arg)
+   - Builds a new ExprInvoke with terminator-specific shell (accumulator/buffer init, new for_each_archetype + inner for, fused chain body, return).
+4. **Sub-PR 4a scope (D1 + D2):** to_array + count terminators only. Tier-2 cascade for everything else (the eager bridge runs unchanged). End-to-end architecture validated, smallest possible terminator surface.
+5. **4b-4d:** add accumulator/early-exit/state-table terminators following the same template.
+
+### Why this beats the alternatives we considered
+
+- **Pure AST pattern match** (no annotation): planner has to walk every ExprInvoke in the AST and check shape. Annotation is a fast filter.
+- **Marker call** (`from_decs_template_marker(req_hash, ...)`): needs a stub function with the right return type per template, generated per call site. Annotation is lighter.
+- **Compile-time helper** (`emit_for_each_archetype_invoke`): still requires the planner to extract metadata first; doesn't save the metadata-extraction step. Useful as a refactor of the macro emission code but doesn't change the planner architecture.
+
+### Things still to verify in 4a implementation
+
+- Annotation survives `query()` macro expansion (since `query` expands inside the annotated block, modifying the block's statement list — does it preserve the annotation list?). **High confidence yes** (annotations are on the block itself, query macro adds statements not annotations) but verify with the first AST-shape test.
+- The `erq_factory` function pointer in the original `for_each_archetype` call refers to a function that returns the EcsRequest. When we build a new `for_each_archetype` for the splice, reuse the same `erq_factory` reference. Confirm function references can be cloned/reused across emissions.
+- The `req_hash` is a `ExprConstUInt64` literal embedded in the for_each_archetype call. Easy to extract + reuse.
