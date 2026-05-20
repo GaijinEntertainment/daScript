@@ -1195,6 +1195,13 @@ def private order_top_n_call_name(orderName : string) : string {
     return ""
 }
 
+def private order_min_call_name(orderName : string; hasKey : bool) : string {
+    // `order + first` collapses to min/max — asc → min, desc → max. Keyed forms route to min_by/max_by.
+    let isDesc = orderName == "order_descending" || orderName == "order_by_descending"
+    if (hasKey) return isDesc ? "max_by" : "min_by"
+    return isDesc ? "max" : "min"
+}
+
 [macro_function]
 def private try_make_inline_cmp(orderKey : Expression?; orderName : string;
                                 elemType : TypeDeclPtr; at : LineInfo) : Expression? {
@@ -1236,6 +1243,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var orderKey : Expression?
     var orderElemType : TypeDeclPtr
     var takeExpr : Expression?
+    var firstName : string
+    var firstDefaultExpr : Expression?
     var hasOrder = false
     let at = calls[0]._0.at
     let itName = "`it`{at.line}`{at.column}"
@@ -1260,10 +1269,18 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
             orderElemType = clone_type(cll._0._type.firstType)
         } elif (name == "take") {
-            if (!hasOrder || takeExpr != null) return null
+            if (!hasOrder || takeExpr != null || firstName != "") return null
             var arg = cll._0.arguments[1]
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
             takeExpr = clone_expression(arg)
+        } elif (name == "first" || name == "first_or_default") {
+            // order + first → min/max (O(N) instead of sort + index). Must be terminal.
+            if (!hasOrder || takeExpr != null || firstName != "" || i != length(calls) - 1) return null
+            firstName = name
+            if (name == "first_or_default") {
+                if ((cll._0.arguments |> length) < 2) return null
+                firstDefaultExpr = clone_expression(cll._0.arguments[1])
+            }
         } else {
             return null
         }
@@ -1278,12 +1295,31 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     if (hasKey) {
         inlineCmp = try_make_inline_cmp(orderKey, orderName, orderElemType, at)
     }
+    let minMaxName = order_min_call_name(orderName, hasKey)
     if (whereCond == null) {
         // No prefilter — direct call to daslib helper.
         var topExpr = clone_expression(top)
         topExpr.genFlags.alwaysSafe = true
         var emission : Expression?
-        if (takeExpr == null) {
+        if (firstName == "first") {
+            // order + first → min/max (or min_by/max_by). O(N) single pass; matches the eager `order(...).first()` panic-on-empty semantics via min/max_impl returning default-initialized ref.
+            if (hasKey) {
+                emission = qmacro($c(minMaxName)($e(topExpr), $e(orderKey)))
+            } else {
+                emission = qmacro($c(minMaxName)($e(topExpr)))
+            }
+        } elif (firstName == "first_or_default") {
+            // No min_by_or_default exists; route through top_n*(_, 1, _) which returns an array (empty or single-element), then first_or_default supplies the default.
+            var topNCall : Expression?
+            if (inlineCmp != null) {
+                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+            } elif (hasKey) {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
+            } else {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1))
+            }
+            emission = qmacro(_::first_or_default($e(topNCall), $e(firstDefaultExpr)))
+        } elif (takeExpr == null) {
             // Bare order family — emit the direct call. Same shape as plain LINQ, but via
             if (inlineCmp != null) {
                 // Inlined comparator dispatches to the asc `order(src, block)` overload —
@@ -1304,7 +1340,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
         // Wrap with to_sequence_move only when emission is array-shaped: take dispatches to
-        let emissionIsArray = takeExpr != null || top._type.isGoodArrayType
+        let emissionIsArray = takeExpr != null || (firstName == "" && top._type.isGoodArrayType)
         if (needIterWrap && emissionIsArray) {
             emission = qmacro($e(emission).to_sequence_move())
         }
@@ -1337,7 +1373,31 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             $e(loopBody)
         }
     }
-    if (takeExpr == null) {
+    if (firstName == "first") {
+        // where + order + first → min/max on prefilter buffer. O(N) single pass after the filter materializes. min/max return const-refs (TT -& -const), so plain `return` — not `return <-` — matches the eager semantics.
+        var minMaxCall : Expression?
+        if (hasKey) {
+            minMaxCall = qmacro($c(minMaxName)($i(bufName), $e(orderKey)))
+        } else {
+            minMaxCall = qmacro($c(minMaxName)($i(bufName)))
+        }
+        stmts |> push <| qmacro_expr() {
+            return $e(minMaxCall)
+        }
+    } elif (firstName == "first_or_default") {
+        // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case.
+        var topNCall : Expression?
+        if (inlineCmp != null) {
+            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), 1, $e(inlineCmp)))
+        } elif (hasKey) {
+            topNCall = qmacro($c(topNName)($i(bufName), 1, $e(orderKey)))
+        } else {
+            topNCall = qmacro($c(topNName)($i(bufName), 1))
+        }
+        stmts |> push <| qmacro_expr() {
+            return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+        }
+    } elif (takeExpr == null) {
         // Sort the prefilter buffer in place and return it. order*_inplace is void
         var sortCall : Expression?
         if (inlineCmp != null) {
