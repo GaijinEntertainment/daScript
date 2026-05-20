@@ -169,6 +169,13 @@ namespace das {
             };
             uint32_t flags;
         };
+        // On 32-bit ABIs Array has uint64_t members forcing 8-byte alignment, so
+        // sizeof(Array) is 40 with 4 trailing pad bytes. Itanium ABI (clang on
+        // wasm/linux/darwin 32-bit) lets the derived `Table` reuse that trailing
+        // padding, placing Table::keys at offset 36; MSVC 32-bit doesn't, placing
+        // it at offset 40. Make the padding explicit so the dsize matches sizeof
+        // on every ABI and Table::keys lives at a single, predictable offset.
+        uint32_t _pad_after_flags = 0u;
         __forceinline bool isLocked() const { return lock; }
 
         friend DAS_API int builtin_array_lock_count ( const Array & arr );
