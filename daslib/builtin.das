@@ -509,10 +509,12 @@ def empty(a : table<auto; auto> | #) : bool {
 }
 
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
+    return if (newSize < 0)
     __builtin_table_reserve(Tab, uint64(newSize))
 }
 
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int64) {
+    return if (newSize < 0_l)
     __builtin_table_reserve(Tab, uint64(newSize))
 }
 

@@ -682,14 +682,12 @@ namespace das {
         // 64-bit index overloads (Phase 2 — 64-bit arrays)
         static __forceinline OT & at ( TT & value, int64_t index, Context * __context__ ) {
             uint64_t size = uint64_t(SIZE_POLICY::size(value));
-            uint64_t idx = uint64_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
             return value[index];
         }
         static __forceinline const OT & at ( const TT & value, int64_t index, Context * __context__ ) {
             uint64_t size = uint64_t(SIZE_POLICY::size(value));
-            uint64_t idx = uint64_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
             return value[index];
         }
         static __forceinline OT & at ( TT & value, uint64_t idx, Context * __context__ ) {
@@ -725,8 +723,7 @@ namespace das {
     __forceinline OT & das_ati_i64 ( TT & value, int64_t index, Context * __context__, LineInfoArg * __info__ ) {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint64_t size = uint64_t(SIZE_POLICY::size(value));
-        uint64_t idx = uint64_t(index);
-        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+        if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_at(__info__,"vector index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
         return value[index];
     }
 
@@ -759,8 +756,7 @@ namespace das {
     __forceinline const OT & das_atci_i64 ( const TT & value, int64_t index, Context * __context__, LineInfoArg * __info__ ) {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint64_t size = uint64_t(SIZE_POLICY::size(value));
-        uint64_t idx = uint64_t(index);
-        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+        if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_at(__info__,"vector index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
         return value[index];
     }
 

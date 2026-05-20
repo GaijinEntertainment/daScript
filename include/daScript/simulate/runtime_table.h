@@ -148,6 +148,12 @@ namespace das
             if (size <= tab.capacity)
               return true;
 
+            // Guard against overflow before doubling — otherwise huge `size` (e.g. a negative
+            // signed input cast to uint64) would infinite-loop here as newCapacity wraps to 0.
+            if (size > (uint64_t(1) << 62)) {
+              context->throw_error_at(at, "table reserve: size %llu exceeds 2^62", (unsigned long long)size);
+              return false;
+            }
             uint64_t newCapacity = das::max(uint64_t(minCapacity), tab.capacity*2);
             while (newCapacity < size)
             {

@@ -270,8 +270,8 @@ namespace das
             currentRange = ptrRangeStack.back();
             ptrRangeStack.pop_back();
         }
-        bool describe_ptr ( char * pa, int tsize, bool isHandle = false ) {
-            auto ssize = (tsize+15) & ~15;
+        bool describe_ptr ( char * pa, uint64_t tsize, bool isHandle = false ) {
+            auto ssize = (tsize + uint64_t(15)) & ~uint64_t(15);
             bool show = !errorsOnly;
             if ( context->stack.is_stack_ptr(pa) ) {
                 if ( show ) tp << "\tSTACK";
@@ -379,7 +379,7 @@ namespace das
             char * pa = PA->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                if ( describe_ptr(pa, int(tsize)) ) {
+                if ( describe_ptr(pa, tsize) ) {
                     describeInfo(ti);
                     ReportHistory();
                     tp << "ARRAY " << getTypeInfoMangledName(ti) << "\n";
@@ -396,7 +396,7 @@ namespace das
             char * pa = PT->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                if ( describe_ptr(pa, int(tsize)) ) {
+                if ( describe_ptr(pa, tsize) ) {
                     describeInfo(ti);
                     ReportHistory();
                     tp << "TABLE " << getTypeInfoMangledName(ti) << "\n";

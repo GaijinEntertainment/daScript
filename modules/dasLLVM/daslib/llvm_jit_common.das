@@ -144,6 +144,7 @@ enum public JIT_ARRAY {
     LOOK
     MAGIC
     FLAGS
+    PAD_AFTER_FLAGS  // mirror Array's trailing alignment pad (see arraytype.h)
 }
 
 enum public JIT_TABLE {
@@ -153,6 +154,7 @@ enum public JIT_TABLE {
     LOOK
     MAGIC
     FLAGS
+    PAD_AFTER_FLAGS  // matches C++ sizeof(Array)==40 on 32-bit; Table::keys lands at 40
     KEYS
     HASHES
 }
@@ -926,14 +928,17 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
             g_prim_t.t_int64,                    // uint64_t capacity
             g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.t_int32,                    // uint32_t lock
-            g_prim_t.t_int32                     // uint32_t flags
+            g_prim_t.t_int32,                    // uint32_t flags
+            g_prim_t.t_int32                     // _pad_after_flags (mirror trailing alignment pad)
         )
         if (t.firstType != null) {
             array_fields[int(JIT_ARRAY.DATA)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
         }
         res = g_prim_t |> StructType(array_fields)
     } elif (t.baseType == Type.tTable) {
-        // table type — must mirror Table layout (Array base + keys/hashes/tombstones)
+        // table type — must mirror Table layout (Array base + keys/hashes/tombstones).
+        // The explicit _pad_after_flags slot forces keys onto an 8-aligned offset on
+        // 32-bit ABIs, matching the C++ Table (where Table::keys lives at sizeof(Array)==40).
         var table_fields <- fixed_array(
             g_prim_t.LLVMVoidPtrType(),// char * data
             g_prim_t.t_int64,                    // uint64_t size
@@ -941,6 +946,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
             g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.t_int32,                    // uint32_t lock
             g_prim_t.t_int32,                    // uint32_t flags
+            g_prim_t.t_int32,                    // _pad_after_flags
             g_prim_t.LLVMVoidPtrType(),// char * keys
             g_prim_t.LLVMVoidPtrType(),// TableHashKey * hashes
             g_prim_t.t_int64)                    // uint64_t tombstones

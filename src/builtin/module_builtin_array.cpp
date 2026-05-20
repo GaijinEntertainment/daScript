@@ -66,8 +66,8 @@ namespace das {
     }
 
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
-        if ( uint64_t(index) >= pArray.size ) {
-            context->throw_error_at(at, "erase index out of range, %u of %llu", uint32_t(index), (unsigned long long)pArray.size);
+        if ( index < 0 || uint64_t(index) >= pArray.size ) {
+            context->throw_error_at(at, "erase index out of range, %d of %llu", index, (unsigned long long)pArray.size);
             return;
         }
         memmove ( pArray.data+index*stride, pArray.data+(index+1)*stride, size_t(pArray.size-uint64_t(index)-1)*size_t(stride) );
@@ -75,12 +75,13 @@ namespace das {
     }
 
     void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context, LineInfoArg * at ) {
-        if ( index < 0 || count < 0 || uint64_t(index + count) > pArray.size ) {
-            context->throw_error_at(at, "erasing array range is invalid: index=%i count=%i size=%llu", index, count, (unsigned long long)pArray.size);
+        // Compute end as uint64 sum AFTER non-negativity check to avoid signed overflow UB on index+count.
+        if ( index < 0 || count < 0 || uint64_t(index) + uint64_t(count) > pArray.size ) {
+            context->throw_error_at(at, "erasing array range is invalid: index=%d count=%d size=%llu", index, count, (unsigned long long)pArray.size);
             return;
         }
-        memmove ( pArray.data+index*stride, pArray.data+(index+count)*stride, size_t(pArray.size-uint64_t(index)-uint64_t(count))*size_t(stride) );
-        array_resize(*context, pArray, pArray.size-count, stride, false, at);
+        memmove ( pArray.data+uint64_t(index)*stride, pArray.data+(uint64_t(index)+uint64_t(count))*stride, size_t(pArray.size-uint64_t(index)-uint64_t(count))*size_t(stride) );
+        array_resize(*context, pArray, pArray.size-uint64_t(count), stride, false, at);
     }
 
     void builtin_array_erase_i64 ( Array & pArray, int64_t index, int stride, Context * context, LineInfoArg * at ) {
