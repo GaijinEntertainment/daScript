@@ -53,6 +53,22 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let groups <- _fold(from_decs_template(type<DecsCar>)
+                            ._group_by(_.brand)
+                            ._select((Brand = _._0,
+                                      N = _._1 |> length,
+                                      TotalPrice = _._1 |> _select(_.price) |> sum(),
+                                      MaxPrice   = _._1 |> _select(_.price) |> max()))
+                            .to_array())
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def groupby_multi_reducer_m1(b : B?) {
     run_m1(b, 100000)
@@ -66,4 +82,9 @@ def groupby_multi_reducer_m3(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def groupby_multi_reducer_m4(b : B?) {
+    run_m4(b, 100000)
 }

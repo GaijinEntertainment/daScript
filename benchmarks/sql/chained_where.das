@@ -49,6 +49,18 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let c = _fold(from_decs_template(type<DecsCar>)._where(_.price > THRESHOLD)
+                               ._where(_.year >= YEAR_FLOOR)
+                               .count())
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def chained_where_m1(b : B?) {
     run_m1(b, 100000)
@@ -62,4 +74,9 @@ def chained_where_m3(b : B?) {
 [benchmark]
 def chained_where_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def chained_where_m4(b : B?) {
+    run_m4(b, 100000)
 }

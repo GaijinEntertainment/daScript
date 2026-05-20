@@ -46,6 +46,16 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let c = _fold(from_decs_template(type<DecsCar>)._select(_.price * 2)._where(_ > THRESHOLD).count())
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def select_where_count_m1(b : B?) {
     run_m1(b, 100000)
@@ -59,4 +69,9 @@ def select_where_count_m3(b : B?) {
 [benchmark]
 def select_where_count_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def select_where_count_m4(b : B?) {
+    run_m4(b, 100000)
 }

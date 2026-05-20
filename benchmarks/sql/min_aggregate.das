@@ -37,6 +37,16 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let m = _fold(from_decs_template(type<DecsCar>)._select(_.price).min())
+        if (m > 999) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def min_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -50,4 +60,9 @@ def min_aggregate_m3(b : B?) {
 [benchmark]
 def min_aggregate_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def min_aggregate_m4(b : B?) {
+    run_m4(b, 100000)
 }
