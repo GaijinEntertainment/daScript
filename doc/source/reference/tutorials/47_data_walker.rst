@@ -149,14 +149,14 @@ with key/value pairs:
         indent : int = 0
 
         def override beforeArrayData(ps : void?; stride : uint;
-                count : uint; ti : TypeInfo) : void {
+                count : uint64; ti : TypeInfo) : void {
             self->pad()
             print("array[{int(count)}] = [\n")
             indent++
         }
 
         def override beforeArrayElement(ps : void?; ti : TypeInfo;
-                pe : void?; index : uint; last : bool) : void {
+                pe : void?; index : uint64; last : bool) : void {
             self->pad()
             print("[{int(index)}] = ")
         }
@@ -279,7 +279,7 @@ for efficiency — no intermediate string concatenation:
 
         // --- arrays ---
         def override beforeArrayData(ps : void?; stride : uint;
-                count : uint; ti : TypeInfo) : void {
+                count : uint64; ti : TypeInfo) : void {
             *writer |> write("[")
             indent++
             pushComma()
