@@ -2873,6 +2873,262 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     return finalize_emission_stmts(top, srcName, at, stmts)
 }
 
+// ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
+
+struct private DecsBridgeShape {
+    reqHashExpr : ExpressionPtr     // ExprConstUInt64 — cloned, ready to splice
+    erqExpr     : ExpressionPtr     // ExprAddr — cloned, ready to splice
+    archName    : string            // bridge's arch param name (reused as-is so cloned sources stay valid)
+    forExpr     : ExpressionPtr     // cloned ExprFor — inner multi-iter for-loop; body replaced when splicing
+    iterNames   : array<string>     // bridge's iter var names (prefixed component names)
+    userNames   : array<string>     // user-facing field names from the push tuple — feed the named-tuple bind that lets the user's `_.userName` chain access work
+}
+
+[macro_function]
+def private get_call_short_name(c : ExprCall?) : string {
+    // Strip module prefix + mangler hash. "__::linq`to_sequence`hash" → "to_sequence".
+    let s = string(c.name)
+    let bt = s |> rfind("`")
+    if (bt >= 0) {
+        let prev = s |> slice(0, bt) |> rfind("`")
+        if (prev >= 0) return s |> slice(prev + 1, bt)
+    }
+    let cc = s |> rfind("::")
+    if (cc >= 0) return s |> slice(cc + 2)
+    return s
+}
+
+[macro_function]
+def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
+    // Pattern-match the post-expansion from_decs*-eager-bridge shape. Mismatch → null cascades to tier-2.
+    if (!(top is ExprInvoke)) return null
+    var topInv = top as ExprInvoke
+    if (topInv.arguments |> length != 1
+            || !(topInv.arguments[0] is ExprMakeBlock)) return null
+    var mblk = topInv.arguments[0] as ExprMakeBlock
+    if (!(mblk._block is ExprBlock)) return null
+    var blk = mblk._block as ExprBlock
+    if (blk.list |> length != 3
+            || !empty(blk.arguments)
+            || !(blk.list[0] is ExprLet)
+            || !(blk.list[1] is ExprCall)
+            || !(blk.list[2] is ExprReturn)) return null
+    // Statement 0: var res : array<tuple<...>>
+    var letStmt = blk.list[0] as ExprLet
+    if (letStmt.variables |> length != 1) return null
+    var resVar = letStmt.variables[0]
+    if (!resVar._type.isGoodArrayType
+            || resVar._type.firstType.baseType != Type.tTuple) return null
+    let resVarName = string(resVar.name)
+    // Statement 1: for_each_archetype(req_hash, erq, $(arch) { for(iter_vars in get_ro_sources){push((userNames=iter_vars))} })
+    var feaCall = blk.list[1] as ExprCall
+    if (feaCall.name != "for_each_archetype"
+            || feaCall.arguments |> length != 3
+            || !(feaCall.arguments[0] is ExprConstUInt64)
+            || !(feaCall.arguments[1] is ExprAddr)
+            || !(feaCall.arguments[2] is ExprMakeBlock)) return null
+    var feaBlkExpr = feaCall.arguments[2] as ExprMakeBlock
+    if (!(feaBlkExpr._block is ExprBlock)) return null
+    var feaBlk = feaBlkExpr._block as ExprBlock
+    if (feaBlk.arguments |> length != 1
+            || feaBlk.list |> length != 1
+            || !(feaBlk.list[0] is ExprFor)) return null
+    let archName = string(feaBlk.arguments[0].name)
+    var forExpr = feaBlk.list[0] as ExprFor
+    // Body must be ExprBlock with single push call whose tuple recordNames are the user-facing field names.
+    if (empty(forExpr.sources)
+            || !(forExpr.body is ExprBlock)) return null
+    var forBody = forExpr.body as ExprBlock
+    if (forBody.list |> length != 1
+            || !(forBody.list[0] is ExprCall)) return null
+    var pushCall = forBody.list[0] as ExprCall
+    // Push target must be the SAME `res` from stmt 0 — guards a user-written invoke that returns res.to_sequence() but pushes elsewhere.
+    if (get_call_short_name(pushCall) != "push"
+            || pushCall.arguments |> length != 2
+            || !(pushCall.arguments[0] is ExprVar)
+            || (pushCall.arguments[0] as ExprVar).name != resVarName
+            || !(pushCall.arguments[1] is ExprMakeTuple)) return null
+    var mkTup = pushCall.arguments[1] as ExprMakeTuple
+    if (mkTup.recordNames |> length != forExpr.sources |> length
+            || forExpr.iteratorVariables |> length != forExpr.sources |> length) return null
+    var userNames : array<string>
+    for (n in mkTup.recordNames) {
+        userNames |> push(string(n))
+    }
+    var iterNames : array<string>
+    for (v in forExpr.iteratorVariables) {
+        iterNames |> push(string(v.name))
+    }
+    // Statement 2: return res.to_sequence() — must reference the same `res`.
+    var retStmt = blk.list[2] as ExprReturn
+    if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null
+    let retCall = retStmt.subexpr as ExprCall
+    if (get_call_short_name(retCall) != "to_sequence"
+            || empty(retCall.arguments)
+            || !(retCall.arguments[0] is ExprVar)
+            || (retCall.arguments[0] as ExprVar).name != resVarName) return null
+    var info = new DecsBridgeShape(
+        reqHashExpr = clone_expression(feaCall.arguments[0]),
+        erqExpr = clone_expression(feaCall.arguments[1]),
+        archName := archName,
+        forExpr = clone_expression(forExpr),
+        iterNames <- iterNames,
+        userNames <- userNames
+    )
+    return info
+}
+
+[macro_function]
+def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
+    // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
+    let accName = "`decs_acc`{at.line}`{at.column}"
+    let archName = "`decs_arch`{at.line}`{at.column}"
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    var emission : Expression? = qmacro(invoke($() : int {
+        var $i(accName) = 0
+        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            $i(accName) += $i(archName).size
+        })
+        return $i(accName)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
+def private emit_decs_accumulator(bridge : DecsBridgeShape?;
+                                  opName : string;
+                                  var projection : Expression?;
+                                  var whereCond : Expression?;
+                                  var accType : TypeDeclPtr;
+                                  at : LineInfo) : Expression? {
+    // Slice 2 accumulator emission: count / long_count / sum with optional _where + single _select chain ops.
+    let accName = "`decs_acc`{at.line}`{at.column}"
+    let tupName = "`decs_tup`{at.line}`{at.column}"
+    // Per-element body: acc += <value> for sum, acc++ for count/long_count.
+    var perElement : Expression?
+    if (opName == "sum") {
+        perElement = qmacro_expr() {
+            $i(accName) += $e(projection)
+        }
+    } elif (opName == "long_count") {
+        perElement = qmacro_expr() {
+            $i(accName) ++
+        }
+    } else {
+        perElement = qmacro_expr() {
+            $i(accName) ++
+        }
+    }
+    // Wrap with where filter.
+    var body = wrap_with_condition(perElement, whereCond)
+    // Named-tuple bind: fold_linq_cond(lambda, tupName) rebinds `_.userName` → `tup.userName`, so chain ops see a real named tuple.
+    var mkTup = new ExprMakeTuple(at = at)
+    mkTup.recordNames |> resize(length(bridge.userNames))
+    for (i in 0 .. length(bridge.userNames)) {
+        mkTup.recordNames[i] := bridge.userNames[i]
+        mkTup.values |> emplace_new(new ExprVar(at = at, name := bridge.iterNames[i]))
+    }
+    var tupBind : Expression? = qmacro_expr() {
+        var $i(tupName) = $e(mkTup)
+    }
+    var forBodyStmts <- [tupBind, body]
+    var forBody = stmts_to_expr(forBodyStmts)
+    // Cloned for retains the bridge's iter vars + get_ro sources (which reference archName); reuse archName below.
+    var clonedForExpr = clone_expression(bridge.forExpr)
+    var clonedFor = clonedForExpr as ExprFor
+    var newForBody = new ExprBlock(at = at)
+    newForBody.list |> push(forBody)
+    clonedFor.body = newForBody
+    let archName = bridge.archName
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    var forExprNode : Expression? = clonedForExpr
+    var emission : Expression?
+    if (opName == "long_count") {
+        emission = qmacro(invoke($() : int64 {
+            var $i(accName) = 0l
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            return $i(accName)
+        }))
+    } elif (opName == "count") {
+        emission = qmacro(invoke($() : int {
+            var $i(accName) = 0
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            return $i(accName)
+        }))
+    } elif (opName == "sum") {
+        emission = qmacro(invoke($() : $t(accType) {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            return $i(accName)
+        }))
+    } else {
+        return null
+    }
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
+def private plan_decs_unroll(var expr : Expression?) : Expression? {
+    var (top, calls) = flatten_linq(expr)
+    let bridge = extract_decs_bridge(top)
+    if (bridge == null || empty(calls)) return null
+    let lastName = calls.back()._1.name
+    let at = expr.at
+    // Slice 1: bare count → arch.size shortcut.
+    if (lastName == "count" && length(calls) == 1) return emit_decs_count_archsize(bridge, at)
+    // Slice 2: chain-aware count/long_count/sum with _where + single _select.
+    if (lastName != "count" && lastName != "long_count" && lastName != "sum") return null
+    let tupName = "`decs_tup`{at.line}`{at.column}"
+    let intermediateEnd = length(calls) - 1
+    var whereCond : Expression?
+    var projection : Expression?
+    var seenSelect = false
+    for (i in 0 .. intermediateEnd) {
+        var cll & = unsafe(calls[i])
+        let opName = cll._1.name
+        if (opName == "where_") {
+            // After-select where: defer to follow-up; canonical order is where-then-select.
+            if (seenSelect) return null
+            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (pred == null) return null
+            if (whereCond == null) {
+                whereCond = pred
+            } else {
+                whereCond = qmacro($e(whereCond) && $e(pred))
+            }
+        } elif (opName == "select") {
+            // Chained selects: defer to follow-up.
+            if (seenSelect) return null
+            projection = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (projection == null) return null
+            seenSelect = true
+        } else {
+            return null
+        }
+    }
+    // sum requires a scalar projection (tuple sources can't sum directly).
+    var accType : TypeDeclPtr
+    if (lastName == "sum") {
+        if (projection == null || projection._type == null) return null
+        accType = clone_type(projection._type)
+        accType.flags.constant = false
+        accType.flags.ref = false
+    }
+    return emit_decs_accumulator(bridge, lastName, projection, whereCond, accType, at)
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip), accumulator terminators (sum/min/max/etc.), and chained selects bail to tier-2 cascade.
@@ -3145,6 +3401,8 @@ class private LinqFold : AstCallMacro {
         res = plan_distinct(call.arguments[0])
         if (res != null) return res
         res = plan_group_by(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_unroll(call.arguments[0])
         if (res != null) return res
         res = plan_zip(call.arguments[0])
         if (res != null) return res
