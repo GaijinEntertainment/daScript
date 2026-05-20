@@ -3007,6 +3007,89 @@ def private build_decs_inner_for(bridge : DecsBridgeShape?; var tupBind : Expres
     return clonedForExpr
 }
 
+struct private DecsChainInfo {
+    bindAt      : array<string>    // bind name visible at each chain position
+    finalBind   : string            // bind name AFTER full chain — what terminator references
+    finalType   : TypeDeclPtr       // element type AFTER full chain (constant + ref stripped)
+    selectCount : int               // number of `select` ops in chain; 0 means finalBind == tupName
+}
+
+[macro_function]
+def private compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                    intermediateEnd : int;
+                                    tupName : string;
+                                    bridge : DecsBridgeShape?;
+                                    at : LineInfo) : DecsChainInfo? {
+    // Each select introduces a fresh `decs_sel{N}` bind; subsequent ops peel against it. Returns null on any non-where_/select op.
+    var info = new DecsChainInfo(
+        finalBind := tupName,
+        finalType = clone_type(bridge.elementType),
+        selectCount = 0
+    )
+    info.bindAt |> reserve(intermediateEnd)
+    var curBind = tupName
+    var curType : TypeDeclPtr = clone_type(bridge.elementType)
+    for (i in 0 .. intermediateEnd) {
+        info.bindAt |> push(curBind)
+        var cll & = unsafe(calls[i])
+        let opName = cll._1.name
+        if (opName == "select") {
+            info.selectCount ++
+            curBind = "`decs_sel`{at.line}`{at.column}`{info.selectCount}"
+            var peeled = fold_linq_cond(cll._0.arguments[1], info.bindAt[i])
+            if (peeled == null || peeled._type == null) return null
+            curType = clone_type(peeled._type)
+        } elif (opName != "where_") return null
+    }
+    info.finalBind := curBind
+    info.finalType = curType
+    if (info.finalType != null) {
+        info.finalType.flags.constant = false
+        info.finalType.flags.ref = false
+    }
+    return info
+}
+
+[macro_function]
+def private wrap_decs_chain(var action : Expression?;
+                            chainInfo : DecsChainInfo?;
+                            var calls : array<tuple<ExprCall?; LinqCall?>>;
+                            intermediateEnd : int;
+                            at : LineInfo) : Expression? {
+    // Reverse-walk chain, wrapping action with `if (pred) { ... }` for where_ and `let bindN+1 = proj; ...` for select.
+    var current = action
+    for (rev in 0 .. intermediateEnd) {
+        let i = intermediateEnd - 1 - rev
+        var cll & = unsafe(calls[i])
+        let opName = cll._1.name
+        let bindHere = chainInfo.bindAt[i]
+        if (opName == "where_") {
+            var pred = fold_linq_cond(cll._0.arguments[1], bindHere)
+            if (pred == null) return null
+            current = qmacro_expr() {
+                if ($e(pred)) {
+                    $e(current)
+                }
+            }
+        } elif (opName == "select") {
+            var proj = fold_linq_cond(cll._0.arguments[1], bindHere)
+            if (proj == null) return null
+            let nextBind = (i + 1 < intermediateEnd) ? chainInfo.bindAt[i + 1] : chainInfo.finalBind
+            var letStmt = qmacro_expr() {
+                let $i(nextBind) = $e(proj)
+            }
+            var stmts : array<Expression?>
+            stmts |> reserve(2)
+            stmts |> push(letStmt)
+            stmts |> push(current)
+            current = stmts_to_expr(stmts)
+        } else {
+            return null
+        }
+    }
+    return current
+}
+
 [macro_function]
 def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
@@ -3029,31 +3112,34 @@ def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) :
 [macro_function]
 def private emit_decs_accumulator(bridge : DecsBridgeShape?;
                                   opName : string;
-                                  var projection : Expression?;
-                                  var whereCond : Expression?;
+                                  chainInfo : DecsChainInfo?;
+                                  var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                  intermediateEnd : int;
+                                  terminatorCall : ExprCall?;
                                   var accType : TypeDeclPtr;
                                   at : LineInfo) : Expression? {
-    // Slice 2+3a accumulator emission: count / long_count / sum / min / max / average with optional _where + single _select.
+    // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred).
     let accName = "`decs_acc`{at.line}`{at.column}"
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let cntName = "`decs_cnt`{at.line}`{at.column}"
     let firstName = "`decs_first`{at.line}`{at.column}"
     let valBindName = "`decs_val`{at.line}`{at.column}"
+    let finalBind = chainInfo.finalBind
     var perElement : Expression?
     if (opName == "sum") {
         perElement = qmacro_expr() {
-            $i(accName) += $e(projection)
+            $i(accName) += $i(finalBind)
         }
     } elif (opName == "average") {
         perElement = qmacro_block() {
-            $i(accName) += $e(projection)
+            $i(accName) += $i(finalBind)
             $i(cntName) ++
         }
     } elif (opName == "min" || opName == "max") {
-        let workhorse = (projection != null && projection._type != null && projection._type.isWorkhorseType)
+        let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
         var compareExpr = min_max_compare(workhorse, opName, valBindName, accName)
         perElement = qmacro_block() {
-            let $i(valBindName) = $e(projection)
+            let $i(valBindName) = $i(finalBind)
             if ($i(firstName)) {
                 $i(accName) := $i(valBindName)
                 $i(firstName) = false
@@ -3067,7 +3153,18 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             $i(accName) ++
         }
     }
-    var body = wrap_with_condition(perElement, whereCond)
+    // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
+    if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
+        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+        if (predExpr == null) return null
+        perElement = qmacro_expr() {
+            if ($e(predExpr)) {
+                $e(perElement)
+            }
+        }
+    }
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
     var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
     let archName = bridge.archName
@@ -3129,40 +3226,19 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
 [macro_function]
 def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                                  opName : string;
-                                 var projection : Expression?;
-                                 var whereCond : Expression?;
+                                 chainInfo : DecsChainInfo?;
+                                 var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                 intermediateEnd : int;
                                  terminatorCall : ExprCall?;
                                  at : LineInfo) : Expression? {
-    // Slice 3b early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk).
+    // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain.
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let foundName = "`decs_found`{at.line}`{at.column}"
     let resultName = "`decs_result`{at.line}`{at.column}"
-    let projBindName = "`decs_proj`{at.line}`{at.column}"
     let containsValName = "`decs_cv`{at.line}`{at.column}"
     let defaultName = "`decs_dv`{at.line}`{at.column}"
-    // valueExpr is what the user "sees" per element — projection if present, else the named tuple itself.
-    var valueExpr : Expression?
-    var valueName : string
-    if (projection != null) {
-        valueExpr = clone_expression(projection)
-        valueName = projBindName
-    } else {
-        valueExpr = qmacro_expr() {
-            $i(tupName)
-        }
-        valueName = tupName
-    }
-    // Result element type (only used by first / first_or_default).
-    var elemType : TypeDeclPtr
-    if (projection != null) {
-        elemType = clone_type(projection._type)
-    } else {
-        elemType = clone_type(bridge.elementType)
-    }
-    if (elemType != null) {
-        elemType.flags.constant = false
-        elemType.flags.ref = false
-    }
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression?
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
@@ -3179,19 +3255,10 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                 let $i(defaultName) = $e(defaultExpr)
             }
         }
-        if (projection != null) {
-            perElement = qmacro_block() {
-                let $i(projBindName) = $e(valueExpr)
-                $i(resultName) := $i(valueName)
-                $i(foundName) = true
-                return true
-            }
-        } else {
-            perElement = qmacro_block() {
-                $i(resultName) := $i(valueName)
-                $i(foundName) = true
-                return true
-            }
+        perElement = qmacro_block() {
+            $i(resultName) := $i(finalBind)
+            $i(foundName) = true
+            return true
         }
         if (opName == "first") {
             tailStmts |> push <| qmacro_expr() {
@@ -3211,16 +3278,10 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
         if (argCount > 1) {
-            var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
-            if (projection != null) {
-                perElement = qmacro_block() {
-                    let $i(projBindName) = $e(valueExpr)
-                    if ($e(predExpr)) return true
-                }
-            } else {
-                perElement = qmacro_block() {
-                    if ($e(predExpr)) return true
-                }
+            var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+            if (predExpr == null) return null
+            perElement = qmacro_expr() {
+                if ($e(predExpr)) return true
             }
         } else {
             perElement = qmacro_expr() {
@@ -3228,36 +3289,24 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         }
     } elif (opName == "all") {
-        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
-        if (projection != null) {
-            perElement = qmacro_block() {
-                let $i(projBindName) = $e(valueExpr)
-                if (!$e(predExpr)) return true
-            }
-        } else {
-            perElement = qmacro_block() {
-                if (!$e(predExpr)) return true
-            }
+        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+        if (predExpr == null) return null
+        perElement = qmacro_expr() {
+            if (!$e(predExpr)) return true
         }
     } elif (opName == "contains") {
         var valExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
             let $i(containsValName) = $e(valExpr)
         }
-        if (projection != null) {
-            perElement = qmacro_block() {
-                let $i(projBindName) = $e(valueExpr)
-                if ($i(valueName) == $i(containsValName)) return true
-            }
-        } else {
-            perElement = qmacro_expr() {
-                if ($i(valueName) == $i(containsValName)) return true
-            }
+        perElement = qmacro_expr() {
+            if ($i(finalBind) == $i(containsValName)) return true
         }
     } else {
         return null
     }
-    var body = wrap_with_condition(perElement, whereCond)
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
     var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
     let archName = bridge.archName
@@ -3312,31 +3361,20 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
 
 [macro_function]
 def private emit_decs_to_array(bridge : DecsBridgeShape?;
-                               var projection : Expression?;
-                               var whereCond : Expression?;
+                               chainInfo : DecsChainInfo?;
+                               var calls : array<tuple<ExprCall?; LinqCall?>>;
+                               intermediateEnd : int;
                                at : LineInfo) : Expression? {
-    // Slice 3c to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of projection (or named-tuple if no _select).
+    // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind.
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let bufName = "`decs_buf`{at.line}`{at.column}"
-    var elemType : TypeDeclPtr
-    var pushValue : Expression?
-    if (projection != null) {
-        elemType = clone_type(projection._type)
-        pushValue = clone_expression(projection)
-    } else {
-        elemType = clone_type(bridge.elementType)
-        pushValue = qmacro_expr() {
-            $i(tupName)
-        }
-    }
-    if (elemType != null) {
-        elemType.flags.constant = false
-        elemType.flags.ref = false
-    }
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression? = qmacro_expr() {
-        $i(bufName) |> push_clone($e(pushValue))
+        $i(bufName) |> push_clone($i(finalBind))
     }
-    var body = wrap_with_condition(perElement, whereCond)
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
     var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
     let archName = bridge.archName
@@ -3355,63 +3393,95 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
+def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
+                                 opName : string;
+                                 chainInfo : DecsChainInfo?;
+                                 var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                 intermediateEnd : int;
+                                 terminatorCall : ExprCall?;
+                                 at : LineInfo) : Expression? {
+    // Slice 4: min_by / max_by — track best (key, element) pair across archetypes. Element retained via `:=`, matches min_by_impl's empty→default semantics.
+    let tupName = "`decs_tup`{at.line}`{at.column}"
+    let firstName = "`decs_first`{at.line}`{at.column}"
+    let bestKeyName = "`decs_bkey`{at.line}`{at.column}"
+    let bestElemName = "`decs_belem`{at.line}`{at.column}"
+    let keyBindName = "`decs_key`{at.line}`{at.column}"
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
+    var keyExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+    if (keyExpr == null || keyExpr._type == null) return null
+    var keyType = clone_type(keyExpr._type)
+    keyType.flags.constant = false
+    keyType.flags.ref = false
+    let workhorse = keyType.isWorkhorseType
+    let opCmp = (opName == "min_by") ? "min" : "max"
+    var compareExpr = min_max_compare(workhorse, opCmp, keyBindName, bestKeyName)
+    var perElement = qmacro_block() {
+        let $i(keyBindName) = $e(keyExpr)
+        if ($i(firstName)) {
+            $i(bestKeyName) := $i(keyBindName)
+            $i(bestElemName) := $i(finalBind)
+            $i(firstName) = false
+        } elif ($e(compareExpr)) {
+            $i(bestKeyName) := $i(keyBindName)
+            $i(bestElemName) := $i(finalBind)
+        }
+    }
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
+    var tupBind = build_decs_tup_bind(bridge, tupName, at)
+    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    let archName = bridge.archName
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    var emission = qmacro(invoke($() : $t(elemType) {
+        var $i(firstName) = true
+        var $i(bestKeyName) : $t(keyType)
+        var $i(bestElemName) : $t(elemType)
+        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            $e(forExprNode)
+        })
+        return $i(bestElemName)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
 def private plan_decs_unroll(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     let bridge = extract_decs_bridge(top)
     if (bridge == null) return null
     let at = expr.at
     // Slice 1: bare count → arch.size shortcut.
-    if (length(calls) == 1 && calls.back()._1.name == "count") return emit_decs_count_archsize(bridge, at)
+    if (length(calls) == 1 && calls.back()._1.name == "count" && length(calls.back()._0.arguments) == 1) return emit_decs_count_archsize(bridge, at)
     // to_array is `skip = true` in linqCalls so it's already peeled — "no recognized terminator" means implicit to_array.
     let lastName = empty(calls) ? "" : calls.back()._1.name
     let isAccum = (lastName == "count" || lastName == "long_count" || lastName == "sum"
         || lastName == "min" || lastName == "max" || lastName == "average")
     let isEarlyExit = (lastName == "first" || lastName == "first_or_default"
         || lastName == "any" || lastName == "all" || lastName == "contains")
-    let isTerminator = isAccum || isEarlyExit
+    let isMinMaxBy = (lastName == "min_by" || lastName == "max_by")
+    let isTerminator = isAccum || isEarlyExit || isMinMaxBy
     let tupName = "`decs_tup`{at.line}`{at.column}"
     let intermediateEnd = isTerminator ? length(calls) - 1 : length(calls)
-    var whereCond : Expression?
-    var projection : Expression?
-    var seenSelect = false
-    for (i in 0 .. intermediateEnd) {
-        var cll & = unsafe(calls[i])
-        let opName = cll._1.name
-        if (opName == "where_") {
-            // After-select where: defer to follow-up; canonical order is where-then-select.
-            if (seenSelect) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
-            if (pred == null) return null
-            if (whereCond == null) {
-                whereCond = pred
-            } else {
-                whereCond = qmacro($e(whereCond) && $e(pred))
-            }
-        } elif (opName == "select") {
-            // Chained selects: defer to follow-up.
-            if (seenSelect) return null
-            projection = fold_linq_cond(cll._0.arguments[1], tupName)
-            if (projection == null) return null
-            seenSelect = true
-        } else {
-            return null
-        }
-    }
+    let chainInfo = compute_decs_chain_info(calls, intermediateEnd, tupName, bridge, at)
+    if (chainInfo == null) return null
     if (isAccum) {
-        // sum/min/max/average require a scalar projection — multi-field named tuples don't compare/add.
+        // sum/min/max/average need a scalar element — selectCount==0 keeps finalType = bridge.elementType (a tuple) which can't be summed/compared.
         var accType : TypeDeclPtr
         if (lastName == "sum" || lastName == "min" || lastName == "max" || lastName == "average") {
-            if (projection == null || projection._type == null) return null
-            accType = clone_type(projection._type)
-            accType.flags.constant = false
-            accType.flags.ref = false
+            if (chainInfo.selectCount == 0 || chainInfo.finalType == null) return null
+            accType = clone_type(chainInfo.finalType)
         }
-        return emit_decs_accumulator(bridge, lastName, projection, whereCond, accType, at)
+        return emit_decs_accumulator(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, accType, at)
     }
-    if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, projection, whereCond, calls.back()._0, at)
+    if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, at)
+    if (isMinMaxBy) return emit_decs_min_max_by(bridge, lastName, chainInfo, calls, intermediateEnd, calls.back()._0, at)
     // Iterator-typed chains cascade to tier-2; only fire to_array when expr is array-typed (user wrote `.to_array()`, peeled by skip=true).
     if (expr._type == null || !expr._type.isGoodArrayType) return null
-    return emit_decs_to_array(bridge, projection, whereCond, at)
+    return emit_decs_to_array(bridge, chainInfo, calls, intermediateEnd, at)
 }
 
 [macro_function]
