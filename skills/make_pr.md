@@ -19,19 +19,29 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
-## 1. Lint all changed `.das` files
+## 1. Lint all changed `.das` files — **zero warnings required**
 
-Run the unified lint utility on changed directories:
+CI's `extended_checks` job runs the same lint utility on every `.das` file changed vs `origin/master` and **exits non-zero on any warning** (`./bin/daslang ./utils/lint/main.das -- <files> --quiet` → exit code 2 on ≥1 warning). One STYLE/LINT/PERF warning anywhere in your diff fails CI. Local lint must be clean before push — there is no "minor warning, will ignore" tier here.
+
+Lint only the files changed relative to `origin/master` (matches what CI lints):
 ```bash
-bin/Release/daslang.exe utils/lint/main.das -- daslib/ modules/ tutorials/
+git diff --name-only origin/master..HEAD -- '*.das' | xargs bin/Release/daslang.exe utils/lint/main.das -- --quiet
 ```
 
-Or lint only the files changed relative to `master`:
-```bash
-git diff --name-only master -- '*.das' | xargs bin/Release/daslang.exe utils/lint/main.das --
-```
+Expect: `--- Summary --- N files, 0 issue(s), 0 error(s)` and exit code 0. Any other outcome blocks the PR.
 
-Fix significant issues (unused variables that indicate bugs, performance warnings in hot paths). Use `// nolint:CODE` comments to suppress false positives (LINT001-004, PERF001-011, STYLE001-010). Minor lint warnings in unchanged code can be ignored unless trivial to fix.
+Or via MCP: `mcp__daslang__lint` on each changed file.
+
+**Resolution policy** for every warning reported:
+1. **Fix it.** Most STYLE/PERF rules have a mechanical rewrite that's strictly better (postfix `return X if (cond)` instead of `if (cond) { return X }` for STYLE005, direct iteration for PERF018, bitfield-field assignment for STYLE022, etc.). The fix table in `CLAUDE.md` ("Code style — prefer idiomatic forms") covers the common ones.
+2. **Suppress with `// nolint:CODE`** only when the rule is a known false positive for the construct — e.g. handled types (`xml_node`, `sqlite3_stmt`) need `var` for non-const C++ binding access, so a `var`→`let` suggestion is wrong. Include the reason in the comment or in a same-line tail comment.
+3. **Never** push with warnings unsuppressed. CI will fail and the round-trip costs ~25 minutes per fix.
+
+For sweep-style validation on a broader scope before pushing, the directory form still works:
+```bash
+bin/Release/daslang.exe utils/lint/main.das -- daslib/ modules/ tutorials/ --quiet
+```
+but the changed-files form above is the gate.
 
 ## 1.5. Check for duplicates against the corpus
 
@@ -257,7 +267,7 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Step | Tool/Command | Fix policy |
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
-| Lint | `utils/lint/main.das` | Fix significant issues in changed files |
+| Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
