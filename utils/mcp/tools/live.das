@@ -250,7 +250,7 @@ def do_live_launch(file, project, project_root : string; port : string = ""; loa
                 fprint(f, "#!/bin/sh\nnohup \"{live_exe}\" {script_args} > /dev/null 2>&1 &\n")
             }
         }
-        var exit_code = 0
+        var exit_code : int
         unsafe {
             exit_code = system("chmod +x {sh} && {sh}")
         }

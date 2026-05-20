@@ -190,7 +190,7 @@ class CollectExternVisitor : AstVisitor {
             standalone_ctx,
             types.ConstI64(fn.index |> uint64),
             get_string_constant_ptr(builder, string(fn.name)),
-            get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
+            get_string_constant_ptr(builder, fn |> get_mangled_name()),
             types.ConstI64(fn.getMangledNameHash),
             types.ConstI32(fn.totalStackSize |> uint64),
             fn_ptr_cast,
@@ -677,9 +677,9 @@ def private write_release_deps(prog : Program?) {
     var by_das : table<string; SharedModuleEntry>
     var by_pkg : table<string; SharedModuleEntry>
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        let abs = string(path)
+        let abs = path
         let rel = compute_modules_relative_suffix(abs)
-        let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = string(das_name))
+        let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = das_name)
         by_das[entry.das_name] = entry
         let pkg = dylib_package_name(rel)
         if (!empty(pkg)) {
