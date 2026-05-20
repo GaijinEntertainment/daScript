@@ -408,10 +408,18 @@ def private new_entity_id() {
     //! Creates new entity ID.
     var eid : EntityId
     if (!empty(decsState.entityFreeList)) {
-        eid = decsState.entityFreeList[length(decsState.entityFreeList) - 1]
+        eid = decsState.entityFreeList[long_length(decsState.entityFreeList) - 1_l]
         decsState.entityFreeList |> pop
     } else {
-        eid.id = uint(length(decsState.entityLookup))
+        // EntityId.id is uint; cap at UINT_MAX entities to avoid silent wrap to
+        // INVALID_ENTITY_ID. Widening EntityId.id to uint64 is an architectural
+        // followup; for now the panic surfaces the limit loudly instead of
+        // corrupting state.
+        let next_id = long_length(decsState.entityLookup)
+        if (next_id >= int64(0xFFFF_FFFF_l)) {
+            panic("decs: entityLookup reached UINT_MAX entries ({next_id}); EntityId.id (uint) widening is required to allocate more")
+        }
+        eid.id = uint(next_id)
         decsState.entityLookup |> push((generation = 0, archetype = ComponentHash(0ul), index = 0_l))
     }
     eid.generation ++
@@ -1029,8 +1037,14 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         for (c in arch.components) {
             c.data |> resize(length(c.data) + c.stride * count)
         }
-        let id_base = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> resize(int(id_base) + count)
+        // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
+        // EntityId.id to uint64 is an architectural followup.
+        let id_base_long = long_length(decsState.entityLookup)
+        if (id_base_long + int64(count) > int64(0xFFFF_FFFF_l)) {
+            panic("decs: create_entities_from_cmp would push entityLookup past UINT_MAX (current = {id_base_long}, count = {count}); EntityId.id (uint) widening is required")
+        }
+        let id_base = uint(id_base_long)
+        decsState.entityLookup |> resize(id_base_long + int64(count))
         for (i in range(count)) {
             let eid = EntityId(id = id_base + uint(i), generation = 1)
             let eidx = base + int64(i)
@@ -1069,7 +1083,7 @@ def public commit {
 def public is_alive(eid : EntityId) : bool {
     //! Returns true if the entity is alive (exists and has not been deleted).
     //! An entity is alive when its id is within bounds and its generation matches the lookup table.
-    if (eid == INVALID_ENTITY_ID || int(eid.id) >= length(decsState.entityLookup)) return false
+    if (eid == INVALID_ENTITY_ID || int64(eid.id) >= long_length(decsState.entityLookup)) return false
     return decsState.entityLookup[eid.id].generation == eid.generation
 }
 
