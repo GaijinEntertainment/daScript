@@ -471,6 +471,18 @@ def enumerate(var src : iterator<auto(TT)>) {
     }
 }
 
+def long_enumerate(var src : iterator<auto(TT)>) {
+    //! yields tuples of `(int64 index, element)` for each element in `src`
+    return <- generator<tuple<int64, TT -&>> capture(<- src) {
+        var idx = 0_l
+        for (x in src) {
+            yield (idx, x)
+            idx ++
+        }
+        return false
+    }
+}
+
 // ===========================
 //  for_each — apply side-effect to every element
 // ===========================

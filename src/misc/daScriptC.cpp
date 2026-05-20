@@ -1230,7 +1230,7 @@ void das_table_clear ( das_context * context, das_table * tab, int key_base_type
         uint32_t key_size = 0;
         DAS_TABLE_DISPATCH(key_base_type, { key_size = sizeof(KEY_TYPE); })
         if ( !key_size ) return; // throw_error already raised
-        uint32_t total = t->capacity * (value_size + key_size + uint32_t(sizeof(TableHashKey)));
+        uint64_t total = t->capacity * (uint64_t(value_size) + uint64_t(key_size) + uint64_t(sizeof(TableHashKey)));
         ((Context *)context)->free(t->data, total, nullptr);
     }
     memset(t, 0, sizeof(Table));

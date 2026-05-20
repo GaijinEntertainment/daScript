@@ -1872,9 +1872,17 @@ namespace das
             auto pidx = simulateExpression(expr->index);
             uint32_t stride = expr->subexpr->type->firstType->getSizeOf();
             if ( r2vType->baseType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  return context.code->makeValueNode<SimNode_ArrayAtR2V_I64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                case Type::tUInt64: return context.code->makeValueNode<SimNode_ArrayAtR2V_U64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                default:            return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                }
             } else {
-                return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  return context.code->makeNode<SimNode_ArrayAt_I64>(at, prv, pidx, stride, extraOffset);
+                case Type::tUInt64: return context.code->makeNode<SimNode_ArrayAt_U64>(at, prv, pidx, stride, extraOffset);
+                default:            return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
+                }
             }
         } else if ( expr->subexpr->type->isPointer() ) {
             uint32_t stride = expr->subexpr->type->firstType->getSizeOf();
@@ -1999,7 +2007,11 @@ namespace das
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
                 uint32_t stride = seT->firstType->getSizeOf();
-                setE(expr, context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0));
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  setE(expr, context.code->makeNode<SimNode_SafeArrayAt_I64>(at, prv, pidx, stride, 0)); break;
+                case Type::tUInt64: setE(expr, context.code->makeNode<SimNode_SafeArrayAt_U64>(at, prv, pidx, stride, 0)); break;
+                default:            setE(expr, context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0)); break;
+                }
             } else if ( seT->isGoodTableType() ) {
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
@@ -2046,7 +2058,11 @@ namespace das
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
                 uint32_t stride = seT->firstType->getSizeOf();
-                setE(expr, context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0));
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  setE(expr, context.code->makeNode<SimNode_SafeArrayAt_I64>(at, prv, pidx, stride, 0)); break;
+                case Type::tUInt64: setE(expr, context.code->makeNode<SimNode_SafeArrayAt_U64>(at, prv, pidx, stride, 0)); break;
+                default:            setE(expr, context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0)); break;
+                }
             } else if ( expr->subexpr->type->isGoodTableType() ) {
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);

@@ -265,24 +265,24 @@ class DAWalker : DapiDataWalker {
     def override canVisitArray(ps : void?; ti : TypeInfo) : bool {
         //! Returns true if the array size is within the maximum children limit.
         let arr = unsafe(reinterpret<DapiArray?> ps)
-        return maxChildrenCount < 0u || arr.size <= maxChildrenCount
+        return maxChildrenCount < 0u || arr.size <= uint64(maxChildrenCount)
     }
 
-    def override canVisitArrayData(ti : TypeInfo; count : uint) : bool {
+    def override canVisitArrayData(ti : TypeInfo; count : uint64) : bool {
         //! Returns true if the array data count is within the maximum children limit.
-        return maxChildrenCount < 0u || count <= maxChildrenCount
+        return maxChildrenCount < 0u || count <= uint64(maxChildrenCount)
     }
 
-    def override beforeArrayData(ps : void?; stride : uint; count : uint; ti : TypeInfo) : void {
+    def override beforeArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
         //! Records the array element count on the current variable before walking array data.
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
-            v.indexedVariables = count
+            v.indexedVariables = uint(count)
         }
     }
 
-    def override beforeArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint; last : bool) : void {
+    def override beforeArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
         //! Creates a child variable entry for each array element.
         self->startCont()
         let n = length(varsStack)
@@ -295,7 +295,7 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint; last : bool) : void {
+    def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
         //! Finalizes an array element variable, printing its value if it has no children.
         let n = length(varsStack)
         if (n > 0) {
@@ -312,7 +312,7 @@ class DAWalker : DapiDataWalker {
         self->popStack()
     }
 
-    def override afterArrayData(ps : void?; stride : uint; count : uint; ti : TypeInfo) : void {
+    def override afterArrayData(ps : void?; stride : uint; count : uint64; ti : TypeInfo) : void {
         //! Builds an inline preview string for the array after all elements are walked.
         let n = length(varsStack)
         if (n > 0) {
@@ -334,17 +334,17 @@ class DAWalker : DapiDataWalker {
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
-            v.indexedVariables = pa.size
+            v.indexedVariables = uint(pa.size)
         }
     }
 
     def override canVisitTable(ps : void?; ti : TypeInfo) : bool {
         //! Returns true if the table size is within the maximum children limit.
         let pa = unsafe(reinterpret<DapiTable?> ps)
-        return maxChildrenCount < 0u || pa.size <= maxChildrenCount
+        return maxChildrenCount < 0u || pa.size <= uint64(maxChildrenCount)
     }
 
-    def override beforeTableKey(pa : DapiTable; ti : TypeInfo; pk : void?; ki : TypeInfo; index : uint; last : bool) : void {
+    def override beforeTableKey(pa : DapiTable; ti : TypeInfo; pk : void?; ki : TypeInfo; index : uint64; last : bool) : void {
         //! Creates a child variable entry for a table key.
         self->startCont()
         let n = length(varsStack)
@@ -357,7 +357,7 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    def override beforeTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint; last : bool) : void {
+    def override beforeTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint64; last : bool) : void {
         //! Updates the type description for the current table value.
         let n = length(varsStack)
         if (n > 0) {
@@ -366,7 +366,7 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    def override afterTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint; last : bool) : void {
+    def override afterTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint64; last : bool) : void {
         //! Finalizes a table value variable, printing its value if it has no children.
         let n = length(varsStack)
         if (n > 0) {

@@ -109,7 +109,11 @@ namespace das {
             if ( !initialSize ) {
                 initialSize = default_initial_size;
             }
-            return initialSize / ((si+1)<<4); // fit in initial size
+            // Shoe per-chunk byte total is 32-bit bounded (max 256B per element,
+            // total chunk size capped). If initialSize > UINT32_MAX*divisor (>68GB),
+            // clamp so the shoe still gets a workable chunk size.
+            uint64_t per = initialSize / ((uint64_t(si)+1)<<4);
+            return per > uint64_t(UINT32_MAX) ? UINT32_MAX : uint32_t(per);
         }
     }
 

@@ -104,6 +104,9 @@ SET(AOT_DECS_MODULE_FILES
     tests/decs/test_stages_extra.das
 )
 
+# AOT for long_array_table test files (Phase 2+3+4 — 64-bit arrays/tables)
+FILE(GLOB AOT_LONG_ARRAY_TABLE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/long_array_table/*.das")
+
 # AOT for live_host test files — dasLiveHost transitively requires dashv,
 # so AOT them only when HV is enabled.
 SET(AOT_LIVE_HOST_FILES)
@@ -401,6 +404,10 @@ add_custom_target(test_aot_archive)
 SET(ARCHIVE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_ARCHIVE_FILES}" ARCHIVE_AOT_GENERATED_SRC test_aot_archive daslang)
 
+add_custom_target(test_aot_long_array_table)
+SET(LONG_ARRAY_TABLE_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_LONG_ARRAY_TABLE_FILES}" LONG_ARRAY_TABLE_AOT_GENERATED_SRC test_aot_long_array_table daslang)
+
 add_custom_target(test_aot_ast_match)
 SET(AST_MATCH_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_AST_MATCH_FILES}" AST_MATCH_AOT_GENERATED_SRC test_aot_ast_match daslang)
@@ -686,6 +693,7 @@ SOURCE_GROUP_FILES("aot generated" TESTING_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ALGORITHM_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" APPLY_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ARCHIVE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" LONG_ARRAY_TABLE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" AST_MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ASSERT_ONCE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ASYNC_AOT_GENERATED_SRC)
@@ -755,6 +763,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${ALGORITHM_AOT_GENERATED_SRC}
     ${APPLY_AOT_GENERATED_SRC}
     ${ARCHIVE_AOT_GENERATED_SRC}
+    ${LONG_ARRAY_TABLE_AOT_GENERATED_SRC}
     ${AST_MATCH_AOT_GENERATED_SRC}
     ${ASSERT_ONCE_AOT_GENERATED_SRC}
     ${ASYNC_AOT_GENERATED_SRC}
@@ -824,7 +833,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_tests test_aot_testing
-    test_aot_algorithm test_aot_apply test_aot_archive test_aot_ast_match
+    test_aot_algorithm test_aot_apply test_aot_archive test_aot_long_array_table test_aot_ast_match
     test_aot_assert_once test_aot_async test_aot_bare_block test_aot_base64
     test_aot_bitfields test_aot_bool_array
     test_aot_class_boost

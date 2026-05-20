@@ -44,6 +44,8 @@ namespace das {
     DAS_API void builtin_terminate ( Context * context, LineInfoArg * lineInfo );
     DAS_API int builtin_table_size ( const Table & arr );
     DAS_API int builtin_table_capacity ( const Table & arr );
+    DAS_API int64_t builtin_table_long_size ( const Table & arr );
+    DAS_API int64_t builtin_table_long_capacity ( const Table & arr );
     DAS_API void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API void heap_stats ( Context & context, uint64_t * bytes );
@@ -72,12 +74,19 @@ namespace das {
     DAS_API void builtin_table_clear_lock ( const Table & arr, Context * context );
     DAS_API int builtin_array_size ( const Array & arr );
     DAS_API int builtin_array_capacity ( const Array & arr );
+    DAS_API int64_t builtin_array_long_size ( const Array & arr );
+    DAS_API int64_t builtin_array_long_capacity ( const Array & arr );
     DAS_API int builtin_array_lock_count ( const Array & arr );
     DAS_API void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_erase ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_resize_i64 ( Array & pArray, int64_t newSize, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_resize_no_init_i64 ( Array & pArray, int64_t newSize, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_reserve_i64 ( Array & pArray, int64_t newSize, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_erase_i64 ( Array & pArray, int64_t index, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_erase_range_i64 ( Array & pArray, int64_t index, int64_t count, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_clear ( Array & pArray, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_lock_mutable ( const Array & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_unlock_mutable ( const Array & arr, Context * context, LineInfoArg * at );
@@ -201,43 +210,46 @@ namespace das {
 
     __forceinline void array_grow ( Context & context, Array & arr, uint32_t stride, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't resize locked array");
-        uint32_t newSize = arr.size + 1;
+        uint64_t newSize = arr.size + 1;
         if ( newSize > arr.capacity ) {
-            uint32_t newCapacity = 1 << (32 - das_clz (das::max(newSize,2u) - 1));
-            newCapacity = das::max(newCapacity, 16u);
+            if ( newSize > (uint64_t(1) << 63) ) {
+                context.throw_error_at(at, "array_grow: newSize exceeds 2^63 [newSize=%llu]", (unsigned long long)newSize);
+            }
+            uint64_t newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
+            newCapacity = das::max(newCapacity, uint64_t(16));
             array_reserve(context, arr, newCapacity, stride, at);
         }
         arr.size = newSize;
     }
 
-    __forceinline int builtin_array_push ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
-        uint32_t idx = pArray.size;
+    __forceinline int64_t builtin_array_push ( Array & pArray, int64_t index, int stride, Context * context, LineInfoArg * at ) {
+        uint64_t idx = pArray.size;
         array_grow(*context, pArray, stride, at);
-        if ( uint32_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
+        if ( uint64_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %lld of %llu", (long long)index, (unsigned long long)pArray.size);
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-uint64_t(index))*size_t(stride) );
         return index;
     }
 
-    __forceinline int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
-        uint32_t idx = pArray.size;
+    __forceinline int64_t builtin_array_push_zero ( Array & pArray, int64_t index, int stride, Context * context, LineInfoArg * at ) {
+        uint64_t idx = pArray.size;
         array_grow(*context, pArray, stride, at);
-        if ( uint32_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
+        if ( uint64_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %lld of %llu", (long long)index, (unsigned long long)pArray.size);
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-uint64_t(index))*size_t(stride) );
         memset ( pArray.data + index*stride, 0, stride );
         return index;
     }
 
-    __forceinline int builtin_array_push_back ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
-        uint32_t idx = pArray.size;
+    __forceinline int64_t builtin_array_push_back ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
+        uint64_t idx = pArray.size;
         array_grow(*context, pArray, stride, at);
-        return idx;
+        return int64_t(idx);
     }
 
-    __forceinline int builtin_array_push_back_zero ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
-        uint32_t idx = pArray.size;
+    __forceinline int64_t builtin_array_push_back_zero ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
+        uint64_t idx = pArray.size;
         array_grow(*context, pArray, stride, at);
         memset(pArray.data + idx*stride, 0, stride);
-        return idx;
+        return int64_t(idx);
     }
 
     __forceinline void concept_assert ( bool, const char * ) {}

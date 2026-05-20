@@ -104,8 +104,8 @@ typedef struct {
 
 typedef struct {
     char *      data;
-    uint32_t    size;
-    uint32_t    capacity;
+    uint64_t    size;
+    uint64_t    capacity;
     uint32_t    magic;
     uint32_t    lock;
     uint32_t    flags;
@@ -114,14 +114,14 @@ typedef struct {
 // Layout MUST mirror das::Table exactly (Table : Array, then keys/hashes/tombstones).
 typedef struct {
     char *      data;
-    uint32_t    size;
-    uint32_t    capacity;
+    uint64_t    size;
+    uint64_t    capacity;
     uint32_t    magic;
     uint32_t    lock;
     uint32_t    flags;
     char *      keys;
     uint32_t *  hashes;
-    uint32_t    tombstones;
+    uint64_t    tombstones;
 } das_table;
 
 typedef vec4f (das_interop_function) ( das_context * ctx, das_node * node, vec4f * arguments );

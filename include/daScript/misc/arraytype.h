@@ -153,8 +153,8 @@ namespace das {
 
     struct Array {
         char *data;
-        uint32_t size;
-        uint32_t capacity;
+        uint64_t size;
+        uint64_t capacity;
     // TArray, Table can set manually during copying.
     protected:
         // use friend helpers to lock-unlock.
@@ -172,8 +172,8 @@ namespace das {
         __forceinline bool isLocked() const { return lock; }
 
         friend DAS_API int builtin_array_lock_count ( const Array & arr );
-        friend DAS_API void array_mark_locked(Array &arr, void *data, uint32_t capacity);
-        friend DAS_API void array_mark_locked(Array &arr, void *data, uint32_t size, uint32_t capacity);
+        friend DAS_API void array_mark_locked(Array &arr, void *data, uint64_t capacity);
+        friend DAS_API void array_mark_locked(Array &arr, void *data, uint64_t size, uint64_t capacity);
         friend DAS_API void array_lock(Context &context, Array &arr, LineInfo *at);
         friend DAS_API void array_unlock(Context &context, Array &arr, LineInfo *at);
         friend DAS_API void table_lock(Context &context, Table &arr, LineInfo *at);
@@ -183,13 +183,13 @@ namespace das {
 
     class Context;
 
-    DAS_API void array_mark_locked(Array &arr, void *data, uint32_t capacity);
-    DAS_API void array_mark_locked(Array &arr, void *data, uint32_t size, uint32_t capacity);
+    DAS_API void array_mark_locked(Array &arr, void *data, uint64_t capacity);
+    DAS_API void array_mark_locked(Array &arr, void *data, uint64_t size, uint64_t capacity);
     DAS_API void array_lock(Context &context, Array &arr, LineInfo *at);
     DAS_API void array_unlock(Context &context, Array &arr, LineInfo *at);
-    DAS_API void array_reserve(Context &context, Array &arr, uint32_t newCapacity, uint32_t stride, LineInfo *at);
-    DAS_API void array_resize(Context &context, Array &arr, uint32_t newSize, uint32_t stride, bool zero, LineInfo *at);
-    DAS_API void array_grow(Context &context, Array &arr, uint32_t newSize, uint32_t stride); // always grows
+    DAS_API void array_reserve(Context &context, Array &arr, uint64_t newCapacity, uint32_t stride, LineInfo *at);
+    DAS_API void array_resize(Context &context, Array &arr, uint64_t newSize, uint32_t stride, bool zero, LineInfo *at);
+    DAS_API void array_grow(Context &context, Array &arr, uint64_t newSize, uint32_t stride); // always grows
     DAS_API void array_clear(Context &context, Array &arr, LineInfo *at);
 
     typedef uint32_t TableHashKey;
@@ -199,13 +199,13 @@ namespace das {
     struct Table : Array {
         char *keys;
         TableHashKey *hashes;
-        uint32_t tombstones;
+        uint64_t tombstones;
     };
 
     DAS_API void table_clear(Context &context, Table &arr, LineInfo *at);
     DAS_API void table_lock(Context &context, Table &arr, LineInfo *at);
     DAS_API void table_unlock(Context &context, Table &arr, LineInfo *at);
-    DAS_API void table_reserve_impl(Context &context, Table &arr, int32_t baseType, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo *at);
+    DAS_API void table_reserve_impl(Context &context, Table &arr, int32_t baseType, uint64_t newCapacity, uint32_t valueTypeSize, LineInfo *at);
 
     struct Sequence;
     DAS_API void builtin_table_keys(Sequence &result, const Table &tab, int32_t stride, Context *__context__, LineInfoArg *at);

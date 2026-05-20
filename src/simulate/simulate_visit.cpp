@@ -1032,9 +1032,49 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ArrayAt_I64::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ArrayAt_I64);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_ArrayAt_U64::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ArrayAt_U64);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
     SimNode * SimNode_SafeArrayAt::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(SafeArrayAt);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_SafeArrayAt_I64::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(SafeArrayAt_I64);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_SafeArrayAt_U64::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(SafeArrayAt_U64);
         V_SUB(l);
         V_SUB(r);
         V_ARG(stride);

@@ -45,7 +45,7 @@ namespace das
             return ti->flags & gcFlags;
         }
 
-        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint64_t ) override {
             return ti->flags & gcFlags;
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
@@ -97,10 +97,10 @@ namespace das
             afterVariant(ps, ti);
         }
 
-        virtual void walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) override {
+        virtual void walk_array ( char * pa, uint32_t stride, uint64_t count, TypeInfo * ti ) override {
             if ( !canVisitArrayData(ti,count) ) return;
             char * pe = pa;
-            for ( uint32_t i=0; i!=count; ++i ) {
+            for ( uint64_t i=0; i!=count; ++i ) {
                 walk(pe, ti);
                 pe += stride;
             }
@@ -133,7 +133,7 @@ namespace das
             int valueSize = info->secondType->size;
             if (info->firstType->flags & gcFlags) {
                 if (info->secondType->flags & gcFlags) {
-                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                    for ( uint64_t i=0, is=tab->capacity; i!=is; ++i ) {
                         if ( tab->hashes[i] > HASH_KILLED64 ) {
                             // key
                             char * key = tab->keys + i*keySize;
@@ -144,7 +144,7 @@ namespace das
                         }
                     }
                 } else {
-                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                    for ( uint64_t i=0, is=tab->capacity; i!=is; ++i ) {
                         if ( tab->hashes[i] > HASH_KILLED64 ) {
                             // key
                             char * key = tab->keys + i*keySize;
@@ -153,7 +153,7 @@ namespace das
                     }
                 }
             } else {
-                for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                for ( uint64_t i=0, is=tab->capacity; i!=is; ++i ) {
                     if ( tab->hashes[i] > HASH_KILLED64 ) {
                         // value
                         char * value = tab->data + i*valueSize;
@@ -367,7 +367,7 @@ namespace das
         virtual void afterDim ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint64_t ) override {
             return (ti->flags | gcAlways) & gcFlags;
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
@@ -379,7 +379,7 @@ namespace das
             char * pa = PA->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                if ( describe_ptr(pa, tsize) ) {
+                if ( describe_ptr(pa, int(tsize)) ) {
                     describeInfo(ti);
                     ReportHistory();
                     tp << "ARRAY " << getTypeInfoMangledName(ti) << "\n";
@@ -489,25 +489,25 @@ namespace das
         virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
             history.pop_back();
         }
-        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {
+        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint64_t index, bool ) override {
             history.push_back("["+to_string(index)+"]");
         }
-        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint64_t, bool ) override {
             history.pop_back();
         }
-        virtual void beforeTableKey ( Table *, TypeInfo *, char * pk, TypeInfo * ki, uint32_t, bool ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char * pk, TypeInfo * ki, uint64_t, bool ) override {
             string keyText = debug_value ( pk, ki, PrintFlags::none );
             keys.push_back(keyText);
             history.push_back("=>key=>");
         }
-        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool ) override {
             history.pop_back();
         }
-        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool ) override {
             string keyText = keys.back();
             history.push_back("[\""+escapeString(keyText)+"\"]");
         }
-        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool ) override {
             keys.pop_back();
             history.pop_back();
         }
@@ -598,8 +598,8 @@ namespace das
             if ( !canVisitTableData(info) ) return;
             int keySize = info->firstType->size;
             int valueSize = info->secondType->size;
-            uint32_t count = 0;
-            for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+            uint64_t count = 0;
+            for ( uint64_t i=0, is=tab->capacity; i!=is; ++i ) {
                 if ( tab->hashes[i] > HASH_KILLED64 ) {
                     bool last = (count == (tab->size-1));
                     // key
@@ -1080,7 +1080,7 @@ namespace das
         virtual bool canVisitPointer ( TypeInfo * ) override { return false; }
         virtual bool canVisitLambda ( TypeInfo * ) override { return false; }
         virtual bool canVisitIterator ( TypeInfo * ) override { return true; }
-        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint64_t ) override {
             return ti->flags & gcFlags;
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
@@ -1089,7 +1089,7 @@ namespace das
         virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
                 if ( !pa->isLocked() || pa->hopeless ) {
-                    uint32_t oldSize = pa->capacity*ti->firstType->size;
+                    uint64_t oldSize = pa->capacity*ti->firstType->size;
                     __context__->free(pa->data, oldSize, __at__);
                 } else {
                     __context__->throw_error_at(__at__, "can't delete locked array");
@@ -1105,7 +1105,7 @@ namespace das
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
                 if ( !pa->isLocked() || pa->hopeless ) {
-                    uint32_t oldSize = pa->capacity*(ti->firstType->size+ti->secondType->size+sizeof(TableHashKey));
+                    uint64_t oldSize = pa->capacity*(ti->firstType->size+ti->secondType->size+sizeof(TableHashKey));
                     __context__->free(pa->data, oldSize, __at__);
                 } else {
                     __context__->throw_error_at(__at__, "can't delete locked table");

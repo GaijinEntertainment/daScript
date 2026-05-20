@@ -461,7 +461,7 @@ namespace das {
             if (peek() == ']') { cur++; return true; }
             while (true) {
                 // grow array by one, zero-initialized
-                uint32_t idx = builtin_array_push_back_zero(*arr, stride, &ctx, (LineInfoArg*)at);
+                uint64_t idx = uint64_t(builtin_array_push_back_zero(*arr, stride, &ctx, (LineInfoArg*)at));
                 char * elem = arr->data + idx * stride;
                 if (!scanValue(elem, elemTi)) return false;
                 skipWS();

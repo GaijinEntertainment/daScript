@@ -679,6 +679,29 @@ namespace das {
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return value[idx];
         }
+        // 64-bit index overloads (Phase 2 — 64-bit arrays)
+        static __forceinline OT & at ( TT & value, int64_t index, Context * __context__ ) {
+            uint64_t size = uint64_t(SIZE_POLICY::size(value));
+            uint64_t idx = uint64_t(index);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            return value[index];
+        }
+        static __forceinline const OT & at ( const TT & value, int64_t index, Context * __context__ ) {
+            uint64_t size = uint64_t(SIZE_POLICY::size(value));
+            uint64_t idx = uint64_t(index);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            return value[index];
+        }
+        static __forceinline OT & at ( TT & value, uint64_t idx, Context * __context__ ) {
+            uint64_t size = uint64_t(SIZE_POLICY::size(value));
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            return value[idx];
+        }
+        static __forceinline const OT & at ( const TT & value, uint64_t idx, Context * __context__ ) {
+            uint64_t size = uint64_t(SIZE_POLICY::size(value));
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            return value[idx];
+        }
     };
 
     template <typename TT, typename OT>
@@ -699,6 +722,23 @@ namespace das {
     }
 
     template <typename TT, typename OT>
+    __forceinline OT & das_ati_i64 ( TT & value, int64_t index, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint64_t size = uint64_t(SIZE_POLICY::size(value));
+        uint64_t idx = uint64_t(index);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+        return value[index];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline OT & das_atu_u64 ( TT & value, uint64_t idx, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint64_t size = uint64_t(SIZE_POLICY::size(value));
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+        return value[idx];
+    }
+
+    template <typename TT, typename OT>
     __forceinline const OT & das_atci ( const TT & value, int32_t index, Context * __context__, LineInfoArg * __info__ ) {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint32_t size = SIZE_POLICY::size(value);
@@ -712,6 +752,23 @@ namespace das {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint32_t size = SIZE_POLICY::size(value);
         if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        return value[idx];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline const OT & das_atci_i64 ( const TT & value, int64_t index, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint64_t size = uint64_t(SIZE_POLICY::size(value));
+        uint64_t idx = uint64_t(index);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+        return value[index];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline const OT & das_atcu_u64 ( const TT & value, uint64_t idx, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint64_t size = uint64_t(SIZE_POLICY::size(value));
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
         return value[idx];
     }
 
@@ -994,11 +1051,27 @@ namespace das {
             return ((const TT *)data)[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
             return ((TT *)data)[idx];
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
+            return ((const TT *)data)[idx];
+        }
+        __forceinline TT & operator () ( int64_t index, Context * __context__ ) {
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("array index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator () ( int64_t index, Context * __context__ ) const {
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("array index out of range, %lld of %llu", (long long)index, (unsigned long long)size);
+            return ((const TT *)data)[index];
+        }
+        __forceinline TT & operator () ( uint64_t idx, Context * __context__ ) {
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
+            return ((TT *)data)[idx];
+        }
+        __forceinline const TT & operator () ( uint64_t idx, Context * __context__ ) const {
+            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %llu of %llu", (unsigned long long)idx, (unsigned long long)size);
             return ((const TT *)data)[idx];
         }
     // safe index
@@ -1013,6 +1086,26 @@ namespace das {
             uint32_t idx = uint32_t(index);
             if ( idx>=that->size ) return nullptr;
             return ((const TT *)that->data) + index;
+        }
+        static __forceinline TT * safe_index ( THIS_TYPE * that, int64_t index, Context * ) {
+            if (!that) return nullptr;
+            if ( index<0 || uint64_t(index)>=that->size ) return nullptr;
+            return ((TT *)that->data) + index;
+        }
+        static __forceinline const TT  * safe_index ( const THIS_TYPE * that, int64_t index, Context * ) {
+            if (!that) return nullptr;
+            if ( index<0 || uint64_t(index)>=that->size ) return nullptr;
+            return ((const TT *)that->data) + index;
+        }
+        static __forceinline TT * safe_index ( THIS_TYPE * that, uint64_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=that->size ) return nullptr;
+            return ((TT *)that->data) + idx;
+        }
+        static __forceinline const TT  * safe_index ( const THIS_TYPE * that, uint64_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=that->size ) return nullptr;
+            return ((const TT *)that->data) + idx;
         }
         static __forceinline TT * safe_index ( THIS_TYPE * that, uint32_t idx, Context * ) {
             if (!that) return nullptr;
