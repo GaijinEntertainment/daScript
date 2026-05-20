@@ -321,3 +321,206 @@ def test_unroll_select_sum_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 3a: min/max/average accumulator extensions
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_min_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).min())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_max_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).max())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_average_fold() : double {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).average())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_max_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).max())
+}
+
+[test]
+def test_unroll_min_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0,1,2,3,4 → min = 0
+    t |> equal(target_unroll_min_fold(), 0, "min splice parity")
+}
+
+[test]
+def test_unroll_max_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0,1,2,3,4 → max = 4
+    t |> equal(target_unroll_max_fold(), 4, "max splice parity")
+}
+
+[test]
+def test_unroll_average_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0,1,2,3,4 → avg = 10/5 = 2.0
+    t |> equal(target_unroll_average_fold(), 2.0lf, "average splice parity")
+}
+
+[test]
+def test_unroll_where_max_parity(t : T?) {
+    fixture_unroll2(5)
+    // flag==1 rows: vals 1,3 → max 3
+    t |> equal(target_unroll_where_max_fold(), 3, "where+select+max splice parity")
+}
+
+[test]
+def test_unroll_max_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_max_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_max_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "max splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 3b: early-exit terminators (first/first_or_default/any/all/contains)
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_any_bare_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>).any())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_any_pred_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._any(_ > 100))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_all_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._all(_ >= 0))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_contains_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).contains(3))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_first_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).first())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_first_or_default_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).first_or_default(-7))
+}
+
+[test]
+def test_unroll_any_bare_parity(t : T?) {
+    fixture_unroll2(3)
+    t |> equal(target_unroll_any_bare_fold(), true, "bare any with entities")
+    restart()
+    commit()
+    t |> equal(target_unroll_any_bare_fold(), false, "bare any with no entities")
+}
+
+[test]
+def test_unroll_any_pred_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0..4, none > 100
+    t |> equal(target_unroll_any_pred_fold(), false, "any(pred) — no match")
+    fixture_unroll2(150)
+    // vals 0..149, some > 100
+    t |> equal(target_unroll_any_pred_fold(), true, "any(pred) — has match")
+}
+
+[test]
+def test_unroll_all_parity(t : T?) {
+    fixture_unroll2(5)
+    t |> equal(target_unroll_all_fold(), true, "all(>=0) on 0..4")
+}
+
+[test]
+def test_unroll_contains_parity(t : T?) {
+    fixture_unroll2(5)
+    t |> equal(target_unroll_contains_fold(), true, "contains(3) in 0..4")
+    fixture_unroll2(2)
+    t |> equal(target_unroll_contains_fold(), false, "contains(3) in 0..1")
+}
+
+[test]
+def test_unroll_first_parity(t : T?) {
+    fixture_unroll2(5)
+    // flag==1 first: i=1 → val=1
+    t |> equal(target_unroll_first_fold(), 1, "first(where flag==1)")
+}
+
+[test]
+def test_unroll_first_or_default_parity(t : T?) {
+    fixture_unroll2(5)
+    // val>1000 → none match → default -7
+    t |> equal(target_unroll_first_or_default_fold(), -7, "first_or_default empty match")
+}
+
+[test]
+def test_unroll_first_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_first_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_first_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "first splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "first splice uses for_each_archetype_find")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 3c: to_array buffer terminator
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).to_array())
+}
+
+[test]
+def test_unroll_to_array_parity(t : T?) {
+    fixture_unroll2(6)
+    // flag==1 rows: i=1,3,5 → vals 1,3,5
+    let got <- target_unroll_to_array_fold()
+    t |> equal(got |> length, 3, "to_array length")
+    if (length(got) == 3) {
+        t |> equal(got[0], 1, "to_array[0]")
+        t |> equal(got[1], 3, "to_array[1]")
+        t |> equal(got[2], 5, "to_array[2]")
+    }
+}
+
+[test]
+def test_unroll_to_array_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_to_array_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_to_array_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "to_array splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+    }
+}
