@@ -68,7 +68,12 @@ if [ ${#RANGES[@]} -eq 0 ]; then
     exit 0
 fi
 
-mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "${RANGES[@]}" -- '*.das' | sort -u)
+# Portable read-into-array (mapfile is bash 4+; macOS default ships bash 3.2).
+CHANGED=()
+while IFS= read -r line; do
+    CHANGED+=("$line")
+done < <(git diff --name-only --diff-filter=AM "${RANGES[@]}" -- '*.das' | sort -u)
+
 if [ ${#CHANGED[@]} -eq 0 ]; then
     echo "pre-push: no .das files changed; skipping lint"
     exit 0
