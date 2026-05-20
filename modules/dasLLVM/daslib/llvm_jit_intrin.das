@@ -191,9 +191,15 @@ def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
             return LLVMBuildFPToUI(ctx.builder, arguments[0], intType, string(expr.name))
         }
     } elif (argType.isInteger || argType.isEnum) {
-        if (argType.sizeOf >= expr._type.sizeOf) {
-            return LLVMBuildTruncOrBitCast(ctx.builder, arguments[0], intType, string(expr.name))
-        } elif (argType.isSignedInteger || argType.isEnum) {
+        return LLVMBuildTruncOrBitCast(ctx.builder, arguments[0], intType, string(expr.name)) if (argType.sizeOf >= expr._type.sizeOf)
+        // For enums, the sign of the underlying type drives sign vs zero extension —
+        // uint8/uint16/uint64-backed enums must zero-extend (200u8 → 0xc8u, not 0xffffffc8u).
+        var widenSigned = argType.isSignedInteger
+        if (argType.isEnum) {
+            let ebt = argType.enumType.baseType
+            widenSigned = ebt == Type.tInt8 || ebt == Type.tInt16 || ebt == Type.tInt || ebt == Type.tInt64
+        }
+        if (widenSigned) {
             return LLVMBuildSExtOrBitCast(ctx.builder, arguments[0], intType, string(expr.name))
         } else {
             return LLVMBuildZExtOrBitCast(ctx.builder, arguments[0], intType, string(expr.name))

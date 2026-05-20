@@ -17,3 +17,6 @@ The type is a reification tag.
 The type is an explicit reference.
 The type is a private alias.
 The type is an auto-to-alias.
+Exempt this type from the "uninitialized variable/field is unsafe" check — analog of struct-level safe_when_uninitialized for tuples / variants / aliases.
+The TypeDecl came from a C++ EnumStub*/EnumStub*u binding parameter; used to dispatch enum casts by underlying signedness.
+The EnumStub binding expects an unsigned-underlying enum (uint8/uint16/uint64), letting overload resolution pick the zero-extending cast helper.

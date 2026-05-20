@@ -705,6 +705,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             fieldType = makeType<EnumValueInfo>(*mlib);
             fieldType->ref = true;
         }

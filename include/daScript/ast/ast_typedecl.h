@@ -277,6 +277,13 @@ namespace das {
                 bool    isPrivateAlias : 1;    // this is a private alias. only matters in the context of module aliasTypes (for now)
                 bool    autoToAlias : 1;       // this allows conversion of auto to alias
                 bool    safeWhenUninitialized : 1; // exempt this type from "Uninitialized variable/field is unsafe" — analog of struct-level safe_when_uninitialized for tuples / variants / aliases
+                bool    enumStubBinding : 1;    // marks a parameter TypeDecl produced from a C++ EnumStub*/EnumStub*u
+                                                //  binding (set by typeFactory<EnumStub*[u]>). Used together with
+                                                //  enumStubIsUnsigned to dispatch enum→int casts by underlying signedness.
+                bool    enumStubIsUnsigned : 1; // when enumStubBinding is set: true if the binding expects an
+                                                //  unsigned-underlying enum (uint8/uint16/uint64). Lets `int(uint8Enum)`
+                                                //  resolve to enum8u_to_int instead of enum8_to_int so the byte
+                                                //  zero-extends instead of sign-extending.
             };
             uint32_t flags = 0;
         };
@@ -307,6 +314,9 @@ namespace das {
     template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
     template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };
     template<> struct ToBasicType<EnumStub64>   { enum { type = Type::tEnumeration64 }; };
+    template<> struct ToBasicType<EnumStub8u>   { enum { type = Type::tEnumeration8 }; };
+    template<> struct ToBasicType<EnumStub16u>  { enum { type = Type::tEnumeration16 }; };
+    template<> struct ToBasicType<EnumStub64u>  { enum { type = Type::tEnumeration64 }; };
     template<> struct ToBasicType<Sequence>     { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<Sequence *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
@@ -376,6 +386,66 @@ namespace das {
             auto t = new TypeDecl();
             t->baseType = Type( ToBasicType<TT>::type );
             t->constant = is_const<TT>::value;
+            return t;
+        }
+    };
+
+    // EnumStub*/EnumStub*u — bindings carry the enumStubBinding marker so overload
+    // resolution can dispatch enum→int casts by underlying signedness. The 32-bit
+    // tEnumeration variant is unaffected by sign-extension and stays generic.
+    template <>
+    struct typeFactory<EnumStub8> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration8);
+            t->enumStubBinding = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<EnumStub16> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration16);
+            t->enumStubBinding = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<EnumStub64> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration64);
+            t->enumStubBinding = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<EnumStub8u> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration8);
+            t->enumStubBinding = true;
+            t->enumStubIsUnsigned = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<EnumStub16u> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration16);
+            t->enumStubBinding = true;
+            t->enumStubIsUnsigned = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<EnumStub64u> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = new TypeDecl(Type::tEnumeration64);
+            t->enumStubBinding = true;
+            t->enumStubIsUnsigned = true;
             return t;
         }
     };

@@ -837,7 +837,22 @@ class public AotDebugInfoHelper {
     def describeCppEnumInfoValues(var writer : StringBuilderWriter?; einfo : EnumInfo?) {
         for (v in range(einfo.count)) {
             let val = unsafe(einfo.fields[v]);
-            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", {val.value} \};\n")
+            // Portable C++ int64 literal: the previous `int64_t(UINT64_C(0x...))` form relied on
+            // the uint64→int64 narrowing being well-defined, which is only true post-C++20.
+            // Negative values are emitted via unary minus on a positive INT64_C literal;
+            // INT64_MIN is special-cased because |INT64_MIN| overflows int64 before the
+            // unary minus binds, so we construct it from valid signed parts instead.
+            let bits = uint64(val.value)
+            var cppLit : string
+            if (bits == 0x8000000000000000ul) {
+                cppLit := "(-INT64_C(0x7fffffffffffffff) - INT64_C(1))"
+            } elif (val.value < 0l) {
+                let absBits = uint64(-val.value)
+                cppLit := "-INT64_C(0x{absBits:x})"
+            } else {
+                cppLit := "INT64_C(0x{bits:x})"
+            }
+            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", {cppLit} \};\n")
         }
         let enum_vals = (each(range(einfo.count))
             ._select("&{enumInfoName(einfo)}_value_{_}")
@@ -846,7 +861,7 @@ class public AotDebugInfoHelper {
         write(*writer, "EnumValueInfo * {enumInfoName(einfo)}_values [] = \{ {enum_vals} \};\n");
     }
     def describeCppEnumInfo(info : EnumInfo?) {
-        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x})";
+        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x}), {info.flags:d}";
     }
     def describeCppTypeInfo(info : TypeInfo?; suffix : string = "") {
         return build_string() $(writer) {
