@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# pre-push: mirror CI's formatter + lint (.github/workflows/extended_checks.yml).
+# Cross-platform: runs under Git Bash on Windows, bash on Linux/macOS.
+#
+# Enable per-clone:
+#   git config core.hooksPath hooks
+# Skip once:
+#   git push --no-verify
+# Override binary path:
+#   DASLANG=/path/to/daslang git push
+
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Resolve daslang binary across single/multi-config layouts.
+resolve_daslang() {
+    if [ -n "${DASLANG:-}" ] && [ -x "$DASLANG" ]; then
+        echo "$DASLANG"; return
+    fi
+    for p in \
+        "$ROOT/bin/daslang" \
+        "$ROOT/bin/daslang.exe" \
+        "$ROOT/bin/Release/daslang.exe" \
+        "$ROOT/bin/Debug/daslang.exe" \
+        "$ROOT/build/daslang" \
+        "$ROOT/build/bin/daslang"
+    do
+        [ -x "$p" ] && { echo "$p"; return; }
+    done
+    return 1
+}
+
+DASLANG="$(resolve_daslang || true)"
+if [ -z "$DASLANG" ]; then
+    echo "pre-push: daslang not found — build it (cmake --build build --target daslang)" >&2
+    echo "         or set DASLANG=/path/to/daslang" >&2
+    exit 1
+fi
+
+echo "pre-push: using $DASLANG"
+
+# Formatter: whole tree, verify-only (CI parity).
+echo "pre-push: formatter --verify ..."
+"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --path "$ROOT" --verify
+
+# Lint: only .das files changed in the pushed range vs remote tip
+# (mirrors CI's `git diff origin/<base>...HEAD`).
+ZERO40="0000000000000000000000000000000000000000"
+ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
+RANGES=()
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    case "$LOCAL_SHA" in "$ZERO40"|"$ZERO64") continue;; esac  # branch delete
+    case "$REMOTE_SHA" in
+        "$ZERO40"|"$ZERO64")
+            BASE="$(git merge-base "$LOCAL_SHA" origin/master 2>/dev/null || true)"
+            [ -n "$BASE" ] && RANGES+=("$BASE..$LOCAL_SHA")
+            ;;
+        *)
+            RANGES+=("$REMOTE_SHA..$LOCAL_SHA")
+            ;;
+    esac
+done
+
+if [ ${#RANGES[@]} -eq 0 ]; then
+    echo "pre-push: no ranges (deleting or empty); skipping lint"
+    exit 0
+fi
+
+mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "${RANGES[@]}" -- '*.das' | sort -u)
+if [ ${#CHANGED[@]} -eq 0 ]; then
+    echo "pre-push: no .das files changed; skipping lint"
+    exit 0
+fi
+
+echo "pre-push: linting ${#CHANGED[@]} .das file(s)"
+"$DASLANG" "$ROOT/utils/lint/main.das" -- "${CHANGED[@]}" --quiet
