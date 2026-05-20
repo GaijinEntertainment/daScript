@@ -114,8 +114,8 @@ def main {
         print(make_tool_result("compile_check subtool: expected 3 args (file, project, json), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let project = string(args[1])
-    let json = string(args[2]) == "true"
+    let file = args[0]
+    let project = args[1]
+    let json = args[2] == "true"
     print(run_compile_check(file, project, json))
 }

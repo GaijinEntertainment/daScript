@@ -84,8 +84,8 @@ def good_enum_without_or(a, b : EnumNoOr) : int {
     return int(a) | int(b)                                  // no operator| on EnumNoOr — rewrite would not compile
 }
 
-def good_nested_cast(m1, m2 : Mode) : int {
-    return int(int(m1)) | int(m2)                           // outer LHS argument is int->int, not bitfield/enum
+def good_nested_cast(widen : int64; m2 : Mode) : int {
+    return int(widen) | int(m2)                             // outer LHS argument is int64 (not bitfield/enum) — PERF019's unwrap succeeds then inner_type_supports_or bails
 }
 
 def good_plain_ints(x, y : int) : int {

@@ -86,7 +86,7 @@ def public run_find_dupe_judge(input_path : string;
                  "--out", resolved_out]
     if (!empty(model)) {
         argv |> push("--model")
-        argv |> push(string(model))
+        argv |> push(model)
     }
     if (parallel > 0) {
         argv |> push("--parallel")

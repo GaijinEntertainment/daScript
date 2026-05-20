@@ -78,7 +78,7 @@ def public extract_source(var cache : FileCache; path : string;
     return build_string() $(var w) {
         for (i in range(lo, hi + 1)) {
             if (i > lo) {
-                w |> write_char(int('\n'))
+                w |> write_char('\n')
             }
             w |> write(lines[i])
         }

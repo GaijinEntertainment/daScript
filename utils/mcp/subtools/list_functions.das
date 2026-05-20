@@ -25,7 +25,7 @@ def main {
         print(make_tool_result("list_functions subtool: expected 2 args (file, project), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let project = string(args[1])
+    let file = args[0]
+    let project = args[1]
     print(run_list_functions(file, project))
 }

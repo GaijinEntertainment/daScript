@@ -137,8 +137,8 @@ def main {
         print(make_tool_result("aot subtool: expected 3 args (file, func_name, project), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let func_name = string(args[1])
-    let project = string(args[2])
+    let file = args[0]
+    let func_name = args[1]
+    let project = args[2]
     print(run_aot(file, func_name, project))
 }

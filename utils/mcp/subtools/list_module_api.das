@@ -368,10 +368,10 @@ def main {
         print(make_tool_result("list_module_api subtool: expected 5 args (module_name, filter, section, compact, project), got {length(args)}", true))
         return
     }
-    let module_name = string(args[0])
-    let filter = string(args[1])
-    let section = string(args[2])
-    let compact_str = string(args[3])
-    let project = string(args[4])
+    let module_name = args[0]
+    let filter = args[1]
+    let section = args[2]
+    let compact_str = args[3]
+    let project = args[4]
     print(run_list_module_api(module_name, filter, section, compact_str, project))
 }

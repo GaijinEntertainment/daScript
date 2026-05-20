@@ -87,9 +87,9 @@ def private try_eval_expression(exe, expression, req_modules, project, project_r
     }
     if (!empty(project)) {
         argv |> push("-project")
-        argv |> push(string(project))
+        argv |> push(project)
     }
-    argv |> push(string(stub_path))
+    argv |> push(stub_path)
     let exit_code = run_and_capture(argv, output)
     remove(stub_path)
     return exit_code

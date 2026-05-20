@@ -16,7 +16,7 @@ def main {
         print(make_tool_result("_test_sleep: expected 1 arg (milliseconds)", true))
         return
     }
-    let ms = to_int(string(args[0]))
+    let ms = to_int(args[0])
     sleep(uint(ms))
     print(make_tool_result("DONE_AFTER_{ms}ms"))
 }

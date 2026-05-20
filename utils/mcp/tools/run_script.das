@@ -33,13 +33,13 @@ def do_run_script(file, code : string; timeout_str : string = ""; track_allocati
     }
     if (!empty(project)) {
         argv |> push("-project")
-        argv |> push(string(project))
+        argv |> push(project)
     }
     if (track_allocations) {
         argv |> push("-track-allocations")
         argv |> push("-heap-report")
     }
-    argv |> push(string(script_path))
+    argv |> push(script_path)
     let exit_code = run_and_capture(argv, output, timeout_sec)
     if (is_temp) {
         remove(script_path)

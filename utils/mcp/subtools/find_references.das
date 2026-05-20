@@ -433,11 +433,11 @@ def main {
         print(make_tool_result("find_references subtool: expected 6 args (file, line, col, scope, no_opt, project), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let line_str = string(args[1])
-    let col_str = string(args[2])
-    let scope_str = string(args[3])
-    let no_opt_str = string(args[4])
-    let project = string(args[5])
+    let file = args[0]
+    let line_str = args[1]
+    let col_str = args[2]
+    let scope_str = args[3]
+    let no_opt_str = args[4]
+    let project = args[5]
     print(run_find_references(file, line_str, col_str, scope_str, no_opt_str, project))
 }

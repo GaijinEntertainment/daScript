@@ -77,11 +77,11 @@ def main {
         print(make_tool_result("ast_dump subtool: expected 5 args (file, func_name, mode, lineinfo, project), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let func_name = string(args[1])
-    let mode = string(args[2])
-    let lineinfo = string(args[3])
-    let project = string(args[4])
+    let file = args[0]
+    let func_name = args[1]
+    let mode = args[2]
+    let lineinfo = args[3]
+    let project = args[4]
     let use_source_mode = mode == "source"
     let use_lineinfo = lineinfo == "true"
     print(run_ast_dump_file(file, func_name, use_source_mode, use_lineinfo, project))

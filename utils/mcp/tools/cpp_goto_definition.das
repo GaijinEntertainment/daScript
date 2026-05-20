@@ -67,7 +67,7 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
         }
         ident = slice(cursor_line, start, endx + 1)
     }
-    if (empty(ident) || !is_cpp_ident_start_char(int(first_character(ident)))) return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
+    if (empty(ident) || !is_cpp_ident_start_char(first_character(ident))) return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
     // Look up definitions in the lazily-built C++ index. Shared with the
     // with_cpp_source redirect on find_symbol/goto_definition — pays the ~2s
     // scan cost once per server lifetime, then O(1) per goto.
