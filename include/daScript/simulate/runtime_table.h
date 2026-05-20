@@ -62,11 +62,11 @@ namespace das
             else return hash;
         }
 
-        __forceinline int find ( const Table & tab, KeyType key, uint64_t hash ) const {
+        __forceinline int64_t find ( const Table & tab, KeyType key, uint64_t hash ) const {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
-            uint32_t mask = tab.capacity - 1;
-            uint32_t index = uint32_t(hash) & mask;
+            uint64_t mask = tab.capacity - 1;
+            uint64_t index = hash & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
             auto hashKey = hashToHashKey(TableHashKey(hash));
@@ -75,19 +75,19 @@ namespace das
                 if ( kh==HASH_EMPTY64 ) {
                     return -1;
                 } else if ( kh==hashKey && KeyCompare<KeyType>()(pKeys[index],key) ) {
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
+        __forceinline int64_t reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
             DAS_ASSERT(hash>1);
             if ( tab.size >= (tab.capacity/2) ) grow(tab, at);
             else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab, at);
-            uint32_t mask = tab.capacity - 1;
-            uint32_t index = uint32_t(hash) & mask;
-            uint32_t insertI = -1u;
+            uint64_t mask = tab.capacity - 1;
+            uint64_t index = hash & mask;
+            uint64_t insertI = ~uint64_t(0);
             auto pKeys = (KeyType *) tab.keys;
             auto pHashes = tab.hashes;
             auto hashKey = hashToHashKey(TableHashKey(hash));
@@ -95,28 +95,28 @@ namespace das
                 auto kh = pHashes[index];
                 if (kh == HASH_EMPTY64 ) {
                     if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
-                    if ( insertI != -1u ) {
+                    if ( insertI != ~uint64_t(0) ) {
                         index = insertI;
                         tab.tombstones--;
                     }
                     pHashes[index] = hashKey;
                     pKeys[index] = key;
                     tab.size++;
-                    return (int)index;
+                    return (int64_t)index;
                 } else if (kh == HASH_KILLED64) {
-                    if ( insertI == -1u ) insertI = index;
+                    if ( insertI == ~uint64_t(0) ) insertI = index;
                 } else if (kh == hashKey && KeyCompare<KeyType>()(pKeys[index], key)) {
-                    return (int)index;
+                    return (int64_t)index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
-        __forceinline int erase ( Table & tab, KeyType key, uint64_t hash ) {
+        __forceinline int64_t erase ( Table & tab, KeyType key, uint64_t hash ) {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
-            uint32_t mask = tab.capacity - 1;
-            uint32_t index = uint32_t(hash) & mask;
+            uint64_t mask = tab.capacity - 1;
+            uint64_t index = hash & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
             auto hashKey = hashToHashKey(TableHashKey(hash));
@@ -129,14 +129,21 @@ namespace das
                     tab.tombstones++;
                     pHashes[index] = HASH_KILLED64;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
         bool grow ( Table & tab, LineInfo * at ) {
-            uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
+            // Guard against capacity*2 overflow — at uint64_t the wrap-to-zero produces
+            // a non-power-of-two `newCapacity` that would trip reserveInternal's verify
+            // and, before that, make `mask = capacity - 1` underflow into all-ones.
+            if ( tab.capacity > (uint64_t(1) << 62) ) {
+                context->throw_error_at(at, "table grow: capacity %llu exceeds 2^62", (unsigned long long)tab.capacity);
+                return false;
+            }
+            uint64_t newCapacity = das::max(uint64_t(minCapacity), tab.capacity*2);
             return reserveInternal(tab, newCapacity, at);
         }
 
@@ -144,11 +151,17 @@ namespace das
             return reserveInternal(tab, tab.capacity, at);
         }
 
-        bool reserve(Table & tab, uint32_t size, LineInfo * at ) {
+        bool reserve(Table & tab, uint64_t size, LineInfo * at ) {
             if (size <= tab.capacity)
               return true;
 
-            uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
+            // Guard against overflow before doubling — otherwise huge `size` (e.g. a negative
+            // signed input cast to uint64) would infinite-loop here as newCapacity wraps to 0.
+            if (size > (uint64_t(1) << 62)) {
+              context->throw_error_at(at, "table reserve: size %llu exceeds 2^62", (unsigned long long)size);
+              return false;
+            }
+            uint64_t newCapacity = das::max(uint64_t(minCapacity), tab.capacity*2);
             while (newCapacity < size)
             {
               newCapacity *= 2;
@@ -158,37 +171,38 @@ namespace das
         }
 
     private:
-        __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
+        // Returns the slot index. Always finds a slot (called only during rehash on a fresh
+        // pre-allocated table), so signed int64_t can hold any value the uint64 capacity allows.
+        __forceinline int64_t insertNew ( Table & tab, uint64_t hash ) const {
             // TODO: take key under account and be less aggressive?
             DAS_ASSERT(hash>1);
-            uint32_t mask = tab.capacity - 1;
-            uint32_t index = uint32_t(hash) & mask;
+            uint64_t mask = tab.capacity - 1;
+            uint64_t index = hash & mask;
             auto pHashes = tab.hashes;
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
-                    return (int) index;
+                    return (int64_t) index;
                 }
                 index = (index + 1) & mask;
             }
         }
 
-        bool reserveInternal(Table & tab, uint32_t newCapacity, LineInfo * at) {
-            DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %i", int(newCapacity));
+        bool reserveInternal(Table & tab, uint64_t newCapacity, LineInfo * at) {
+            DAS_VERIFYF(newCapacity != 0 && (newCapacity & (newCapacity - 1)) == 0, "newCapacity must be a nonzero power of 2, and not %llu", (unsigned long long)newCapacity);
             if ( tab.magic!=0 || tab.lock!=0 ) {
                 context->throw_error_at(at, "can't grow a locked table");
                 return false;
             }
             Table newTab;
-            uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(TableHashKey)));
-            if ( memSize64>=0xffffffff ) {
-                context->throw_error_ex("can't grow table, out of index space [capacity=%i]", newCapacity);
+            uint64_t perSlot = uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(TableHashKey));
+            if ( perSlot && newCapacity > UINT64_MAX / perSlot ) {
+                context->throw_error_ex("can't grow table, capacity*perSlot overflows uint64 [capacity=%llu]", (unsigned long long)newCapacity);
                 return false;
-
             }
+            uint64_t memSize64 = newCapacity * perSlot;
             const char * prev_comment = tab.data ? context->heap->get_comment(tab.data) : nullptr;
-            uint32_t memSize = uint32_t(memSize64);
-            newTab.data = (char *) context->allocate(memSize, at);
+            newTab.data = (char *) context->allocate(memSize64, at);
             context->heap->mark_comment(newTab.data, prev_comment ? prev_comment : "table");
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
             newTab.hashes = (TableHashKey *)(newTab.keys + newCapacity * sizeof(KeyType));
@@ -200,17 +214,17 @@ namespace das
             newTab.tombstones = 0;
             if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));
             auto pHashes = newTab.hashes;
-            memset(pHashes, 0, newCapacity * sizeof(TableHashKey));
+            memset(pHashes, 0, size_t(newCapacity) * sizeof(TableHashKey));
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
                 auto pOldValues = tab.data;
                 auto pValues = newTab.data;
                 auto pOldKeys = (const KeyType *) tab.keys;
                 auto pOldHashes = tab.hashes;
-                for ( uint32_t i=0, is=tab.capacity; i!=is; ++i ) {
+                for ( uint64_t i=0, is=tab.capacity; i!=is; ++i ) {
                     auto hash = pOldHashes[i];
                     if ( hash>HASH_KILLED64 ) {
-                        int index = insertNew(newTab, hash);
+                        int64_t index = insertNew(newTab, hash);
                         pHashes[index] = hash;
                         pKeys[index] = pOldKeys[i];
                         memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );
@@ -218,7 +232,7 @@ namespace das
                 }
             }
             if (tab.capacity && !context->verySafeContext) {
-                uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(TableHashKey));
+                uint64_t oldSize = tab.capacity * perSlot;
                 context->free(tab.data, oldSize, at);
             }
             swap ( newTab, tab );

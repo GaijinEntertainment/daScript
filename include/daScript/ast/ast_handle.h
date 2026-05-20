@@ -582,6 +582,22 @@ namespace das
             addExtern<DAS_BIND_FUN((das_atcu<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
                 SideEffects::none, atcun.c_str())
                     ->args({"vec","index","context","at"});
+            auto atin64 = "das_ati_i64<"+TTN+","+OTN+">";
+            addExtern<DAS_BIND_FUN((das_ati_i64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
+                SideEffects::modifyArgument, atin64.c_str())
+                    ->args({"vec","index","context","at"});
+            auto atun64 = "das_atu_u64<"+TTN+","+OTN+">";
+            addExtern<DAS_BIND_FUN((das_atu_u64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
+                SideEffects::modifyArgument, atun64.c_str())
+                    ->args({"vec","index","context","at"});
+            auto atcin64 = "das_atci_i64<"+TTN+","+OTN+">";
+            addExtern<DAS_BIND_FUN((das_atci_i64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
+                SideEffects::none, atcin64.c_str())
+                    ->args({"vec","index","context","at"});
+            auto atcun64 = "das_atcu_u64<"+TTN+","+OTN+">";
+            addExtern<DAS_BIND_FUN((das_atcu_u64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
+                SideEffects::none, atcun64.c_str())
+                    ->args({"vec","index","context","at"});
         }
     };
 

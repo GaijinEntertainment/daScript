@@ -137,24 +137,35 @@ class public Attributes {
 
 }
 
+// Indices MUST match the field order produced by `type_to_llvm_type` for `Type.tArray`
+// below, which itself mirrors the C++ `das::Array` layout (data, size, capacity, magic,
+// lock, flags, _pad_after_flags). The enum order was originally `LOOK, MAGIC` to match
+// an older mirror that had `lock, magic` in that order — when the mirror was corrected
+// to C++ order, the enum needed the same flip.
 enum public JIT_ARRAY {
     DATA
     SIZE
     CAPACITY
-    LOOK
     MAGIC
+    LOCK
     FLAGS
+    PAD_AFTER_FLAGS  // mirror Array's trailing alignment pad (see arraytype.h)
 }
 
+// Indices MUST match the field order produced by `type_to_llvm_type` for `Type.tTable`
+// below — Array base fields, then keys/hashes/tombstones. Keep in sync with the C++
+// `das::Table` layout (Table : Array).
 enum public JIT_TABLE {
     DATA
     SIZE
     CAPACITY
-    LOOK
     MAGIC
+    LOCK
     FLAGS
+    PAD_AFTER_FLAGS  // matches C++ sizeof(Array)==40 on 32-bit; Table::keys lands at 40
     KEYS
     HASHES
+    TOMBSTONES
 }
 
 enum public JIT_SIMFUNCTION {
@@ -919,31 +930,35 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
     } elif (t.baseType == Type.tBlock) {
         res = g_t_block
     } elif (t.baseType == Type.tArray) {
-        // array type
+        // array type — must mirror Array layout in arraytype.h byte-for-byte
         var array_fields <- fixed_array(
             g_prim_t.LLVMVoidPtrType(),// char * data
-            g_prim_t.t_int32,                    // uint32_t size
-            g_prim_t.t_int32,                    // uint32_t capacity
-            g_prim_t.t_int32,                    // uint32_t lock
+            g_prim_t.t_int64,                    // uint64_t size
+            g_prim_t.t_int64,                    // uint64_t capacity
             g_prim_t.t_int32,                    // uint32_t magic
-            g_prim_t.t_int32                     // uint32_t flags
+            g_prim_t.t_int32,                    // uint32_t lock
+            g_prim_t.t_int32,                    // uint32_t flags
+            g_prim_t.t_int32                     // _pad_after_flags (mirror trailing alignment pad)
         )
         if (t.firstType != null) {
             array_fields[int(JIT_ARRAY.DATA)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
         }
         res = g_prim_t |> StructType(array_fields)
     } elif (t.baseType == Type.tTable) {
-        // table type
+        // table type — must mirror Table layout (Array base + keys/hashes/tombstones).
+        // The explicit _pad_after_flags slot forces keys onto an 8-aligned offset on
+        // 32-bit ABIs, matching the C++ Table (where Table::keys lives at sizeof(Array)==40).
         var table_fields <- fixed_array(
             g_prim_t.LLVMVoidPtrType(),// char * data
-            g_prim_t.t_int32,                    // uint32_t size
-            g_prim_t.t_int32,                    // uint32_t capacity
+            g_prim_t.t_int64,                    // uint64_t size
+            g_prim_t.t_int64,                    // uint64_t capacity
+            g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.t_int32,                    // uint32_t lock
             g_prim_t.t_int32,                    // uint32_t flags
-            g_prim_t.t_int32,                    // uint32_t magic
+            g_prim_t.t_int32,                    // _pad_after_flags
             g_prim_t.LLVMVoidPtrType(),// char * keys
-            g_prim_t.LLVMVoidPtrType(),// char * hashes
-            g_prim_t.t_int32)
+            g_prim_t.LLVMVoidPtrType(),// TableHashKey * hashes
+            g_prim_t.t_int64)                    // uint64_t tombstones
         if (t.firstType != null) {
             table_fields[int(JIT_TABLE.KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
         }

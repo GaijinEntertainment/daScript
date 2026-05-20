@@ -6,12 +6,12 @@
 namespace das
 {
     template <typename KeyType>
-    void table_reserve_internal ( Context & context, Table & arr, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo * at ) {
+    void table_reserve_internal ( Context & context, Table & arr, uint64_t newCapacity, uint32_t valueTypeSize, LineInfo * at ) {
         TableHash<KeyType> hash(&context, valueTypeSize);
         hash.reserve(arr, newCapacity, at);
     }
 
-    void table_reserve_impl ( Context & context, Table & arr, int32_t baseType, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo * at ) {
+    void table_reserve_impl ( Context & context, Table & arr, int32_t baseType, uint64_t newCapacity, uint32_t valueTypeSize, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't reserve locked table");
         if ( !newCapacity ) return;
         switch ( Type(baseType) ) {
@@ -228,7 +228,7 @@ namespace das
         for ( uint32_t i=0, is=total; i!=is; ++i, pTable-- ) {
             if ( pTable->data ) {
                 if ( !pTable->isLocked() ) {
-                    uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(TableHashKey));
+                    uint64_t oldSize = pTable->capacity * uint64_t(vts_add_kts + sizeof(TableHashKey));
                     context.free(pTable->data, oldSize, &debugInfo);
                 } else {
                     context.throw_error_at(debugInfo, "deleting locked table%s", errorMessage);

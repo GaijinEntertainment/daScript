@@ -1,0 +1,1 @@
+Returns the current capacity of a dynamic `array` — the number of elements it can hold before triggering a reallocation — as `int64`. Unlike `capacity`, never panics on arrays with more than ``INT32_MAX`` reserved slots.

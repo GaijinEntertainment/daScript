@@ -138,25 +138,25 @@ namespace das {
         virtual void afterVariant ( char *, TypeInfo * ) override {
             ss << "}";
         }
-        virtual void beforeArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
+        virtual void beforeArrayData ( char *, uint32_t, uint64_t, TypeInfo * ) override {
             ss << "[";
         }
-        virtual void afterArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
+        virtual void afterArrayData ( char *, uint32_t, uint64_t, TypeInfo * ) override {
             ss << "]";
         }
-        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint64_t, bool last ) override {
             if ( !last ) ss << ",";
         }
         virtual void beforeTable ( Table *, TypeInfo * ) override {
             ss << "{";
         }
-        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint64_t, bool ) override {
             if ( ki->type!=Type::tString ) ss << "\"";
         }
-        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
+        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint64_t, bool ) override {
             if ( ki->type!=Type::tString ) ss << "\":"; else ss << ":";
         }
-        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool last ) override {
             if ( !last ) ss << ",";
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {

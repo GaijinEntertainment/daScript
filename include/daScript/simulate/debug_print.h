@@ -132,22 +132,22 @@ namespace das {
             if ( !ti->isVariantOfSimpleTypes() ) br();
         }
 
-        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
+        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint64_t, bool ) override {
             ss << " ";
         }
-        virtual void afterArrayElement ( char *, TypeInfo * ti, char *, uint32_t, bool last ) override {
+        virtual void afterArrayElement ( char *, TypeInfo * ti, char *, uint64_t, bool last ) override {
             if ( !last ) {
                 ss << ",";
             }
             if ( !ti->isSimpleType() ) br();
         }
-        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool ) override {
             ss << " ";
         }
-        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool ) override {
             ss << " => ";
         }
-        virtual void afterTableValue ( Table *, TypeInfo * ti, char *, TypeInfo *, uint32_t, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo * ti, char *, TypeInfo *, uint64_t, bool last ) override {
             if ( !last ) {
                 ss << ",";
             }

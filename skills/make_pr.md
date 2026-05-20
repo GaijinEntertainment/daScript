@@ -115,6 +115,23 @@ Or use the MCP `run_test` tool with the `tests/` directory.
 
 **Module-specific testing:** CI enables ALL modules via `ci/release_modules.txt` (PUGIXML, LLVM, Audio, SQLite, GLFW, HV). If you changed files under `modules/X/daslib/`, explicitly run that module's tests even if your local build has the module disabled. Handled types (C++ interop like `xml_node`, `sqlite3_stmt`) often require `var` — lint's `var`→`let` suggestion is wrong for them because the C++ binding expects non-const.
 
+## 2.5. JIT smoke check — catch verifier failures before push
+
+The dasLLVM JIT path is a **third execution tier** alongside interpreter and AOT. Changes to runtime struct layouts (`Array`, `Table`, etc.), `SimNode_*` lowerings, or the dasLLVM module (`modules/dasLLVM/daslib/`) can break JIT codegen even when the interpreter and AOT tests are green. CI catches it on the second-line builds (decs / soa / jit_tests / language tests run under JIT), but the failure shape — `LLVMVerifyFunction: Both operands to a binary operator are not of the same type! %5 = mul i64 %3, i32 12` — is a 30-minute round-trip cost per discovery cycle.
+
+**Run a JIT smoke on a couple of tests:**
+
+```bash
+bin/Release/daslang.exe -jit tests/jit_tests/array.das 2>&1 | grep -iE "verifier|Both operands|verify"
+bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "verifier|Both operands|verify"
+```
+
+**Expected:** empty output (no verifier errors). The LLVM IR generation succeeded.
+
+**Windows local caveat:** `clang-cl` may report `unable to execute command: program not executable` when linking the JIT'd `.dll`. That's a local Windows env issue (linker discovery), **not the JIT codegen** — IR was already generated and verified before the link step. Treat the `clang-cl` link failure as a known-local artifact; the only signal you care about for this gate is *no verifier errors*. For full end-to-end JIT validation, use WSL/Linux (`feedback_wsl_tsan_repro`) where clang's link path works.
+
+**What this catches:** struct-layout drift (i32 vs i64 fields in JIT mirror), mixed-width arithmetic (i64 × i32), missing intrinsic lowering after a runtime-side widening. The two suggested tests cover array indexing + table operations; widen the smoke list to `tests/soa/test_soa_basic.das` and `tests/language/typeAlias.das` if you touched generic-instance lowering or capture frames.
+
 ## 3. Build and run AOT tests
 
 **IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files.
@@ -269,6 +286,7 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
+| JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
 | Docs | `das2rst.das` + stubs + Sphinx | Only if daslib/C++ bindings/RST changed |

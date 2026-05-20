@@ -1,0 +1,1 @@
+Returns an `int64` range iterator over the valid indices of an iterable `foo` (typically an array or table). Same role as `iter_range` but produces `int64` indices so it stays correct when the container holds more than ``INT32_MAX`` elements.

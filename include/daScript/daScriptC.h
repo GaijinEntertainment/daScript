@@ -104,24 +104,33 @@ typedef struct {
 
 typedef struct {
     char *      data;
-    uint32_t    size;
-    uint32_t    capacity;
+    uint64_t    size;
+    uint64_t    capacity;
     uint32_t    magic;
     uint32_t    lock;
     uint32_t    flags;
+    // 4 bytes of trailing pad. The C++ Array struct has uint64_t members so its alignment is 8,
+    // and on every supported ABI sizeof(Array) is rounded to 40. Without an explicit pad here,
+    // 32-bit C compilers might tail-pack a following member into this slot and produce a
+    // different sizeof from the C++ side — see the static_asserts in src/misc/daScriptC.cpp.
+    uint32_t    _pad_after_flags;
 } das_array;
 
 // Layout MUST mirror das::Table exactly (Table : Array, then keys/hashes/tombstones).
+// In C++, Table : Array places `keys` at sizeof(Array)==40 because the derived class cannot
+// reuse the base's trailing padding (MSVC convention, and standard layout for non-POD bases).
+// The flat C mirror needs the same _pad_after_flags so `keys` lands at offset 40 on 32-bit too.
 typedef struct {
     char *      data;
-    uint32_t    size;
-    uint32_t    capacity;
+    uint64_t    size;
+    uint64_t    capacity;
     uint32_t    magic;
     uint32_t    lock;
     uint32_t    flags;
+    uint32_t    _pad_after_flags;
     char *      keys;
     uint32_t *  hashes;
-    uint32_t    tombstones;
+    uint64_t    tombstones;
 } das_table;
 
 typedef vec4f (das_interop_function) ( das_context * ctx, das_node * node, vec4f * arguments );

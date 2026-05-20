@@ -104,6 +104,26 @@ def public temp_array(data : auto? ==const; lenA : int; a : auto(TT)) : array<TT
     return <- res
 }
 
+[unsafe_operation, template(a), unused_argument(a)]
+def public temp_array(var data : auto? ==const; lenA : int64; a : auto(TT)) : array<TT -const -#> {
+    //! int64 overload — creates a temporary array from the given data pointer and length
+    var res : array<TT -const -#>
+    if (lenA >= 1_l) {
+        unsafe(_builtin_make_temp_array_i64(res, data, lenA))
+    }
+    return <- res
+}
+
+[unsafe_operation, template(a), unused_argument(a)]
+def public temp_array(data : auto? ==const; lenA : int64; a : auto(TT)) : array<TT -const -#> const {
+    //! int64 overload — creates a temporary array from the given data pointer and length
+    var res : array<TT -const -#>
+    if (lenA >= 1_l) {
+        unsafe(_builtin_make_temp_array_i64(res, data, lenA))
+    }
+    return <- res
+}
+
 def array_view(bytes : array<auto(TT)> ==const; offset, length : int; blk : block<(view : array<TT>#) : void>) {
     //! creates a view of the array, which is a temporary array that is valid only within the block
     unsafe {
@@ -127,6 +147,36 @@ def array_view(var bytes : array<auto(TT)> ==const; offset, length : int; blk : 
         __builtin_array_lock(bytes)
         var res : array<TT>#
         _builtin_make_temp_array(res, addr(bytes[offset]), length)
+        invoke(blk, res)
+        __builtin_array_unlock(bytes)
+    }
+}
+
+def array_view(bytes : array<auto(TT)> ==const; offset, length : int64; blk : block<(view : array<TT>#) : void>) {
+    //! int64 overload — creates a view of the array
+    unsafe {
+        // Validate non-negativity before the sum to avoid signed overflow UB,
+        // and so a negative length doesn't wrap to huge after the uint64 cast.
+        if (offset < 0_l || length < 0_l || uint64(offset) + uint64(length) > long_length(bytes)) {
+            panic("array_view: out of range")
+        }
+        __builtin_array_lock_mutable(bytes)
+        var res : array<TT>#
+        _builtin_make_temp_array_i64(res, addr(bytes[offset]), length)
+        invoke(blk, res)
+        __builtin_array_unlock_mutable(bytes)
+    }
+}
+
+def array_view(var bytes : array<auto(TT)> ==const; offset, length : int64; blk : block<(var view : array<TT>#) : void>) {
+    //! int64 overload — creates a mutable view of the array
+    unsafe {
+        if (offset < 0_l || length < 0_l || uint64(offset) + uint64(length) > long_length(bytes)) {
+            panic("array_view: out of range")
+        }
+        __builtin_array_lock(bytes)
+        var res : array<TT>#
+        _builtin_make_temp_array_i64(res, addr(bytes[offset]), length)
         invoke(blk, res)
         __builtin_array_unlock(bytes)
     }

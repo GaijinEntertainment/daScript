@@ -800,11 +800,23 @@ namespace das
     }
 
     int builtin_table_size ( const Table & arr ) {
-        return arr.size;
+        DAS_VERIFYF(arr.size <= uint64_t(INT32_MAX), "table size %llu exceeds INT_MAX; use long_length() instead", (unsigned long long)arr.size);
+        return int(arr.size);
     }
 
     int builtin_table_capacity ( const Table & arr ) {
-        return arr.capacity;
+        DAS_VERIFYF(arr.capacity <= uint64_t(INT32_MAX), "table capacity %llu exceeds INT_MAX; use long_capacity() instead", (unsigned long long)arr.capacity);
+        return int(arr.capacity);
+    }
+
+    int64_t builtin_table_long_size ( const Table & arr ) {
+        DAS_VERIFYF(arr.size <= uint64_t(INT64_MAX), "table size %llu exceeds INT64_MAX", (unsigned long long)arr.size);
+        return int64_t(arr.size);
+    }
+
+    int64_t builtin_table_long_capacity ( const Table & arr ) {
+        DAS_VERIFYF(arr.capacity <= uint64_t(INT64_MAX), "table capacity %llu exceeds INT64_MAX", (unsigned long long)arr.capacity);
+        return int64_t(arr.capacity);
     }
 
     void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at ) {
@@ -823,7 +835,7 @@ namespace das
         Type baseType = call->types[0]->firstType->type;
         uint32_t valueTypeSize = call->types[0]->secondType->size;
         Table & tab = cast<Table&>::to(args[0]);
-        uint32_t newCapacity = cast<uint32_t>::to(args[1]);
+        uint64_t newCapacity = cast<uint64_t>::to(args[1]);
         table_reserve_impl(context, tab, baseType, newCapacity, valueTypeSize, &call->debugInfo);
         return v_zero();
     }
@@ -1214,7 +1226,7 @@ namespace das
     void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
         if ( dim.data ) {
             if ( !dim.isLocked() || dim.hopeless ) {
-                uint32_t oldSize = dim.capacity*szt;
+                uint64_t oldSize = dim.capacity*uint64_t(szt);
                 __context__->free(dim.data, oldSize, at);
             } else {
                 __context__->throw_error_at(at, "can't delete locked array");
@@ -1231,7 +1243,7 @@ namespace das
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
             if ( !tab.isLocked() || tab.hopeless ) {
-                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(TableHashKey));
+                uint64_t oldSize = tab.capacity*uint64_t(szk+szv+sizeof(TableHashKey));
                 __context__->free(tab.data, oldSize, at);
             } else {
                 __context__->throw_error_at(at, "can't delete locked table");
@@ -1657,14 +1669,21 @@ namespace das
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
         Array arr;
-        array_mark_locked(arr, (char *)data, uint32_t(size));
+        // Negative size would wrap into a huge uint capacity; clamp to empty array instead.
+        array_mark_locked(arr, (char *)data, size < 0 ? uint64_t(0) : uint64_t(size));
         vec4f args[1];
         args[0] = cast<Array &>::from(arr);
         context->invoke(block, args, nullptr, at);
     }
 
     void builtin_make_temp_array ( Array & arr, void * data, int size ) {
-        array_mark_locked(arr, (char *)data, uint32_t(size));
+        // Negative size would underflow to huge uint64 — clamp to empty array instead.
+        array_mark_locked(arr, (char *)data, size < 0 ? uint64_t(0) : uint64_t(size));
+    }
+
+    void builtin_make_temp_array_i64 ( Array & arr, void * data, int64_t size ) {
+        // Negative size would underflow to huge uint64 — clamp to empty array instead.
+        array_mark_locked(arr, (char *)data, size < 0 ? uint64_t(0) : uint64_t(size));
     }
 
     void toLog ( int level, const char * text, Context * context, LineInfoArg * at ) {
@@ -2153,6 +2172,12 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity",
             SideEffects::none, "builtin_table_capacity")
                 ->arg("table");
+        addExtern<DAS_BIND_FUN(builtin_table_long_size)>(*this, lib, "long_length",
+            SideEffects::none, "builtin_table_long_size")
+                ->arg("table");
+        addExtern<DAS_BIND_FUN(builtin_table_long_capacity)>(*this, lib, "long_capacity",
+            SideEffects::none, "builtin_table_long_capacity")
+                ->arg("table");
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_lock")
                 ->args({"table","context","at"});
@@ -2180,7 +2205,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_get_key)>(*this, lib, "__builtin_table_get_key",
             SideEffects::modifyExternal, "builtin_table_get_key")
                 ->args({"result","table","value_ptr","value_stride","key_stride","context","at"});
-        addInterop<builtin_table_reserve,void,vec4f,uint32_t>(*this, lib, "__builtin_table_reserve",
+        addInterop<builtin_table_reserve,void,vec4f,uint64_t>(*this, lib, "__builtin_table_reserve",
             SideEffects::modifyArgumentAndExternal, "builtin_table_reserve")
                 ->args({"table","size"});
         // array and table free
@@ -2355,6 +2380,10 @@ namespace das
             SideEffects::modifyArgument, "builtin_make_temp_array")
                 ->args({"array","data","size"});
         bmta->unsafeOperation = true;
+        auto bmta64 = addExtern<DAS_BIND_FUN(builtin_make_temp_array_i64)>(*this, lib, "_builtin_make_temp_array_i64",
+            SideEffects::modifyArgument, "builtin_make_temp_array_i64")
+                ->args({"array","data","size"});
+        bmta64->unsafeOperation = true;
         // migrate data
         addExtern<DAS_BIND_FUN(das_is_dll_build)>(*this, lib, "das_is_dll_build",
             SideEffects::worstDefault, "das_is_dll_build");

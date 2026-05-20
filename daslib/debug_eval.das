@@ -377,10 +377,10 @@ def opArray(var st : TokenStream; index : int64; var result : Result) {
         let pArray = reinterpret<DapiArray?> getPD(st, result)
         if (pArray == null) return st |> error("null pointer")
         let dim = pArray.size
-        if (index < 0l || index >= int64(dim)) return st |> error("index out of range")
+        if (index < 0l || uint64(index) >= dim) return st |> error("index out of range")
         let pData = reinterpret<int8?> pArray.data
         let elemSize = get_type_size(result.tinfo.firstType)
-        let offset = int(index) * elemSize
+        let offset = index * int64(elemSize)
         result.data = pData + offset
         result.tinfo = *result.tinfo.firstType
         return result

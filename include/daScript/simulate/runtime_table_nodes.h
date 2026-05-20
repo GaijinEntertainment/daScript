@@ -68,7 +68,7 @@ namespace das
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             TableHash<KeyType> thh(&context,valueTypeSize);
             auto hfn = hash_function(context, key);
-            int index = thh.reserve(*tab, key, hfn, &debugInfo);    // if index==-1, it was a through, so safe to do
+            int64_t index = thh.reserve(*tab, key, hfn, &debugInfo);    // reserve always returns a valid slot or throws
             return tab->data + index * valueTypeSize + offset;
         }
         uint32_t offset;
@@ -97,7 +97,7 @@ namespace das
             auto key = EvalTT<KeyType>::eval(context,PT::keyExpr);
             TableHash<KeyType> thh(&context,PT::valueTypeSize);
             auto hfn = hash_function(context, key);
-            int index = thh.find(*tab, key, hfn);
+            int64_t index = thh.find(*tab, key, hfn);
             return index!=-1 ? tab->data + index * PT::valueTypeSize : nullptr;
         }
     };
@@ -154,7 +154,7 @@ namespace das
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
-            int index = thh.find(*tab, key, hfn);
+            int64_t index = thh.find(*tab, key, hfn);
             return index!=-1 ? tab->data + index * valueTypeSize : nullptr;
         }
     };

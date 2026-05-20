@@ -2908,14 +2908,9 @@ namespace das {
             AstSerializerState * state,
             const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
             Context * context, LineInfoArg * at ) {
-        auto dataSize = state->storage->buffer.size();
-        if ( dataSize > INT32_MAX ) {
-            context->throw_error_at(at, "data size exceeds 2GB limit");
-            return;
-        }
         Array arr;
         array_mark_locked(arr, state->storage->buffer.data(),
-            uint32_t(state->storage->buffer.size()), uint32_t(state->storage->buffer.size()));
+            uint64_t(state->storage->buffer.size()), uint64_t(state->storage->buffer.size()));
         vec4f args[1] = { cast<Array *>::from(&arr) };
         context->invoke(block, args, nullptr, at);
     }

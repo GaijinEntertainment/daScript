@@ -635,7 +635,11 @@ extern "C" {
         if ( tab->isLocked() ) context->throw_error_at(at, "can't insert to a locked table");
         TableHash<KeyType> thh(context,valueTypeSize);
         auto hfn = hash_function(*context, key);
-        return thh.reserve(*tab, key, hfn, at);
+        int64_t idx = thh.reserve(*tab, key, hfn, at);
+        // TODO Phase 7: widen JIT helper return to int64_t. Until then, guard the narrowing
+        // so JIT-emitted code never gets a wrapped-negative slot index for huge tables.
+        if ( idx > int64_t(INT32_MAX) ) context->throw_error_at(at, "JIT table slot index %lld exceeds INT32_MAX; JIT does not yet support tables past INT_MAX slots", (long long)idx);
+        return (int32_t) idx;
     }
 
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
@@ -658,7 +662,11 @@ extern "C" {
     int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
         TableHash<KeyType> thh(context,valueTypeSize);
         auto hfn = hash_function(*context, key);
-        return thh.find(*tab, key, hfn);
+        int64_t idx = thh.find(*tab, key, hfn);
+        // TODO Phase 7: widen JIT helper return to int64_t. Until then, guard the narrowing
+        // so JIT-emitted code never gets a wrapped-negative slot index for huge tables.
+        if ( idx > int64_t(INT32_MAX) ) context->throw_error("JIT table slot index exceeds INT32_MAX; JIT does not yet support tables past INT_MAX slots");
+        return (int32_t) idx;
     }
 
     void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {

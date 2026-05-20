@@ -1715,14 +1715,25 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprAt
+    // Bring two integer LLVM values to a common width by zero-extending the narrower one.
+    // Needed since Array.size widened to i64 but daslang's default int index is still i32.
+    def normalize_int_widths(lhs : LLVMOpaqueValue?; rhs : LLVMOpaqueValue?) : tuple<LLVMOpaqueValue?; LLVMOpaqueValue?> {
+        let wl = LLVMGetIntTypeWidth(LLVMTypeOf(lhs))
+        let wr = LLVMGetIntTypeWidth(LLVMTypeOf(rhs))
+        return (LLVMBuildZExt(g_builder, lhs, LLVMTypeOf(rhs), ""), rhs) if (wl < wr)
+        return (lhs, LLVMBuildZExt(g_builder, rhs, LLVMTypeOf(lhs), "")) if (wr < wl)
+        return (lhs, rhs)
+    }
+
     def check_range(tidx, maxIdx : LLVMOpaqueValue?; at : LineInfo; message : string) {
         if (option_no_range_check) return
+        let (ntidx, nmax) = normalize_int_widths(tidx, maxIdx)
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")
         LLVMBuildBr(g_builder, check_null_ptr)
         LLVMPositionBuilderAtEnd(g_builder, check_null_ptr)
-        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntUGE, tidx, maxIdx, "range_check")
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntUGE, ntidx, nmax, "range_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
         build_exception(message, at)
@@ -1769,7 +1780,10 @@ class public LlvmJitVisitor : AstVisitor {
         var ptr_idx : LLVMOpaqueValue?
         if (elemType.isVectorType && elemType.vectorDim == 3) {
             var data_bytes = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(types.t_int8, 0u), "")
-            var data_idx = LLVMBuildMul(g_builder, tidx, types.ConstI32(12ul), "")
+            // Stride const must match tidx width — Array.size-derived `tail` is i64,
+            // dim-derived tail is i32; an i32 ConstI32 against i64 tidx is a verifier error.
+            var stride = LLVMConstInt(LLVMTypeOf(tidx), 12ul, 0)
+            var data_idx = LLVMBuildMul(g_builder, tidx, stride, "")
             ptr_idx = LLVMBuildGEP2(g_builder, types.t_int8, data_bytes, data_idx, "")
             ptr_idx = LLVMBuildPointerCast(g_builder, ptr_idx, LLVMPointerType(type_to_llvm_type(elemType), 0u), name)
         } else {
@@ -1889,7 +1903,8 @@ class public LlvmJitVisitor : AstVisitor {
             var if_not_null = empty(subExprT.dim) ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             res = build_select(if_not_null, resType) {
                 var maxIdx = types.ConstI32(uint64(maxIndex))
-                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, maxIdx, "dim_range")
+                let (nidx, nmax) = normalize_int_widths(tidx, maxIdx)
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, nidx, nmax, "dim_range")
                 var subRes = build_select(if_range, resType) {
                     return build_array_index(tsrc, tidx, etype, "dim_at")
                 }
@@ -1909,7 +1924,8 @@ class public LlvmJitVisitor : AstVisitor {
                 var arr_ty = expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(arr_ty), tsrc, arr_ty.alignOf, "arr")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
-                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, size, "array_range")
+                let (nidx, nsize) = normalize_int_widths(tidx, size)
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, nidx, nsize, "array_range")
                 var subRes = build_select(if_range, resType) {
                     var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                     return build_array_index(data, tidx, etype, "array_at")
@@ -1956,7 +1972,8 @@ class public LlvmJitVisitor : AstVisitor {
             var etype = subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             res = build_select(if_not_null, resType) {
-                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, types.ConstI32(uint64(etype.vectorDim)), "dim_range")
+                let (nidx, nmax) = normalize_int_widths(tidx, types.ConstI32(uint64(etype.vectorDim)))
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, nidx, nmax, "dim_range")
                 var subRes = build_select(if_range, resType) {
                     if (expr.atFlags.r2v) {
                         var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
@@ -2924,7 +2941,10 @@ class public LlvmJitVisitor : AstVisitor {
             } elif (ssrc._type.isGoodArrayType) {// {}->first()
                 var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(ssrc._type), getE(ssrc), ssrc._type.alignOf, "array")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
-                var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, size, types.ConstI32(0ul), "")
+                // Array.size is i64; produce zero/one of matching width for the compare + sub.
+                var i64_zero = LLVMConstInt(LLVMTypeOf(size), 0ul, 0)
+                var i64_one = LLVMConstInt(LLVMTypeOf(size), 1ul, 0)
+                var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, size, i64_zero, "")
                 var okay = append_basic_block("for_{svar.name}_not_empty")
                 var not_okay = append_basic_block("for_{svar.name}_empty")
                 LLVMBuildCondBr(g_builder, cmp_from_to, okay, not_okay)
@@ -2935,7 +2955,7 @@ class public LlvmJitVisitor : AstVisitor {
                 build_array_lock(getE(ssrc), expr.at)
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
-                var tail = LLVMBuildSub(g_builder, size, types.ConstI32(1ul), "")
+                var tail = LLVMBuildSub(g_builder, size, i64_one, "")
                 var sto = build_array_index(data, tail, ssrc._type.firstType, "last_element")
                 sto = LLVMBuildPtrToInt(g_builder, sto, types.LLVMIntPtrType(), "array_end")
                 range2[ssrc] = sto
