@@ -221,6 +221,9 @@ namespace das {
                 }
             } else if (expr->left->rtti_isAt()) {
                 ExprAt *eat = (ExprAt *)(expr->left);
+                if ( !eat->subexpr->type || eat->subexpr->type->isExprType() ) {
+                    return nullptr;
+                }
                 auto complexName = "[]" + expr->name;
                 if (auto atComplex = inferGenericOperator3(complexName, eat->at, eat->subexpr, eat->index, expr->right)) {
                     atComplex->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
