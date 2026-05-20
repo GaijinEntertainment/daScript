@@ -2273,6 +2273,12 @@ namespace das {
             } else if (expr->trait == "is_numeric") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->isNumeric());
+            } else if (expr->trait == "is_int") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt && expr->typeexpr->dim.size() == 0);
+            } else if (expr->trait == "is_int64") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt64 && expr->typeexpr->dim.size() == 0);
             } else if (expr->trait == "is_numeric_comparable") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->isNumericComparable());
