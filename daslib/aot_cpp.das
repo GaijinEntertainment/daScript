@@ -837,12 +837,22 @@ class public AotDebugInfoHelper {
     def describeCppEnumInfoValues(var writer : StringBuilderWriter?; einfo : EnumInfo?) {
         for (v in range(einfo.count)) {
             let val = unsafe(einfo.fields[v]);
-            // Emit the int64 value as a bit pattern through uint64 — decimal `-9223372036854775808`
-            // (INT64_MIN, e.g. for `enum X : uint64 { HIGH_BIT = 0x8000000000000000ul }`) overflows
-            // the C++ int64 literal parser and trips clang's -Wc++11-narrowing under MSVC even though
-            // MSVC accepts it. The `int64_t(uint64_t(0x...ull))` round-trip is well-defined modulo 2^64.
+            // Portable C++ int64 literal: the previous `int64_t(UINT64_C(0x...))` form relied on
+            // the uint64→int64 narrowing being well-defined, which is only true post-C++20.
+            // Negative values are emitted via unary minus on a positive INT64_C literal;
+            // INT64_MIN is special-cased because |INT64_MIN| overflows int64 before the
+            // unary minus binds, so we construct it from valid signed parts instead.
             let bits = uint64(val.value)
-            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", int64_t(UINT64_C(0x{bits:x})) \};\n")
+            var cppLit : string
+            if (bits == 0x8000000000000000ul) {
+                cppLit := "(-INT64_C(0x7fffffffffffffff) - INT64_C(1))"
+            } elif (val.value < 0l) {
+                let absBits = uint64(-val.value)
+                cppLit := "-INT64_C(0x{absBits:x})"
+            } else {
+                cppLit := "INT64_C(0x{bits:x})"
+            }
+            write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", {cppLit} \};\n")
         }
         let enum_vals = (each(range(einfo.count))
             ._select("&{enumInfoName(einfo)}_value_{_}")
