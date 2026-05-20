@@ -147,6 +147,52 @@ def private describe_count(expr : Expression?; needle : string) : int {
     return n
 }
 
+// Structural ExprFor counter — robust against describe() formatting changes (Copilot review #2).
+def private count_expr_for(expr : Expression?) : int {
+    if (expr == null) return 0
+    var n = 0
+    if (expr is ExprFor) {
+        n ++
+        var ef = expr as ExprFor
+        for (s in ef.sources) {
+            n += count_expr_for(s)
+        }
+        n += count_expr_for(ef.body)
+    } elif (expr is ExprBlock) {
+        var eb = expr as ExprBlock
+        for (s in eb.list) {
+            n += count_expr_for(s)
+        }
+    } elif (expr is ExprMakeBlock) {
+        var emb = expr as ExprMakeBlock
+        n += count_expr_for(emb._block)
+    } elif (expr is ExprInvoke) {
+        var ei = expr as ExprInvoke
+        for (a in ei.arguments) {
+            n += count_expr_for(a)
+        }
+    } elif (expr is ExprCall) {
+        var ec = expr as ExprCall
+        for (a in ec.arguments) {
+            n += count_expr_for(a)
+        }
+    } elif (expr is ExprLet) {
+        var el = expr as ExprLet
+        for (v in el.variables) {
+            n += count_expr_for(v.init)
+        }
+    } elif (expr is ExprReturn) {
+        var er = expr as ExprReturn
+        n += count_expr_for(er.subexpr)
+    } elif (expr is ExprIfThenElse) {
+        var ei = expr as ExprIfThenElse
+        n += count_expr_for(ei.cond)
+        n += count_expr_for(ei.if_true)
+        n += count_expr_for(ei.if_false)
+    }
+    return n
+}
+
 [export, marker(no_coverage)]
 def target_unroll_count_fold() : int {
     return _fold(from_decs_template(type<UnrollCountRow>).count())
@@ -186,7 +232,7 @@ def test_unroll_count_splice_shape(t : T?) {
         // arch.size shortcut: no inner for-loop (per-entity walk), no to_sequence.
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "count splice must NOT call to_sequence")
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "count splice emits exactly one for_each_archetype")
-        t |> equal(describe_count(body_expr, "for ( "), 0, "count splice with no chain ops must NOT emit inner per-entity for-loop")
+        t |> equal(count_expr_for(body_expr), 0, "count splice with no chain ops must NOT emit inner per-entity for-loop")
         t |> equal(describe_count(body_expr, ".size"), 1, "count splice reads arch.size")
     }
 }

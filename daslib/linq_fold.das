@@ -2942,8 +2942,11 @@ def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
     if (forBody.list |> length != 1
             || !(forBody.list[0] is ExprCall)) return null
     var pushCall = forBody.list[0] as ExprCall
+    // Push target must be the SAME `res` from stmt 0 — guards a user-written invoke that returns res.to_sequence() but pushes elsewhere.
     if (get_call_short_name(pushCall) != "push"
-            || pushCall.arguments |> length < 2
+            || pushCall.arguments |> length != 2
+            || !(pushCall.arguments[0] is ExprVar)
+            || (pushCall.arguments[0] as ExprVar).name != resVarName
             || !(pushCall.arguments[1] is ExprMakeTuple)) return null
     var mkTup = pushCall.arguments[1] as ExprMakeTuple
     if (mkTup.recordNames |> length != forExpr.sources |> length
