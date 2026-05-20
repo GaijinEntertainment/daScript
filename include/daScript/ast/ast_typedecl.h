@@ -393,23 +393,11 @@ namespace das {
     // EnumStub*/EnumStub*u — bindings carry the enumStubBinding marker so overload
     // resolution can dispatch enum→int casts by underlying signedness. The 32-bit
     // tEnumeration variant is unaffected by sign-extension and stays generic.
-    //
-    // We write the two markers via both the bitfield members AND the `flags` mask.
-    // The bitfield members keep RTTI / macro access (makeTypeDeclFlags exposes them
-    // by name) working; the explicit mask writes make the bits durable across
-    // platforms in case `bool : 1` bitfield-vs-uint32 union aliasing is fragile
-    // under a given ABI (Darwin clang ARM64 dispatch failures point at exactly
-    // this kind of aliasing mismatch). isSameType / mangling read via the same
-    // mask constants so they never depend on the bitfield alias.
-    static constexpr uint32_t TDF_enumStubBinding    = (1u << 19);
-    static constexpr uint32_t TDF_enumStubIsUnsigned = (1u << 20);
-
     template <>
     struct typeFactory<EnumStub8> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
             auto t = new TypeDecl(Type::tEnumeration8);
             t->enumStubBinding = true;
-            t->flags |= TDF_enumStubBinding;
             return t;
         }
     };
@@ -419,7 +407,6 @@ namespace das {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
             auto t = new TypeDecl(Type::tEnumeration16);
             t->enumStubBinding = true;
-            t->flags |= TDF_enumStubBinding;
             return t;
         }
     };
@@ -429,7 +416,6 @@ namespace das {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
             auto t = new TypeDecl(Type::tEnumeration64);
             t->enumStubBinding = true;
-            t->flags |= TDF_enumStubBinding;
             return t;
         }
     };
@@ -440,7 +426,6 @@ namespace das {
             auto t = new TypeDecl(Type::tEnumeration8);
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
-            t->flags |= (TDF_enumStubBinding | TDF_enumStubIsUnsigned);
             return t;
         }
     };
@@ -451,7 +436,6 @@ namespace das {
             auto t = new TypeDecl(Type::tEnumeration16);
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
-            t->flags |= (TDF_enumStubBinding | TDF_enumStubIsUnsigned);
             return t;
         }
     };
@@ -462,7 +446,6 @@ namespace das {
             auto t = new TypeDecl(Type::tEnumeration64);
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
-            t->flags |= (TDF_enumStubBinding | TDF_enumStubIsUnsigned);
             return t;
         }
     };
