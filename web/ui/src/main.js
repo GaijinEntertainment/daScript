@@ -121,27 +121,66 @@ function syncUrlToState() {
     if (url && url !== location.href) history.pushState(null, '', url);
 }
 
+// Multi-file MEMFS sync: unlink stale, write current pgState files. Returns
+// true when pgState + FS are ready (callers can then callMain); false when
+// the tab strip hasn't mounted yet (caller falls back to single-buffer flow).
+function syncMemFsFromState() {
+    if (!window.pgState || typeof FS === 'undefined') return false;
+    const current = new Set(Object.keys(window.pgState.files));
+    for (const stale of __lastWrittenFiles) {
+        if (!current.has(stale)) {
+            try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
+        }
+    }
+    for (const [name, doc] of Object.entries(window.pgState.files)) {
+        FS.writeFile(name, doc.getValue());
+    }
+    __lastWrittenFiles = current;
+    return true;
+}
+
 runCode = function() {
-    // Multi-file: sync MEMFS with the current pgState (unlink stale, write
-    // current), then run main.das. Falls back to the single-buffer path when
-    // pgState isn't up yet.
-    if (window.pgState && typeof FS !== 'undefined') {
-        const current = new Set(Object.keys(window.pgState.files));
-        for (const stale of __lastWrittenFiles) {
-            if (!current.has(stale)) {
-                try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
-            }
-        }
-        for (const [name, doc] of Object.entries(window.pgState.files)) {
-            FS.writeFile(name, doc.getValue());
-        }
-        __lastWrittenFiles = current;
+    if (syncMemFsFromState()) {
         syncUrlToState();
         Module.callMain(['main.das']);
         return;
     }
     syncUrlToState();
     runScript(code.getValue());
+}
+
+// Toggle the Test button based on whether any open buffer declares a `[test]`
+// annotation. \b after `test` keeps `[test_something]` from triggering. Called
+// from playground-tabs.js autosave (which fires on every state mutation: edit,
+// switch, add, rename, delete) so the button stays in sync without polling.
+var __TEST_ANNOT_RE = /\[\s*test\b/m;
+function updateTestButtonState() {
+    const btn = document.getElementById('test');
+    if (!btn) return;
+    let hasTest = false;
+    if (window.pgState) {
+        for (const doc of Object.values(window.pgState.files)) {
+            if (__TEST_ANNOT_RE.test(doc.getValue())) { hasTest = true; break; }
+        }
+    } else if (typeof code === 'object' && code) {
+        hasTest = __TEST_ANNOT_RE.test(code.getValue());
+    }
+    btn.disabled = !hasTest;
+}
+window.updateTestButtonState = updateTestButtonState;
+
+// Invoke dastest against the current main.das. `[test]` functions in the file
+// are discovered + run by dastest/suite.das; the existing Module.print hook
+// routes stdout into the output panel. No --color: Emscripten has no TERM and
+// our printOutput doesn't render ANSI escapes. --timeout=0 disables dastest's
+// wall-clock thread (suite.das wraps each file in new_thread when timeout>0),
+// keeping the run single-threaded in the WASM build.
+runTests = function() {
+    if (!syncMemFsFromState()) {
+        FS.writeFile('main.das', code.getValue());
+    }
+    syncUrlToState();
+    Module.callMain(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
 }
 
 clearOutput = function() {

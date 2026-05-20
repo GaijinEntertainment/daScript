@@ -40,7 +40,20 @@ add_link_options(
     -sALLOW_MEMORY_GROWTH=1
 )
 # embed daslang standard library into wasm binary.
-add_link_options(--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@daslib)
+# SHELL: keeps the --embed-file + path pair atomic — without it, CMake folds
+# repeated --embed-file flags into one token (drops the second), so the second
+# directory becomes a positional arg to em++ and the embed silently fails.
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@daslib")
+# Exclude modules whose native dependencies are not linked in the WASM build.
+# spoof + its only consumer linked_list both require peg/peg (dasPEG module),
+# which is not linked here. Embedding them gives users a confusing
+# "module peg/peg not found" compile error; better to fail at the require
+# itself with "module not found".
+add_link_options("SHELL:--exclude-file */daslib/spoof.das")
+add_link_options("SHELL:--exclude-file */daslib/linked_list.das")
+# embed dastest runner so the playground's Test button can invoke
+# /dastest/dastest.das against user-authored [test] functions.
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../dastest@dastest")
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${DAS_CONFIG_INCLUDE_DIR})

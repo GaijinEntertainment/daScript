@@ -20,6 +20,10 @@
     {
       "name" : "Random Sequence",
       "files" : ["examples/random_sequence.das"]
+    },
+    {
+      "name" : "Tests",
+      "files" : ["examples/tests.das"]
     }
   ]
 }
