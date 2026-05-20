@@ -428,6 +428,15 @@ DAS_CC_API void * das_context_reallocate ( das_context * context, void * ptr, ui
 // accept it). Passing ptr==NULL is a no-op.
 DAS_CC_API void   das_context_free ( das_context * context, void * ptr, uint32_t size );
 
+// 64-bit-size variants of the context allocators. Behavior identical to the
+// uint32_t entries above, but the byte-count argument is uint64_t so callers
+// can request > 4GB allocations on platforms with a wide enough address space.
+// The uint32_t entries above remain ABI-stable and forward to the same
+// internal allocator after a zero-extending upcast.
+DAS_CC_API void * das_context_allocate_i64 ( das_context * context, uint64_t size );
+DAS_CC_API void * das_context_reallocate_i64 ( das_context * context, void * ptr, uint64_t old_size, uint64_t new_size );
+DAS_CC_API void   das_context_free_i64 ( das_context * context, void * ptr, uint64_t size );
+
 // --- Arrays ---
 // Helpers to construct, populate and pass `array<T>` values from C code.
 // All sizes/strides are in bytes for raw element access; element count is the

@@ -8,7 +8,7 @@ namespace das {
     void das_track_breakpoint ( uint64_t id );
 #endif
 
-    #define DAS_PAGE_GC_MASK    0x80000000
+    #define DAS_PAGE_GC_MASK    0x8000000000000000ull
     #define DAS_MAX_SHOE_ALLOCATION     256
     #define DAS_MAX_SHOE_CUNKS          (DAS_MAX_SHOE_ALLOCATION>>4)
 
@@ -279,39 +279,39 @@ namespace das {
         virtual ~MemoryModel ();
         virtual void reset();
         virtual void shrink();
-        void setInitialSize ( uint32_t size );
+        void setInitialSize ( uint64_t size );
         uint32_t grow ( uint32_t si );
         virtual void sweep();
-        char * allocate ( uint32_t size );
-        bool free ( char * ptr, uint32_t size );
-        char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
+        char * allocate ( uint64_t size );
+        bool free ( char * ptr, uint64_t size );
+        char * reallocate ( char * ptr, uint64_t size, uint64_t nsize );
         __forceinline int depth() const { return shoe.depth(); }
-        __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
+        __forceinline bool isOwnPtr( char * ptr, uint64_t size ) const {
             if ( size<=maxShoeAllocation )
-                return shoe.isOwnPtr(ptr,size);
+                return shoe.isOwnPtr(ptr,uint32_t(size));
             return (bigStuff.find(ptr)!=bigStuff.end());
         }
-        __forceinline bool isAllocatedPtr( char * ptr, uint32_t size ) const {
+        __forceinline bool isAllocatedPtr( char * ptr, uint64_t size ) const {
             if ( size<=maxShoeAllocation )
-                return shoe.isAllocatedPtr(ptr,size);
+                return shoe.isAllocatedPtr(ptr,uint32_t(size));
             return (bigStuff.find(ptr)!=bigStuff.end());
         }
-        uint32_t bytesAllocated() const { return totalAllocated; }
-        uint32_t maxBytesAllocated() const { return maxAllocated; }
+        uint64_t bytesAllocated() const { return totalAllocated; }
+        uint64_t maxBytesAllocated() const { return maxAllocated; }
         uint64_t totalAlignedMemoryAllocated() const;
         void setTrackAllocations ( bool on );
         __forceinline bool isTrackingAllocations() const { return trackAllocations; }
         CustomGrowFunction      customGrow;
         uint32_t                alignMask;
-        uint32_t                totalAllocated;
-        uint32_t                maxAllocated;
-        uint32_t                initialSize = 0;
+        uint64_t                totalAllocated;
+        uint64_t                maxAllocated;
+        uint64_t                initialSize = 0;
         uint32_t                maxShoeAllocation = DAS_MAX_SHOE_ALLOCATION;
         bool                    trackAllocations = false;
         Shoe                    shoe;
-        das_hash_map<void *,uint32_t> bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
+        das_hash_map<void *,uint64_t> bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
 #if DAS_SANITIZER
-        das_hash_map<void *,uint32_t> deletedBigStuff;
+        das_hash_map<void *,uint64_t> deletedBigStuff;
 #endif
 #if DAS_TRACK_ALLOCATIONS
         das_hash_map<void *,uint64_t> bigStuffId;
@@ -377,9 +377,9 @@ namespace das {
     public:
         LinearChunkAllocator() { }
         virtual ~LinearChunkAllocator () { if ( chunk ) delete chunk; }
-        char * allocate ( uint32_t s );
-        void free ( char * ptr, uint32_t s );
-        char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
+        char * allocate ( uint64_t s );
+        void free ( char * ptr, uint64_t s );
+        char * reallocate ( char * ptr, uint64_t size, uint64_t nsize );
         virtual void reset ();
         virtual void shrink ();
         char * allocateName ( const string & name );
@@ -395,7 +395,12 @@ namespace das {
         uint32_t depth() const;
         uint64_t bytesAllocated() const;
         uint64_t totalAlignedMemoryAllocated() const;
-        __forceinline void setInitialSize ( uint32_t size ) {
+        __forceinline void setInitialSize ( uint64_t size ) {
+            // HeapChunk allocation is uint32-bounded; LinearChunkAllocator never
+            // serves >4GB single allocations (those go through PersistentHeapAllocator
+            // / MemoryModel::bigStuff). Setting a larger initial size would silently
+            // truncate when the first chunk is created — fail loud instead.
+            DAS_VERIFYF(size <= UINT32_MAX, "LinearChunkAllocator::setInitialSize(%llu) exceeds the per-chunk uint32 cap", (unsigned long long)size);
             unadjustedInitialSize = size;
             initialSize = size;
         }
@@ -404,8 +409,8 @@ namespace das {
         void getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total ) const;
     public:
         CustomGrowFunction  customGrow;
-        uint32_t    unadjustedInitialSize = 0;
-        uint32_t    initialSize = 0;
+        uint64_t    unadjustedInitialSize = 0;
+        uint64_t    initialSize = 0;
         uint32_t    alignMask = 15;
         HeapChunk * chunk = nullptr;
     };
