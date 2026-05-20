@@ -143,11 +143,11 @@ def private port_in_range(s : string) : bool {
     peek_data(s) $(bytes) {
         for (b in bytes) {
             let c = int(b)
-            if (c < int('0') || c > int('9')) {
+            if (c < '0' || c > '9') {
                 n = -1
                 return
             }
-            n = n * 10 + (c - int('0'))
+            n = n * 10 + (c - '0')
         }
     }
     return n > 0 && n <= 65535

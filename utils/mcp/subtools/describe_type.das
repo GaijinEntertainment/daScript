@@ -229,8 +229,8 @@ def main {
         print(make_tool_result("describe_type subtool: expected 3 args (name, module_name, project), got {length(args)}", true))
         return
     }
-    let name = string(args[0])
-    let module_name = string(args[1])
-    let project = string(args[2])
+    let name = args[0]
+    let module_name = args[1]
+    let project = args[2]
     print(run_describe_type(name, module_name, project))
 }

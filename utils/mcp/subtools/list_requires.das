@@ -121,8 +121,8 @@ def main {
         print(make_tool_result("list_requires subtool: expected 3 args (file, project, json), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let project = string(args[1])
-    let json = string(args[2]) == "true"
+    let file = args[0]
+    let project = args[1]
+    let json = args[2] == "true"
     print(run_list_requires(file, project, json))
 }

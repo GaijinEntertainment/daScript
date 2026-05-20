@@ -316,12 +316,12 @@ def main {
         print(make_tool_result("goto_definition subtool: expected 7 args (file, line, col, no_opt, with_cpp_source, cpp_dirs, project), got {length(args)}", true))
         return
     }
-    let file = string(args[0])
-    let line_str = string(args[1])
-    let col_str = string(args[2])
-    let no_opt_str = string(args[3])
-    let with_cpp_source_str = string(args[4])
-    let cpp_dirs = string(args[5])
-    let project = string(args[6])
+    let file = args[0]
+    let line_str = args[1]
+    let col_str = args[2]
+    let no_opt_str = args[3]
+    let with_cpp_source_str = args[4]
+    let cpp_dirs = args[5]
+    let project = args[6]
     print(run_goto_definition(file, line_str, col_str, no_opt_str, with_cpp_source_str, cpp_dirs, project))
 }

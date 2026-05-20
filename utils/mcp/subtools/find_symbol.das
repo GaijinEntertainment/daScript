@@ -284,11 +284,11 @@ def main {
         print(make_tool_result("find_symbol subtool: expected 5+ args (query, kind, file, project, with_cpp_source[, cpp_dirs]), got {length(args)}", true))
         return
     }
-    let query = string(args[0])
-    let kind = string(args[1])
-    let file = string(args[2])
-    let project = string(args[3])
-    let with_cpp_source = string(args[4]) == "true"
-    let cpp_dirs <- length(args) >= 6 ? parse_cpp_dirs(string(args[5])) : default<array<string>>
+    let query = args[0]
+    let kind = args[1]
+    let file = args[2]
+    let project = args[3]
+    let with_cpp_source = args[4] == "true"
+    let cpp_dirs <- length(args) >= 6 ? parse_cpp_dirs(args[5]) : default<array<string>>
     print(run_find_symbol(query, kind, file, project, with_cpp_source, cpp_dirs))
 }

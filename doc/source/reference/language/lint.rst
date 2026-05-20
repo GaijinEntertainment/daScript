@@ -675,6 +675,53 @@ uses runtime operands; the constant case is covered by the CI lint gate.
         return int(m1 | m2)
     }
 
+PERF020 — redundant same-type cast
+====================================
+
+``T(x)`` where ``x`` is already of workhorse type ``T`` is a no-op. The
+cast produces a real ``ExprCall`` node — the parser/typer does NOT elide
+it — so it costs source noise and one call dispatch for zero work.
+
+Fires for the 15 workhorse cast names: ``int``, ``int8``, ``int16``,
+``int64``, ``uint``, ``uint8``, ``uint16``, ``uint64``, ``float``,
+``double``, ``string``, ``bitfield``, ``bitfield8``, ``bitfield16``,
+``bitfield64``. The match is on the call's ``func.name`` /
+``fromGeneric.name`` (so generic instantiations of the cast still
+trigger) combined with a strict ``arg._type.baseType`` equality check
+against the cast's target type. Const / reference / temporary qualifiers
+on the argument are ignored — only ``baseType`` matters.
+
+.. code-block:: das
+
+    // Bad — a is already int64
+    def widen(a : int64) : int64 {
+        return int64(a)                                     // PERF020
+    }
+
+    def field_read(s : SomeStruct) : int64 {
+        return int64(s.value)                               // PERF020 — s.value is int64
+    }
+
+    // Good
+    def widen(a : int64) : int64 {
+        return a
+    }
+
+The rule deliberately does NOT cover:
+
+- User-named bitfield/enum constructors (``MyBitfield(x)``, ``MyEnum(x)``).
+  These are parser-synthesized constructors named after the user type, not
+  the bare workhorse name in the table above; ``MyBitfield(modeVar)``
+  does not match.
+- Vector constructors (``int2``, ``float3``, …). They primarily take
+  componentwise arguments and are excluded by the single-argument gate.
+- ``string(das_string)`` — covered by PERF007 (in comparisons) and
+  PERF012 (passed to ``strings`` functions). ``das_string`` has a
+  distinct ``baseType``, so it does not collide with this rule.
+
+Cross-type casts (widening, narrowing, signedness change, float ↔ int)
+are genuine work and do NOT fire.
+
 .. _style_lint:
 
 -----------

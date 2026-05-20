@@ -125,6 +125,7 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF017 | `length(x) == 0` / `> 0` / `>= 1` etc. | Medium | use `empty(x)` / `!empty(x)`; avoids strlen on strings |
 | PERF018 | `for (i in range(length(arr))) { ... arr[i] ... }` (where `i` only indexes `arr`) | Medium | use `for (c in arr) { ... c ... }`; direct iteration drops the index |
 | PERF019 | `int(T.a) \| int(T.b)` on the same bitfield (or enum with `operator \|` overload) | Low | collapse to `int(T.a \| T.b)` — one cast instead of two. **Const-foldable forms only fire under lint policies** (`no_optimizations`/`no_infer_time_folding`); dastest validates runtime forms only. Enum-overload probe iterates `program_for_each_module` + `for_each_function(mod, "\|")`, cached per-enum-type on the visitor |
+| PERF020 | `T(x)` where `x` is already workhorse type `T` (15 names: `int`/`int8`/`int16`/`int64`, `uint`/`uint8`/`uint16`/`uint64`, `float`, `double`, `string`, `bitfield`/`bitfield8`/`bitfield16`/`bitfield64`) | Low | drop the cast — it's a no-op. Match: `call.func.fromGeneric?.name ?? call.func.name` is in the workhorse-cast set AND `arg._type.baseType` equals the cast's target type (Ref/Const/Temp qualifiers ignored). User-named bitfield/enum constructors (`MyBitfield(x)`, `MyEnum(x)`), vector constructors (`int2`/`float3`/…), and `string(das_string)` are out of scope by construction |
 
 ## Visitor gotchas
 

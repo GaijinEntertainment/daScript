@@ -58,7 +58,7 @@ def public do_find_dupe(paths : string;
         stage1_argv |> push(resolve_path(f))
     }
     stage1_argv |> push("--json")
-    stage1_argv |> push(string(dupes_json))
+    stage1_argv |> push(dupes_json)
     if (threshold >= 0.0) {
         stage1_argv |> push("-t")
         stage1_argv |> push("{threshold}")
