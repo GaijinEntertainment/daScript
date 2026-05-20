@@ -11,6 +11,7 @@ require daslib/json_boost
 require math
 require strings
 require daslib/strings_boost
+require daslib/rtti
 require ../common/parallel_workers.das
 
 let JSON_PREFIX = "##lint##\n"
@@ -48,6 +49,14 @@ struct Config {
 
     @clarg_doc = "Worker mode: read newline-delimited file paths and emit one JSON-wrapped LintResult per file on stdout. Internal — used by parallel driver. Skips positional args, banner, summary."
     paths_from : string
+
+    @clarg_short = "d"
+    @clarg_doc = "Disable rule(s). Repeatable or comma-separated. Codes only (e.g. PERF001,STYLE024). On overlap with --enable, --disable wins."
+    disable : array<string>
+
+    @clarg_short = "e"
+    @clarg_doc = "Enable rule(s) — whitelist. If used, only listed rules run (subject to --disable). Repeatable or comma-separated."
+    enable : array<string>
 
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
@@ -127,7 +136,48 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
     }
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene : bool) : LintResult {
+// Validates a rule code: ^(LINT|PERF|STYLE)\d{3}$. Returns true if shape matches.
+def is_valid_rule_code(code : string) : bool {
+    let n = length(code)
+    return false if (n < 7 || n > 8)
+    var prefix_len = 0
+    if (code |> starts_with("LINT") || code |> starts_with("PERF")) {
+        prefix_len = 4
+    } elif (code |> starts_with("STYLE")) {
+        prefix_len = 5
+    } else {
+        return false
+    }
+    let digits = slice(code, prefix_len)
+    return false if (length(digits) != 3)
+    var all_digits = true
+    peek_data(digits) $(d) {
+        for (c in d) {
+            if (int(c) < int('0') || int(c) > int('9')) {
+                all_digits = false
+            }
+        }
+    }
+    return all_digits
+}
+
+// Comma-split, strip, uppercase, validate. On bad token returns the bad token
+// (caller emits error + exits); on success returns "" and dest is populated.
+def normalize_rule_list(raw : array<string>; var dest : table<string>) : string {
+    for (entry in raw) {
+        let parts <- entry |> split(",")
+        for (p in parts) {
+            let token = p |> strip |> to_upper
+            continue if (empty(token))
+            return token if (!is_valid_rule_code(token))
+            dest |> insert(token)
+        }
+    }
+    return ""
+}
+
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene : bool;
+              disabled_codes, enabled_codes : table<string>) : LintResult {
     var result = LintResult(file = file)
     if (has_expect_directive(file)) {
         result.skip_reason = "(intentional compile errors via `expect`)"
@@ -157,21 +207,21 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
                 }
                 if (run_paranoid) {
                     var paranoid_issues : array<string>
-                    result.count += paranoid_collect(program, paranoid_issues)
+                    result.count += paranoid_collect(program, paranoid_issues, disabled_codes, enabled_codes)
                     for (w in paranoid_issues) {
                         result.errors |> push(w)
                     }
                 }
                 if (run_perf) {
                     var perf_issues : array<string>
-                    result.count += perf_lint_collect(program, perf_issues)
+                    result.count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
                     for (w in perf_issues) {
                         result.errors |> push(w)
                     }
                 }
                 if (run_style) {
                     var style_issues : array<string>
-                    result.count += style_lint_collect(program, style_issues, comment_hygiene)
+                    result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, comment_hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
@@ -222,9 +272,10 @@ def read_paths_from(path : string; var out : array<string>) : bool {
 // Worker entry: lint every file in `paths`, emit one JSON-wrapped
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
-def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene : bool) {
+def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene : bool;
+               disabled_codes, enabled_codes : table<string>) {
     for (f in paths) {
-        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene)
+        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, disabled_codes, enabled_codes)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
     }
 }
@@ -303,6 +354,14 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
         if (cfg.style_only) {
             argv |> push("--style-only")
         }
+        if (!empty(cfg.disable)) {
+            argv |> push("--disable")
+            argv |> push(cfg.disable |> join(","))
+        }
+        if (!empty(cfg.enable)) {
+            argv |> push("--enable")
+            argv |> push(cfg.enable |> join(","))
+        }
         argvs |> emplace(argv)
     }
 
@@ -370,6 +429,19 @@ def main() : int {
     let run_perf = !any_only || cfg.perf_only
     let run_style = !any_only || cfg.style_only
 
+    var disabled_codes : table<string>
+    var enabled_codes : table<string>
+    let dis_bad = normalize_rule_list(cfg.disable, disabled_codes)
+    if (!empty(dis_bad)) {
+        print("error: invalid rule code \"{dis_bad}\" in --disable (expected LINT|PERF|STYLE + 3 digits)\n")
+        return 1
+    }
+    let en_bad = normalize_rule_list(cfg.enable, enabled_codes)
+    if (!empty(en_bad)) {
+        print("error: invalid rule code \"{en_bad}\" in --enable (expected LINT|PERF|STYLE + 3 digits)\n")
+        return 1
+    }
+
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
     // JSON-wrapped results. No banner, no summary, no exit-code derivation.
     if (!empty(cfg.paths_from)) {
@@ -378,7 +450,7 @@ def main() : int {
             print("error: cannot read paths-from file: {cfg.paths_from}\n")
             return 1
         }
-        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene)
+        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, disabled_codes, enabled_codes)
         return 0
     }
 
@@ -434,7 +506,7 @@ def main() : int {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene)
+            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, disabled_codes, enabled_codes)
             print_result(result, cfg.quiet)
             if (!empty(result.skip_reason)) {
                 total_skipped++

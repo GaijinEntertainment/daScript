@@ -57,11 +57,20 @@ class LintVisitor : AstVisitor {
     // collection mode — when true, errors are appended to `errors` instead of error()
     collect_errors : bool = false
     errors : array<string>
+    // Filters: disabled (denylist) and enabled (whitelist; empty == all).
+    // Caller-populated via collect overload; applied alongside // nolint suppression.
+    disabled_codes : table<string>
+    enabled_codes : table<string>
     def LintVisitor() {
         pass
     }
     def is_suppressed(text : string; at : LineInfo) : bool {
-        return is_lint_suppressed(at, extract_lint_code(text))
+        let code = extract_lint_code(text)
+        if (!empty(code)) {
+            return true if (key_exists(disabled_codes, code)
+                            || (!empty(enabled_codes) && !key_exists(enabled_codes, code)))
+        }
+        return is_lint_suppressed(at, code)
     }
     def lint_error(text : string; at : LineInfo) : void {
         if (noLint || self->is_suppressed(text, at)) return
@@ -273,7 +282,17 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
 def public paranoid_collect(prog : ProgramPtr; var errors : array<string>) : int {
     //! Runs the paranoid lint visitor and collects errors as strings.
     //! Returns the number of lint issues found.
+    let empty_set : table<string>
+    return paranoid_collect(prog, errors, empty_set, empty_set)
+}
+
+def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
+                            disabled_codes, enabled_codes : table<string>) : int {
+    //! Filter-aware overload. `disabled_codes` is a denylist; `enabled_codes`
+    //! is a whitelist (empty == all). Codes use the bare form (e.g. "LINT002").
     var astVisitor = new LintVisitor(compile_time_errors = false, collect_errors = true)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(adapter) {
         astVisitor.astVisitorAdapter = adapter
         visit(prog, astVisitor.astVisitorAdapter)

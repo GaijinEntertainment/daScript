@@ -82,8 +82,18 @@ class StyleLintVisitor : AstVisitor {
         return uint64(at.line) | (uint64(at.column) << uint64(20))
     }
 
+    // Filters: disabled (denylist) and enabled (whitelist; empty == all).
+    // Caller-populated via collect overload; applied alongside // nolint suppression.
+    disabled_codes : table<string>
+    enabled_codes : table<string>
+
     def is_suppressed(text : string; at : LineInfo) : bool {
-        return is_lint_suppressed(at, extract_lint_code(text))
+        let code = extract_lint_code(text)
+        if (!empty(code)) {
+            return true if (key_exists(disabled_codes, code)
+                            || (!empty(enabled_codes) && !key_exists(enabled_codes, code)))
+        }
+        return is_lint_suppressed(at, code)
     }
 
     def style_warning(text : string; at : LineInfo) : void {
@@ -1259,7 +1269,7 @@ class StyleLintVisitor : AstVisitor {
         //! Add 1 to the current top of `unsafe_stack`.
         let n = length(unsafe_stack)
         if (n > 0) {
-            unsafe_stack[n - 1].count += 1
+            unsafe_stack[n - 1].count++
         }
     }
 
@@ -1318,10 +1328,14 @@ class StyleLintVisitor : AstVisitor {
         //! when narrowing would leave the let-ref binding unsatisfied).
         if (expr.genFlags.generated) return
         for (v in expr.variables) {
-            if (v._type == null || !v._type.flags.ref || v.init == null) continue
-            if (v.init.genFlags.alwaysSafe) continue
-            if (v.init._type != null && v.init._type.flags.temporary) continue
-            if (is_local_or_global_expr(v.init)) continue
+            continue if (
+                v._type == null ||
+                !v._type.flags.ref ||
+                v.init == null ||
+                v.init.genFlags.alwaysSafe ||
+                (v.init._type != null && v.init._type.flags.temporary) ||
+                is_local_or_global_expr(v.init)
+            )
             self->mark_non_local_let_ref_in_stack()
             return
         }
@@ -1515,7 +1529,18 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; c
     //! Runs the style lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
     //! Pass ``comment_hygiene = true`` to enable STYLE014/STYLE015 checks.
+    let empty_set : table<string>
+    return style_lint_collect(prog, warnings, empty_set, empty_set, comment_hygiene)
+}
+
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
+                              disabled_codes, enabled_codes : table<string>;
+                              comment_hygiene : bool = false) : int {
+    //! Filter-aware overload. `disabled_codes` is a denylist; `enabled_codes`
+    //! is a whitelist (empty == all). Codes use the bare form (e.g. "STYLE024").
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = comment_hygiene)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
