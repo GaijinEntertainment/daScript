@@ -87,7 +87,7 @@ def test_archetype_lookup(t : T?) {
     commit()
     t |> run("lookup table has entries") @(t : T?) {
         var count = 0
-        for (k, v in keys(decsState.archetypeLookup), values(decsState.archetypeLookup)) {
+        for (_k, _v in keys(decsState.archetypeLookup), values(decsState.archetypeLookup)) {
             count++
         }
         t |> equal(count, 2)
@@ -100,6 +100,7 @@ def test_archetype_lookup(t : T?) {
 def test_archetype_shrinks_on_delete(t : T?) {
     restart()
     var eids : array<EntityId>
+    eids |> reserve(4)
     for (i in range(4)) {
         let eid = create_entity() @(eid, cmp) {
             cmp.val := i
