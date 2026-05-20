@@ -33,6 +33,7 @@ module perf_lint shared private
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
+//!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
 
 require daslib/ast_boost
 require strings
@@ -381,7 +382,7 @@ class PerfLintVisitor : AstVisitor {
         if (inner == null || !(inner is ExprCall)) return null
         let call = inner as ExprCall
         if (call.func == null || empty(call.arguments)) return null
-        let fname = call.func.fromGeneric != null ? string(call.func.fromGeneric.name) : string(call.func.name)
+        let fname = string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
         if (fname != "int") return null
         return call.arguments[0]
     }
@@ -948,7 +949,7 @@ class PerfLintVisitor : AstVisitor {
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
         if (call == null || call.func == null || length(call.arguments) != 1) return
-        let fname = call.func.fromGeneric != null ? string(call.func.fromGeneric.name) : string(call.func.name)
+        let fname = string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
         let target = self->perf020_target_basetype(fname)
         if (target == Type.none) return
         var arg = call.arguments[0]
@@ -957,6 +958,60 @@ class PerfLintVisitor : AstVisitor {
         }
         if (arg == null || arg._type == null || arg._type.baseType != target) return
         self->perf_warning("PERF020: redundant {fname}(...) cast — argument is already {fname}", call.at)
+    }
+
+    // --- PERF021: cond ? T(a) : T(b) — hoist common workhorse cast out of ternary ---
+
+    def cast_call_workhorse_target(e : Expression?; var fname_out : string&) : Type {
+        //! If `e` is a workhorse cast call (after peeling ExprRef2Value), return
+        //! its target Type and write the cast name to `fname_out`. Otherwise
+        //! return Type.none. Accepts any argument count — `string(int)` is bound
+        //! with `value,hex,context,at` (4 daslang args), other casts use 1.
+        var ee = e
+        if (ee != null && ee is ExprRef2Value) {
+            ee = (ee as ExprRef2Value.subexpr)
+        }
+        if (ee == null || !(ee is ExprCall)) return Type.none
+        let c = ee as ExprCall
+        if (c.func == null || empty(c.arguments)) return Type.none
+        let n = string(c.func.fromGeneric != null ? c.func.fromGeneric.name : c.func.name)
+        let t = self->perf020_target_basetype(n)
+        if (t == Type.none) return Type.none
+        fname_out = n
+        return t
+    }
+
+    def cast_call_arg_basetype(e : Expression?) : Type {
+        //! Peel ExprRef2Value, take call.arguments[0], peel ExprRef2Value, return its baseType
+        //! (or Type.none if anything along the chain is null).
+        var ee = e
+        if (ee != null && ee is ExprRef2Value) {
+            ee = (ee as ExprRef2Value.subexpr)
+        }
+        if (ee == null || !(ee is ExprCall)) return Type.none
+        let c = ee as ExprCall
+        if (empty(c.arguments)) return Type.none
+        var arg = c.arguments[0]
+        if (arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value.subexpr)
+        }
+        if (arg == null || arg._type == null) return Type.none
+        return arg._type.baseType
+    }
+
+    def check_perf021_ternary_cast_hoist(expr : ExprOp3?) : void {
+        if (expr == null || expr.op != "?"
+            || expr.left == null || expr.right == null) return
+        var lname = ""
+        var rname = ""
+        let lt = self->cast_call_workhorse_target(expr.left, lname)
+        if (lt == Type.none) return
+        let rt = self->cast_call_workhorse_target(expr.right, rname)
+        if (rt == Type.none || lt != rt || lname != rname) return
+        let la = self->cast_call_arg_basetype(expr.left)
+        let ra = self->cast_call_arg_basetype(expr.right)
+        if (la == Type.none || la != ra) return
+        self->perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary — hoist as {lname}(cond ? a : b)", expr.at)
     }
 
     // --- PERF014: closed-interval char-class range checks ---
@@ -1119,6 +1174,9 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF015 / PERF016: ternary min/max/abs ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
+        // PERF021: fires anywhere, including in closures — a redundant per-branch cast
+        // is redundant regardless of where the ternary lives.
+        self->check_perf021_ternary_cast_hoist(expr)
         if (in_closure > 0 || expr.op != "?"
             || expr.subexpr == null || !(expr.subexpr is ExprOp2)) return
         var cmp = expr.subexpr as ExprOp2
