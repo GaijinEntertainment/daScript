@@ -3603,7 +3603,8 @@ namespace das {
             if ( arr.size<=1 || n<=0 ) return;
             // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
             // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
-            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
+            // partial_sort on arrays this large is not supported.
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; partial_sort is not supported on arrays this large", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             array_lock(*context, arr, at);
             auto sdata = (TT *) arr.data;
@@ -3621,7 +3622,8 @@ namespace das {
             if ( arr.size<=1 || n<=0 ) return;
             // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
             // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
-            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
+            // partial_sort on arrays this large is not supported.
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; partial_sort is not supported on arrays this large", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);
@@ -3646,7 +3648,8 @@ namespace das {
             if ( arr.size<=1 || n<=0 ) return;
             // The int32_t-`n` partial_sort signature can't represent the int64 surface; refuse
             // to silently clip when arr.size > INT_MAX (would lose high bits in the clamp below).
-            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; use long_partial_sort() instead", (unsigned long long)arr.size);
+            // partial_sort on arrays this large is not supported.
+            if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "partial_sort: array size %llu exceeds INT_MAX; partial_sort is not supported on arrays this large", (unsigned long long)arr.size);
             if ( uint32_t(n) > arr.size ) n = int32_t(arr.size);
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);

@@ -137,26 +137,35 @@ class public Attributes {
 
 }
 
+// Indices MUST match the field order produced by `type_to_llvm_type` for `Type.tArray`
+// below, which itself mirrors the C++ `das::Array` layout (data, size, capacity, magic,
+// lock, flags, _pad_after_flags). The enum order was originally `LOOK, MAGIC` to match
+// an older mirror that had `lock, magic` in that order — when the mirror was corrected
+// to C++ order, the enum needed the same flip.
 enum public JIT_ARRAY {
     DATA
     SIZE
     CAPACITY
-    LOOK
     MAGIC
+    LOCK
     FLAGS
     PAD_AFTER_FLAGS  // mirror Array's trailing alignment pad (see arraytype.h)
 }
 
+// Indices MUST match the field order produced by `type_to_llvm_type` for `Type.tTable`
+// below — Array base fields, then keys/hashes/tombstones. Keep in sync with the C++
+// `das::Table` layout (Table : Array).
 enum public JIT_TABLE {
     DATA
     SIZE
     CAPACITY
-    LOOK
     MAGIC
+    LOCK
     FLAGS
     PAD_AFTER_FLAGS  // matches C++ sizeof(Array)==40 on 32-bit; Table::keys lands at 40
     KEYS
     HASHES
+    TOMBSTONES
 }
 
 enum public JIT_SIMFUNCTION {

@@ -71,10 +71,10 @@ namespace das
 
     // The sort wrappers below pass arr.size (uint64_t) into inner sort functions taking
     // int32_t length. For arrays > INT_MAX elements this would silently truncate and
-    // sort only a prefix. Panic up-front instead; users with huge arrays will need a
-    // future long_sort surface (Phase 4 follow-up).
+    // sort only a prefix. Panic up-front instead; the int-sized sort surface simply
+    // does not support arrays past INT_MAX, and there is no `long_sort` companion yet.
     static __forceinline int32_t sort_array_size_or_panic ( const Array & arr, Context * context, LineInfoArg * at, const char * op ) {
-        if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "%s: array size %llu exceeds INT_MAX; use long_%s() instead", op, (unsigned long long)arr.size, op);
+        if ( arr.size > uint64_t(INT32_MAX) ) context->throw_error_at(at, "%s: array size %llu exceeds INT_MAX; sort is not supported on arrays this large", op, (unsigned long long)arr.size);
         return int32_t(arr.size);
     }
 
