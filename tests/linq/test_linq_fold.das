@@ -2776,3 +2776,32 @@ def test_take_while_skip_while_cascade_bails(t : T?) {
         tt |> equal(0, length(got))
     }
 }
+
+[test]
+def test_fold_order_by_first(t : T?) {
+    t |> run("order_by + first → min_by") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).first())
+        tt |> equal(2, v, "minimum element after order_by")
+    }
+    t |> run("order_by_descending + first → max_by") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).first())
+        tt |> equal(30, v, "maximum element after order_by_descending")
+    }
+    t |> run("where + order_by + first → min on prefilter buf") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).first())
+        tt |> equal(8, v, "min of (10,20,8,30,15,25) = 8")
+    }
+    t |> run("order_by + first_or_default — empty source returns default") @(tt : T?) {
+        let empty : array<int>
+        let v = _fold(each(empty)._order_by(_).first_or_default(-1))
+        tt |> equal(-1, v, "empty source → default")
+    }
+    t |> run("order_by + first_or_default — non-empty returns min") @(tt : T?) {
+        let v = _fold(each([10, 5, 20])._order_by(_).first_or_default(-1))
+        tt |> equal(5, v, "non-empty source → min element")
+    }
+    t |> run("where + order_by + first_or_default — empty after filter") @(tt : T?) {
+        let v = _fold(each([1, 2, 3])._where(_ > 100)._order_by(_).first_or_default(-1))
+        tt |> equal(-1, v, "filter excludes all → default")
+    }
+}
