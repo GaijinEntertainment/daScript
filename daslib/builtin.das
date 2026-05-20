@@ -1365,7 +1365,7 @@ def each(a : auto(TT)[]) : iterator<TT&> {
     unsafe {
         var parr : void? = reinterpret<void?>(addr(a[0]))
         var it : iterator<TT&>
-        _builtin_make_fixed_array_iterator(it, parr, typeinfo dim(a), typeinfo sizeof(a[0]))
+        _builtin_make_fixed_array_iterator(it, parr, int64(typeinfo dim(a)), typeinfo sizeof(a[0]))
         return <- it
     }
 }

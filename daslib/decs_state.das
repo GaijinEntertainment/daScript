@@ -44,7 +44,7 @@ struct EcsComponentView {
 struct EcsArchetypeView {
     //! Read-only view of an ECS archetype for debug inspection.
     hash        : uint64
-    size        : int
+    size        : int64                //! widened with decs::Archetype.size (entity counts can exceed INT_MAX)
     components  : array<EcsComponentView>
 }
 
@@ -68,7 +68,7 @@ class ContextStateAgent : DapiDebugAgent {
                         }
                     }
                     var arr : array<uint8>
-                    unsafe(_builtin_make_temp_array(arr, unsafe(addr(c.data[0])), arch.size))
+                    unsafe(_builtin_make_temp_array_i64(arr, unsafe(addr(c.data[0])), arch.size))
                     cv.values = sprint_data(unsafe(addr(arr)), tinfo, print_flags.singleLine)
                 }
                 arq.components |> push(cv)

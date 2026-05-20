@@ -65,7 +65,7 @@ struct public Archetype {
     //! ECS archetype. Archetype is unique combination of components.
     hash : ComponentHash            //! hash of the archetype (combination of component hashes)
     components : array<Component>   //! list of components in the archetype
-    size : int                      //! number of entities in the archetype
+    size : int64                    //! number of entities in the archetype (int64 — entity counts can exceed INT_MAX)
     eidIndex : int                  //! index of the 'eid' component in the components array
 }
 
@@ -130,7 +130,7 @@ struct public DecsState {
     archetypeLookup : table<ComponentHash; int>     //! lookup of archetype by its hash
     allArchetypes : array<Archetype>                //! all archetypes in the system
     entityFreeList : array<EntityId>                //! list of free entity IDs
-    entityLookup : array<tuple<generation : int; archetype : ComponentHash; index : int>>   //! lookup of entity by its ID
+    entityLookup : array<tuple<generation : int; archetype : ComponentHash; index : int64>>   //! lookup of entity by its ID (index : int64 — entity indices can exceed INT_MAX)
     componentTypeCheck : table<string; CTypeInfo>   //! lookup of component type info by its name
     ecsQueries : array<EcsRequest>                  //! all ECS requests
     queryLookup : table<ComponentHash; int>         //! lookup of ECS request by its hash
@@ -151,6 +151,8 @@ var private decsPasses : array<DecsPass>
 var private insideQuery : int
 
 let INVALID_ENTITY_ID = decs::EntityId()  //! Entity ID which represents invalid entity.
+
+let private MAX_ENTITY_ID = int64(0xFFFF_FFFF_l)  // EntityId.id : uint -> UINT_MAX entries. Allocation panics past this; widening is an architectural followup.
 
 def operator ==(a, b : decs::EntityId implicit) {
     //! Equality operator for entity IDs.
@@ -408,11 +410,19 @@ def private new_entity_id() {
     //! Creates new entity ID.
     var eid : EntityId
     if (!empty(decsState.entityFreeList)) {
-        eid = decsState.entityFreeList[length(decsState.entityFreeList) - 1]
+        eid = decsState.entityFreeList[long_length(decsState.entityFreeList) - 1_l]
         decsState.entityFreeList |> pop
     } else {
-        eid.id = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> push((generation = 0, archetype = ComponentHash(0ul), index = 0))
+        // EntityId.id is uint; cap at UINT_MAX entities to avoid silent wrap to
+        // INVALID_ENTITY_ID. Widening EntityId.id to uint64 is an architectural
+        // followup; for now the panic surfaces the limit loudly instead of
+        // corrupting state.
+        let next_id = long_length(decsState.entityLookup)
+        if (next_id > MAX_ENTITY_ID) {
+            panic("decs: entityLookup reached UINT_MAX entries ({next_id}); EntityId.id (uint) widening is required to allocate more")
+        }
+        eid.id = uint(next_id)
+        decsState.entityLookup |> push((generation = 0, archetype = ComponentHash(0ul), index = 0_l))
     }
     eid.generation ++
     return eid
@@ -425,7 +435,7 @@ def public before_gc {
         panic("decs: can't call 'before_gc' from inside query")
     }
     for (arch in decsState.allArchetypes) {
-        if (arch.size > 0) {
+        if (arch.size > 0_l) {
             for (comp in arch.components) {
                 if (comp.info.gc != null) {
                     comp.gc_dummy <- invoke(comp.info.gc, comp.data)
@@ -442,7 +452,7 @@ def public after_gc {
         panic("decs: can't call 'after_gc' from inside query")
     }
     for (arch in decsState.allArchetypes) {
-        if (arch.size > 0) {
+        if (arch.size > 0_l) {
             for (comp in arch.components) {
                 if (comp.gc_dummy != null) {
                     unsafe { delete comp.gc_dummy; }
@@ -463,11 +473,11 @@ def public debug_dump_writer(var writer : StringBuilderWriter) {
     //! Writes state of the ECS system to a StringBuilderWriter.
     for (arch in decsState.allArchetypes) {
         writer |> write("archetype {arch.hash} : {arch.size}\n")
-        for (index in range(arch.size)) {
+        for (index in range64(0_l, arch.size)) {
             writer |> write("\tentity[{index}]\n")
             for (c in arch.components) {
                 if (c.info.dumper != null) {
-                    let offset = index * c.stride
+                    let offset = index * int64(c.stride)
                     unsafe {
                         let dump = invoke(c.info.dumper, addr(c.data[offset]))
                         writer |> write("\t\t{c.name} : {describe(c.info)} = {dump}\n")
@@ -534,11 +544,11 @@ def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int
     }
 }
 
-def private get_eid(var arch : Archetype; index : int) : EntityId& {
+def private get_eid(var arch : Archetype; index : int64) : EntityId& {
     //! Gets entity ID component for the specific entity index in the archetype.
     unsafe {
         var ceid & = arch.components[arch.eidIndex]
-        return *(reinterpret<EntityId?> addr(ceid.data[index * ceid.stride]))
+        return *(reinterpret<EntityId?> addr(ceid.data[index * int64(ceid.stride)]))
     }
 }
 
@@ -546,15 +556,15 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
     //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++
     for (c, comp in arch.components, cmp) {
-        c.data |> resize(length(c.data) + c.stride)
+        c.data |> resize(long_length(c.data) + int64(c.stride))
         unsafe {
-            memcpy(addr(c.data[eidx * c.stride]), addr(comp.data), c.stride)
+            memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
         }
     }
     return eidx
 }
 
-def private remove_entity(var arch : Archetype; di : int) {
+def private remove_entity(var arch : Archetype; di : int64) {
     //! Removes entity at specified index from the archetype.
     arch.size --
     if (di != arch.size) {// copy last one in the hole
@@ -562,12 +572,12 @@ def private remove_entity(var arch : Archetype; di : int) {
         decsState.entityLookup[eid_last_id].index = di
         for (c in arch.components) {
             unsafe {
-                memcpy(addr(c.data[di * c.stride]), addr(c.data[arch.size * c.stride]), c.stride)
+                memcpy(addr(c.data[di * int64(c.stride)]), addr(c.data[arch.size * int64(c.stride)]), c.stride)
             }
         }
     }
     for (c in arch.components) {
-        c.data |> resize(arch.size * c.stride)
+        c.data |> resize(arch.size * int64(c.stride))
     }
 }
 
@@ -647,7 +657,7 @@ def public for_each_archetype(var erq : EcsRequest; blk : block<(arch : Archetyp
     var inscope aclone := decsState.ecsQueries[qi].archetypes
     for (aidx in aclone) {
         var arch & = unsafe(decsState.allArchetypes[aidx])
-        if (arch.size > 0) {
+        if (arch.size > 0_l) {
             ++insideQuery; invoke(blk, arch); --insideQuery
         }
     }
@@ -669,8 +679,15 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
     if (aidx == 0) return false
     if (binary_search(decsState.ecsQueries[qi].archetypes, aidx - 1)) {
         var arch & = unsafe(decsState.allArchetypes[aidx - 1])
-        assert(arch.size > 0)
-        ++insideQuery; invoke(blk, arch, lookup.index); -- insideQuery
+        assert(arch.size > 0_l)
+        // blk takes index:int — public API stability. After the cascade widening
+        // (commit 2), lookup.index can hold int64 values up to UINT_MAX, so the
+        // cast below would silently truncate past INT_MAX. Loudly panic instead;
+        // a long_for_eid_archetype variant with int64 block sig is the followup.
+        if (lookup.index > int64(INT_MAX)) {
+            panic("decs: for_eid_archetype index {lookup.index} exceeds INT_MAX (blk takes int); widening blk to int64 is a follow-up")
+        }
+        ++insideQuery; invoke(blk, arch, int(lookup.index)); -- insideQuery
         return true
     } else {
         return false
@@ -690,7 +707,7 @@ def public for_each_archetype(hash : ComponentHash; var erq : function<() : EcsR
     var inscope aclone := decsState.ecsQueries[qi].archetypes
     for (aidx in aclone) {
         var arch & = unsafe(decsState.allArchetypes[aidx])
-        if (arch.size > 0) {
+        if (arch.size > 0_l) {
             ++insideQuery; invoke(blk, arch); --insideQuery
         }
     }
@@ -710,7 +727,7 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
     var inscope aclone := decsState.ecsQueries[qi].archetypes
     for (aidx in aclone) {
         var arch & = unsafe(decsState.allArchetypes[aidx])
-        if (arch.size > 0) {
+        if (arch.size > 0_l) {
             ++insideQuery; let res = invoke(blk, arch); --insideQuery
             if (res) return true
         }
@@ -720,19 +737,20 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
 
 // [template(atype)]
 [unsafe_operation]
-def decs_array(atype : auto(TT); src : array<uint8>; capacity : int) {
+def decs_array(atype : auto(TT); src : array<uint8>; capacity : int64) {
     //! Low level function returns temporary array of component given specific type of component.
+    //! capacity is int64 — archetypes can hold >INT_MAX entities (Phase 8c widening).
     assert(!empty(src))
     static_if (typeinfo is_dim(atype)) {
         var dest : array<TT[typeinfo dim(atype)] -const -& -#>
         unsafe {
-            _builtin_make_temp_array(dest, addr(src[0]), capacity)
+            _builtin_make_temp_array_i64(dest, addr(src[0]), capacity)
             return <- dest
         }
     } else {
         var dest : array<TT -const -& -#>
         unsafe {
-            _builtin_make_temp_array(dest, addr(src[0]), capacity)
+            _builtin_make_temp_array_i64(dest, addr(src[0]), capacity)
             return <- dest
         }
     }
@@ -819,7 +837,12 @@ def public get_default_ro(arch : Archetype; name : string; value : auto(TT)) : i
             }
         }
     }
-    return <- repeat_ref(value, arch.size)
+    // repeat_ref takes int count (daslib/functional.das). Cap at INT_MAX with a loud
+    // panic on overflow — widening repeat/repeat_ref to int64 is a separate followup.
+    if (arch.size > int64(INT_MAX)) {
+        panic("decs: get_default_ro fallback over {arch.size} entities exceeds INT_MAX (repeat_ref int64 widening is a follow-up)")
+    }
+    return <- repeat_ref(value, int(arch.size))
 }
 
 def public get_optional(arch : Archetype; name : string; value : auto(TT)?) : iterator<TT -const -& -#?> {
@@ -842,7 +865,12 @@ def public get_optional(arch : Archetype; name : string; value : auto(TT)?) : it
             return <- it
         }
     }
-    return <- repeat(default<TT -const -& -#?>, arch.size)
+    // repeat takes int count (daslib/functional.das). Cap at INT_MAX with a loud
+    // panic on overflow — widening repeat/repeat_ref to int64 is a separate followup.
+    if (arch.size > int64(INT_MAX)) {
+        panic("decs: get_optional fallback over {arch.size} entities exceeds INT_MAX (repeat int64 widening is a follow-up)")
+    }
+    return <- repeat(default<TT -const -& -#?>, int(arch.size))
 }
 
 def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var cmp : ComponentMap) : void>) {
@@ -858,7 +886,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
         for (c in arch.components) {
             var value = ComponentValue(name = c.name, info = c.info)
             unsafe {
-                memcpy(addr(value.data), addr(c.data[eidx * c.stride]), c.stride)
+                memcpy(addr(value.data), addr(c.data[eidx * int64(c.stride)]), c.stride)
             }
             cmp |> push(value)
         }
@@ -870,7 +898,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     if (old_ahash == new_ahash) {
         for (c, comp in decsState.allArchetypes[arch_index].components, cmp) {
             unsafe {
-                memcpy(addr(c.data[eidx * c.stride]), addr(comp.data), c.stride)
+                memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
             }
         }
     } else {
@@ -962,12 +990,12 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
         // Pre-resize all component arrays for count entities at once
         let base = arch.size
         for (c in arch.components) {
-            c.data |> resize(length(c.data) + c.stride * count)
+            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
         }
         // Fill first entity
         for (c, comp in arch.components, cmp) {
             unsafe {
-                memcpy(addr(c.data[base * c.stride]), addr(comp.data), c.stride)
+                memcpy(addr(c.data[base * int64(c.stride)]), addr(comp.data), c.stride)
             }
         }
         decsState.entityLookup[first_eid.id] = (generation = first_eid.generation, archetype = ahash, index = base)
@@ -980,15 +1008,15 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
             if (cmp_archetype_hash(cmp) != ahash) {
                 panic("decs: create_entities — all entities must have the same components (entity {i} differs from entity 0)")
             }
-            let eidx = base + i
+            let eidx = base + int64(i)
             for (c, comp in arch.components, cmp) {
                 unsafe {
-                    memcpy(addr(c.data[eidx * c.stride]), addr(comp.data), c.stride)
+                    memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
                 }
             }
             decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
         }
-        arch.size += count
+        arch.size += int64(count)
     }
     delete cmp
 }
@@ -1014,17 +1042,35 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         }
         let base = arch.size
         for (c in arch.components) {
-            c.data |> resize(length(c.data) + c.stride * count)
+            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
         }
-        let id_base = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> resize(int(id_base) + count)
+        // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
+        // EntityId.id to uint64 is an architectural followup.
+        let id_base_long = long_length(decsState.entityLookup)
+        // The highest id allocated is id_base + count - 1; panic only if THAT
+        // exceeds MAX_ENTITY_ID, so the boundary case (last allocatable id ==
+        // UINT_MAX) still succeeds.
+        if (id_base_long + int64(count) - 1_l > MAX_ENTITY_ID) {
+            panic("decs: create_entities_from_cmp would push entityLookup past UINT_MAX (current = {id_base_long}, count = {count}); EntityId.id (uint) widening is required")
+        }
+        let id_base = uint(id_base_long)
+        decsState.entityLookup |> resize(id_base_long + int64(count))
+        // After the cascade widening, base + count can exceed INT_MAX, so a
+        // per-iteration int(eidx) cast would silently truncate. Hoist the cap
+        // check before the loop — fill_blk is part of the public API and macro-
+        // generated callers in decs_boost.das emit `eidx : int`; widening blk
+        // to int64 is the followup. Highest eidx is `base + count - 1`; the
+        // boundary case (max eidx == INT_MAX) still succeeds.
+        if (base + int64(count) - 1_l > int64(INT_MAX)) {
+            panic("decs: create_entities_from_cmp eidx range [{base} .. {base + int64(count)}) exceeds INT_MAX (fill_blk takes int); widening fill_blk to int64 is a follow-up")
+        }
         for (i in range(count)) {
             let eid = EntityId(id = id_base + uint(i), generation = 1)
-            let eidx = base + i
-            invoke(fill_blk, arch, eidx, eid, i)
+            let eidx = base + int64(i)
+            invoke(fill_blk, arch, int(eidx), eid, i)
             decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
         }
-        arch.size += count
+        arch.size += int64(count)
     }
 }
 
@@ -1051,13 +1097,28 @@ def public commit {
 def public is_alive(eid : EntityId) : bool {
     //! Returns true if the entity is alive (exists and has not been deleted).
     //! An entity is alive when its id is within bounds and its generation matches the lookup table.
-    if (eid == INVALID_ENTITY_ID || int(eid.id) >= length(decsState.entityLookup)) return false
+    if (eid == INVALID_ENTITY_ID || int64(eid.id) >= long_length(decsState.entityLookup)) return false
     return decsState.entityLookup[eid.id].generation == eid.generation
 }
 
 def public entity_count() : int {
     //! Returns the total number of alive entities across all archetypes.
-    var total = 0
+    //! Panics if the total exceeds INT_MAX — use ``long_entity_count`` for the
+    //! int64-safe accessor. Mirrors the ``length`` / ``long_length`` contract.
+    var total = 0_l
+    for (arch in decsState.allArchetypes) {
+        total += arch.size
+    }
+    if (total > int64(INT_MAX)) {
+        panic("decs: entity_count() overflows INT_MAX (total = {total}); use long_entity_count() for int64-safe access")
+    }
+    return int(total)
+}
+
+def public long_entity_count() : int64 {
+    //! int64-safe variant of ``entity_count``. Returns the total number of
+    //! alive entities across all archetypes without panicking past INT_MAX.
+    var total = 0_l
     for (arch in decsState.allArchetypes) {
         total += arch.size
     }
@@ -1088,7 +1149,7 @@ def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT 
                     panic("decs: get_component {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
                 }
                 var result : TT -const -& -#
-                memcpy(addr(result), addr(comp.data[lookup.index * comp.stride]), comp.stride)
+                memcpy(addr(result), addr(comp.data[lookup.index * int64(comp.stride)]), comp.stride)
                 return result
             }
         }

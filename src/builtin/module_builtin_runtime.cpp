@@ -1060,9 +1060,11 @@ namespace das
         result = { (Iterator *) iter };
     }
 
-    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at ) {
+    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int64_t size, int stride, Context * context, LineInfoArg * at ) {
+        // Negative size would underflow into a huge uint64 and the iterator would run past
+        // the array bounds — clamp to empty instead. Same pattern as builtin_make_temp_array_i64.
         char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator", at);
-        new (iter) FixedArrayIterator((char *)data, size, stride, at);
+        new (iter) FixedArrayIterator((char *)data, size < 0 ? uint64_t(0) : uint64_t(size), uint32_t(stride), at);
         result = { (Iterator *) iter };
     }
 
