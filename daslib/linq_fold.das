@@ -2873,6 +2873,101 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     return finalize_emission_stmts(top, srcName, at, stmts)
 }
 
+// ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
+
+struct private DecsBridgeShape {
+    reqHashExpr : ExpressionPtr     // ExprConstUInt64 — cloned, ready to splice
+    erqExpr     : ExpressionPtr     // ExprAddr — cloned, ready to splice
+}
+
+[macro_function]
+def private get_call_short_name(c : ExprCall?) : string {
+    // Strip module prefix + mangler hash. "__::linq`to_sequence`hash" → "to_sequence".
+    let s = string(c.name)
+    let bt = s |> rfind("`")
+    if (bt >= 0) {
+        let prev = s |> slice(0, bt) |> rfind("`")
+        if (prev >= 0) return s |> slice(prev + 1, bt)
+    }
+    let cc = s |> rfind("::")
+    if (cc >= 0) return s |> slice(cc + 2)
+    return s
+}
+
+[macro_function]
+def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
+    // Pattern-match the post-expansion from_decs*-eager-bridge shape. Mismatch → null cascades to tier-2.
+    if (!(top is ExprInvoke)) return null
+    var topInv = top as ExprInvoke
+    if (topInv.arguments |> length != 1
+            || !(topInv.arguments[0] is ExprMakeBlock)) return null
+    var mblk = topInv.arguments[0] as ExprMakeBlock
+    if (!(mblk._block is ExprBlock)) return null
+    var blk = mblk._block as ExprBlock
+    if (blk.list |> length != 3
+            || !empty(blk.arguments)
+            || !(blk.list[0] is ExprLet)
+            || !(blk.list[1] is ExprCall)
+            || !(blk.list[2] is ExprReturn)) return null
+    // Statement 0: var res : array<tuple<...>>
+    var letStmt = blk.list[0] as ExprLet
+    if (letStmt.variables |> length != 1) return null
+    var resVar = letStmt.variables[0]
+    if (!resVar._type.isGoodArrayType
+            || resVar._type.firstType.baseType != Type.tTuple) return null
+    let resVarName = string(resVar.name)
+    // Statement 1: for_each_archetype(req_hash, erq, $(arch) { ... })
+    var feaCall = blk.list[1] as ExprCall
+    if (feaCall.name != "for_each_archetype"
+            || feaCall.arguments |> length != 3
+            || !(feaCall.arguments[0] is ExprConstUInt64)
+            || !(feaCall.arguments[1] is ExprAddr)) return null
+    // Statement 2: return res.to_sequence() — must reference the same `res`.
+    var retStmt = blk.list[2] as ExprReturn
+    if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null
+    let retCall = retStmt.subexpr as ExprCall
+    if (get_call_short_name(retCall) != "to_sequence"
+            || empty(retCall.arguments)
+            || !(retCall.arguments[0] is ExprVar)
+            || (retCall.arguments[0] as ExprVar).name != resVarName) return null
+    var info = new DecsBridgeShape(
+        reqHashExpr = clone_expression(feaCall.arguments[0]),
+        erqExpr = clone_expression(feaCall.arguments[1])
+    )
+    return info
+}
+
+[macro_function]
+def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
+    // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
+    let accName = "`decs_acc`{at.line}`{at.column}"
+    let archName = "`decs_arch`{at.line}`{at.column}"
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    var emission : Expression? = qmacro(invoke($() : int {
+        var $i(accName) = 0
+        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            $i(accName) += $i(archName).size
+        })
+        return $i(accName)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
+def private plan_decs_unroll(var expr : Expression?) : Expression? {
+    var (top, calls) = flatten_linq(expr)
+    let bridge = extract_decs_bridge(top)
+    // Slice 1: only bare `count()` (no chain ops). Single trailing call.
+    if (bridge == null || length(calls) != 1) return null
+    let lastName = calls.back()._1.name
+    let at = expr.at
+    if (lastName == "count") return emit_decs_count_archsize(bridge, at)
+    return null
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip), accumulator terminators (sum/min/max/etc.), and chained selects bail to tier-2 cascade.
@@ -3145,6 +3240,8 @@ class private LinqFold : AstCallMacro {
         res = plan_distinct(call.arguments[0])
         if (res != null) return res
         res = plan_group_by(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_unroll(call.arguments[0])
         if (res != null) return res
         res = plan_zip(call.arguments[0])
         if (res != null) return res
