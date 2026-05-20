@@ -209,23 +209,23 @@ namespace das
     };
 
     struct FixedArrayIterator : Iterator {
-        FixedArrayIterator ( char * d, uint32_t sz, uint32_t st, LineInfo * at ) : Iterator(at), data(d), size(sz), stride(st) {}
+        FixedArrayIterator ( char * d, uint64_t sz, uint32_t st, LineInfo * at ) : Iterator(at), data(d), size(sz), stride(st) {}
         virtual bool first ( Context & context, char * value ) override;
         virtual bool next  ( Context & context, char * value ) override;
         virtual void close ( Context & context, char * value ) override;
         char *      data;
-        uint32_t    size;
+        uint64_t    size;            // widened from uint32_t for fixed-array iteration over >INT_MAX elements (decs Archetype with int64 size)
         uint32_t    stride;
         char *      fixed_array_end = nullptr;
     };
 
     struct SimNode_FixedArrayIterator : SimNode {
-        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
+        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint64_t sz, uint32_t st )
             : SimNode(at), source(s), size(sz), stride(st) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         SimNode *   source;
-        uint32_t    size;
+        uint64_t    size;            // widened with FixedArrayIterator
         uint32_t    stride;
     };
 

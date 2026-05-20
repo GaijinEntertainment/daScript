@@ -112,7 +112,7 @@ namespace das {
     DAS_API __forceinline bool builtin_iterator_empty ( const Sequence & seq ) { return seq.iter==nullptr; }
 
     DAS_API void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at );
-    DAS_API void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int64_t size, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_urange_iterator ( Sequence & result, urange rng, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_range64_iterator ( Sequence & result, range64 rng, Context * context, LineInfoArg * at );
