@@ -689,3 +689,149 @@ def test_unroll_min_by_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5a: take/skip ranges on decs (counters hoisted at invoke scope; take present routes to for_each_archetype_find with bool block returning true on cap-hit)
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_take_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).take(3).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).skip(2).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_take_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).skip(1).take(2).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_take_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1).take(2).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_select_take_sum_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).sum())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_first_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).first())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_neg_count_fold() : int {
+    // take(-N) must short-circuit (>=-guard) — empty iteration regardless of source size.
+    return _fold(from_decs_template(type<UnrollChainRow>).take(-1).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_beyond_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).skip(100).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).to_array())
+}
+
+[test]
+def test_unroll_take_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_count_fold(), 3, "take(3) caps total")
+}
+
+[test]
+def test_unroll_skip_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_count_fold(), 5, "skip(2) drops first 2 across archetypes")
+}
+
+[test]
+def test_unroll_skip_take_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_take_count_fold(), 2, "skip(1)+take(2) windows total count")
+}
+
+[test]
+def test_unroll_where_take_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // flag==1 rows are vals 1,3,5 → take(2) → 2 matches
+    t |> equal(target_unroll_where_take_count_fold(), 2, "where+take caps post-filter count")
+}
+
+[test]
+def test_unroll_select_take_sum_parity(t : T?) {
+    fixture_unroll2(7)
+    // vals 0,1,2,...,6 → take(3) → sum 0+1+2 = 3
+    t |> equal(target_unroll_select_take_sum_fold(), 3, "select+take+sum splice parity")
+}
+
+[test]
+def test_unroll_take_first_parity(t : T?) {
+    fixture_unroll2(7)
+    // take(2) then first() — first wins before take counter ticks past 1
+    t |> equal(target_unroll_take_first_fold(), 0, "take+first returns first element")
+}
+
+[test]
+def test_unroll_take_neg_zero_count(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_neg_count_fold(), 0, "take(-1) short-circuits to 0")
+}
+
+[test]
+def test_unroll_skip_beyond_returns_zero(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_beyond_count_fold(), 0, "skip past end yields 0 count")
+}
+
+[test]
+def test_unroll_take_to_array_parity(t : T?) {
+    fixture_unroll2(7)
+    let got <- target_unroll_take_to_array_fold()
+    t |> equal(length(got), 3, "take(3).to_array() yields 3 elements")
+    if (length(got) >= 3) {
+        t |> equal(got[0], 0, "first taken element")
+        t |> equal(got[1], 1, "second taken element")
+        t |> equal(got[2], 2, "third taken element")
+    }
+}
+
+[test]
+def test_unroll_take_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "take+count splice must NOT call to_sequence")
+        // take present → must use the _find variant so early-exit propagates across archetypes.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take splice routes to for_each_archetype_find")
+    }
+}
+
+[test]
+def test_unroll_skip_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_skip_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "skip+count splice must NOT call to_sequence")
+        // skip-only (no take) keeps the void for_each_archetype variant.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "skip-only splice does NOT route to _find")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "skip-only splice uses regular for_each_archetype")
+    }
+}

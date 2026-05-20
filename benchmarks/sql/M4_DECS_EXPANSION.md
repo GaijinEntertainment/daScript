@@ -264,3 +264,20 @@ PR #2742's accumulator + early-exit terminator work on `plan_zip` was orphaned o
 | zip_dot_product | — | 53 | 58 | **7** | 8.3× |
 
 `zip(xs, ys)._select(_._0 * _._1).sum()` now fuses to a single multi-iter for-loop with inline accumulator, zero alloc. Falls in line with the rest of the accumulator-class benchmarks.
+
+## Update — Slice 5a take/skip on decs (2026-05-20, plan_decs_unroll + DecsRangeInfo)
+
+`plan_decs_unroll` now recognizes trailing `take(N)` / `skip(N)` after the where/select chain. New `extract_decs_ranges` peels them into `DecsRangeInfo`; counter inits hoist above `for_each_archetype` (so they span archetypes); per-element guards (take-cap → return true, skip-counter → continue, take++) wrap `perElement` BEFORE chain so ranges apply to the post-`where_` stream. When `takeExpr != null` the outer call switches to `for_each_archetype_find` with a `: bool` lambda so the take-cap stop propagates across archetypes.
+
+Affected emit paths (all 4 non-bare-count): `emit_decs_accumulator`, `emit_decs_early_exit`, `emit_decs_min_max_by`, `emit_decs_to_array`. Bare `count` via arch.size shortcut still bails on any chain ops including ranges.
+
+**Coverage:** take, skip, skip+take, where+take, select+take+sum, take+first, take+to_array, take(-1) short-circuit, skip-beyond-end, AST-shape gates for take→`_find` routing + skip-only→`for_each_archetype` routing. +11 tests.
+
+| benchmark | shape | m4 (old) | m4 (new) |
+|---|---|---:|---:|
+| take_count | `.take(N).count()` | 36 | 0 (DCE) |
+| skip_take | `.skip(N).take(M).count()` | 37 | 0 (DCE) |
+| take_count_filtered | `_where.take(N).count()` | — | 0 (DCE) |
+| take_sum_aggregate | `_select.take(N).sum()` | — | 0 (DCE) |
+
+Splice fires (AST shape tests confirm `for_each_archetype_find` emission when take present), but bench numbers collapse to 0 ns/op — the splice output is tight enough that the compiler folds the whole chain when `accept(rows)` doesn't break the constant path. Real-world win is provable via the AST gates; numeric bench wins are blocked on the plan.md Task 1 anti-DCE sweep (still open). Slices 5b-5f will widen the affected bench surface (take_while, distinct, group_by, order_by); their numbers may also need the anti-DCE pass to be measurable.
