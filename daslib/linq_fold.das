@@ -425,13 +425,19 @@ def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? 
 
 [macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
-    // Count-shaped shortcut: emit `length(src)` (count) or `int64(length(src))` (long_count)
+    // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
-    let castName = opName == "long_count" ? "int64" : "int"
-    var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-        return $c(castName)(length($i(srcName)))
-    }, $e(topExpr)))
+    var res : Expression?
+    if (opName == "long_count") {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return int64(length($i(srcName)))
+        }, $e(topExpr)))
+    } else {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return length($i(srcName))
+        }, $e(topExpr)))
+    }
     return finalize_invoke(res, at)
 }
 
@@ -730,8 +736,15 @@ def private emit_accumulator_lane(
             $i(accName) += $e(valueExpr)
             $i(cntName) ++
         }
-        returnExpr = qmacro_expr() {
-            double($i(accName)) / double($i(cntName))
+        // Skip the double(accName) when accType is already double (interp doesn't fold redundant casts — would trip PERF020 and slow the inner loop tail).
+        if (accType != null && accType.baseType == Type.tDouble) {
+            returnExpr = qmacro_expr() {
+                $i(accName) / double($i(cntName))
+            }
+        } else {
+            returnExpr = qmacro_expr() {
+                double($i(accName)) / double($i(cntName))
+            }
         }
     } elif (opName == "min" || opName == "max") {
         preludeStmts <- qmacro_block_to_array() {
@@ -3349,8 +3362,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
         if (lastName == "count") {
+            // length returns int already; bare `length(...)` matches return type — no cast (PERF020).
             bodyStmts |> push <| qmacro_expr() {
-                return int(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+                return length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName))
             }
         } else {
             bodyStmts |> push <| qmacro_expr() {

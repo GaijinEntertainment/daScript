@@ -1526,7 +1526,11 @@ def average(var src : iterator<auto(TT)>) : double {
     var total : double = 0lf
     var count : uint64 = 0ul
     for (x in src) {
-        total += double(x)
+        static_if (typeinfo stripped_typename(x) == typeinfo stripped_typename(default<double>)) {
+            total += x
+        } else {
+            total += double(x)
+        }
         count ++
     }
     return count != 0ul ? total / double(count) : 0lf
@@ -1538,7 +1542,11 @@ def average(src : array<auto(TT)>) : double {
     var total : double = 0lf
     var count : uint64 = 0ul
     for (x in src) {
-        total += double(x)
+        static_if (typeinfo stripped_typename(x) == typeinfo stripped_typename(default<double>)) {
+            total += x
+        } else {
+            total += double(x)
+        }
         count ++
     }
     return count != 0ul ? total / double(count) : 0lf
