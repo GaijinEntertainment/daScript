@@ -3731,8 +3731,9 @@ class public LlvmJitVisitor : AstVisitor {
             void_ptr,        // const char* name
             void_ptr,        // const char* module_name
             void_ptr,        // EnumValueInfo **  fields
-            types.t_int32, // uint32_t count
-            types.t_int64)
+            types.t_int32,   // uint32_t count
+            types.t_int64,   // uint64_t hash
+            types.t_int32)   // uint32_t flags (EnumInfo::flag_unsigned for uint*-backed enums)
     }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -3858,7 +3859,8 @@ class public LlvmJitVisitor : AstVisitor {
             get_string_constant_ptr(g_builder, ei.module_name),
             create_enumvalueinfo_global_array(ei.fields, ei.count),
             types.ConstI32(ei.count |> uint64()),
-            LLVMConstInt(types.t_int64, ei.hash  |> uint64(), 0)
+            LLVMConstInt(types.t_int64, ei.hash  |> uint64(), 0),
+            types.ConstI32(ei.flags |> uint64())
         ]
         struct_info_global |> LLVMSetInitializer() <| make_initializer(ty, init_values)
         return struct_info_global
