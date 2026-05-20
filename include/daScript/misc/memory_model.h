@@ -302,7 +302,10 @@ namespace das {
         void setTrackAllocations ( bool on );
         __forceinline bool isTrackingAllocations() const { return trackAllocations; }
         CustomGrowFunction      customGrow;
-        uint32_t                alignMask;
+        // Mask must be uint64 — `(size + alignMask) & ~alignMask` in allocate/free/reallocate
+        // would otherwise zero-extend `~alignMask` from uint32 to uint64 as 0x00000000FFFFFFF0,
+        // silently truncating any allocation ≥ 4 GB to its low 32 bits.
+        uint64_t                alignMask;
         uint64_t                totalAllocated;
         uint64_t                maxAllocated;
         uint64_t                initialSize = 0;
@@ -411,7 +414,10 @@ namespace das {
         CustomGrowFunction  customGrow;
         uint64_t    unadjustedInitialSize = 0;
         uint64_t    initialSize = 0;
-        uint32_t    alignMask = 15;
+        // uint64 — see MemoryModel::alignMask. `~alignMask` must be uint64 so the
+        // `DAS_VERIFYF(s <= UINT32_MAX)` cap check in allocate() actually fires on
+        // >4 GB requests instead of seeing a silently-truncated low-32-bit size.
+        uint64_t    alignMask = 15;
         HeapChunk * chunk = nullptr;
     };
 

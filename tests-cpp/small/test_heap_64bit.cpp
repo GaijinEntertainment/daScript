@@ -13,6 +13,7 @@
 
 #include "daScript/daScript.h"
 #include "daScript/daScriptC.h"
+#include "daScript/simulate/aot_builtin.h"   // heap_bytes_allocated
 
 #include <cstdlib>
 #include <cstring>
@@ -116,6 +117,53 @@ TEST_CASE("legacy uint32_t C-API still works after heap widening") {
     cleanup_inline_ctx(ic);
 }
 
+TEST_CASE("alignMask uint32 truncation guard: 4 GB allocation reports correct bytesAllocated (gated)") {
+    // Repro for the alignMask uint32_t truncation in MemoryModel::allocate
+    // (`size = (size + alignMask) & ~alignMask` — `~alignMask` is uint32 and
+    // zero-extends to 0x00000000FFFFFFF0 when ANDed with uint64 size). Sizes
+    // ≥ 4 GB lose their high 32 bits, the function takes the shoe path with
+    // size=0, computes `si = (0>>4) - 1 = 0xFFFFFFFF`, and dereferences
+    // `chunks[0xFFFFFFFF]` — a wild-address read that crashes the process.
+    //
+    // On master with the bug: das_context_allocate_i64(ctx, 4GB) crashes
+    // inside MemoryModel::allocate via shoe.chunks OOB.
+    // After widening alignMask to uint64_t: the AND no longer truncates,
+    // the allocation lands in the bigStuff path, and bytesAllocated() grows
+    // by ≥ 4 GB. The CHECK below catches a regression where the mask flips
+    // back to uint32 (bytesAllocated grows by ~16 instead of ≥ 4 GB).
+    if constexpr ( sizeof(void*) < 8 ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS: 32-bit build, skipping");
+        return;
+    }
+    const char * env = getenv("DASLANG_HUGE_HEAP_TESTS");
+    if ( !env || env[0] != '1' ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS=1 not set, skipping 4 GB alignMask probe");
+        return;
+    }
+
+    // persistent_heap routes through PersistentHeapAllocator (MemoryModel/bigStuff).
+    // The default LinearHeapAllocator is uint32-bounded per the policy at
+    // memory_model.h:415-422 — >4GB allocations through it should panic with a
+    // clear message rather than silently truncate. PR-A's widening of
+    // LinearChunkAllocator::alignMask also enables that policy check to fire.
+    static const char * SRC =
+        "options gen2\n"
+        "options persistent_heap = true\n"
+        "[export] def main {}\n";
+    InlineCtx ic = compile_inline(SRC);
+    REQUIRE(ic.ctx != nullptr);
+
+    const uint64_t HUGE_BYTES = uint64_t(4) * 1024 * 1024 * 1024;  // exactly 4 GB
+    const uint64_t before = heap_bytes_allocated(reinterpret_cast<Context*>(ic.ctx));
+    void * p = das_context_allocate_i64(ic.ctx, HUGE_BYTES);
+    REQUIRE(p != nullptr);
+    const uint64_t after = heap_bytes_allocated(reinterpret_cast<Context*>(ic.ctx));
+    CHECK(after - before >= HUGE_BYTES);
+    das_context_free_i64(ic.ctx, p, HUGE_BYTES);
+
+    cleanup_inline_ctx(ic);
+}
+
 TEST_CASE("uint64 size accepts values larger than UINT32_MAX (gated)") {
     // Only runs when DASLANG_HUGE_HEAP_TESTS=1 — a 5GB allocation isn't free
     // even on big runners. Compile-time disabled on 32-bit builds where
@@ -130,7 +178,13 @@ TEST_CASE("uint64 size accepts values larger than UINT32_MAX (gated)") {
         return;
     }
 
-    static const char * SRC = "options gen2\n[export] def main {}\n";
+    // persistent_heap required: default LinearHeapAllocator is uint32-bounded
+    // (per memory_model.h:415-422). >4GB allocations need PersistentHeapAllocator
+    // / MemoryModel::bigStuff path.
+    static const char * SRC =
+        "options gen2\n"
+        "options persistent_heap = true\n"
+        "[export] def main {}\n";
     InlineCtx ic = compile_inline(SRC);
     REQUIRE(ic.ctx != nullptr);
 
