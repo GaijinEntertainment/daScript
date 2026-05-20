@@ -17,6 +17,7 @@ def run_m3(b : B?; n : int) {
                                $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                $(c : Car, d : Dealer) => (c.name, d.name))
                       |> count())
+        b |> accept(c)
         if (c == 0) {
             b->failNow()
         }
@@ -30,6 +31,7 @@ def run_m3f(b : B?; n : int) {
                                     $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                     $(c : Car, d : Dealer) => (c.name, d.name))
                            |> count())
+        b |> accept(c)
         if (c == 0) {
             b->failNow()
         }

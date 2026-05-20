@@ -20,6 +20,7 @@ def run_m1(b : B?; n : int) {
                                   |> _group_by(_.brand)
                                   |> _having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
+            b |> accept(groups)
             if (empty(groups)) {
                 b->failNow()
             }
@@ -31,6 +32,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let groups <- (arr._group_by(_.brand)._having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)._select((Brand = _._0, N = _._1 |> length)))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -44,6 +46,7 @@ def run_m3f(b : B?; n : int) {
                             ._having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -58,6 +61,7 @@ def run_m4(b : B?; n : int) {
                             ._having(_._1 |> _select(_.price) |> sum > 50000)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }

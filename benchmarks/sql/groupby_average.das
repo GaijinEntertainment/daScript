@@ -16,6 +16,7 @@ def run_m1(b : B?; n : int) {
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               AvgPrice = _._1 |> select($(c : Car) => c.price) |> average())))
+            b |> accept(groups)
             if (empty(groups)) {
                 b->failNow()
             }
@@ -28,6 +29,7 @@ def run_m3(b : B?; n : int) {
     b |> run("m3_array/{n}", n) {
         let groups <- (arr._group_by(_.brand)._select((Brand = _._0,
                                                        AvgPrice = _._1 |> select($(c : Car) => c.price) |> average())))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -41,6 +43,7 @@ def run_m3f(b : B?; n : int) {
                             ._select((Brand = _._0,
                                       AvgPrice = _._1 |> select($(c : Car) => c.price) |> average()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -55,6 +58,7 @@ def run_m4(b : B?; n : int) {
                             ._select((Brand = _._0,
                                       AvgPrice = _._1 |> _select(_.price) |> average()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }

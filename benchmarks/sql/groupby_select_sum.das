@@ -12,6 +12,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let groups <- (arr._select(_.price)._group_by(_ % 100)._select((K = _._0, S = _._1 |> sum())))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -25,6 +26,7 @@ def run_m3f(b : B?; n : int) {
                             ._group_by(_ % 100)
                             ._select((K = _._0, S = _._1 |> sum()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -39,6 +41,7 @@ def run_m4(b : B?; n : int) {
                             ._group_by(_ % 100)
                             ._select((K = _._0, S = _._1 |> sum()))
                             .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
