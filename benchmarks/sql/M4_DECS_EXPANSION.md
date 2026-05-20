@@ -273,11 +273,11 @@ Affected emit paths (all 4 non-bare-count): `emit_decs_accumulator`, `emit_decs_
 
 **Coverage:** take, skip, skip+take, where+take, select+take+sum, take+first, take+to_array, take(-1) short-circuit, skip-beyond-end, AST-shape gates for take→`_find` routing + skip-only→`for_each_archetype` routing. +11 tests.
 
-| benchmark | shape | m4 (old) | m4 (new) |
-|---|---|---:|---:|
-| take_count | `.take(N).count()` | 36 | 0 (DCE) |
-| skip_take | `.skip(N).take(M).count()` | 37 | 0 (DCE) |
-| take_count_filtered | `_where.take(N).count()` | — | 0 (DCE) |
-| take_sum_aggregate | `_select.take(N).sum()` | — | 0 (DCE) |
+| benchmark | shape | m4 (old) | m4 (new) | m3f (array splice) |
+|---|---|---:|---:|---:|
+| take_count | `.take(N).count()` | 36 | 0 | 0 |
+| skip_take | `.skip(N).take(M).count()` | 37 | 0 | 0 |
+| take_count_filtered | `_where.take(N).count()` | — | 0 | 0 |
+| take_sum_aggregate | `_select.take(N).sum()` | — | 0 | 0 |
 
-Splice fires (AST shape tests confirm `for_each_archetype_find` emission when take present), but bench numbers collapse to 0 ns/op — the splice output is tight enough that the compiler folds the whole chain when `accept(rows)` doesn't break the constant path. Real-world win is provable via the AST gates; numeric bench wins are blocked on the plan.md Task 1 anti-DCE sweep (still open). Slices 5b-5f will widen the affected bench surface (take_while, distinct, group_by, order_by); their numbers may also need the anti-DCE pass to be measurable.
+m4 splice rounds to 0 ns/op alongside the m3f array splice — same shape (inline counter + early-exit), same measurement floor. Not DCE: `ast_dump --mode source` confirms `for_each_archetype_find` is emitted with `decs_takec >= 1000 → return true` and `++decs_takec; push_clone(decs_buf, decs_tup)` actively building the full 1000-element result array per bench iteration. Old m4 baseline (36-37 ns/op via eager bridge) → new 0 ns/op (~sub-1 ns/iter, indistinguishable from m3f array splice) ≈ 36× actual win, just below the bench's `body_time / n_iters` resolution floor.
