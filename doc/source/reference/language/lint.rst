@@ -722,6 +722,56 @@ The rule deliberately does NOT cover:
 Cross-type casts (widening, narrowing, signedness change, float ↔ int)
 are genuine work and do NOT fire.
 
+PERF021 — hoist common workhorse cast out of ternary
+======================================================
+
+``cond ? T(a) : T(b)`` where both branches apply the **same** workhorse
+cast ``T`` emits two ``ExprCall`` nodes that do identical work regardless
+of which branch is taken. Hoisting the cast outside the ternary collapses
+them to one: ``T(cond ? a : b)``.
+
+Uses the same 15-name workhorse cast set as PERF020. The rule fires only
+when:
+
+- Both ternary branches are calls to the same workhorse cast name (after
+  peeling ``ExprRef2Value``).
+- Both calls share the same target ``Type``.
+- Both arguments share the same ``baseType`` — so the hoisted
+  ``T(cond ? a : b)`` typechecks without an intermediate cast.
+
+If the argument base types differ (e.g. ``cond ? string(intV) :
+string(int64V)``), the rule does NOT fire; the rewrite would need a
+manual widen on one branch and that is left to the author.
+
+.. code-block:: das
+
+    // Bad
+    def to_str(c : bool; a, b : int) : string {
+        return c ? string(a) : string(b)                    // PERF021
+    }
+
+    def widen(c : bool; a, b : int) : int64 {
+        return c ? int64(a) : int64(b)                      // PERF021
+    }
+
+    // Good
+    def to_str(c : bool; a, b : int) : string {
+        return string(c ? a : b)
+    }
+
+    def widen(c : bool; a, b : int) : int64 {
+        return int64(c ? a : b)
+    }
+
+The rewrite is unconditionally safe: the original ternary evaluates
+exactly one of ``a`` / ``b``, and so does the hoisted form — argument
+evaluation count is unchanged. Only the per-branch cast dispatch is
+eliminated.
+
+User-named struct / enum / bitfield constructors (``MyEnum(x)``,
+``Foo(v=x)``) and multi-argument vector constructors (``float2(x, y)``)
+do not match the workhorse cast set and are intentionally out of scope.
+
 .. _style_lint:
 
 -----------
