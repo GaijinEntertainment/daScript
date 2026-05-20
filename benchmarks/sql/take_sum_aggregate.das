@@ -14,6 +14,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let s = arr |> _select(_.price) |> take(TAKE_N) |> sum()
+        b |> accept(s)
         if (s == 0) {
             b->failNow()
         }
@@ -23,6 +24,18 @@ def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
         let s = _fold(each(arr)._select(_.price).take(TAKE_N).sum())
+        b |> accept(s)
+        if (s == 0) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let s = _fold(from_decs_template(type<DecsCar>)._select(_.price).take(TAKE_N).sum())
+        b |> accept(s)
         if (s == 0) {
             b->failNow()
         }
@@ -37,4 +50,9 @@ def take_sum_aggregate_m3(b : B?) {
 [benchmark]
 def take_sum_aggregate_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def take_sum_aggregate_m4(b : B?) {
+    run_m4(b, 100000)
 }

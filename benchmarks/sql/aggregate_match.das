@@ -16,6 +16,7 @@ def run_m1(b : B?; n : int) {
         b |> run("m1_sql/{n}", n) {
             let total = _sql(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD)
                                 |> _select(_.price) |> sum())
+            b |> accept(total)
             if (total == 0) {
                 b->failNow()
             }
@@ -28,6 +29,7 @@ def run_m3(b : B?; n : int) {
     b |> run("m3_array/{n}", n) {
         let total = (arr |> _where(_.price > THRESHOLD)
                          |> aggregate(0, $(acc : int, c : Car) => acc + c.price))
+        b |> accept(total)
         if (total == 0) {
             b->failNow()
         }
@@ -38,6 +40,19 @@ def run_m3f(b : B?; n : int) {
     b |> run("m3f_array_fold/{n}", n) {
         let total = _fold(each(arr)._where(_.price > THRESHOLD)
             .aggregate(0, $(acc : int, c : Car) => acc + c.price))
+        b |> accept(total)
+        if (total == 0) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let total = _fold(from_decs_template(type<DecsCar>)._where(_.price > THRESHOLD)
+            .aggregate(0, $(acc, c) => acc + c.price))
+        b |> accept(total)
         if (total == 0) {
             b->failNow()
         }
@@ -57,4 +72,9 @@ def aggregate_match_m3(b : B?) {
 [benchmark]
 def aggregate_match_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def aggregate_match_m4(b : B?) {
+    run_m4(b, 100000)
 }

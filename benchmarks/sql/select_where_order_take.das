@@ -15,6 +15,7 @@ def run_m1(b : B?; n : int) {
                                 |> _where(_.price > THRESHOLD)
                                 |> _order_by(_.price)
                                 |> take(TAKE_N))
+            b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
             }
@@ -29,6 +30,7 @@ def run_m3(b : B?; n : int) {
         let rows <- (arr |> _where(_.price > THRESHOLD)
                          |> _order_by(_.price)
                          |> take(TAKE_N))
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -43,6 +45,21 @@ def run_m3f(b : B?; n : int) {
                                    ._order_by(_.price)
                                    .take(TAKE_N)
                                    .to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > THRESHOLD)
+                                   ._order_by(_.price)
+                                   .take(TAKE_N)
+                                   .to_array())
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -62,4 +79,9 @@ def select_where_order_take_m3(b : B?) {
 [benchmark]
 def select_where_order_take_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def select_where_order_take_m4(b : B?) {
+    run_m4(b, 100000)
 }

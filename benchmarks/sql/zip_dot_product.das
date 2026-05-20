@@ -21,6 +21,7 @@ def run_m3(b : B?; n : int) {
     let ys <- make_ints(n)
     b |> run("m3_array/{n}", n) {
         let s = (zip(xs, ys) |> _select(_._0 * _._1) |> sum())
+        b |> accept(s)
         if (s == 0) {
             b->failNow()
         }
@@ -31,6 +32,7 @@ def run_m3f(b : B?; n : int) {
     let ys <- make_ints(n)
     b |> run("m3f_array_fold/{n}", n) {
         let s = _fold(zip(xs, ys)._select(_._0 * _._1).sum())
+        b |> accept(s)
         if (s == 0) {
             b->failNow()
         }

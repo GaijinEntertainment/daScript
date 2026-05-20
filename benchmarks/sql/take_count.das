@@ -14,6 +14,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
             let rows <- _sql(db |> select_from(type<Car>) |> take(TAKE_N))
+            b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
             }
@@ -25,6 +26,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let rows <- (arr |> take(TAKE_N))
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -34,6 +36,18 @@ def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
         let rows <- _fold(each(arr).take(TAKE_N).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let rows <- _fold(from_decs_template(type<DecsCar>).take(TAKE_N).to_array())
+        b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
         }
@@ -53,4 +67,9 @@ def take_count_m3(b : B?) {
 [benchmark]
 def take_count_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def take_count_m4(b : B?) {
+    run_m4(b, 100000)
 }

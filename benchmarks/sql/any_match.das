@@ -14,6 +14,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
             let opt = _sql(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD) |> _first_opt())
+            b |> accept(opt)
             if (!is_some(opt)) {
                 b->failNow()
             }
@@ -25,6 +26,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let yes = arr |> _any(_.price > THRESHOLD)
+        b |> accept(yes)
         if (!yes) {
             b->failNow()
         }
@@ -34,6 +36,18 @@ def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
         let yes = _fold(each(arr)._any(_.price > THRESHOLD))
+        b |> accept(yes)
+        if (!yes) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let yes = _fold(from_decs_template(type<DecsCar>)._any(_.price > THRESHOLD))
+        b |> accept(yes)
         if (!yes) {
             b->failNow()
         }
@@ -53,4 +67,9 @@ def any_match_m3(b : B?) {
 [benchmark]
 def any_match_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def any_match_m4(b : B?) {
+    run_m4(b, 100000)
 }

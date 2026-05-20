@@ -7,6 +7,7 @@ require sqlite/sqlite_boost public
 require sqlite/sqlite_linq public
 require dastest/testing_boost public
 require daslib/fio public
+require daslib/decs_boost public
 
 let public BRAND_COUNT = 5
 let public DEALER_COUNT = 100
@@ -74,4 +75,29 @@ def public fixture_dealers_array() : array<Dealer> {
         arr[i] = Dealer(id = i + 1, name = "Dealer{i}")
     }
     return <- arr
+}
+
+// m4_decs_fold lane: same Car schema, decs-archetype-backed. Same row generator as fixture_array so fold splice perf is directly comparable across SQL / array / decs.
+[decs_template(prefix = "car_")]
+struct public DecsCar {
+    id        : int
+    name      : string
+    price     : int
+    brand     : int
+    year      : int
+    dealer_id : int
+}
+
+def public fixture_decs(n : int) {
+    restart()
+    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsCar(
+            id = i + 1,
+            name = "Car{i}",
+            price = (i * 37) % 1000,
+            brand = i % BRAND_COUNT,
+            year = 2010 + (i * 7) % 16,
+            dealer_id = (i % DEALER_COUNT) + 1
+        ))
+    }
 }

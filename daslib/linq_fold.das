@@ -425,13 +425,19 @@ def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? 
 
 [macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
-    // Count-shaped shortcut: emit `length(src)` (count) or `int64(length(src))` (long_count)
+    // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
-    let castName = opName == "long_count" ? "int64" : "int"
-    var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
-        return $c(castName)(length($i(srcName)))
-    }, $e(topExpr)))
+    var res : Expression?
+    if (opName == "long_count") {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return int64(length($i(srcName)))
+        }, $e(topExpr)))
+    } else {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return length($i(srcName))
+        }, $e(topExpr)))
+    }
     return finalize_invoke(res, at)
 }
 
@@ -730,8 +736,15 @@ def private emit_accumulator_lane(
             $i(accName) += $e(valueExpr)
             $i(cntName) ++
         }
-        returnExpr = qmacro_expr() {
-            double($i(accName)) / double($i(cntName))
+        // Skip the double(accName) when accType is already double (interp doesn't fold redundant casts — would trip PERF020 and slow the inner loop tail).
+        if (accType != null && accType.baseType == Type.tDouble) {
+            returnExpr = qmacro_expr() {
+                $i(accName) / double($i(cntName))
+            }
+        } else {
+            returnExpr = qmacro_expr() {
+                double($i(accName)) / double($i(cntName))
+            }
         }
     } elif (opName == "min" || opName == "max") {
         preludeStmts <- qmacro_block_to_array() {
@@ -1195,6 +1208,13 @@ def private order_top_n_call_name(orderName : string) : string {
     return ""
 }
 
+def private order_min_call_name(orderName : string; hasKey : bool) : string {
+    // `order + first` collapses to min/max — asc → min, desc → max. Keyed forms route to min_by/max_by.
+    let isDesc = orderName == "order_descending" || orderName == "order_by_descending"
+    if (hasKey) return isDesc ? "max_by" : "min_by"
+    return isDesc ? "max" : "min"
+}
+
 [macro_function]
 def private try_make_inline_cmp(orderKey : Expression?; orderName : string;
                                 elemType : TypeDeclPtr; at : LineInfo) : Expression? {
@@ -1236,6 +1256,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var orderKey : Expression?
     var orderElemType : TypeDeclPtr
     var takeExpr : Expression?
+    var firstName : string
+    var firstDefaultExpr : Expression?
     var hasOrder = false
     let at = calls[0]._0.at
     let itName = "`it`{at.line}`{at.column}"
@@ -1253,17 +1275,28 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         } elif (name == "order" || name == "order_descending"
                 || name == "order_by" || name == "order_by_descending") {
             if (hasOrder) return null
+            // bail on `order(arr, cmp)` / `order_descending(arr, cmp)` — splice helpers (min/max/top_n) can't honor a user-supplied comparator and would silently drop it.
+            let argCount = cll._0.arguments |> length
+            if ((name == "order" || name == "order_descending") && argCount >= 2) return null
             hasOrder = true
             orderName = name
-            if ((cll._0.arguments |> length) >= 2) {
+            if (argCount >= 2) {
                 orderKey = clone_expression(cll._0.arguments[1])
             }
             orderElemType = clone_type(cll._0._type.firstType)
         } elif (name == "take") {
-            if (!hasOrder || takeExpr != null) return null
+            if (!hasOrder || takeExpr != null || firstName != "") return null
             var arg = cll._0.arguments[1]
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
             takeExpr = clone_expression(arg)
+        } elif (name == "first" || name == "first_or_default") {
+            // order + first → min/max (O(N) instead of sort + index). Must be terminal.
+            if (!hasOrder || takeExpr != null || firstName != "" || i != length(calls) - 1) return null
+            firstName = name
+            if (name == "first_or_default") {
+                if ((cll._0.arguments |> length) < 2) return null
+                firstDefaultExpr = clone_expression(cll._0.arguments[1])
+            }
         } else {
             return null
         }
@@ -1278,12 +1311,51 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     if (hasKey) {
         inlineCmp = try_make_inline_cmp(orderKey, orderName, orderElemType, at)
     }
+    let minMaxName = order_min_call_name(orderName, hasKey)
     if (whereCond == null) {
         // No prefilter — direct call to daslib helper.
         var topExpr = clone_expression(top)
         topExpr.genFlags.alwaysSafe = true
         var emission : Expression?
-        if (takeExpr == null) {
+        if (firstName == "first") {
+            // order + first → preserve eager `first()` panic-on-empty. min/max return an uninitialized ref on empty, so wrap in an empty-guard for arrays (zero alloc, O(N) min scan), or use top_n*(_, 1, _) |> first() for iterators (n=1 bounded heap; first() panics on empty).
+            if (top._type.isGoodArrayType) {
+                var srcParamType = invoke_src_param_type(top)
+                let firstSrcName = "`first_src`{at.line}`{at.column}"
+                var minMaxCall : Expression?
+                if (hasKey) {
+                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName), $e(orderKey)))
+                } else {
+                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName)))
+                }
+                emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
+                    panic("sequence contains no elements") if (empty($i(firstSrcName)))
+                    return $e(minMaxCall)
+                }, $e(topExpr)))
+                emission = finalize_invoke(emission, at)
+            } else {
+                var topNCall : Expression?
+                if (inlineCmp != null) {
+                    topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+                } elif (hasKey) {
+                    topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
+                } else {
+                    topNCall = qmacro($c(topNName)($e(topExpr), 1))
+                }
+                emission = qmacro(_::first($e(topNCall)))
+            }
+        } elif (firstName == "first_or_default") {
+            // No min_by_or_default exists; route through top_n*(_, 1, _) which returns an array (empty or single-element), then first_or_default supplies the default.
+            var topNCall : Expression?
+            if (inlineCmp != null) {
+                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+            } elif (hasKey) {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
+            } else {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1))
+            }
+            emission = qmacro(_::first_or_default($e(topNCall), $e(firstDefaultExpr)))
+        } elif (takeExpr == null) {
             // Bare order family — emit the direct call. Same shape as plain LINQ, but via
             if (inlineCmp != null) {
                 // Inlined comparator dispatches to the asc `order(src, block)` overload —
@@ -1304,7 +1376,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
         // Wrap with to_sequence_move only when emission is array-shaped: take dispatches to
-        let emissionIsArray = takeExpr != null || top._type.isGoodArrayType
+        let emissionIsArray = takeExpr != null || (firstName == "" && top._type.isGoodArrayType)
         if (needIterWrap && emissionIsArray) {
             emission = qmacro($e(emission).to_sequence_move())
         }
@@ -1337,7 +1409,34 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             $e(loopBody)
         }
     }
-    if (takeExpr == null) {
+    if (firstName == "first") {
+        // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager `first()` semantics; min/max return uninitialized refs on empty.
+        stmts |> push <| qmacro_expr() {
+            panic("sequence contains no elements") if (empty($i(bufName)))
+        }
+        var minMaxCall : Expression?
+        if (hasKey) {
+            minMaxCall = qmacro($c(minMaxName)($i(bufName), $e(orderKey)))
+        } else {
+            minMaxCall = qmacro($c(minMaxName)($i(bufName)))
+        }
+        stmts |> push <| qmacro_expr() {
+            return $e(minMaxCall)
+        }
+    } elif (firstName == "first_or_default") {
+        // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case.
+        var topNCall : Expression?
+        if (inlineCmp != null) {
+            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), 1, $e(inlineCmp)))
+        } elif (hasKey) {
+            topNCall = qmacro($c(topNName)($i(bufName), 1, $e(orderKey)))
+        } else {
+            topNCall = qmacro($c(topNName)($i(bufName), 1))
+        }
+        stmts |> push <| qmacro_expr() {
+            return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+        }
+    } elif (takeExpr == null) {
         // Sort the prefilter buffer in place and return it. order*_inplace is void
         var sortCall : Expression?
         if (inlineCmp != null) {
@@ -3263,8 +3362,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
         if (lastName == "count") {
+            // length returns int already; bare `length(...)` matches return type — no cast (PERF020).
             bodyStmts |> push <| qmacro_expr() {
-                return int(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
+                return length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName))
             }
         } else {
             bodyStmts |> push <| qmacro_expr() {

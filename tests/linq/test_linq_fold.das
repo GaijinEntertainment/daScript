@@ -2776,3 +2776,70 @@ def test_take_while_skip_while_cascade_bails(t : T?) {
         tt |> equal(0, length(got))
     }
 }
+
+[test]
+def test_fold_order_by_first(t : T?) {
+    t |> run("order_by + first → min_by") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).first())
+        tt |> equal(2, v, "minimum element after order_by")
+    }
+    t |> run("order_by_descending + first → max_by") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).first())
+        tt |> equal(30, v, "maximum element after order_by_descending")
+    }
+    t |> run("where + order_by + first → min on prefilter buf") @(tt : T?) {
+        let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).first())
+        tt |> equal(8, v, "min of (10,20,8,30,15,25) = 8")
+    }
+    t |> run("order_by + first_or_default — empty source returns default") @(tt : T?) {
+        let empty : array<int>
+        let v = _fold(each(empty)._order_by(_).first_or_default(-1))
+        tt |> equal(-1, v, "empty source → default")
+    }
+    t |> run("order_by + first_or_default — non-empty returns min") @(tt : T?) {
+        let v = _fold(each([10, 5, 20])._order_by(_).first_or_default(-1))
+        tt |> equal(5, v, "non-empty source → min element")
+    }
+    t |> run("where + order_by + first_or_default — empty after filter") @(tt : T?) {
+        let v = _fold(each([1, 2, 3])._where(_ > 100)._order_by(_).first_or_default(-1))
+        tt |> equal(-1, v, "filter excludes all → default")
+    }
+    t |> run("order_by + first on empty array panics") @(tt : T?) {
+        let empty : array<int>
+        var didPanic = false
+        try {
+            let v = _fold(each(empty)._order_by(_).first())
+            tt |> success(false, "expected panic; got {v}")
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "first() on empty array panicked")
+    }
+    t |> run("where + order_by + first filtered-empty panics") @(tt : T?) {
+        var didPanic = false
+        try {
+            let v = _fold(each([1, 2, 3])._where(_ > 100)._order_by(_).first())
+            tt |> success(false, "expected panic; got {v}")
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "first() on filtered-empty array panicked")
+    }
+    // ── order(arr, cmp) + first — splice MUST honor the custom comparator (was emitting bare min/max, ignoring cmp)
+    t |> run("order(arr, cmp) + first preserves custom comparator (descending cmp → max)") @(tt : T?) {
+        let v = _fold(each([10, 5, 20, 3]) |> order($(a : int, b : int) => a > b) |> first())
+        tt |> equal(20, v, "cmp orders descending → first returns max")
+    }
+    t |> run("order_descending(arr, cmp) + first preserves custom comparator") @(tt : T?) {
+        // order_descending swaps cmp args, so cmp `a > b` becomes effectively `b > a` (ascending) → first → min
+        let v = _fold(each([10, 5, 20, 3]) |> order_descending($(a : int, b : int) => a > b) |> first())
+        tt |> equal(3, v, "order_descending negates cmp → first is min")
+    }
+    t |> run("order(arr, cmp) + take preserves custom comparator (pre-existing recognizer hole)") @(tt : T?) {
+        // cmp orders descending → take(2) returns top 2
+        let result <- _fold(each([10, 5, 20, 3, 25, 8]) |> order($(a : int, b : int) => a > b) |> take(2) |> to_array())
+        tt |> equal(2, length(result), "take 2 of descending order")
+        tt |> equal(25, result[0], "first is max (25)")
+        tt |> equal(20, result[1], "second is next-max (20)")
+    }
+}

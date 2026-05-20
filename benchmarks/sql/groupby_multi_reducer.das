@@ -18,6 +18,7 @@ def run_m1(b : B?; n : int) {
                                               N = _._1 |> length,
                                               TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                               MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max())))
+            b |> accept(groups)
             if (empty(groups)) {
                 b->failNow()
             }
@@ -32,6 +33,7 @@ def run_m3(b : B?; n : int) {
                                                        N = _._1 |> length,
                                                        TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                                        MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max())))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -47,6 +49,24 @@ def run_m3f(b : B?; n : int) {
                                       TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum(),
                                       MaxPrice   = _._1 |> select($(c : Car) => c.price) |> max()))
                             .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let groups <- _fold(from_decs_template(type<DecsCar>)
+                            ._group_by(_.brand)
+                            ._select((Brand = _._0,
+                                      N = _._1 |> length,
+                                      TotalPrice = _._1 |> _select(_.price) |> sum(),
+                                      MaxPrice   = _._1 |> _select(_.price) |> max()))
+                            .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -66,4 +86,9 @@ def groupby_multi_reducer_m3(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def groupby_multi_reducer_m4(b : B?) {
+    run_m4(b, 100000)
 }

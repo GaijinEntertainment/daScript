@@ -16,6 +16,7 @@ def run_m1(b : B?; n : int) {
             let groups <- _sql(db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
+            b |> accept(groups)
             if (empty(groups)) {
                 b->failNow()
             }
@@ -27,6 +28,7 @@ def run_m3(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3_array/{n}", n) {
         let groups <- (arr._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)))
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -39,6 +41,21 @@ def run_m3f(b : B?; n : int) {
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let groups <- _fold(from_decs_template(type<DecsCar>)
+                            ._group_by(_.brand)
+                            ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
         if (empty(groups)) {
             b->failNow()
         }
@@ -58,4 +75,9 @@ def groupby_count_m3(b : B?) {
 [benchmark]
 def groupby_count_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def groupby_count_m4(b : B?) {
+    run_m4(b, 100000)
 }
