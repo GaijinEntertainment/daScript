@@ -55,6 +55,7 @@ struct FromTemplateEmpty {
 
 [test]
 def test_from_decs_template(t : T?) {
+    restart()
     for (i in range(3)) {
         create_entity() @(eid, cmp) {
             cmp.eid := eid
@@ -92,7 +93,7 @@ def test_from_decs_template(t : T?) {
             from_decs_template(type<FromTemplateImplicit>)._select(_.iv).sum()
         )
         let via_explicit = (
-            from_decs($(FromTemplateImplicit_iv : int){})._select(_.FromTemplateImplicit_iv).sum()
+            from_decs($(FromTemplateImplicit_iv : int; FromTemplateImplicit_sv : string){})._select(_.FromTemplateImplicit_iv).sum()
         )
         tt |> equal(via_template, via_explicit)
         tt |> equal(via_template, 0 + 10 + 20)
