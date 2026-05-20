@@ -197,6 +197,16 @@ class private LinqCount : AstCallMacro_LinqPred2 {
     override predName = "count"
 }
 
+[call_macro(name="_long_count")]
+class private LinqLongCount : AstCallMacro_LinqPred2 {
+    //! implements _long_count(iterator, expression) shorthand notation
+    //! that expands into long_count(iterator, $(_) => expression)
+    //! for example::
+    //!
+    //!   each(foo)._long_count(_ > 3)
+    override predName = "long_count"
+}
+
 [call_macro(name="_unique_by")]
 class private LinqUnique : AstCallMacro_LinqPred2 {
     //! implements _unique_by(iterator, expression) shorthand notation
