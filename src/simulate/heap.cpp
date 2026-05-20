@@ -359,7 +359,14 @@ namespace das {
     int PersistentStringAllocator::depth() const { return model.depth(); }
     uint64_t PersistentStringAllocator::bytesAllocated() const { return model.bytesAllocated(); }
     uint64_t PersistentStringAllocator::totalAlignedMemoryAllocated() const { return model.totalAlignedMemoryAllocated(); }
-    void PersistentStringAllocator::reset() { model.reset(); }
+    void PersistentStringAllocator::reset() {
+        // Clear the intern map BEFORE releasing the heap — otherwise the map
+        // ends up with pointers into now-reusable slots, and the next
+        // allocateString of a previously-interned string returns a dangling
+        // pointer. Surfaced by Debug-build CI on tests-cpp PR #2744.
+        StringHeapAllocator::reset();
+        model.reset();
+    }
     void PersistentStringAllocator::shrink() { model.shrink(); }
     bool PersistentStringAllocator::isOwnPtr ( char * ptr, uint64_t size ) { return model.isOwnPtr(ptr,size); }
     bool PersistentStringAllocator::isValidPtr ( char * ptr, uint64_t size ) { return model.isAllocatedPtr(ptr,size); }
@@ -467,7 +474,10 @@ namespace das {
     int LinearStringAllocator::depth() const { return model.depth(); }
     uint64_t LinearStringAllocator::bytesAllocated() const { return model.bytesAllocated(); }
     uint64_t LinearStringAllocator::totalAlignedMemoryAllocated() const { return model.totalAlignedMemoryAllocated(); }
-    void LinearStringAllocator::reset() { model.reset(); }
+    void LinearStringAllocator::reset() {
+        StringHeapAllocator::reset();
+        model.reset();
+    }
     void LinearStringAllocator::shrink() { model.shrink(); }
     bool LinearStringAllocator::isOwnPtr ( char * ptr, uint64_t ) { return model.isOwnPtr(ptr); }
     void LinearStringAllocator::setInitialSize ( uint64_t size ) { model.setInitialSize(size); }

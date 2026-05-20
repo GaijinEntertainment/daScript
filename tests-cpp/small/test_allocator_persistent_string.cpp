@@ -81,6 +81,12 @@ TEST_CASE("PersistentStringAllocator: setInitialSize accepts uint64_t (widened)"
 }
 
 TEST_CASE("PersistentStringAllocator: reset clears the heap and intern table") {
+    // Regression test for a latent bug: before the fix in heap.cpp,
+    // PersistentStringAllocator::reset() only called model.reset() and
+    // left internMap populated with pointers into now-reusable slots.
+    // The next allocateString of a previously-interned string would hit
+    // the dangling entry and return a stale pointer — silent corruption
+    // in Release, Deck::free double-free assert in Debug.
     PersistentStringAllocator h;
     h.setIntern(true);
     char * a = h.impl_allocateString(nullptr, "alpha", 5, nullptr);
@@ -88,15 +94,21 @@ TEST_CASE("PersistentStringAllocator: reset clears the heap and intern table") {
     REQUIRE(a != nullptr);
     REQUIRE(b != nullptr);
     CHECK(h.bytesAllocated() > 0);
+    CHECK(h.intern("alpha", 5) == a);              // intern hits pre-reset
+
     h.reset();
-    // reset() releases heap memory + empties the intern table but does NOT
-    // zero the totalAllocated counter (sweep() owns that contract).
-    // We verify the intern table is cleared by allocating "alpha" again
-    // post-reset and seeing a fresh pointer (no intern hit on the dangling
-    // pre-reset entry).
+    // Note: reset() does NOT zero the totalAllocated counter (only sweep()
+    // owns that contract) — but the intern table IS now cleared, and the
+    // heap memory IS released, so any subsequent allocation lands in fresh
+    // storage with the slot bookkeeping in sync.
+    CHECK(h.intern("alpha", 5) == nullptr);        // intern table is empty
+
+    // Round-trip a new allocation of the SAME interned string — this is the
+    // exact path that triggered the latent bug (intern hit → dangling ptr →
+    // free crashes on already-free slot).
     char * a2 = h.impl_allocateString(nullptr, "alpha", 5, nullptr);
     REQUIRE(a2 != nullptr);
-    h.impl_freeString(a2, 5);
+    h.impl_freeString(a2, 5);                       // must not assert
 }
 
 TEST_CASE("PersistentStringAllocator: forEachString enumerates live strings") {
