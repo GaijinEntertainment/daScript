@@ -87,7 +87,7 @@ def main {
 
     // = is copy assignment — works for simple types and copyable values.
     let p = 10
-    var q = p       // q is a copy of p
+    var q = p       // q is a copy of p  // nolint:LINT010 — demonstrating reassignment after copy
     q = 99
     print("p={p}  q={q}\n")    // p is unchanged
 

@@ -509,7 +509,6 @@ class DecsQueryMacro : AstCallMacro {
         var qres = move_unquote_block(qblock)
         assert(length(qres.list) == 1 && empty(qres.finalList))
         var rqres = qres.list[0]
-        qres := null
         rqres.genFlags.alwaysSafe = true
         return rqres
     }

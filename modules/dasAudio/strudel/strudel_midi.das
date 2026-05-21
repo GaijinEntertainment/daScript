@@ -138,7 +138,7 @@ def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack
             status = runningStatus
         }
         let msgType = status & int(0xF0)
-        let ch = int(status & int(0x0F))
+        let ch = status & int(0x0F)
         if (msgType == int(0x80)) {
             // Note Off
             let note = (status == firstByte) ? read_byte(data, cursor) : firstByte
@@ -264,11 +264,10 @@ def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack
 def parse_midi(data : array<uint8>) : MidiFile {
     //! Parse MIDI data from a byte array into a MidiFile structure.
     var result : MidiFile
-    if (length(data) < 14) return <- result
-    var cursor = 0
-    // "MThd"
-    if (int(data[0]) != 'M' || int(data[1]) != 'T' || int(data[2]) != 'h' || int(data[3]) != 'd') return <- result
-    cursor = 4
+    if (length(data) < 14
+            || int(data[0]) != 'M' || int(data[1]) != 'T'
+            || int(data[2]) != 'h' || int(data[3]) != 'd') return <- result
+    var cursor = 4
     let headerLen = read_u32(data, cursor)
     if (headerLen < 6) return <- result
     result.format = read_u16(data, cursor)

@@ -879,7 +879,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     var cmp : ComponentMap
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
     let eidx = decsState.entityLookup[eid.id].index
-    var old_ahash = 0ul
+    var old_ahash = 0ul    // nolint:LINT010 — written inside the inner scope below, but must outlive that scope
     {// note - this scope is for arch &
         var arch & = unsafe(decsState.allArchetypes[arch_index])
         cmp |> reserve(length(arch.components))

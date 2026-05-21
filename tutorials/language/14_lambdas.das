@@ -31,7 +31,7 @@ def main {
     print("mul_lambda(5) = {mul_lambda(5)}\n")   // 50
 
     // Changing the original variable does NOT affect the lambda (captured by copy).
-    multiplier = 999
+    multiplier = 999  // nolint:LINT010 — dead-by-design; lambda has its own captured copy
     print("mul_lambda(5) still = {mul_lambda(5)}\n")  // still 50
 
     // === Simplified => syntax ===

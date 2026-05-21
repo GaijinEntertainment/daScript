@@ -67,15 +67,12 @@ def run_cmd(cmd : string; var output : string&) : int {
     if (get_platform_name() == "windows") {
         full_cmd = "\"{full_cmd}\""
     }
-    var exit_code = -1
     var pipe_output : string
-    unsafe {
-        exit_code = popen(full_cmd) $(f) {
-            if (f != null) {
-                pipe_output = fread(f)
-            }
+    let exit_code = unsafe(popen(full_cmd) $(f) {
+        if (f != null) {
+            pipe_output = fread(f)
         }
-    }
+    })
     let tmp_existed = fexist(tmp_out)
     if (tmp_existed) {
         fopen(tmp_out, "rb") $(f) {

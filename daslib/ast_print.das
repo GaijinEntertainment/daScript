@@ -1106,7 +1106,7 @@ def add(a, b : int) {
     return a + b + add_extra;
 }
 
-[sideeffects, export]
+[sideeffects, export, no_lint]
 def allExpr(arg : int) {
     //! Exercises all expression types for AST pretty-printer coverage.
     // ExprStringBuilder
