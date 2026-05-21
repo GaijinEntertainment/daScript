@@ -4769,10 +4769,25 @@ class public LlvmJitVisitor : AstVisitor {
                         vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                         vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                     } else {
-                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
-                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                        var global_ptr = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                        global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                        // On wasm32 the host's offsetof(Context, globals) (the
+                        // CONTEXT_OFFSET_OF_GLOBALS constant baked into module_jit.cpp)
+                        // does NOT match the wasm32 runtime's Context layout —
+                        // 4-byte pointers shift everything. Call into the runtime
+                        // archive (which knows its own layout) instead of doing
+                        // GEP+load against a host-derived offset. Native keeps
+                        // the inlined GEP+load — same codegen as before.
+                        var global_ptr : LLVMOpaqueValue?
+                        if (g_target_is_wasm) {
+                            let fname = expr.variable.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
+                            let fty = g_fn_types[fname]
+                            var args = fixed_array(get_context_param())
+                            global_ptr = LLVMBuildCall2(g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
+                        } else {
+                            var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
+                            let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                            var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                            global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                        }
                         vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     }
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
@@ -6615,10 +6630,20 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                             vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
                             vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
                         } else {
-                            var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
-                            let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                            var global_ptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                            global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                            // See the matching site in preVisitExprVar for why
+                            // wasm32 goes through a runtime helper here.
+                            var global_ptr : LLVMOpaqueValue?
+                            if (g_target_is_wasm) {
+                                let fname = glob.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
+                                let fty = g_fn_types[fname]
+                                var args = fixed_array(ctx_param)
+                                global_ptr = LLVMBuildCall2(visitor.g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
+                            } else {
+                                var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                                let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                                var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                                global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                            }
                             vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                         }
                         // register CMRES destination so init expressions that return by copy/move

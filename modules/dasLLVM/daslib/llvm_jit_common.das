@@ -49,6 +49,10 @@ let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
 let public FN_JIT_STRING_BUILDER_TEMP    = "jit_string_builder_temp"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
 let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
+// Wasm-only path — see g_target_is_wasm in init_jit and the two sites in
+// llvm_jit.das that emit a call instead of a baked-host-offset GEP+load.
+let public FN_JIT_GET_GLOBALS_BASE  = "jit_get_globals_base"
+let public FN_JIT_GET_SHARED_BASE   = "jit_get_shared_base"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -469,6 +473,23 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
     LLVMAddAttributesToFunction(jit_get_shared_mnh, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
+    // Wasm-only: void * jit_get_globals_base ( Context * ); same shape for shared.
+    // Declared unconditionally (zero cost if unused); only called from llvm_jit.das
+    // when g_target_is_wasm. The native path keeps the inlined GEP+load — these
+    // helpers exist so the wasm32 runtime archive (which knows its own Context
+    // layout) resolves the right field offset.
+    var jit_get_globals_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBALS_BASE,
+        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_get_globals_base, get_jit_get_globals_base())
+    LLVMAddAttributesToFunction(jit_get_globals_base, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgument(jit_get_globals_base, 0u, nocapture)
+    var jit_get_shared_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_SHARED_BASE,
+        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_get_shared_base, get_jit_get_shared_base())
+    LLVMAddAttributesToFunction(jit_get_shared_base, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgument(jit_get_shared_base, 0u, nocapture)
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),

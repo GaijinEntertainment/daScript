@@ -401,6 +401,23 @@ extern "C" {
         return context.shared + context.globalOffsetByMangledName(mnh);
     }
 
+    // Return the raw globals / shared base pointers from the Context. Existed
+    // before as JIT IR doing `GEP ctx+CONTEXT_OFFSET_OF_GLOBALS + load`, but
+    // CONTEXT_OFFSET_OF_GLOBALS is a `static const uint32_t` baked at C++
+    // compile time of THIS file using the host's `offsetof(Context, globals)`.
+    // When cross-compiling JIT'd code to wasm32, the wasm32 Context struct
+    // has 4-byte pointers and a different offsetof — emitting the host's
+    // offset reads garbage. The runtime archive (libDaScript_runtime.a) is
+    // built for the target with the right layout, so calling this helper
+    // gives the right pointer.
+    DAS_API void * jit_get_globals_base ( Context * context ) {
+        return context->globals;
+    }
+
+    DAS_API void * jit_get_shared_base ( Context * context ) {
+        return context->shared;
+    }
+
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         return context->allocate(bytes);
     }
@@ -610,6 +627,8 @@ extern "C" {
     void *das_get_jit_string_builder_temp() { return (void *)&jit_string_builder_temp; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
+    void *das_get_jit_get_globals_base() { return (void *)&jit_get_globals_base; }
+    void *das_get_jit_get_shared_base() { return (void *)&jit_get_shared_base; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -992,6 +1011,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
                 SideEffects::none, "das_get_jit_get_shared_mnh");
+            addExtern<DAS_BIND_FUN(das_get_jit_get_globals_base)>(*this, lib, "get_jit_get_globals_base",
+                SideEffects::none, "das_get_jit_get_globals_base");
+            addExtern<DAS_BIND_FUN(das_get_jit_get_shared_base)>(*this, lib, "get_jit_get_shared_base",
+                SideEffects::none, "das_get_jit_get_shared_base");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
