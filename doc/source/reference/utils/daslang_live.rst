@@ -708,6 +708,12 @@ CLI reference
      - Project root --- the parent of ``modules/`` for daspkg-style
        module resolution. Equivalent to passing ``project_root`` to
        MCP tools.
+   * - ``-load_module <path>``
+     - Directly load a single dynamic-module folder (the one containing
+       ``.das_module``); repeatable. Bypasses the
+       ``<project_root>/modules/<name>`` scan and shadows same-basename
+       entries in dasroot and project_root. Use when working on an
+       external module locally without setting up the junction trick.
    * - ``-dasroot <path>``
      - Override ``DAS_ROOT``.
    * - ``-cwd``

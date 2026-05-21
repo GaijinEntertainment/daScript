@@ -107,14 +107,38 @@ def live_is_running(port : string) : bool {
     return running
 }
 
+// Resolve each load_module entry to an absolute path. Same rationale as
+// resolving file/project/project_root before composing daslang-live argv:
+// the `-cwd` chdir runs before `require_dynamic_modules`, so any relative
+// `-load_module <P>` would re-resolve against the new cwd. Public so the
+// test suite can unit-test the abs-resolve without spawning daslang-live.
+def public resolve_load_modules(load_modules : array<string>) : array<string> {
+    var abs : array<string>
+    abs |> reserve(length(load_modules))
+    for (lm in load_modules) {
+        abs |> push(resolve_path(lm))
+    }
+    return <- abs
+}
+
 // daslang-live script_args composition. Extracted so tests can pin the
 // flag-ordering invariants without spawning a subprocess. Slash-replace on
 // Windows happens here so the resulting string is shell-ready for Start-Process.
 def public build_live_script_args(file, project, project_root : string;
-                                  is_windows : bool) : string {
+                                  is_windows : bool;
+                                  load_modules : array<string> = array<string>()) : string {
     var launch_file = clone_string(file)
     var launch_project = clone_string(project)
     var launch_project_root = clone_string(project_root)
+    var launch_load_modules : array<string>
+    launch_load_modules |> reserve(length(load_modules))
+    for (lm in load_modules) {
+        var lm_norm = clone_string(lm)
+        if (is_windows) {
+            lm_norm = replace(lm_norm, "/", "\\")
+        }
+        launch_load_modules |> push(lm_norm)
+    }
     if (is_windows) {
         launch_file = replace(launch_file, "/", "\\")
         launch_project = replace(launch_project, "/", "\\")
@@ -123,6 +147,21 @@ def public build_live_script_args(file, project, project_root : string;
     var script_args = "-cwd \"{launch_file}\""
     if (!empty(launch_project)) {
         script_args = "-project \"{launch_project}\" {script_args}"
+    }
+    // Build the -load_module chain in source order, then prepend once. Input
+    // order is preserved left-to-right in the output.
+    let lm_args = build_string() $(var w) {
+        var first = true
+        for (lm in launch_load_modules) {
+            if (!first) {
+                w |> write(" ")
+            }
+            first = false
+            w |> write("-load_module \"{lm}\"")
+        }
+    }
+    if (!empty(lm_args)) {
+        script_args = "{lm_args} {script_args}"
     }
     if (!empty(launch_project_root)) {
         script_args = "-project_root \"{launch_project_root}\" {script_args}"
@@ -153,7 +192,7 @@ def private port_in_range(s : string) : bool {
     return n > 0 && n <= 65535
 }
 
-def do_live_launch(file, project, project_root, port : string) : string {
+def do_live_launch(file, project, project_root : string; port : string = ""; load_modules : array<string> = array<string>()) : string {
     if (!empty(port) && !port_in_range(port)) return make_tool_result("invalid port '{port}': expected 1-65535", true)
     let p = empty(port) ? "9090" : port
     // Check if already running
@@ -172,19 +211,17 @@ def do_live_launch(file, project, project_root, port : string) : string {
     }
     if (!stat(live_exe).is_valid) return make_tool_result("daslang-live not found in {root}/bin/Release/ or {root}/bin/", true)
     // Build launch command — daslang-live -cwd handles working directory.
-    // CRITICAL: resolve file / project / project_root to absolute paths BEFORE
-    // composing the args. daslang-live's `-cwd` flag chdir's to the script's
-    // folder (utils/daslang-live/main.cpp:696-707) BEFORE running
-    // require_dynamic_modules — so a relative `-project_root <P>` would
-    // re-resolve against the new cwd and fail to find <P>/modules/.
-    var launch_exe = clone_string(live_exe)
-    if (is_windows) {
-        launch_exe = replace(launch_exe, "/", "\\")
-    }
+    // CRITICAL: resolve file / project / project_root / load_modules to
+    // absolute paths BEFORE composing the args. daslang-live's `-cwd` flag
+    // chdir's to the script's folder (utils/daslang-live/main.cpp:696-707)
+    // BEFORE running require_dynamic_modules — so a relative `-project_root <P>`
+    // or `-load_module <M>` would re-resolve against the new cwd and fail to
+    // find the module folder.
     let abs_file = resolve_path(file)
     let abs_project = empty(project) ? "" : resolve_path(project)
     let abs_project_root = empty(project_root) ? "" : resolve_path(project_root)
-    var script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows)
+    let abs_load_modules <- resolve_load_modules(load_modules)
+    var script_args = build_live_script_args(abs_file, abs_project, abs_project_root, is_windows, abs_load_modules)
     if (!empty(port)) {
         // Make the spawned binary actually bind the requested port (matching the
         // poll URL above). Without this, the binary uses its own default and we'd
@@ -193,6 +230,7 @@ def do_live_launch(file, project, project_root, port : string) : string {
     }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
+        let launch_exe = replace(live_exe, "/", "\\")
         let ps1 = replace("{launcher}.ps1", "/", "\\")
         fopen(ps1, "wt") $(f) {
             if (f != null) {

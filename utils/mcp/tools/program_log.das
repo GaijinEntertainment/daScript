@@ -9,6 +9,6 @@ require common public
 //! any shared module the compiled program requires (dasModuleImgui, etc.)
 //! loads + unloads on the subtool's process lifecycle, not the MCP server's.
 
-def do_program_log(file, func_name : string; project : string = ""; project_root : string = "") : string {
-    return run_mcp_subtool("program_log", [file, func_name, project], project_root)
+def do_program_log(file, func_name : string; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
+    return run_mcp_subtool("program_log", [file, func_name, project], project_root, load_modules)
 }

@@ -444,7 +444,8 @@ The dynamic binary discovers modules automatically from the
        auto fAccess = das::make_smart<das::FsFileAccess>();
 
        NEED_ALL_DEFAULT_MODULES
-       das::require_dynamic_modules(fAccess, das::getDasRoot(), "./", tout);
+       das::vector<das::string> load_modules;  // optional: explicit module paths
+       das::require_dynamic_modules(fAccess, das::getDasRoot(), "./", load_modules, tout);
        das::Module::Initialize();
 
        // ... compile and run scripts as normal
@@ -454,6 +455,12 @@ The dynamic binary discovers modules automatically from the
 for a ``.das_module`` file and executes it.  The ``getDasRoot()``
 function returns the daslang installation root (set via the
 ``DAS_ROOT`` environment variable or auto-detected).
+
+Each entry in ``load_modules`` is the path to a single module folder
+(the one containing ``.das_module``), bypassing the
+``<project_root>/modules/<name>`` scan.  Path basenames shadow same-named
+entries from dasroot and project_root.  This is the C++ equivalent of
+daslang's ``-load_module <path>`` CLI flag (repeatable).
 
 
 Installing external modules
@@ -553,7 +560,8 @@ simulate, evaluate — with the addition of
        auto faccess = das::smart_ptr<das::FsFileAccess>(new das::FsFileAccess);
 
        NEED_ALL_DEFAULT_MODULES
-       das::require_dynamic_modules(faccess, das::getDasRoot(), "./", tout);
+       das::vector<das::string> load_modules;
+       das::require_dynamic_modules(faccess, das::getDasRoot(), "./", load_modules, tout);
        das::Module::Initialize();
 
        // compile, simulate, evaluate hello.das ...

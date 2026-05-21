@@ -5,16 +5,21 @@ options no_unused_block_arguments = false
 require common public
 require daslib/fio
 
-def do_run_test(file : string; project : string = ""; project_root : string = ""; timeout_str : string = ""; json : bool = false; failures_only : bool = false) : string {
+def do_run_test(file : string; project : string = ""; project_root : string = ""; timeout_str : string = ""; json : bool = false; failures_only : bool = false; load_modules : array<string> = array<string>()) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let test_file = resolve_path(file)
     let dastest_main = "{get_das_root()}/dastest/dastest.das"
-    // -project_root is a daslang CLI flag and must come before the script path.
+    // -project_root and -load_module are daslang CLI flags and must come before the script path.
     var argv <- [exe]
     if (!empty(project_root)) {
         argv |> push("-project_root")
         argv |> push(project_root)
+    }
+    argv |> reserve(length(argv) + 2 * length(load_modules) + 7)
+    for (lm in load_modules) {
+        argv |> push("-load_module")
+        argv |> push(lm)
     }
     argv |> push(dastest_main)
     argv |> push("--")
