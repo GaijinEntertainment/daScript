@@ -3183,7 +3183,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let stride = expr.makeType.stride
         if (stride != 0 && empty(expr.variants)) {
-            let total = int(expr.variants |> length)
+            let total = expr.variants |> length
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mkv_ptr, 0ul, uint64(bytes), align)
@@ -3306,7 +3306,7 @@ class public LlvmJitVisitor : AstVisitor {
         let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && empty(expr.structs)
         let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
         if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
-            let total = int(expr.structs |> length)
+            let total = expr.structs |> length
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
@@ -3455,7 +3455,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let stride = expr.makeType.stride
         if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
-            let total = int(expr.values |> length)
+            let total = expr.values |> length
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
@@ -3532,7 +3532,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let stride = expr.makeType.stride
         if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
-            let total = int(expr.values |> length)
+            let total = expr.values |> length
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
@@ -3816,7 +3816,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def get_typeinfo_fields(ti : TypeInfo?) : array<LLVMValueRef> {
         var init_values = rec_create_type_info_global(ti)
-        init_values |> push <| LLVMConstInt(types.t_int64, ti.hash       |> uint64(), 0)
+        init_values |> push <| LLVMConstInt(types.t_int64, ti.hash, 0)
         init_values |> push <| types.ConstI32(ti.basicType  |> uint64())
         init_values |> push <| types.ConstI32(ti.flags      |> uint64())
         init_values |> push <| types.ConstI32(ti.size       |> uint64())
@@ -3881,10 +3881,10 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         }
-        let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len |> uint())
+        let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len)
         let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
         set_globalvar_linkage(varinfo_array)
-        let initializer = LLVMConstArray(LLVMPointerType(ty, 0u), array_data_ptr(array_init), len |> uint())
+        let initializer = LLVMConstArray(LLVMPointerType(ty, 0u), array_data_ptr(array_init), len)
         LLVMSetInitializer(varinfo_array) <| initializer
 
         return g_builder |> LLVMBuildPointerCast(varinfo_array, types.LLVMVoidPtrType(), "mycast")
@@ -3901,7 +3901,7 @@ class public LlvmJitVisitor : AstVisitor {
             get_string_constant_ptr(g_builder, ei.module_name),
             create_enumvalueinfo_global_array(ei.fields, ei.count),
             types.ConstI32(ei.count |> uint64()),
-            LLVMConstInt(types.t_int64, ei.hash  |> uint64(), 0),
+            LLVMConstInt(types.t_int64, ei.hash, 0),
             types.ConstI32(ei.flags |> uint64())
         ]
         struct_info_global |> LLVMSetInitializer() <| make_initializer(ty, init_values)
@@ -3921,8 +3921,8 @@ class public LlvmJitVisitor : AstVisitor {
             create_struct_fields_global_array(si.fields, si.count),
             LLVMConstPointerNull(void_ptr), // NOTE: annotations are not used right now
 
-            LLVMConstInt(types.t_int64, si.hash     |> uint64(), 0),
-            LLVMConstInt(types.t_int64, si.init_mnh |> uint64(), 0),
+            LLVMConstInt(types.t_int64, si.hash, 0),
+            LLVMConstInt(types.t_int64, si.init_mnh, 0),
 
             types.ConstI32(si.flags |> uint64()),
             types.ConstI32(si.count |> uint64()),
@@ -5378,7 +5378,7 @@ class public LlvmJitVisitor : AstVisitor {
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
-        let annotationData = (expr._block as ExprBlock).annotationData |> uint64()
+        let annotationData = (expr._block as ExprBlock).annotationData
         var ann_data_ptr : LLVMOpaqueValue? = null
         if (annotationData != 0 |> uint64()) {
             ann_data_ptr = LLVMBuildPtrToInt(g_builder, save_address_global(uid.get_block_ann(expr), unsafe(reinterpret<void?>(annotationData))), types.LLVMIntPtrType(), "")
@@ -5507,7 +5507,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprConstUInt64
     def override visitExprConstUInt64(expr : ExprConstUInt64?) : ExpressionPtr {
-        setE(expr, types.ConstI64(expr.value |> uint64()))
+        setE(expr, types.ConstI64(expr.value))
         return expr
     }
 
@@ -5570,8 +5570,8 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprConstURange64
     def override visitExprConstURange64(expr : ExprConstURange64?) : ExpressionPtr {
-        var x = types.ConstI64(expr.value.x |> uint64())
-        var y = types.ConstI64(expr.value.y |> uint64())
+        var x = types.ConstI64(expr.value.x)
+        var y = types.ConstI64(expr.value.y)
         setE(expr, LLVMBuildAnyInt2_xy(g_builder, types, types.LLVMRange64Type(), x, y, "urange64"))
         return expr
     }
@@ -5644,7 +5644,7 @@ class public LlvmJitVisitor : AstVisitor {
             let mangled_name = expr.typeexpr |> get_mangled_name()
             let hash_value = hash(mangled_name)
             var params = fixed_array(
-                types.ConstI64(hash_value |> uint64()), // hash
+                types.ConstI64(hash_value), // hash
                 get_context_param(),                    // context
                 get_line_info_ptr(expr.at)              // lineinfo
             )
@@ -5978,9 +5978,9 @@ class public LlvmJitVisitor : AstVisitor {
         elif (a.name == "distribute") operands |> push <| make_loop_md_pair_i1("llvm.loop.distribute.enable", true)
         elif (a.name == "disable_nonforced") operands |> push <| make_loop_md_flag("llvm.loop.disable_nonforced")
         elif (a.name == "licm_versioning_disable") operands |> push <| make_loop_md_flag("llvm.loop.licm_versioning.disable")
-        elif (a.name == "unroll_count"     && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.unroll.count",     int(a.iValue))
-        elif (a.name == "vectorize_width"  && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.vectorize.width", int(a.iValue))
-        elif (a.name == "interleave_count" && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.interleave.count", int(a.iValue))
+        elif (a.name == "unroll_count"     && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.unroll.count",     a.iValue)
+        elif (a.name == "vectorize_width"  && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.vectorize.width", a.iValue)
+        elif (a.name == "interleave_count" && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.interleave.count", a.iValue)
         else                                          failed("unknown loop hint '{a.name}'")
     }
 
@@ -6628,7 +6628,7 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
         let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
         if (err != null) {
             let msg = LLVMGetErrorMessage(err)
-            let local_msg = string(msg)
+            let local_msg = msg
             LLVMDisposeErrorMessage(msg)
             panic("LLVM pass run failed: {local_msg}")
         }

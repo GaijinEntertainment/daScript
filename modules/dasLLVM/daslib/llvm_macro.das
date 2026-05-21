@@ -292,7 +292,7 @@ class JIT_LLVM : AstSimulateMacro {
                     let dce_err = LLVMRunPasses(g_mod, "globaldce", null, pmo)
                     if (dce_err != null) {
                         let dce_msg = LLVMGetErrorMessage(dce_err)
-                        to_log(LOG_WARNING, "LLVM globaldce failed: {string(dce_msg)}\n")
+                        to_log(LOG_WARNING, "LLVM globaldce failed: {dce_msg}\n")
                         LLVMDisposeErrorMessage(dce_msg)
                     }
                     LLVMDisposePassBuilderOptions(pmo)

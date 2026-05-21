@@ -19,13 +19,13 @@ def neg_int_array_at(idx : int) : int {
 def neg_int_array_at_fused(idx : int) : int {
     var arr : array<int>
     arr |> resize(10)
-    var x = arr[idx]
+    let x = arr[idx]
     return x
 }
 
 // Dim (fixed-size array) variant -- exercises simulate_fusion_at.cpp / SimNode_At.
 [export]
 def neg_int_dim_at(idx : int) : int {
-    var arr : int[5]
+    let arr : int[5]
     return arr[idx]
 }
