@@ -2405,9 +2405,7 @@ def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbN
                                                      bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
     // Pre-rewrite walker that appends hidden ReducerSpecs for having-only reducers; unrecognized shapes leak to rewrite_having_pred (which bails on any surviving raw `<hb>`).
     if (expr == null) return true
-    while (expr is ExprRef2Value) {
-        expr = (expr as ExprRef2Value).subexpr
-    }
+    qm_peel_ref2value(expr)
     if (expr is ExprCall) {
         var c = expr as ExprCall
         if (!having_reducer_append_if_missing(expr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
@@ -2442,10 +2440,7 @@ def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbN
 def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
     // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` (or divide expr for average) against matching specs; any other use of `<hb>` returns null and cascades.
     if (expr == null) return expr
-    // Peel typer-inserted ExprRef2Value wrappers (same pattern as peel_tuple_field_read).
-    while (expr is ExprRef2Value) {
-        expr = (expr as ExprRef2Value).subexpr
-    }
+    qm_peel_ref2value(expr)
     if (expr is ExprCall) {
         var c = expr as ExprCall
         if (c.func != null && (c.arguments |> length) == 1) {
@@ -4685,19 +4680,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
             // Skip/take/while come after select; chained selects on zip stream defer (would mirror plan_loop_or_count `intermediateBinds`).
             if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
             // Pull elementType from the projection block's return expression — the SELECT call's `_type.firstType` is a typedecl(result_selector(...)) formula that doesn't resolve when the chain is wrapped in _fold (call-macro context defers generic typedecl evaluation).
-            var projElemType : TypeDeclPtr
-            var projBody = cll._0.arguments[1]
-            if (projBody is ExprMakeBlock) {
-                var projMblk = projBody as ExprMakeBlock
-                var projBlk = projMblk._block as ExprBlock
-                if (projBlk.list |> length == 1 && projBlk.list[0] is ExprReturn) {
-                    var projRet = projBlk.list[0] as ExprReturn
-                    if (projRet.subexpr != null && projRet.subexpr._type != null) {
-                        projElemType = clone_type(projRet.subexpr._type)
-                    }
-                }
-            }
-            if (projElemType == null) return null
+            var projRet = peel_lambda_single_return(cll._0.arguments[1])
+            if (projRet == null || projRet._type == null) return null
+            var projElemType = clone_type(projRet._type)
             // Strip both constness and ref-ness — `array<T const>` is unwritable, `array<T&>` is invalid as buffer element. Matches the canonical pattern used by plan_reverse/plan_distinct/etc.
             projElemType = strip_const_ref(projElemType)
             projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
