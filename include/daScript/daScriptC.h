@@ -484,16 +484,27 @@ DAS_CC_API void   das_array_init ( das_array * arr );
 //   capacity  : capacity in elements (>= count); commonly equal to count
 DAS_CC_API void   das_array_init_borrowed ( das_array * arr, void * data, uint32_t count, uint32_t capacity );
 
+// 64-bit-count variant for borrowed views > UINT32_MAX elements. The legacy
+// uint32_t entry remains for callers that don't need wide counts.
+DAS_CC_API void   das_array_init_borrowed_i64 ( das_array * arr, void * data, uint64_t count, uint64_t capacity );
+
 // Reserve space for at least 'capacity' elements of size 'stride' bytes.
 // Allocates on the context heap. No-op if current capacity is sufficient.
 // 'stride' must be non-zero when 'capacity' > 0 (passing 0 raises a context
 // exception — the runtime allocator can't reach allocate(0) cleanly).
 DAS_CC_API void   das_array_reserve ( das_context * context, das_array * arr, uint32_t capacity, uint32_t stride );
 
+// 64-bit-capacity variant. The runtime helper (array_reserve) takes uint64_t;
+// this entry threads it through without the legacy uint32 narrowing.
+DAS_CC_API void   das_array_reserve_i64 ( das_context * context, das_array * arr, uint64_t capacity, uint32_t stride );
+
 // Resize the array to 'size' elements of size 'stride' bytes. Growth allocates
 // on the context heap; new elements are zeroed when zero != 0.
 // 'stride' must be non-zero when 'size' > 0 (same rationale as _reserve).
 DAS_CC_API void   das_array_resize ( das_context * context, das_array * arr, uint32_t size, uint32_t stride, int zero );
+
+// 64-bit-size variant for arrays past UINT32_MAX elements.
+DAS_CC_API void   das_array_resize_i64 ( das_context * context, das_array * arr, uint64_t size, uint32_t stride, int zero );
 
 // Free the array's backing storage and zero the structure. Errors if the
 // array is locked (matches `delete` semantics in daslang). 'stride' is the
@@ -507,6 +518,9 @@ DAS_CC_API void   das_array_clear ( das_context * context, das_array * arr, uint
 // preconditions: arr->data != NULL and arr->size > 0 (a non-empty array
 // always has non-null data — otherwise the returned pointer is invalid).
 DAS_CC_API void * das_array_at ( das_array * arr, uint32_t index, uint32_t stride );
+
+// 64-bit-index variant. Use when index may exceed UINT32_MAX.
+DAS_CC_API void * das_array_at_i64 ( das_array * arr, uint64_t index, uint32_t stride );
 
 // Increment the array lock counter. While locked, mutation operations panic
 // in the daslang runtime. Use to pin an array's storage while iterating.
@@ -542,6 +556,9 @@ DAS_CC_API void   das_table_init ( das_table * tab );
 
 // Reserve at least 'capacity' slots. Allocates on the context heap.
 DAS_CC_API void   das_table_reserve ( das_context * context, das_table * tab, int key_base_type, uint32_t capacity, uint32_t value_size );
+
+// 64-bit-capacity variant for tables past UINT32_MAX slots.
+DAS_CC_API void   das_table_reserve_i64 ( das_context * context, das_table * tab, int key_base_type, uint64_t capacity, uint32_t value_size );
 
 // Free backing storage and zero the structure. 'key_base_type' and 'value_size'
 // must match the values used at insertion time (needed to compute the freed
