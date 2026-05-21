@@ -840,9 +840,9 @@ namespace das {
         __forceinline char * compute (Context & context) {
             DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
-            uint32_t idx = uint32_t(index->evalInt(context));
-            if (idx >= range) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", idx, range, errorMessage);
-            return pValue + idx*stride + offset;
+            int32_t idx = index->evalInt(context);
+            if (idx<0 || uint32_t(idx) >= range) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", idx, range, errorMessage);
+            return pValue + uint32_t(idx)*stride + offset;
         }
         SimNode * value, * index;
         uint32_t  stride, offset, range;
@@ -858,9 +858,9 @@ namespace das {
             DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
             if (!pValue) return nullptr;
-            uint32_t idx = uint32_t(index->evalInt(context));
-            if (idx >= range) return nullptr;
-            return pValue + idx*stride + offset;
+            int32_t idx = index->evalInt(context);
+            if (idx<0 || uint32_t(idx) >= range) return nullptr;
+            return pValue + uint32_t(idx)*stride + offset;
         }
     };
 
@@ -958,9 +958,9 @@ namespace das {
         __forceinline CTYPE compute ( Context & context ) {                                     \
             DAS_PROFILE_NODE \
             auto vec = value->eval(context);                                                    \
-            uint32_t idx = uint32_t(index->evalInt(context));                                   \
-            if (idx >= range) {                                                                 \
-                context.throw_error_at(debugInfo,"vector index out of range, %u of %u%s", idx, range, errorMessage); \
+            int32_t idx = index->evalInt(context);                                              \
+            if (idx<0 || uint32_t(idx) >= range) {                                              \
+                context.throw_error_at(debugInfo,"vector index out of range, %d of %u%s", idx, range, errorMessage); \
                 return (CTYPE) 0;                                                               \
             } else {                                                                            \
                 CTYPE * pv = (CTYPE *) &vec;                                                    \
