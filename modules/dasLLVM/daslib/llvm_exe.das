@@ -345,11 +345,9 @@ class CollectExternVisitor : AstVisitor {
         } else {
             if (!empty(expr.typeexpr.dim)) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
-                    var elemT = clone_type(expr.typeexpr)
-                    elemT.dim |> clear() // hack to get correct ptr to ctor
                     let name = uid.get_new(expr.typeexpr)
                     if (initialize(name)) {
-                        register_new_from_annotation(name, elemT.annotation)
+                        register_new_from_annotation(name, expr.typeexpr.annotation)
                     }
                 } else {
                     if (expr.initializer) {
