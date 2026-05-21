@@ -638,9 +638,9 @@ def private emit_accumulator_lane(
         accType.flags.constant = false
         accType.flags.ref = false
     }
-    let valBindName = "`val`{at.line}`{at.column}"
-    let firstName = "`first`{at.line}`{at.column}"
-    let cntName = "`cnt`{at.line}`{at.column}"
+    let valBindName = qn("val", at)
+    let firstName = qn("first", at)
+    let cntName = qn("cnt", at)
     var preludeStmts : array<Expression?>
     var perMatchStmts : array<Expression?>
     var returnExpr : Expression?
@@ -650,7 +650,7 @@ def private emit_accumulator_lane(
         }
         // Value is unused; mirror counter-lane discipline and bind only when projection has
         if (projection != null && has_sideeffects(projection)) {
-            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            let finalBindName = qn("vfinal", at)
             perMatchStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
@@ -771,7 +771,7 @@ def private emit_early_exit_lane(
     // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
     var perMatchStmts : array<Expression?>
     var valueName = itName
-    let projBindName = "`vproj`{at.line}`{at.column}"
+    let projBindName = qn("vproj", at)
     if (projection != null) {
         perMatchStmts |> push <| qmacro_expr() {
             let $i(projBindName) = $e(projection)
@@ -803,7 +803,7 @@ def private emit_early_exit_lane(
         }
     } elif (opName == "first_or_default") {
         // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
-        let defaultName = "`dval`{at.line}`{at.column}"
+        let defaultName = qn("dval", at)
         var defaultExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
             let $i(defaultName) = $e(defaultExpr)
@@ -843,7 +843,7 @@ def private emit_early_exit_lane(
         }
     } elif (opName == "contains") {
         // `v` is bound once at the top of the block; per-element compare uses the bound name
-        let containsValName = "`cval`{at.line}`{at.column}"
+        let containsValName = qn("cval", at)
         var valExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
             let $i(containsValName) = $e(valExpr)
@@ -868,8 +868,8 @@ def private emit_early_exit_lane(
             retType.flags.constant = false
             retType.flags.ref = false
         }
-        let foundName = "`found`{at.line}`{at.column}"
-        let lastBindName = "`lst`{at.line}`{at.column}"
+        let foundName = qn("found", at)
+        let lastBindName = qn("lst", at)
         preludeStmts |> push <| qmacro_expr() {
             var $i(foundName) = false
         }
@@ -891,7 +891,7 @@ def private emit_early_exit_lane(
             }
         } else {
             // Bind `d` once at the top (eager, matches linq.das line 2621).
-            let defaultName = "`dval`{at.line}`{at.column}"
+            let defaultName = qn("dval", at)
             var defaultExpr = clone_expression(terminatorCall.arguments[1])
             preludeStmts |> push <| qmacro_expr() {
                 let $i(defaultName) = $e(defaultExpr)
@@ -915,8 +915,8 @@ def private emit_early_exit_lane(
             retType.flags.constant = false
             retType.flags.ref = false
         }
-        let foundName = "`found`{at.line}`{at.column}"
-        let bindName = "`sng`{at.line}`{at.column}"
+        let foundName = qn("found", at)
+        let bindName = qn("sng", at)
         preludeStmts |> push <| qmacro_expr() {
             var $i(foundName) = false
         }
@@ -942,7 +942,7 @@ def private emit_early_exit_lane(
                 return <- $i(bindName)
             }
         } else {
-            let defaultName = "`dval`{at.line}`{at.column}"
+            let defaultName = qn("dval", at)
             var defaultExpr = clone_expression(terminatorCall.arguments[1])
             preludeStmts |> push <| qmacro_expr() {
                 let $i(defaultName) = $e(defaultExpr)
@@ -978,8 +978,8 @@ def private emit_early_exit_lane(
             retType.flags.constant = false
             retType.flags.ref = false
         }
-        let idxName = "`idx`{at.line}`{at.column}"
-        let cntName = "`ec`{at.line}`{at.column}"
+        let idxName = qn("idx", at)
+        let cntName = qn("ec", at)
         var idxExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
             let $i(idxName) = $e(idxExpr)
@@ -1027,7 +1027,7 @@ def private emit_early_exit_lane(
             accType.flags.constant = false
             accType.flags.ref = false
         }
-        let aggAccName = "`agg`{at.line}`{at.column}"
+        let aggAccName = qn("agg", at)
         let aggIsWorkhorse = (seedExpr._type != null && seedExpr._type.isWorkhorseType)
         if (aggIsWorkhorse) {
             preludeStmts |> push <| qmacro_expr() {
@@ -1114,17 +1114,6 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
 }
 
 [macro_function]
-def private finalize_emission(var top : Expression?; srcName : string; at : LineInfo; var body : Expression?) : Expression? {
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $e(body)
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
-}
-
-[macro_function]
 def private finalize_emission_stmts(var top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)
@@ -1133,6 +1122,16 @@ def private finalize_emission_stmts(var top : Expression?; srcName : string; at 
         $b(stmts)
     }, $e(topExpr)))
     return finalize_invoke(emission, at)
+}
+
+[macro_function]
+def private finalize_decs_emission(var emission : Expression?; at : LineInfo; wrapToIter : bool) : Expression? {
+    emission.force_at(at)
+    emission.force_generated(true)
+    if (wrapToIter) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    return emission
 }
 
 [macro_function]
@@ -1206,7 +1205,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var firstDefaultExpr : Expression?
     var hasOrder = false
     let at = calls[0]._0.at
-    let itName = "`it`{at.line}`{at.column}"
+    let itName = qn("it", at)
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
@@ -1267,7 +1266,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             // order + first → preserve eager `first()` panic-on-empty. min/max return an uninitialized ref on empty, so wrap in an empty-guard for arrays (zero alloc, O(N) min scan), or use top_n*(_, 1, _) |> first() for iterators (n=1 bounded heap; first() panics on empty).
             if (top._type.isGoodArrayType) {
                 var srcParamType = invoke_src_param_type(top)
-                let firstSrcName = "`first_src`{at.line}`{at.column}"
+                let firstSrcName = qn("first_src", at)
                 var minMaxCall : Expression?
                 if (hasKey) {
                     minMaxCall = qmacro($c(minMaxName)($i(firstSrcName), $e(orderKey)))
@@ -1330,8 +1329,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         return emission
     }
     // where_* + order_*[+take] — emit a single fused loop that prefilters into a fresh
-    let srcName = "`source`{at.line}`{at.column}"
-    let bufName = "`buf`{at.line}`{at.column}"
+    let srcName = qn("source", at)
+    let bufName = qn("buf", at)
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
@@ -1438,12 +1437,12 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     let hasTerminator = lane != LinqLane.ARRAY
     let intermediateCount = hasTerminator ? length(calls) - 1 : length(calls)
     let at = calls[0]._0.at
-    let srcName = "`source`{at.line}`{at.column}"
-    let itName  = "`it`{at.line}`{at.column}"
-    let accName = "`acc`{at.line}`{at.column}"
-    let skipName = "`skip`{at.line}`{at.column}"
-    let takeCountName = "`tc`{at.line}`{at.column}"
-    let skippingName = "`skipping`{at.line}`{at.column}"
+    let srcName = qn("source", at)
+    let itName  = qn("it", at)
+    let accName = qn("acc", at)
+    let skipName = qn("skip", at)
+    let takeCountName = qn("tc", at)
+    let skippingName = qn("skipping", at)
     var whereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
@@ -1586,7 +1585,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         // Counter lane must evaluate the projection (and any chained intermediates) per
         var stmts : array<Expression?>
         if (projection != null && has_sideeffects(projection)) {
-            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            let finalBindName = qn("vfinal", at)
             stmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
@@ -1649,13 +1648,13 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     var seenSelect = false
     var takeExpr : Expression?
     let at = calls[0]._0.at
-    let srcName = "`source`{at.line}`{at.column}"
-    let itName  = "`it`{at.line}`{at.column}"
-    let bufName = "`buf`{at.line}`{at.column}"
-    let foundName = "`found`{at.line}`{at.column}"
-    let lastName = "`last`{at.line}`{at.column}"
-    let cntName = "`cnt`{at.line}`{at.column}"
-    let dBindName = "`d`{at.line}`{at.column}"
+    let srcName = qn("source", at)
+    let itName  = qn("it", at)
+    let bufName = qn("buf", at)
+    let foundName = qn("found", at)
+    let lastName = qn("last", at)
+    let cntName = qn("cnt", at)
+    let dBindName = qn("d", at)
     var reverseCall : ExprCall?
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
@@ -1686,7 +1685,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
         var perElement : Expression?
         if (projection != null && has_sideeffects(projection)) {
-            let vfinalName = "`vfinal`{at.line}`{at.column}"
+            let vfinalName = qn("vfinal", at)
             perElement = qmacro_block() {
                 var $i(vfinalName) = $e(projection)
                 $i(cntName) ++
@@ -1752,9 +1751,9 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                 && (top._type.isGoodArrayType || top._type.isArray))
         if (canBackwardIndex) {
             // R6: visit only the last takeN indices — skips full-source push + O(length) reverse_inplace.
-            let lenName   = "`rlen`{at.line}`{at.column}"
-            let takeNName = "`rtn`{at.line}`{at.column}"
-            let kName     = "`rk`{at.line}`{at.column}"
+            let lenName   = qn("rlen", at)
+            let takeNName = qn("rtn", at)
+            let kName     = qn("rk", at)
             var takeA = clone_expression(takeExpr)
             var takeB = clone_expression(takeExpr)
             var takeC = clone_expression(takeExpr)
@@ -1810,7 +1809,9 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             }
         }
     }
-    return finalize_emission(top, srcName, at, body)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push_block_list(body)
+    return finalize_emission_stmts(top, srcName, at, bodyStmts)
 }
 
 [macro_function]
@@ -1837,13 +1838,13 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     var distinctKeyBlock : Expression?
     var takeExpr : Expression?
     let at = calls[0]._0.at
-    let srcName = "`source`{at.line}`{at.column}"
-    let itName  = "`it`{at.line}`{at.column}"
-    let bufName = "`buf`{at.line}`{at.column}"
-    let seenName = "`seen`{at.line}`{at.column}"
-    let keyName = "`k`{at.line}`{at.column}"
-    let takenName = "`taken`{at.line}`{at.column}"
-    let accName = "`acc`{at.line}`{at.column}"
+    let srcName = qn("source", at)
+    let itName  = qn("it", at)
+    let bufName = qn("buf", at)
+    let seenName = qn("seen", at)
+    let keyName = qn("k", at)
+    let takenName = qn("taken", at)
+    let accName = qn("acc", at)
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
@@ -1897,7 +1898,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         }
     }
     // Bind take(N) limit once at outer scope so a side-effecting arg fires once, not on every fresh-key check.
-    let takeLimName = "`takeLim`{at.line}`{at.column}"
+    let takeLimName = qn("takeLim", at)
     if (takeExpr != null) {
         var takeBind = clone_expression(takeExpr)
         stmts |> push <| qmacro_expr() {
@@ -1908,7 +1909,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         }
     }
     // Bind side-effecting projection once per element; key + buffer/acc share the bind (matches original LINQ's one-eval per source elem).
-    let pvName = "`pv`{at.line}`{at.column}"
+    let pvName = qn("pv", at)
     let bindProjection = projection != null && has_sideeffects(projection)
     var pushExpr : Expression?
     if (projection != null) {
@@ -2630,15 +2631,15 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                var adapter : GroupBySourceAdapter) : Expression? {
     // Shared group_by splice machinery. Caller pops terminator/select/having/group_by_lazy + extracts keyBlock + sets up the source adapter; this function does the rest (upstream chain walk, reducer recognition, state-table hoisting, tab?[uk]??dummy splice, output emission, source-loop wrap, terminator emission, final invoke wrap).
     let prefix = adapter.namePrefix
-    let tabName    = "`{prefix}tab`{at.line}`{at.column}"
-    let kName      = "`{prefix}k`{at.line}`{at.column}"
-    let ukName     = "`{prefix}uk`{at.line}`{at.column}"
-    let entryName  = "`{prefix}entry`{at.line}`{at.column}"
-    let kvName     = "`{prefix}kv`{at.line}`{at.column}"
-    let bufName    = "`{prefix}buf`{at.line}`{at.column}"
-    let bindName   = "`{prefix}gpb`{at.line}`{at.column}"
-    let cntName    = "`{prefix}cnt`{at.line}`{at.column}"
-    let dummyName  = "`{prefix}dummy`{at.line}`{at.column}"
+    let tabName    = qn("{prefix}tab", at)
+    let kName      = qn("{prefix}k", at)
+    let ukName     = qn("{prefix}uk", at)
+    let entryName  = qn("{prefix}entry", at)
+    let kvName     = qn("{prefix}kv", at)
+    let bufName    = qn("{prefix}buf", at)
+    let bindName   = qn("{prefix}gpb", at)
+    let cntName    = qn("{prefix}cnt", at)
+    let dummyName  = qn("{prefix}dummy", at)
     // Walk upstream where_/select* into segments. Each where guards everything AFTER it; a select after a where flushes a new segment so the projection bind lives inside the where's guard.
     var segBinds : array<array<Expression?>>
     var segWheres : array<Expression?>
@@ -2704,7 +2705,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     // Rewrite optional having predicate against accumulator slots; PR-E scan adds hidden slots for reducers referenced by having but absent from select.
     var havingPred : Expression?
     if (havingCall != null) {
-        let hbName = "`{prefix}hb`{at.line}`{at.column}"
+        let hbName = qn("{prefix}hb", at)
         var rawPred = peel_lambda_rename_var(havingCall.arguments[1], hbName)
         if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
         havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
@@ -2963,12 +2964,12 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     var keyBlock = clone_expression(groupByCall.arguments[1])
     let at = groupByCall.at
     var adapter = GroupBySourceAdapter(
-        initialBindName := "`it`{at.line}`{at.column}",
+        initialBindName := qn("it", at),
         initialElemType = strip_const_ref(clone_type(top._type.firstType)),
         namePrefix := "",
         isDecs = false,
         arrayTop = top,
-        arraySrcName := "`source`{at.line}`{at.column}",
+        arraySrcName := qn("source", at),
         decsBridge = null
     )
     return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, terminatorName, expr._type.isIterator, at, adapter)
@@ -3345,8 +3346,8 @@ def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountNa
 [macro_function]
 def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
-    let accName = "`decs_acc`{at.line}`{at.column}"
-    let archName = "`decs_arch`{at.line}`{at.column}"
+    let accName = qn("decs_acc", at)
+    let archName = qn("decs_arch", at)
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
     // arch.size is int64; count() returns int and the += site truncates past INT_MAX — chain `long_count()` when an int64-safe total is required.
@@ -3373,15 +3374,15 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
                                   var accType : TypeDeclPtr;
                                   at : LineInfo) : Expression? {
     // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred). Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope, take present → for_each_archetype_find).
-    let accName = "`decs_acc`{at.line}`{at.column}"
-    let tupName = "`decs_tup`{at.line}`{at.column}"
-    let cntName = "`decs_cnt`{at.line}`{at.column}"
-    let firstName = "`decs_first`{at.line}`{at.column}"
-    let valBindName = "`decs_val`{at.line}`{at.column}"
-    let skipName = "`decs_skip`{at.line}`{at.column}"
-    let takeCountName = "`decs_takec`{at.line}`{at.column}"
-    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
-    let skippingName = "`decs_skipping`{at.line}`{at.column}"
+    let accName = qn("decs_acc", at)
+    let tupName = qn("decs_tup", at)
+    let cntName = qn("decs_cnt", at)
+    let firstName = qn("decs_first", at)
+    let valBindName = qn("decs_val", at)
+    let skipName = qn("decs_skip", at)
+    let takeCountName = qn("decs_takec", at)
+    let takeLimitName = qn("decs_takel", at)
+    let skippingName = qn("decs_skipping", at)
     let finalBind = chainInfo.finalBind
     var perElement : Expression?
     if (opName == "sum") {
@@ -3534,15 +3535,15 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                                  terminatorCall : ExprCall?;
                                  at : LineInfo) : Expression? {
     // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain. Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope).
-    let tupName = "`decs_tup`{at.line}`{at.column}"
-    let foundName = "`decs_found`{at.line}`{at.column}"
-    let resultName = "`decs_result`{at.line}`{at.column}"
-    let containsValName = "`decs_cv`{at.line}`{at.column}"
-    let defaultName = "`decs_dv`{at.line}`{at.column}"
-    let skipName = "`decs_skip`{at.line}`{at.column}"
-    let takeCountName = "`decs_takec`{at.line}`{at.column}"
-    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
-    let skippingName = "`decs_skipping`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
+    let foundName = qn("decs_found", at)
+    let resultName = qn("decs_result", at)
+    let containsValName = qn("decs_cv", at)
+    let defaultName = qn("decs_dv", at)
+    let skipName = qn("decs_skip", at)
+    let takeCountName = qn("decs_takec", at)
+    let takeLimitName = qn("decs_takel", at)
+    let skippingName = qn("decs_skipping", at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression?
@@ -3740,12 +3741,12 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
                                intermediateEnd : int;
                                at : LineInfo) : Expression? {
     // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind. Slice 5a adds take/skip ranges via rangeInfo.
-    let tupName = "`decs_tup`{at.line}`{at.column}"
-    let bufName = "`decs_buf`{at.line}`{at.column}"
-    let skipName = "`decs_skip`{at.line}`{at.column}"
-    let takeCountName = "`decs_takec`{at.line}`{at.column}"
-    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
-    let skippingName = "`decs_skipping`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
+    let bufName = qn("decs_buf", at)
+    let skipName = qn("decs_skip", at)
+    let takeCountName = qn("decs_takec", at)
+    let takeLimitName = qn("decs_takel", at)
+    let skippingName = qn("decs_skipping", at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression? = qmacro_expr() {
@@ -3803,15 +3804,15 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
                                  terminatorCall : ExprCall?;
                                  at : LineInfo) : Expression? {
     // Slice 4: min_by / max_by — track best (key, element) pair across archetypes. Element retained via `:=`, matches min_by_impl's empty→default semantics. Slice 5a adds take/skip ranges via rangeInfo.
-    let tupName = "`decs_tup`{at.line}`{at.column}"
-    let firstName = "`decs_first`{at.line}`{at.column}"
-    let bestKeyName = "`decs_bkey`{at.line}`{at.column}"
-    let bestElemName = "`decs_belem`{at.line}`{at.column}"
-    let keyBindName = "`decs_key`{at.line}`{at.column}"
-    let skipName = "`decs_skip`{at.line}`{at.column}"
-    let takeCountName = "`decs_takec`{at.line}`{at.column}"
-    let takeLimitName = "`decs_takel`{at.line}`{at.column}"
-    let skippingName = "`decs_skipping`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
+    let firstName = qn("decs_first", at)
+    let bestKeyName = qn("decs_bkey", at)
+    let bestElemName = qn("decs_belem", at)
+    let keyBindName = qn("decs_key", at)
+    let skipName = qn("decs_skip", at)
+    let takeCountName = qn("decs_takec", at)
+    let takeLimitName = qn("decs_takel", at)
+    let skippingName = qn("decs_skipping", at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var keyExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
@@ -3897,7 +3898,7 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
         || lastName == "any" || lastName == "all" || lastName == "contains")
     let isMinMaxBy = (lastName == "min_by" || lastName == "max_by")
     let isTerminator = isAccum || isEarlyExit || isMinMaxBy
-    let tupName = "`decs_tup`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
     let intermediateEnd = isTerminator ? length(calls) - 1 : length(calls)
     // Slice 5a/5b: peel trailing take/skip/take_while/skip_while into rangeInfo. chainEnd is the index past which only range ops live (or == intermediateEnd if none). tupName passed so predicate-driven ranges peel against the source tuple.
     let rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
@@ -3956,7 +3957,7 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
     var keyBlock = clone_expression(groupByCall.arguments[1])
     let at = groupByCall.at
     var adapter = GroupBySourceAdapter(
-        initialBindName := "`decs_tup`{at.line}`{at.column}",
+        initialBindName := qn("decs_tup", at),
         initialElemType = strip_const_ref(clone_type(bridge.elementType)),
         namePrefix := "decs_",
         isDecs = true,
@@ -3976,8 +3977,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
     let at = calls[0]._0.at
-    let tupName = "`decs_tup`{at.line}`{at.column}"
-    let bufName = "`decs_buf`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
+    let bufName = qn("decs_buf", at)
     var whereCond : Expression?
     var orderName : string = ""
     var orderKey : Expression?
@@ -4077,7 +4078,7 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         }))
     } elif (firstName == "first_or_default") {
         // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case. The default expression is hoisted into a let BEFORE for_each_archetype so its side effects fire ahead of iteration (matches plan_decs_reverse's first_or_default + the eager-arg-eval semantics of the non-spliced chain).
-        let dBindName = "`order_d`{at.line}`{at.column}"
+        let dBindName = qn("order_d", at)
         var foDStmts : array<Expression?>
         foDStmts |> reserve(4)
         foDStmts |> push <| qmacro_expr() {
@@ -4133,14 +4134,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             $b(bodyStmts)
         }))
     }
-    emission.force_at(at)
-    emission.force_generated(true)
     // Bare order + take both return array; wrap to iterator when the user's outer context demands it. first/first_or_default return scalar — no wrap.
-    let returnsArray = firstName == ""
-    if (needIterWrap && returnsArray) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return emission
+    return finalize_decs_emission(emission, at, needIterWrap && firstName == "")
 }
 
 // ── decs reverse splice (Slice 5d — buffer + reverse_inplace; or counter/walk-last for terminators) ───────
@@ -4167,7 +4162,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     }
     if (empty(calls)) return null
     let at = calls[0]._0.at
-    let tupName = "`decs_tup`{at.line}`{at.column}"
+    let tupName = qn("decs_tup", at)
     var whereCond : Expression?
     var projection : Expression?
     var hasReverse = false
@@ -4204,10 +4199,10 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     let archName = bridge.archName
     if (terminatorName == "count") {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
-        let cntName = "`decs_cnt`{at.line}`{at.column}"
+        let cntName = qn("decs_cnt", at)
         var perElement : Expression?
         if (projection != null && has_sideeffects(projection)) {
-            let vfinalName = "`decs_vfinal`{at.line}`{at.column}"
+            let vfinalName = qn("decs_vfinal", at)
             perElement = qmacro_block() {
                 var $i(vfinalName) = $e(projection)
                 $i(cntName) ++
@@ -4239,9 +4234,9 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     }
     if (terminatorName == "first" || terminatorName == "first_or_default") {
         // "first of reversed" = LAST surviving element. Walk all archetypes, overwrite `last` on each match. No buffer.
-        let foundName = "`decs_found`{at.line}`{at.column}"
-        let lastName = "`decs_last`{at.line}`{at.column}"
-        let dBindName = "`decs_d`{at.line}`{at.column}"
+        let foundName = qn("decs_found", at)
+        let lastName = qn("decs_last", at)
+        let dBindName = qn("decs_d", at)
         var lastType = strip_const_ref(clone_type(projection != null ? projection._type : bridge.elementType))
         var valueExpr : Expression?
         if (projection != null) {
@@ -4295,7 +4290,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
         return emission
     }
     // Buffer + reverse_inplace + optional resize. Implicit to_array (no terminator).
-    let bufName = "`decs_buf`{at.line}`{at.column}"
+    let bufName = qn("decs_buf", at)
     let needIterWrap = expr._type.isIterator
     var bufElemType = strip_const_ref(clone_type(projection != null ? projection._type : bridge.elementType))
     var pushExpr : Expression?
@@ -4321,7 +4316,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     var resizeStmts : array<Expression?>
     if (takeExpr != null) {
         // take(N) of reversed-buffer = last N of source reversed. Hoist once to a let so a side-effecting take expression evaluates exactly once.
-        let takeNName = "`take_n`{at.line}`{at.column}"
+        let takeNName = qn("take_n", at)
         resizeStmts |> push <| qmacro_expr() {
             let $i(takeNName) = $e(takeExpr)
         }
@@ -4338,12 +4333,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
         $b(resizeStmts)
         return <- $i(bufName)
     }))
-    emission.force_at(at)
-    emission.force_generated(true)
-    if (needIterWrap) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return emission
+    return finalize_decs_emission(emission, at, needIterWrap)
 }
 
 // ── decs distinct splice (Slice 5c — streaming dedup table hoisted above for_each_archetype) ───────
@@ -4366,14 +4356,14 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     if (empty(calls)) return null
     let at = calls[0]._0.at
-    let tupName     = "`decs_tup`{at.line}`{at.column}"
-    let bufName     = "`decs_buf`{at.line}`{at.column}"
-    let seenName    = "`decs_seen`{at.line}`{at.column}"
-    let keyName     = "`decs_k`{at.line}`{at.column}"
-    let takenName   = "`decs_taken`{at.line}`{at.column}"
-    let takeLimName = "`decs_takeLim`{at.line}`{at.column}"
-    let accName     = "`decs_acc`{at.line}`{at.column}"
-    let pvName      = "`decs_pv`{at.line}`{at.column}"
+    let tupName     = qn("decs_tup", at)
+    let bufName     = qn("decs_buf", at)
+    let seenName    = qn("decs_seen", at)
+    let keyName     = qn("decs_k", at)
+    let takenName   = qn("decs_taken", at)
+    let takeLimName = qn("decs_takeLim", at)
+    let accName     = qn("decs_acc", at)
+    let pvName      = qn("decs_pv", at)
     var whereCond : Expression?
     var projection : Expression?
     var hasDistinct = false
@@ -4575,13 +4565,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
             $b(bodyStmts)
         }))
     }
-    emission.force_at(at)
-    emission.force_generated(true)
-    let needIterWrap = expr._type.isIterator
-    if (needIterWrap && needBuffer) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return emission
+    return finalize_decs_emission(emission, at, expr._type.isIterator && needBuffer)
 }
 
 [macro_function]
@@ -4632,15 +4616,15 @@ def private plan_zip(var expr : Expression?) : Expression? {
         }
     }
     let at = zipCall.at
-    let srcAName = "`srcA`{at.line}`{at.column}"
-    let srcBName = "`srcB`{at.line}`{at.column}"
-    let bufName  = "`buf`{at.line}`{at.column}"
-    let accName  = "`acc`{at.line}`{at.column}"
-    let skipName = "`skip`{at.line}`{at.column}"
-    let takeCountName = "`tc`{at.line}`{at.column}"
-    let skippingName = "`skipping`{at.line}`{at.column}"
+    let srcAName = qn("srcA", at)
+    let srcBName = qn("srcB", at)
+    let bufName  = qn("buf", at)
+    let accName  = qn("acc", at)
+    let skipName = qn("skip", at)
+    let takeCountName = qn("tc", at)
+    let skippingName = qn("skipping", at)
     // itName binds the tuple `(itA, itB)` at the top of the for-body; chain ops (where_/select/while-family) reference it by name.
-    let itName = "`it`{at.line}`{at.column}"
+    let itName = qn("it", at)
     var srcAExpr = peel_each(clone_expression(zipCall.arguments[0]))
     var srcBExpr = peel_each(clone_expression(zipCall.arguments[1]))
     if (srcAExpr == null || srcAExpr._type == null || srcBExpr == null || srcBExpr._type == null) return null
@@ -4778,7 +4762,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
     if (isCounter) {
         // Counter lane: if projection has side effects, evaluate it for those effects; then `acc++`.
         if (seenSelect && !allProjectionsPure) {
-            let finalBindName = "`vfinal`{at.line}`{at.column}"
+            let finalBindName = qn("vfinal", at)
             perStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
