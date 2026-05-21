@@ -30,83 +30,10 @@ module linq_fold shared public
 require daslib/linq public
 
 require daslib/ast_boost
+require daslib/ast_match
 require daslib/templates_boost
 require daslib/macro_boost
 require strings
-
-def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
-    if (expr is ExprCall) {
-        var call = expr as ExprCall
-        if ((call.func.name == name && call.func._module.name == moduleName)
-                || (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName)) return call
-    }
-    return null
-}
-
-def private is_call_or_generic_arg0(var expr : Expression?, name, moduleName : string) : Expression? {
-    var call = expr.is_call_or_generic(name, moduleName)
-    return call.arguments[0] if (call != null)
-    return null
-}
-
-def private fold_linq_cond(var expr : Expression?; argName : string) : Expression? {
-    // Peel single-return lambda by renaming its bound var; otherwise emit invoke.
-    if (expr is ExprMakeBlock) {
-        var mblk = expr as ExprMakeBlock
-        var blk = mblk._block as ExprBlock
-        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
-            var ret = blk.list[0] as ExprReturn
-            if (ret.subexpr != null) {
-                var res = clone_expression(ret.subexpr)
-                var rules : Template
-                rules |> renameVariable(string(blk.arguments[0].name), argName)
-                apply_template(rules, res.at, res)
-                return res
-            }
-        }
-    }
-    return qmacro(invoke($e(expr), $i(argName)))
-}
-
-def private fold_linq_cond_peel(var expr : Expression?; var replacement : Expression?) : Expression? {
-    // Variant of fold_linq_cond using peel-aware substitution (strips typer ExprRef2Value wrappers on already-typed AST).
-    if (expr is ExprMakeBlock) {
-        var mblk = expr as ExprMakeBlock
-        var blk = mblk._block as ExprBlock
-        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
-            var ret = blk.list[0] as ExprReturn
-            if (ret.subexpr != null) {
-                var res = clone_expression(ret.subexpr)
-                var rules : Template
-                rules |> replaceVariablePeeling(string(blk.arguments[0].name), replacement)
-                apply_template(rules, res.at, res)
-                return res
-            }
-        }
-    }
-    return qmacro(invoke($e(expr), $e(replacement)))
-}
-
-[macro_function]
-def private fold_linq_cond2(var expr : Expression?; arg0Name, arg1Name : string) : Expression? {
-    // 2-arg peel for aggregate's block<(acc, x):AGG>; returns null if non-peelable so caller falls back to invoke.
-    if (expr is ExprMakeBlock) {
-        var mblk = expr as ExprMakeBlock
-        var blk = mblk._block as ExprBlock
-        if (blk.arguments |> length == 2 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
-            var ret = blk.list[0] as ExprReturn
-            if (ret.subexpr != null) {
-                var res = clone_expression(ret.subexpr)
-                var rules : Template
-                rules |> renameVariable(string(blk.arguments[0].name), arg0Name)
-                rules |> renameVariable(string(blk.arguments[1].name), arg1Name)
-                apply_template(rules, res.at, res)
-                return res
-            }
-        }
-    }
-    return null
-}
 
 struct private LinqCall {
     name : string
@@ -359,13 +286,6 @@ def private type_has_length(t : TypeDecl?) : bool {
         || t.isArray || t.isRange)
 }
 
-[macro_function]
-def private is_each_call(call : ExprCall?) : bool {
-    if (call == null || call.func == null) return false
-    return (call.func.name == "each"
-        || (call.func.fromGeneric != null && call.func.fromGeneric.name == "each"))
-}
-
 enum private LinqLane {
     UNKNOWN
     ARRAY
@@ -406,7 +326,7 @@ def private peel_each(var top : Expression?) : Expression? {
     // Unwrap `each(<arr>)` so downstream length/reserve hints fire; only safe when arg is a real array (iterator sources lack indexed length).
     if (!(top is ExprCall)) return top
     var topCall = top as ExprCall
-    if (!is_each_call(topCall) || topCall.arguments |> length != 1) return top
+    if (match_call_in_module(top, "each", "builtin") == null || topCall.arguments |> length != 1) return top
     let argExpr = topCall.arguments[0]
     if ((argExpr == null || argExpr._type == null)
             || (!argExpr._type.isGoodArrayType && !argExpr._type.isArray)) return top
@@ -897,7 +817,7 @@ def private emit_early_exit_lane(
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
         if (argCount > 1) {
-            var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
+            var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), valueName)
             perMatchStmts |> push <| qmacro_expr() {
                 if ($e(predExpr)) {
                     return true
@@ -912,7 +832,7 @@ def private emit_early_exit_lane(
             return false
         }
     } elif (opName == "all") {
-        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), valueName)
+        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), valueName)
         perMatchStmts |> push <| qmacro_expr() {
             if (!$e(predExpr)) {
                 return false
@@ -1118,7 +1038,7 @@ def private emit_early_exit_lane(
                 var $i(aggAccName) : $t(accType) <- $e(seedExpr)
             }
         }
-        var peeled = fold_linq_cond2(aggFn, aggAccName, valueName)
+        var peeled = peel_lambda_rename_2vars(aggFn, aggAccName, valueName)
         if (peeled != null) {
             if (aggIsWorkhorse) {
                 perMatchStmts |> push <| qmacro_expr() {
@@ -1292,7 +1212,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasOrder) return null   // where-after-order not in scope
-            var pred = fold_linq_cond(cll._0.arguments[1], itName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], itName)
             if (whereCond == null) {
                 whereCond = pred
             } else {
@@ -1564,9 +1484,9 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                     pvar._type.flags.ref = true
                     projection = pvar
                 }
-                predicate = fold_linq_cond_peel(cll._0.arguments[1], projection)
+                predicate = peel_lambda_replace_var(cll._0.arguments[1], projection)
             } else {
-                predicate = fold_linq_cond(cll._0.arguments[1], itName)
+                predicate = peel_lambda_rename_var(cll._0.arguments[1], itName)
             }
             if (whereCond == null) {
                 whereCond = predicate
@@ -1586,7 +1506,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 }
                 lastBindName = bindName
             }
-            projection = fold_linq_cond(cll._0.arguments[1], lastBindName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], lastBindName)
             elementType = clone_type(cll._0._type.firstType)
             seenSelect = true
         } elif (opName == "skip") {
@@ -1601,7 +1521,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
             var swArg = cll._0.arguments[1]
             if (swArg == null) return null
-            skipWhileCond = fold_linq_cond(swArg, itName)
+            skipWhileCond = peel_lambda_rename_var(swArg, itName)
             if (skipWhileCond == null) return null
             seenSkipWhile = true
         } elif (opName == "take_while") {
@@ -1609,7 +1529,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             if (seenSelect || seenTakeWhile || seenTake) return null
             var twArg = cll._0.arguments[1]
             if (twArg == null) return null
-            takeWhileCond = fold_linq_cond(twArg, itName)
+            takeWhileCond = peel_lambda_rename_var(twArg, itName)
             if (takeWhileCond == null) return null
             seenTakeWhile = true
         } elif (opName == "take") {
@@ -1742,11 +1662,11 @@ def private plan_reverse(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasReverse || seenSelect) return null
-            whereCond = merge_where_cond(whereCond, fold_linq_cond(cll._0.arguments[1], itName))
+            whereCond = merge_where_cond(whereCond, peel_lambda_rename_var(cll._0.arguments[1], itName))
         } elif (name == "select") {
             if (hasReverse || seenSelect) return null
             seenSelect = true
-            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
         } elif (name == "reverse") {
             if (hasReverse) return null
             hasReverse = true
@@ -1929,11 +1849,11 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasDistinct || seenSelect) return null
-            whereCond = merge_where_cond(whereCond, fold_linq_cond(cll._0.arguments[1], itName))
+            whereCond = merge_where_cond(whereCond, peel_lambda_rename_var(cll._0.arguments[1], itName))
         } elif (name == "select") {
             if (hasDistinct || seenSelect) return null
             seenSelect = true
-            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
         } elif (name == "distinct") {
             if (hasDistinct) return null
             hasDistinct = true
@@ -2092,28 +2012,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
 // ── Group-by helpers ──────────────────────────────────────────────────
 
 [macro_function]
-def private is_bind_field_access(expr : Expression?; bindName : string; fieldIndex : int) : bool {
-    // Returns true when `expr` matches `<bindName>._<fieldIndex>` (tuple field read).
-    if (expr == null) return false
-    var sub = expr
-    // Peel ExprRef2Value wrappers the typer inserts around `var`-bound reads.
-    while (sub is ExprRef2Value) {
-        sub = (sub as ExprRef2Value).subexpr
-    }
-    if (!(sub is ExprField)) return false
-    let fld = sub as ExprField
-    let fieldExpected = "_{fieldIndex}"
-    if (fld.name != fieldExpected) return false
-    var src = fld.value
-    while (src is ExprRef2Value) {
-        src = (src as ExprRef2Value).subexpr
-    }
-    if (!(src is ExprVar)) return false
-    let v = src as ExprVar
-    return v.name == bindName
-}
-
-[macro_function]
 def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; string; Expression?> {
     // Returns (matched, reducerName, innerLambda). innerLambda is non-null for *_inner_select forms.
     if (expr == null || !(expr is ExprCall)) return (false, "", null)
@@ -2127,7 +2025,7 @@ def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tupl
     // Bare reducer: `<reducer>(<bind>._1)`
     if (fnName == "length" || fnName == "count" || fnName == "long_count"
             || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
-        if (is_bind_field_access(c.arguments[0], bindName, 1)) return (true, fnName, null)
+        if (peel_tuple_field_read(c.arguments[0], bindName, 1)) return (true, fnName, null)
     }
     // Inner-select reducer: `<reducer>(select(<bind>._1, <lambda>))`
     if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
@@ -2141,7 +2039,7 @@ def private is_bucket_reducer_call(expr : Expression?; bindName : string) : tupl
                 }
                 if (innerName == "select"
                         && (innerCall.arguments |> length) == 2
-                        && is_bind_field_access(innerCall.arguments[0], bindName, 1)) return (true, "{fnName}_inner_select", innerCall.arguments[1])
+                        && peel_tuple_field_read(innerCall.arguments[0], bindName, 1)) return (true, "{fnName}_inner_select", innerCall.arguments[1])
             }
         }
     }
@@ -2189,7 +2087,7 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
     if (okBare) {
         var innerBody : Expression?
         if (innerBare != null) {
-            innerBody = fold_linq_cond(clone_expression(innerBare), itName)
+            innerBody = peel_lambda_rename_var(clone_expression(innerBare), itName)
             if (innerBody == null) return <- (<- specs, false)
         }
         let isAvgBare = rnBare == "average" || rnBare == "average_inner_select"
@@ -2203,7 +2101,7 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
     if (!(groupProjBody is ExprMakeTuple)) return <- (<- specs, false)
     let mt = groupProjBody as ExprMakeTuple
     let n = mt.values |> length
-    if (n < 2 || !is_bind_field_access(mt.values[0], bindName, 0)) return <- (<- specs, false)
+    if (n < 2 || !peel_tuple_field_read(mt.values[0], bindName, 0)) return <- (<- specs, false)
     specs |> reserve(n - 1)
     for (i in range(1, n)) {
         let (ok, rn, innerLam) = is_bucket_reducer_call(mt.values[i], bindName)
@@ -2213,7 +2111,7 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
         }
         var innerBody : Expression?
         if (innerLam != null) {
-            innerBody = fold_linq_cond(clone_expression(innerLam), itName)
+            innerBody = peel_lambda_rename_var(clone_expression(innerLam), itName)
             if (innerBody == null) {
                 specs |> clear
                 return <- (<- specs, false)
@@ -2465,7 +2363,7 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
             || fnName == "sum" || fnName == "min" || fnName == "max"
             || fnName == "first" || fnName == "average")
     if (!isReducer) return true
-    if (is_bind_field_access(c.arguments[0], hbName, 1)) {
+    if (peel_tuple_field_read(c.arguments[0], hbName, 1)) {
         for (s in specs) {
             if (s.innerBody == null && s.name == fnName) return true
         }
@@ -2481,7 +2379,7 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
     let inner = c.arguments[0]
     if (inner == null || !(inner is ExprCall)) return true
     let ic = inner as ExprCall
-    if (ic.func == null || (ic.arguments |> length) != 2 || !is_bind_field_access(ic.arguments[0], hbName, 1)) return true
+    if (ic.func == null || (ic.arguments |> length) != 2 || !peel_tuple_field_read(ic.arguments[0], hbName, 1)) return true
     var innerName = string(ic.func.name)
     if (ic.func.fromGeneric != null) {
         innerName = string(ic.func.fromGeneric.name)
@@ -2492,7 +2390,7 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
         // Match against a select-side spec (visible slot): v1 trusts the user wrote identical lambdas (pre-existing PR-D limitation, documented in LINQ.md). Match against an already-added hidden spec from this having scan would silently route two different inner lambdas to the same slot — bail to tier 2 instead, where each select() is evaluated separately.
         if (s.name == comboName) return s.slot <= userVisibleSlotCount
     }
-    var innerBody = fold_linq_cond(clone_expression(ic.arguments[1]), itName)
+    var innerBody = peel_lambda_rename_var(clone_expression(ic.arguments[1]), itName)
     if (innerBody == null || innerBody._type == null) return false
     var accType = mk_hidden_acc_type(comboName, true, bucketElemType, innerBody._type, at)
     if (accType == null) return false
@@ -2544,7 +2442,7 @@ def private extend_specs_for_missing_having_reducers(var expr : Expression?; hbN
 def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
     // Substitutes `<hb>._0` → `kv._0` and `<reducer>(<hb>._1)` / `<reducer>(select(<hb>._1, <lam>))` → `kv._{slot}` (or divide expr for average) against matching specs; any other use of `<hb>` returns null and cascades.
     if (expr == null) return expr
-    // Peel typer-inserted ExprRef2Value wrappers (same pattern as is_bind_field_access).
+    // Peel typer-inserted ExprRef2Value wrappers (same pattern as peel_tuple_field_read).
     while (expr is ExprRef2Value) {
         expr = (expr as ExprRef2Value).subexpr
     }
@@ -2555,7 +2453,7 @@ def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string;
             if (c.func.fromGeneric != null) {
                 fnName = string(c.func.fromGeneric.name)
             }
-            if (is_bind_field_access(c.arguments[0], hbName, 1)) {
+            if (peel_tuple_field_read(c.arguments[0], hbName, 1)) {
                 for (s in specs) {
                     if (s.innerBody == null && s.name == fnName) return mk_slot_output_expr(expr.at, kvName, s)
                 }
@@ -2564,7 +2462,7 @@ def private rewrite_having_pred(var expr : Expression?; hbName, kvName : string;
             let inner = c.arguments[0]
             if (inner != null && inner is ExprCall) {
                 let ic = inner as ExprCall
-                if (ic.func != null && (ic.arguments |> length) == 2 && is_bind_field_access(ic.arguments[0], hbName, 1)) {
+                if (ic.func != null && (ic.arguments |> length) == 2 && peel_tuple_field_read(ic.arguments[0], hbName, 1)) {
                     var innerName = string(ic.func.name)
                     if (ic.func.fromGeneric != null) {
                         innerName = string(ic.func.fromGeneric.name)
@@ -2767,7 +2665,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                 lastBindName = bn
                 projection = null
             }
-            var predicate = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            var predicate = peel_lambda_rename_var(calls[i]._0.arguments[1], lastBindName)
             if (predicate == null) return null
             currentWhere = merge_where_cond(currentWhere, predicate)
         } elif (opName == "select") {
@@ -2784,7 +2682,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                 }
                 lastBindName = bn
             }
-            projection = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            projection = peel_lambda_rename_var(calls[i]._0.arguments[1], lastBindName)
             if (projection == null) return null
             elemType = strip_const_ref(clone_type(calls[i]._0._type.firstType))
         } else {
@@ -2803,7 +2701,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     segWheres |> push(currentWhere)
     let itName = lastBindName
     // Recognize the group_proj body's reducer shape (uses post-projection itName for inner-select fold).
-    var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
+    var groupProjBody = peel_lambda_rename_var(groupProjCall.arguments[1], bindName)
     if (groupProjBody == null || groupProjBody._type == null) return null
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
@@ -2812,7 +2710,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     var havingPred : Expression?
     if (havingCall != null) {
         let hbName = "`{prefix}hb`{at.line}`{at.column}"
-        var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
+        var rawPred = peel_lambda_rename_var(havingCall.arguments[1], hbName)
         if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
         havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
         if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
@@ -3190,7 +3088,7 @@ def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
 
 [macro_function]
 def private build_decs_tup_bind(bridge : DecsBridgeShape?; tupName : string; at : LineInfo) : Expression? {
-    // Named-tuple bind: `var tup = (n1=iter1, n2=iter2, ...)` — fold_linq_cond peels user lambdas substituting `_.userName` → `tup.userName`.
+    // Named-tuple bind: `var tup = (n1=iter1, n2=iter2, ...)` — peel_lambda_rename_var peels user lambdas substituting `_.userName` → `tup.userName`.
     var mkTup = new ExprMakeTuple(at = at)
     mkTup.recordNames |> resize(length(bridge.userNames))
     for (i in 0 .. length(bridge.userNames)) {
@@ -3244,7 +3142,7 @@ def private compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?
         if (opName == "select") {
             info.selectCount ++
             curBind = "`decs_sel`{at.line}`{at.column}`{info.selectCount}"
-            var peeled = fold_linq_cond(cll._0.arguments[1], info.bindAt[i])
+            var peeled = peel_lambda_rename_var(cll._0.arguments[1], info.bindAt[i])
             if (peeled == null || peeled._type == null) return null
             curType = clone_type(peeled._type)
         } elif (opName != "where_") return null
@@ -3272,7 +3170,7 @@ def private wrap_decs_chain(var action : Expression?;
         let opName = cll._1.name
         let bindHere = chainInfo.bindAt[i]
         if (opName == "where_") {
-            var pred = fold_linq_cond(cll._0.arguments[1], bindHere)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], bindHere)
             if (pred == null) return null
             current = qmacro_expr() {
                 if ($e(pred)) {
@@ -3280,7 +3178,7 @@ def private wrap_decs_chain(var action : Expression?;
                 }
             }
         } elif (opName == "select") {
-            var proj = fold_linq_cond(cll._0.arguments[1], bindHere)
+            var proj = peel_lambda_rename_var(cll._0.arguments[1], bindHere)
             if (proj == null) return null
             let nextBind = (i + 1 < intermediateEnd) ? chainInfo.bindAt[i + 1] : chainInfo.finalBind
             var letStmt = qmacro_expr() {
@@ -3346,12 +3244,12 @@ def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
             info.skipExpr = clone_expression(arg)
         } elif (nm == "skip_while") {
             if (info.skipWhileCond != null || info.takeWhileCond != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             info.skipWhileCond = pred
         } elif (nm == "take_while") {
             if (info.takeWhileCond != null || info.takeExpr != null || length(cll._0.arguments) < 2) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             info.takeWhileCond = pred
         } elif (nm == "take") {
@@ -3528,7 +3426,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     }
     // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
     if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
-        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
         if (predExpr == null) return null
         perElement = qmacro_expr() {
             if ($e(predExpr)) {
@@ -3696,7 +3594,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                 var $i(foundName) = false
             }
             if (argCount > 1) {
-                var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+                var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
                 if (predExpr == null) return null
                 perElement = qmacro_expr() {
                     if ($e(predExpr)) {
@@ -3715,7 +3613,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         } else {
             if (argCount > 1) {
-                var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+                var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
                 if (predExpr == null) return null
                 perElement = qmacro_expr() {
                     if ($e(predExpr)) return true
@@ -3727,7 +3625,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         }
     } elif (opName == "all") {
-        var predExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
         if (predExpr == null) return null
         if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
             // Take-cap / take_while-stop hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
@@ -3921,7 +3819,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let skippingName = "`decs_skipping`{at.line}`{at.column}"
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
-    var keyExpr = fold_linq_cond(clone_expression(terminatorCall.arguments[1]), finalBind)
+    var keyExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
     if (keyExpr == null || keyExpr._type == null) return null
     var keyType = clone_type(keyExpr._type)
     keyType.flags.constant = false
@@ -4097,7 +3995,7 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasOrder) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
         } elif (name == "order" || name == "order_descending"
@@ -4285,13 +4183,13 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasReverse || seenSelect) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
         } elif (name == "select") {
             if (hasReverse || seenSelect) return null
             seenSelect = true
-            projection = fold_linq_cond(cll._0.arguments[1], tupName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (projection == null) return null
         } elif (name == "reverse") {
             if (hasReverse) return null
@@ -4493,13 +4391,13 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
         let name = cll._1.name
         if (name == "where_") {
             if (hasDistinct || seenSelect) return null
-            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
         } elif (name == "select") {
             if (hasDistinct || seenSelect) return null
             seenSelect = true
-            projection = fold_linq_cond(cll._0.arguments[1], tupName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (projection == null) return null
         } elif (name == "distinct") {
             if (hasDistinct) return null
@@ -4769,14 +4667,14 @@ def private plan_zip(var expr : Expression?) : Expression? {
     var seenTakeWhile = false
     var seenTake = false
     var allProjectionsPure = true
-    // Z3 chain walk: fuse where_/select/take/skip/take_while/skip_while between zip and terminator. Predicates/projections receive the tuple element via fold_linq_cond_peel substitution with `(itA, itB)` — typer collapses `t._0/_1` to the raw iter vars.
+    // Z3 chain walk: fuse where_/select/take/skip/take_while/skip_while between zip and terminator. Predicates/projections receive the tuple element via peel_lambda_replace_var substitution with `(itA, itB)` — typer collapses `t._0/_1` to the raw iter vars.
     for (i in 1 .. intermediateEnd) {
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
         if (opName == "where_") {
             // Canonical chain order: skip/take/while-family come after where_/select. After-select chained where: defer (would require chained-bind dedup, see Phase 3d for single-source analog).
             if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
-            var predicate : Expression? = fold_linq_cond(cll._0.arguments[1], itName)
+            var predicate : Expression? = peel_lambda_rename_var(cll._0.arguments[1], itName)
             if (predicate == null) return null
             if (whereCond == null) {
                 whereCond = predicate
@@ -4802,7 +4700,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
             if (projElemType == null) return null
             // Strip both constness and ref-ness — `array<T const>` is unwritable, `array<T&>` is invalid as buffer element. Matches the canonical pattern used by plan_reverse/plan_distinct/etc.
             projElemType = strip_const_ref(projElemType)
-            projection = fold_linq_cond(cll._0.arguments[1], itName)
+            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
             if (projection == null) return null
             elementType = projElemType
             seenSelect = true
@@ -4819,14 +4717,14 @@ def private plan_zip(var expr : Expression?) : Expression? {
             if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
             var swArg = cll._0.arguments[1]
             if (swArg == null) return null
-            skipWhileCond = fold_linq_cond(swArg, itName)
+            skipWhileCond = peel_lambda_rename_var(swArg, itName)
             if (skipWhileCond == null) return null
             seenSkipWhile = true
         } elif (opName == "take_while") {
             if (seenSelect || seenTakeWhile || seenTake) return null
             var twArg = cll._0.arguments[1]
             if (twArg == null) return null
-            takeWhileCond = fold_linq_cond(twArg, itName)
+            takeWhileCond = peel_lambda_rename_var(twArg, itName)
             if (takeWhileCond == null) return null
             seenTakeWhile = true
         } elif (opName == "take") {
