@@ -17,7 +17,7 @@ let private per_target_init_suffixes <- array<string>(
 // prebuilt LLVM.dll (linux x86_64, linux arm64, mac arm64, windows x86_64).
 // Anything else is filtered out at regen time to keep the binding loadable.
 let private universal_targets <- array<string>(
-    "X86", "AArch64", "ARM"
+    "X86", "AArch64", "ARM", "WebAssembly"
 )
 
 def private skip_per_target_initializer(function_name : string) : bool {
@@ -113,44 +113,25 @@ class LlvmGen : CppGenBind {
         return true
     }
     def override skip_file(fname : string) : bool {
-        if (!any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]
     }
     def override skip_alias(var c : CXCursor) {
         let aliasf = clang_getCursorLocationFileName(c)
-        if (!any <| [iterator for(h in llvm_c_headers); aliasf |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in llvm_c_headers); aliasf |> ends_with(h)]
     }
     def override skip_enum(ns_en, en : string) {
-        if (ns_en == "std::byte" || ns_en |> starts_with("(unnamed enum")) {
-            return true
-        }
-        return false
+        return ns_en == "std::byte" || ns_en |> starts_with("(unnamed enum")
     }
     def override skip_struct(sn : string) {
-        if (sn |> starts_with("__crt")) {
-            return true
-        }
-        return false
+        return sn |> starts_with("__crt")
     }
     def override skip_function(var c : CXCursor) : bool {
         let function_name = string(clang_getCursorSpelling(c))
         if (function_name == "LLVMConstGEP2" || function_name == "LLVMConstInBoundsGEP2"
-            || function_name == "LLVMOrcObjectLayerAddObjectFileWithRT" || function_name == "LLVMInitializeCore") {
-            return true
-        }
+            || function_name == "LLVMOrcObjectLayerAddObjectFileWithRT" || function_name == "LLVMInitializeCore") return true
         let funf = clang_getCursorLocationFileName(c)
-        if (!any <| [iterator for(h in llvm_c_headers); funf |> ends_with(h)]) {
-            return true
-        }
-        if (skip_anyFunction(c, false)) {
-            return true
-        }
-        return false
+        if (!any <| [iterator for(h in llvm_c_headers); funf |> ends_with(h)]) return true
+        return skip_anyFunction(c, false)
     }
 }
 
@@ -159,22 +140,14 @@ class LlvmGenDinamic : DasGenBind {
         init_args(pfn, pfp, args)
     }
     def override skip_const(name : string) : bool {
-        if (name == "true" || name == "false") {
-            return true
-        }
-        return false
+        return name == "true" || name == "false"
     }
     def override skip_alias(var c : CXCursor) {
         let aliasf = clang_getCursorLocationFileName(c)
         let typedef_name = string(clang_getCursorSpelling(c))
         // Let's skip ssize_t, we never use it.
-        if (typedef_name == "ssize_t") {
-            return true
-        }
-        if (!any <| [iterator for(h in llvm_c_headers); aliasf |> ends_with(h)]) {
-            return true
-        }
-        return false
+        if (typedef_name == "ssize_t") return true
+        return !any <| [iterator for(h in llvm_c_headers); aliasf |> ends_with(h)]
     }
     def override skip_function(var c : CXCursor) : bool {
         let function_name = string(clang_getCursorSpelling(c))
@@ -189,24 +162,14 @@ class LlvmGenDinamic : DasGenBind {
             // only needs the host target, so skipping every per-target initializer
             // outside the X86/AArch64/ARM set keeps the binding loadable everywhere.
             skip_per_target_initializer(function_name)
-            ) {
-            return true
-        }
+            ) return true
         let funf = clang_getCursorLocationFileName(c)
-        if (!any <| [iterator for(h in llvm_c_headers); funf |> ends_with(h)]) {
-            return true
-        }
-        if (skip_anyFunction(c, false)) {
-            return true
-        }
-        return false
+        if (!any <| [iterator for(h in llvm_c_headers); funf |> ends_with(h)]) return true
+        return skip_anyFunction(c, false)
     }
 
     def override skip_file(fname : string) : bool {
-        if (!any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]
     }
     def override output_dasbind(function_name : string) {
         fprint(func_decl_file, "[extern(cdecl, name=\"{function_name}\", library=\"LLVM.dll\")]\n")
@@ -221,7 +184,7 @@ def main {
         print_help(get_command_info(type<Config>), "bind_llvm")
         return
     }
-    var cfg <- r |> move_unwrap
+    let cfg <- r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "bind_llvm")
         return
@@ -245,14 +208,14 @@ def main {
     if (is_dynamic) {
         // generate
         let output_name = "{cfg.output}/llvm_func.das"
-        fopen(output_name, "wb") <| $(fdf) {
+        fopen(output_name, "wb") $(fdf) {
             fprint(fdf, "require dasbind public\n")
             fprint(fdf, "options gen2\n")
             fprint(fdf, "module llvm_func shared\n")
             fprint(fdf, "require llvm/bindings/llvm_struct\n")
             fprint(fdf, "require llvm/bindings/llvm_enum\n")
             let output_const_name = "{cfg.output}/llvm_const.das"
-            fopen(output_const_name, "wb") <| $(dcf) {
+            fopen(output_const_name, "wb") $(dcf) {
                 var glbind = new LlvmGenDinamic(pfn, pfp, args)
                 var scf = glbind.openFile("{cfg.output}/llvm_struct.das")
                 var ecf = glbind.openFile("{cfg.output}/llvm_enum.das")

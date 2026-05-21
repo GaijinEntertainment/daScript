@@ -190,7 +190,7 @@ class CollectExternVisitor : AstVisitor {
             standalone_ctx,
             types.ConstI64(fn.index |> uint64),
             get_string_constant_ptr(builder, string(fn.name)),
-            get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
+            get_string_constant_ptr(builder, fn |> get_mangled_name()),
             types.ConstI64(fn.getMangledNameHash),
             types.ConstI32(fn.totalStackSize |> uint64),
             fn_ptr_cast,
@@ -677,9 +677,9 @@ def private write_release_deps(prog : Program?) {
     var by_das : table<string; SharedModuleEntry>
     var by_pkg : table<string; SharedModuleEntry>
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        let abs = string(path)
+        let abs = path
         let rel = compute_modules_relative_suffix(abs)
-        let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = string(das_name))
+        let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = das_name)
         by_das[entry.das_name] = entry
         let pkg = dylib_package_name(rel)
         if (!empty(pkg)) {
@@ -734,7 +734,8 @@ def private write_release_deps(prog : Program?) {
 // all compiled functions, runs init scripts, then calls the program entry point.
 def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
-                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
+                       target_triple : string = "") : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
 
     let builder = LLVMCreateBuilder()
     defer() {
@@ -770,6 +771,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
 
     var start_fn_name = ""
     var no_return = true
+    var bool_return = false
     for (fn in funcs) {
         if (fn.name == entry_point && fn.arguments.empty()) {
             assume fnmna = uids.get_dll_fn_name(fn).impl()
@@ -779,6 +781,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             } elif (fn.result.baseType == Type.tInt) {
                 start_fn_name = fnmna
                 no_return = false
+            } elif (fn.result.baseType == Type.tBool) {
+                start_fn_name = fnmna
+                no_return = false
+                bool_return = true
             }
         }
     }
@@ -793,7 +799,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             types.LLVMVoidPtrType() // argv
         )
     )
-    let main_fn = LLVMAddFunctionWithType(mod, "main", main_fn_type)
+    // wasm32-emscripten: emcc's libstandalonewasm already defines `main`,
+    // emit `__main_argc_argv` instead and let crt1 chain through.
+    let main_sym = (target_triple |> starts_with("wasm32-")) ? "__main_argc_argv" : "main"
+    let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
 
@@ -1032,6 +1041,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     LLVMBuildCall2(builder, shutdown_fn_type, shutdown_fn, array<LLVMValueRef>(), "")
     if (no_return) {
         LLVMBuildRet(builder, types.ConstI32(uint64(0)))
+    } elif (bool_return) {
+        // bool main → exit code: true → 0 (success), false → 1 (failure).
+        let exit_code = LLVMBuildSelect(builder, main_ret,
+            types.ConstI32(uint64(0)), types.ConstI32(uint64(1)), "main_exit")
+        LLVMBuildRet(builder, exit_code)
     } else {
         LLVMBuildRet(builder, main_ret)
     }

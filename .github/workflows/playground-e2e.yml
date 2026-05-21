@@ -8,13 +8,13 @@ on:
   pull_request:
     paths:
       - 'site/**'
-      - 'web/ui/**'
+      - 'web/examples/ui/**'
       - '.github/workflows/playground-e2e.yml'
   push:
     branches-ignore: [master]
     paths:
       - 'site/**'
-      - 'web/ui/**'
+      - 'web/examples/ui/**'
       - '.github/workflows/playground-e2e.yml'
   workflow_dispatch:
 
@@ -48,9 +48,9 @@ jobs:
           cp site/downloads.html _site/ || true
           cp -r site/files _site/files
 
-          # Playground: vendor web/ui IDE (no WASM artifacts)
-          cp -r web/ui/src/* _site/playground/
-          cp -r web/ui/samples _site/playground/samples 2>/dev/null || true
+          # Playground: vendor web/examples/ui IDE (no WASM artifacts)
+          cp -r web/examples/ui/src/* _site/playground/
+          cp -r web/examples/ui/samples _site/playground/samples 2>/dev/null || true
           cp site/playground/index.html _site/playground/index.html
           cp site/playground/forge-skin.css _site/playground/
           # Forge playground scripts (init shim + tabs + share + splitter).

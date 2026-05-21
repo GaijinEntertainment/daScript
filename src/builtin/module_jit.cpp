@@ -35,6 +35,12 @@
 #include <inttypes.h>
 #include <filesystem>
 
+// MSVC ships popen/pclose under _popen/_pclose; alias once for the whole TU.
+#if defined(_WIN32) || defined(_WIN64)
+    #define popen _popen
+    #define pclose _pclose
+#endif
+
 namespace das {
     // forward declarations from module_builtin_fio.cpp
     void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
@@ -738,6 +744,19 @@ extern "C" {
         string compilerLibrary; // non-empty when linkWholeLib — exe also needs compiler lib
     };
 
+    // Resolve a linker / tool path. Lookup order:
+    //   1. `custom` — explicit override (non-null, non-empty)
+    //   2. `<das_root>/bin/<bundledName>` if present on disk
+    //   3. `fallback` — bare name picked up via PATH
+    // Callers pass the platform-specific bundled name (e.g. `wasm-ld.exe` on
+    // Windows, `wasm-ld` on POSIX, `emcc.bat` on Windows, etc.).
+    static string find_linker(const char * custom, const string & bundledName, const string & fallback) {
+        if ( custom != nullptr && custom[0] != '\0' ) return custom;
+        string bundled = getDasRoot() + "/bin/" + bundledName;
+        if ( check_file_present(bundled.c_str()) ) return bundled;
+        return fallback;
+    }
+
     static LinkerPaths get_real_lib_linker_paths(const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib) {
         LinkerPaths result;
         result.linker = customLinker != nullptr ? customLinker : "";
@@ -746,7 +765,7 @@ extern "C" {
         if (result.linker.empty() || result.runtimeLibrary.empty()) {
             #if defined(_WIN32) || defined(_WIN64)
                 if (result.linker.empty()) {
-                    result.linker = getDasRoot() + "/bin/clang-cl.exe";
+                    result.linker = find_linker(nullptr, "clang-cl.exe", "clang-cl");
                 }
                 if (result.runtimeLibrary.empty()) {
                     const auto path = get_prefix(getExecutableFileName());
@@ -780,6 +799,45 @@ extern "C" {
     }
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+    // Run a fully-formed linker command via popen, capture combined stdout/
+    // stderr into a 16KB buffer, then log success or a failure diagnostic
+    // (with the captured output) through the daslang Context.
+    //   cmd          — complete shell command, already includes 2>&1.
+    //   artifactPath — output file path (logged on success/failure).
+    //   artifactKind — short label for messages ("Library", "Wasm", ...).
+    static void run_link_cmd(const char * cmd, const char * artifactPath,
+                             const char * artifactKind, Context * context) {
+        FILE * fp = popen(cmd, "r");
+        if ( fp == NULL ) {
+            LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
+            return;
+        }
+        static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
+        char buffer[1024], output[MAX_OUTPUT_SIZE];
+        output[0] = '\0';
+        size_t output_length = 0;
+        while ( fgets(buffer, sizeof(buffer), fp) != NULL ) {
+            size_t buffer_length = strlen(buffer);
+            if ( output_length + buffer_length < MAX_OUTPUT_SIZE ) {
+                strcat(output, buffer);
+                output_length += buffer_length;
+            } else {
+                strncat(output, buffer, MAX_OUTPUT_SIZE - output_length - 1);
+                break;
+            }
+        }
+        auto li = LineInfo();
+        if ( int status = pclose(fp); status != 0 ) {
+            string msg = string("Failed to link ") + artifactKind + " " + artifactPath + ", command '" + cmd + "'\n";
+            context->to_out(&li, LogLevel::error, msg.c_str());
+            string err = string("Output:\n") + output;
+            context->to_out(&li, LogLevel::error, err.c_str());
+        } else {
+            string msg = string(artifactKind) + " " + artifactPath + " linked - ok\n";
+            context->to_out(&li, LogLevel::info, msg.c_str());
+        }
+    }
+
     void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib, Context *context ) {
         char cmd[1024];
         const auto paths = get_real_lib_linker_paths(dasLib, customLinker, isShared, linkWholeLib);
@@ -829,50 +887,51 @@ extern "C" {
                                         linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, compilerLibrary);
         #endif
             *result = '\0';
-
-#if defined(_WIN32) || defined(_WIN64)
-    #define popen _popen
-    #define pclose _pclose
-#endif
-
-        FILE * fp = popen(cmd, "r");
-        if ( fp == NULL ) {
-            LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
-            return;
-        }
-
-        static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
-
-        char buffer[1024], output[MAX_OUTPUT_SIZE];
-        output[0] = '\0';
-
-        size_t output_length = 0;
-
-        // Read the output a line at a time and accumulate it
-        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-            size_t buffer_length = strlen(buffer);
-            if (output_length + buffer_length < MAX_OUTPUT_SIZE) {
-                strcat(output, buffer);
-                output_length += buffer_length;
-            } else {
-                strncat(output, buffer, MAX_OUTPUT_SIZE - output_length - 1);
-                break;
-            }
-        }
-
-        auto li = LineInfo();
-        if ( int status = pclose(fp); status != 0 ) {
-            string msg = string("Failed to make shared library ") + libraryName + ", command '" + cmd + "'\n";
-            context->to_out(&li, LogLevel::error, msg.c_str());
-            string err = string("Output:\n") + output;
-            context->to_out(&li, LogLevel::error, err.c_str());
-        } else {
-            string msg = string("Library ") + libraryName + " made - ok\n";
-            context->to_out(&li, LogLevel::info, msg.c_str());
-        }
+        run_link_cmd(cmd, libraryName, "Library", context);
     }
 #else
     void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib, Context *context ) { }
+#endif
+
+#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+    // Cross-compile-link a wasm32 object into a standalone .wasm via emcc.
+    //   runtimeLibPath — path to libDaScript_runtime.a (wasm32). Optional:
+    //     present  → link runtime symbols (das_*, malloc, memcpy, …) in.
+    //     missing  → link without; only safe for pure programs that touch
+    //                no daslang runtime.
+    //   customEmcc — explicit emcc override (nullptr/empty = resolve via
+    //                bin/ then PATH).
+    // emcc drives wasm-ld plus libc / wasi / wasm-exceptions glue, so output
+    // is self-contained -sSTANDALONE_WASM (only wasi imports).
+    void link_wasm ( const char * objFilePath, const char * wasmPath,
+                     const char * runtimeLibPath, const char * customEmcc,
+                     Context * context ) {
+        #if defined(_WIN32) || defined(_WIN64)
+            const auto linker = find_linker(customEmcc, "emcc.bat", "emcc");
+        #else
+            const auto linker = find_linker(customEmcc, "emcc", "emcc");
+        #endif
+        if ( !check_file_present(objFilePath) ) {
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing wasm32 object, does not exist\n";
+            return;
+        }
+        const bool withRuntime = runtimeLibPath != nullptr && runtimeLibPath[0] != '\0'
+                                 && check_file_present(runtimeLibPath);
+        if ( runtimeLibPath != nullptr && runtimeLibPath[0] != '\0' && !withRuntime ) {
+            LOG(LogLevel::warning) << "libDaScript_runtime archive '" << runtimeLibPath
+                                   << "' not found - linking without; runtime refs will fail\n";
+        }
+        // -sSTANDALONE_WASM: emit self-contained .wasm with wasi imports only.
+        // -fwasm-exceptions + -sWASM_LEGACY_EXCEPTIONS=0: match the runtime
+        // archive's modern wasm EH, avoid emcc's JS invoke_* trampolines.
+        const string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
+        const string cmd = fmt::format(
+            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 2>&1"),
+            linker, objFilePath, runtimeArg, wasmPath);
+        run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
+    }
+#else
+    void link_wasm ( const char *, const char *, const char *, const char *, Context * ) { }
 #endif
 
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
@@ -1017,6 +1076,9 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared", "linkWholeLib", "context"});
+            addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
+                SideEffects::worstDefault, "link_wasm")
+                    ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","context"});
             addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});

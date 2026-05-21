@@ -46,6 +46,11 @@ struct AnnotationVarInfoEntry {
 }
 var annotation_varinfo_list : array<AnnotationVarInfoEntry>
 
+// (parent_global, resolvent_str_global) pairs for tHandle typeinfo slot 0.
+// Static initializer leaves slot 0 null; runtime ctor writes the tagged pointer
+// because wasm32 forbids widening ptrtoint inside .data initializers.
+var handle_typeinfo_pending : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
+
 [macro_function]
 def private get_expr_ptr(expr : ExpressionPtr) {
     return expr
@@ -234,6 +239,51 @@ def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<A
 }
 
 [macro_function]
+def generate_handle_typeinfo_ctor_dtor(types : PrimitiveTypes; entries : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; jit_mode : bool) {
+    // Slot 0 (annotation_or_name) of every tHandle TypeInfo holds
+    //   ((TypeAnnotation*)(intptr_t(annName)|1))
+    // wasm32 forbids widening ptrtoint inside .data initializers (the cast
+    // must run post-relocation), so the tagged pointer is materialized at
+    // runtime by this constructor function. globalopt would otherwise fold
+    // the ctor-only store back into the static initializer — the parent
+    // global is marked externally_initialized to block that.
+    var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
+    defer() {
+        LLVMDisposeBuilder(ctor_builder)
+    }
+    let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
+    let constructor = LLVMAddFunctionWithType(g_mod, "handle_typeinfo_constructor", functionType)
+    if (!jit_mode) {
+        set_private_linkage(constructor)
+    } else {
+        set_public_linkage(constructor)
+    }
+    let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
+    LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
+
+    let void_ptr = types.LLVMVoidPtrType()
+    let void_ptr_ptr = LLVMPointerType(void_ptr, 0u)
+    let one = LLVMConstInt(types.t_int64, 1 |> uint64(), 0)
+    for ((parent_global, resolvent_str) in entries) {
+        // tagged = (i8*)(ptrtoint(resolvent) + 1)
+        // Mark parent as externally_initialized: globalopt would otherwise
+        // fold ctor-only stores back into the static initializer, which
+        // re-introduces the ptrtoint ConstantExpr that wasm32 cannot lower
+        // in .data. The attribute is LLVM's intended signal for
+        // "runtime-initialized by external code, don't fold".
+        LLVMSetExternallyInitialized(parent_global, 1)
+        let nameInt   = LLVMBuildPtrToInt(ctor_builder, resolvent_str, types.t_int64, "nameInt")
+        let taggedInt = LLVMBuildAdd(ctor_builder, nameInt, one,                      "taggedInt")
+        let taggedPtr = LLVMBuildIntToPtr(ctor_builder, taggedInt, void_ptr,          "taggedPtr")
+        // slot 0 is at offset 0 — alias parent_global as i8** and store.
+        let slot0 = LLVMBuildBitCast(ctor_builder, parent_global, void_ptr_ptr, "slot0")
+        LLVMBuildStore(ctor_builder, taggedPtr, slot0)
+    }
+    LLVMBuildRetVoid(ctor_builder)
+    return (constructor, unsafe(reinterpret<LLVMOpaqueValue?>(null)))
+}
+
+[macro_function]
 def get_function_addr(var ctx : Context?; func : Function?) {
     let mangled_name = get_mangled_name(func)
     let MNH = hash(mangled_name)
@@ -303,6 +353,9 @@ class public LlvmJitVisitor : AstVisitor {
     option_no_range_check : bool = false
     option_no_alias : bool = false
     option_no_capture : bool = false
+    // True once any ExprCall to a builtIn function has been emitted, i.e. this
+    // function pulls in libDaScript_runtime.
+    has_externals : bool = false
     flags : LlvmJitFlags
     emit_prologue : bool = false
     own_di : bool = false
@@ -1655,6 +1708,9 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprCall(expr : ExprCall?) : ExpressionPtr {
+        if (expr.func != null && expr.func.flags.builtIn) {
+            has_externals = true
+        }
         make_call(expr, expr.doesNotNeedSp)
         return expr
     }
@@ -3857,6 +3913,7 @@ class public LlvmJitVisitor : AstVisitor {
             set_globalvar_linkage(varinfo)
             let vi = unsafe(ei[i])
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(vi)
+            queue_handle_typeinfo_if_needed(unsafe(reinterpret<TypeInfo?> vi), varinfo)
             array_init |> push <| unsafe(reinterpret<LLVMValueRef>(varinfo))
             if (vi.annotation_arguments != null) {
                 let ann_ty = get_llvm_type_for_annotation_arg_pod()
@@ -3975,6 +4032,17 @@ class public LlvmJitVisitor : AstVisitor {
         return global
     }
 
+    // For tHandle: emits resolvent string global + queues (parent, resolvent)
+    // for runtime slot-0 store. Parent's slot 0 stays null in the static
+    // initializer — wasm32 forbids widening ptrtoint inside .data initializers.
+    def queue_handle_typeinfo_if_needed(info : TypeInfo?; parent_global : LLVMValueRef) {
+        if (info == null || info.basicType != Type.tHandle) return
+        let resolvent = "~{info.annotation._module.name}::{info.annotation.name}"
+        var llvm_resolvent = g_builder |> get_string_constant_ptr(resolvent)
+        LLVMSetAlignment(llvm_resolvent, 2u)
+        handle_typeinfo_pending |> push((parent_global, llvm_resolvent))
+    }
+
     def rec_create_type_info_global(info : TypeInfo?) {
         var initValues = array<LLVMValueRef>()
         initValues |> resize(6)
@@ -3982,18 +4050,8 @@ class public LlvmJitVisitor : AstVisitor {
             initValues[i] = LLVMConstPointerNull(types.LLVMVoidPtrType())
         }
         if (info.basicType == Type.tHandle) {
-            let resolvent = "~{info.annotation._module.name}::{info.annotation.name}"
-            var llvm_resolvent = g_builder |> get_string_constant_ptr(resolvent)
-            LLVMSetAlignment(llvm_resolvent, 2u)
-            // now do this:
-            //      info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
-            let one = LLVMConstInt(types.t_int64, 1 |> uint64(), 0)
-            let ptrToInt = LLVMBuildPtrToInt(g_builder, llvm_resolvent, types.t_int64, "ptrToInt")
-            // Or constexpr are forbidden. Since we have alignment we can use add.
-            let modifiedPtr = LLVMBuildAdd(g_builder, ptrToInt, one, "modifiedPtr")
-            let intToPtr = LLVMBuildIntToPtr(g_builder, modifiedPtr, types.LLVMVoidPtrType(), "intToPtr")
-
-            initValues[0] = intToPtr
+            // slot 0 stays null — parent-site queue_handle_typeinfo_if_needed
+            // arranged the runtime store.
         } elif (info.basicType == Type.tStructure) {
             var t = create_struct_global_pointer(info.structType)
             initValues[0] = t
@@ -4052,6 +4110,7 @@ class public LlvmJitVisitor : AstVisitor {
 
         typeinfo_cache[ti] = type_info_global
 
+        queue_handle_typeinfo_if_needed(ti, type_info_global)
         let init_values <- get_typeinfo_fields(ti)
         var type_info_init = LLVMGetUndef(type_info_type)
         for (i in urange(init_values |> length())) {
@@ -6149,7 +6208,6 @@ def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) 
 
 [macro_function]
 def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?) {
-    let total_sz = ctor_dtor |> length() |> uint
     let priority = 0 |> uint64()
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
     let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
@@ -6171,33 +6229,42 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
     ctor_entries |> reserve(n_entries)
     dtor_entries |> reserve(n_entries)
 
-    var i = 0
+    // Skip null fn entries — caller passed null to opt out of ctor or dtor.
+    // ctor / dtor counted independently; each may be null without affecting the other.
+    var ci = 0
+    var di = 0
     for ((ctor, dtor) in ctor_dtor) {
-        ctorFields |> push(types.ConstI32(priority))
-        var c := ctor
-        ctorFields |> push(c)
-        ctorFields |> push(LLVMConstPointerNull(dataPointerType))
-        ctor_entries |> push(LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[i])), 3u))
-
-        dtorFields |> push(types.ConstI32(priority))
-        var d := dtor
-        dtorFields |> push(d)
-        dtorFields |> push(LLVMConstPointerNull(dataPointerType))
-        dtor_entries |> push(LLVMConstNamedStruct(dtorStructType, unsafe(addr(dtorFields[i])), 3u))
-        i = i + 3
+        if (ctor != null) {
+            ctorFields |> push(types.ConstI32(priority))
+            var c := ctor
+            ctorFields |> push(c)
+            ctorFields |> push(LLVMConstPointerNull(dataPointerType))
+            ctor_entries |> push(LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[ci])), 3u))
+            ci += 3
+        }
+        if (dtor != null) {
+            dtorFields |> push(types.ConstI32(priority))
+            var d := dtor
+            dtorFields |> push(d)
+            dtorFields |> push(LLVMConstPointerNull(dataPointerType))
+            dtor_entries |> push(LLVMConstNamedStruct(dtorStructType, unsafe(addr(dtorFields[di])), 3u))
+            di += 3
+        }
     }
 
-    var ctorStruct = LLVMConstNamedStruct(ctorStructType, array_data_ptr(ctorFields), 3u)
-    var dtorStruct = LLVMConstNamedStruct(dtorStructType, array_data_ptr(dtorFields), 3u)
+    let ctor_sz = ctor_entries |> length() |> uint
+    let dtor_sz = dtor_entries |> length() |> uint
 
-    let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, total_sz), "llvm.global_ctors")
-    let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, total_sz), "llvm.global_dtors")
-
-    LLVMSetLinkage(ctorArray, LLVMLinkage.LLVMAppendingLinkage)
-    LLVMSetLinkage(dtorArray, LLVMLinkage.LLVMAppendingLinkage)
-
-    LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, array_data_ptr(ctor_entries), total_sz))
-    LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, array_data_ptr(dtor_entries), total_sz))
+    if (ctor_sz != 0u) {
+        let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, ctor_sz), "llvm.global_ctors")
+        LLVMSetLinkage(ctorArray, LLVMLinkage.LLVMAppendingLinkage)
+        LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, array_data_ptr(ctor_entries), ctor_sz))
+    }
+    if (dtor_sz != 0u) {
+        let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, dtor_sz), "llvm.global_dtors")
+        LLVMSetLinkage(dtorArray, LLVMLinkage.LLVMAppendingLinkage)
+        LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, array_data_ptr(dtor_entries), dtor_sz))
+    }
 }
 
 // We need to overwrite address-like dependencies in .dll before start.
@@ -6447,7 +6514,7 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
 // Main function. Generates LLVM IR for `FunctionPtr`.
 [macro_function]
 def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
-                         attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags) {
+                         attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags) : bool {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
@@ -6472,10 +6539,11 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
         to_log(LOG_ERROR, "LLVM JIT FAILED:\n{errors}\n")
         g_failed = true
     }
+    let has_externals = astVisitor.has_externals
     unsafe {
         delete astVisitor
     }
-    return true
+    return has_externals
 }
 
 // Generates function to initialize all global variables.
@@ -6596,12 +6664,14 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
         // FileInfo
         generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode),
         // VarInfo
-        generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode)
+        generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode),
+        generate_handle_typeinfo_ctor_dtor(*types, handle_typeinfo_pending, jit_mode)
     ]
     ctor_dtor |> add_ctor_dtor_function(types)
 
     active_filenames = table<string>()
     annotation_varinfo_list |> clear()
+    handle_typeinfo_pending |> clear()
 }
 
 [macro_function]
@@ -6730,5 +6800,6 @@ class public DisableJitVisitor : AstVisitor {
 def init_llvm_jit_module_options() {
     if (is_compiling_macros_in_module("llvm_jit")) {
         this_module() |> add_module_option("jit_vec3_ldu", Type.tBool)
+        this_module() |> add_module_option("jit_target", Type.tString)
     }
 }

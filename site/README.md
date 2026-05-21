@@ -35,13 +35,13 @@ site/
 ├── news/<slug>.html        # GENERATED — micro-pages for news entries with bodies
 ├── playground/
 │   ├── index.html              # Forge nav + IDE body (mobile gate at top of <body>)
-│   ├── forge-skin.css          # CSS overrides on web/ui/src/main.css + mobile notice + splitter
+│   ├── forge-skin.css          # CSS overrides on web/examples/ui/src/main.css + mobile notice + splitter
 │   ├── playground-init.js      # URL-hash dispatch (#code= legacy / #z= multi-file)
 │   ├── playground-tabs.js      # multi-file state, tab strip, autosave to localStorage
 │   ├── playground-share.js     # ↗ share popover, is.gd shortener
 │   ├── playground-splitter.js  # draggable code | output column splitter
-│   ├── samples/                # multi-file sample bundles (gitignored, mirrored from web/ui/samples)
-│   └── *.{js,css}              # other vendored bits from web/ui/src/ for local-dev (gitignored)
+│   ├── samples/                # multi-file sample bundles (gitignored, mirrored from web/examples/ui/samples)
+│   └── *.{js,css}              # other vendored bits from web/examples/ui/src/ for local-dev (gitignored)
 ├── tests/
 │   └── playground/             # Playwright e2e suite (28 specs, ~5 s no-WASM)
 └── doc/                        # Sphinx HTML output (gitignored, deployed by CI)
@@ -162,17 +162,10 @@ The mini playground needs the WASM artifact at `site/files/wasm/`. Build it
 once (then `pip install`-free; subsequent `ninja` rebuilds are fast):
 
 ```bash
-cd web/
-bash step0_emsdk_install.sh                    # ~1 GB into web/emsdk/
-source emsdk/emsdk_env.sh                      # activate for this shell
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -G Ninja \
-      -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
-ninja                                          # 5–15 min first build
-
-# Drop the artifact where the mini runner expects it:
-mkdir -p ../../site/files/wasm
-cp ../output/daslang_static.{js,wasm} ../../site/files/wasm/
+# Install emcc (see web/README.md), then:
+source ~/emsdk/emsdk_env.sh
+emcmake cmake -S web -B web/cmake_temp -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build web/cmake_temp
+# stage_site_playground auto-drops daslang_static.{js,wasm} into site/files/wasm/.
 ```
 
 Re-run the http.server. The hero `▶ run` button should now compile and run
@@ -181,21 +174,24 @@ re-execute.
 
 ## Full playground (`/playground/`)
 
-The full IDE is `web/ui/` (CodeMirror, samples picker, multi-file). For local
+The full IDE is `web/examples/ui/` (CodeMirror, samples picker, multi-file). For local
 preview, vendor its source files into `site/playground/` and copy the sample
 bundles:
 
 ```bash
-cp web/ui/src/* site/playground/
-cp -r web/ui/samples site/playground/samples
+# stage_site_playground (from the WASM build above) auto-vendors UI + samples
+# + daslang_static.{js,wasm} into site/playground/.
 # Forge skin auto-loads from site/playground/forge-skin.css.
 # CodeMirror itself + the Forge CM theme load from /files/cm/ (already in site/).
 ```
 
-Plus the WASM artifact (same as the mini playground):
+### JIT (wasm) engine
+
+Optional: build precompiled `.wasm` per sample so the playground's "JIT (wasm)"
+radio works. `all_wasm` auto-stages them into `site/playground/samples/examples/`.
 
 ```bash
-cp web/output/daslang_static.{js,wasm} site/playground/
+cmake -B build -DDAS_LLVM_DISABLED=OFF -DDAS_BUILD_WASM=ON && cmake --build build --target all_wasm
 ```
 
 Open `http://localhost:8000/playground/`. Forge nav at the top, multi-file
@@ -243,7 +239,7 @@ python3 site/blog/build_blog.py \
 
 # Playground (assumes web/ has been built — see above)
 mkdir -p _site/playground _site/files/wasm
-cp -r web/ui/src/* _site/playground/
+cp -r web/examples/ui/src/* _site/playground/
 cp web/output/daslang_static.{js,wasm} _site/playground/
 cp web/output/daslang_static.{js,wasm} _site/files/wasm/
 cp site/playground/index.html _site/playground/index.html
@@ -301,7 +297,7 @@ no dedicated CI tier yet.
   WASM artifact yet. Either follow "Mini playground" above, or just preview
   the static landing without it (the run button is the only thing that won't
   work).
-- **`/playground/` shows a blank page** — you forgot to `cp web/ui/src/*
+- **`/playground/` shows a blank page** — you forgot to `cp web/examples/ui/src/*
   site/playground/`. `main.js`, `main.css`, and `jquery-3.6.0.min.js` are
   needed; CodeMirror itself lives at `site/files/cm/` and is already in
   the repo.

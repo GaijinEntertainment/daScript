@@ -121,6 +121,10 @@
             <div class="main_header_part">
                 <button id="test" class="button_header" onclick="runTests()" disabled>▶ test</button>
             </div>
+            <div class="main_header_part engine-toggle">
+                <label><input type="radio" name="engine" value="interpreter" checked> interpreter</label>
+                <label><input type="radio" name="engine" value="jit" disabled> JIT (wasm)</label>
+            </div>
         </div>
         <div class="main_header_right">
             <button id="clear" class="button_header button_header--ghost" onclick="clearOutput()">clear</button>
