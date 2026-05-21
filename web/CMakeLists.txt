@@ -138,6 +138,11 @@ ExternalProject_Add(host_daslang
                      -DCMAKE_BUILD_TYPE:STRING=Release
                      -DDAS_LLVM_DISABLED:BOOL=OFF
                      -DDAS_PUGIXML_DISABLED:BOOL=OFF
+                     # dasGlfw pulls find_package(OpenGL REQUIRED) at configure
+                     # time. The pages.yml runner doesn't apt-install OpenGL
+                     # dev libs, and this sub-build is tooling-only (drives
+                     # .das→wasm codegen via dasLLVM — no graphics needed).
+                     -DDAS_GLFW_DISABLED:BOOL=ON
     BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target daslang --parallel)
 
 # Cross-compile web playground example scripts to wasm32 via host daslang.
