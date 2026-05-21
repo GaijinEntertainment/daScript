@@ -92,6 +92,8 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo is_numeric(expr)`` — true if numeric type
 * ``typeinfo is_int(expr)`` — true if exactly ``int`` (32-bit signed, non-array)
 * ``typeinfo is_int64(expr)`` — true if exactly ``int64`` (64-bit signed, non-array)
+* ``typeinfo is_float(expr)`` — true if exactly ``float`` (32-bit, non-array)
+* ``typeinfo is_double(expr)`` — true if exactly ``double`` (64-bit, non-array)
 * ``typeinfo is_numeric_comparable(expr)`` — true if numeric-comparable
 * ``typeinfo is_vector(expr)`` — true if vector type (``float2``/``int3``/etc.)
 * ``typeinfo is_any_vector(expr)`` — true if handled vector-template type
