@@ -73,12 +73,10 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 			"-DCMAKE_CXX_FLAGS=${_HV_ASAN_FLAG}"
 		)
 	ENDIF()
-	# TODO: switch back to ithewei/libhv upstream tag once
-	# https://github.com/ithewei/libhv/pull/835 is merged.
 	ExternalProject_Add(
 		LIBHV
-		URL https://github.com/aleksisch/libhv/archive/343437b72fbd0f348abb168d61fe7f1c6c4f4d20.tar.gz
-		URL_HASH SHA256=1b809d55dc1a637aafecb25e717c4ab302a6733390f43b32244976d6583cd866
+		URL https://github.com/ithewei/libhv/archive/5da5fc22cdfd1b59ba2b0520abb34f95d050975c.tar.gz
+		URL_HASH SHA256=b4f774936ccd6981df74b23f9e033e0b3ab584f6682d889490377dc9450b5f54
 		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 		PREFIX ${CMAKE_CURRENT_BINARY_DIR}/libhv
 		CMAKE_ARGS ${HV_CMAKE_FLAGS}
