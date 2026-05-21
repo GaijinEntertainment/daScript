@@ -2322,3 +2322,11 @@ def qn(prefix : string; at : LineInfo) : string {
     //! yourself if that matters at the call site.
     return "`{prefix}`{at.line}`{at.column}"
 }
+
+def extract_const_string(e : Expression?) : tuple<bool; string> {
+    //! For ``ExprConstString`` constants return ``(true, value)``; otherwise ``(false, "")``.
+    //! Use to consume compile-time string literals threaded through macro args before splicing.
+    if (e == null || !(e is ExprConstString)) return (false, "")
+    let cs = e as ExprConstString
+    return (true, string(cs.value))
+}
