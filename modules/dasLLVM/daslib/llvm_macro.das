@@ -26,7 +26,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x04ul
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x09ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -236,7 +236,10 @@ class JIT_LLVM : AstSimulateMacro {
                 dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info)
                 output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
             }
-            init_jit(opt_level |> uint)
+            // Pass target_triple so init_jit can pin the module data layout
+                // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
+                // sizes baked into GEP folding from the very first IR instruction).
+                init_jit(opt_level |> uint, target_triple)
 
             var jit_flags : LlvmJitFlags
             jit_flags.emit_prologue = emit_prologue

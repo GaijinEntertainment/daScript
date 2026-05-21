@@ -49,6 +49,10 @@ let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
 let public FN_JIT_STRING_BUILDER_TEMP    = "jit_string_builder_temp"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
 let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
+// Wasm-only path — see g_target_is_wasm in init_jit and the two sites in
+// llvm_jit.das that emit a call instead of a baked-host-offset GEP+load.
+let public FN_JIT_GET_GLOBALS_BASE  = "jit_get_globals_base"
+let public FN_JIT_GET_SHARED_BASE   = "jit_get_shared_base"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -290,6 +294,15 @@ def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpa
 
 var public g_fn_types : table<string; LLVMTypeRef>
 
+// Set by init_jit when target_triple is a wasm target. Cross-compile path's
+// host-LLVM wasm32 codegen mishandles several user-provided hints (alwaysinline
+// over complex inlined bodies, certain loop-vectorize / unroll metadata). When
+// this flag is true, the LlvmJitVisitor skips ALL user hint application —
+// function-level [hint(...)] AND for/while-loop hints — and falls back to the
+// optimizer's default heuristics. Slight perf hit, but eliminates a class of
+// wasm32-only miscompiles.
+var public g_target_is_wasm = false
+
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
     var rv = LLVMAddFunction(mod, name, typ)
     g_fn_types[name] = typ
@@ -337,7 +350,7 @@ def public init_jit_clopts() {
 }
 
 [macro_function]
-def public init_jit(cg_opt_level : uint) {
+def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     // also prevent double init (g_mod != null)
     return if (is_in_completion() || is_compiling_macros() || g_mod != null)
     LLVMLinkInMCJIT()
@@ -355,6 +368,32 @@ def public init_jit(cg_opt_level : uint) {
     g_fn_types |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
     LLVMCreateJITCompilerForModule(g_engine, g_mod, cg_opt_level)
+    // For cross-compile targets (wasm32, etc.) pin the module's data layout
+    // to the TARGET's, not the host's, BEFORE any IR is built. LLVM constant-
+    // folds GEPs eagerly using the module's current layout — if the host has
+    // 8-byte pointers and the target has 4-byte, every for-loop end-pointer
+    // GEP bakes in the wrong stride and the loop never terminates. The native
+    // path (empty triple) keeps the host default.
+    g_target_is_wasm = target_triple |> starts_with("wasm")
+    if (!(target_triple |> empty())) {
+        // wasm32 target isn't always part of LLVMInitializeAllTargets in
+        // prebuilt LLVM.dll — call the explicit wasm initializer when needed.
+        if (g_target_is_wasm) {
+            LLVMInitializeWasmTarget()
+        }
+        // +simd128 / +nontrapping-fptoint is the feature set the wasm runtime
+        // archive is compiled with (see web/CMakeLists.txt). Required on wasm
+        // so vec4f returns are v128-in-register on both sides; meaningless
+        // (and potentially a target-machine-creation failure) on other
+        // cross-compile triples, so keep features empty there.
+        let features = g_target_is_wasm ? "+simd128,+nontrapping-fptoint" : ""
+        with_target_machine(target_triple, "", features, cg_opt_level) $(targetMachine : LLVMTargetMachineRef) {
+            let dl = LLVMCreateTargetDataLayout(targetMachine)
+            LLVMSetModuleDataLayout(g_mod, dl)
+            LLVMSetTarget(g_mod, target_triple)
+            LLVMDisposeTargetData(dl)
+        }
+    }
     static_if (LLVM_DEBUG_EVERYTHING) {
         let hostcpu = LLVMGetHostCPUName()
         let features = LLVMGetHostCPUFeatures()
@@ -440,6 +479,23 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
     LLVMAddAttributesToFunction(jit_get_shared_mnh, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
+    // Wasm-only: void * jit_get_globals_base ( Context * ); same shape for shared.
+    // Declared unconditionally (zero cost if unused); only called from llvm_jit.das
+    // when g_target_is_wasm. The native path keeps the inlined GEP+load — these
+    // helpers exist so the wasm32 runtime archive (which knows its own Context
+    // layout) resolves the right field offset.
+    var jit_get_globals_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBALS_BASE,
+        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_get_globals_base, get_jit_get_globals_base())
+    LLVMAddAttributesToFunction(jit_get_globals_base, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgument(jit_get_globals_base, 0u, nocapture)
+    var jit_get_shared_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_SHARED_BASE,
+        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_get_shared_base, get_jit_get_shared_base())
+    LLVMAddAttributesToFunction(jit_get_shared_base, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgument(jit_get_shared_base, 0u, nocapture)
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
@@ -456,7 +512,7 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddAttributeToFunctionArgument(jit_alloc_persistent, 1u, nocapture)
     // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
     var jit_free_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_FREE_HEAP,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+        LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32, g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_free_heap, get_jit_free_heap())
     LLVMAddAttributesToFunction(jit_free_heap, fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw))
@@ -464,21 +520,21 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddAttributeToFunctionArgument(jit_free_heap, 2u, nocapture)
     // void jit_free_persistent ( void * bytes, Context * context )
     var jit_free_persistent = LLVMAddFunctionWithType(g_mod, FN_JIT_FREE_PERSISTENT,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+        LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
     LLVMAddAttributesToFunction(jit_free_persistent, fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw))
     LLVMAddAttributeToFunctionArgumentRange(jit_free_persistent, urange(0, 2), nocapture)
-    // void jit_array_lock ( Array & array, Context * context )
+    // void jit_array_lock ( Array & array, Context * context, LineInfoArg * at )
     var jit_array_lock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_LOCK,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+        LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_array_lock, get_jit_array_lock())
     LLVMAddAttributesToFunction(jit_array_lock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_lock, urange(0, 2), nocapture)
-    // void jit_array_unlock ( Array & array, Context * context )
+    // void jit_array_unlock ( Array & array, Context * context, LineInfoArg * at )
     var jit_array_unlock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_UNLOCK,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+        LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(
                 g_prim_t.LLVMVoidPtrType(), // arr
                 g_prim_t.LLVMVoidPtrType(), // ctx
@@ -509,21 +565,22 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddGlobalMapping(g_engine, jit_str_cat, get_jit_str_cat())
     LLVMAddAttributesToFunction(jit_str_cat, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0, 3), nocapture)
-    // void jit_prologue ( void * line_info, int32_t stackSize, JitStackState * stackState, Context * context )
+    // void jit_prologue ( char * funcName, void * funcLineInfo, int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at )
     var jit_prologue = LLVMAddFunctionWithType(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(
-                g_prim_t.get_type_string(),
-                g_prim_t.LLVMVoidPtrType(),
-                g_prim_t.t_int32,
-                LLVMPointerType(g_t_stack_state, 0u),
-                g_prim_t.LLVMVoidPtrType()
+                g_prim_t.get_type_string(),    // funcName
+                g_prim_t.LLVMVoidPtrType(),    // funcLineInfo
+                g_prim_t.t_int32,              // stackSize
+                LLVMPointerType(g_t_stack_state, 0u), // stackState
+                g_prim_t.LLVMVoidPtrType(),    // context
+                g_prim_t.LLVMVoidPtrType()     // at
             )
         )
     )
     LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
     LLVMAddAttributesToFunction(jit_prologue, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(3, 5), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(3, 6), nocapture)
     // void jit_epilogue ( JitStackState * stackState, Context * context )
     var jit_epilogue = LLVMAddFunctionWithType(g_mod, FN_JIT_EPILOGUE,
         LLVMFunctionType(g_prim_t.t_void,
@@ -564,7 +621,7 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddAttributeToFunctionArgumentRange(jit_iterator_iterate, urange(0, 3), nocapture)
     // void builtin_iterator_delete ( const Sequence & it, Context * context ) {
     var jit_iterator_delete = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_DELETE,
-        LLVMFunctionType(g_prim_t.t_int1,
+        LLVMFunctionType(g_prim_t.t_void,
             fixed_array<LLVMTypeRef>(LLVMPointerType(g_t_sequence, 0u), g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_iterator_delete, get_jit_iterator_delete())
     LLVMAddAttributesToFunction(jit_iterator_delete, fixed_array(nounwind, willreturn))
@@ -580,11 +637,12 @@ def public init_jit(cg_opt_level : uint) {
     var jit_iterator_next = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_NEXT,
         LLVMFunctionType(g_prim_t.t_int1,
             fixed_array<LLVMTypeRef>(LLVMPointerType(g_t_sequence, 0u), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
-    let simnode_interop_type = LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+    // void jit_simnode_interop ( void * ptr, int argCount, TypeInfo ** types )
+    let simnode_interop_type = LLVMFunctionType(g_prim_t.t_void,
         fixed_array<LLVMTypeRef>(
-            g_prim_t.LLVMVoidPtrType(), // context
-            g_prim_t.t_int32,
-            g_prim_t.LLVMVoidPtrType() // argv
+            g_prim_t.LLVMVoidPtrType(), // ptr (placement-new buffer for SimNode_AotInteropBase)
+            g_prim_t.t_int32,           // argCount
+            g_prim_t.LLVMVoidPtrType()  // types
         )
     )
     var jit_simnode_interop = LLVMAddFunctionWithType(
@@ -827,7 +885,14 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
         to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output/lib/ — run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
     }
     let real_triple = (!(triple |> empty()) ? triple : "wasm32-unknown-emscripten")
-    with_target_machine(real_triple, "", "", 2u) $(targetMachine : LLVMTargetMachineRef) {
+    // Match the feature set web/CMakeLists.txt compiles the runtime archive with
+    // (-msimd128 -mnontrapping-fptoint). Without +simd128 the host LLVM lowers
+    // vec4f returns via sret while emcc returns them as native v128, causing
+    // function-signature mismatches at wasm-ld link time and `unreachable`
+    // traps at runtime on any helper that returns vec4f (jit_invoke_block_*,
+    // jit_call_*).
+    let features = "+simd128,+nontrapping-fptoint"
+    with_target_machine(real_triple, "", features, 2u) $(targetMachine : LLVMTargetMachineRef) {
         // Pin the module's data layout + triple so codegen sizes pointers as
         // 32-bit. Without this the module inherits host layout and produces
         // wrong-sized loads/stores in the emitted wasm.

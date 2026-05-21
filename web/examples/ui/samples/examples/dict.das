@@ -1,13 +1,8 @@
 options gen2
 require math
 
-// enable for test purposes only. this is slower
-// options intern_strings = true
-
 def makeRandomSequence(var src : array<string>) {
-    // Do not resize too much or add flag -sALLOW_MEMORY_GROWTH
-    // to CMakeLists.txt.
-    let n = 5000
+    let n = 200000
     let mod = uint(n)
     resize(src, n)
     for (i in range(n)) {
@@ -30,7 +25,7 @@ def main {
     var tab : table<string; int>
     var src : array<string>
     makeRandomSequence(src)
-    profile(20, "dictionary") <| $() {
+    profile(10, "dictionary") {
         dict(tab, src)
     }
     return true

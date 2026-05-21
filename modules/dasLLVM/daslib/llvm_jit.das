@@ -471,6 +471,9 @@ class public LlvmJitVisitor : AstVisitor {
     def build_noalias_list(annotations : AnnotationList) : tuple<noalias : table<string>; nocapture : table<string>> {
         var noalias : table<string>
         var nocapture : table<string>
+        // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
+        // miscompiles around them. Tracked alongside the alwaysinline gotcha.
+        if (g_target_is_wasm) return <- (noalias <- noalias, nocapture <- nocapture)
         for (ann in annotations) {
             if (ann.annotation.name == "hint") {
                 for (arg in ann.arguments) {
@@ -506,6 +509,10 @@ class public LlvmJitVisitor : AstVisitor {
         option_no_range_check = false
         option_no_alias = false
         option_no_capture = false
+        // Bypass user hints on wasm — keeps option_no_* flags false (= safe
+        // defaults: bounds checks on, no alias/capture assumption) and skips
+        // every LLVMAddAttributeToFunction call below. See g_target_is_wasm.
+        if (g_target_is_wasm) return
         for (ann in annotations) {
             if (ann.annotation.name == "hint") {
                 for (arg in ann.arguments) {
@@ -820,7 +827,8 @@ class public LlvmJitVisitor : AstVisitor {
                 get_line_info_ptr(funAt),
                 types.ConstI32(uint64(totalStackSize)),
                 prologue,
-                get_context_param()
+                get_context_param(),
+                get_line_info_ptr(funAt)    // at — used for stack-overflow throw
             )
             var typ = g_fn_types[FN_JIT_PROLOGUE]
             LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
@@ -3013,9 +3021,13 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMBuildStore(g_builder, s0, getV(svar))
                 let dimSize = ssrc._type.dim[0]
                 var tail = types.ConstI32(uint64(dimSize - 1))
-                var sto = build_array_index(sdim, tail, etype, "last_element")
-                sto = LLVMBuildPtrToInt(g_builder, sto, types.LLVMIntPtrType(), "dim_end")
-                range2[ssrc] = sto
+                // Stash end-element pointer as-is; compare directly in next-step.
+                // Previous code ptrtoint'd to LLVMIntPtrType which is statically i64
+                // on a 64-bit host even when codegen target is wasm32 — that zero-
+                // extends a 32-bit ptr to 64 bits but wasm32 codegen lowers it in a
+                // way that breaks the i64 equality check. Direct ptr compare avoids
+                // the width mismatch entirely.
+                range2[ssrc] = build_array_index(sdim, tail, etype, "last_element")
             } elif (ssrc._type.isGoodArrayType) {// {}->first()
                 var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(ssrc._type), getE(ssrc), ssrc._type.alignOf, "array")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
@@ -3034,9 +3046,8 @@ class public LlvmJitVisitor : AstVisitor {
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
                 var tail = LLVMBuildSub(g_builder, size, i64_one, "")
-                var sto = build_array_index(data, tail, ssrc._type.firstType, "last_element")
-                sto = LLVMBuildPtrToInt(g_builder, sto, types.LLVMIntPtrType(), "array_end")
-                range2[ssrc] = sto
+                // See dim case above — store end-element ptr directly, compare-by-ptr.
+                range2[ssrc] = build_array_index(data, tail, ssrc._type.firstType, "last_element")
             } elif (ssrc._type.isIterator) {
                 if (is_count_or_ucount(ssrc)) {
                     var ccount = ssrc as ExprCall
@@ -3132,9 +3143,9 @@ class public LlvmJitVisitor : AstVisitor {
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
                 var svar_i = build_array_index(svar_v, types.ConstI32(1ul), etype, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
+                // Direct ptr compare — avoids LLVMIntPtrType host/wasm32 width mismatch.
                 var sto = range2[ssrc]
-                svar_i = LLVMBuildPtrToInt(g_builder, svar_v, types.LLVMIntPtrType(), "")
-                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, svar_i, sto, "")
+                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, svar_v, sto, "")
                 var nextOk = append_basic_block("for_{svar.name}_next_ok")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
@@ -3142,9 +3153,9 @@ class public LlvmJitVisitor : AstVisitor {
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
                 var svar_i = build_array_index(svar_v, types.ConstI32(1ul), ssrc._type.firstType, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
+                // Direct ptr compare — avoids LLVMIntPtrType host/wasm32 width mismatch.
                 var sto = range2[ssrc]
-                svar_i = LLVMBuildPtrToInt(g_builder, svar_v, types.LLVMIntPtrType(), "")
-                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, svar_i, sto, "")
+                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, svar_v, sto, "")
                 var nextOk = append_basic_block("for_{svar.name}_next_ok")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
@@ -4758,10 +4769,25 @@ class public LlvmJitVisitor : AstVisitor {
                         vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                         vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                     } else {
-                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
-                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                        var global_ptr = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                        global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                        // On wasm32 the host's offsetof(Context, globals) (the
+                        // CONTEXT_OFFSET_OF_GLOBALS constant baked into module_jit.cpp)
+                        // does NOT match the wasm32 runtime's Context layout —
+                        // 4-byte pointers shift everything. Call into the runtime
+                        // archive (which knows its own layout) instead of doing
+                        // GEP+load against a host-derived offset. Native keeps
+                        // the inlined GEP+load — same codegen as before.
+                        var global_ptr : LLVMOpaqueValue?
+                        if (g_target_is_wasm) {
+                            let fname = expr.variable.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
+                            let fty = g_fn_types[fname]
+                            var args = fixed_array(get_context_param())
+                            global_ptr = LLVMBuildCall2(g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
+                        } else {
+                            var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
+                            let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                            var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                            global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                        }
                         vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     }
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
@@ -6065,8 +6091,14 @@ class public LlvmJitVisitor : AstVisitor {
         operands |> push(temp)
         var mustprog = make_loop_md_flag("llvm.loop.mustprogress")
         operands |> push(mustprog)
-        for (a in args) {
-            append_loop_hint_operand(operands, a)
+        // Skip user-supplied loop hints on wasm — host LLVM's wasm32 backend
+        // has had miscompiles around llvm.loop.* metadata in combination with
+        // certain bodies. mustprogress alone is preserved (safe, required for
+        // some opt passes). See g_target_is_wasm.
+        if (!g_target_is_wasm) {
+            for (a in args) {
+                append_loop_hint_operand(operands, a)
+            }
         }
         let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(length(operands)))
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)
@@ -6598,10 +6630,20 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                             vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
                             vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
                         } else {
-                            var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
-                            let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                            var global_ptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                            global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                            // See the matching site in preVisitExprVar for why
+                            // wasm32 goes through a runtime helper here.
+                            var global_ptr : LLVMOpaqueValue?
+                            if (g_target_is_wasm) {
+                                let fname = glob.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
+                                let fty = g_fn_types[fname]
+                                var args = fixed_array(ctx_param)
+                                global_ptr = LLVMBuildCall2(visitor.g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
+                            } else {
+                                var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                                let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                                var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                                global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                            }
                             vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                         }
                         // register CMRES destination so init expressions that return by copy/move
