@@ -513,8 +513,14 @@ static void dump_alloc_leaks_atexit() {
         fflush(stderr);
         return;
     }
-    dump_alloc_leaks(stderr);
+    uint64_t leaked = dump_alloc_leaks(stderr);
     dump_lexer_string_leaks(stderr);
+    if (leaked > 0) {
+        // Surface leaks as non-zero exit so CI / scripts can detect.
+        // _Exit skips remaining atexit handlers (already dumped what we need).
+        fflush(stderr);
+        std::_Exit(1);
+    }
 }
 
 struct RegisterLeakDumpAtExit {
