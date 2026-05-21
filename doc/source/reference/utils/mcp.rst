@@ -90,10 +90,17 @@ take them are marked below; the meaning is identical everywhere.
        ``-project_root <path>`` CLI flag. Use when working on an
        external module via a ``<DummyRoot>/modules/<your-module>``
        junction.
+   * - ``load_modules``
+     - JSON array of paths to individual module folders (each
+       containing ``.das_module``) to load directly. Equivalent to
+       daslang's ``-load_module <path>`` CLI flag (repeatable).
+       Bypasses the ``<project_root>/modules/<name>`` scan and shadows
+       same-basename entries in dasroot and project_root. Use to work
+       on an external module without setting up the junction trick.
 
-Both default to empty (no project / cwd-based resolution). Most
+All three default to empty (no project / cwd-based resolution). Most
 compilation, navigation, introspection, execution, code-generation,
-and tree-sitter tools accept both arguments.
+and tree-sitter tools accept all three arguments.
 
 Compilation and diagnostics
 ---------------------------
@@ -391,12 +398,13 @@ before composing the spawn argv.
      - Args + description
    * - ``live_launch``
      - ``file`` (required), optional ``project``, ``project_root``,
-       ``port``. Launches ``daslang-live.exe`` on a script if not
-       already running, then polls up to 10 s for the HTTP server. The
-       working directory is set to the script's folder via the
-       ``-cwd`` flag; ``project`` and ``project_root`` are forwarded as
-       ``-project`` / ``-project_root``; ``port`` is forwarded as
-       ``--live-port``.
+       ``load_modules``, ``port``. Launches ``daslang-live.exe`` on a
+       script if not already running, then polls up to 10 s for the
+       HTTP server. The working directory is set to the script's folder
+       via the ``-cwd`` flag; ``project`` / ``project_root`` /
+       ``load_modules`` are forwarded as ``-project`` /
+       ``-project_root`` / ``-load_module`` (one per entry); ``port``
+       is forwarded as ``--live-port``.
    * - ``live_status``
      - Optional ``port``. Returns JSON with ``fps``, ``uptime``,
        ``paused``, ``dt``, ``has_error``. Returns 503 JSON if the script

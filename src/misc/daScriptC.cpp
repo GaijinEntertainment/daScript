@@ -152,11 +152,22 @@ void das_modulegroup_release ( das_module_group * group ) {
 
 int das_register_dynamic_modules ( das_file_access *file_access,
                                     const char *project_root,
+                                    const char * const * load_module_paths,
+                                    uint32_t num_load_module_paths,
                                     das_text_writer *tout ) {
     TextPrinter printer;
     TextWriter *writer = tout != nullptr ? (TextWriter *)tout : &printer;
+    vector<string> load_modules;
+    if (load_module_paths) {
+        load_modules.reserve(num_load_module_paths);
+        for (uint32_t i = 0; i < num_load_module_paths; ++i) {
+            if (load_module_paths[i]) {
+                load_modules.emplace_back(load_module_paths[i]);
+            }
+        }
+    }
     bool res = require_dynamic_modules((FileAccess *)file_access, project_root,
-                    project_root, *writer);
+                    project_root, load_modules, *writer);
     return !res;
 }
 

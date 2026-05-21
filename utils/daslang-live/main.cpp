@@ -39,6 +39,7 @@ das::FileAccessPtr get_file_access( char * pak );
 static TextPrinter tout;
 static string projectFile;
 static string project_root;
+static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
@@ -618,6 +619,7 @@ static void print_help() {
     tout << "Usage: daslang-live [options] <script.das> [-- script arguments]\n";
     tout << "  -project <file>    - project file (.das_project)\n";
     tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
+    tout << "  -load_module <path> - directly load a single dynamic-module folder (the one containing .das_module); repeatable. Shadows same-basename entries from dasroot/project_root.\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
     tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
@@ -713,6 +715,8 @@ int main(int argc, char * argv[]) {
             projectFile = argv[++i];
         } else if ((arg == "-project_root" || arg == "-project-root") && i + 1 < argc) {
             project_root = argv[++i];
+        } else if ((arg == "-load_module" || arg == "-load-module") && i + 1 < argc) {
+            load_modules.push_back(argv[++i]);
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {
@@ -797,7 +801,7 @@ int main(int argc, char * argv[]) {
             project_root = (slash != string::npos) ? scriptFile.substr(0, slash) : "./";
         }
         auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-        require_dynamic_modules(access, getDasRoot(), project_root, tout);
+        require_dynamic_modules(access, getDasRoot(), project_root, load_modules, tout);
     }
 #endif
     Module::Initialize();

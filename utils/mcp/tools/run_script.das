@@ -4,7 +4,7 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_run_script(file, code : string; timeout_str : string = ""; track_allocations : bool = false; project : string = ""; project_root : string = "") : string {
+def do_run_script(file, code : string; timeout_str : string = ""; track_allocations : bool = false; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
     let project_err = validate_project_arg(project)
     if (!empty(project_err)) return make_tool_result(project_err, true)
     let exe = get_daslang_exe()
@@ -30,6 +30,11 @@ def do_run_script(file, code : string; timeout_str : string = ""; track_allocati
     if (!empty(project_root)) {
         argv |> push("-project_root")
         argv |> push(project_root)
+    }
+    argv |> reserve(length(argv) + 2 * length(load_modules) + 5)
+    for (lm in load_modules) {
+        argv |> push("-load_module")
+        argv |> push(lm)
     }
     if (!empty(project)) {
         argv |> push("-project")

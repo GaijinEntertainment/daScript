@@ -172,13 +172,20 @@ DAS_CC_API void das_modulegroup_release ( das_module_group * group );
 // --- Dynamic modules ---
 
 // Scan <project_root>/modules/ for .das_module descriptor files and
-// call `initialize` on each one.
+// call `initialize` on each one. Plus, for each path in load_module_paths,
+// initialize that exact folder directly (it must contain `.das_module`),
+// shadowing same-basename entries from <project_root>/modules/.
+//
+// load_module_paths may be NULL (treated as 0 entries). Each entry is a
+// path to the module folder itself, not its parent.
 //
 // If tout is NULL, diagnostic output goes to stdout.
 //
 // Returns 0 on success.
 DAS_CC_API int das_register_dynamic_modules(das_file_access *file_access,
                                          const char *project_root,
+                                         const char * const * load_module_paths,
+                                         uint32_t num_load_module_paths,
                                          das_text_writer *tout);
 
 // --- File access ---

@@ -8,7 +8,7 @@ require common public
 //! daslang.exe subprocess with a generated stub) and file-based (forwards to
 //! subtools/ast_dump.das). Both isolate compile state from the MCP server.
 
-def do_ast_dump_expression(expression, project_root : string) : string {
+def do_ast_dump_expression(expression, project_root : string; load_modules : array<string>) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let script_path = make_temp_das_file()
@@ -26,6 +26,11 @@ def do_ast_dump_expression(expression, project_root : string) : string {
         argv |> push("-project_root")
         argv |> push(project_root)
     }
+    argv |> reserve(length(argv) + 2 * length(load_modules) + 1)
+    for (lm in load_modules) {
+        argv |> push("-load_module")
+        argv |> push(lm)
+    }
     argv |> push(script_path)
     let exit_code = run_and_capture(argv, output)
     remove(script_path)
@@ -33,11 +38,11 @@ def do_ast_dump_expression(expression, project_root : string) : string {
     return make_tool_result(output)
 }
 
-def do_ast_dump(expression, file, func_name, mode, lineinfo : string; project : string = ""; project_root : string = "") : string {
+def do_ast_dump(expression, file, func_name, mode, lineinfo : string; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
     if (!empty(expression)) {
-        return do_ast_dump_expression(expression, project_root)
+        return do_ast_dump_expression(expression, project_root, load_modules)
     } elif (!empty(file)) {
-        return run_mcp_subtool("ast_dump", [file, func_name, mode, lineinfo, project], project_root)
+        return run_mcp_subtool("ast_dump", [file, func_name, mode, lineinfo, project], project_root, load_modules)
     } else {
         return make_tool_result("Provide either 'expression' or 'file' argument", true)
     }
