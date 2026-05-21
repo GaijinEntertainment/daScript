@@ -1724,6 +1724,21 @@ def test_distinct_extended_parity(t : T?) {
     t |> run("distinct.long_count: [1,2,2,3,3,3] → int64 3") @(tt : T?) {
         tt |> equal(3l, _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().long_count()))
     }
+    // D8: predicate-form terminators must NOT be silently dropped — plan_distinct guards arg count and cascades to tier 2.
+    t |> run("distinct.count(pred) parity: [1,1,2,2,3,3,4,4,5,5].distinct.count(>2) → 3 (not 5)") @(tt : T?) {
+        let arr = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+        let got = _fold(arr.to_sequence().distinct().count($(x : int) => x > 2))
+        let raw = arr.to_sequence().distinct().count($(x : int) => x > 2)
+        tt |> equal(got, raw, "predicate must be honored, not dropped")
+        tt |> equal(got, 3)
+    }
+    t |> run("distinct.long_count(pred) parity: [1,1,2,2,3,3,4,4,5,5].distinct.long_count(>=3) → 3l") @(tt : T?) {
+        let arr = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+        let got = _fold(arr.to_sequence().distinct().long_count($(x : int) => x >= 3))
+        let raw = arr.to_sequence().distinct().long_count($(x : int) => x >= 3)
+        tt |> equal(got, raw, "predicate must be honored, not dropped")
+        tt |> equal(got, 3l)
+    }
 }
 
 [test]

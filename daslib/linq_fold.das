@@ -1915,7 +1915,9 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     var terminatorName : string  = ""
     {
         let lastName = calls.back()._1.name
-        if (lastName == "count" || lastName == "sum" || lastName == "long_count") {
+        // 1-arg form only — `count(src, predicate)` / `long_count(src, predicate)` would silently drop the predicate (splice emits `length(seen)`). Bail to tier-2 which correctly evaluates the predicate.
+        if ((lastName == "count" || lastName == "sum" || lastName == "long_count")
+                && length(calls.back()._0.arguments) == 1) {
             terminatorName = lastName
             calls |> pop
         }
@@ -4483,6 +4485,246 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     return emission
 }
 
+// ── decs distinct splice (Slice 5c — streaming dedup table hoisted above for_each_archetype) ───────
+
+[macro_function]
+def private plan_decs_distinct(var expr : Expression?) : Expression? {
+    // Decs-bridge entry mirroring plan_distinct. Recognizes [where_*][select?] |> distinct[_by(key)] [|> take(N)]? [|> {count, long_count, sum, to_array}]?. Two emit shapes: buffer-required (to_array, optionally with take(N)) and buffer-free (count/long_count return length(seen); sum folds inline at fresh-key site). Take(N) flips outer iteration to for_each_archetype_find so the take-cap can stop across archetypes; counter / seen-table hoist above for_each_archetype so state persists.
+    var (top, calls) = flatten_linq(expr)
+    var bridge = extract_decs_bridge(top)
+    if (bridge == null || empty(calls) || expr._type == null) return null
+    var terminatorName : string = ""
+    {
+        let lastName = calls.back()._1.name
+        if ((lastName == "count" || lastName == "long_count" || lastName == "sum")
+                && length(calls.back()._0.arguments) == 1) {
+            // 1-arg form only — `count(src, predicate)` / `long_count(src, predicate)` would silently drop the predicate (sum has no selector overload today, but kept under the same guard for symmetry with plan_distinct). Bail to tier-2 which correctly evaluates the predicate.
+            terminatorName = lastName
+            calls |> pop
+        }
+    }
+    if (empty(calls)) return null
+    let at = calls[0]._0.at
+    let tupName     = "`decs_tup`{at.line}`{at.column}"
+    let bufName     = "`decs_buf`{at.line}`{at.column}"
+    let seenName    = "`decs_seen`{at.line}`{at.column}"
+    let keyName     = "`decs_k`{at.line}`{at.column}"
+    let takenName   = "`decs_taken`{at.line}`{at.column}"
+    let takeLimName = "`decs_takeLim`{at.line}`{at.column}"
+    let accName     = "`decs_acc`{at.line}`{at.column}"
+    let pvName      = "`decs_pv`{at.line}`{at.column}"
+    var whereCond : Expression?
+    var projection : Expression?
+    var hasDistinct = false
+    var seenSelect = false
+    var isDistinctBy = false
+    var distinctKeyBlock : Expression?
+    var takeExpr : Expression?
+    for (i in 0 .. length(calls)) {
+        var cll & = unsafe(calls[i])
+        let name = cll._1.name
+        if (name == "where_") {
+            if (hasDistinct || seenSelect) return null
+            var pred = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (pred == null) return null
+            whereCond = merge_where_cond(whereCond, pred)
+        } elif (name == "select") {
+            if (hasDistinct || seenSelect) return null
+            seenSelect = true
+            projection = fold_linq_cond(cll._0.arguments[1], tupName)
+            if (projection == null) return null
+        } elif (name == "distinct") {
+            if (hasDistinct) return null
+            hasDistinct = true
+        } elif (name == "distinct_by") {
+            if (hasDistinct) return null
+            hasDistinct = true
+            isDistinctBy = true
+            distinctKeyBlock = clone_expression(cll._0.arguments[1])
+        } elif (name == "take") {
+            if (!hasDistinct || takeExpr != null) return null
+            var arg = cll._0.arguments[1]
+            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
+            takeExpr = clone_expression(arg)
+        } else {
+            return null
+        }
+    }
+    // take(N) only composes with the implicit-to_array terminator. count/sum + take would defeat the streaming early-exit (matches array-side bail at plan_distinct).
+    if (!hasDistinct || (takeExpr != null && terminatorName != "")) return null
+    var elemType = strip_const_ref(clone_type(projection != null ? projection._type : bridge.elementType))
+    let isCountTerminator = terminatorName == "count" || terminatorName == "long_count"
+    let isSumTerminator = terminatorName == "sum"
+    let needBuffer = !isCountTerminator && !isSumTerminator
+    // Prelude: seen-table + (buffer | accumulator | take counter). All hoisted at invoke scope so state spans archetypes.
+    var preludeStmts : array<Expression?>
+    if (isDistinctBy) {
+        var keyTypeBlock = clone_expression(distinctKeyBlock)
+        preludeStmts |> push <| qmacro_expr() {
+            var inscope $i(seenName) : table<typedecl(_::unique_key(invoke($e(keyTypeBlock), default<$t(elemType)>)))>
+        }
+    } else {
+        preludeStmts |> push <| qmacro_expr() {
+            var inscope $i(seenName) : table<typedecl(_::unique_key(default<$t(elemType)>))>
+        }
+    }
+    if (needBuffer) {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(elemType)>
+        }
+    } elif (isSumTerminator) {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(accName) : $t(elemType) = default<$t(elemType)>
+        }
+    }
+    if (takeExpr != null) {
+        // Bind take(N) limit once at outer scope so a side-effecting arg fires once (matches plan_distinct).
+        var takeBind = clone_expression(takeExpr)
+        preludeStmts |> push <| qmacro_expr() {
+            let $i(takeLimName) = $e(takeBind)
+        }
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(takenName) = 0
+        }
+    }
+    // Bind side-effecting projection once per element; key + buffer/acc share the bind (matches array-side single-eval per source elem).
+    let bindProjection = projection != null && has_sideeffects(projection)
+    var pushExpr : Expression?
+    if (projection != null) {
+        if (bindProjection) {
+            pushExpr = qmacro_expr() {
+                $i(pvName)
+            }
+        } else {
+            pushExpr = clone_expression(projection)
+        }
+    } else {
+        pushExpr = qmacro_expr() {
+            $i(tupName)
+        }
+    }
+    var keyExpr : Expression?
+    if (isDistinctBy) {
+        var keyBlk = clone_expression(distinctKeyBlock)
+        var keyArg = clone_expression(pushExpr)
+        keyExpr = qmacro_expr() {
+            invoke($e(keyBlk), $e(keyArg))
+        }
+    } else {
+        keyExpr = clone_expression(pushExpr)
+    }
+    // Per-fresh-key consume: only inside the fresh-key branch. take++ first (matches plan_distinct).
+    var consumeStmts : array<Expression?>
+    if (takeExpr != null) {
+        consumeStmts |> push <| qmacro_expr() {
+            $i(takenName) ++
+        }
+    }
+    consumeStmts |> push <| qmacro_expr() {
+        $i(seenName) |> insert($i(keyName))
+    }
+    if (needBuffer) {
+        var pushClone = clone_expression(pushExpr)
+        consumeStmts |> push <| qmacro_expr() {
+            $i(bufName) |> push_clone($e(pushClone))
+        }
+    } elif (isSumTerminator) {
+        var sumExpr = clone_expression(pushExpr)
+        consumeStmts |> push <| qmacro_expr() {
+            $i(accName) += $e(sumExpr)
+        }
+    }
+    var consumeBody = stmts_to_expr(consumeStmts)
+    var ifNew : Expression? = qmacro_expr() {
+        if (!$i(seenName) |> key_exists($i(keyName))) {
+            $e(consumeBody)
+        }
+    }
+    var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    if (bindProjection) {
+        var pvBind = clone_expression(projection)
+        perMatchStmts |> push <| qmacro_expr() {
+            let $i(pvName) = $e(pvBind)
+        }
+    }
+    perMatchStmts |> push <| qmacro_expr() {
+        let $i(keyName) = _::unique_key($e(keyExpr))
+    }
+    perMatchStmts |> push(ifNew)
+    var perElement = stmts_to_expr(perMatchStmts)
+    perElement = wrap_with_condition(perElement, whereCond)
+    // Top-of-inner-for take-cap guard: `return true` exits both the inner for AND the archetype-find lambda, propagating the stop across archetypes.
+    if (takeExpr != null) {
+        perElement = qmacro_expr() {
+            {
+                if ($i(takenName) >= $i(takeLimName)) return true
+                $e(perElement)
+            }
+        }
+    }
+    var tupBind = build_decs_tup_bind(bridge, tupName, at)
+    var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    let archName = bridge.archName
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + 2)
+    for (s in preludeStmts) {
+        bodyStmts |> push(s)
+    }
+    if (takeExpr != null) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    var emission : Expression?
+    if (terminatorName == "count") {
+        bodyStmts |> push <| qmacro_expr() {
+            return length($i(seenName))
+        }
+        emission = qmacro(invoke($() : int {
+            $b(bodyStmts)
+        }))
+    } elif (terminatorName == "long_count") {
+        bodyStmts |> push <| qmacro_expr() {
+            return int64(length($i(seenName)))
+        }
+        emission = qmacro(invoke($() : int64 {
+            $b(bodyStmts)
+        }))
+    } elif (isSumTerminator) {
+        bodyStmts |> push <| qmacro_expr() {
+            return $i(accName)
+        }
+        emission = qmacro(invoke($() : $t(elemType) {
+            $b(bodyStmts)
+        }))
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            return <- $i(bufName)
+        }
+        emission = qmacro(invoke($() : array<$t(elemType)> {
+            $b(bodyStmts)
+        }))
+    }
+    emission.force_at(at)
+    emission.force_generated(true)
+    let needIterWrap = expr._type.isIterator
+    if (needIterWrap && needBuffer) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    return emission
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
@@ -4810,6 +5052,8 @@ class private LinqFold : AstCallMacro {
         res = plan_decs_reverse(call.arguments[0])
         if (res != null) return res
         res = plan_reverse(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_distinct(call.arguments[0])
         if (res != null) return res
         res = plan_distinct(call.arguments[0])
         if (res != null) return res
