@@ -954,3 +954,304 @@ def test_unroll_take_n_evaluated_once(t : T?) {
     // Single hoisted evaluation — NOT once per element across 7 entities.
     t |> equal(take_n_eval_counter, 1, "take(N) expression must evaluate exactly once per invoke")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5b: take_while / skip_while on decs. Predicate-driven ranges, predicates
+// peeled against the source tuple (matches array-side seenSelect bail rule).
+// take_while breaks iteration on first false → routes to for_each_archetype_find
+// just like take(N). skip_while sets a one-way flag (flips false on first
+// non-matching elem); flag hoisted at invoke scope so it persists across
+// archetypes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2)._take_while(_.val < 5).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_take_while_count_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._take_while(_.val < 5).count())
+}
+
+// take_while + select is REJECTED by extract_decs_ranges (canonical order forbids
+// select-after-range — array side bails at linq_fold.das:1623). So for sum/first/
+// to_array splice coverage we drop select and operate on the source tuple
+// directly. first/to_array yield source tuples; sum needs a scalar so we use
+// _select-BEFORE-take_while is also forbidden (skip_while/take_while bail on
+// seenSelect), so sum-after-take_while can't splice on either side. The variants
+// here keep the chain in shapes that DO splice.
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_first_fold() : int {
+    // first returns the source tuple; we extract .val for the parity check.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).first()).val
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_to_array_fold() : array<tuple<val : int; flag : int>> {
+    return <- _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_min_by_fold() : int {
+    // min_by takes a key extractor lambda over the source tuple — splice fires
+    // (chain prefix empty; rangeInfo carries the take_while; min_by routes to
+    // emit_decs_min_max_by). Source vals 0..6, take_while(<3) keeps 0,1,2 → min .val = 0.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._min_by(_.val)).val
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_never_fires_count_fold() : int {
+    // pred always true → take_while never breaks → full source count.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 100).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_immediate_break_count_fold() : int {
+    // pred false on first elem → break immediately → 0.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 0).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_never_done_count_fold() : int {
+    // pred always true → skip_while never flips → everything skipped → 0.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 100).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_immediate_done_count_fold() : int {
+    // pred false on first elem → flag flips on entry → nothing skipped → full count.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 0).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_take_while_count_fold() : int {
+    // skip(2) then take_while(val<5) → drops 0,1 → walks 2,3,4 stops at 5 → count 3.
+    return _fold(from_decs_template(type<UnrollChainRow>).skip(2)._take_while(_.val < 5).count())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_skip_while_take_count_fold() : int {
+    // skip_while(val<2) drops 0,1 → take(2) windows 2,3 → count 2.
+    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2).take(2).count())
+}
+
+// Predicates over the SOURCE TUPLE (no select; select-after-take_while bails per
+// canonical order). This is the only shape where the splice actually fires for
+// any/all/contains + take_while, which is what exercises the explicit-state
+// (decs_found) routing added in emit_decs_early_exit.
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_any_match_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._any(_.val == 2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_any_after_window_fold() : bool {
+    // val 5 is outside the take_while window — must NOT report true even though take_while produces inner `return true` on val=3.
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._any(_.val == 5))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_all_pass_fold() : bool {
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._all(_.val < 5))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_while_all_fail_fold() : bool {
+    // val=1 fails the all-pred. take_while-stop inner `return true` must not be misread as "no counterexample".
+    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._all(_.val == 0))
+}
+
+// take_while + contains: source-tuple equality isn't defined (no `==` on tuple),
+// and the canonical-order rule forbids _select between take_while and contains
+// to project to a scalar — so this combination is not testable on decs today.
+// any/all above already exercise the same useExplicitState code path
+// (contains shares the branch in emit_decs_early_exit).
+
+[test]
+def test_unroll_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // vals 0,1,2 satisfy <3 → break on val=3 → count 3.
+    t |> equal(target_unroll_take_while_count_fold(), 3, "take_while breaks on first false-pred")
+}
+
+[test]
+def test_unroll_skip_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // skip 0,1,2; keep 3..6 → count 4.
+    t |> equal(target_unroll_skip_while_count_fold(), 4, "skip_while drops leading matches, keeps rest")
+}
+
+[test]
+def test_unroll_skip_while_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // skip 0,1; flag flips on val=2; take_while keeps 2,3,4; breaks on 5 → count 3.
+    t |> equal(target_unroll_skip_while_take_while_count_fold(), 3, "skip_while + take_while compose")
+}
+
+[test]
+def test_unroll_where_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    // flag==1 → vals 1,3,5; take_while(val<5) keeps 1,3; breaks on 5 → count 2.
+    t |> equal(target_unroll_where_take_while_count_fold(), 2, "where + take_while applies pred to post-filter stream")
+}
+
+[test]
+def test_unroll_take_while_first_parity(t : T?) {
+    fixture_unroll2(7)
+    // first returns source tuple; we project to .val. vals 0,1,2 satisfy <3, first = 0.
+    t |> equal(target_unroll_take_while_first_fold(), 0, "take_while + first returns first source elem before break")
+}
+
+[test]
+def test_unroll_take_while_to_array_parity(t : T?) {
+    fixture_unroll2(7)
+    // to_array yields the take_while prefix as tuples; check length + field access on each.
+    let got <- target_unroll_take_while_to_array_fold()
+    t |> equal(length(got), 3, "take_while.to_array() yields the prefix")
+    if (length(got) >= 3) {
+        t |> equal(got[0].val, 0, "first tuple .val")
+        t |> equal(got[1].val, 1, "second tuple .val")
+        t |> equal(got[2].val, 2, "third tuple .val")
+    }
+}
+
+[test]
+def test_unroll_take_while_min_by_parity(t : T?) {
+    fixture_unroll2(7)
+    // min_by takes a key extractor over the source tuple; splice routes to emit_decs_min_max_by
+    // with take_while routing through for_each_archetype_find. Window {0,1,2}; min .val = 0.
+    t |> equal(target_unroll_take_while_min_by_fold(), 0, "take_while + min_by returns the min in window")
+}
+
+[test]
+def test_unroll_take_while_never_fires_returns_all(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_never_fires_count_fold(), 7, "take_while with always-true pred returns full source count")
+}
+
+[test]
+def test_unroll_take_while_immediate_break_returns_zero(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_take_while_immediate_break_count_fold(), 0, "take_while breaks on first elem when pred false")
+}
+
+[test]
+def test_unroll_skip_while_never_done_returns_zero(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_never_done_count_fold(), 0, "skip_while with always-true pred drops everything")
+}
+
+[test]
+def test_unroll_skip_while_immediate_done_returns_all(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_immediate_done_count_fold(), 7, "skip_while flag flips on first elem when pred false")
+}
+
+[test]
+def test_unroll_skip_take_while_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_take_while_count_fold(), 3, "skip(2) + take_while(val<5) walks 2,3,4")
+}
+
+[test]
+def test_unroll_skip_while_take_count_parity(t : T?) {
+    fixture_unroll2(7)
+    t |> equal(target_unroll_skip_while_take_count_fold(), 2, "skip_while(val<2) + take(2) yields 2,3")
+}
+
+[test]
+def test_unroll_take_while_any_match(t : T?) {
+    fixture_unroll2(7)
+    // val 2 is in the window → true. Real match, not the take_while-stop signal.
+    t |> equal(target_unroll_take_while_any_match_fold(), true, "take_while + any returns true when match in window")
+}
+
+[test]
+def test_unroll_take_while_any_after_window(t : T?) {
+    fixture_unroll2(7)
+    // val 5 outside take_while window → false. take_while-stop must NOT register as a match.
+    t |> equal(target_unroll_take_while_any_after_window_fold(), false, "take_while + any returns false when match outside window")
+}
+
+[test]
+def test_unroll_take_while_all_pass(t : T?) {
+    fixture_unroll2(7)
+    // window {0,1,2}; all < 5 → true.
+    t |> equal(target_unroll_take_while_all_pass_fold(), true, "take_while + all returns true when window satisfies pred")
+}
+
+[test]
+def test_unroll_take_while_all_fail(t : T?) {
+    fixture_unroll2(7)
+    // window {0,1,2}; not all == 0 → false. take_while-stop inner true must not be misread as "no counterexample".
+    t |> equal(target_unroll_take_while_all_fail_fold(), false, "take_while + all returns false on counterexample in window")
+}
+
+[test]
+def test_unroll_take_while_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "take_while+count splice must NOT call to_sequence")
+        // take_while present → must use the _find variant so first-false propagates across archetypes.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take_while splice routes to for_each_archetype_find")
+    }
+}
+
+[test]
+def test_unroll_skip_while_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_skip_while_count_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "skip_while+count splice must NOT call to_sequence")
+        // skip_while alone does NOT early-exit — must use plain for_each_archetype.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "skip_while-only splice does NOT route to _find")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "skip_while-only splice uses regular for_each_archetype")
+    }
+}
+
+[test]
+def test_unroll_take_while_any_splice_shape(t : T?) {
+    // Verifies the take_while + any splice fires AND routes through explicit-state
+    // (decs_found) — distinguishing take_while-stop `return true` from real-match
+    // `return true`. This is the exact code path that fails to be exercised when
+    // tests put _select between take_while and the terminator (Copilot PR #2772
+    // review feedback). Predicate over the source tuple keeps the splice hot.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_while_any_match_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "take_while+any splice must NOT fall to tier-2 to_sequence")
+        // take_while-stop produces inner `return true` — needs _find dispatch.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take_while+any splice routes to for_each_archetype_find")
+        // Explicit-state routing emits `decs_found` to disambiguate take_while-stop from real-match.
+        t |> equal(describe_count(body_expr, "decs_found"), 3, "take_while+any routes through explicit decs_found state (var + set + return)")
+    }
+}
