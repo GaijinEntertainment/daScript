@@ -210,13 +210,13 @@ def public jaccard(a : table<string>; b : table<string>) : float {
     //! Empty either side returns 0.0. Use ``table<string>`` (the set form) so
     //! the intersect lookup is O(1).
     if (empty(a) || empty(b)) return 0.0f
-    var intersect = 0
+    var intersect = 0_l
     for (k in keys(a)) {
         if (key_exists(b, k)) {
             intersect ++
         }
     }
-    let unionSize = length(a) + length(b) - intersect
+    let unionSize = long_length(a) + long_length(b) - intersect
     return float(intersect) / float(unionSize)
 }
 

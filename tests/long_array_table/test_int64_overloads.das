@@ -1,5 +1,6 @@
 options gen2
 require dastest/testing_boost public
+require daslib/array_boost
 
 [test]
 def test_resize_int64(t : T?) {
@@ -108,4 +109,41 @@ def test_resize_and_init_initvalue_int64(t : T?) {
     for (i in iter_range(arr)) {
         t |> equal(arr[i], 42)
     }
+}
+
+[test]
+def test_temp_array_data_lenA_int64(t : T?) {
+    // array_boost public temp_array(data, lenA, a) -- int64 lenA overload via int|int64
+    var src : array<int>
+    src |> resize(4)
+    src[0] = 10
+    src[1] = 20
+    src[2] = 30
+    src[3] = 40
+    unsafe {
+        let view <- temp_array(addr(src[0]), 4_l, type<int>)
+        t |> equal(length(view), 4)
+        t |> equal(view[0], 10)
+        t |> equal(view[3], 40)
+    }
+}
+
+[test]
+def test_array_view_int64(t : T?) {
+    // array_boost array_view(offset, length : int|int64) -- int64 path
+    var bytes : array<int>
+    bytes |> resize(8)
+    for (i in iter_range(bytes)) {
+        bytes[i] = i * 100
+    }
+    var observed : array<int>
+    array_view(bytes, 2_l, 3_l) $(view) {
+        for (x in view) {
+            observed |> push(x)
+        }
+    }
+    t |> equal(length(observed), 3)
+    t |> equal(observed[0], 200)
+    t |> equal(observed[1], 300)
+    t |> equal(observed[2], 400)
 }
