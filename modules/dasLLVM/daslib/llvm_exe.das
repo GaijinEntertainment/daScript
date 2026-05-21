@@ -770,6 +770,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
 
     var start_fn_name = ""
     var no_return = true
+    var bool_return = false
     for (fn in funcs) {
         if (fn.name == entry_point && fn.arguments.empty()) {
             assume fnmna = uids.get_dll_fn_name(fn).impl()
@@ -779,6 +780,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             } elif (fn.result.baseType == Type.tInt) {
                 start_fn_name = fnmna
                 no_return = false
+            } elif (fn.result.baseType == Type.tBool) {
+                start_fn_name = fnmna
+                no_return = false
+                bool_return = true
             }
         }
     }
@@ -1032,6 +1037,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     LLVMBuildCall2(builder, shutdown_fn_type, shutdown_fn, array<LLVMValueRef>(), "")
     if (no_return) {
         LLVMBuildRet(builder, types.ConstI32(uint64(0)))
+    } elif (bool_return) {
+        // bool main → exit code: true → 0 (success), false → 1 (failure).
+        let exit_code = LLVMBuildSelect(builder, main_ret,
+            types.ConstI32(uint64(0)), types.ConstI32(uint64(1)), "main_exit")
+        LLVMBuildRet(builder, exit_code)
     } else {
         LLVMBuildRet(builder, main_ret)
     }
