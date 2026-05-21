@@ -2279,6 +2279,12 @@ namespace das {
             } else if (expr->trait == "is_int64") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt64 && expr->typeexpr->dim.size() == 0);
+            } else if (expr->trait == "is_float") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tFloat && expr->typeexpr->dim.size() == 0);
+            } else if (expr->trait == "is_double") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tDouble && expr->typeexpr->dim.size() == 0);
             } else if (expr->trait == "is_numeric_comparable") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->isNumericComparable());

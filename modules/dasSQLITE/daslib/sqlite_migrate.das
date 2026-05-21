@@ -243,7 +243,7 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
             commit_err = cerr |> unwrap
         }
     } recover {
-        let underlying = string(this_context().last_exception) |> rtrim
+        let underlying = this_context().last_exception |> rtrim
         let rolled_back_str = _format_versions_csv(pending, applied_count)
         to_log(LOG_ERROR, "migration v{failed_version} '{failed_desc}' FAILED — rolled back call\n  underlying error: {underlying}\n  rolled back: {rolled_back_str}\n")
         db |> try_exec("ROLLBACK") |> _log_warn_on_some
@@ -405,7 +405,7 @@ def try_baseline(db : SqlRunner; version : int) : Result<int, string> {
             commit_err = cerr |> unwrap
         }
     } recover {
-        let underlying = string(this_context().last_exception) |> rtrim
+        let underlying = this_context().last_exception |> rtrim
         db |> try_exec("ROLLBACK") |> _log_warn_on_some
         inner_err = "baseline(version={version}) failed: {underlying}"
     }
@@ -586,19 +586,36 @@ def struct_convert_field(var dst : Option<auto(SCF_T)>&; src : Option<auto(SCF_S
     }
 }
 
-// Target-typed conversion via the type's constructor. ``int(string)``, ``int(double)``, etc. dispatch
-// through daslang's existing primitive constructors. Identity above wins for same-source-target.
+// Target-typed conversion via primitive constructors (``int(string)``, ``int(double)``, etc.).
+// Auto identity above doesn't win in [struct_convert] instances (concrete `T&` beats `auto(SCF_T)&`);
+// each numeric overload short-circuits via static_if when SCF_S already matches the target.
 def struct_convert_field(var dst : int&; src : auto(SCF_S)) : void {
-    dst = int(src)
+    static_if (typeinfo is_int(src)) {
+        dst = src
+    } else {
+        dst = int(src)
+    }
 }
 def struct_convert_field(var dst : int64&; src : auto(SCF_S)) : void {
-    dst = int64(src)
+    static_if (typeinfo is_int64(src)) {
+        dst = src
+    } else {
+        dst = int64(src)
+    }
 }
 def struct_convert_field(var dst : float&; src : auto(SCF_S)) : void {
-    dst = float(src)
+    static_if (typeinfo is_float(src)) {
+        dst = src
+    } else {
+        dst = float(src)
+    }
 }
 def struct_convert_field(var dst : double&; src : auto(SCF_S)) : void {
-    dst = double(src)
+    static_if (typeinfo is_double(src)) {
+        dst = src
+    } else {
+        dst = double(src)
+    }
 }
 def struct_convert_field(var dst : string&; src : auto(SCF_S)) : void {
     dst = "{src}"
@@ -749,7 +766,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
             if (key_exists(overrides, tname)) continue
             // Honor @sql_renamed_from on T's field — read from old's <OldName> instead of <tname>.
             let renamed_arg = find_arg(t_field.annotation, "sql_renamed_from")
-            let renamed_from = renamed_arg is tString ? string(renamed_arg as tString) : ""
+            let renamed_from = renamed_arg is tString ? (renamed_arg as tString) : ""
             let lookup_name = empty(renamed_from) ? tname : renamed_from
             let t_type = t_field._type
             let t_is_option = is_option_field_type(t_type)

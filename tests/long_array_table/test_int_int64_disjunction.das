@@ -42,3 +42,16 @@ def test_typeinfo_is_int_traits(t : T?) {
     static_assert(!typeinfo is_int64(type<uint>), "is_int64(uint) must be false")
     t |> equal(0, 0)
 }
+
+// Symmetric is_float / is_double — added alongside is_int / is_int64 for
+// numeric struct_convert dispatch (sqlite_migrate `struct_convert_field`).
+[test]
+def test_typeinfo_is_float_double_traits(t : T?) {
+    static_assert(typeinfo is_float(type<float>), "is_float(float) must be true")
+    static_assert(!typeinfo is_float(type<double>), "is_float(double) must be false")
+    static_assert(!typeinfo is_float(type<int>), "is_float(int) must be false")
+    static_assert(typeinfo is_double(type<double>), "is_double(double) must be true")
+    static_assert(!typeinfo is_double(type<float>), "is_double(float) must be false")
+    static_assert(!typeinfo is_double(type<int>), "is_double(int) must be false")
+    t |> equal(0, 0)
+}
