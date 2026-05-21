@@ -381,7 +381,13 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
         if (g_target_is_wasm) {
             LLVMInitializeWasmTarget()
         }
-        with_target_machine(target_triple, "", "+simd128,+nontrapping-fptoint", cg_opt_level) $(targetMachine : LLVMTargetMachineRef) {
+        // +simd128 / +nontrapping-fptoint is the feature set the wasm runtime
+        // archive is compiled with (see web/CMakeLists.txt). Required on wasm
+        // so vec4f returns are v128-in-register on both sides; meaningless
+        // (and potentially a target-machine-creation failure) on other
+        // cross-compile triples, so keep features empty there.
+        let features = g_target_is_wasm ? "+simd128,+nontrapping-fptoint" : ""
+        with_target_machine(target_triple, "", features, cg_opt_level) $(targetMachine : LLVMTargetMachineRef) {
             let dl = LLVMCreateTargetDataLayout(targetMachine)
             LLVMSetModuleDataLayout(g_mod, dl)
             LLVMSetTarget(g_mod, target_triple)

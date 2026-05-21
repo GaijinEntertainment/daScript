@@ -1,3 +1,13 @@
+// SHA-256 compression-function benchmark.
+//
+// Not a standards-conforming SHA-256: omits length-and-bit padding for the
+// final block, so the digest it prints is the compression-function output
+// over whole 64-byte blocks only. This shape is the one used across language
+// ports in the dasProfile suite so the numbers compare apples-to-apples
+// (LUA / JS / C# / etc. all run the same simplified loop).
+//
+// Input is fixed at 1024 bytes (16 full blocks) so the "leftover bytes"
+// case doesn't arise. If you want a real SHA-256, this is the wrong example.
 options gen2
 options solid_context
 
