@@ -25,6 +25,14 @@ class LintEverything : AstPassMacro {
     }
 }
 
+struct private DeadStoreEntry {
+    @do_not_delete v : Variable const?
+    @do_not_delete pending_expr : Expression const?
+    skip : bool
+    has_pending : bool
+    pending_pure : bool
+}
+
 def private is_block_terminator(expr : ExpressionPtr) : bool {
     // A direct-child block statement that always exits the enclosing function.
     if (expr is ExprReturn) return true
@@ -49,6 +57,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT007: left and right operands of binary operator are identical
     //!   - LINT008: both branches of ternary ``?:`` are equivalent
     //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
+    //!   - LINT010: dead store — local variable written but value never read
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -61,6 +70,10 @@ class LintVisitor : AstVisitor {
     // Caller-populated via collect overload; applied alongside // nolint suppression.
     disabled_codes : table<string>
     enabled_codes : table<string>
+    // LINT010 state — dead-store detection. Per-local tracking; one entry per
+    // analyzed local in the current function. Reset on function entry.
+    branch_depth : int = 0
+    ds_entries : array<DeadStoreEntry>
     def LintVisitor() {
         pass
     }
@@ -97,8 +110,20 @@ class LintVisitor : AstVisitor {
                 break
             }
         }
+        // LINT010 — reset dead-store tracking
+        branch_depth = 0
+        ds_entries |> clear()
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
+        // LINT010 — emit final dead-store warnings for any still-pending stores
+        if (!noLint && genericDepth == 0) {
+            for (e in ds_entries) {
+                if (!e.skip && e.has_pending && e.pending_pure && e.pending_expr != null) {
+                    let vname = "{e.v.name}"
+                    self->lint_error("LINT010: dead store of '{vname}': value written but never read before scope exit", e.pending_expr.at)
+                }
+            }
+        }
         noLint = false
         if (fun.fromGeneric != null || fun.flags.generated) {
             genericDepth--
@@ -107,10 +132,22 @@ class LintVisitor : AstVisitor {
     }
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         exprForTerminator |> push(0ul)
+        // LINT010: a block passed as a closure / lambda body / generator body
+        // executes deferred or conditionally — treat it as a branch so writes
+        // inside don't kill pending stores outside and reads inside don't keep
+        // an outside-init "live" (the callback may never fire).
+        let bf = blk.blockFlags
+        if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
+            branch_depth++
+        }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         if (!empty(exprForTerminator)) {
             exprForTerminator |> pop()
+        }
+        let bf = blk.blockFlags
+        if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
+            branch_depth--
         }
         return <- blk
     }
@@ -264,7 +301,124 @@ class LintVisitor : AstVisitor {
         if (expr.if_false != null && expr_equal(expr.if_true, expr.if_false, false)) {
             self->lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
         }
+        branch_depth++
     }
+    def override visitExprIfThenElse(var expr : ExprIfThenElse?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0) {
+            branch_depth--
+        }
+        return <- expr
+    }
+
+    // --- LINT010: dead store ---
+
+    def private ds_find(v : VariablePtr) : int {
+        // Linear scan — typical function has <10 tracked locals.
+        let vc : Variable const? = v
+        for (i in range(length(ds_entries))) {
+            if (ds_entries[i].v == vc) return i
+        }
+        return -1
+    }
+
+    def override preVisitExprLetVariable(_let : ExprLet?; v : VariablePtr; _last : bool) : void {
+        // Skip reference bindings (`var r & = x`) and inscope smart_ptr vars —
+        // these have aliasing or scope-exit semantics we don't reason about.
+        // Skip constant-folded vars (their reads were inlined to use sites,
+        // so no ExprVar reference remains for us to observe) and vars whose
+        // whole-variable unusedness is already LINT002's territory.
+        if (noLint || genericDepth > 0
+            || (v._type != null && v._type.flags.ref)
+            || v.flags.inScope
+            || v.access_flags.access_fold
+            || !v.access_flags.access_get) return
+        let has_init = v.init != null
+        let init_pure = has_init && v.init.flags.noSideEffects
+        ds_entries |> emplace(DeadStoreEntry(
+            v = v,
+            pending_expr = v.init,
+            skip = false,
+            has_pending = has_init,
+            pending_pure = init_pure
+        ))
+    }
+
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        if (noLint || genericDepth > 0) return
+        let i = ds_find(expr.variable)
+        if (i < 0 || ds_entries[i].skip) return
+        let vf = expr.varFlags
+        // Any reference inside a branch/loop/lambda body, OR a write under an
+        // aliasing context (addr-of, ref-bind, mutable-ref-arg, compound op),
+        // means we can't reason about this var — bail.
+        if (branch_depth > 0 || (vf.write && !vf.under_clone)) {
+            ds_entries[i].skip = true
+            return
+        }
+        // Pure store — handled in postVisit for ExprCopy/Clone/Move so the
+        // RHS reads have been observed first. preVisit of the LHS fires
+        // BEFORE the RHS is walked, so we do nothing here.
+        if (vf.write) return
+        // Read — kills any pending dead store on this var.
+        ds_entries[i].has_pending = false
+    }
+
+    def private ds_handle_store(lhs : ExpressionPtr; rhs : ExpressionPtr; var store_expr : ExpressionPtr) : void {
+        if (lhs == null || !(lhs is ExprVar)) return
+        let ev = lhs as ExprVar
+        let i = ds_find(ev.variable)
+        if (i < 0 || ds_entries[i].skip || branch_depth > 0) return
+        if (ds_entries[i].has_pending && ds_entries[i].pending_pure && ds_entries[i].pending_expr != null) {
+            let vname = "{ev.variable.name}"
+            self->lint_error("LINT010: dead store of '{vname}': overwritten without intervening read", ds_entries[i].pending_expr.at)
+        }
+        ds_entries[i].has_pending = true
+        ds_entries[i].pending_expr = store_expr
+        ds_entries[i].pending_pure = rhs != null && rhs.flags.noSideEffects
+    }
+
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
+        ds_handle_store(expr.left, expr.right, expr)
+        return <- expr
+    }
+    def override visitExprClone(var expr : ExprClone?) : ExpressionPtr {
+        ds_handle_store(expr.left, expr.right, expr)
+        return <- expr
+    }
+    def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
+        ds_handle_store(expr.left, expr.right, expr)
+        return <- expr
+    }
+
+    // Branch / loop / try / lambda — bumps branch_depth so any var referenced
+    // inside is bailed-on.
+    def override preVisitExprFor(expr : ExprFor?) : void {
+        if (!noLint && genericDepth == 0) branch_depth++
+    }
+    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0) branch_depth--
+        return <- expr
+    }
+    def override preVisitExprWhile(expr : ExprWhile?) : void {
+        if (!noLint && genericDepth == 0) branch_depth++
+    }
+    def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0) branch_depth--
+        return <- expr
+    }
+    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+        if (!noLint && genericDepth == 0) branch_depth++
+    }
+    def override visitExprTryCatch(var expr : ExprTryCatch?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0) branch_depth--
+        return <- expr
+    }
+    // NOTE on lambda capture: by-copy/clone captures (the daslang default) read
+    // the local at capture time and place a copy into the lambda's struct
+    // frame — subsequent writes to the local don't reach the lambda. So the
+    // capture site is just a read for our purposes (clears pending), and
+    // later writes that aren't read again ARE dead. By-ref captures and
+    // addr-of are caught by the `write && !under_clone` check above.
 }
 
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {

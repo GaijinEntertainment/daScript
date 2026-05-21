@@ -272,6 +272,63 @@ has side effects — the structural pattern is suspicious regardless of purity.
         x = 2
     }
 
+LINT010 — dead store
+=====================
+
+A local variable is written but the value never reaches a read — either it is
+overwritten by a later write with no intervening read, or it goes out of scope
+(``return`` / end-of-block) with no subsequent read. Two forms fire:
+
+- ``overwritten without intervening read`` — the next write happens before any
+  reader sees this one.
+- ``value written but never read before scope exit`` — the scope ends and no
+  subsequent code reads this store.
+
+The variable being read elsewhere keeps LINT002 (unused variable) silent —
+this rule is for *partial* deadness within an otherwise-used local.
+
+.. code-block:: das
+
+    // Bad — re-init before any read
+    def f() : int {
+        var x = 1                               // LINT010
+        x = 2
+        return x
+    }
+
+    // Bad — written before return, never read
+    def g(z : int) : int {
+        var t = z
+        print("{t}\n")
+        t = compute()                           // LINT010 — scope ends, no read
+        return z
+    }
+
+    // Bad — lambda captures by-copy at creation, later write never observed
+    def h() : int {
+        var x = 1
+        let f = @() => x + 1
+        x = 2                                   // LINT010 — lambda has its own copy
+        return invoke(f)
+    }
+
+    // Good
+    def g_fixed(z : int) : int {
+        var t = z
+        print("{t}\n")
+        return z * 2
+    }
+
+The rule's scope is intentionally narrow for the first pass: it only flags
+pure stores (LHS of ``=`` / ``<-`` / ``:=``) on function-local variables, only
+when the dead store's RHS has ``noSideEffects``, and only in straight-line
+basic blocks — control flow (``if`` / ``for`` / ``while`` / ``try``) and
+block-argument callbacks (``tab |> get(k) $(v) { … }``) cause the analysis to
+bail on the variable to avoid false positives. Bail signals also include
+address-of (``addr(x)``), reference bindings (``var r & = x``), mutable-ref
+parameter passing (``foo(x)`` where ``foo`` takes ``var T&``), and capture-by-
+reference. Suppress structurally-needed dead inits with ``// nolint:LINT010``.
+
 .. _perf_lint:
 
 -----------------

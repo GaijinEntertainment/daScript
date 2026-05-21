@@ -17,7 +17,7 @@ def main {
     // === var vs let ===
 
     // var declares a mutable variable — its value can change.
-    var score = 0
+    var score = 0   // nolint:LINT010 — demonstrating mutable reassignment
     score = 100
     print("score = {score}\n")
 

@@ -33,9 +33,7 @@ def do_convert_to_gen2(file : string; inplace : bool) : string {
     let inplace_flag = inplace ? " -i" : ""
     let cmd = "{fmt_exe} -v2{inplace_flag} {file}"
     var output : string
-    var exit_code = 0
-    unsafe {
-        exit_code = popen(cmd) $(f) {
+    let exit_code = unsafe(popen(cmd) $(f) {
             if (f == null) {
                 output = "Failed to execute: {cmd}"
                 return
@@ -46,7 +44,7 @@ def do_convert_to_gen2(file : string; inplace : bool) : string {
                 }
             }
         }
-    }
+    )
     output = strip_das_fmt_header(output)
     if (exit_code != 0) return make_tool_result("Conversion failed (exit code {exit_code}):\n{output}", true)
     if (inplace) return make_tool_result("Converted {file} to gen2 syntax in place")
