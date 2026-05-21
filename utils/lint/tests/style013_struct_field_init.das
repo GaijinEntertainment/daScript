@@ -1,24 +1,32 @@
 options gen2
-// STYLE013: struct var with default/empty init followed by a run of field assignments
+// STYLE013: struct (or `new`-allocated struct pointer) var with default/empty
+// init followed by a run of field assignments.
 //
 // Problem: Declaring a struct var via `Foo()` (or as `var a : Foo` for
-// `[safe_when_uninitialized]` structs) and then patching it with TWO OR MORE
-// contiguous field assignments is the same "I-forgot-the-idiomatic-init"
-// shape as STYLE012 — and the named-argument constructor reads better and
-// avoids the redundant zero-init.
+// `[safe_when_uninitialized]` structs), OR a pointer-to-struct via zero-arg
+// `new Foo()` / `new Foo`, then patching it with TWO OR MORE contiguous field
+// assignments is the same "I-forgot-the-idiomatic-init" shape as STYLE012 —
+// and the named-argument constructor reads better and avoids the redundant
+// zero-init.
 //
-// Bad pattern:
-//   var a = Foo()
-//   a.x = 1
-//   a.y = 2
+// Bad patterns:
+//   var a = Foo()              var a = new Foo()
+//   a.x = 1                    a.x = 1
+//   a.y = 2                    a.y = 2
 //
-// Good pattern:
+// Good patterns:
 //   var a = Foo(x = 1, y = 2)
+//   var a = new Foo(x = 1, y = 2)
 //
 // A single trailing field assignment stays silent — it is often the more
 // readable form (e.g. when the struct is mostly defaulted and only one
 // field is patched), and we want this rule to flag the bug case, not
-// every possible rewrite.
+// every possible rewrite. Null-pointer init (`var a : Foo?`) is NOT flagged
+// here — that's a guaranteed NPE on the first `a.x = 1`, a different bug.
+
+expect 31209:8
+
+require daslib/style_lint
 
 struct Foo {
     x : int = 0
@@ -113,6 +121,56 @@ def make_foo : Foo {
 }
 def good_modify_existing() {
     var a = make_foo()
+    a.x = 1
+    a.y = 2
+}
+
+// ── new-allocated pointer cases ──────────────────────────────────────────────
+
+// bad: var a = new Foo() then two field assigns (1 warning)
+def bad_default_new() {
+    var a = new Foo()
+    a.x = 1
+    a.y = 2
+}
+
+// bad: var a = new Foo (no parens) then two field assigns (1 warning)
+def bad_default_new_no_parens() {
+    var a = new Foo
+    a.x = 1
+    a.y = 2
+}
+
+// bad: mix of := clone and = copy through pointer (1 warning, via ExprClone branch)
+def bad_new_clone_then_copy() {
+    var a = new Foo()
+    a.s := "hi"
+    a.x = 1
+}
+
+// good: var a = new Foo(x=1) — non-empty new, silent
+def good_partial_new_ctor() {
+    var a = new Foo(x = 1)
+    a.y = 2
+}
+
+// good: var a : Foo? — null init, silent (different bug; not STYLE013).
+// Guarded by `if (a != null)` so we don't actually trip the NPE at test-run time
+// (the linter only inspects AST shape; the guard never affects detection).
+def good_null_ptr_init() {
+    var a : Foo?
+    if (a != null) {
+        a.x = 1
+        a.y = 2
+    }
+}
+
+// good: var a = make_foo_ptr() — non-`new` pointer init, silent
+def make_foo_ptr : Foo ? {
+    return new Foo(x = 7)
+}
+def good_modify_existing_ptr() {
+    var a = make_foo_ptr()
     a.x = 1
     a.y = 2
 }
