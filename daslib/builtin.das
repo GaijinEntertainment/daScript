@@ -50,30 +50,58 @@ def resize(var Arr : array<auto(numT)>; newSize : int64) {
     __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
-def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
-    let oldSize = length(Arr)
-    __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-    for (i in range(oldSize, newSize)) {
-        static_if (typeinfo is_workhorse(type<numT>)) {
-            Arr[i] = numT()
-        } static_elif (typeinfo can_move(type<numT>)) {
-            Arr[i] <- default<numT>
-        } static_elif (typeinfo can_copy(type<numT>)) {
-            Arr[i] = default<numT>
-        } else {
-            Arr[i] := default<numT>
+def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
+    static_if (typeinfo is_int(newSize)) {
+        let oldSize = length(Arr)
+        __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+        for (i in range(oldSize, newSize)) {
+            static_if (typeinfo is_workhorse(type<numT>)) {
+                Arr[i] = numT()
+            } static_elif (typeinfo can_move(type<numT>)) {
+                Arr[i] <- default<numT>
+            } static_elif (typeinfo can_copy(type<numT>)) {
+                Arr[i] = default<numT>
+            } else {
+                Arr[i] := default<numT>
+            }
+        }
+    } else {
+        let oldSize = long_length(Arr)
+        __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
+        for (i in range64(oldSize, newSize)) {
+            static_if (typeinfo is_workhorse(type<numT>)) {
+                Arr[i] = numT()
+            } static_elif (typeinfo can_move(type<numT>)) {
+                Arr[i] <- default<numT>
+            } static_elif (typeinfo can_copy(type<numT>)) {
+                Arr[i] = default<numT>
+            } else {
+                Arr[i] := default<numT>
+            }
         }
     }
 }
 
-def resize_and_init(var Arr : array<auto(numT)>; newSize : int; initValue : numT) {
-    let oldSize = length(Arr)
-    __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-    for (i in range(oldSize, newSize)) {
-        static_if (typeinfo can_copy(initValue)) {
-            Arr[i] = initValue
-        } else {
-            Arr[i] := initValue
+def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64; initValue : numT) {
+    static_if (typeinfo is_int(newSize)) {
+        let oldSize = length(Arr)
+        __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+        for (i in range(oldSize, newSize)) {
+            static_if (typeinfo can_copy(initValue)) {
+                Arr[i] = initValue
+            } else {
+                Arr[i] := initValue
+            }
+        }
+    } else {
+        let oldSize = long_length(Arr)
+        __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
+        for (i in range64(oldSize, newSize)) {
+            static_if (typeinfo can_copy(initValue)) {
+                Arr[i] = initValue
+            } else {
+                Arr[i] := initValue
+            }
         }
     }
 }
@@ -110,10 +138,14 @@ def pop(var Arr : array<auto(numT)>) {
 }
 
 [unused_argument(Arr, value)]
-def push(var Arr : array<auto(numT)>; value : numT -# const ==const; at : int) {
+def push(var Arr : array<auto(numT)>; value : numT -# const ==const; at : int | int64) {
     static_if (typeinfo can_copy(value)) {
         static_if (typeinfo can_clone_from_const(value)) {
-            Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] = value
+            static_if (typeinfo is_int(at)) {
+                Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] = value
+            } else {
+                Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] = value
+            }
         } else {
             concept_assert(false, "can't push value, which can't be cloned from const")
         }
@@ -123,9 +155,13 @@ def push(var Arr : array<auto(numT)>; value : numT -# const ==const; at : int) {
 }
 
 [unused_argument(Arr, value)]
-def push(var Arr : array<auto(numT)>; var value : numT -# ==const; at : int) {
+def push(var Arr : array<auto(numT)>; var value : numT -# ==const; at : int | int64) {
     static_if (typeinfo can_copy(value)) {
-        Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] = value
+        static_if (typeinfo is_int(at)) {
+            Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] = value
+        } else {
+            Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] = value
+        }
     } else {
         concept_assert(false, "can't push value, which can't be copied")
     }
@@ -221,10 +257,16 @@ def push(var Arr : array<auto(numT)[]>; var varr : numT[] -# ==const) {
 }
 
 [unused_argument(Arr, value)]
-def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int) {
+def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int | int64) {
     static_if (typeinfo can_move(value)) {
-        unsafe {
-            Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] <- value
+        static_if (typeinfo is_int(at)) {
+            unsafe {
+                Arr[__builtin_array_push(Arr, int64(at), typeinfo sizeof(Arr[0]))] <- value
+            }
+        } else {
+            unsafe {
+                Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] <- value
+            }
         }
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
@@ -271,10 +313,14 @@ def emplace(var Arr : array<auto(numT)[]>; var value : numT[] -#) {
 }
 
 [unused_argument(Arr, value, at)]
-def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #; at : int) {
+def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #; at : int | int64) {
     static_if (typeinfo can_clone(value)) {
         static_if (typeinfo can_clone_from_const(value)) {
-            Arr[__builtin_array_push_zero(Arr, int64(at), typeinfo sizeof(Arr[0]))] := value
+            static_if (typeinfo is_int(at)) {
+                Arr[__builtin_array_push_zero(Arr, int64(at), typeinfo sizeof(Arr[0]))] := value
+            } else {
+                Arr[__builtin_array_push_zero(Arr, at, typeinfo sizeof(Arr[0]))] := value
+            }
         } else {
             concept_assert(false, "can't push-clone value, which can't be cloned from const")
         }
@@ -284,9 +330,13 @@ def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #; at : int) 
 }
 
 [unused_argument(Arr, value, at)]
-def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #; at : int) {
+def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #; at : int | int64) {
     static_if (typeinfo can_clone(value)) {
-        Arr[__builtin_array_push_zero(Arr, int64(at), typeinfo sizeof(Arr[0]))] := value
+        static_if (typeinfo is_int(at)) {
+            Arr[__builtin_array_push_zero(Arr, int64(at), typeinfo sizeof(Arr[0]))] := value
+        } else {
+            Arr[__builtin_array_push_zero(Arr, at, typeinfo sizeof(Arr[0]))] := value
+        }
     } else {
         concept_assert(false, "can't push-clone value, which can't be cloned")
     }
@@ -381,10 +431,8 @@ def push_clone(var A : auto(CT) -# -const; b : auto(TT) | #) {
     } static_elif (!typeinfo builtin_function_exists(@@ < (var a : CT -# -const; var b : TT -# -const) : void > _::emplace)) {
         concept_assert(false, "can't push_clone, missing emplace({typeinfo typename(type<CT -# -const>)},{typeinfo typename(type<TT -# -const>)})")
     } else {
-        unsafe {
-            var cb : TT -# -const := b
-            _::emplace(A, cb)
-        }
+        var cb : TT -# -const := b
+        _::emplace(A, cb)
     }
 }
 
@@ -473,9 +521,7 @@ def erase_if(var arr : array<auto(TT)>; blk : block<(key : TT) : bool> | block<(
         if (invoke(blk, arr[i])) {
             let endIndex = i
             while (--i >= 0) {
-                if (!invoke(blk, arr[i])) {
-                    break
-                }
+                break if (!invoke(blk, arr[i]))
             }
             __builtin_array_erase_range(arr, i + 1, endIndex - i, typeinfo sizeof(arr[0]))
         }
@@ -525,9 +571,7 @@ def get(Tab : table<auto(keyT); auto(valT)> ==const#; at : keyT | #; blk : block
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock_mutable(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?#> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT?#> val)))
         __builtin_table_unlock_mutable(Tab)
         return true
     } else {
@@ -539,9 +583,7 @@ def get(Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock_mutable(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT?> val)))
         __builtin_table_unlock_mutable(Tab)
         return true
     } else {
@@ -553,9 +595,7 @@ def get(var Tab : table<auto(keyT); auto(valT)> ==const#; at : keyT | #; blk : b
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?#> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT?#> val)))
         __builtin_table_unlock(Tab)
         return true
     } else {
@@ -567,9 +607,7 @@ def get(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : bl
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT?> val)))
         __builtin_table_unlock(Tab)
         return true
     } else {
@@ -583,9 +621,7 @@ def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : blo
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock_mutable(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val)))
         __builtin_table_unlock_mutable(Tab)
         return true
     } else {
@@ -597,9 +633,7 @@ def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : bloc
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock_mutable(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val)))
         __builtin_table_unlock_mutable(Tab)
         return true
     } else {
@@ -611,9 +645,7 @@ def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk :
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val)))
         __builtin_table_unlock(Tab)
         return true
     } else {
@@ -625,9 +657,7 @@ def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : 
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val))
-        }
+        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val)))
         __builtin_table_unlock(Tab)
         return true
     } else {
@@ -799,9 +829,7 @@ def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : va
 [unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #; var val : smart_ptr<valT>&) {
     static_if (typeinfo can_move(val)) {
-        unsafe {
-            Tab[at] <- val
-        }
+        Tab[at] <- val
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
     }
@@ -955,7 +983,7 @@ def move_to_local(var a : auto(TT)&) : TT -const -& {
 }
 
 def clone(clone_src : auto(TT) ==const | #) : TT -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT -#
         clone_dest := clone_src
         return <- clone_dest
@@ -963,7 +991,7 @@ def clone(clone_src : auto(TT) ==const | #) : TT -const -# {
 }
 
 def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT -#
         clone_dest := clone_src
         return <- clone_dest
@@ -971,7 +999,7 @@ def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
 }
 
 def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT[N] -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT[typeinfo dim(clone_src)] -#
         clone_dest := clone_src
         return <- clone_dest
@@ -979,7 +1007,7 @@ def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -con
 }
 
 def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT[N] -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT[typeinfo dim(clone_src)] -#
         clone_dest := clone_src
         return <- clone_dest
@@ -987,7 +1015,7 @@ def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] 
 }
 
 def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT -#
         clone_dest := clone_src
         return <- clone_dest
@@ -995,7 +1023,7 @@ def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
 }
 
 def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
-    unsafe {
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT -#
         clone_dest := clone_src
         return <- clone_dest
@@ -1280,9 +1308,7 @@ def finalize(var a : table<auto(TK); auto(TV)>) {
 
 def lock(Tab : table<auto(keyT); auto(valT)> | #; blk : block<(t : table<keyT; valT>#) : void >) {
     __builtin_table_lock_mutable(Tab)
-    unsafe {
-        invoke(blk, reinterpret<table<auto(keyT); auto(valT)> const>(Tab))
-    }
+    invoke(blk, unsafe(reinterpret<table<auto(keyT); auto(valT)> const>(Tab)))
     __builtin_table_unlock_mutable(Tab)
 }
 
@@ -1441,15 +1467,11 @@ def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>
         static_if (typeinfo can_copy(a)) {
-            unsafe(resize(arr, length(a)))// TODO: is this safe? do we actually need to init first???
-            unsafe {
-                reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) = a
-            }
+            resize(arr, length(a))// TODO: is this safe? do we actually need to init first???
+            reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) = a
         } static_elif (typeinfo can_move(a)) {
-            unsafe(resize(arr, length(a)))// TODO: is this safe? do we actually need to init first???
-            unsafe {
-                reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) <- a
-            }
+            resize(arr, length(a))// TODO: is this safe? do we actually need to init first???
+            reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) <- a
         } else {
             concept_assert(false, "this array can't be copied or moved")
         }
@@ -1574,9 +1596,7 @@ def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -co
 }
 
 def sort(var a : auto(TT)[] | #) {
-    if (length(a) <= 1) {
-        return
-    }
+    return if (length(a) <= 1)
     static_if (typeinfo is_numeric_comparable(type<TT>)) {
         unsafe {
             __builtin_sort(addr(a[0]), length(a))       // there is numeric specialization
@@ -1685,17 +1705,13 @@ def sort(var a : array<auto(TT)> | #; cmp : block<(x, y : TT) : bool>) {
 
 def lock(var a : array<auto(TT)> ==const | #; blk : block<(var x : array<TT>#)>) {
     __builtin_array_lock(a)
-    unsafe {
-        invoke(blk, reinterpret<array<auto(TT)> -const#> a)
-    }
+    invoke(blk, unsafe(reinterpret<array<auto(TT)> -const#> a))
     __builtin_array_unlock(a)
 }
 
 def lock(a : array<auto(TT)> ==const | #; blk : block<(x : array<TT>#)>) {
     __builtin_array_lock_mutable(a)
-    unsafe {
-        invoke(blk, reinterpret<array<auto(TT)> const#> a)
-    }
+    invoke(blk, unsafe(reinterpret<array<auto(TT)> const#> a))
     __builtin_array_unlock_mutable(a)
 }
 
@@ -1703,15 +1719,13 @@ def lock_data(var a : array<auto(TT)> ==const | #; blk : block<(var p : TT?#; s 
     let len = length(a)
     if (len != 0) {
         __builtin_array_lock(a)
-        unsafe {
+        unsafe {   // nolint:STYLE025 addr() needs unsafe too -- not detected as an unsafe leaf by the lint
             invoke(blk, reinterpret<TT?#> addr(a[0]), len)
         }
         __builtin_array_unlock(a)
     } else {
         var nullT : TT?
-        unsafe {
-            invoke(blk, reinterpret<TT?#> nullT, 0)
-        }
+        invoke(blk, unsafe(reinterpret<TT?#> nullT), 0)
     }
 }
 
@@ -1719,14 +1733,12 @@ def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : 
     let len = length(a)
     if (len != 0) {
         __builtin_array_lock_mutable(a)
-        unsafe {
+        unsafe {   // nolint:STYLE025 addr() needs unsafe too -- not detected as an unsafe leaf by the lint
             invoke(blk, reinterpret<TT const?#> addr(a[0]), len)
         }
         __builtin_array_unlock_mutable(a)
     } else {
-        unsafe {
-            invoke(blk, reinterpret<TT const?#> null, 0)
-        }
+        invoke(blk, unsafe(reinterpret<TT const?#> null), 0)
     }
 }
 
@@ -1755,9 +1767,7 @@ def find_index(arr : auto(TT)[] | #; key : TT) {
 
 def find_index(var arr : iterator<auto(TT)>; key : TT -&) {
     for (o, i in arr, count()) {
-        if (o == key) {
-            return i
-        }
+        return i if (o == key)
     }
     return -1
 }
@@ -1771,9 +1781,7 @@ def find_index_if(arr : array<auto(TT)> | #; blk : block<(key : TT) : bool>) {
 
 def find_index_if(arr : auto(TT)[] | #; blk : block<(key : TT) : bool>) {
     for (o, i in arr, range(length(arr))) {
-        if (invoke(blk, o)) {
-            return i
-        }
+        return i if (invoke(blk, o))
     }
     return -1
 }
@@ -1799,9 +1807,7 @@ def has_value(a; key) {
 
 def has_value(var a : iterator<auto>; key) {
     for (t in a) {
-        if (t == key) {
-            return true
-        }
+        return true if (t == key)
     }
     return false
 }
@@ -1851,9 +1857,7 @@ def map_to_array(data : void?; len : int; blk : block<(var arg : array<auto(TT)>
     assert(len > 0, "at least 1 element")
     let elem_size = typeinfo sizeof(type<TT>)
     let num_elem = len / elem_size
-    unsafe {
-        _builtin_temp_array(data, num_elem, blk)
-    }
+    unsafe(_builtin_temp_array(data, num_elem, blk))
 }
 
 [unsafe_operation]
@@ -1862,17 +1866,13 @@ def map_to_ro_array(data : void?; len : int; blk : block<(arg : array<auto(TT)>#
     assert(len > 0, "at least 1 element")
     let elem_size = typeinfo sizeof(type<TT>)
     let num_elem = len / elem_size
-    unsafe {
-        _builtin_temp_array(data, num_elem, blk)
-    }
+    unsafe(_builtin_temp_array(data, num_elem, blk))
 }
 
 def swap(var a, b : auto(TT)&) {
-    unsafe {
-        var t : TT -& <- a
-        a <- b
-        b <- t
-    }
+    var t : TT -& <- a
+    a <- b
+    b <- t
 }
 
 def subarray(a : auto(TT)[]; r : range) {

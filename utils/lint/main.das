@@ -106,7 +106,7 @@ def has_expect_directive(file : string) : bool {
     return false
 }
 
-def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
+def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
     return if (!st.is_valid)
     if (st.is_reg) {
@@ -117,6 +117,8 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
             if (!is_skip_file(fname)) {
                 cache |> insert(path, null)
                 files |> push(path)
+            } else {
+                skipped++
             }
         }
         return
@@ -128,10 +130,14 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
-            scan_das_files(full, files, cache)
-        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name) && !cache |> key_exists(full)) {
-            cache |> insert(full, null)
-            files |> push(full)
+            scan_das_files(full, files, cache, skipped)
+        } elif (fst.is_reg && name |> ends_with(".das") && !cache |> key_exists(full)) {
+            if (is_skip_file(name)) {
+                skipped++
+            } else {
+                cache |> insert(full, null)
+                files |> push(full)
+            }
         }
     }
 }
@@ -469,10 +475,16 @@ def main() : int {
     }
     var files : array<string>
     var cache : table<string; void?>
+    var skipped = 0
     for (p in paths) {
-        scan_das_files(p, files, cache)
+        scan_das_files(p, files, cache, skipped)
     }
     if (empty(files)) {
+        // All inputs were intentionally skipped (e.g. builtin.das) -- success.
+        // Distinguishes a clean "nothing to lint" from a genuine "no .das at the
+        // given path", which still errors. This matters for the pre-push hook:
+        // a commit that only touches a skip-listed file would otherwise fail.
+        return 0 if (skipped > 0)
         print("Error: no .das files found\n")
         return 1
     }

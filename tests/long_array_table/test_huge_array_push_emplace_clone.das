@@ -63,3 +63,56 @@ def test_push_clone_past_int_max(t : T?) {
     t |> equal(arr[before], uint8(0xEF))
     delete arr
 }
+
+// at-position insertion variants. The int|int64 disjunction on the daslib
+// push/emplace/push_clone wrappers (PR-builtin) lets `at` be int64 directly,
+// which is required to reach insertion positions past INT_MAX. Inserting at
+// (before-1) keeps the memmove cost to one element while exercising the full
+// int64 cascade through __builtin_array_push.
+
+[test]
+def test_push_at_int64_past_int_max(t : T?) {
+    if (!huge_enabled()) return
+    var arr : array<uint8>
+    arr |> resize(HUGE_N)
+    let before = long_length(arr)
+    let at_pos = before - 1_l
+    arr[at_pos] = uint8(0x11)
+    arr |> push(uint8(0xAB), at_pos)
+    t |> equal(long_length(arr), before + 1_l)
+    t |> equal(arr[at_pos], uint8(0xAB))
+    t |> equal(arr[at_pos + 1_l], uint8(0x11))
+    delete arr
+}
+
+[test]
+def test_emplace_at_int64_past_int_max(t : T?) {
+    if (!huge_enabled()) return
+    var arr : array<uint8>
+    arr |> resize(HUGE_N)
+    let before = long_length(arr)
+    let at_pos = before - 1_l
+    arr[at_pos] = uint8(0x22)
+    var v : uint8 = uint8(0xCD)
+    arr |> emplace(v, at_pos)
+    t |> equal(long_length(arr), before + 1_l)
+    t |> equal(arr[at_pos], uint8(0xCD))
+    t |> equal(arr[at_pos + 1_l], uint8(0x22))
+    delete arr
+}
+
+[test]
+def test_push_clone_at_int64_past_int_max(t : T?) {
+    if (!huge_enabled()) return
+    var arr : array<uint8>
+    arr |> resize(HUGE_N)
+    let before = long_length(arr)
+    let at_pos = before - 1_l
+    arr[at_pos] = uint8(0x33)
+    let v : uint8 = uint8(0xEF)
+    arr |> push_clone(v, at_pos)
+    t |> equal(long_length(arr), before + 1_l)
+    t |> equal(arr[at_pos], uint8(0xEF))
+    t |> equal(arr[at_pos + 1_l], uint8(0x33))
+    delete arr
+}
