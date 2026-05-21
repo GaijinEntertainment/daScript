@@ -60,7 +60,7 @@ def private null_coalescing(a : json::JsonValue const?; val : auto(TT)) : TT {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
     if (a != null) {
         if (a.value is _number) {
-            return TT(a.value as _number)
+            return TT(a.value as _number)   // nolint:PERF020 generic -- cast redundant for TT=double, needed for other TT
         } elif (a.value is _longint) return TT(a.value as _longint)
     }
     return val
@@ -72,7 +72,7 @@ def private null_coalescing_with_string(a : json::JsonValue const?; val : auto(T
         if (a.value is _number) {
             return TT(a.value as _number)
         } elif (a.value is _longint) {
-            return TT(a.value as _longint)
+            return TT(a.value as _longint)   // nolint:PERF020 generic -- cast redundant for TT=int64, needed for other TT
         } elif (a.value is _string) return TT(a.value as _string)
     }
     return val
@@ -472,7 +472,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         if (v == null || !(v.value is _array)) return <- ret
         unsafe {
             let arr & = v.value as _array
-            ret |> reserve(arr |> length)
+            ret |> reserve(arr |> long_length)
             for (a in arr) {
                 if (typeinfo can_copy(anything[0])) {
                     ret |> push_clone <| _::from_JV(a, decltype_noref(anything[0]))
@@ -624,8 +624,10 @@ def JV(value : auto(TT)) : JsonValue? {
         return _::JV(map)
     } static_elif (typeinfo is_iterable(value)) {
         var arr : array<JsonValue?>
-        static_if (typeinfo is_array(value) || typeinfo is_dim(value)) {
-            arr |> reserve(length(value))
+        static_if (typeinfo is_array(value)) {
+            arr |> reserve(long_length(value))
+        } static_elif (typeinfo is_dim(value)) {
+            arr |> reserve(typeinfo dim(value))
         }
         for (x in value) {
             arr |> push <| _::JV(x)
