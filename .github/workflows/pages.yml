@@ -137,14 +137,14 @@ jobs:
         if [ -f web/output/daslang_static.js ] && [ -f web/output/daslang_static.wasm ]; then
             mkdir -p _site/playground _site/files/wasm
             # Copy IDE source files (CodeMirror, jQuery, main.js/css, etc.)
-            cp -r web/ui/src/* _site/playground/
+            cp -r web/examples/ui/src/* _site/playground/
             # Copy WASM artifacts — known-present after the guard above.
             cp web/output/daslang_static.js _site/playground/
             cp web/output/daslang_static.wasm _site/playground/
             cp web/output/daslang_static.js _site/files/wasm/
             cp web/output/daslang_static.wasm _site/files/wasm/
             # Copy sample data if present
-            cp -r web/ui/samples _site/playground/samples 2>/dev/null || true
+            cp -r web/examples/ui/samples _site/playground/samples 2>/dev/null || true
             # Our Forge-skinned playground/index.html + skin CSS + init shim take precedence.
             # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
             # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`
