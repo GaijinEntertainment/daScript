@@ -4295,8 +4295,16 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
             bufElemType.flags.constant = false
             bufElemType.flags.ref = false
         }
-        retType = new TypeDecl(baseType = Type.tArray)
-        retType.firstType = clone_type(bufElemType)
+        // Preserve iterator-vs-array typing of the source chain — bridge's `to_sequence(res)` makes `_group_by._select` iterator-typed by default, but a downstream `.to_array()` peel surfaces array-typed `expr`. Match the user's static expectation (otherwise: error[30343] iterator vs array mismatch).
+        if (expr._type == null) return null
+        let exprIsIterator = expr._type.isIterator
+        if (exprIsIterator) {
+            retType = new TypeDecl(baseType = Type.tIterator)
+            retType.firstType = clone_type(bufElemType)
+        } else {
+            retType = new TypeDecl(baseType = Type.tArray)
+            retType.firstType = clone_type(bufElemType)
+        }
         stmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(bufElemType)>
         }
@@ -4318,9 +4326,7 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
                 }
             }
         }
-        stmts |> push <| qmacro_expr() {
-            return <- $i(bufName)
-        }
+        stmts |> push(buffer_return(bufName, exprIsIterator))
     }
     var emission = qmacro(invoke($() : $t(retType) {
         $b(stmts)

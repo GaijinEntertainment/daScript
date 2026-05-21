@@ -1357,6 +1357,14 @@ def target_unroll5e_groupby_count_terminator_fold() : int {
                  .count())
 }
 
+// Iterator-typed chain — bridge's `to_sequence(res)` makes `_group_by._select` yield iterator<...> by default (no trailing `.to_array()` peel). The splice must emit `to_sequence_move` to match the caller's static type; otherwise error[30343] iterator vs array. Regression guard for Copilot review on PR #2775.
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_iter_typed_fold() : iterator<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, N = _._1 |> length)))
+}
+
 [export, marker(no_coverage)]
 def target_unroll5e_groupby_where_count_fold() : array<tuple<Brand : int; N : int>> {
     return <- _fold(from_decs_template(type<UnrollGroupRow>)
@@ -1501,6 +1509,39 @@ def test_unroll5e_groupby_multi_reducer_parity(t : T?) {
 def test_unroll5e_groupby_count_terminator_parity(t : T?) {
     fixture_unroll5e()
     t |> equal(target_unroll5e_groupby_count_terminator_fold(), 3, "count terminator returns length(tab)")
+}
+
+[test]
+def test_unroll5e_groupby_iter_typed_parity(t : T?) {
+    // Walks the iterator-typed chain; counts entries.
+    fixture_unroll5e()
+    var count = 0
+    for (item in target_unroll5e_groupby_iter_typed_fold()) {
+        count ++
+        // Every entry has a valid Brand (0/1/2) and N (count per bucket).
+        t |> success(item.Brand >= 0 && item.Brand <= 2, "Brand in 0..2")
+        t |> success(item.N >= 1, "N >= 1 (at least one row per bucket)")
+    }
+    t |> equal(count, 3, "iterator-typed group_by yields 3 buckets")
+}
+
+[test]
+def test_unroll5e_groupby_iter_typed_splice_shape(t : T?) {
+    // Verifies the iterator-typed splice fires (not falling to tier-2) and emits to_sequence_move at the tail to convert the buffer array to iterator.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5e_groupby_iter_typed_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        // Splice fires: no tier-2 fall-through (would manifest as inner-invoke `to_sequence(res)` from the eager bridge).
+        t |> equal(describe_count(body_expr, "to_sequence("), 0, "iterator-typed group_by splice must NOT call eager bridge's to_sequence(res)")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype outer call")
+        // Tail emits `to_sequence_move(buf)` to convert array<...> result to iterator<...> matching caller's type.
+        t |> equal(describe_count(body_expr, "to_sequence_move"), 1, "iterator-typed splice tail emits to_sequence_move(buf)")
+    }
 }
 
 [test]
