@@ -842,7 +842,10 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", true, link_whole_lib)
+        let ok = create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", true, link_whole_lib)
+        if (!ok) {
+            panic("write_dll: link failed for {out_path}")
+        }
     }
 }
 
@@ -853,7 +856,10 @@ def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", false, link_whole_lib)
+        let ok = create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", false, link_whole_lib)
+        if (!ok) {
+            panic("write_exe: link failed for {out_path}")
+        }
     }
 }
 
@@ -906,7 +912,10 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, obj, filetype, error)
         let runtime_arg = needs_runtime ? (runtime_lib ?? "") : ""
-        link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc)
+        let ok = link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc)
+        if (!ok) {
+            panic("write_wasm: link failed for {out_path}.wasm")
+        }
     }
 }
 
