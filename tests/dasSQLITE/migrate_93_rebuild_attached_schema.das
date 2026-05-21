@@ -28,7 +28,7 @@ def convert_v1_to_v2(old : UserV1; var dst : User) {
 [test]
 def test_rebuild_runs_in_attached_schema(t : T?) {
     var inscope main = open_sqlite(":memory:")
-    main |> with_attached("file:rebuild_attached_test?mode=memory&cache=shared", "att") $(att) {
+    main |> with_attached(":memory:", "att") $(att) {
         att |> exec("DROP TABLE IF EXISTS \"users\"")
         att |> exec("DROP TABLE IF EXISTS \"users_new\"")
         att |> exec("CREATE TABLE \"users\" (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL, LegacyEmail TEXT NOT NULL DEFAULT '')")
