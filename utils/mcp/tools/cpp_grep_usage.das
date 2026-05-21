@@ -32,10 +32,7 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
     if (empty(rule_path)) return make_tool_result(rule_err, true)
     var args <- [sg, "scan", "-r", rule_path, "--json"]
     cpp_push_glob_args(args, search_dirs, glob_filter)
-    args |> reserve(length(args) + length(search_dirs))
-    for (d in search_dirs) {
-        args |> push(d)
-    }
+    args |> push_from(search_dirs)
     var raw_json : string
     let rc = run_and_capture(args, raw_json, 60.0)
     if (rc != 0 && empty(raw_json)) return make_tool_result("ast-grep failed (exit {rc})", true)

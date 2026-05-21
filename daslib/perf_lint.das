@@ -34,6 +34,7 @@ module perf_lint shared private
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
+//!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
 
 require daslib/ast_boost
 require strings
@@ -59,6 +60,25 @@ struct Perf018State {
     @do_not_delete iter_var : Variable?
     @do_not_delete arr_var : Variable?
     qualified_count : int
+    sources_seen : int
+    vars_seen : int
+    disqualified : bool
+    matched : bool
+}
+
+struct Perf022State {
+    //! PERF022 per-for-loop candidate. Detects 'for (s in A) { B |> push(s) }'
+    //! (push and push_clone; all three pipe/dot/plain-call shapes compiler-fold
+    //! to the same ExprCall). Pushed in preVisitExprFor in lockstep with PERF018.
+    //! `matched` is stamped by preVisitExprForBody when body is a single
+    //! ExprCall of the right shape against the frame's iter_var. We warn at the
+    //! for-loop's `at` (looked up via the parallel `perf022_for_exprs` stack)
+    //! rather than the inner push's `at` — the inner push location dedups
+    //! against PERF006 which also fires at that exact line:col.
+    //! `callee_id`: 1 = push, 2 = push_clone (kept trivial so the struct can live
+    //! in an array). String name is rebuilt at warn time.
+    @do_not_delete iter_var : Variable?
+    callee_id : int
     sources_seen : int
     vars_seen : int
     disqualified : bool
@@ -108,6 +128,11 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete perf018_for_exprs : array<ExprFor?>
     in_qualifying_idx : int = 0
     at_qualifying_pushes : array<int>
+    // PERF022: per-for-loop bulk-push candidates; same lockstep with for-loop
+    // nesting. `array<T>` requires T trivially-storable, so the owning ExprFor
+    // pointer lives in a parallel `perf022_for_exprs` array.
+    perf022_stack : array<Perf022State>
+    @do_not_delete perf022_for_exprs : array<ExprFor?>
     warning_count : int = 0
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
@@ -556,6 +581,7 @@ class PerfLintVisitor : AstVisitor {
             current_for_known_length = true
             loop_has_early_exit |> push(false)
             self->perf018_push_sentinel(expr)
+            self->perf022_push_sentinel(expr)
         }
     }
 
@@ -576,6 +602,7 @@ class PerfLintVisitor : AstVisitor {
         }
         if (in_closure == 0) {
             self->perf018_record_source(src)
+            self->perf022_record_source(src)
         }
     }
 
@@ -585,6 +612,7 @@ class PerfLintVisitor : AstVisitor {
         }
         if (in_closure == 0) {
             self->perf018_finalize_on_body()
+            self->perf022_inspect_body(expr.body)
         }
     }
 
@@ -592,12 +620,14 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth - 1, is_iter = true))
             self->perf018_record_var(v)
+            self->perf022_record_var(v)
         }
     }
 
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
         if (in_closure == 0) {
             self->perf018_pop_and_check()
+            self->perf022_pop_and_check()
             loop_depth--
             if (current_for_known_length) {
                 known_length_loop_depth--
@@ -790,6 +820,122 @@ class PerfLintVisitor : AstVisitor {
                 st.disqualified = true
                 perf018_stack[i] = st
             }
+        }
+    }
+
+    // --- PERF022: for (s in A) { B |> push(s) } — recommend bulk *_from ---
+
+    def perf022_push_sentinel(expr : ExprFor?) : void {
+        //! Always pushed in preVisitExprFor so the stack stays lock-step with
+        //! for-loop nesting. preVisitExprForBody may flip `matched`; if a
+        //! frame survives to perf022_pop_and_check matched-and-undisqualified,
+        //! we fire at the for-loop's `at` (not the push's, to avoid colliding
+        //! with PERF006 under the same-location dedup in perf_warning).
+        var state : Perf022State
+        perf022_stack |> push(state)
+        unsafe {
+            perf022_for_exprs |> push(reinterpret<ExprFor?>(expr))
+        }
+    }
+
+    def perf022_record_source(src : Expression?) : void {
+        if (empty(perf022_stack)) return
+        let top_idx = length(perf022_stack) - 1
+        var state = perf022_stack[top_idx]
+        state.sources_seen++
+        if (state.sources_seen > 1) {
+            state.disqualified = true
+        }
+        // PERF022 only suggests push_from / push_clone_from, which take array<T>
+        // or C-array sources. Disqualify range/string/iterator/generator sources
+        // — there is no bulk overload to migrate to in those cases.
+        if (src == null || src._type == null) {
+            state.disqualified = true
+        } else {
+            let bt = src._type.baseType
+            let is_array_src = bt == Type.tArray || !empty(src._type.dim)
+            if (!is_array_src) {
+                state.disqualified = true
+            }
+        }
+        perf022_stack[top_idx] = state
+    }
+
+    def perf022_record_var(var v : Variable?) : void {
+        if (empty(perf022_stack) || v == null) return
+        let top_idx = length(perf022_stack) - 1
+        var state = perf022_stack[top_idx]
+        state.vars_seen++
+        if (state.vars_seen > 1) {
+            state.disqualified = true
+            perf022_stack[top_idx] = state
+            return
+        }
+        state.iter_var = v
+        perf022_stack[top_idx] = state
+    }
+
+    def perf022_inspect_body(body : Expression?) : void {
+        //! Called from preVisitExprForBody. Flips `matched` iff the body is
+        //! a single-statement ExprBlock containing exactly one ExprCall to
+        //! push/push_clone with arg[1] = the frame's iter_var. Compiler folds
+        //! 'B |> push(s)', 'B.push(s)', and 'push(B, s)' to the same shape,
+        //! so this single check covers all three call forms.
+        if (empty(perf022_stack)) return
+        let top_idx = length(perf022_stack) - 1
+        var state = perf022_stack[top_idx]
+        if (state.disqualified || state.iter_var == null
+            || state.sources_seen != 1 || state.vars_seen != 1
+            || body == null || !(body is ExprBlock)) return
+        var blk = body as ExprBlock
+        if (length(blk.list) != 1) return
+        var stmt = blk.list[0]
+        if (stmt == null || !(stmt is ExprCall) || (stmt as ExprCall).func == null
+            || length((stmt as ExprCall).arguments) != 2) return
+        var call = stmt as ExprCall
+        // Destination must be `array<T>` — the `*_from` overloads are array-only.
+        // Generic `auto` parameters (e.g. `[expect_any_vector] def clone(var args;
+        // ...)` in builtin.das) where the destination accepts dasvector etc. must
+        // be skipped — no push_from overload exists for them.
+        let dest = call.arguments[0]
+        if (dest == null || dest._type == null || dest._type.baseType != Type.tArray) return
+        var callee_id = 0
+        if (call.func.fromGeneric != null) {
+            if (call.func.fromGeneric.name == "push") {
+                callee_id = 1
+            } elif (call.func.fromGeneric.name == "push_clone") {
+                callee_id = 2
+            }
+        } else {
+            if (call.func.name == "push") {
+                callee_id = 1
+            } elif (call.func.name == "push_clone") {
+                callee_id = 2
+            }
+        }
+        if (callee_id == 0) return
+        var arg1 = call.arguments[1]
+        if (arg1 is ExprRef2Value) {
+            arg1 = (arg1 as ExprRef2Value.subexpr)
+        }
+        if (arg1 == null || !(arg1 is ExprVar)) return
+        var ev = arg1 as ExprVar
+        if (ev.variable != state.iter_var) return
+        state.matched = true
+        state.callee_id = callee_id
+        perf022_stack[top_idx] = state
+    }
+
+    def perf022_pop_and_check() : void {
+        if (empty(perf022_stack)) return
+        let top_idx = length(perf022_stack) - 1
+        let state = perf022_stack[top_idx]
+        let owning = perf022_for_exprs[top_idx]
+        perf022_stack    |> pop()
+        perf022_for_exprs |> pop()
+        if (state.matched && !state.disqualified && owning != null) {
+            let name = state.callee_id == 1 ? "push" : "push_clone"
+            self->perf_warning("PERF022: for-loop body 'B |> {name}(x)' pushes one element per iteration; use 'B |> {name}_from(A)' for a bulk reserve+copy", owning.at)
         }
     }
 
@@ -1525,10 +1671,7 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
         visit(prog, astVisitorAdapter)
     }
     let count = astVisitor.warning_count
-    warnings |> reserve(length(astVisitor.warnings))
-    for (w in astVisitor.warnings) {
-        warnings |> push(w)
-    }
+    warnings |> push_from(astVisitor.warnings)
     unsafe { delete astVisitor; }
     return count
 }

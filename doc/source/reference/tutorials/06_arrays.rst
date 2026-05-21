@@ -52,6 +52,27 @@ Operations
   resize(buf, 5)            // resize to 5 elements (zero-filled)
   clear(buf)                // remove all elements
 
+Bulk append
+===========
+
+To append every element of one array to another, prefer the bulk
+``push_from`` / ``push_clone_from`` / ``emplace_from`` overloads over a
+hand-rolled element-at-a-time ``for`` loop. The bulk forms reserve the
+combined capacity up front, so the allocator is touched once instead of
+N times::
+
+  var prefix <- [1, 2, 3]
+  var suffix <- [4, 5]
+  var combined : array<int>
+  combined |> push_from(prefix)
+  combined |> push_from(suffix)
+  // combined: [1, 2, 3, 4, 5]
+
+The ``PERF022`` lint rule flags the element-at-a-time shape and
+recommends the bulk form. ``push_clone_from`` clones each element (deep
+copy semantics) and ``emplace_from`` moves each element (consuming the
+source).
+
 Iteration
 =========
 

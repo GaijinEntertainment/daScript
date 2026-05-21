@@ -467,10 +467,7 @@ def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
     var buf : array<TT -const -&>
     if (n <= 0 || empty(arr)) return <- buf
     let take_count = min(n, length(arr))
-    buf |> reserve(length(arr))
-    for (it in arr) {
-        buf |> push_clone(it)
-    }
+    buf |> push_clone_from(arr)
     sort_boost::partial_sort(buf, take_count, $(v1, v2) => _::less(key(v1), key(v2)))
     buf |> resize(take_count)
     return <- buf
@@ -524,10 +521,7 @@ def top_n_by_descending(arr : array<auto(TT)>; n : int; key) : array<TT -const -
     var buf : array<TT -const -&>
     if (n <= 0 || empty(arr)) return <- buf
     let take_count = min(n, length(arr))
-    buf |> reserve(length(arr))
-    for (it in arr) {
-        buf |> push_clone(it)
-    }
+    buf |> push_clone_from(arr)
     sort_boost::partial_sort(buf, take_count, $(v1, v2) => _::less(key(v2), key(v1)))
     buf |> resize(take_count)
     return <- buf
@@ -583,10 +577,7 @@ def top_n_by_with_cmp(arr : array<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v
     var buf : array<TT -const -&>
     if (n <= 0 || empty(arr)) return <- buf
     let take_count = min(n, length(arr))
-    buf |> reserve(length(arr))
-    for (it in arr) {
-        buf |> push_clone(it)
-    }
+    buf |> push_clone_from(arr)
     sort_boost::partial_sort(buf, take_count, cmp)
     buf |> resize(take_count)
     return <- buf

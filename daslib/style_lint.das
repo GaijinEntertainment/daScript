@@ -1622,10 +1622,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
     }
     let count = astVisitor.warning_count
-    warnings |> reserve(length(astVisitor.warnings))
-    for (w in astVisitor.warnings) {
-        warnings |> push(w)
-    }
+    warnings |> push_from(astVisitor.warnings)
     unsafe { delete astVisitor; }
     return count
 }

@@ -398,10 +398,7 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
     manifest.author = meta.author
     manifest.license = meta.license
     manifest.min_sdk = meta.min_sdk
-    manifest.tags |> reserve(length(meta.tags))
-    for (tag in meta.tags) {
-        manifest.tags |> push_clone(tag)
-    }
+    manifest.tags |> push_clone_from(meta.tags)
     if (empty(manifest.name)) {
         to_log(LOG_ERROR, "Error: .das_package missing package_name()\n")
         return false
@@ -512,14 +509,8 @@ def private manifest_to_entry(manifest : PackageManifest; url : string) : IndexE
         license = manifest.license,
         min_sdk = manifest.min_sdk,
         has_native = manifest.has_native)
-    entry.tags |> reserve(length(manifest.tags))
-    for (t in manifest.tags) {
-        entry.tags |> push_clone(t)
-    }
-    entry.dependencies |> reserve(length(manifest.dependencies))
-    for (d in manifest.dependencies) {
-        entry.dependencies |> push_clone(d)
-    }
+    entry.tags |> push_clone_from(manifest.tags)
+    entry.dependencies |> push_clone_from(manifest.dependencies)
     return <- entry
 }
 
@@ -933,18 +924,12 @@ def cmd_update_index(root : string) : int {
                 }
                 if (!empty(manifest.tags)) {
                     delete index[name].tags
-                    index[name].tags |> reserve(length(manifest.tags))
-                    for (t in manifest.tags) {
-                        index[name].tags |> push_clone(t)
-                    }
+                    index[name].tags |> push_clone_from(manifest.tags)
                 }
                 index[name].has_native = manifest.has_native
                 if (!empty(manifest.dependencies)) {
                     delete index[name].dependencies
-                    index[name].dependencies |> reserve(length(manifest.dependencies))
-                    for (d in manifest.dependencies) {
-                        index[name].dependencies |> push_clone(d)
-                    }
+                    index[name].dependencies |> push_clone_from(manifest.dependencies)
                 }
             }
 

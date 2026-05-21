@@ -54,13 +54,9 @@ def reverse(var a : array<auto>) {
 def combine(a, b : array<auto(TT)>) {
     //! Returns a new array containing elements from a followed by b.
     var c : array<TT>
-    reserve(c, length(a) + length(b))
-    for (t in a) {
-        c |> push_clone(t)
-    }
-    for (t in b) {
-        c |> push_clone(t)
-    }
+    c |> reserve(long_length(a) + long_length(b))
+    c |> push_clone_from(a)
+    c |> push_clone_from(b)
     return <- c
 }
 

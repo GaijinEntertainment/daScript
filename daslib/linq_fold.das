@@ -487,13 +487,9 @@ def private prepend_binds(var stmts : array<Expression?>; var intermediateBinds 
     // Splice the chain's let-bindings (one per upstream `select`) ahead of the per-element
     if (empty(intermediateBinds)) return
     var prefixed : array<Expression?>
-    prefixed |> reserve(length(intermediateBinds) + length(stmts))
-    for (b in intermediateBinds) {
-        prefixed |> push(b)
-    }
-    for (s in stmts) {
-        prefixed |> push(s)
-    }
+    prefixed |> reserve(long_length(intermediateBinds) + long_length(stmts))
+    prefixed |> push_from(intermediateBinds)
+    prefixed |> push_from(stmts)
     swap(stmts, prefixed)
 }
 
@@ -522,10 +518,8 @@ def private prepend_precond(var body : Expression?; var preCondStmts : array<Exp
     // Splice per-element unconditional binds BEFORE the body. Used by the select+where
     if (empty(preCondStmts)) return body
     var stmts : array<Expression?>
-    stmts |> reserve(length(preCondStmts) + 1)
-    for (s in preCondStmts) {
-        stmts |> push(s)
-    }
+    stmts |> reserve(long_length(preCondStmts) + 1_l)
+    stmts |> push_from(preCondStmts)
     stmts |> push(body)
     return stmts_to_expr(stmts)
 }
@@ -600,9 +594,7 @@ def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeE
             $i(takeCountName) ++
         }
     }
-    for (s in stmts) {
-        prefixed |> push(s)
-    }
+    prefixed |> push_from(stmts)
     swap(stmts, prefixed)
 }
 
@@ -809,9 +801,7 @@ def private emit_accumulator_lane(
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + 4)
     append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
-    for (s in preludeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(preludeStmts)
     // For-loop emission: single-source uses one iter var (itName); 2-source (zip) uses literal `itA, itB` parallel iter vars (qmacro for-loop iter-var position doesn't accept $i(...) splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts so itName resolves inside the loop body.
     if (length(srcNames) == 1) {
         bodyStmts |> push <| qmacro_expr() {
@@ -1169,9 +1159,7 @@ def private emit_early_exit_lane(
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 3)
     append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
-    for (s in preludeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(preludeStmts)
     // For-loop emission: 1-source uses itName; 2-source (zip) uses literal `itA, itB` (qmacro for-iter-var position doesn't accept $i splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts.
     if (length(srcNames) == 1) {
         bodyStmts |> push <| qmacro_expr() {
@@ -1186,9 +1174,7 @@ def private emit_early_exit_lane(
             }
         }
     }
-    for (s in tailStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(tailStmts)
     return finalize_lane_emission(topExprs, srcNames, bodyStmts, at)
 }
 
@@ -3609,12 +3595,8 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
-    for (s in preludeStmts) {
-        bodyStmts |> push(s)
-    }
-    for (s in rangeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(preludeStmts)
+    bodyStmts |> push_from(rangeStmts)
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
@@ -3630,9 +3612,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             })
         }
     }
-    for (s in tailStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(tailStmts)
     var retType : TypeDeclPtr
     if (opName == "long_count") {
         retType = new TypeDecl(baseType = Type.tInt64)
@@ -3808,12 +3788,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     // Combine prelude + invocation + tail into ONE bodyStmts list — multiple $b splices in the same qmacro fragment isolate variable scope.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
-    for (s in preludeStmts) {
-        bodyStmts |> push(s)
-    }
-    for (s in rangeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(preludeStmts)
+    bodyStmts |> push_from(rangeStmts)
     // When takeExpr OR takeWhileCond is present, any/all/contains route their answer through explicit foundName state (set above) — the find result is unreliable because the iteration-stop signal and "real match" both produce inner `return true`. In that case, treat the find call as iteration control only and emit the return via tailStmts (which already contains `return foundName` / `return !foundName`).
     let useExplicitState = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) && (opName == "any" || opName == "all" || opName == "contains"))
     if (useExplicitState) {
@@ -3823,9 +3799,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                 return false
             })
         }
-        for (s in tailStmts) {
-            bodyStmts |> push(s)
-        }
+        bodyStmts |> push_from(tailStmts)
     } elif (opName == "any" || opName == "contains") {
         bodyStmts |> push <| qmacro_expr() {
             return for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
@@ -3848,9 +3822,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                 return false
             })
         }
-        for (s in tailStmts) {
-            bodyStmts |> push(s)
-        }
+        bodyStmts |> push_from(tailStmts)
     }
     var emission : Expression?
     if (opName == "first" || opName == "first_or_default") {
@@ -3901,9 +3873,7 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     bodyStmts |> push <| qmacro_expr() {
         var $i(bufName) : array<$t(elemType)>
     }
-    for (s in rangeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(rangeStmts)
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
@@ -3991,9 +3961,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     bodyStmts |> push <| qmacro_expr() {
         var $i(bestElemName) : $t(elemType)
     }
-    for (s in rangeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(rangeStmts)
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
@@ -4669,9 +4637,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     let archName = bridge.archName
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + 2)
-    for (s in preludeStmts) {
-        bodyStmts |> push(s)
-    }
+    bodyStmts |> push_from(preludeStmts)
     if (takeExpr != null) {
         bodyStmts |> push <| qmacro_expr() {
             for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
