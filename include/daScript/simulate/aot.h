@@ -659,14 +659,12 @@ namespace das {
         using SIZE_POLICY = das_default_vector_size<TT>;
         static __forceinline OT & at ( TT & value, int32_t index, Context * __context__ ) {
             uint32_t size = SIZE_POLICY::size(value);
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
+            if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %d of %u", index, size);
             return value[index];
         }
         static __forceinline const OT & at ( const TT & value, int32_t index, Context * __context__ ) {
             uint32_t size = SIZE_POLICY::size(value);
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
+            if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %d of %u", index, size);
             return value[index];
         }
         static __forceinline OT & at ( TT & value, uint32_t idx, Context * __context__ ) {
@@ -706,8 +704,7 @@ namespace das {
     __forceinline OT & das_ati ( TT & value, int32_t index, Context * __context__, LineInfoArg * __info__ ) {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint32_t size = SIZE_POLICY::size(value);
-        uint32_t idx = uint32_t(index);
-        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_at(__info__,"vector index out of range, %d of %u", index, size);
         return value[index];
     }
 
@@ -739,8 +736,7 @@ namespace das {
     __forceinline const OT & das_atci ( const TT & value, int32_t index, Context * __context__, LineInfoArg * __info__ ) {
         using SIZE_POLICY = das_default_vector_size<TT>;
         uint32_t size = SIZE_POLICY::size(value);
-        uint32_t idx = uint32_t(index);
-        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_at(__info__,"vector index out of range, %d of %u", index, size);
         return value[index];
     }
 
@@ -776,14 +772,12 @@ namespace das {
     struct das_vec_index {
     // index
         static __forceinline TT & at ( VecT & value, int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
-            return (&value.x)[idx];
+            if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %d of %u", index, size);
+            return (&value.x)[index];
         }
         static __forceinline const TT & at ( const VecT & value, int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
-            return (&value.x)[idx];
+            if ( index<0 || uint32_t(index)>=size ) __context__->throw_error_ex("vector index out of range, %d of %u", index, size);
+            return (&value.x)[index];
         }
         static __forceinline TT & at ( VecT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
@@ -796,15 +790,13 @@ namespace das {
     // safe index
         static __forceinline TT * safe_at ( VecT * value, int32_t index, Context * ) {
             if (!value) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if (idx >= size) return nullptr;
-            return (&value->x) + idx;
+            if ( index<0 || uint32_t(index)>=size ) return nullptr;
+            return (&value->x) + index;
         }
         static __forceinline const TT * safe_at ( const VecT * value, int32_t index, Context * ) {
             if (!value) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) return nullptr;
-            return (&value->x) + idx;
+            if ( index<0 || uint32_t(index)>=size ) return nullptr;
+            return (&value->x) + index;
         }
         static __forceinline TT * safe_at ( VecT * value, uint32_t idx, Context * ) {
             if (!value) return nullptr;
@@ -840,9 +832,8 @@ namespace das {
     struct das_index<Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
         static __forceinline VecT & at ( MatT & value, int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
-            return value.m[idx];
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %u", index, size);
+            return value.m[index];
         }
         static __forceinline VecT & at ( MatT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
@@ -854,9 +845,8 @@ namespace das {
     struct das_index<const Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
         static __forceinline const VecT & at ( const MatT & value, int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
-            return value.m[idx];
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %u", index, size);
+            return value.m[index];
         }
         static __forceinline const VecT & at ( const MatT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
@@ -948,13 +938,11 @@ namespace das {
         }
     // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %u", index, size);
             return data[index];
         }
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %u", index, size);
             return data[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
@@ -968,14 +956,12 @@ namespace das {
     // safe index
         static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {
             if (!that) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if (idx >= uint32_t(size)) return nullptr;
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) return nullptr;
             return that->data + index;
         }
         static __forceinline const TT * safe_index ( const THIS_TYPE * that, int32_t index, Context * ) {
             if (!that) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if ( idx>=uint32_t(size) ) return nullptr;
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) return nullptr;
             return that->data + index;
         }
         static __forceinline TT * safe_index ( THIS_TYPE * that, uint32_t idx, Context * ) {
@@ -1037,13 +1023,11 @@ namespace das {
         }
     // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("array index out of range, %d of %llu", index, (unsigned long long)size);
             return ((TT *)data)[index];
         }
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
-            uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %llu", idx, (unsigned long long)size);
+            if ( index<0 || uint64_t(index)>=size ) __context__->throw_error_ex("array index out of range, %d of %llu", index, (unsigned long long)size);
             return ((const TT *)data)[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
@@ -1073,14 +1057,12 @@ namespace das {
     // safe index
         static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {
             if (!that) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if (idx >= that->size) return nullptr;
+            if ( index<0 || uint64_t(index)>=that->size ) return nullptr;
             return ((TT *)that->data) + index;
         }
         static __forceinline const TT  * safe_index ( const THIS_TYPE * that, int32_t index, Context * ) {
             if (!that) return nullptr;
-            uint32_t idx = uint32_t(index);
-            if ( idx>=that->size ) return nullptr;
+            if ( index<0 || uint64_t(index)>=that->size ) return nullptr;
             return ((const TT *)that->data) + index;
         }
         static __forceinline TT * safe_index ( THIS_TYPE * that, int64_t index, Context * ) {
