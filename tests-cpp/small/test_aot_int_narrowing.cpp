@@ -107,3 +107,48 @@ TEST_CASE("aot.h int32 indexing — negative-index corruption + message clarity"
         ctx.clearException();
     }
 }
+
+// Interpreter-path coverage: compile a script and exercise SimNode_ArrayAt
+// (runtime_array.h), SimNode_Op2ArrayAt (simulate_fusion_at_array.cpp), and
+// SimNode_At (simulate_fusion_at.cpp). The aot.h fixes alone don't cover
+// these -- the interpreter has its own copy of the same negative-index bug.
+TEST_CASE("interpreter int32 indexing — negative-index diagnostic") {
+    TextPrinter tout;
+    ModuleGroup dummyLibGroup;
+    auto fAccess = make_smart<FsFileAccess>();
+    auto program = compileDaScript(
+        getDasRoot() + "/tests-cpp/small/test_index_diagnostic.das",
+        fAccess, tout, dummyLibGroup);
+    REQUIRE_FALSE(program->failed());
+
+    Context ctx(program->getContextStackSize());
+    REQUIRE(program->simulate(ctx, tout));
+
+    auto check_neg_diag = [&](const char * fnName) {
+        auto fn = ctx.findFunction(fnName);
+        REQUIRE_MESSAGE(fn, "function not found: ", fnName);
+        vec4f args[1];
+        args[0] = cast<int32_t>::from(-2);
+        bool ok = ctx.runWithCatch([&](){
+            ctx.callOrFastcall(fn, args, nullptr);
+        });
+        CHECK_MESSAGE(!ok, fnName, " did not panic");
+        REQUIRE(ctx.getException() != nullptr);
+        const char * msg = ctx.getException();
+        CHECK_MESSAGE(strstr(msg, "-2") != nullptr,
+                      fnName, " — expected '-2' in error, got: ", msg);
+        CHECK_MESSAGE(strstr(msg, "4294967294") == nullptr,
+                      fnName, " — error must NOT show wrap value, got: ", msg);
+        ctx.clearException();
+    };
+
+    SUBCASE("array<int>[-2] — SimNode_ArrayAt (non-fused)") {
+        check_neg_diag("neg_int_array_at");
+    }
+    SUBCASE("array<int>[-2] via `var x =` — SimNode_Op2ArrayAt (fused)") {
+        check_neg_diag("neg_int_array_at_fused");
+    }
+    SUBCASE("dim[-2] — SimNode_At / SimNode_Op2At") {
+        check_neg_diag("neg_int_dim_at");
+    }
+}

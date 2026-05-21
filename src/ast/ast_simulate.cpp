@@ -1915,9 +1915,13 @@ namespace das
             if ( expr->index->rtti_isConstant() ) {
             // if its constant index, like a[3]..., we try to let node bellow simulate
                 auto idxCE = static_cast<ExprConst*>(expr->index);
-                uint32_t idxC = cast<uint32_t>::to(idxCE->value);
-                if ( idxC >= range ) {
-                    context.thisProgram->error("index out of range " + to_string(idxC) + " of " + to_string(range) + ", " + expr->describe(), "", "",
+                bool idxSigned = expr->index->type->baseType == Type::tInt
+                              || expr->index->type->baseType == Type::tInt64;
+                int32_t idxS = cast<int32_t>::to(idxCE->value);
+                uint32_t idxC = uint32_t(idxS);
+                if ( (idxSigned && idxS<0) || idxC >= range ) {
+                    string idxStr = idxSigned ? to_string(idxS) : to_string(idxC);
+                    context.thisProgram->error("index out of range " + idxStr + " of " + to_string(range) + ", " + expr->describe(), "", "",
                         at, CompilationError::exceeds_array);
                     return nullptr;
                 }

@@ -1715,6 +1715,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprAt
+    // True for `int` / `int64` index types -- the cases where widening must use
+    // SExt to keep negative-index detection working against arrays > UINT32_MAX.
+    def is_signed_index_type(t : TypeDeclPtr) : bool {
+        return t != null && (t.baseType == Type.tInt || t.baseType == Type.tInt64)
+    }
+
     // Bring two integer LLVM values to a common width by zero-extending the narrower one.
     // Needed since Array.size widened to i64 but daslang's default int index is still i32.
     def normalize_int_widths(lhs : LLVMOpaqueValue?; rhs : LLVMOpaqueValue?) : tuple<LLVMOpaqueValue?; LLVMOpaqueValue?> {
@@ -1725,9 +1731,25 @@ class public LlvmJitVisitor : AstVisitor {
         return (lhs, rhs)
     }
 
-    def check_range(tidx, maxIdx : LLVMOpaqueValue?; at : LineInfo; message : string) {
+    // For signed index: sign-extend on widening so negative becomes
+    // 0xFFFF...FFFE; the subsequent unsigned compare against size then catches
+    // both negative and oversize indices. Plain ZExt would zero-extend -2 to
+    // 4294967294, which is < size for arrays > UINT32_MAX -- silent corruption.
+    def check_range(tidx, maxIdx : LLVMOpaqueValue?; at : LineInfo; message : string; idxIsSigned : bool = true) {
         if (option_no_range_check) return
-        let (ntidx, nmax) = normalize_int_widths(tidx, maxIdx)
+        let wl = LLVMGetIntTypeWidth(LLVMTypeOf(tidx))
+        let wr = LLVMGetIntTypeWidth(LLVMTypeOf(maxIdx))
+        var ntidx = tidx
+        var nmax = maxIdx
+        if (wl < wr) {
+            if (idxIsSigned) {
+                ntidx = LLVMBuildSExt(g_builder, tidx, LLVMTypeOf(maxIdx), "")
+            } else {
+                ntidx = LLVMBuildZExt(g_builder, tidx, LLVMTypeOf(maxIdx), "")
+            }
+        } elif (wr < wl) {
+            nmax = LLVMBuildZExt(g_builder, maxIdx, LLVMTypeOf(tidx), "")
+        }
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")
@@ -1826,7 +1848,7 @@ class public LlvmJitVisitor : AstVisitor {
                 vec[i - 1] = vec[i]
             }
             vec |> resize(vec |> length - 1)
-            check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range")
+            check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if (expr.atFlags.r2v) {
                 var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(expr._type),
@@ -1838,7 +1860,7 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (subExprT.isGoodArrayType) {
             var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, expr.subexpr._type.alignOf, "arr")
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
-            check_range(tidx, size, expr.at, "array index out of range")
+            check_range(tidx, size, expr.at, "array index out of range", is_signed_index_type(expr.index._type))
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
             var ptr_idx = build_array_index(data, tidx, subExprT.firstType, "array_at")
             if (expr.atFlags.r2v) {
@@ -1869,7 +1891,7 @@ class public LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } elif (subExprT.isVectorType) {
-            check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range")
+            check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range", is_signed_index_type(expr.index._type))
             if (expr.atFlags.r2v) {
                 var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
                     tsrc, subExprT.alignOf, "vector_at")

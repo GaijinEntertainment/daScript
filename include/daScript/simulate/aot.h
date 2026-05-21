@@ -832,11 +832,11 @@ namespace das {
     struct das_index<Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
         static __forceinline VecT & at ( MatT & value, int32_t index, Context * __context__ ) {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %u", index, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %d", index, size);
             return value.m[index];
         }
         static __forceinline VecT & at ( MatT & value, uint32_t idx, Context * __context__ ) {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
+            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %d", idx, size);
             return value.m[idx];
         }
     };
@@ -845,11 +845,11 @@ namespace das {
     struct das_index<const Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
         static __forceinline const VecT & at ( const MatT & value, int32_t index, Context * __context__ ) {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %u", index, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %d of %d", index, size);
             return value.m[index];
         }
         static __forceinline const VecT & at ( const MatT & value, uint32_t idx, Context * __context__ ) {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
+            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %d", idx, size);
             return value.m[idx];
         }
     };
@@ -938,19 +938,19 @@ namespace das {
         }
     // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %u", index, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %d", index, size);
             return data[index];
         }
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %u", index, size);
+            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %d", index, size);
             return data[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
+            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %d", idx, size);
             return data[idx];
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
+            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %d", idx, size);
             return data[idx];
         }
     // safe index
