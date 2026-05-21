@@ -211,7 +211,7 @@ def private push_text(var out : array<SqlFrag>; s : string) {
     if (empty(s)) return
     let n = length(out)
     if (n > 0 && out[n - 1] is text) {
-        out[n - 1] = SqlFrag(text = string(out[n - 1] as text) + s)
+        out[n - 1] = SqlFrag(text = out[n - 1] as text + s)
         return
     }
     out |> push(SqlFrag(text = s))
@@ -234,9 +234,7 @@ def private push_inline_lit(var out : array<SqlFrag>; e : ExpressionPtr) {
 
 [macro_function]
 def private push_frags(var dst : array<SqlFrag>; var src : array<SqlFrag>) {
-    for (f in src) {
-        dst |> push(f) // nolint:PERF006 macro-function, runs once per compile
-    }
+    dst |> push_from(src)
 }
 
 [macro_function]
@@ -245,13 +243,6 @@ def private has_bind_frag(var frags : array<SqlFrag>) : bool {
         if (f is bind) return true
     }
     return false
-}
-
-[macro_function]
-def private extract_const_string(e : ExpressionPtr) : tuple<bool; string> {
-    if (e == null || !(e is ExprConstString)) return (false, "")
-    let cs = e as ExprConstString
-    return (true, string(cs.value))
 }
 
 [macro_function]
@@ -296,7 +287,7 @@ def private fold_to_builder(var frags : array<SqlFrag>; at : LineInfo;
     // macro-function: short-burst string accumulation, flushed into ExprConstString nodes
     for (f in frags) {
         if (f is text) {
-            pending += string(f as text) // nolint:PERF001
+            pending += f as text // nolint:PERF001
         } elif (f is bind) {
             pending += "?" // nolint:PERF001
             var be : ExpressionPtr = f as bind
@@ -471,7 +462,7 @@ def private call_resolved_name(var call : ExprCall?) : string {
 [macro_function]
 def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : SqlQuery&;
                                            xSql : string; negated : bool; nullable : bool) : string {
-    // Captured-collection lowering for `_in` / `_not_in`: encode arr as JSON TEXT,
+    // nolint:STYLE015 Captured-collection lowering for `_in` / `_not_in`: encode arr as JSON TEXT,
     // single bind, query via SQLite's table-valued json_each. EF Core 8's default.
     var rawArg : ExpressionPtr = clone_expression(collArg)
     var wrapped : ExpressionPtr = qmacro(_::write_json(_::JV($e(rawArg))))
@@ -481,7 +472,7 @@ def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : 
         q.bindExprs |> push(wrapped)
     }
     if (negated) {
-        // Three-valued logic: `x != NULL` is unknown, so naive NOT IN drops rows
+        // nolint:STYLE015 Three-valued logic: `x != NULL` is unknown, so naive NOT IN drops rows
         // whose column is NULL. Defensive form preserves them on nullable columns.
         if (nullable) return "({xSql} NOT IN (SELECT value FROM json_each(?)) OR {xSql} IS NULL)"
         return "{xSql} NOT IN (SELECT value FROM json_each(?))"
@@ -491,7 +482,7 @@ def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : 
 
 [macro_function]
 def private looks_like_subquery_chain(var arg : ExpressionPtr) : bool {
-    // Walks `arg.arguments[0]` repeatedly; chain shape bottoms out at `select_from(...)`.
+    // nolint:STYLE015 Walks `arg.arguments[0]` repeatedly; chain shape bottoms out at `select_from(...)`.
     // Captured arrays / inline literals / user functions returning array<T> never reach it.
     // Handles both expanded ExprCall (e.g. `select(...)`) and unexpanded ExprCallMacro
     // (`_select(...)`, `_where(...)`) on intermediate chain links — Mode-2 doesn't deep-walk
@@ -519,7 +510,7 @@ def private looks_like_subquery_chain(var arg : ExpressionPtr) : bool {
 
 [macro_function]
 def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) : bool {
-    // Matches `_.<Field>` / `<alias>._.<Field>` (mirrors the column-ref qmatch arm in
+    // nolint:STYLE015 Matches `_.<Field>` / `<alias>._.<Field>` (mirrors the column-ref qmatch arm in
     // pred_to_sql) and consults is_option_field_type on the matching struct field.
     // Returns true on shapes we don't recognize so the caller emits the safer NOT IN
     // form by default.
@@ -554,46 +545,10 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
 // ===== Chain analysis (walk pipe-composed chain backwards) =====
 
 [macro_function]
-def private peel_lambda_body(var lam : ExpressionPtr) : ExpressionPtr {
-    if (lam == null || !(lam is ExprMakeBlock)) return null
-    var mblk = lam as ExprMakeBlock
-    var blk = mblk._block as ExprBlock
-    if (blk == null || blk.arguments |> length != 1 || blk.list |> length != 1 || !(blk.list[0] is ExprReturn)) return null
-    var ret = blk.list[0] as ExprReturn
-    return ret.subexpr
-}
-
-[macro_function]
-def private match_linq_call(var expr : ExpressionPtr; name : string) : ExprCall? {
-    if (expr == null || !(expr is ExprCall)) return null
-    var call = expr as ExprCall
-    if (call.func == null || call.func._module == null) return null
-    if ((call.func.name == name && call.func._module.name == "linq")
-            || (call.func.fromGeneric != null
-                && call.func.fromGeneric.name == name
-                && call.func.fromGeneric._module != null
-                && call.func.fromGeneric._module.name == "linq")) return call
-    return null
-}
-
-[macro_function]
-def private match_module_call(var expr : ExpressionPtr; name : string; modName : string) : ExprCall? {
-    if (expr == null || !(expr is ExprCall)) return null
-    var call = expr as ExprCall
-    if (call.func == null || call.func._module == null) return null
-    if ((call.func.name == name && call.func._module.name == modName)
-            || (call.func.fromGeneric != null
-                && call.func.fromGeneric.name == name
-                && call.func.fromGeneric._module != null
-                && call.func.fromGeneric._module.name == modName)) return call
-    return null
-}
-
-[macro_function]
 def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
                                   linqName : string; sqlOp : string; promote_to_double : bool;
                                   prog : ProgramPtr; at : LineInfo) : bool {
-    var aCall = match_linq_call(node, linqName)
+    var aCall = match_call_in_linq(node, linqName)
     if (aCall == null) return false
     if (q.seenTerminal || q.seenToArray) {
         macro_error(prog, at, "_sql: only one terminal allowed per chain")
@@ -1144,23 +1099,13 @@ def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr
         total += length(j.rightOnBindExprs)
     }
     out |> reserve(out |> length + total)
-    for (b in q.innerBindExprs) {
-        out |> push(b)
-    }
+    out |> push_from(q.innerBindExprs)
     for (j in q.joins) {
-        for (b in j.rightOnBindExprs) {
-            out |> push(b)
-        }
+        out |> push_from(j.rightOnBindExprs)
     }
-    for (b in q.bindExprs) {
-        out |> push(b)
-    }
-    for (b in q.havingBindExprs) {
-        out |> push(b)
-    }
-    for (b in q.setOpRhsBinds) {
-        out |> push(b)
-    }
+    out |> push_from(q.bindExprs)
+    out |> push_from(q.havingBindExprs)
+    out |> push_from(q.setOpRhsBinds)
     let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
                           && q.proj != ProjectionShape.Aggregate)
     if (!forced_one_row && q.limitBindExpr != null) {
@@ -1331,9 +1276,9 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel first(prev) — `|> first()` or `|> _first()`.
     {
-        var fCall = match_linq_call(node, "first")
+        var fCall = match_call_in_linq(node, "first")
         if (fCall == null) {
-            fCall = match_module_call(node, "_first", "sqlite_linq")
+            fCall = match_call_in_module(node, "_first", "sqlite_linq")
         }
         if (fCall != null) {
             if (q.seenTerminal || q.seenToArray) {
@@ -1351,7 +1296,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel _first_opt(prev) — plain function in this module.
     {
-        var foCall = match_module_call(node, "_first_opt", "sqlite_linq")
+        var foCall = match_call_in_module(node, "_first_opt", "sqlite_linq")
         if (foCall != null) {
             if (q.seenTerminal || q.seenToArray) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
@@ -1364,7 +1309,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel count(prev) — `|> _count()` → SELECT COUNT(*) ...
     {
-        var cCall = match_linq_call(node, "count")
+        var cCall = match_call_in_linq(node, "count")
         if (cCall != null) {
             if (q.seenTerminal || q.seenToArray) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
@@ -1398,7 +1343,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // ---- Stage operators: peel distinct(prev) — emits SELECT DISTINCT.
     {
-        var dCall = match_linq_call(node, "distinct")
+        var dCall = match_call_in_linq(node, "distinct")
         if (dCall != null) {
             let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
             if (dr != 0) return dr > 0
@@ -1417,7 +1362,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel take(prev, n) — sets LIMIT n; bind emitted after WHERE so placeholder index lines up.
     {
-        var tCall = match_linq_call(node, "take")
+        var tCall = match_call_in_linq(node, "take")
         if (tCall != null) {
             let dr = maybe_divert(q, PHASE_TAKE, node, prog, at)
             if (dr != 0) return dr > 0
@@ -1436,7 +1381,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel order_by(prev, lambda) — body `_.Col` → `"Col" ASC`. Recurse first so groupBy state is in place for `_._N`.
     {
-        var obCall = match_linq_call(node, "order_by")
+        var obCall = match_call_in_linq(node, "order_by")
         if (obCall != null) {
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
@@ -1444,7 +1389,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering: `_order_by((_.k1, _.k2))`)")
                 return false
             }
-            var body = peel_lambda_body(obCall.arguments[1])
+            var body = peel_lambda_single_return(obCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _order_by key lambda has unexpected shape")
                 return false
@@ -1457,7 +1402,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel order_by_descending — same shape as order_by, emits DESC.
     {
-        var odCall = match_linq_call(node, "order_by_descending")
+        var odCall = match_call_in_linq(node, "order_by_descending")
         if (odCall != null) {
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
@@ -1465,7 +1410,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering)")
                 return false
             }
-            var body = peel_lambda_body(odCall.arguments[1])
+            var body = peel_lambda_single_return(odCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _order_by_descending key lambda has unexpected shape")
                 return false
@@ -1478,7 +1423,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel skip(prev, n) → OFFSET n. build_sql_string emits `LIMIT -1 OFFSET n` when no take.
     {
-        var sCall = match_linq_call(node, "skip")
+        var sCall = match_call_in_linq(node, "skip")
         if (sCall != null) {
             let dr = maybe_divert(q, PHASE_SKIP, node, prog, at)
             if (dr != 0) return dr > 0
@@ -1497,7 +1442,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel select(prev, lambda) — recurse first so q.seenGroupBy is set before projection analysis routes grouped vs row-scope.
     {
-        var sCall = match_linq_call(node, "select")
+        var sCall = match_call_in_linq(node, "select")
         if (sCall != null) {
             // nolint:STYLE015 v2 divert only behind outer WHERE (phase 2) — SQL `WHERE` filters source rows,
             // but linq `_select |> _where` filters PROJECTED rows; wrap pushes _select into a subquery so the
@@ -1516,7 +1461,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
             // Recurse first so q.seenGroupBy reflects any downstream `_group_by` fusing with this `_select`.
             if (!analyze_chain(sCall.arguments[0], q, prog, at)) return false
-            var body = peel_lambda_body(sCall.arguments[1])
+            var body = peel_lambda_single_return(sCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _select projection lambda has unexpected shape")
                 return false
@@ -1532,7 +1477,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel _having — recurse first to validate that _group_by sits inside; HAVING binds land in q.havingBindExprs (after WHERE).
     {
-        var hCall = match_linq_call(node, "having_")
+        var hCall = match_call_in_linq(node, "having_")
         if (hCall != null) {
             // v1: no divert on _having (paired with _group_by below; v2 handles divert when needed).
             if (PHASE_HAVING < q.minPhaseSeen) { q.minPhaseSeen = PHASE_HAVING; }
@@ -1555,7 +1500,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _having must appear AFTER _group_by in the chain")
                 return false
             }
-            var body = peel_lambda_body(hCall.arguments[1])
+            var body = peel_lambda_single_return(hCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _having predicate lambda has unexpected shape")
                 return false
@@ -1571,7 +1516,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel _group_by / _group_by_lazy — both lower to group_by_lazy; emits GROUP BY.
     {
-        var gbCall = match_linq_call(node, "group_by_lazy")
+        var gbCall = match_call_in_linq(node, "group_by_lazy")
         if (gbCall != null) {
             // v1: no divert on _group_by; v2 handles when paired with post-aggregate filter.
             if (PHASE_GROUP_BY < q.minPhaseSeen) { q.minPhaseSeen = PHASE_GROUP_BY; }
@@ -1583,7 +1528,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _group_by expects (chain, key)")
                 return false
             }
-            var body = peel_lambda_body(gbCall.arguments[1])
+            var body = peel_lambda_single_return(gbCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _group_by key lambda has unexpected shape")
                 return false
@@ -1595,11 +1540,11 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel _where — recurse first so q.rootType is set before pred_to_sql runs (needs it for @sql_json/@sql_blob descent).
     {
-        var wCall = match_linq_call(node, "where_")
+        var wCall = match_call_in_linq(node, "where_")
         if (wCall != null) {
             // _where is broadly commutative with JOIN / GROUP / SELECT in SQL — no divert; just track min phase.
             if (PHASE_WHERE < q.minPhaseSeen) { q.minPhaseSeen = PHASE_WHERE; }
-            var body = peel_lambda_body(wCall.arguments[1])
+            var body = peel_lambda_single_return(wCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _where predicate lambda has unexpected shape")
                 return false
@@ -1623,17 +1568,17 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var soKind = SetOpKind.None
         var soCall : ExprCall?
-        var uCall = match_linq_call(node, "union")
+        var uCall = match_call_in_linq(node, "union")
         if (uCall != null) {
             soCall = uCall
             soKind = SetOpKind.Union
         } else {
-            var iCall = match_linq_call(node, "intersect")
+            var iCall = match_call_in_linq(node, "intersect")
             if (iCall != null) {
                 soCall = iCall
                 soKind = SetOpKind.Intersect
             } else {
-                var eCall = match_linq_call(node, "except")
+                var eCall = match_call_in_linq(node, "except")
                 if (eCall != null) {
                     soCall = eCall
                     soKind = SetOpKind.Except
@@ -1697,27 +1642,27 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // Peel _join (linq_boost expands `on` into keya/keyb selectors).
     {
-        var jCall = match_linq_call(node, "join")
+        var jCall = match_call_in_linq(node, "join")
         if (jCall != null) return process_join_call(jCall, q, JoinKind.Inner, prog, at)
     }
     // Peel _left_join — same shape as `join`, right side becomes NULL on no-match.
     {
-        var ljCall = match_linq_call(node, "left_join")
+        var ljCall = match_call_in_linq(node, "left_join")
         if (ljCall != null) return process_join_call(ljCall, q, JoinKind.Left, prog, at)
     }
     // Peel _right_join — mirror of left_join, left side becomes NULL on no-match. SQLite ≥3.39.
     {
-        var rjCall = match_linq_call(node, "right_join")
+        var rjCall = match_call_in_linq(node, "right_join")
         if (rjCall != null) return process_join_call(rjCall, q, JoinKind.Right, prog, at)
     }
     // Peel _full_outer_join — both sides surface; unmatched pair with NULL. SQLite ≥3.39.
     {
-        var foCall = match_linq_call(node, "full_outer_join")
+        var foCall = match_call_in_linq(node, "full_outer_join")
         if (foCall != null) return process_join_call(foCall, q, JoinKind.FullOuter, prog, at)
     }
     // Peel _cross_join — Cartesian; 3-arg shape (no on lambda).
     {
-        var cxCall = match_linq_call(node, "cross_join")
+        var cxCall = match_call_in_linq(node, "cross_join")
         if (cxCall != null) return process_cross_join_call(cxCall, q, prog, at)
     }
     // Bottom: select_from(db, type<T>) — plain function in sqlite_boost.
@@ -1760,19 +1705,19 @@ def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
         var probeAlias : string
         var sqlCol : string
         if (spec.kind == JoinKind.Left && srcIdx == 1) {
-            probeAlias = string(spec.alias)
+            probeAlias = spec.alias
             sqlCol = field_to_column_name(spec.rootType, spec.rightCol)
         } elif (spec.kind == JoinKind.Right && srcIdx == 0) {
             // LHS owner type: q.rootType pre-wrap, q.fromRowType post multi-join wrap.
             let lhsOwner = q.rootType != null ? q.rootType : q.fromRowType
-            probeAlias = string(spec.leftAlias)
+            probeAlias = spec.leftAlias
             sqlCol = field_to_column_name(lhsOwner, spec.leftCol)
         } elif (spec.kind == JoinKind.FullOuter && srcIdx == 0) {
             let lhsOwner = q.rootType != null ? q.rootType : q.fromRowType
-            probeAlias = string(spec.leftAlias)
+            probeAlias = spec.leftAlias
             sqlCol = field_to_column_name(lhsOwner, spec.leftCol)
         } elif (spec.kind == JoinKind.FullOuter && srcIdx == 1) {
-            probeAlias = string(spec.alias)
+            probeAlias = spec.alias
             sqlCol = field_to_column_name(spec.rootType, spec.rightCol)
         } else {
             return ""
@@ -2076,10 +2021,10 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
     // sum/average/min/max over `_._1 |> select($(p:T)=>p.X)` → SUM("X") etc.
     if ((fname == "sum" || fname == "average" || fname == "min" || fname == "max") && argc == 1) {
         var inner : ExpressionPtr = call.arguments[0]
-        var innerCall = match_linq_call(inner, "select")
+        var innerCall = match_call_in_linq(inner, "select")
         if (innerCall != null && innerCall.arguments |> length == 2
                 && qmatch(innerCall.arguments[0], _._1).matched) {
-            var lamBody = peel_lambda_body(innerCall.arguments[1])
+            var lamBody = peel_lambda_single_return(innerCall.arguments[1])
             if (lamBody == null) {
                 macro_error(prog, at, "_sql: aggregate's inner select lambda has unexpected shape")
                 return true
@@ -2601,7 +2546,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             let xSql = pred_to_sql(mcall.arguments[0], q, prog, at)
             return "" if (q.hadError)
             var collArg : ExpressionPtr = mcall.arguments[1]
-            // Subquery form first: `select_from(...) |> ...` chains have array type
+            // nolint:STYLE015 Subquery form first: `select_from(...) |> ...` chains have array type
             // post-typer, so isGoodArrayType alone can't distinguish them from a
             // captured runtime array — pick by AST shape (chain bottoms out at
             // `select_from`).
@@ -2622,7 +2567,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 if (mname == "_not_in") return "{xSql} NOT IN ({subSql})"
                 return "{xSql} IN ({subSql})"
             }
-            // Captured-collection form: arg2 is `array<T>` (variable, function result,
+            // nolint:STYLE015 Captured-collection form: arg2 is `array<T>` (variable, function result,
             // literal). Bind JSON-encoded TEXT and use SQLite's table-valued json_each —
             // single bind, any size, plan-cache-friendly (matches EF Core 8's default).
             if (collArg._type != null && collArg._type.isGoodArrayType) {
@@ -2731,7 +2676,7 @@ def private user_arg_count(call : ExprCall?) : int {
     var n = length(call.arguments)
     while (n > 0) {
         let a = call.arguments[n - 1]
-        let kind = string(a.__rtti)
+        let kind = a.__rtti
         if (kind == "ExprFakeContext" || kind == "ExprFakeLineInfo") {
             n--
         } else {
@@ -2806,7 +2751,7 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
         macro_error(prog, at, "_sql: subqueries cannot have terminals (`_first`, `_to_array`, `_count`, etc.)")
         return ""
     }
-    var body = peel_lambda_body(predLambda)
+    var body = peel_lambda_single_return(predLambda)
     if (body == null) {
         macro_error(prog, at, "_sql: _any/_none predicate lambda has unexpected shape")
         return ""
@@ -3477,7 +3422,7 @@ class private SqlCreateViewMacro : AstCallMacro {
                 var col_name = string(viewT.structType.fields[i].name)
                 let col_anno = find_arg(viewT.structType.fields[i].annotation, "sql_column")
                 if (col_anno is tString) {
-                    col_name = string(col_anno as tString)
+                    col_name = col_anno as tString
                 }
                 w |> write("\"")
                 w |> write(col_name)
@@ -3623,7 +3568,7 @@ def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string
     for (field in st.fields) {
         if (field.name == fieldName) {
             let v = find_arg(field.annotation, annoName)
-            if (v is tString) return string(v as tString)
+            if (v is tString) return v as tString
             return defaultV
         }
     }
@@ -3953,10 +3898,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
         if (setQ.hadError || empty(valSql)) return false
         setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
-    setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
-    for (b in setQ.bindExprs) {
-        setBindExprs |> push(b)
-    }
+    setBindExprs |> push_from(setQ.bindExprs)
     return true
 }
 
@@ -4046,12 +3988,8 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
     // Combine binds: SET first, then WHERE.
     var allBinds : array<ExpressionPtr>
     allBinds |> reserve(length(setBindExprs) + length(q.bindExprs))
-    for (b in setBindExprs) {
-        allBinds |> push(b)
-    }
-    for (b in q.bindExprs) {
-        allBinds |> push(b)
-    }
+    allBinds |> push_from(setBindExprs)
+    allBinds |> push_from(q.bindExprs)
     var frags : array<SqlFrag>
     sql_to_frags(sql, allBinds, frags)
     var sqlExpr : ExpressionPtr
@@ -4413,10 +4351,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         if (setQ.hadError || empty(valSql)) return false
         setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
-    setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
-    for (b in setQ.bindExprs) {
-        setBindExprs |> push(b)
-    }
+    setBindExprs |> push_from(setQ.bindExprs)
     return true
 }
 
