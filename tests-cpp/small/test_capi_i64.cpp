@@ -150,23 +150,30 @@ TEST_CASE("das_array _i64 API: resize past UINT32_MAX (gated)") {
     das_array a;
     das_array_init(&a);
 
-    // 2.2 GB uint8 elements -- exceeds INT_MAX (2.147 GB) and confirms the
-    // _i64 path doesn't narrow. Stride 1 keeps the byte total identical to
-    // the element count.
-    const uint64_t HUGE_N = uint64_t(2200) * 1024 * 1024;
+    // 5 GiB uint8 elements -- comfortably past UINT32_MAX (~4.29 GiB), which
+    // is what proves the _i64 entries don't truncate via uint32 narrowing.
+    // Stride 1 keeps the byte total equal to the element count.
+    const uint64_t HUGE_N = uint64_t(5) * 1024 * 1024 * 1024;  // 5 GiB > UINT32_MAX
+    static_assert(uint64_t(5) * 1024 * 1024 * 1024 > uint64_t(UINT32_MAX),
+                  "HUGE_N must exceed UINT32_MAX to exercise the _i64 path");
     das_array_resize_i64(ic.ctx, &a, HUGE_N, /*stride=*/1, /*zero=*/0);
     REQUIRE(a.data != nullptr);
     REQUIRE(das_context_get_exception(ic.ctx) == nullptr);
     CHECK(a.size == HUGE_N);
     CHECK(a.capacity >= HUGE_N);
 
-    // Write sentinels near the tail (past UINT32_MAX).
-    *(uint8_t*)das_array_at_i64(&a, HUGE_N - 3, sizeof(uint8_t)) = 0xAA;
-    *(uint8_t*)das_array_at_i64(&a, HUGE_N - 2, sizeof(uint8_t)) = 0xBB;
-    *(uint8_t*)das_array_at_i64(&a, HUGE_N - 1, sizeof(uint8_t)) = 0xCC;
-    CHECK(*(uint8_t*)das_array_at_i64(&a, HUGE_N - 3, sizeof(uint8_t)) == 0xAA);
-    CHECK(*(uint8_t*)das_array_at_i64(&a, HUGE_N - 2, sizeof(uint8_t)) == 0xBB);
-    CHECK(*(uint8_t*)das_array_at_i64(&a, HUGE_N - 1, sizeof(uint8_t)) == 0xCC);
+    // Write + read sentinels at indices > UINT32_MAX. Pre-fix the uint32_t entry
+    // would have truncated these indices into the low ~4 GiB region and
+    // returned a wrong pointer; the _i64 entry must thread the full uint64_t.
+    const uint64_t IDX_A = uint64_t(UINT32_MAX) + 17;        // ~4.29 G + 17
+    const uint64_t IDX_B = HUGE_N - 2;                       // ~5 G - 2
+    const uint64_t IDX_C = HUGE_N - 1;                       // ~5 G - 1
+    *(uint8_t*)das_array_at_i64(&a, IDX_A, sizeof(uint8_t)) = 0xAA;
+    *(uint8_t*)das_array_at_i64(&a, IDX_B, sizeof(uint8_t)) = 0xBB;
+    *(uint8_t*)das_array_at_i64(&a, IDX_C, sizeof(uint8_t)) = 0xCC;
+    CHECK(*(uint8_t*)das_array_at_i64(&a, IDX_A, sizeof(uint8_t)) == 0xAA);
+    CHECK(*(uint8_t*)das_array_at_i64(&a, IDX_B, sizeof(uint8_t)) == 0xBB);
+    CHECK(*(uint8_t*)das_array_at_i64(&a, IDX_C, sizeof(uint8_t)) == 0xCC);
 
     das_array_clear(ic.ctx, &a, sizeof(uint8_t));
     cleanup_inline_ctx(ic);

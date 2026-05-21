@@ -1193,7 +1193,11 @@ void * das_array_at ( das_array * arr, uint32_t index, uint32_t stride ) {
 }
 
 void * das_array_at_i64 ( das_array * arr, uint64_t index, uint32_t stride ) {
-    return ((Array *)arr)->data + uint64_t(index) * uint64_t(stride);
+    // size_t matches das_array_at's pattern: 64-bit on 64-bit platforms (where
+    // arr.size > UINT32_MAX is reachable), 32-bit on 32-bit platforms (where
+    // a huge index can't be addressed anyway -- same graceful degradation as
+    // the legacy entry).
+    return ((Array *)arr)->data + size_t(index) * size_t(stride);
 }
 
 void das_array_lock ( das_context * context, das_array * arr ) {
