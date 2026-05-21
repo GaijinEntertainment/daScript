@@ -1601,22 +1601,8 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find-dupe/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install blind-mouse (personal Q&A cache MCP server).
-file(GLOB DAS_MOUSE_FILES ${PROJECT_SOURCE_DIR}/utils/mouse/*.das)
-install(FILES ${DAS_MOUSE_FILES} DESTINATION utils/mouse)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/mouse/README.md
-    ${PROJECT_SOURCE_DIR}/utils/mouse/OVERVIEW.md
-    ${PROJECT_SOURCE_DIR}/utils/mouse/.das_package
-    DESTINATION utils/mouse
-)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mouse/tests/
-    DESTINATION utils/mouse/tests
-    FILES_MATCHING PATTERN "*.das" PATTERN "*.md"
-)
-
-# Install utils/common (git-aware staleness signature shared between
-# utils/mcp/tools/cpp_common and utils/mouse/index).
+# Install utils/common (git-aware staleness signature used by
+# utils/mcp/tools/cpp_common for source-search staleness tracking).
 file(GLOB DAS_UTILS_COMMON_FILES ${PROJECT_SOURCE_DIR}/utils/common/*.das)
 install(FILES ${DAS_UTILS_COMMON_FILES} DESTINATION utils/common)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/common/tests/
