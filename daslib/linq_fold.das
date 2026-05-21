@@ -4213,7 +4213,15 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             $b(bodyStmts)
         }))
     } elif (firstName == "first_or_default") {
-        // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case.
+        // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case. The default expression is hoisted into a let BEFORE for_each_archetype so its side effects fire ahead of iteration (matches plan_decs_reverse's first_or_default + the eager-arg-eval semantics of the non-spliced chain).
+        let dBindName = "`order_d`{at.line}`{at.column}"
+        var foDStmts : array<Expression?>
+        foDStmts |> reserve(4)
+        foDStmts |> push <| qmacro_expr() {
+            let $i(dBindName) = $e(firstDefaultExpr)
+        }
+        foDStmts |> push(bodyStmts[0])
+        foDStmts |> push(bodyStmts[1])
         var topNCall : Expression?
         if (inlineCmp != null) {
             topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), 1, $e(inlineCmp)))
@@ -4222,11 +4230,11 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), 1))
         }
-        bodyStmts |> push <| qmacro_expr() {
-            return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+        foDStmts |> push <| qmacro_expr() {
+            return _::first_or_default($e(topNCall), $i(dBindName))
         }
         emission = qmacro(invoke($() : $t(elemType) {
-            $b(bodyStmts)
+            $b(foDStmts)
         }))
     } elif (takeExpr == null) {
         // Bare order family — sort buffer in place and return.
@@ -4794,8 +4802,7 @@ class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        // Tier 1 splice — try the dedicated order-family planner first (handles
-        // Slice 5d: decs-bridge planners run BEFORE their array-side equivalents.
+        // Decs-bridge planners run BEFORE their array-side equivalents (Slice 5d cascade rule — decs planners have stricter guards; running them second lets the generic planner match on the eager-bridge invoke and silently emit the slow shape).
         var res : Expression? = plan_decs_order_family(call.arguments[0])
         if (res != null) return res
         res = plan_order_family(call.arguments[0])

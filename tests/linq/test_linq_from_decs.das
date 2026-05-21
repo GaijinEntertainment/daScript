@@ -1791,6 +1791,33 @@ def test_unroll5d_order_by_first_or_default_empty(t : T?) {
     t |> equal(target_unroll5d_order_by_first_or_default_fold().price, -99, "empty decs source → default")
 }
 
+// Eval-order invariant: the splice must evaluate the first_or_default default expression BEFORE the for_each_archetype loop, matching plan_decs_reverse's first_or_default hoist + the eager-arg-eval semantics of the equivalent non-spliced chain. Detected via a side-effecting predicate that flips a global flag during iter and a side-effecting default that snapshots the flag.
+var g_eval_order_iter_seen : bool = false
+var g_eval_order_default_saw_iter : bool = false
+def trace_pred_for_eval_order(rec : tuple<id : int; price : int; flag : int>) : bool {
+    g_eval_order_iter_seen = true
+    return rec.flag == 1
+}
+def trace_default_for_eval_order() : tuple<id : int; price : int; flag : int> {
+    g_eval_order_default_saw_iter = g_eval_order_iter_seen
+    return (id = -1, price = -99, flag = -1)
+}
+
+[test]
+def test_unroll5d_order_by_first_or_default_eval_order(t : T?) {
+    fixture_unroll5d()
+    g_eval_order_iter_seen = false
+    g_eval_order_default_saw_iter = true
+    let got = _fold(
+        from_decs_template(type<Unroll5dRow>)
+            ._where(trace_pred_for_eval_order(_))
+            ._order_by(_.price)
+            .first_or_default(trace_default_for_eval_order())
+    )
+    t |> equal(g_eval_order_default_saw_iter, false, "default arg evaluated before for_each_archetype iteration")
+    t |> equal(got.flag, 1, "non-empty: top-1 by price among flag==1 returned")
+}
+
 // ── where + order_by + take ──
 
 [export, marker(no_coverage)]
