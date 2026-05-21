@@ -1255,3 +1255,399 @@ def test_unroll_take_while_any_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "decs_found"), 3, "take_while+any routes through explicit decs_found state (var + set + return)")
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5e: group_by on decs — state-table over for_each_archetype
+// ─────────────────────────────────────────────────────────────────────────────
+
+[decs_template(prefix = "unroll5e_")]
+struct UnrollGroupRow {
+    brand : int
+    val   : int
+    flag  : int
+}
+
+// Mirrors the tuple yielded by the from_decs_template bridge — used to type inner-select lambdas inside `_._1 |> select(@(r : UnrollGroupTup) => r.val) |> ...`.
+typedef UnrollGroupTup = tuple<brand : int; val : int; flag : int>
+
+def private fixture_unroll5e() {
+    // 7 entities: brand=val%3, val=10..16, flag=val%2
+    // brand 0 → vals {12,15}      len=2 sum=27 min=12 max=15 avg=13.5
+    // brand 1 → vals {10,13,16}   len=3 sum=39 min=10 max=16 avg=13.0
+    // brand 2 → vals {11,14}      len=2 sum=25 min=11 max=14 avg=12.5
+    restart()
+    var i = 10
+    while (i <= 16) {
+        let v = i
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.unroll5e_brand := v % 3
+            cmp.unroll5e_val := v
+            cmp.unroll5e_flag := v % 2
+        }
+        i ++
+    }
+    commit()
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_count_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, N = _._1 |> length))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_sum_fold() : array<tuple<Brand : int; S : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, S = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> sum))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_min_fold() : array<tuple<Brand : int; Min : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, Min = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> min))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_max_fold() : array<tuple<Brand : int; Max : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, Max = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> max))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_avg_fold() : array<tuple<Brand : int; Avg : double>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, Avg = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> average))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_first_fold() : array<tuple<Brand : int; F : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, F = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> first))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_multi_reducer_fold() : array<tuple<Brand : int; N : int; S : int; MX : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0,
+                              N = _._1 |> length,
+                              S = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> sum,
+                              MX = _._1 |> select(@(r : UnrollGroupTup) => r.val) |> max))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_count_terminator_fold() : int {
+    return _fold(from_decs_template(type<UnrollGroupRow>)
+                 ._group_by(_.brand)
+                 ._select((Brand = _._0, N = _._1 |> length))
+                 .count())
+}
+
+// Iterator-typed chain — bridge's `to_sequence(res)` makes `_group_by._select` yield iterator<...> by default (no trailing `.to_array()` peel). The splice must emit `to_sequence_move` to match the caller's static type; otherwise error[30343] iterator vs array. Regression guard for Copilot review on PR #2775.
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_iter_typed_fold() : iterator<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, N = _._1 |> length)))
+}
+
+// count(predicate) overload — the planner must NOT pop `.count(_.N >= 2)` as a bare count terminator (would silently drop the predicate). Must cascade to tier-2 so the 2-arg `count(src, pred)` overload runs. Regression guard for Copilot review on PR #2775.
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_count_pred_fold() : int {
+    return _fold(from_decs_template(type<UnrollGroupRow>)
+                 ._group_by(_.brand)
+                 ._select((Brand = _._0, N = _._1 |> length))
+                 ._count(_.N >= 2))
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_where_count_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._where(_.flag == 1)
+                    ._group_by(_.brand)
+                    ._select((Brand = _._0, N = _._1 |> length))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_select_sum_fold() : array<tuple<K : int; S : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._select(_.val)
+                    ._group_by(_ % 3)
+                    ._select((K = _._0, S = _._1 |> sum))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_having_count_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by_lazy(_.brand)
+                    ._having(_._1 |> length >= 3)
+                    ._select((Brand = _._0, N = _._1 |> length))
+                    .to_array())
+}
+
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_having_hidden_sum_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<UnrollGroupRow>)
+                    ._group_by_lazy(_.brand)
+                    ._having(_._1 |> select(@(r : UnrollGroupTup) => r.val) |> sum > 30)
+                    ._select((Brand = _._0, N = _._1 |> length))
+                    .to_array())
+}
+
+[test]
+def test_unroll5e_groupby_count_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_count_fold()
+    t |> equal(got.length(), 3, "3 brand buckets")
+    var perBrand : table<int; int>
+    for (item in got) {
+        perBrand[item.Brand] = item.N
+    }
+    t |> equal(perBrand[0], 2)
+    t |> equal(perBrand[1], 3)
+    t |> equal(perBrand[2], 2)
+}
+
+[test]
+def test_unroll5e_groupby_sum_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_sum_fold()
+    t |> equal(got.length(), 3)
+    var perBrand : table<int; int>
+    for (item in got) {
+        perBrand[item.Brand] = item.S
+    }
+    t |> equal(perBrand[0], 27)
+    t |> equal(perBrand[1], 39)
+    t |> equal(perBrand[2], 25)
+}
+
+[test]
+def test_unroll5e_groupby_min_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_min_fold()
+    t |> equal(got.length(), 3)
+    var perBrand : table<int; int>
+    for (item in got) {
+        perBrand[item.Brand] = item.Min
+    }
+    t |> equal(perBrand[0], 12)
+    t |> equal(perBrand[1], 10)
+    t |> equal(perBrand[2], 11)
+}
+
+[test]
+def test_unroll5e_groupby_max_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_max_fold()
+    t |> equal(got.length(), 3)
+    var perBrand : table<int; int>
+    for (item in got) {
+        perBrand[item.Brand] = item.Max
+    }
+    t |> equal(perBrand[0], 15)
+    t |> equal(perBrand[1], 16)
+    t |> equal(perBrand[2], 14)
+}
+
+[test]
+def test_unroll5e_groupby_avg_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_avg_fold()
+    t |> equal(got.length(), 3)
+    var perBrand : table<int; double>
+    for (item in got) {
+        perBrand[item.Brand] = item.Avg
+    }
+    t |> equal(perBrand[0], 13.5lf)
+    t |> equal(perBrand[1], 13.0lf)
+    t |> equal(perBrand[2], 12.5lf)
+}
+
+[test]
+def test_unroll5e_groupby_first_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_first_fold()
+    t |> equal(got.length(), 3)
+    // First per bucket depends on iteration order, but it must be A value FROM the bucket.
+    for (item in got) {
+        if (item.Brand == 0) t |> success(item.F == 12 || item.F == 15, "brand 0 first must be 12 or 15")
+        elif (item.Brand == 1) t |> success(item.F == 10 || item.F == 13 || item.F == 16, "brand 1 first must be 10/13/16")
+        elif (item.Brand == 2) t |> success(item.F == 11 || item.F == 14, "brand 2 first must be 11 or 14")
+    }
+}
+
+[test]
+def test_unroll5e_groupby_multi_reducer_parity(t : T?) {
+    fixture_unroll5e()
+    let got <- target_unroll5e_groupby_multi_reducer_fold()
+    t |> equal(got.length(), 3)
+    var keysSeen = 0
+    for (item in got) {
+        if (item.Brand == 0) {
+            t |> equal(item.N, 2); t |> equal(item.S, 27); t |> equal(item.MX, 15)
+            keysSeen ++
+        } elif (item.Brand == 1) {
+            t |> equal(item.N, 3); t |> equal(item.S, 39); t |> equal(item.MX, 16)
+            keysSeen ++
+        } elif (item.Brand == 2) {
+            t |> equal(item.N, 2); t |> equal(item.S, 25); t |> equal(item.MX, 14)
+            keysSeen ++
+        }
+    }
+    t |> equal(keysSeen, 3, "all 3 keys observed")
+}
+
+[test]
+def test_unroll5e_groupby_count_terminator_parity(t : T?) {
+    fixture_unroll5e()
+    t |> equal(target_unroll5e_groupby_count_terminator_fold(), 3, "count terminator returns length(tab)")
+}
+
+[test]
+def test_unroll5e_groupby_iter_typed_parity(t : T?) {
+    // Walks the iterator-typed chain; counts entries.
+    fixture_unroll5e()
+    var count = 0
+    for (item in target_unroll5e_groupby_iter_typed_fold()) {
+        count ++
+        // Every entry has a valid Brand (0/1/2) and N (count per bucket).
+        t |> success(item.Brand >= 0 && item.Brand <= 2, "Brand in 0..2")
+        t |> success(item.N >= 1, "N >= 1 (at least one row per bucket)")
+    }
+    t |> equal(count, 3, "iterator-typed group_by yields 3 buckets")
+}
+
+[test]
+def test_unroll5e_groupby_count_pred_parity(t : T?) {
+    // Buckets per brand: 0→2, 1→3, 2→2. `_.N >= 2` matches all 3 → result is 3.
+    fixture_unroll5e()
+    t |> equal(target_unroll5e_groupby_count_pred_fold(), 3, "count(predicate) over groups counts buckets satisfying pred")
+    // Smoke: change pred to keep only buckets with N >= 3 → only brand 1.
+}
+
+[test]
+def test_unroll5e_groupby_count_pred_cascade_shape(t : T?) {
+    // count(predicate) must NOT be popped as the bare count terminator (would drop the predicate). Splice cascades to tier-2 eager bridge which honors the 2-arg count overload — verified by presence of tier-2 fingerprints (`to_sequence`, `group_by_lazy_to_array` materialized intermediate).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5e_groupby_count_pred_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        // Splice did NOT fire: the decs-specific table (`decs_tab`) is absent.
+        t |> equal(describe_count(body_expr, "decs_tab"), 0, "count(pred) must cascade — no decs_tab hoisted")
+        // Tier-2 fingerprint: `count(_, predicate)` runs on the materialized array.
+        t |> success(describe_count(body_expr, "_.N >= 2") >= 1, "predicate body must appear in the cascaded emission")
+    }
+}
+
+[test]
+def test_unroll5e_groupby_iter_typed_splice_shape(t : T?) {
+    // Verifies the iterator-typed splice fires (not falling to tier-2) and emits to_sequence_move at the tail to convert the buffer array to iterator.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5e_groupby_iter_typed_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        // Splice fires: no tier-2 fall-through (would manifest as inner-invoke `to_sequence(res)` from the eager bridge).
+        t |> equal(describe_count(body_expr, "to_sequence("), 0, "iterator-typed group_by splice must NOT call eager bridge's to_sequence(res)")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype outer call")
+        // Tail emits `to_sequence_move(buf)` to convert array<...> result to iterator<...> matching caller's type.
+        t |> equal(describe_count(body_expr, "to_sequence_move"), 1, "iterator-typed splice tail emits to_sequence_move(buf)")
+    }
+}
+
+[test]
+def test_unroll5e_groupby_where_count_parity(t : T?) {
+    fixture_unroll5e()
+    // flag==1 → odd vals: {11,13,15}. Buckets: brand 0→{15} N=1, brand 1→{13} N=1, brand 2→{11} N=1.
+    let got <- target_unroll5e_groupby_where_count_fold()
+    t |> equal(got.length(), 3)
+    var perBrand : table<int; int>
+    for (item in got) {
+        perBrand[item.Brand] = item.N
+    }
+    t |> equal(perBrand[0], 1)
+    t |> equal(perBrand[1], 1)
+    t |> equal(perBrand[2], 1)
+}
+
+[test]
+def test_unroll5e_groupby_select_sum_parity(t : T?) {
+    fixture_unroll5e()
+    // _select(r=>r.val) projects vals 10..16 then group by val%3:
+    // key 0 (vals 12,15) S=27, key 1 (vals 10,13,16) S=39, key 2 (vals 11,14) S=25.
+    let got <- target_unroll5e_groupby_select_sum_fold()
+    t |> equal(got.length(), 3)
+    var perKey : table<int; int>
+    for (item in got) {
+        perKey[item.K] = item.S
+    }
+    t |> equal(perKey[0], 27)
+    t |> equal(perKey[1], 39)
+    t |> equal(perKey[2], 25)
+}
+
+[test]
+def test_unroll5e_groupby_having_count_parity(t : T?) {
+    fixture_unroll5e()
+    // having length >= 3 keeps only brand 1 (N=3).
+    let got <- target_unroll5e_groupby_having_count_fold()
+    t |> equal(got.length(), 1)
+    t |> equal(got[0].Brand, 1)
+    t |> equal(got[0].N, 3)
+}
+
+[test]
+def test_unroll5e_groupby_having_hidden_sum_parity(t : T?) {
+    fixture_unroll5e()
+    // sums: brand 0→27, brand 1→39, brand 2→25. having sum > 30 keeps brand 1 (N=3).
+    let got <- target_unroll5e_groupby_having_hidden_sum_fold()
+    t |> equal(got.length(), 1)
+    t |> equal(got[0].Brand, 1)
+    t |> equal(got[0].N, 3)
+}
+
+[test]
+def test_unroll5e_groupby_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5e_groupby_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "group_by splice must NOT fall to tier-2 to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype outer call")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "group_by does NOT use _find variant (no early-exit)")
+        // State-table hoisted ABOVE the for_each_archetype call so it spans archetypes.
+        t |> equal(describe_count(body_expr, "decs_tab"), 1 + 5, "decs_tab declared once + 5 refs (?[uk], [uk]=, length, values, finalize)")
+        t |> equal(describe_count(body_expr, "decs_dummy"), 1 + 5, "decs_dummy declared once + 5 splice refs (??dummy, addr(dummy), dummy._0=, tab[uk]=dummy, dummy=default)")
+        t |> equal(describe_count(body_expr, "unique_key"), 1, "single unique_key derivation per element")
+    }
+}
+

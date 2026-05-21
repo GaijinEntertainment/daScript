@@ -2378,6 +2378,21 @@ def test_group_by_having_fold_parity(t : T?) {
 }
 
 [test]
+def test_group_by_count_predicate_cascades(t : T?) {
+    // Regression for Copilot review on PR #2775: the recognizer pops `.count()` as the bare-count terminator (→ length(tab)) — but `count(src, predicate)` is a valid linq.das overload, and popping that form silently drops the predicate. Recognizer must check `length(arguments) == 1` and otherwise cascade.
+    t |> run("count(predicate) over group-by output cascades and honors the predicate") @(tt : T?) {
+        let nums = [1, 2, 3, 4, 5, 6, 7]
+        // Buckets %3: 0=[3,6] N=2, 1=[1,4,7] N=3, 2=[2,5] N=2. Pred `_.N >= 3` → matches only bucket 1 → result 1.
+        let c = _fold(nums._group_by(_ % 3)._select((K = _._0, N = _._1 |> length))._count(_.N >= 2))
+        // All 3 buckets have N >= 2 → result 3.
+        tt |> equal(3, c)
+        let c2 = _fold(nums._group_by(_ % 3)._select((K = _._0, N = _._1 |> length))._count(_.N >= 3))
+        // Only bucket 1 has N >= 3 → result 1.
+        tt |> equal(1, c2)
+    }
+}
+
+[test]
 def test_group_by_having_unhandled_node_cascades(t : T?) {
     // PR-D safety: any unhandled node type that references `hb` (ExprAt for `_._1[0]`,
     // ExprInvoke from a non-peelable lambda, etc.) must NOT silently leak `hbName` into

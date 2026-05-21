@@ -293,3 +293,26 @@ m4 splice rounds to 0 ns/op alongside the m3f array splice — same shape (inlin
 m4 lands close to m3f (8 vs 2 ns/op — within Wave 4 known multi-component get_ro overhead). Splice fires; `ast_dump --mode source` confirms `for_each_archetype_find` with `if !(decs_tup.id < 50000) return true else ++decs_acc`.
 
 **Coverage:** take_while, skip_while, skip_while+take_while, where+take_while, take_while+sum, take_while+first, take_while+to_array, take_while always-true (no break) / always-false (immediate break), skip_while always-true (drops all) / always-false (immediate done), skip+take_while, skip_while+take, take_while+any/all/contains (regression guards for explicit-state routing under take_while), AST shape gates for take_while→`_find` routing + skip_while-only→`for_each_archetype` routing. +21 tests (60 → 81 in file).
+
+## Update — Slice 5e group_by on decs (2026-05-20, plan_decs_group_by)
+
+New `plan_decs_group_by` planner mirrors `plan_group_by` machinery (state-table `tab?[uk] ?? dummy` + addr-compare miss detection + `tab[uk] = dummy; dummy = default<typedecl(dummy)>` first-key-wins) but emits the per-element splice into the bridge's inner multi-iter for-loop, wrapped by the outer `for_each_archetype` — replacing the eager bridge's `array<tuple>` materialization. Reuses `recognize_reducer_specs` / `emit_reducer_branches` / `extend_specs_for_missing_having_reducers` / `rewrite_having_pred` / averaging + hidden-slot machinery wholesale; the only delta is the source iteration shape. Inserted in the cascade BEFORE `plan_group_by` (the bridge-match is stricter so it won't grab array chains; running after `plan_group_by` would cause the array planner to fire on the eager-bridge invoke and short-circuit the decs path).
+
+| benchmark | m1 sql | m3 | m3f (array splice) | m4 (eager bridge, was) | m4 (Slice 5e, now) | m4 win | m4 vs m1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| groupby_count             | 142 | 67  | 37  | 115 | **50**  | 2.3× | 2.8× faster |
+| groupby_sum               | 172 | 101 | 36  | 115 | **50**  | 2.3× | 3.4× faster |
+| groupby_average           | 175 | 101 | 52  | 128 | **62**  | 2.1× | 2.8× faster |
+| groupby_max               | 173 | 103 | 49  | 120 | **57**  | 2.1× | 3.0× faster |
+| groupby_min               | 177 | 106 | 42  | 122 | **56**  | 2.2× | 3.2× faster |
+| groupby_first             | —   | 70  | 35  | 112 | **46**  | 2.4× | — |
+| groupby_having_count      | 142 | 73  | 36  | 114 | **49**  | 2.3× | 2.9× faster |
+| groupby_having_hidden_sum | 175 | 103 | 40  | 122 | **57**  | 2.1× | 3.1× faster |
+| groupby_multi_reducer     | 191 | 139 | 52  | 130 | **63**  | 2.1× | 3.0× faster |
+| groupby_select_sum        | —   | 110 | 60  | 137 | **71**  | 1.9× | — |
+| groupby_where_count       | 75  | 65  | 23  | 101 | **36**  | 2.8× | 2.1× faster |
+| groupby_where_sum         | 94  | 80  | 23  | 105 | **36**  | 2.9× | 2.6× faster |
+
+All 12 groupby_* rows improve 1.9-2.9× (avg ~2.3×). m4 now consistently lands 10-20 ns above m3f — the remaining gap is the Wave 4 multi-component `get_ro` overhead (every bridge component participates in the inner for-loop iteration even when the chain only reads one). m4 beats SQL on 10/10 measurable rows by 2.1-3.4×.
+
+**Coverage:** count terminator (length(tab)), implicit to_array terminator, sum/min/max/average/first reducers, multi-reducer (N+S+MX in one pass), having_ predicate over named slot, having_ predicate over hidden synthesized slot, upstream where_+group_by, upstream select+group_by(expression key), AST shape gate (no `to_sequence`, exactly one `for_each_archetype`, no `_find` variant — group_by doesn't early-exit, `decs_tab` 6 refs + `decs_dummy` 6 refs in the splice). +13 tests (80 → 93 in file).

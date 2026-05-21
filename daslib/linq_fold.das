@@ -2680,62 +2680,98 @@ def private expr_uses_var(var e : Expression?; name : string) : bool {
     return hit
 }
 
+// ── group_by core (shared between array and decs sources) ──────────────────────
+
+// Source-loop adapter: dispatches the per-source-shape divergence (initial bind name + element type, per-element source loop emission, final invoke wrap). Used by plan_group_by_core to unify the ~350 LOC shared recognizer/splice machinery between plan_group_by (array source via for(it in src)) and plan_decs_group_by (decs bridge via for_each_archetype + inner multi-iter for + tupBind).
+struct private GroupBySourceAdapter {
+    // The bind name the upstream segment walk and reducer recognition see as "the element" (srcItName for array, tupName for decs — both alias the post-iterator-bind variable).
+    initialBindName : string
+    // The element type at that bind point (peel_each-derived from `top._type.firstType` for array, `bridge.elementType` for decs).
+    initialElemType : TypeDeclPtr
+    // Prefix for all hoisted names ("" for array → tab/dummy/k/uk/…; "decs_" for decs → decs_tab/decs_dummy/…). Lets the same core function generate distinct-but-recognizable names per source.
+    namePrefix      : string
+    // Discriminator for the two emit functions below.
+    isDecs          : bool
+    // Array side: the source expression bound by finalize_emission_stmts into srcName.
+    arrayTop        : Expression?
+    arraySrcName    : string
+    // Decs side: bridge metadata used by build_decs_tup_bind / build_decs_inner_for + the outer for_each_archetype call.
+    decsBridge      : DecsBridgeShape?
+}
+
 [macro_function]
-def private plan_group_by(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    top = peel_each(top)
-    // Pop count terminator from chain tail; bare select-after-group_by → ARRAY lane.
-    var terminatorName : string  = ""
-    {
-        let lastName = calls.back()._1.name
-        if (lastName == "count") {
-            terminatorName = lastName
-            calls |> pop
+def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
+    // Per-element source loop. Body has been segment-wrapped (inside-out where_/select) by the caller. For array: simple `for(it in src) { body }`. For decs: tupBind from build_decs_tup_bind + inner multi-iter for via build_decs_inner_for + outer for_each_archetype.
+    if (adapter.isDecs) {
+        var tupBind = build_decs_tup_bind(adapter.decsBridge, adapter.initialBindName, at)
+        var forExprNode = build_decs_inner_for(adapter.decsBridge, tupBind, body, at)
+        var reqExpr = clone_expression(adapter.decsBridge.reqHashExpr)
+        var erqExpr = clone_expression(adapter.decsBridge.erqExpr)
+        let archName = adapter.decsBridge.archName
+        return qmacro_expr() {
+            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
         }
     }
-    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
-    if (empty(calls) || calls.back()._1.name != "select") return null
-    var groupProjCall = calls.back()._0
-    calls |> pop
-    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten below against accumulator slots.
-    var havingCall : ExprCall?
-    if (!empty(calls) && calls.back()._1.name == "having_") {
-        havingCall = calls.back()._0
-        calls |> pop
+    let srcItName = adapter.initialBindName
+    let srcName = adapter.arraySrcName
+    return qmacro_block() {
+        for ($i(srcItName) in $i(srcName)) {
+            $e(body)
+        }
     }
-    // The call immediately before must be group_by_lazy with a key arg.
-    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
-    var groupByCall = calls.back()._0
-    calls |> pop
-    if ((groupByCall.arguments |> length) < 2) return null
-    var keyBlock = clone_expression(groupByCall.arguments[1])
-    // Setup names + walk upstream segment (where_/select*) for fusion into per-element loop.
-    let at = groupByCall.at
-    let srcName   = "`source`{at.line}`{at.column}"
-    let srcItName = "`it`{at.line}`{at.column}"
-    let tabName   = "`tab`{at.line}`{at.column}"
-    let kName     = "`k`{at.line}`{at.column}"
-    let ukName    = "`uk`{at.line}`{at.column}"
-    let entryName = "`entry`{at.line}`{at.column}"
-    let kvName    = "`kv`{at.line}`{at.column}"
-    let bufName   = "`buf`{at.line}`{at.column}"
-    let bindName  = "`gpb`{at.line}`{at.column}"   // group_proj lambda's bound variable
-    // Walk upstream where_/select into segments. Each where guards everything AFTER it (lazy LINQ semantics) — a select that follows a where gets its bind emitted INSIDE that where's guard.
+}
+
+[macro_function]
+def private adapter_finalize_emission(adapter : GroupBySourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; at : LineInfo) : Expression? {
+    // Wrap accumulated stmts into the emission invoke. Array side: bind source as param (finalize_emission_stmts handles peel + topExpr clone). Decs side: zero-arg invoke with explicit retType (the bridge is already inline via for_each_archetype).
+    if (adapter.isDecs) {
+        var emission = qmacro(invoke($() : $t(retType) {
+            $b(stmts)
+        }))
+        emission.force_at(at)
+        emission.force_generated(true)
+        return emission
+    }
+    var topClone = clone_expression(adapter.arrayTop)
+    return finalize_emission_stmts(topClone, adapter.arraySrcName, at, stmts)
+}
+
+[macro_function]
+def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
+                               var keyBlock : Expression?;
+                               var groupProjCall : ExprCall?;
+                               var havingCall : ExprCall?;
+                               terminatorName : string;
+                               exprIsIterator : bool;
+                               at : LineInfo;
+                               var adapter : GroupBySourceAdapter) : Expression? {
+    // Shared group_by splice machinery. Caller pops terminator/select/having/group_by_lazy + extracts keyBlock + sets up the source adapter; this function does the rest (upstream chain walk, reducer recognition, state-table hoisting, tab?[uk]??dummy splice, output emission, source-loop wrap, terminator emission, final invoke wrap).
+    let prefix = adapter.namePrefix
+    let tabName    = "`{prefix}tab`{at.line}`{at.column}"
+    let kName      = "`{prefix}k`{at.line}`{at.column}"
+    let ukName     = "`{prefix}uk`{at.line}`{at.column}"
+    let entryName  = "`{prefix}entry`{at.line}`{at.column}"
+    let kvName     = "`{prefix}kv`{at.line}`{at.column}"
+    let bufName    = "`{prefix}buf`{at.line}`{at.column}"
+    let bindName   = "`{prefix}gpb`{at.line}`{at.column}"
+    let cntName    = "`{prefix}cnt`{at.line}`{at.column}"
+    let dummyName  = "`{prefix}dummy`{at.line}`{at.column}"
+    // Walk upstream where_/select* into segments. Each where guards everything AFTER it; a select after a where flushes a new segment so the projection bind lives inside the where's guard.
     var segBinds : array<array<Expression?>>
     var segWheres : array<Expression?>
     var currentBinds : array<Expression?>
     var currentWhere : Expression?
     var projection : Expression?
-    var lastBindName = srcItName
-    var elemType = strip_const_ref(clone_type(top._type.firstType))
+    var lastBindName = adapter.initialBindName
+    var elemType = strip_const_ref(clone_type(adapter.initialElemType))
     var totalBindCount = 0
     for (i in 0 .. (calls |> length)) {
         let opName = calls[i]._1.name
         if (opName == "where_") {
-            // Bind any pending projection before the where so the predicate references a stable name (no double-eval).
             if (projection != null) {
-                let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+                let bn = "`{prefix}v`{at.line}`{at.column}`{totalBindCount}"
                 totalBindCount ++
                 currentBinds |> push <| qmacro_expr() {
                     var $i(bn) := $e(projection)
@@ -2747,15 +2783,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             if (predicate == null) return null
             currentWhere = merge_where_cond(currentWhere, predicate)
         } elif (opName == "select") {
-            // Select after a where belongs in a NEW segment (must execute INSIDE the where's guard) — flush first.
             if (currentWhere != null) {
                 segBinds |> emplace(currentBinds)
                 segWheres |> push(currentWhere)
                 currentWhere = null
             }
-            // Bind previous projection (if any) before computing the next.
             if (projection != null) {
-                let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+                let bn = "`{prefix}v`{at.line}`{at.column}`{totalBindCount}"
                 totalBindCount ++
                 currentBinds |> push <| qmacro_expr() {
                     var $i(bn) := $e(projection)
@@ -2769,16 +2803,14 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // Final bind: stable itName for the recognizer/emission to reference.
     if (projection != null) {
-        let bn = "`v`{at.line}`{at.column}`{totalBindCount}"
+        let bn = "`{prefix}v`{at.line}`{at.column}`{totalBindCount}"
         totalBindCount ++
         currentBinds |> push <| qmacro_expr() {
             var $i(bn) := $e(projection)
         }
         lastBindName = bn
     }
-    // Flush trailing segment.
     segBinds |> emplace(currentBinds)
     segWheres |> push(currentWhere)
     let itName = lastBindName
@@ -2788,19 +2820,17 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
     if (empty(specs)) return null
     let userVisibleSlotCount = specs |> length
-    // Rewrite optional having predicate against accumulator slots; bails on anything other than _._0 / reducer(_._1) matched to a select-side slot or a synthesized hidden slot (PR-E).
+    // Rewrite optional having predicate against accumulator slots; PR-E scan adds hidden slots for reducers referenced by having but absent from select.
     var havingPred : Expression?
     if (havingCall != null) {
-        let hbName = "`hb`{at.line}`{at.column}"
+        let hbName = "`{prefix}hb`{at.line}`{at.column}"
         var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
-        // PR-E: scan first to add hidden slots for reducers referenced by having but absent from select.
         if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
         havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
-        // Safety net: a node type rewrite_having_pred didn't recurse into would leak hbName through to the splice (compile error at the splice site). Bail.
         if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
     }
     let hasHidden = (specs |> length) > userVisibleSlotCount
-    // Bare form + hidden slot would require extending `tuple<KeyT; AccT>` synthesized inside a qmacro with embedded `typedecl(invoke(...))` for the key type — can't dynamically grow that. Cascade.
+    // Bare reducer + hidden slot needs typedecl(invoke(...)) growth inside a qmacro — can't grow that dynamically. Cascade.
     if (hasHidden && !usesNamedTuple) return null
     var hasAvg = false
     for (s in specs) {
@@ -2808,16 +2838,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             hasAvg = true
         }
     }
-    // Named-tuple wrap reuses the user's body type (preserves field-name hints); bare reducer synthesizes tuple<KeyT; AccT>.
+    // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem on hits).
     var keyBlk1 = clone_expression(keyBlock)
     var keyBlk2 = clone_expression(keyBlock)
     var keyBlkD = clone_expression(keyBlock)
     var stmts : array<Expression?>
-    let dummyName = "`dummy`{at.line}`{at.column}"
-    // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem).
     if (usesNamedTuple) {
         var tabValueType = strip_const_ref(clone_type(groupProjBody._type))
-        // Average slots store the 2-tuple <sum;count> internally; result-build divides at output.
         if (hasAvg) {
             for (s in specs) {
                 if (is_average_spec(s) && s.slot <= userVisibleSlotCount && s.slot < (tabValueType.argTypes |> length)) {
@@ -2825,7 +2852,6 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 }
             }
         }
-        // PR-E: append hidden slots (synthesized for having-only reducers) after the user-visible slots; result-build re-synthesizes the user's tuple shape via ExprMakeTuple, omitting them.
         if (hasHidden) {
             let preserveNames = (tabValueType.argNames |> length) == (tabValueType.argTypes |> length)
             for (s in specs) {
@@ -2856,12 +2882,11 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     }
-    // `tab?[uk] ?? dummy` returns ref to existing entry OR to dummy on miss — single hash op per element. addr-compare splits into miss-branch (init+commit) and hit-branch (incremental update); each reducer slot contributes one init stmt and (optionally) one update stmt.
+    // `tab?[uk] ?? dummy` + addr-compare: one hash op/elem on hits, two on misses (insert).
     var keyBlk3 = clone_expression(keyBlock)
     var missInitStmts : array<Expression?>
     var hitUpdateStmts : array<Expression?>
     for (s in specs) {
-        // Clone to drop const propagated through tuple destructure.
         let (mi, hu) = emit_reducer_branches(s, at, entryName, itName)
         if (mi != null) {
             missInitStmts |> push(clone_expression(mi))
@@ -2871,9 +2896,8 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         }
     }
     if (empty(missInitStmts)) return null
-    var missInit  = stmts_to_expr(missInitStmts)
+    var missInit = stmts_to_expr(missInitStmts)
     let hasHitUpdate = !empty(hitUpdateStmts)
-    // Per-element table-update splice — variant on hasHitUpdate (first* chains have no else branch).
     var tableUpdate : Expression?
     if (hasHitUpdate) {
         var hitUpdate = stmts_to_expr(hitUpdateStmts)
@@ -2923,15 +2947,13 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         }
         idx --
     }
-    stmts |> push <| qmacro_block() {
-        for ($i(srcItName) in $i(srcName)) {
-            $e(body)
-        }
-    }
-    // Lane: count terminator returns length(tab) directly (number of groups).
+    // Adapter-specific source loop emission (for(it in src) for array, for_each_archetype + inner for for decs).
+    stmts |> push(adapter_emit_source_loop(adapter, body, at))
+    // Terminator emission + retType derivation.
+    var retType : TypeDeclPtr
     if (terminatorName == "count") {
+        retType = new TypeDecl(baseType = Type.tInt)
         if (havingPred != null) {
-            let cntName = "`cnt`{at.line}`{at.column}"
             stmts |> push <| qmacro_block() {
                 var $i(cntName) = 0
                 for ($i(kvName) in values($i(tabName))) {
@@ -2947,10 +2969,9 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             }
         }
     } else {
-        // to_array lane: build result buffer by walking the table. Each output element
+        // to_array lane (implicit when no count terminator): build result buffer by walking the table.
         var outputExpr : Expression?
         if (!usesNamedTuple) {
-            // Bare reducer: avg slot needs sum/count divide; everything else is the raw acc value.
             if (hasAvg) {
                 outputExpr = mk_avg_divide_expr(at, kvName, 1)
             } else {
@@ -2984,16 +3005,22 @@ def private plan_group_by(var expr : Expression?) : Expression? {
             }
             outputExpr = mt
         } else {
-            // Named-tuple wrap `(K = bind._0, V = bind._1|>length)` — table value type already shaped via tabValueType; emit the entry directly.
             outputExpr = qmacro_expr() {
                 $i(kvName)
             }
         }
-        // Buffer type: deduce from group_proj body type (already shaped as the named-tuple / reducer result).
         var bufElemType = clone_type(groupProjBody._type)
         if (bufElemType != null) {
             bufElemType.flags.constant = false
             bufElemType.flags.ref = false
+        }
+        // retType matches exprIsIterator: iterator<bufElemType> via to_sequence_move(buf) tail, or array<bufElemType> via raw buf return. Both paths use buffer_return(bufName, exprIsIterator) for the final stmt.
+        if (exprIsIterator) {
+            retType = new TypeDecl(baseType = Type.tIterator)
+            retType.firstType = clone_type(bufElemType)
+        } else {
+            retType = new TypeDecl(baseType = Type.tArray)
+            retType.firstType = clone_type(bufElemType)
         }
         stmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(bufElemType)>
@@ -3016,9 +3043,54 @@ def private plan_group_by(var expr : Expression?) : Expression? {
                 }
             }
         }
-        stmts |> push(buffer_return(bufName, expr._type.isIterator))
+        stmts |> push(buffer_return(bufName, exprIsIterator))
     }
-    return finalize_emission_stmts(top, srcName, at, stmts)
+    return adapter_finalize_emission(adapter, stmts, retType, at)
+}
+
+[macro_function]
+def private plan_group_by(var expr : Expression?) : Expression? {
+    // Array-source entry to plan_group_by_core. Recognizer + adapter setup; all splice machinery lives in the shared core.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    top = peel_each(top)
+    if (expr._type == null) return null
+    // Pop count terminator from chain tail; bare select-after-group_by → ARRAY lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
+    var terminatorName : string  = ""
+    {
+        let lastName = calls.back()._1.name
+        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
+            terminatorName = lastName
+            calls |> pop
+        }
+    }
+    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
+    if (empty(calls) || calls.back()._1.name != "select") return null
+    var groupProjCall = calls.back()._0
+    calls |> pop
+    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten in plan_group_by_core against accumulator slots.
+    var havingCall : ExprCall?
+    if (!empty(calls) && calls.back()._1.name == "having_") {
+        havingCall = calls.back()._0
+        calls |> pop
+    }
+    // The call immediately before must be group_by_lazy with a key arg.
+    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
+    var groupByCall = calls.back()._0
+    calls |> pop
+    if ((groupByCall.arguments |> length) < 2) return null
+    var keyBlock = clone_expression(groupByCall.arguments[1])
+    let at = groupByCall.at
+    var adapter = GroupBySourceAdapter(
+        initialBindName := "`it`{at.line}`{at.column}",
+        initialElemType = strip_const_ref(clone_type(top._type.firstType)),
+        namePrefix := "",
+        isDecs = false,
+        arrayTop = top,
+        arraySrcName := "`source`{at.line}`{at.column}",
+        decsBridge = null
+    )
+    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, terminatorName, expr._type.isIterator, at, adapter)
 }
 
 // ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
@@ -3985,6 +4057,53 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)
 }
 
+// ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────
+
+[macro_function]
+def private plan_decs_group_by(var expr : Expression?) : Expression? {
+    // Decs-bridge entry to plan_group_by_core. Recognizer + extract_decs_bridge + adapter setup; all splice machinery lives in the shared core (decs adapter dispatches the outer for_each_archetype + inner multi-iter for + tupBind wrap).
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    var bridge = extract_decs_bridge(top)
+    if (bridge == null || expr._type == null) return null
+    // Pop count terminator; bare select-after-group_by → to_array lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
+    var terminatorName : string  = ""
+    {
+        let lastName = calls.back()._1.name
+        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
+            terminatorName = lastName
+            calls |> pop
+        }
+    }
+    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
+    if (empty(calls) || calls.back()._1.name != "select") return null
+    var groupProjCall = calls.back()._0
+    calls |> pop
+    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten in plan_group_by_core against accumulator slots.
+    var havingCall : ExprCall?
+    if (!empty(calls) && calls.back()._1.name == "having_") {
+        havingCall = calls.back()._0
+        calls |> pop
+    }
+    // The call immediately before must be group_by_lazy with a key arg.
+    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
+    var groupByCall = calls.back()._0
+    calls |> pop
+    if ((groupByCall.arguments |> length) < 2) return null
+    var keyBlock = clone_expression(groupByCall.arguments[1])
+    let at = groupByCall.at
+    var adapter = GroupBySourceAdapter(
+        initialBindName := "`decs_tup`{at.line}`{at.column}",
+        initialElemType = strip_const_ref(clone_type(bridge.elementType)),
+        namePrefix := "decs_",
+        isDecs = true,
+        arrayTop = null,
+        arraySrcName := "",
+        decsBridge = bridge
+    )
+    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, terminatorName, expr._type.isIterator, at, adapter)
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
@@ -4310,6 +4429,8 @@ class private LinqFold : AstCallMacro {
         res = plan_reverse(call.arguments[0])
         if (res != null) return res
         res = plan_distinct(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_group_by(call.arguments[0])
         if (res != null) return res
         res = plan_group_by(call.arguments[0])
         if (res != null) return res
