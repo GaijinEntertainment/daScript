@@ -3985,6 +3985,351 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)
 }
 
+// ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────
+
+[macro_function]
+def private plan_decs_group_by(var expr : Expression?) : Expression? {
+    // Decs-bridge variant of plan_group_by. Same recognizer/splice machinery — only the source iteration differs: instead of `for (it in src)`, the per-element coreBody is wrapped by the bridge's inner multi-iter for-loop + outer for_each_archetype. Reuses recognize_reducer_specs / emit_reducer_branches / having rewrites / output-tuple build wholesale.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    let bridge = extract_decs_bridge(top)
+    if (bridge == null) return null
+    // Pop count terminator; bare select-after-group_by → to_array lane.
+    var terminatorName : string  = ""
+    {
+        let lastName = calls.back()._1.name
+        if (lastName == "count") {
+            terminatorName = lastName
+            calls |> pop
+        }
+    }
+    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
+    if (empty(calls) || calls.back()._1.name != "select") return null
+    var groupProjCall = calls.back()._0
+    calls |> pop
+    // Optional: having_ between select and group_by_lazy (SQL HAVING shape).
+    var havingCall : ExprCall?
+    if (!empty(calls) && calls.back()._1.name == "having_") {
+        havingCall = calls.back()._0
+        calls |> pop
+    }
+    // The call immediately before must be group_by_lazy with a key arg.
+    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
+    var groupByCall = calls.back()._0
+    calls |> pop
+    if ((groupByCall.arguments |> length) < 2) return null
+    var keyBlock = clone_expression(groupByCall.arguments[1])
+    // Names + initial source bind (the bridge's tuple).
+    let at = groupByCall.at
+    let tupName    = "`decs_tup`{at.line}`{at.column}"
+    let tabName    = "`decs_tab`{at.line}`{at.column}"
+    let kName      = "`decs_k`{at.line}`{at.column}"
+    let ukName     = "`decs_uk`{at.line}`{at.column}"
+    let entryName  = "`decs_entry`{at.line}`{at.column}"
+    let kvName     = "`decs_kv`{at.line}`{at.column}"
+    let bufName    = "`decs_buf`{at.line}`{at.column}"
+    let bindName   = "`decs_gpb`{at.line}`{at.column}"
+    let cntName    = "`decs_cnt`{at.line}`{at.column}"
+    let dummyName  = "`decs_dummy`{at.line}`{at.column}"
+    // Walk upstream where_/select* — same segment logic as plan_group_by but the source bind is tupName (bridge's tuple), not srcItName.
+    var segBinds : array<array<Expression?>>
+    var segWheres : array<Expression?>
+    var currentBinds : array<Expression?>
+    var currentWhere : Expression?
+    var projection : Expression?
+    var lastBindName = tupName
+    var elemType = strip_const_ref(clone_type(bridge.elementType))
+    var totalBindCount = 0
+    for (i in 0 .. (calls |> length)) {
+        let opName = calls[i]._1.name
+        if (opName == "where_") {
+            if (projection != null) {
+                let bn = "`decs_v`{at.line}`{at.column}`{totalBindCount}"
+                totalBindCount ++
+                currentBinds |> push <| qmacro_expr() {
+                    var $i(bn) := $e(projection)
+                }
+                lastBindName = bn
+                projection = null
+            }
+            var predicate = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            if (predicate == null) return null
+            currentWhere = merge_where_cond(currentWhere, predicate)
+        } elif (opName == "select") {
+            if (currentWhere != null) {
+                segBinds |> emplace(currentBinds)
+                segWheres |> push(currentWhere)
+                currentWhere = null
+            }
+            if (projection != null) {
+                let bn = "`decs_v`{at.line}`{at.column}`{totalBindCount}"
+                totalBindCount ++
+                currentBinds |> push <| qmacro_expr() {
+                    var $i(bn) := $e(projection)
+                }
+                lastBindName = bn
+            }
+            projection = fold_linq_cond(calls[i]._0.arguments[1], lastBindName)
+            if (projection == null) return null
+            elemType = strip_const_ref(clone_type(calls[i]._0._type.firstType))
+        } else {
+            return null
+        }
+    }
+    if (projection != null) {
+        let bn = "`decs_v`{at.line}`{at.column}`{totalBindCount}"
+        totalBindCount ++
+        currentBinds |> push <| qmacro_expr() {
+            var $i(bn) := $e(projection)
+        }
+        lastBindName = bn
+    }
+    segBinds |> emplace(currentBinds)
+    segWheres |> push(currentWhere)
+    let itName = lastBindName
+    // Recognize the group_proj body's reducer shape (uses post-projection itName for inner-select fold).
+    var groupProjBody = fold_linq_cond(groupProjCall.arguments[1], bindName)
+    if (groupProjBody == null || groupProjBody._type == null) return null
+    var (specs, usesNamedTuple) = recognize_reducer_specs(groupProjBody, bindName, itName)
+    if (empty(specs)) return null
+    let userVisibleSlotCount = specs |> length
+    // Rewrite optional having predicate against accumulator slots.
+    var havingPred : Expression?
+    if (havingCall != null) {
+        let hbName = "`decs_hb`{at.line}`{at.column}"
+        var rawPred = fold_linq_cond(havingCall.arguments[1], hbName)
+        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
+        havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
+        if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
+    }
+    let hasHidden = (specs |> length) > userVisibleSlotCount
+    // Bare form + hidden slot would need typedecl(invoke(...)) growth inside a qmacro — can't. Cascade.
+    if (hasHidden && !usesNamedTuple) return null
+    var hasAvg = false
+    for (s in specs) {
+        if (is_average_spec(s)) {
+            hasAvg = true
+        }
+    }
+    // Table + dummy hoisting — same as plan_group_by. Key type derived via typedecl(invoke(keyBlock, default<elemType>)).
+    var keyBlk1 = clone_expression(keyBlock)
+    var keyBlk2 = clone_expression(keyBlock)
+    var keyBlkD = clone_expression(keyBlock)
+    var stmts : array<Expression?>
+    if (usesNamedTuple) {
+        var tabValueType = strip_const_ref(clone_type(groupProjBody._type))
+        if (hasAvg) {
+            for (s in specs) {
+                if (is_average_spec(s) && s.slot <= userVisibleSlotCount && s.slot < (tabValueType.argTypes |> length)) {
+                    tabValueType.argTypes[s.slot] = mk_avg_acc_type(at)
+                }
+            }
+        }
+        if (hasHidden) {
+            let preserveNames = (tabValueType.argNames |> length) == (tabValueType.argTypes |> length)
+            for (s in specs) {
+                if (s.slot > userVisibleSlotCount) {
+                    tabValueType.argTypes |> push <| clone_type(s.accType)
+                    if (preserveNames) {
+                        let nameIdx = tabValueType.argNames |> length
+                        tabValueType.argNames |> resize(nameIdx + 1)
+                        tabValueType.argNames[nameIdx] := "_hidden_{s.slot}"
+                    }
+                }
+            }
+        }
+        var tabValueType2 = clone_type(tabValueType)
+        stmts |> push <| qmacro_expr() {
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
+        }
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : $t(tabValueType2)
+        }
+    } else {
+        var accType  = clone_type(specs[0].accType)
+        var accType2 = clone_type(specs[0].accType)
+        stmts |> push <| qmacro_expr() {
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(accType)>>
+        }
+        stmts |> push <| qmacro_expr() {
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
+        }
+    }
+    // `tab?[uk] ?? dummy` + addr-compare: one hash op/elem on hits, two on misses (insert).
+    var keyBlk3 = clone_expression(keyBlock)
+    var missInitStmts : array<Expression?>
+    var hitUpdateStmts : array<Expression?>
+    for (s in specs) {
+        let (mi, hu) = emit_reducer_branches(s, at, entryName, itName)
+        if (mi != null) {
+            missInitStmts |> push(clone_expression(mi))
+        }
+        if (hu != null) {
+            hitUpdateStmts |> push(clone_expression(hu))
+        }
+    }
+    if (empty(missInitStmts)) return null
+    var missInit  = stmts_to_expr(missInitStmts)
+    let hasHitUpdate = !empty(hitUpdateStmts)
+    var tableUpdate : Expression?
+    if (hasHitUpdate) {
+        var hitUpdate = stmts_to_expr(hitUpdateStmts)
+        tableUpdate = qmacro_expr() {
+            unsafe {
+                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $e(missInit)
+                    $i(dummyName)._0 = $i(kName)
+                    $i(tabName)[$i(ukName)] = $i(dummyName)
+                    $i(dummyName) = default<typedecl($i(dummyName))>
+                } else {
+                    $e(hitUpdate)
+                }
+            }
+        }
+    } else {
+        tableUpdate = qmacro_expr() {
+            unsafe {
+                var $i(entryName) & = $i(tabName)?[$i(ukName)] ?? $i(dummyName)
+                if (addr($i(entryName)) == addr($i(dummyName))) {
+                    $e(missInit)
+                    $i(dummyName)._0 = $i(kName)
+                    $i(tabName)[$i(ukName)] = $i(dummyName)
+                    $i(dummyName) = default<typedecl($i(dummyName))>
+                }
+            }
+        }
+    }
+    // Per-element core: key derive + unique_key derive + table-update splice.
+    var coreBody = qmacro_block() {
+        let $i(kName) = invoke($e(keyBlk3), $i(itName))
+        let $i(ukName) = _::unique_key($i(kName))
+        $e(tableUpdate)
+    }
+    // Walk segments in reverse, wrapping body inside-out: each where guards everything inside it.
+    var body : Expression? = coreBody
+    var idx = (segBinds |> length) - 1
+    while (idx >= 0) {
+        if (segWheres[idx] != null) {
+            body = wrap_with_condition(body, clone_expression(segWheres[idx]))
+        }
+        if (!empty(segBinds[idx])) {
+            var thisSeg <- segBinds[idx]
+            thisSeg |> push(body)
+            body = stmts_to_expr(thisSeg)
+        }
+        idx --
+    }
+    // Bridge wrap: inner multi-iter for + outer for_each_archetype.
+    var tupBind = build_decs_tup_bind(bridge, tupName, at)
+    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    let archName = bridge.archName
+    var reqExpr = clone_expression(bridge.reqHashExpr)
+    var erqExpr = clone_expression(bridge.erqExpr)
+    stmts |> push <| qmacro_expr() {
+        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            $e(forExprNode)
+        })
+    }
+    // Terminator emission.
+    var retType : TypeDeclPtr
+    if (terminatorName == "count") {
+        retType = new TypeDecl(baseType = Type.tInt)
+        if (havingPred != null) {
+            stmts |> push <| qmacro_block() {
+                var $i(cntName) = 0
+                for ($i(kvName) in values($i(tabName))) {
+                    if ($e(havingPred)) {
+                        $i(cntName) ++
+                    }
+                }
+                return $i(cntName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return length($i(tabName))
+            }
+        }
+    } else {
+        // to_array lane (implicit when no count terminator): build result buffer by walking the table.
+        var outputExpr : Expression?
+        if (!usesNamedTuple) {
+            if (hasAvg) {
+                outputExpr = mk_avg_divide_expr(at, kvName, 1)
+            } else {
+                outputExpr = qmacro_expr() {
+                    $i(kvName)._1
+                }
+            }
+        } elif (hasAvg || hasHidden) {
+            var mt = new ExprMakeTuple(at = at)
+            let slotCount = (groupProjBody._type.argTypes |> length)
+            let hasNames = (groupProjBody._type.argNames |> length) == slotCount
+            if (hasNames) {
+                mt.recordNames |> resize(slotCount)
+            }
+            mt.values |> push(mk_slot_ref(at, kvName, 0))
+            if (hasNames) {
+                mt.recordNames[0] := string(groupProjBody._type.argNames[0])
+            }
+            for (i in 1 .. slotCount) {
+                var v : Expression?
+                for (sp in specs) {
+                    if (sp.slot == i) {
+                        v = mk_slot_output_expr(at, kvName, sp)
+                    }
+                }
+                mt.values |> push(v)
+                if (hasNames) {
+                    mt.recordNames[i] := string(groupProjBody._type.argNames[i])
+                }
+            }
+            outputExpr = mt
+        } else {
+            outputExpr = qmacro_expr() {
+                $i(kvName)
+            }
+        }
+        var bufElemType = clone_type(groupProjBody._type)
+        if (bufElemType != null) {
+            bufElemType.flags.constant = false
+            bufElemType.flags.ref = false
+        }
+        retType = new TypeDecl(baseType = Type.tArray)
+        retType.firstType = clone_type(bufElemType)
+        stmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(bufElemType)>
+        }
+        stmts |> push <| qmacro_expr() {
+            $i(bufName) |> reserve(length($i(tabName)))
+        }
+        if (havingPred != null) {
+            stmts |> push <| qmacro_expr() {
+                for ($i(kvName) in values($i(tabName))) {
+                    if ($e(havingPred)) {
+                        $i(bufName) |> push_clone($e(outputExpr))
+                    }
+                }
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                for ($i(kvName) in values($i(tabName))) {
+                    $i(bufName) |> push_clone($e(outputExpr))
+                }
+            }
+        }
+        stmts |> push <| qmacro_expr() {
+            return <- $i(bufName)
+        }
+    }
+    var emission = qmacro(invoke($() : $t(retType) {
+        $b(stmts)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
@@ -4310,6 +4655,8 @@ class private LinqFold : AstCallMacro {
         res = plan_reverse(call.arguments[0])
         if (res != null) return res
         res = plan_distinct(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_group_by(call.arguments[0])
         if (res != null) return res
         res = plan_group_by(call.arguments[0])
         if (res != null) return res
