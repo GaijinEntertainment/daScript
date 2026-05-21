@@ -551,17 +551,11 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
     if (empty(search_dirs)) {
         dirs_to_scan <- cpp_default_search_dirs()
     } else {
-        dirs_to_scan |> reserve(length(search_dirs))
-        for (d in search_dirs) {
-            dirs_to_scan |> push(d)
-        }
+        dirs_to_scan |> push_from(search_dirs)
     }
     var args <- [sg, "scan", "-r", rules_path, "--json"]
     cpp_push_glob_args(args, dirs_to_scan, glob_filter)
-    args |> reserve(length(args) + length(dirs_to_scan))
-    for (d in dirs_to_scan) {
-        args |> push(d)
-    }
+    args |> push_from(dirs_to_scan)
     var raw : string
     let rc = run_and_capture(args, raw, 60.0)
     if (rc != 0 && empty(raw)) {

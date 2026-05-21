@@ -101,10 +101,7 @@ struct Config {
 def resolve_against_files(against : array<string>; from_stdin : bool;
                           var out_set : table<string; void?>) {
     var raw : array<string>
-    raw |> reserve(length(against))
-    for (p in against) {
-        raw |> push(p)
-    }
+    raw |> push_from(against)
     if (from_stdin) {
         read_path_lines(fstdin(), raw)
     }
@@ -389,10 +386,7 @@ def main() {
         }
     } else {
         var seeds : array<string>
-        seeds |> reserve(length(cfg.path))
-        for (p in cfg.path) {
-            seeds |> push(p)
-        }
+        seeds |> push_from(cfg.path)
         if (!empty(cfg.paths_from)) {
             var perr : string
             if (!read_path_lines_from_file(cfg.paths_from, seeds, perr)) {

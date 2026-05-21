@@ -414,10 +414,7 @@ def expand_glob(pattern : string; var result : array<string>) {
         }
     }
     sort(matches)
-    result |> reserve(length(result) + length(matches))
-    for (m in matches) {
-        result |> push(m)
-    }
+    result |> push_from(matches)
 }
 
 // Join `dir_part` and `fname` with `/`, but skip the inserted separator when `dir_part`

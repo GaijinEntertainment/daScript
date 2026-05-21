@@ -193,6 +193,7 @@ def push(var Arr : array<auto(numT)>; var value : numT -# ==const) {
 def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo can_clone_from_const(varr[0])) {
+            Arr |> reserve(long_length(Arr) + long_length(varr))
             for (t in varr) {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
             }
@@ -207,6 +208,7 @@ def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + long_length(varr))
         for (t in varr) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
         }
@@ -218,6 +220,7 @@ def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; varr : numT[] -#) {
     static_if (typeinfo can_copy(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + int64(length(varr)))
         for (t in varr) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
         }
@@ -287,6 +290,7 @@ def emplace(var Arr : array<auto(numT)>; var value : numT -#&) {
 [unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
     static_if (typeinfo can_move(value)) {
+        Arr |> reserve(long_length(Arr) + int64(length(value)))
         for (t in value) {
             unsafe {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- t
@@ -368,8 +372,9 @@ def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #) {
 def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
         static_if (typeinfo can_clone_from_const(varr[0])) {
+            Arr |> reserve(long_length(Arr) + int64(length(varr)))
             for (t in varr) {
-                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
+                Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
             }
         } else {
             concept_assert(false, "can't push-clone value, which can't be cloned from const")
@@ -382,8 +387,9 @@ def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
 [unused_argument(Arr, value)]
 def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + int64(length(varr)))
         for (t in varr) {
-            Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
+            Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
         }
     } else {
         concept_assert(false, "can't push_clone value, which can't be cloned")
@@ -396,7 +402,7 @@ def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
             if (typeinfo can_clone_from_const(varr)) {
                 for (t in varr) {
-                    Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
+                    Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
                 }
             } else {
                 concept_assert(false, "can't push-clone value, which can't be cloned from const")
@@ -413,7 +419,7 @@ def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
 def push_clone(var Arr : array<auto(numT)[]>; var varr : numT[]) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := varr
+            Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := varr
         } else {
             concept_assert(false, "can't push_clone array of different size")
         }
@@ -433,6 +439,148 @@ def push_clone(var A : auto(CT) -# -const; b : auto(TT) | #) {
     } else {
         var cb : TT -# -const := b
         _::emplace(A, cb)
+    }
+}
+
+//! Append every element of source array `varr` to `Arr` via copy.
+//! Reserves `length(Arr) + length(varr)` capacity up front, so a bulk
+//! append touches the allocator once instead of N times.
+[unused_argument(Arr, varr)]
+def push_from(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
+    static_if (typeinfo can_copy(type<numT>)) {
+        static_if (typeinfo can_clone_from_const(varr[0])) {
+            Arr |> reserve(long_length(Arr) + long_length(varr))
+            for (t in varr) {
+                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
+            }
+        } else {
+            concept_assert(false, "can't push value, which can't be cloned from const")
+        }
+    } else {
+        concept_assert(false, "can't push value, which can't be copied")
+    }
+}
+
+//! Append every element of source array `varr` to `Arr` via copy
+//! (mutable source overload — still copies, does not consume).
+[unused_argument(Arr, varr)]
+def push_from(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
+    static_if (typeinfo can_copy(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + long_length(varr))
+        for (t in varr) {
+            Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
+        }
+    } else {
+        concept_assert(false, "can't push value, which can't be copied")
+    }
+}
+
+//! Append every element of fixed-size C-array `varr` to `Arr` via copy.
+//! Reserves the combined length up front.
+[unused_argument(Arr, varr)]
+def push_from(var Arr : array<auto(numT)>; varr : numT[] -#) {
+    static_if (typeinfo can_copy(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + int64(length(varr)))
+        for (t in varr) {
+            Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
+        }
+    } else {
+        concept_assert(false, "can't push value, which can't be copied")
+    }
+}
+
+//! Append every element of source array `varr` to `Arr` via clone (`:=`).
+//! Reserves the combined length up front. Each slot is zero-initialized
+//! before clone (matches single-element ``push_clone`` semantics).
+[unused_argument(Arr, varr)]
+def push_clone_from(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
+    static_if (typeinfo can_clone(type<numT>)) {
+        static_if (typeinfo can_clone_from_const(varr[0])) {
+            Arr |> reserve(long_length(Arr) + long_length(varr))
+            for (t in varr) {
+                Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
+            }
+        } else {
+            concept_assert(false, "can't push-clone value, which can't be cloned from const")
+        }
+    } else {
+        concept_assert(false, "can't push_clone value, which can't be cloned")
+    }
+}
+
+//! Append every element of source array `varr` to `Arr` via clone (`:=`),
+//! mutable source overload.
+[unused_argument(Arr, varr)]
+def push_clone_from(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
+    static_if (typeinfo can_clone(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + long_length(varr))
+        for (t in varr) {
+            Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
+        }
+    } else {
+        concept_assert(false, "can't push_clone value, which can't be cloned")
+    }
+}
+
+//! Append every element of fixed-size C-array `varr` to `Arr` via clone.
+[unused_argument(Arr, varr)]
+def push_clone_from(var Arr : array<auto(numT)>; varr : numT[] ==const) {
+    static_if (typeinfo can_clone(type<numT>)) {
+        static_if (typeinfo can_clone_from_const(varr[0])) {
+            Arr |> reserve(long_length(Arr) + int64(length(varr)))
+            for (t in varr) {
+                Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
+            }
+        } else {
+            concept_assert(false, "can't push-clone value, which can't be cloned from const")
+        }
+    } else {
+        concept_assert(false, "can't push_clone value, which can't be cloned")
+    }
+}
+
+//! Append every element of fixed-size C-array `varr` to `Arr` via clone,
+//! mutable source overload.
+[unused_argument(Arr, varr)]
+def push_clone_from(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
+    static_if (typeinfo can_clone(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + int64(length(varr)))
+        for (t in varr) {
+            Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
+        }
+    } else {
+        concept_assert(false, "can't push_clone value, which can't be cloned")
+    }
+}
+
+//! Move every element of source array `varr` into `Arr` (`<-`).
+//! Source is consumed.
+[unused_argument(Arr, varr)]
+def emplace_from(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
+    static_if (typeinfo can_move(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + long_length(varr))
+        for (t in varr) {
+            unsafe {
+                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- t
+            }
+        }
+    } else {
+        concept_assert(false, "can't emplace value, which can't be moved")
+    }
+}
+
+//! Move every element of fixed-size C-array `varr` into `Arr`.
+[unused_argument(Arr, varr)]
+def emplace_from(var Arr : array<auto(numT)>; var varr : numT[] -#) {
+    static_if (typeinfo can_move(type<numT>)) {
+        Arr |> reserve(long_length(Arr) + int64(length(varr)))
+        for (t in varr) {
+            unsafe {
+                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- t
+            }
+        }
+    } else {
+        concept_assert(false, "can't emplace value, which can't be moved")
     }
 }
 

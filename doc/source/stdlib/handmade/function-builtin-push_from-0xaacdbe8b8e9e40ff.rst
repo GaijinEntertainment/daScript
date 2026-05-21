@@ -1,0 +1,1 @@
+Bulk-appends every element of source ``varr`` (an array or fixed-size C-array) to ``Arr`` via copy. Reserves the combined capacity up front, so an O(N) bulk append touches the allocator once instead of N times.

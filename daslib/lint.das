@@ -452,10 +452,7 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
         visit(prog, astVisitor.astVisitorAdapter)
     }
     let count = length(astVisitor.errors)
-    errors |> reserve(count)
-    for (e in astVisitor.errors) {
-        errors |> push(e)
-    }
+    errors |> push_from(astVisitor.errors)
     unsafe {
         delete astVisitor
     }

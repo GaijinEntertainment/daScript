@@ -829,6 +829,54 @@ User-named struct / enum / bitfield constructors (``MyEnum(x)``,
 ``Foo(v=x)``) and multi-argument vector constructors (``float2(x, y)``)
 do not match the workhorse cast set and are intentionally out of scope.
 
+PERF022 — for-loop pushing one element per iteration
+=====================================================
+
+A loop body that consists of exactly one ``push(s)`` or ``push_clone(s)``
+of the for-loop iteration variable into a destination array is the
+element-at-a-time form of an array concatenation. The bulk overloads
+``push_from`` / ``push_clone_from`` (in ``daslib/builtin.das``) reserve the
+combined capacity up front and skip the per-iteration capacity check.
+
+The rule fires for the iteration-variable shape only — a transform,
+if-guard, multi-statement body, or multi-source ``for`` does not match,
+because those have no direct bulk equivalent.
+
+Compiler folds ``B |> push(s)``, ``B.push(s)``, and ``push(B, s)`` to the
+same call shape, so all three forms are detected by the same rule.
+
+.. code-block:: das
+
+    // Bad
+    for (s in src) {                            // PERF022
+        dst |> push(s)
+    }
+
+    // Good
+    dst |> push_from(src)
+
+The bulk forms expect the destination to be ``array<T>`` and the source to
+be ``array<T>`` or a fixed-size C-array ``T[N]``. Range, string, iterator,
+and generator sources do not have a bulk overload and are left unflagged.
+
+The same recommendation applies to ``push_clone``:
+
+.. code-block:: das
+
+    // Bad
+    for (s in src) {                            // PERF022
+        dst |> push_clone(s)
+    }
+
+    // Good
+    dst |> push_clone_from(src)
+
+``emplace`` is not in the rule's scope: a for-loop iteration variable is a
+const reference, but ``emplace`` requires a mutable reference, so the
+hand-rolled shape ``for (s in src) { dst |> emplace(s) }`` does not
+compile. The ``emplace_from`` bulk overload still exists in
+``daslib/builtin.das`` for direct calls with a mutable source array.
+
 .. _style_lint:
 
 -----------

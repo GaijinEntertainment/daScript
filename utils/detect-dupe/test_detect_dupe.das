@@ -684,9 +684,7 @@ def test_chunk_files_contiguous_and_complete(t : T?) {
     var rebuilt : array<string>
     rebuilt |> reserve(11)
     for (c in chunks) {
-        for (s in c) {
-            rebuilt |> push(s)
-        }
+        rebuilt |> push_from(c)
     }
     t |> equal(length(rebuilt), 11)
     for (i in range(11)) {

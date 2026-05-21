@@ -47,7 +47,7 @@ def good_emplace_while() {
 def bad_push_clone() {
     var source <- [1, 2, 3]
     var dest : array<int>
-    for (x in source) {
+    for (x in source) {                         // nolint:PERF022 — fixture targets PERF006
         dest |> push_clone(x)                   // PERF006
     }
     delete source
@@ -119,7 +119,7 @@ def bad_push_array_source() {
 def bad_push_fixed_array_source() {
     let source = fixed_array(1, 2, 3)
     var result : array<int>
-    for (x in source) {
+    for (x in source) {                         // nolint:PERF022 — fixture targets PERF006
         result |> push(x)                       // PERF006 — fixed array = known length
     }
     delete result

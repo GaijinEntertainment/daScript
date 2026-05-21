@@ -370,9 +370,7 @@ def public build_subtool_argv(exe, subtool_path : string;
     }
     argv |> push(subtool_path)
     argv |> push("--")
-    for (a in args) {
-        argv |> push(a)
-    }
+    argv |> push_from(args)
     return <- argv
 }
 
