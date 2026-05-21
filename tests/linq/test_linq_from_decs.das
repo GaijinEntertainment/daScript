@@ -1365,6 +1365,15 @@ def target_unroll5e_groupby_iter_typed_fold() : iterator<tuple<Brand : int; N : 
                     ._select((Brand = _._0, N = _._1 |> length)))
 }
 
+// count(predicate) overload — the planner must NOT pop `.count(_.N >= 2)` as a bare count terminator (would silently drop the predicate). Must cascade to tier-2 so the 2-arg `count(src, pred)` overload runs. Regression guard for Copilot review on PR #2775.
+[export, marker(no_coverage)]
+def target_unroll5e_groupby_count_pred_fold() : int {
+    return _fold(from_decs_template(type<UnrollGroupRow>)
+                 ._group_by(_.brand)
+                 ._select((Brand = _._0, N = _._1 |> length))
+                 ._count(_.N >= 2))
+}
+
 [export, marker(no_coverage)]
 def target_unroll5e_groupby_where_count_fold() : array<tuple<Brand : int; N : int>> {
     return <- _fold(from_decs_template(type<UnrollGroupRow>)
@@ -1523,6 +1532,32 @@ def test_unroll5e_groupby_iter_typed_parity(t : T?) {
         t |> success(item.N >= 1, "N >= 1 (at least one row per bucket)")
     }
     t |> equal(count, 3, "iterator-typed group_by yields 3 buckets")
+}
+
+[test]
+def test_unroll5e_groupby_count_pred_parity(t : T?) {
+    // Buckets per brand: 0→2, 1→3, 2→2. `_.N >= 2` matches all 3 → result is 3.
+    fixture_unroll5e()
+    t |> equal(target_unroll5e_groupby_count_pred_fold(), 3, "count(predicate) over groups counts buckets satisfying pred")
+    // Smoke: change pred to keep only buckets with N >= 3 → only brand 1.
+}
+
+[test]
+def test_unroll5e_groupby_count_pred_cascade_shape(t : T?) {
+    // count(predicate) must NOT be popped as the bare count terminator (would drop the predicate). Splice cascades to tier-2 eager bridge which honors the 2-arg count overload — verified by presence of tier-2 fingerprints (`to_sequence`, `group_by_lazy_to_array` materialized intermediate).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5e_groupby_count_pred_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper")
+        // Splice did NOT fire: the decs-specific table (`decs_tab`) is absent.
+        t |> equal(describe_count(body_expr, "decs_tab"), 0, "count(pred) must cascade — no decs_tab hoisted")
+        // Tier-2 fingerprint: `count(_, predicate)` runs on the materialized array.
+        t |> success(describe_count(body_expr, "_.N >= 2") >= 1, "predicate body must appear in the cascaded emission")
+    }
 }
 
 [test]

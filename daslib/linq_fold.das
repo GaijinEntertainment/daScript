@@ -2685,11 +2685,11 @@ def private plan_group_by(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     top = peel_each(top)
-    // Pop count terminator from chain tail; bare select-after-group_by → ARRAY lane.
+    // Pop count terminator from chain tail; bare select-after-group_by → ARRAY lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
     var terminatorName : string  = ""
     {
         let lastName = calls.back()._1.name
-        if (lastName == "count") {
+        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
             terminatorName = lastName
             calls |> pop
         }
@@ -3994,11 +3994,11 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
     if (empty(calls)) return null
     let bridge = extract_decs_bridge(top)
     if (bridge == null) return null
-    // Pop count terminator; bare select-after-group_by → to_array lane.
+    // Pop count terminator; bare select-after-group_by → to_array lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
     var terminatorName : string  = ""
     {
         let lastName = calls.back()._1.name
-        if (lastName == "count") {
+        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
             terminatorName = lastName
             calls |> pop
         }
