@@ -6628,9 +6628,11 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
         let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
         if (err != null) {
             let msg = LLVMGetErrorMessage(err)
-            let local_msg = msg
+            // String interpolation copies bytes into a fresh daslang-heap string,
+            // so panic_text outlives the LLVM-owned msg buffer.
+            let panic_text = "LLVM pass run failed: {msg}"
             LLVMDisposeErrorMessage(msg)
-            panic("LLVM pass run failed: {local_msg}")
+            panic(panic_text)
         }
     }
 }
