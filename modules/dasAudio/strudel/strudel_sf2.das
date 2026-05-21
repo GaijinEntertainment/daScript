@@ -689,10 +689,10 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
     let num_presets = length(raw_phdr) - 1  // last is terminal
     result.presets |> reserve(num_presets)
     for (pi in range(num_presets)) {
-        var preset = new SF2PresetDef()
-        preset.name = raw_phdr[pi].name
-        preset.preset = raw_phdr[pi].preset
-        preset.bank = raw_phdr[pi].bank
+        var preset = new SF2PresetDef(
+            name = raw_phdr[pi].name,
+            preset = raw_phdr[pi].preset,
+            bank = raw_phdr[pi].bank)
         let bag_start = raw_phdr[pi].pbag_index
         let bag_end = raw_phdr[pi + 1].pbag_index
         var zones <- resolve_zones(raw_pbag, raw_pgen, raw_pmod, bag_start, bag_end, int(SF2GenOper.instrument))

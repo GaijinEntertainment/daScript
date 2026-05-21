@@ -108,11 +108,11 @@ struct RequirefixContext {
 
 def public analyze_module_usages(var config : RequirefixConfig) : ModuleAnalysisResult {
     var result : ModuleAnalysisResult
-    var ctx = new RequirefixContext()
-    ctx.project_file = config.project_file
-    ctx.read_file_fn <- config.read_file_fn
-    ctx.abs_filename_fn <- config.abs_filename_fn
-    ctx.filename = config.target
+    var ctx = new RequirefixContext(
+        project_file = config.project_file,
+        read_file_fn <- config.read_file_fn,
+        abs_filename_fn <- config.abs_filename_fn,
+        filename = config.target)
     for (filename, replacement in keys(config.require_roots), values(config.require_roots)) {
         ctx.require_roots |> insert(ctx.abs_filename_fn(filename), replacement)
     }

@@ -94,9 +94,7 @@ class AsyncMacro : AstFunctionAnnotation {
             retT.argTypes[1] = typeinfo ast_typedecl(type<bool>)
         }
 
-        var astVisitor = new CollectAndReplaceIteratorFields()
-        astVisitor.voidRoutine = voidRoutine
-        astVisitor.retType := retT
+        var astVisitor = new CollectAndReplaceIteratorFields(voidRoutine = voidRoutine, retType := retT)
         make_visitor(*astVisitor) $(astVisitorAdapter) {
             visit(func.body, astVisitorAdapter)
         }

@@ -21,7 +21,7 @@ module style_lint shared private
 //!   STYLE010 — if (true) should be a bare block
 //!   STYLE011 — variable declaration followed by immediate assignment
 //!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
-//!   STYLE013 — struct var with default/empty init followed by a run of field assignments
+//!   STYLE013 — struct (or `new`-allocated struct pointer) var with default/empty init followed by a run of field assignments
 //!   STYLE014 — comment block exceeds 3 lines at module/public scope (opt-in via ``options _comment_hygiene = true``, suppress with '//!@nolint' or '// nolint:STYLE014')
 //!   STYLE015 — comment block exceeds 1 line inside a 'def private' (opt-in via ``options _comment_hygiene = true``, suppress with '// nolint:STYLE015')
 //!   STYLE016 — adjacent guards leading to identical early-exit can be combined with '||'
@@ -848,36 +848,82 @@ class StyleLintVisitor : AstVisitor {
         }
         if (idx < 0 || idx + 1 >= n) return
         for (v in elet.variables) {
-            // Skip generic-host instantiations and any non-struct or non-default-init local
+            // Skip generic-host instantiations and any non-{struct or struct-pointer}
+            // local that isn't a default/empty init we'd want to flag.
             if (v.flags.generated || v.flags.inScope
-                || v._type == null || v._type.baseType != Type.tStructure
-                || !empty(v._type.dim) || !self->is_default_struct_init(v)) continue
+                || !self->is_struct_or_struct_ptr(v._type)
+                || !self->is_default_struct_init(v)) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 if (!self->is_field_assign_of(blk.list[j], v)) break
                 count++
             }
             if (count >= 2) {
-                self->style_warning("STYLE013: struct var (default-init or uninitialized) followed by a run of field assignments; use a named-argument constructor `var a = Foo(bar = ..., far = ...)`", v.at)
+                // Collect actual field names from the assignment run to make the
+                // suggestion concrete (`var a = Foo(x = ..., y = ...)` instead of
+                // a generic `bar/far` placeholder).
+                var field_names : array<string>
+                for (j in range(idx + 1, idx + 1 + count)) {
+                    let name = self->field_name_of(blk.list[j])
+                    if (!empty(name)) field_names |> push(name)
+                }
+                let is_new = v.init != null && v.init is ExprNew
+                let struct_type = is_new ? v._type.firstType : v._type
+                let type_name = (struct_type != null && struct_type.structType != null) ? string(struct_type.structType.name) : ""
+                let ctor_prefix = is_new ? "new " : ""
+                let init_desc = is_new ? "zero-arg `new`" : "default-init or uninitialized"
+                let msg = build_string() $(var w) {
+                    w |> write("STYLE013: var ({init_desc}) followed by assignments to fields \{")
+                    for (k in range(length(field_names))) {
+                        if (k != 0) w |> write(", ")
+                        w |> write(field_names[k])
+                    }
+                    w |> write("\}; use a named-argument constructor `var {v.name} = {ctor_prefix}{type_name}(")
+                    for (k in range(length(field_names))) {
+                        if (k != 0) w |> write(", ")
+                        w |> write("{field_names[k]} = ...")
+                    }
+                    w |> write(")`")
+                }
+                self->style_warning(msg, v.at)
             }
         }
     }
 
+    def is_struct_or_struct_ptr(t : TypeDecl?) : bool {
+        //! Match struct values AND pointers-to-struct, both flat (not array).
+        if (t == null || !empty(t.dim)) return false
+        let is_struct_val = t.baseType == Type.tStructure
+        let is_struct_ptr = (t.baseType == Type.tPointer && t.firstType != null
+                && t.firstType.baseType == Type.tStructure && empty(t.firstType.dim))
+        return is_struct_val || is_struct_ptr
+    }
+
     def is_default_struct_init(v : Variable?) : bool {
-        //! True for `var a : Foo` (no init) or `var a = Foo()` (zero-arg MakeStruct).
-        //! False for any non-empty constructor or non-MakeStruct init — those are
-        //! "modify an existing value" cases, not the bug we want to flag.
-        return true if (v.init == null)
-        return false if (!(v.init is ExprMakeStruct))
-        var ms = v.init as ExprMakeStruct
-        if (ms._block != null) return false
-        for (row in ms.structs) {
-            for (_mf in *row) {
-                // any field present → not the zero-arg constructor
-                return false
+        //! True for `var a : Foo` (no init, struct-valued ONLY — pointer null-init
+        //! is a different bug and is NOT flagged here), `var a = Foo()` (zero-arg
+        //! MakeStruct), or `var a = new Foo()` / `var a = new Foo` (zero-arg
+        //! ExprNew). False for any non-empty constructor, `make_foo()` call, or
+        //! pipe chain — those are "modify an existing value" cases.
+        // Pointer null-init (`var a : Foo?`) is a guaranteed NPE on `a.x = 1` —
+        // a different bug; only flag uninitialized STRUCT values, not pointers.
+        if (v.init == null) return v._type != null && v._type.baseType == Type.tStructure
+        if (v.init is ExprMakeStruct) {
+            var ms = v.init as ExprMakeStruct
+            if (ms._block != null) return false
+            for (row in ms.structs) {
+                for (_mf in *row) {
+                    // any field present → not the zero-arg constructor
+                    return false
+                }
             }
+            return true
         }
-        return true
+        if (v.init is ExprNew) {
+            var en = v.init as ExprNew
+            return empty(en.arguments)
+        }
+        return false
     }
 
     def is_field_assign_of(stmt : Expression?; target : Variable?) : bool {
@@ -892,9 +938,33 @@ class StyleLintVisitor : AstVisitor {
             return false
         }
         return false if (lhs == null || !(lhs is ExprField))
-        let src = (lhs as ExprField).value
+        var src = (lhs as ExprField).value
+        // Pointer auto-deref `ptr.field` lowers to ExprField(value=ExprRef2Value(ExprVar(ptr)))
+        // — the typer-synthesized Ref2Value is invisible to users and safe to peel.
+        if (src != null && src is ExprRef2Value) {
+            src = (src as ExprRef2Value).subexpr
+        }
         return false if (src == null || !(src is ExprVar))
         return (src as ExprVar).variable == target
+    }
+
+    def field_name_of(stmt : Expression?) : string {
+        //! Return the ExprField name of stmt's LHS, or "" if stmt isn't a field
+        //! assignment. Caller is expected to have already passed `is_field_assign_of`.
+        //! Same Ptr2Ref-peel as is_field_assign_of, since pointer auto-deref wraps
+        //! the field-receiver in ExprPtr2Ref.
+        var lhs : Expression? = null
+        if (stmt is ExprCopy) {
+            lhs = (stmt as ExprCopy).left
+        } elif (stmt is ExprClone) {
+            lhs = (stmt as ExprClone).left
+        } elif (stmt is ExprMove) {
+            lhs = (stmt as ExprMove).left
+        } else {
+            return ""
+        }
+        return "" if (lhs == null || !(lhs is ExprField))
+        return string((lhs as ExprField).name)
     }
 
     // --- STYLE021: table<string; JsonValue?> built via repeated insert → JV(named-tuple) ---
