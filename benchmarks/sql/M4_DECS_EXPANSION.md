@@ -316,3 +316,24 @@ New `plan_decs_group_by` planner mirrors `plan_group_by` machinery (state-table 
 All 12 groupby_* rows improve 1.9-2.9× (avg ~2.3×). m4 now consistently lands 10-20 ns above m3f — the remaining gap is the Wave 4 multi-component `get_ro` overhead (every bridge component participates in the inner for-loop iteration even when the chain only reads one). m4 beats SQL on 10/10 measurable rows by 2.1-3.4×.
 
 **Coverage:** count terminator (length(tab)), implicit to_array terminator, sum/min/max/average/first reducers, multi-reducer (N+S+MX in one pass), having_ predicate over named slot, having_ predicate over hidden synthesized slot, upstream where_+group_by, upstream select+group_by(expression key), AST shape gate (no `to_sequence`, exactly one `for_each_archetype`, no `_find` variant — group_by doesn't early-exit, `decs_tab` 6 refs + `decs_dummy` 6 refs in the splice). +13 tests (80 → 93 in file).
+
+## Update — Slice 5d order/reverse on decs (2026-05-21, plan_decs_order_family + plan_decs_reverse)
+
+Two new planners `plan_decs_order_family` (mirrors `plan_order_family`) and `plan_decs_reverse` (mirrors `plan_reverse`), inserted in the cascade BEFORE their array-side equivalents per the same cascade-ordering rule as Slice 5e. Both emit a hoisted buffer above `for_each_archetype`, then dispatch to the existing daslib helper family — `order_inplace` / `top_n*` / `min_by` / `max_by` for the order arm, `reverse_inplace` + optional `resize(takeN)` for the reverse arm.
+
+`plan_decs_reverse` has three emit paths matching the array side: `count` terminator → counter loop (reverse is identity for count); `first`/`first_or_default` → walk + overwrite `last` (reverse-of-last = first-of-reverse); else → buffer + `reverse_inplace` + optional resize. The R6 backward-index optimization from array side doesn't apply: multi-iter for has no random access into the archetype.
+
+`plan_decs_order_family` has a single uniform emit (always buffers, then dispatches the appropriate terminator) — simpler than array side which has separate "no where" direct-call vs "with where" buffered paths. The decs source can never random-access, so the direct-call optimization isn't available.
+
+| benchmark | shape | m1 sql | m3 | m3f (array splice) | m4 (old, eager bridge) | m4 (new, splice) | m4 win |
+|---|---|---:|---:|---:|---:|---:|---:|
+| sort_take                | `_order_by + take` | 38 | 713 | 28 | 119 | **57** | 2.1× |
+| sort_first               | `_order_by + first` | 37 | 711 | 41 | 121 | **71** | 1.7× |
+| order_take_desc          | `_order_by_descending + take` | 37 | 694 | 28 | 117 | **58** | 2.0× |
+| select_where_order_take  | `_where + _order_by + take` | 36 | 352 | 25 | 102 | **38** | 2.7× |
+| bare_order_where         | `_where + _order_by` | 274 | 359 | 118 | 196 | **130** | 1.5× |
+| reverse_take             | `.reverse().take(N)` | 0 | 22 | 0 | 114 | **48** | 2.4× |
+
+All 6 rows improve 1.5-2.7× (avg ~2.1×). m4 lands within 2× of m3f on most rows — the remaining gap is the Wave 4 multi-component `get_ro` overhead (sort dominates the wall-clock so the gap doesn't fully close even when the splice fires). `bare_order_where` is the tightest squeeze (1.5×) because sort over 100K rows is the bottleneck; once the m4 buffer build matches m3f (~117 ns), the rest is pure sort time.
+
+**Coverage:** bare `_order_by` + to_array, bare `_order_by_descending` + to_array, `_order_by` + take, `_order_by_descending` + take, `_order_by` + first, `_order_by_descending` + first, `_order_by` + first_or_default (nonempty + empty), `_where + _order_by + take`, `_where + _order_by + first`; `.reverse() + to_array`, `.reverse() + take(N)` (in-range, beyond-length, and zero — last uses runtime-var to defeat const-fold of PERF017 false-positive on splice-emitted `0 < length(buf)`), `.reverse() + count` (no-buffer counter loop), `_where + .reverse() + first_or_default` (empty + nonempty), `_where + .reverse() + to_array`, `_where + _select + .reverse() + to_array` (projection through reverse). AST shape gates for: order+take (top_n_by emit + no to_sequence + 1 for_each_archetype), order+first (min_by emit + panic-on-empty guard + no top_n_by), reverse+to_array (1 reverse_inplace), reverse+count (no decs_buf, no reverse_inplace). +20 tests (100 → 120 in file).
