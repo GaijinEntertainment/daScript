@@ -111,7 +111,6 @@ A broad utility pass landed across libraries, docs, and developer workflow.
 - **Web target reuses the main `CMakeLists`** (#2600) — `daslang-web` picks up tests and tracks the same build configuration as the native targets, removing the duplicated CMake graph
 - **MCP: parse-aware C++ source-search tools** (#2602) — `cpp_find_symbol`, `cpp_grep_usage`, `cpp_outline`, `cpp_goto_definition` join the existing daslang-side tools, with a configurable search root and git-signature staleness detection
 - **MCP: auto-retry unqualified module names under `daslib/`** (#2616) — when a tool call references e.g. `fio` and the symbol can't be found, the server retries against `daslib/fio` before reporting a miss
-- **`daslib/blind_mouse`: personal Q&A cache MCP server** (#2611) — `mouse__ask` / `mouse__add` keep a curated `.md` answer cache for "how do I X?" / "what's the pattern for Y?" questions across sessions
 - **`@live` extends to struct fields** (#2614) — `live_host` now annotates individual struct fields with `@live`, with per-field `init_hash` combining `f.init` and `g.init` so partial-struct reloads stay coherent
 
 ### Bug Fixes

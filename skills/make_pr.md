@@ -269,10 +269,6 @@ CI's `extended_checks` job runs `./bin/Release/daslang ./das-fmt/dasfmt.das -- -
 
 **Before pushing:** mentally format named-arg constructor / call sites with spaces around `=`. If CI `extended_checks` fails on a format diff after MCP said "already formatted", fix the spacing and re-push (or amend, on a squashed branch).
 
-## 5.5. Run the task-wrap-up curation pass
-
-Pre-PR is a natural moment to close the blind-mouse loop — work is final, you know what was learned, diff is locked. The full curation steps (review log, surface un-asked, cost calculus) live in `skills/task_wrap_up.md` and apply to *any* major task wrap-up, not just PRs. Run that pass now if you keep a personal Q&A cache.
-
 ## 6. Create the PR
 
 Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follow the commit message conventions from the repository (see recent `git log` for style).

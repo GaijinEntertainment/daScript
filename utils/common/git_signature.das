@@ -1,10 +1,9 @@
 // Shared git-aware staleness signature for utils/* index caches.
 //
-// Used by both `utils/mcp/tools/cpp_common.das` (cpp source-search index)
-// and `utils/mouse/index.das` (markdown docs index). Each consumer plugs
-// in its own path predicate and search-dirs scope; this module owns the
-// git plumbing, the filesystem fallback, and the determinism guarantees
-// (sorted fs walk, per-tree HEAD hash).
+// Used by `utils/mcp/tools/cpp_common.das` (cpp source-search index).
+// Consumers plug in their own path predicate and search-dirs scope; this
+// module owns the git plumbing, the filesystem fallback, and the
+// determinism guarantees (sorted fs walk, per-tree HEAD hash).
 
 options gen2
 
