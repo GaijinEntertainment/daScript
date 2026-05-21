@@ -178,11 +178,12 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 
 ### Unsafe
 
-- **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it
+- **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it. Lint backs this: STYLE024 flags `unsafe` wraps with no descendant needing unsafe; STYLE025 flags blocks where exactly one statement needs unsafe (narrow to expression form); STYLE026 flags nested `unsafe { ... }`
 - **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
 - **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
 - **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
 - **`reinterpret<T>(expr)`** requires `unsafe` — used for const-stripping on regular pointers: `unsafe(reinterpret<Foo?>(const_ptr))`
+- **`typeinfo is_unsafe_when_uninitialized(type<T>)`** — the trait that gates unsafe-ness per type in generic code. Pairs with field-level `@safe_when_uninitialized` and struct-level `[safe_when_uninitialized]` annotations. Canonical use in `daslib/builtin.das`: declare `var x : TT` inside `static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }` — the unsafe block needs `// nolint:STYLE025` on the `unsafe {` line because STYLE025 sees only one statement needing unsafe at any instantiation and can't reason across the static_if branches
 
 ### Error handling
 
@@ -298,6 +299,7 @@ Most layout is obvious from `ls`. Non-obvious ones worth knowing:
 - `utils/detect-dupe/` (in-repo dupe finder) and `utils/find-dupe/` (Claude-based judge that needs `daspkg install --root utils/find-dupe` + `ANTHROPIC_API_KEY`) — both also exposed as MCP tools
 - `utils/mcp/`, `utils/daslang-live/`, `utils/daspkg/` — in-tree tools (most also have skills under `skills/`)
 - `tutorials/language/` (language tour) vs `tutorials/<area>/` (per-area) — never put tutorials in `modules/<X>/tutorial/`
+- **Array/dim/vector indexing lives across 5 tiers** — bug fixes (bounds checks, neg-index detection, width-aware bounds) usually need parallel edits in all of them: AOT C++ ([include/daScript/simulate/aot.h](include/daScript/simulate/aot.h)), interpreter non-fused ([include/daScript/simulate/runtime_array.h](include/daScript/simulate/runtime_array.h) + [include/daScript/simulate/simulate_nodes.h](include/daScript/simulate/simulate_nodes.h)), interpreter fused ([src/simulate/simulate_fusion_at_array.cpp](src/simulate/simulate_fusion_at_array.cpp) + [src/simulate/simulate_fusion_at.cpp](src/simulate/simulate_fusion_at.cpp)), JIT ([modules/dasLLVM/daslib/llvm_jit.das](modules/dasLLVM/daslib/llvm_jit.das)), and AST const-fold ([src/ast/ast_simulate.cpp](src/ast/ast_simulate.cpp)). Debug builds bypass the fused permutations — a fix that lands only in the fused path passes Release CI and trips Debug-ARM. Bump `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_macro.das` after JIT changes to invalidate cached `.dll`s
 
 ## MCP Server (AI Tool Integration)
 
