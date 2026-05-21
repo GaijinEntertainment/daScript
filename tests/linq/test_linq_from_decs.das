@@ -1651,3 +1651,422 @@ def test_unroll5e_groupby_count_splice_shape(t : T?) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5d: order_by / order_by_descending / reverse on decs (buffer arms)
+// ─────────────────────────────────────────────────────────────────────────────
+
+[decs_template(prefix = "unroll5d_")]
+struct Unroll5dRow {
+    id    : int
+    price : int
+    flag  : int
+}
+
+def private fixture_unroll5d() {
+    restart()
+    // 7 rows. price (jumbled walk-order so order_by must actually sort): 30,10,50,20,40,5,35.
+    // flag pattern: even-id => 1, odd-id => 0.
+    let prices = fixed_array(30, 10, 50, 20, 40, 5, 35)
+    for (i in range(7)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.unroll5d_id := i
+            cmp.unroll5d_price := prices[i]
+            cmp.unroll5d_flag := (i % 2 == 0) ? 1 : 0
+        }
+    }
+    commit()
+}
+
+// ── order_by + to_array (bare sort) ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).to_array())
+}
+
+[test]
+def test_unroll5d_order_by_to_array_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_order_by_to_array_fold()
+    t |> equal(got.length(), 7)
+    // sorted ascending by price: 5,10,20,30,35,40,50.
+    let expected = [5, 10, 20, 30, 35, 40, 50]
+    for (i in range(7)) {
+        t |> equal(got[i].price, expected[i])
+    }
+}
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_desc_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).to_array())
+}
+
+[test]
+def test_unroll5d_order_by_desc_to_array_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_order_by_desc_to_array_fold()
+    t |> equal(got.length(), 7)
+    let expected = [50, 40, 35, 30, 20, 10, 5]
+    for (i in range(7)) {
+        t |> equal(got[i].price, expected[i])
+    }
+}
+
+// ── order_by + take ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_take3_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).take(3).to_array())
+}
+
+[test]
+def test_unroll5d_order_by_take_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_order_by_take3_fold()
+    t |> equal(got.length(), 3)
+    let expected = [5, 10, 20]
+    for (i in range(3)) {
+        t |> equal(got[i].price, expected[i])
+    }
+}
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_desc_take3_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).take(3).to_array())
+}
+
+[test]
+def test_unroll5d_order_by_desc_take_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_order_by_desc_take3_fold()
+    t |> equal(got.length(), 3)
+    let expected = [50, 40, 35]
+    for (i in range(3)) {
+        t |> equal(got[i].price, expected[i])
+    }
+}
+
+// ── order_by + first ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_first_fold() : tuple<id : int; price : int; flag : int> {
+    return _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first())
+}
+
+[test]
+def test_unroll5d_order_by_first_parity(t : T?) {
+    fixture_unroll5d()
+    t |> equal(target_unroll5d_order_by_first_fold().price, 5)
+}
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_desc_first_fold() : tuple<id : int; price : int; flag : int> {
+    return _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).first())
+}
+
+[test]
+def test_unroll5d_order_by_desc_first_parity(t : T?) {
+    fixture_unroll5d()
+    t |> equal(target_unroll5d_order_by_desc_first_fold().price, 50)
+}
+
+// ── order_by + first_or_default ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_order_by_first_or_default_fold() : tuple<id : int; price : int; flag : int> {
+    return _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first_or_default((id = -1, price = -99, flag = -1)))
+}
+
+[test]
+def test_unroll5d_order_by_first_or_default_nonempty(t : T?) {
+    fixture_unroll5d()
+    t |> equal(target_unroll5d_order_by_first_or_default_fold().price, 5)
+}
+
+[test]
+def test_unroll5d_order_by_first_or_default_empty(t : T?) {
+    restart()
+    commit()
+    t |> equal(target_unroll5d_order_by_first_or_default_fold().price, -99, "empty decs source → default")
+}
+
+// Eval-order invariant: the splice must evaluate the first_or_default default expression BEFORE the for_each_archetype loop, matching plan_decs_reverse's first_or_default hoist + the eager-arg-eval semantics of the equivalent non-spliced chain. Detected via a side-effecting predicate that flips a global flag during iter and a side-effecting default that snapshots the flag.
+var g_eval_order_iter_seen : bool = false
+var g_eval_order_default_saw_iter : bool = false
+def trace_pred_for_eval_order(rec : tuple<id : int; price : int; flag : int>) : bool {
+    g_eval_order_iter_seen = true
+    return rec.flag == 1
+}
+def trace_default_for_eval_order() : tuple<id : int; price : int; flag : int> {
+    g_eval_order_default_saw_iter = g_eval_order_iter_seen
+    return (id = -1, price = -99, flag = -1)
+}
+
+[test]
+def test_unroll5d_order_by_first_or_default_eval_order(t : T?) {
+    fixture_unroll5d()
+    g_eval_order_iter_seen = false
+    g_eval_order_default_saw_iter = true
+    let got = _fold(
+        from_decs_template(type<Unroll5dRow>)
+            ._where(trace_pred_for_eval_order(_))
+            ._order_by(_.price)
+            .first_or_default(trace_default_for_eval_order())
+    )
+    t |> equal(g_eval_order_default_saw_iter, false, "default arg evaluated before for_each_archetype iteration")
+    t |> equal(got.flag, 1, "non-empty: top-1 by price among flag==1 returned")
+}
+
+// ── where + order_by + take ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_where_order_by_take_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).take(2).to_array())
+}
+
+[test]
+def test_unroll5d_where_order_by_take_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_where_order_by_take_fold()
+    // flag==1 rows: ids 0,2,4,6 → prices 30,50,40,35. Sorted asc: 30,35,40,50. take(2) → 30,35.
+    t |> equal(got.length(), 2)
+    t |> equal(got[0].price, 30)
+    t |> equal(got[1].price, 35)
+}
+
+// ── where + order_by + first ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_where_order_by_first_fold() : tuple<id : int; price : int; flag : int> {
+    return _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).first())
+}
+
+[test]
+def test_unroll5d_where_order_by_first_parity(t : T?) {
+    fixture_unroll5d()
+    // flag==1 rows: prices 30,50,40,35 → min = 30.
+    t |> equal(target_unroll5d_where_order_by_first_fold().price, 30)
+}
+
+// ── reverse + to_array ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>).reverse().to_array())
+}
+
+[test]
+def test_unroll5d_reverse_to_array_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_reverse_to_array_fold()
+    // Decs walk order is archetype-dependent. We don't assert exact order vs the eager bridge — we assert .reverse() produces the SAME multiset reversed wrt a non-reverse fold. Cheap check: length + presence of all ids.
+    t |> equal(got.length(), 7)
+    var idsSeen : table<int>
+    for (r in got) {
+        idsSeen |> insert(r.id)
+    }
+    for (i in range(7)) {
+        t |> success(key_exists(idsSeen, i), "id {i} present")
+    }
+}
+
+// ── reverse + take ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_reverse_take_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>).reverse().take(3).to_array())
+}
+
+[test]
+def test_unroll5d_reverse_take_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_reverse_take_fold()
+    t |> equal(got.length(), 3, "reverse + take(3) yields 3 rows")
+}
+
+[test]
+def test_unroll5d_reverse_take_beyond_length(t : T?) {
+    fixture_unroll5d()
+    let huge = _fold(from_decs_template(type<Unroll5dRow>).reverse().take(99).to_array())
+    t |> equal(huge.length(), 7, "take(N>length) returns all rows reversed")
+}
+
+[test]
+def test_unroll5d_reverse_take_zero(t : T?) {
+    fixture_unroll5d()
+    // Runtime-0 take expression: a const-folded `take(0)` literal trips PERF017 on the splice-emitted resize formula (`takeB < length(buf)` collapses to `0 < length(buf)`).
+    var zeroN = 0  // nolint:LINT003 — kept as var to defeat const-fold of the take(N) arg
+    let zero = _fold(from_decs_template(type<Unroll5dRow>).reverse().take(zeroN).to_array())
+    t |> success(empty(zero), "take(0) returns empty")
+}
+
+// Side-effecting take(N) source — the splice must evaluate the take expression EXACTLY ONCE.
+var g_take_call_count = 0
+def bump_take_count() : int {
+    g_take_call_count ++
+    return 3
+}
+
+[test]
+def test_unroll5d_reverse_take_single_eval(t : T?) {
+    fixture_unroll5d()
+    g_take_call_count = 0
+    let got <- _fold(from_decs_template(type<Unroll5dRow>).reverse().take(bump_take_count()).to_array())
+    t |> equal(got.length(), 3, "take(N) honored — 3 rows")
+    t |> equal(g_take_call_count, 1, "take(N) expression evaluated exactly once (no multi-eval from splice clones)")
+}
+
+// ── reverse + count (identity — counter loop) ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_reverse_count_fold() : int {
+    return _fold(from_decs_template(type<Unroll5dRow>).reverse().count())
+}
+
+[test]
+def test_unroll5d_reverse_count_parity(t : T?) {
+    fixture_unroll5d()
+    t |> equal(target_unroll5d_reverse_count_fold(), 7)
+}
+
+// ── reverse + first (= last of source) ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_where_reverse_first_or_default_fold() : tuple<id : int; price : int; flag : int> {
+    return _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().first_or_default((id = -1, price = -99, flag = -1)))
+}
+
+[test]
+def test_unroll5d_where_reverse_first_or_default_empty(t : T?) {
+    restart()
+    commit()
+    t |> equal(target_unroll5d_where_reverse_first_or_default_fold().id, -1, "empty decs source → default")
+}
+
+[test]
+def test_unroll5d_where_reverse_first_or_default_nonempty(t : T?) {
+    fixture_unroll5d()
+    // flag==1 ids = {0,2,4,6}; last-encountered (reverse-of-first) is the maximum encountered id in archetype walk order. We only assert it's one of the flag==1 ids.
+    let id = target_unroll5d_where_reverse_first_or_default_fold().id
+    t |> success(id == 0 || id == 2 || id == 4 || id == 6, "first-of-reverse(flag==1) is one of the matching ids")
+}
+
+// ── where + reverse + to_array ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_where_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().to_array())
+}
+
+[test]
+def test_unroll5d_where_reverse_to_array_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_where_reverse_to_array_fold()
+    t |> equal(got.length(), 4)
+    for (r in got) {
+        t |> equal(r.flag, 1)
+    }
+}
+
+// ── where + select + reverse + to_array (projection through reverse) ──
+
+[export, marker(no_coverage)]
+def target_unroll5d_where_select_reverse_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._select(_.id).reverse().to_array())
+}
+
+[test]
+def test_unroll5d_where_select_reverse_to_array_parity(t : T?) {
+    fixture_unroll5d()
+    let got <- target_unroll5d_where_select_reverse_to_array_fold()
+    t |> equal(got.length(), 4, "4 flag==1 rows projected to id")
+    var idsSeen : table<int>
+    for (id in got) {
+        idsSeen |> insert(id)
+    }
+    for (expectedId in [0, 2, 4, 6]) {
+        t |> success(key_exists(idsSeen, expectedId), "id {expectedId} present in projection")
+    }
+}
+
+// ── AST shape gates ──
+
+[test]
+def test_unroll5d_order_by_take_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5d_order_by_take3_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "order_by+take splice must NOT fall to tier-2 to_sequence (cascade ordering trap)")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no eager-bridge wrapping)")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "order family uses for_each_archetype (no early-exit needed)")
+        // Buffer hoisted ABOVE for_each_archetype so it survives the archetype walk.
+        t |> success(describe_count(body_expr, "decs_buf") >= 2, "decs_buf declared + populated")
+        // top_n_by call replaces the array-side to_array / sort sequence.
+        t |> equal(describe_count(body_expr, "top_n_by"), 1, "splice dispatches to top_n_by")
+    }
+}
+
+[test]
+def test_unroll5d_order_by_first_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5d_order_by_first_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "order_by+first splice must NOT fall to tier-2 to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+        // first → min_by on the buffer (NOT top_n_by + index).
+        t |> equal(describe_count(body_expr, "min_by"), 1, "order_by+first emits min_by call")
+        t |> equal(describe_count(body_expr, "top_n_by"), 0, "order_by+first should NOT use top_n_by")
+        // Empty-buffer panic guard present.
+        t |> equal(describe_count(body_expr, "sequence contains no elements"), 1, "panic-on-empty guard for first()")
+    }
+}
+
+[test]
+def test_unroll5d_reverse_to_array_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5d_reverse_to_array_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "reverse splice must NOT fall to tier-2 to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+        t |> equal(describe_count(body_expr, "reverse_inplace"), 1, "buffer reversed via reverse_inplace")
+    }
+}
+
+[test]
+def test_unroll5d_reverse_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5d_reverse_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // reverse+count → counter loop, NO buffer, NO reverse_inplace.
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "reverse+count splice must NOT fall to tier-2 to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+        t |> equal(describe_count(body_expr, "reverse_inplace"), 0, "reverse is identity for count — no reverse_inplace")
+        t |> equal(describe_count(body_expr, "decs_buf"), 0, "no buffer needed for count")
+    }
+}
+
