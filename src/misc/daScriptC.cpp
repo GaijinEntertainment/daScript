@@ -1129,6 +1129,12 @@ void das_array_init_borrowed ( das_array * arr, void * data, uint32_t count, uin
     ((Array *)arr)->flags |= 1u; // bit 0 == shared
 }
 
+void das_array_init_borrowed_i64 ( das_array * arr, void * data, uint64_t count, uint64_t capacity ) {
+    memset(arr, 0, sizeof(das_array));
+    array_mark_locked(*(Array *)arr, data, count, capacity);
+    ((Array *)arr)->flags |= 1u; // bit 0 == shared (see das_array_init_borrowed)
+}
+
 void das_array_reserve ( das_context * context, das_array * arr, uint32_t capacity, uint32_t stride ) {
     // Same guard as das_array_clear: stride==0 with non-zero capacity reaches
     // Context::reallocate(_, _, 0) which fires DAS_VERIFYF in MemoryModel.
@@ -1139,9 +1145,25 @@ void das_array_reserve ( das_context * context, das_array * arr, uint32_t capaci
     array_reserve(*(Context *)context, *(Array *)arr, capacity, stride, nullptr);
 }
 
+void das_array_reserve_i64 ( das_context * context, das_array * arr, uint64_t capacity, uint32_t stride ) {
+    if ( capacity && !stride ) {
+        ((Context *)context)->throw_error("das_array_reserve_i64: stride must be non-zero when capacity > 0");
+        return;
+    }
+    array_reserve(*(Context *)context, *(Array *)arr, capacity, stride, nullptr);
+}
+
 void das_array_resize ( das_context * context, das_array * arr, uint32_t size, uint32_t stride, int zero ) {
     if ( size && !stride ) {
         ((Context *)context)->throw_error("das_array_resize: stride must be non-zero when size > 0");
+        return;
+    }
+    array_resize(*(Context *)context, *(Array *)arr, size, stride, zero != 0, nullptr);
+}
+
+void das_array_resize_i64 ( das_context * context, das_array * arr, uint64_t size, uint32_t stride, int zero ) {
+    if ( size && !stride ) {
+        ((Context *)context)->throw_error("das_array_resize_i64: stride must be non-zero when size > 0");
         return;
     }
     array_resize(*(Context *)context, *(Array *)arr, size, stride, zero != 0, nullptr);
@@ -1168,6 +1190,10 @@ void das_array_clear ( das_context * context, das_array * arr, uint32_t stride )
 
 void * das_array_at ( das_array * arr, uint32_t index, uint32_t stride ) {
     return ((Array *)arr)->data + size_t(index) * size_t(stride);
+}
+
+void * das_array_at_i64 ( das_array * arr, uint64_t index, uint32_t stride ) {
+    return ((Array *)arr)->data + uint64_t(index) * uint64_t(stride);
 }
 
 void das_array_lock ( das_context * context, das_array * arr ) {
@@ -1228,6 +1254,10 @@ void das_table_init ( das_table * tab ) {
 }
 
 void das_table_reserve ( das_context * context, das_table * tab, int key_base_type, uint32_t capacity, uint32_t value_size ) {
+    table_reserve_impl(*(Context *)context, *(Table *)tab, int32_t(key_base_type), capacity, value_size, nullptr);
+}
+
+void das_table_reserve_i64 ( das_context * context, das_table * tab, int key_base_type, uint64_t capacity, uint32_t value_size ) {
     table_reserve_impl(*(Context *)context, *(Table *)tab, int32_t(key_base_type), capacity, value_size, nullptr);
 }
 
