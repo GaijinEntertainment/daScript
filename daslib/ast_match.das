@@ -340,7 +340,7 @@ def qm_extract_type(var expr : Expression?; var out_type : TypeDeclPtr&) : QMatc
 
 def qm_rtti(expr : Expression const?) : string {
     //! Return the RTTI type name of an expression.
-    return string(expr.__rtti)
+    return expr.__rtti
 }
 
 
@@ -1006,7 +1006,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     // the actual expression before any RTTI/field guards fire.
     body |> push <| qmacro_expr(${ qm_peel_ref2value($i(actual_var)); })
 
-    let rtti = string(pattern.__rtti)
+    let rtti = pattern.__rtti
 
     // ── ExprTag — captures ($e, $v, $i, $t, $c, $f) ────────
     if (pattern is ExprTag) {
@@ -2190,4 +2190,135 @@ class private QMatchFunction : AstCallMacro {
             arguments := array<Expression?>(func_arg, mkblk_f)
         )
     }
+}
+
+// ── Shared AST-match helpers ────────────────────────────────────────────
+// Hand-rolled probes harvested from daslib/linq_fold.das + modules/dasSQLITE/daslib/sqlite_linq.das.
+// Reach for these BEFORE writing a new ``is X / as X`` cascade. For deeper structural matches use ``qmatch`` directly.
+
+def match_call_in_module(var expr : Expression?; name, modName : string) : ExprCall? {
+    //! Match an ``ExprCall`` to ``name`` in module ``modName``, transparent to generic instantiation.
+    //! Returns the call on match; ``null`` otherwise. ``func.fromGeneric`` is consulted as a fallback
+    //! so generic functions match their authored ``(name, modName)``, not the instantiation's mangled name.
+    if (expr == null || !(expr is ExprCall)) return null
+    var call = expr as ExprCall
+    if (call.func == null || call.func._module == null) return null
+    if ((call.func.name == name && call.func._module.name == modName)
+            || (call.func.fromGeneric != null
+                && call.func.fromGeneric.name == name
+                && call.func.fromGeneric._module != null
+                && call.func.fromGeneric._module.name == modName)) return call
+    return null
+}
+
+def match_call_in_linq(var expr : Expression?; name : string) : ExprCall? {
+    //! Match an ``ExprCall`` to ``name`` in the ``linq`` module. Thin wrapper on ``match_call_in_module``
+    //! kept for readability at the heavy-call-site files (linq_fold, sqlite_linq, decs_boost).
+    return match_call_in_module(expr, name, "linq")
+}
+
+def peel_lambda_single_return(var lam : Expression?) : Expression?  {
+    //! For a single-argument, single-return lambda ``@(x : T) => expr``, return the body ``expr``.
+    //! Returns ``null`` if ``lam`` is not an ``ExprMakeBlock`` of that exact shape.
+    if (lam == null || !(lam is ExprMakeBlock)) return null
+    var mblk = lam as ExprMakeBlock
+    var blk = mblk._block as ExprBlock
+    if (blk == null || blk.arguments |> length != 1 || blk.list |> length != 1 || !(blk.list[0] is ExprReturn)) return null
+    var ret = blk.list[0] as ExprReturn
+    return ret.subexpr
+}
+
+def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expression? {
+    //! Peel a single-arg, single-return lambda by renaming its bound variable to ``argName`` in the
+    //! cloned body. If the input is not a peelable lambda, fall back to ``invoke(expr, argName)`` so
+    //! callers can splice the result unconditionally.
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var res = clone_expression(ret.subexpr)
+                var rules : Template
+                rules |> renameVariable(string(blk.arguments[0].name), argName)
+                apply_template(rules, res.at, res)
+                return res
+            }
+        }
+    }
+    return qmacro(invoke($e(expr), $i(argName)))
+}
+
+def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression?) : Expression? {
+    //! Variant of ``peel_lambda_rename_var`` using ``replaceVariablePeeling`` — substitutes the bound
+    //! variable with an arbitrary expression (peel-aware: strips typer-inserted ``ExprRef2Value``
+    //! wrappers on already-typed AST). Falls back to ``invoke(expr, replacement)`` when non-peelable.
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var res = clone_expression(ret.subexpr)
+                var rules : Template
+                rules |> replaceVariablePeeling(string(blk.arguments[0].name), replacement)
+                apply_template(rules, res.at, res)
+                return res
+            }
+        }
+    }
+    return qmacro(invoke($e(expr), $e(replacement)))
+}
+
+def peel_lambda_rename_2vars(var expr : Expression?; arg0Name, arg1Name : string) : Expression? {
+    //! 2-arg peel variant for shapes like aggregate's ``block<(acc, x) : AGG>``. Returns ``null``
+    //! when the input is not a peelable 2-arg, single-return lambda — caller decides the fallback
+    //! (this differs from the 1-arg form, which falls back to ``invoke``).
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 2 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var res = clone_expression(ret.subexpr)
+                var rules : Template
+                rules |> renameVariable(string(blk.arguments[0].name), arg0Name)
+                rules |> renameVariable(string(blk.arguments[1].name), arg1Name)
+                apply_template(rules, res.at, res)
+                return res
+            }
+        }
+    }
+    return null
+}
+
+def peel_tuple_field_read(expr : Expression?; bindName : string; fieldIndex : int) : bool {
+    //! ``true`` when ``expr`` matches ``<bindName>._<fieldIndex>`` — a tuple-slot read on a named bind.
+    //! Single-level ``ExprRef2Value`` peel on each side (the typer never nests these wrappers).
+    if (expr == null) return false
+    var sub = expr
+    if (sub is ExprRef2Value) {
+        sub = (sub as ExprRef2Value).subexpr
+    }
+    if (!(sub is ExprField)) return false
+    let fld = sub as ExprField
+    if (fld.name != "_{fieldIndex}") return false
+    var src = fld.value
+    if (src is ExprRef2Value) {
+        src = (src as ExprRef2Value).subexpr
+    }
+    if (!(src is ExprVar)) return false
+    return (src as ExprVar).name == bindName
+}
+
+def qn(prefix : string; at : LineInfo) : string {
+    //! Build a backtick-quoted qname unique to ``at`` for the given ``prefix``. Use to name
+    //! synthesized locals emitted by macros so multiple expansions in one file don't collide.
+    //! ``at.line`` / ``at.column`` are interpolated via the default ``uint`` formatter (hex), so
+    //! output for ``at.line=42u, at.column=7u`` is ``\`<prefix>\`0x2a\`0x7``.
+    //! Deterministic — distinct ``(prefix, at.line, at.column)`` triples produce distinct names;
+    //! synthesized ``LineInfo()`` (line=0, column=0) produces ``\`<prefix>\`0x0\`0x0`` and WILL
+    //! collide across distinct synth sites with the same prefix. Build a synth-specific name
+    //! yourself if that matters at the call site.
+    return "`{prefix}`{at.line}`{at.column}"
 }
