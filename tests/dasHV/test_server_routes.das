@@ -2,7 +2,8 @@
 //
 // Covers: GET/POST/PUT/DELETE/PATCH/HEAD/ANY routes, TEXT_PLAIN, JSON,
 //         path params (:id), query params (get_param, each_param),
-//         set_header on response, get_header on request
+//         set_header on response, get_header on request,
+//         wildcard ANY("*") priority vs literal routes (#2675 regression).
 
 options gen2
 options persistent_heap
@@ -88,7 +89,7 @@ class RouteTestServer : HvWebServer {
 
 [test]
 def test_get_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("GET route returns text") @(t : T?) {
             GET("{base_url}/hello") <| $(resp) {
                 t |> equal(string(resp.body), "Hello, world!")
@@ -100,7 +101,7 @@ def test_get_route(t : T?) {
 
 [test]
 def test_post_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("POST route echoes body") @(t : T?) {
             POST("{base_url}/echo", "hello server") <| $(resp) {
                 t |> equal(string(resp.body), "hello server")
@@ -111,7 +112,7 @@ def test_post_route(t : T?) {
 
 [test]
 def test_put_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PUT route receives body") @(t : T?) {
             PUT("{base_url}/resource", "updated") <| $(resp) {
                 t |> equal(string(resp.body), "PUT:updated")
@@ -122,7 +123,7 @@ def test_put_route(t : T?) {
 
 [test]
 def test_patch_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PATCH route receives body") @(t : T?) {
             PATCH("{base_url}/resource", "partial") <| $(resp) {
                 t |> equal(string(resp.body), "PATCH:partial")
@@ -133,7 +134,7 @@ def test_patch_route(t : T?) {
 
 [test]
 def test_delete_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("DELETE route works") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.DELETE
@@ -148,7 +149,7 @@ def test_delete_route(t : T?) {
 
 [test]
 def test_head_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("HEAD route sets headers, no body") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.HEAD
@@ -165,7 +166,7 @@ def test_head_route(t : T?) {
 
 [test]
 def test_any_route(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("ANY route handles GET") @(t : T?) {
             GET("{base_url}/any-method") <| $(resp) {
                 t |> success(find(string(resp.body), "method:") >= 0, "body contains method info")
@@ -181,7 +182,7 @@ def test_any_route(t : T?) {
 
 [test]
 def test_path_params(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("single path param") @(t : T?) {
             GET("{base_url}/users/42") <| $(resp) {
                 t |> equal(string(resp.body), "user:42")
@@ -197,7 +198,7 @@ def test_path_params(t : T?) {
 
 [test]
 def test_query_params_server(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("query params accessible via each_param") @(t : T?) {
             GET("{base_url}/search?q=daslang&page=1") <| $(resp) {
                 let body = string(resp.body)
@@ -210,7 +211,7 @@ def test_query_params_server(t : T?) {
 
 [test]
 def test_response_headers_server(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("set_header on response") @(t : T?) {
             GET("{base_url}/headers") <| $(resp) {
                 let custom = get_header(resp, "X-Custom")
@@ -224,7 +225,7 @@ def test_response_headers_server(t : T?) {
 
 [test]
 def test_json_response_server(t : T?) {
-    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("JSON response with correct content-type") @(t : T?) {
             GET("{base_url}/api/status") <| $(resp) {
                 let ct = get_header(resp, "Content-Type")
@@ -238,6 +239,53 @@ def test_json_response_server(t : T?) {
                         delete parsed
                     }
                 }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Wildcard priority — regression for #2675
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Before libhv PR #836 (trie router), pathHandlers was an unordered_map
+// and HttpService::GetRoute iterated in container order, taking the first
+// wildcard or path match it found. ANY("*") could enumerate before
+// specific paths like /status, so every request hit the catch-all
+// (POSIX libstdc++ reliably, Windows MSVC intermittently). Symptom in
+// daslang-live: /shutdown never reached request_exit(); driver popen
+// hung the full 120s watchdog. See GaijinEntertainment/daScript#2675.
+//
+// libhv master (≥ 5da5fc22) replaces pathHandlers with a trie that
+// enforces Literal > Param > Wildcard. This test pins the contract.
+
+class WildcardPriorityServer : HvWebServer {
+    def override onInit {
+        GET("/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> TEXT_PLAIN("specific")
+        }
+        ANY("*") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> TEXT_PLAIN("catchall")
+        }
+    }
+}
+
+[test]
+def test_wildcard_priority(t : T?) {
+    with_test_server(type<WildcardPriorityServer>, 19009) $(base_url) {
+        t |> run("literal GET /status outranks ANY *") @(t : T?) {
+            GET("{base_url}/status") <| $(resp) {
+                t |> equal(string(resp.body), "specific")
+            }
+        }
+        t |> run("ANY * catches unknown GET paths") @(t : T?) {
+            GET("{base_url}/unknown") <| $(resp) {
+                t |> equal(string(resp.body), "catchall")
+            }
+        }
+        t |> run("ANY * catches unknown POST paths") @(t : T?) {
+            POST("{base_url}/unknown", "") <| $(resp) {
+                t |> equal(string(resp.body), "catchall")
             }
         }
     }
