@@ -1915,12 +1915,36 @@ namespace das
             if ( expr->index->rtti_isConstant() ) {
             // if its constant index, like a[3]..., we try to let node bellow simulate
                 auto idxCE = static_cast<ExprConst*>(expr->index);
-                uint32_t idxC = cast<uint32_t>::to(idxCE->value);
-                if ( idxC >= range ) {
-                    context.thisProgram->error("index out of range " + to_string(idxC) + " of " + to_string(range) + ", " + expr->describe(), "", "",
+                auto idxBT = expr->index->type->baseType;
+                bool idxSigned = (idxBT == Type::tInt || idxBT == Type::tInt64);
+                // Read at the index's natural width so int64 / uint64 constants
+                // outside the int32 range are NOT silently truncated (e.g. an
+                // int64 const 5_000_000_000 would otherwise land as 705032704
+                // and produce a wrong "out of range" message + wrong idxC).
+                int64_t idx64;
+                if ( idxBT == Type::tInt64 ) {
+                    idx64 = cast<int64_t>::to(idxCE->value);
+                } else if ( idxBT == Type::tUInt64 ) {
+                    uint64_t u = cast<uint64_t>::to(idxCE->value);
+                    // Anything beyond INT64_MAX is far out of range; clamp into a
+                    // representable form for the "out of range" diagnostic only.
+                    idx64 = (u > uint64_t(INT64_MAX)) ? INT64_MAX : int64_t(u);
+                } else if ( idxBT == Type::tUInt ) {
+                    idx64 = int64_t(cast<uint32_t>::to(idxCE->value));
+                } else {
+                    // tInt and any other narrow integer fall-through
+                    idx64 = int64_t(cast<int32_t>::to(idxCE->value));
+                }
+                if ( (idxSigned && idx64<0) || uint64_t(idx64) >= uint64_t(range) ) {
+                    string idxStr;
+                    if ( idxBT == Type::tUInt64 )      idxStr = to_string(cast<uint64_t>::to(idxCE->value));
+                    else if ( idxBT == Type::tUInt )   idxStr = to_string(uint32_t(idx64));
+                    else                               idxStr = to_string(idx64);
+                    context.thisProgram->error("index out of range " + idxStr + " of " + to_string(range) + ", " + expr->describe(), "", "",
                         at, CompilationError::exceeds_array);
                     return nullptr;
                 }
+                uint32_t idxC = uint32_t(idx64);
                 auto tnode = sv_trySimulate(expr->subexpr, extraOffset + idxC*stride, r2vType);
                 if ( tnode ) {
                     return tnode;

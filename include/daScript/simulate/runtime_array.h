@@ -17,8 +17,8 @@ namespace das
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             Array * pA = (Array *) l->evalPtr(context);
-            auto idx = uint32_t(r->evalInt(context));
-            if ( uint64_t(idx) >= pA->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", idx, (unsigned long long)pA->size);
+            int32_t idx = r->evalInt(context);
+            if ( idx<0 || uint64_t(idx) >= pA->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", idx, (unsigned long long)pA->size);
             return pA->data + uint64_t(idx)*uint64_t(stride) + offset;
         }
         SimNode * l, * r;
@@ -150,8 +150,8 @@ namespace das
             DAS_PROFILE_NODE
             Array * pA = (Array *) l->evalPtr(context);
             if ( !pA ) return nullptr;
-            auto idx = uint32_t(r->evalInt(context));
-            if (uint64_t(idx) >= pA->size) return nullptr;
+            int32_t idx = r->evalInt(context);
+            if (idx<0 || uint64_t(idx) >= pA->size) return nullptr;
             return pA->data + uint64_t(idx)*uint64_t(stride) + offset;
         }
     };

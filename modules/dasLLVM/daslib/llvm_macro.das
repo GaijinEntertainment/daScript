@@ -26,7 +26,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x03ul
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x04ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -292,7 +292,7 @@ class JIT_LLVM : AstSimulateMacro {
                     let dce_err = LLVMRunPasses(g_mod, "globaldce", null, pmo)
                     if (dce_err != null) {
                         let dce_msg = LLVMGetErrorMessage(dce_err)
-                        to_log(LOG_WARNING, "LLVM globaldce failed: {string(dce_msg)}\n")
+                        to_log(LOG_WARNING, "LLVM globaldce failed: {dce_msg}\n")
                         LLVMDisposeErrorMessage(dce_msg)
                     }
                     LLVMDisposePassBuilderOptions(pmo)

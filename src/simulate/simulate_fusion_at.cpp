@@ -42,8 +42,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -54,8 +54,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -85,8 +85,8 @@ namespace das {
          DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl + rr*stride + offset, CTYPE); \
             return __r; \
@@ -99,8 +99,8 @@ namespace das {
          DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl + rr*stride + offset, CTYPE); \
             return __r; \
@@ -120,8 +120,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
@@ -133,8 +133,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", rr, range, errorMessage); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \

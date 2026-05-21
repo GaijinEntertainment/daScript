@@ -48,8 +48,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             return *((CTYPE *)(pl->data + uint64_t(rr)*uint64_t(stride) + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -60,8 +60,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             return *((CTYPE *)(pl->data + uint64_t(rr)*uint64_t(stride) + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -89,8 +89,8 @@ namespace das {
          DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl->data + uint64_t(rr)*uint64_t(stride) + offset, CTYPE); \
             return __r; \
@@ -103,8 +103,8 @@ namespace das {
          DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl->data + uint64_t(rr)*uint64_t(stride) + offset, CTYPE); \
             return __r; \
@@ -124,8 +124,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = uint32_t(r.subexpr->evalInt(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = r.subexpr->evalInt(context); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             return pl->data + uint64_t(rr)*uint64_t(stride) + offset; \
         } \
         DAS_PTR_NODE; \
@@ -137,8 +137,8 @@ namespace das {
         INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto pl = (Array *) l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
-            if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %llu", rr, (unsigned long long)pl->size); \
+            int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %d of %llu", rr, (unsigned long long)pl->size); \
             return pl->data + uint64_t(rr)*uint64_t(stride) + offset; \
         } \
         DAS_PTR_NODE; \
