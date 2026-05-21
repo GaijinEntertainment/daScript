@@ -118,9 +118,12 @@ class CollectExternVisitor : AstVisitor {
         LLVMBuildCall2(init_builder, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
         registered_modules["strings"] = true
 
+        // void * get_jit_table_{at,find,erase} ( int32_t baseType, Context * context, LineInfoArg * at )
         reg_extern_tab_type = LLVMFunctionType(types.LLVMVoidPtrType(),
             fixed_array<LLVMTypeRef>(
-                types.t_int32,            // type
+                types.t_int32,            // baseType
+                types.LLVMVoidPtrType(),  // context
+                types.LLVMVoidPtrType(),  // at
             )
         )
         tab_at_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_at", reg_extern_tab_type)
@@ -420,9 +423,12 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
+    // get_jit_table_{at,find,erase} dispatch on baseType only; context+at unused.
+    // Pass null for both to match the C++ signature without a real Context.
     def add_table_at_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
-        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)))
+        let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
+        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_at_accessor, call_args, "")
 
         let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT(typ)).glob())
@@ -431,7 +437,8 @@ class CollectExternVisitor : AstVisitor {
 
     def add_table_find_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
-        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)))
+        let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
+        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_find_accessor, call_args, "")
 
         let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_FIND(typ)).glob())
@@ -440,7 +447,8 @@ class CollectExternVisitor : AstVisitor {
 
     def add_table_erase_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
-        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)))
+        let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
+        var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_erase_accessor, call_args, "")
 
         let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_ERASE(typ)).glob())
@@ -978,7 +986,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         LLVMBuildCall2(builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
     }
 
-    let init_global_var_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+    // void jit_register_standalone_variable ( Context * ctx, uint64_t mnh, uint64_t offset )
+    let init_global_var_type = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(
             types.LLVMVoidPtrType(),  // Context *
             types.t_int64,            // uint64_t mnh

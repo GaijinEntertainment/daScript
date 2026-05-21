@@ -1,7 +1,8 @@
 // The Examples <select> swaps the editor buffer. Until phase 2 the change
 // handler was missing from index.html, so picking an item did nothing. The
 // spec guards against that regression. The Tests dropdown was removed in
-// the unified-toolbar pass; Random Sequence now lives under Examples.
+// the unified-toolbar pass; benchmark samples (Dictionary, SHA-256) now live
+// under Examples alongside the language-tour samples.
 
 const { test, expect } = require('./fixtures.js');
 
@@ -33,10 +34,18 @@ test('Examples dropdown loads chosen sample into the editor', async ({ playgroun
         .toMatch(/def\s+\w+/);
 });
 
-test('Random Sequence sample is selectable from Examples', async ({ playground }) => {
+test('Dictionary benchmark sample is selectable from Examples', async ({ playground }) => {
     await waitDropdownsPopulated(playground);
     const before = await editorText(playground);
-    await playground.locator('#examples').selectOption({ label: 'Random Sequence' });
+    await playground.locator('#examples').selectOption({ label: 'Dictionary (benchmark)' });
+    await expect.poll(() => editorText(playground), { timeout: 5_000 })
+        .not.toBe(before);
+});
+
+test('SHA-256 benchmark sample is selectable from Examples', async ({ playground }) => {
+    await waitDropdownsPopulated(playground);
+    const before = await editorText(playground);
+    await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
     await expect.poll(() => editorText(playground), { timeout: 5_000 })
         .not.toBe(before);
 });

@@ -145,6 +145,15 @@ jobs:
             cp web/output/daslang_static.wasm _site/files/wasm/
             # Copy sample data if present
             cp -r web/examples/ui/samples _site/playground/samples 2>/dev/null || true
+            # Overlay the cross-compiled per-sample .wasm artifacts staged by
+            # stage_site_playground_wasm. The HEAD probe in main.js
+            # (updateEngineAvailability) enables the JIT radio only when this
+            # file is reachable — without the copy it 404s and the toggle is
+            # permanently disabled.
+            if [ -d web/output/samples/examples ]; then
+                mkdir -p _site/playground/samples/examples
+                cp web/output/samples/examples/*.wasm _site/playground/samples/examples/ 2>/dev/null || true
+            fi
             # Our Forge-skinned playground/index.html + skin CSS + init shim take precedence.
             # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
             # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`

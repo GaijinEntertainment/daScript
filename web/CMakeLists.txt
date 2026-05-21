@@ -153,7 +153,7 @@ set(_web_ex_out ${DAS_WEB_OUTPUT_DIR}/samples/examples)
 
 add_custom_target(all_wasm)
 set(_wasm_run_cmds)
-foreach(ex hello loop func)
+foreach(ex hello loop func dict sha256)
     add_custom_command(OUTPUT ${_web_ex_out}/${ex}.wasm
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
         COMMAND ${DAS_HOST_DASLANG} -exe -output ${_web_ex_out}/${ex}

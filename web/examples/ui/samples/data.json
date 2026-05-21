@@ -18,8 +18,12 @@
       "files" : ["examples/macros/main.das", "examples/macros/for_loop_macro_mod.das"]
     },
     {
-      "name" : "Random Sequence",
-      "files" : ["examples/random_sequence.das"]
+      "name" : "Dictionary (benchmark)",
+      "files" : ["examples/dict.das"]
+    },
+    {
+      "name" : "SHA-256 (benchmark)",
+      "files" : ["examples/sha256.das"]
     },
     {
       "name" : "Tests",
