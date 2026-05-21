@@ -4449,12 +4449,13 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
     var resizeStmts : array<Expression?>
     if (takeExpr != null) {
-        // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
-        var takeA = clone_expression(takeExpr)
-        var takeB = clone_expression(takeExpr)
-        var takeC = clone_expression(takeExpr)
+        // take(N) of reversed-buffer = last N of source reversed. Hoist once to a let so a side-effecting take expression evaluates exactly once.
+        let takeNName = "`take_n`{at.line}`{at.column}"
         resizeStmts |> push <| qmacro_expr() {
-            $i(bufName) |> resize($e(takeA) <= 0 ? 0 : ($e(takeB) < length($i(bufName)) ? $e(takeC) : length($i(bufName))))
+            let $i(takeNName) = $e(takeExpr)
+        }
+        resizeStmts |> push <| qmacro_expr() {
+            $i(bufName) |> resize($i(takeNName) <= 0 ? 0 : ($i(takeNName) < length($i(bufName)) ? $i(takeNName) : length($i(bufName))))
         }
     }
     var emission : Expression? = qmacro(invoke($() : array<$t(bufElemType)> {

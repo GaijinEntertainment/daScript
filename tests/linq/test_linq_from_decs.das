@@ -1874,6 +1874,22 @@ def test_unroll5d_reverse_take_zero(t : T?) {
     t |> success(empty(zero), "take(0) returns empty")
 }
 
+// Side-effecting take(N) source — the splice must evaluate the take expression EXACTLY ONCE.
+var g_take_call_count = 0
+def bump_take_count() : int {
+    g_take_call_count ++
+    return 3
+}
+
+[test]
+def test_unroll5d_reverse_take_single_eval(t : T?) {
+    fixture_unroll5d()
+    g_take_call_count = 0
+    let got <- _fold(from_decs_template(type<Unroll5dRow>).reverse().take(bump_take_count()).to_array())
+    t |> equal(got.length(), 3, "take(N) honored — 3 rows")
+    t |> equal(g_take_call_count, 1, "take(N) expression evaluated exactly once (no multi-eval from splice clones)")
+}
+
 // ── reverse + count (identity — counter loop) ──
 
 [export, marker(no_coverage)]
