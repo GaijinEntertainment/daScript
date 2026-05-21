@@ -20,10 +20,19 @@ require daslib/contracts
 def private array_helper(var arr : auto implicit ==const; a : auto(TT)) : array<TT -const -#> {
     //! helper for temp_array with var argument
     var res : array<TT -const -#>
-    let lenA = _::long_length(arr)
-    if (lenA >= 1_l) {
-        unsafe {
-            _builtin_make_temp_array_i64(res, addr(arr[0]), lenA)
+    static_if (typeinfo is_array(arr)) {
+        let lenA = _::long_length(arr)
+        if (lenA >= 1_l) {
+            unsafe {
+                _builtin_make_temp_array_i64(res, addr(arr[0]), lenA)
+            }
+        }
+    } else {
+        let lenA = _::length(arr)
+        if (lenA >= 1) {
+            unsafe {
+                _builtin_make_temp_array(res, addr(arr[0]), lenA)
+            }
         }
     }
     return <- res
@@ -33,10 +42,19 @@ def private array_helper(var arr : auto implicit ==const; a : auto(TT)) : array<
 def private array_helper(arr : auto implicit ==const; a : auto(TT)) : array<TT -const -#> {
     //! helper for temp_array with const argument
     var res : array<TT -const -#>
-    let lenA = _::long_length(arr)
-    if (lenA >= 1_l) {
-        unsafe {
-            _builtin_make_temp_array_i64(res, addr(arr[0]), lenA)
+    static_if (typeinfo is_array(arr)) {
+        let lenA = _::long_length(arr)
+        if (lenA >= 1_l) {
+            unsafe {
+                _builtin_make_temp_array_i64(res, addr(arr[0]), lenA)
+            }
+        }
+    } else {
+        let lenA = _::length(arr)
+        if (lenA >= 1) {
+            unsafe {
+                _builtin_make_temp_array(res, addr(arr[0]), lenA)
+            }
         }
     }
     return <- res
