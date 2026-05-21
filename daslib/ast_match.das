@@ -2196,7 +2196,6 @@ class private QMatchFunction : AstCallMacro {
 // Hand-rolled probes harvested from daslib/linq_fold.das + modules/dasSQLITE/daslib/sqlite_linq.das.
 // Reach for these BEFORE writing a new ``is X / as X`` cascade. For deeper structural matches use ``qmatch`` directly.
 
-[macro_function]
 def match_call_in_module(var expr : Expression?; name, modName : string) : ExprCall? {
     //! Match an ``ExprCall`` to ``name`` in module ``modName``, transparent to generic instantiation.
     //! Returns the call on match; ``null`` otherwise. ``func.fromGeneric`` is consulted as a fallback
@@ -2212,14 +2211,12 @@ def match_call_in_module(var expr : Expression?; name, modName : string) : ExprC
     return null
 }
 
-[macro_function]
 def match_call_in_linq(var expr : Expression?; name : string) : ExprCall? {
     //! Match an ``ExprCall`` to ``name`` in the ``linq`` module. Thin wrapper on ``match_call_in_module``
     //! kept for readability at the heavy-call-site files (linq_fold, sqlite_linq, decs_boost).
     return match_call_in_module(expr, name, "linq")
 }
 
-[macro_function]
 def peel_lambda_single_return(var lam : Expression?) : Expression?  {
     //! For a single-argument, single-return lambda ``@(x : T) => expr``, return the body ``expr``.
     //! Returns ``null`` if ``lam`` is not an ``ExprMakeBlock`` of that exact shape.
@@ -2231,7 +2228,6 @@ def peel_lambda_single_return(var lam : Expression?) : Expression?  {
     return ret.subexpr
 }
 
-[macro_function]
 def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expression? {
     //! Peel a single-arg, single-return lambda by renaming its bound variable to ``argName`` in the
     //! cloned body. If the input is not a peelable lambda, fall back to ``invoke(expr, argName)`` so
@@ -2253,7 +2249,6 @@ def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expressio
     return qmacro(invoke($e(expr), $i(argName)))
 }
 
-[macro_function]
 def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression?) : Expression? {
     //! Variant of ``peel_lambda_rename_var`` using ``replaceVariablePeeling`` — substitutes the bound
     //! variable with an arbitrary expression (peel-aware: strips typer-inserted ``ExprRef2Value``
@@ -2275,7 +2270,6 @@ def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression
     return qmacro(invoke($e(expr), $e(replacement)))
 }
 
-[macro_function]
 def peel_lambda_rename_2vars(var expr : Expression?; arg0Name, arg1Name : string) : Expression? {
     //! 2-arg peel variant for shapes like aggregate's ``block<(acc, x) : AGG>``. Returns ``null``
     //! when the input is not a peelable 2-arg, single-return lambda — caller decides the fallback
@@ -2298,7 +2292,6 @@ def peel_lambda_rename_2vars(var expr : Expression?; arg0Name, arg1Name : string
     return null
 }
 
-[macro_function]
 def peel_tuple_field_read(expr : Expression?; bindName : string; fieldIndex : int) : bool {
     //! ``true`` when ``expr`` matches ``<bindName>._<fieldIndex>`` — a tuple-slot read on a named bind.
     //! Single-level ``ExprRef2Value`` peel on each side (the typer never nests these wrappers).
@@ -2318,7 +2311,6 @@ def peel_tuple_field_read(expr : Expression?; bindName : string; fieldIndex : in
     return (src as ExprVar).name == bindName
 }
 
-[macro_function]
 def qn(prefix : string; at : LineInfo) : string {
     //! Build a backtick-quoted qname unique to ``at`` for the given ``prefix``. Use to name
     //! synthesized locals emitted by macros so multiple expansions in one file don't collide.
