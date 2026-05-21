@@ -2070,3 +2070,302 @@ def test_unroll5d_reverse_count_splice_shape(t : T?) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5c: distinct / distinct_by on decs (streaming dedup via hoisted table<unique_key>)
+// ─────────────────────────────────────────────────────────────────────────────
+
+[decs_template(prefix = "unroll5c_")]
+struct Unroll5cRow {
+    id    : int
+    brand : int
+    price : int
+}
+
+def private fixture_unroll5c() {
+    restart()
+    // 12 rows. brand cycles 0..3 (so 4 distinct brands). price = id*10 (12 distinct values).
+    for (i in range(12)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.unroll5c_id := i
+            cmp.unroll5c_brand := i % 4
+            cmp.unroll5c_price := i * 10
+        }
+    }
+    commit()
+}
+
+// ── distinct |> to_array (bare select + distinct) ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_select_distinct_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().to_array())
+}
+
+[test]
+def test_unroll5c_select_distinct_to_array_parity(t : T?) {
+    fixture_unroll5c()
+    let got <- target_unroll5c_select_distinct_to_array_fold()
+    t |> equal(got.length(), 4, "4 distinct brands (0..3)")
+    // Brands cycle 0,1,2,3,0,1,2,3,0,1,2,3 → first-seen order is 0,1,2,3.
+    let expected = [0, 1, 2, 3]
+    for (i in range(4)) {
+        t |> equal(got[i], expected[i])
+    }
+}
+
+[test]
+def test_unroll5c_select_distinct_to_array_empty(t : T?) {
+    restart()
+    commit()
+    let got <- target_unroll5c_select_distinct_to_array_fold()
+    t |> equal(got.length(), 0, "empty decs → empty distinct")
+}
+
+// ── distinct |> count ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_select_distinct_count_fold() : int {
+    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().count())
+}
+
+[test]
+def test_unroll5c_select_distinct_count_parity(t : T?) {
+    fixture_unroll5c()
+    t |> equal(target_unroll5c_select_distinct_count_fold(), 4, "length(seen) = 4 distinct brands")
+}
+
+// ── distinct |> long_count ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_select_distinct_long_count_fold() : int64 {
+    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().long_count())
+}
+
+[test]
+def test_unroll5c_select_distinct_long_count_parity(t : T?) {
+    fixture_unroll5c()
+    t |> equal(target_unroll5c_select_distinct_long_count_fold(), 4l, "int64(length(seen)) = 4")
+}
+
+// ── distinct |> sum ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_select_distinct_sum_fold() : int {
+    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().sum())
+}
+
+[test]
+def test_unroll5c_select_distinct_sum_parity(t : T?) {
+    fixture_unroll5c()
+    // sum of distinct brands {0,1,2,3} = 6
+    t |> equal(target_unroll5c_select_distinct_sum_fold(), 6, "acc folds at fresh-key site only")
+}
+
+// ── distinct |> take(N) |> to_array (streaming early-exit) ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_select_distinct_take2_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(2).to_array())
+}
+
+[test]
+def test_unroll5c_select_distinct_take_parity(t : T?) {
+    fixture_unroll5c()
+    let got <- target_unroll5c_select_distinct_take2_fold()
+    // First 2 distinct in source order: 0, 1.
+    t |> equal(got.length(), 2)
+    t |> equal(got[0], 0)
+    t |> equal(got[1], 1)
+}
+
+[test]
+def test_unroll5c_select_distinct_take_zero(t : T?) {
+    fixture_unroll5c()
+    let got <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(0).to_array())
+    t |> equal(got.length(), 0, "take(0) yields empty")
+}
+
+[test]
+def test_unroll5c_select_distinct_take_beyond(t : T?) {
+    fixture_unroll5c()
+    let got <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(99).to_array())
+    t |> equal(got.length(), 4, "take(N>num_distinct) returns all distinct")
+}
+
+// ── where + distinct |> to_array ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_where_distinct_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Unroll5cRow>)._where(_.id < 8)._select(_.brand).distinct().to_array())
+}
+
+[test]
+def test_unroll5c_where_distinct_parity(t : T?) {
+    fixture_unroll5c()
+    let got <- target_unroll5c_where_distinct_to_array_fold()
+    // id<8 → ids 0..7 → brands 0,1,2,3,0,1,2,3 → distinct = 4.
+    t |> equal(got.length(), 4)
+}
+
+// ── distinct_by(key) |> to_array ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_distinct_by_to_array_fold() : array<tuple<id : int; brand : int; price : int>> {
+    return <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).to_array())
+}
+
+[test]
+def test_unroll5c_distinct_by_parity(t : T?) {
+    fixture_unroll5c()
+    let got <- target_unroll5c_distinct_by_to_array_fold()
+    // First row per distinct brand: ids 0,1,2,3 (brands 0,1,2,3).
+    t |> equal(got.length(), 4)
+    for (i in range(4)) {
+        t |> equal(got[i].id, i)
+        t |> equal(got[i].brand, i)
+    }
+}
+
+// ── distinct_by(key) |> count ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_distinct_by_count_fold() : int {
+    return _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).count())
+}
+
+[test]
+def test_unroll5c_distinct_by_count_parity(t : T?) {
+    fixture_unroll5c()
+    t |> equal(target_unroll5c_distinct_by_count_fold(), 4)
+}
+
+// ── distinct_by(key) |> take(N) |> to_array ──
+
+[export, marker(no_coverage)]
+def target_unroll5c_distinct_by_take2_fold() : array<tuple<id : int; brand : int; price : int>> {
+    return <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).take(2).to_array())
+}
+
+[test]
+def test_unroll5c_distinct_by_take_parity(t : T?) {
+    fixture_unroll5c()
+    let got <- target_unroll5c_distinct_by_take2_fold()
+    t |> equal(got.length(), 2)
+    t |> equal(got[0].brand, 0)
+    t |> equal(got[1].brand, 1)
+}
+
+// ── Side-effect single-eval guard: take(N) limit binds once, projection binds once per element ──
+
+var g_unroll5c_take_arg_calls : int = 0
+def trace_take_arg() : int {
+    g_unroll5c_take_arg_calls ++
+    return 2
+}
+
+[test]
+def test_unroll5c_distinct_take_arg_evaluated_once(t : T?) {
+    fixture_unroll5c()
+    g_unroll5c_take_arg_calls = 0
+    let got <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(trace_take_arg()).to_array())
+    t |> equal(g_unroll5c_take_arg_calls, 1, "take(N) arg must evaluate exactly once at invoke entry, not per fresh-key check")
+    t |> equal(got.length(), 2, "result still matches the bound N")
+}
+
+// ── AST shape gates ──
+
+[test]
+def test_unroll5c_select_distinct_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5c_select_distinct_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+count splice must NOT fall to tier-2 to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no _find — no take present)")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "no take → no _find")
+        t |> equal(describe_count(body_expr, "decs_buf"), 0, "count terminator elides the buffer")
+        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen-table declared + queried")
+        t |> equal(describe_count(body_expr, "key_exists"), 1, "single fresh-key check per element")
+    }
+}
+
+[test]
+def test_unroll5c_select_distinct_take_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5c_select_distinct_take2_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+take splice must NOT fall to tier-2 to_sequence")
+        // take present → outer iteration switches to _find so take-cap can stop across archetypes.
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take present → for_each_archetype_find")
+        t |> success(describe_count(body_expr, "decs_buf") >= 2, "buffer needed for to_array terminator")
+        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen-table declared + queried")
+        t |> success(describe_count(body_expr, "decs_taken") >= 2, "taken counter declared + incremented")
+    }
+}
+
+[test]
+def test_unroll5c_distinct_by_to_array_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5c_distinct_by_to_array_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct_by splice must NOT fall to tier-2")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "no take → no _find")
+        // The key lambda invocation is the distinct_by signature — invoke the key block to compute the key, then unique_key wraps it.
+        t |> success(describe_count(body_expr, "unique_key") >= 1, "distinct_by routes key through unique_key")
+    }
+}
+
+[test]
+def test_unroll5c_select_distinct_sum_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5c_select_distinct_sum_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+sum splice must NOT fall to tier-2")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "no take → plain for_each_archetype")
+        t |> equal(describe_count(body_expr, "decs_buf"), 0, "sum terminator elides the buffer")
+        t |> success(describe_count(body_expr, "decs_acc") >= 2, "accumulator declared + folded")
+    }
+}
+
+// ── Predicate-form terminator regression (Copilot review on PR #2785) — plan_decs_distinct bails on the predicate overload (arg-count guard at the terminator pop); plan_distinct must also bail (post-fix in the same PR). The chain must NOT silently drop the predicate — pre-fix this returned `length(seen)` ignoring the predicate. ──
+
+[test]
+def test_unroll5c_select_distinct_count_pred_parity(t : T?) {
+    fixture_unroll5c()
+    // brands cycle 0..3 (4 distinct). distinct |> count(>=2) → only brands 2 and 3 → 2.
+    let got = _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().count($(x : int) => x >= 2))
+    t |> equal(got, 2, "predicate must be honored, not dropped")
+}
+
+[test]
+def test_unroll5c_select_distinct_long_count_pred_parity(t : T?) {
+    fixture_unroll5c()
+    let got = _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().long_count($(x : int) => x >= 2))
+    t |> equal(got, 2l, "predicate must be honored, not dropped")
+}
+
