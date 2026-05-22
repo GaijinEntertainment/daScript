@@ -355,3 +355,20 @@ Side-effecting `_select(proj)` upstream binds once per element to a fresh `decs_
 `distinct_count` lands at 28 ns/op vs m3f's 15 — the ~13 ns gap is the Wave 4 multi-component `get_ro` floor (3 components participate in the inner for-loop even when chain only reads `brand`). `distinct_take` collapses to 0 ns/op — early-exit at the 3rd distinct brand visits only ~3 source elements regardless of N=100K, same as the array-side splice.
 
 **Coverage:** `_select(_.brand).distinct()` + to_array / count / long_count / sum / take(N) / take(0) / take(N>num_distinct), `_where(_.id<8)._select(_.brand).distinct()`, `_distinct_by(_.brand)` + to_array / count / take(N), empty-decs distinct yields empty, side-effecting take(N) arg evaluates exactly once at invoke entry. AST shape gates for: distinct+count (no to_sequence, no decs_buf, single key_exists, plain for_each_archetype), distinct+take (for_each_archetype_find + decs_buf + decs_seen + decs_taken counters), distinct_by+to_array (unique_key wrapping the key invocation), distinct+sum (no decs_buf, decs_acc declared+folded). +17 tests (122 → 139 in file).
+
+## Update — Wave 4b Cat-C surface validation (2026-05-22, indexed_lookup + zip_dot_product m4 lanes)
+
+Two of the three Cat-C benchmarks that were skipped during the original m4 expansion (line 150) now have m4 lanes. The plan flagged both as "may need new decs surface" — turned out neither did. The decs APIs needed for both already exist; the bench code just had to call them.
+
+| benchmark | shape | m1 sql | m3 | m3f (array splice) | m4 (was) | m4 (Wave 4b, now) | m4 vs best other lane |
+|---|---|---:|---:|---:|---:|---:|---:|
+| indexed_lookup | `_where(_.id == K).count()` → eid lookup | 1461 | 2,076,904 | 197,117 | — | **227** | 6.4× faster than m1 sql |
+| zip_dot_product | `zip(xs,ys).select(_._0 * _._1).sum()` → intra-archetype | — | 53 | 7 | — | **10** | within 1.4× of m3f |
+
+**indexed_lookup**: Uses the existing `query(eid, $(...))` call macro ([decs_boost.das:315](../../daslib/decs_boost.das#L315)), which wraps `for_eid_archetype` ([decs.das:666](../../daslib/decs.das#L666)). entityLookup is a flat hash on EntityId.id — single hash + generation check + archetype dispatch. New fixture helper `fixture_decs_capture_mid(n) : EntityId` ([_common.das](_common.das)) captures the n/2-th entity's eid mid-`create_entities` callback so the bench has a real eid to look up. The 227 ns/op figure includes the macro-time-generated request/erq lookup; the lookup itself is essentially the hash plus one block invocation.
+
+**zip_dot_product**: No new surface at all. `from_decs_template(type<DecsCar>)._select(_.price * _.year).sum()` is the natural intra-archetype zip — multi-iter for over the archetype's two int columns. Wave 4 component pruning keeps the price + year `get_ro` slots and drops the other 4 components, so per-element cost is two int reads plus the multiply, matching the m3f two-column zip. The 3 ns gap to m3f covers `for_each_archetype` dispatch overhead.
+
+**Net coverage:** 47 → 49 m4 lanes (`indexed_lookup` + `zip_dot_product`). Only `join_count` remains skipped — it's a cross-archetype join, which requires real design (eid linkage between archetypes) and is appropriately deferred past Wave 4b.
+
+**No daslib changes.** Pure benchmark additions + one helper in `_common.das`. The Wave 4b PR is documentation that the existing decs surface already covers these chain shapes — the team's pre-Wave-4b suspicion that we'd need new helpers turned out to be incorrect.
