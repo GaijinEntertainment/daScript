@@ -2681,3 +2681,200 @@ def test_wave4_pruned_groupby_count_splice_shape(t : T?) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// from_decs($(args){...}) lambda-arg form — splice + pruning coverage.
+//
+// Both from_decs (lambda-arg) and from_decs_template (type<T>) expand to the same
+// invoke-block shape: `invoke($() { var res : array<tuple>; query(...); return
+// res.to_sequence() })`. extract_decs_bridge pattern-matches the expanded shape, not
+// the call macro, so it recognizes both. This block proves that empirically: every
+// chain shape the type-arg form supports also works on the lambda-arg form, with the
+// same emitted AST and the same Wave 4 component pruning.
+//
+// Tests are intentionally lean — the type-arg form is already covered exhaustively
+// above; here we hit one representative case per planner family + the pruning gate.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ----- Parity: lambda-arg form returns the same answer as the type-arg form -----
+
+[export, marker(no_coverage)]
+def target_lambda_count_fold() : int {
+    return _fold(from_decs($(unroll_val : int) {}).count())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_where_count_fold() : int {
+    return _fold(from_decs($(unroll_val : int) {})._where(_.unroll_val >= 3).count())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_select_sum_fold() : int {
+    return _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).sum())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_take_count_fold() : int {
+    return _fold(from_decs($(unroll_val : int) {}).take(3).count())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_distinct_count_fold() : int {
+    return _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).distinct().count())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_to_array_fold() : array<tuple<unroll_val : int>> {
+    return <- _fold(from_decs($(unroll_val : int) {}).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_lambda_groupby_count_fold() : array<tuple<Bucket : int; N : int>> {
+    return <- _fold(from_decs($(unroll_val : int) {})._group_by(_.unroll_val % 3)._select((Bucket = _._0, N = _._1 |> length)).to_array())
+}
+
+def private populate_unroll(n : int) {
+    restart()
+    for (i in range(n)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.unroll_val := i
+        }
+    }
+    commit()
+}
+
+[test]
+def test_lambda_count_parity(t : T?) {
+    populate_unroll(7)
+    t |> equal(target_lambda_count_fold(), 7, "lambda-arg count matches type-arg")
+}
+
+[test]
+def test_lambda_where_count_parity(t : T?) {
+    populate_unroll(7)
+    // vals 0..6, _where(_>=3) → 3,4,5,6 → 4 matches
+    t |> equal(target_lambda_where_count_fold(), 4, "lambda-arg where+count matches type-arg")
+}
+
+[test]
+def test_lambda_select_sum_parity(t : T?) {
+    populate_unroll(7)
+    // sum(0..6) = 21
+    t |> equal(target_lambda_select_sum_fold(), 21, "lambda-arg select+sum matches type-arg")
+}
+
+[test]
+def test_lambda_take_count_parity(t : T?) {
+    populate_unroll(7)
+    // take(3).count() — early-exit at 3, regardless of source size
+    t |> equal(target_lambda_take_count_fold(), 3, "lambda-arg take+count matches type-arg")
+}
+
+[test]
+def test_lambda_distinct_count_parity(t : T?) {
+    populate_unroll(7)
+    // 7 unique vals → 7 distinct
+    t |> equal(target_lambda_distinct_count_fold(), 7, "lambda-arg select+distinct+count matches type-arg")
+}
+
+[test]
+def test_lambda_to_array_parity(t : T?) {
+    populate_unroll(5)
+    let got <- target_lambda_to_array_fold()
+    t |> equal(got |> length, 5, "lambda-arg to_array preserves whole tuple")
+    var sum = 0
+    for (item in got) {
+        sum += item.unroll_val
+    }
+    t |> equal(sum, 0 + 1 + 2 + 3 + 4, "lambda-arg to_array element values match")
+}
+
+[test]
+def test_lambda_groupby_count_parity(t : T?) {
+    populate_unroll(10)
+    // vals 0..9, key = val % 3 → buckets {0:[0,3,6,9], 1:[1,4,7], 2:[2,5,8]} → 3 buckets sized 4,3,3
+    let got <- target_lambda_groupby_count_fold()
+    t |> equal(got |> length, 3, "lambda-arg group_by yields 3 distinct keys")
+    var total = 0
+    for (b in got) {
+        total += b.N
+    }
+    t |> equal(total, 10, "lambda-arg group_by buckets sum to source count")
+}
+
+// ----- AST splice-shape gates: lambda-arg emits the same shape as type-arg -----
+
+[test]
+def test_lambda_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_lambda_count_fold)
+        t |> success(func != null, "RTTI resolves count target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch captures body")
+        // bare count goes through the arch.size shortcut: one for_each_archetype, no inner
+        // per-entity for-loop, no eager-bridge to_sequence. Identical to the type-arg form.
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "lambda-arg count emits one for_each_archetype")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "lambda-arg count does NOT eager-bridge")
+        t |> equal(count_expr_for(body_expr), 0, "lambda-arg count has no inner per-entity for")
+        t |> equal(describe_count(body_expr, ".size"), 1, "lambda-arg count reads arch.size")
+    }
+}
+
+[test]
+def test_lambda_where_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_lambda_where_count_fold)
+        t |> success(func != null, "RTTI resolves where+count target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch captures body")
+        // where+count emits one for_each_archetype with an inner multi-iter for-loop;
+        // the predicate's matching counter accumulates inline. NO to_sequence.
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "lambda-arg where+count emits one for_each_archetype")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "lambda-arg where+count does NOT eager-bridge")
+    }
+}
+
+// ----- Wave 4 component pruning fires on lambda-arg form too -----
+
+[export, marker(no_coverage)]
+def target_lambda_pruned_select_sum_fold() : int {
+    // Multi-component query, but chain only references `wave4_price`. Pruning must
+    // drop wave4_brand + wave4_year get_ros to match the type-arg pruning behavior.
+    return _fold(from_decs($(wave4_brand : int; wave4_price : int; wave4_year : int) {})._select(_.wave4_price).sum())
+}
+
+[test]
+def test_lambda_pruned_select_sum_parity(t : T?) {
+    fixture_wave4(10)
+    // i*10 for i in 0..9 = 0+10+20+...+90 = 450
+    t |> equal(target_lambda_pruned_select_sum_fold(), 450, "lambda-arg pruning preserves sum semantics")
+}
+
+[test]
+def test_lambda_pruned_select_sum_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_lambda_pruned_select_sum_fold)
+        t |> success(func != null, "RTTI resolves pruned target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch captures body")
+        // Lambda-arg declared 3 components but chain reads only wave4_price → pruning
+        // keeps a single get_ro slot. Same gate the type-arg Wave 4 tests assert.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "lambda-arg pruning drops unused get_ros (3 declared → 1 emitted)")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "wave4_price retained")
+        t |> equal(describe_count(body_expr, "wave4_brand"), 0, "wave4_brand pruned")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "wave4_year pruned")
+    }
+}
+
