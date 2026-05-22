@@ -6,7 +6,8 @@ require _common public
 // Indexed point-lookup: _where(_.id == K) where id is the PRIMARY KEY.
 // SQLite uses the PK b-tree -> O(log n).
 // m3/m3f have no index -> O(n) linear scan over the array.
-// Inverse-asymmetry of count_aggregate: m1 wins by complexity-class margin.
+// m4 uses the decs eid hash (query(eid, ...) wraps for_eid_archetype) -> O(1).
+// m1 wins over m3/m3f by complexity-class margin; m4 wins over m1 by skipping the b-tree descent.
 
 // --- m1: _sql over :memory: ---
 def run_m1(b : B?; n : int) {
@@ -49,6 +50,24 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+// --- m4: decs eid lookup (O(1) hash) ---
+// query(eid, $(...)) wraps for_eid_archetype, which hashes the eid into entityLookup
+// and dispatches the block once if the archetype matches. The block-arg `car_id` is
+// the request-shape witness — any field of DecsCar would do; we use id to mirror m1/m3.
+def run_m4(b : B?; n : int) {
+    let target_eid = fixture_decs_capture_mid(n)
+    b |> run("m4_decs_eid/{n}") {
+        var found = 0
+        query(target_eid) $(car_id : int) {
+            found = 1
+        }
+        b |> accept(found)
+        if (found == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def indexed_lookup_m1(b : B?) {
     run_m1(b, 100000)
@@ -62,4 +81,9 @@ def indexed_lookup_m3(b : B?) {
 [benchmark]
 def indexed_lookup_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def indexed_lookup_m4(b : B?) {
+    run_m4(b, 100000)
 }
