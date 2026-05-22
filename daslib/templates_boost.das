@@ -226,20 +226,28 @@ class private TemplateVisitor : AstVisitor {
         }
         return expr
     }
-    in_r2v_wrapper : int = 0  //! depth counter so visitExprVar yields to visitExprRef2Value when a wrapper is above
+    in_r2v_direct_var : int = 0  //! counter: in_r2v_direct_var > 0 ⇔ inside an ExprRef2Value whose direct subexpr is ExprVar
     def override preVisitExprRef2Value(expr : ExprRef2Value?) : void {
-        in_r2v_wrapper++
+        //! Only gate visitExprVar when the wrapper is the exact shape visitExprRef2Value
+        //! will peel-and-substitute (direct ExprVar child). For nested cases like
+        //! ``ExprRef2Value(ExprField(ExprVar(temp), "f"))`` the inner var still needs
+        //! visitExprVar to substitute it — visitExprRef2Value's post peel doesn't fire
+        //! because subexpr isn't an ExprVar.
+        if (expr.subexpr is ExprVar) {
+            in_r2v_direct_var++
+        }
     }
     def override visitExprVar(var expr : ExprVar?) : Expression? {
-        //! Variable rename + bare-var substitution. When an ``ExprRef2Value`` wrapper
-        //! is above us, defer to ``visitExprRef2Value`` (which strips the wrapper as
-        //! part of the substitution); without that gate, the bare-var rule fires first
-        //! and leaves an orphan wrapper around the replacement.
+        //! Variable rename + bare-var substitution. When the direct parent is an
+        //! ``ExprRef2Value`` wrapping THIS ExprVar, defer to ``visitExprRef2Value``
+        //! (which strips the wrapper as part of the substitution); otherwise the
+        //! bare-var rule fires first and leaves an orphan wrapper around the
+        //! replacement.
         let vn = string(expr.name)
         if (key_exists(rules.var2name, vn)) {
             expr.name := rules.var2name |> get_value(vn)
         }
-        if (in_r2v_wrapper == 0 && key_exists(rules.var2expr, vn)) {
+        if (in_r2v_direct_var == 0 && key_exists(rules.var2expr, vn)) {
             var rexpr = clone_expression(unsafe(rules.var2expr[vn]))
             rexpr.at = expr.at
             return rexpr
@@ -251,8 +259,8 @@ class private TemplateVisitor : AstVisitor {
         //! return the replacement directly — stripping the typer-inserted wrapper that
         //! would otherwise be left orphaned around a non-reference value (which trips
         //! ``can only dereference a reference``).
-        in_r2v_wrapper--
         if (expr.subexpr is ExprVar) {
+            in_r2v_direct_var--
             let vvar = expr.subexpr as ExprVar
             let vn = string(vvar.name)
             if (key_exists(rules.var2expr, vn)) {
