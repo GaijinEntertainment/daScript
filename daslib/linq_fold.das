@@ -466,9 +466,8 @@ def private append_ranges_prelude(var preludeStmts : array<Expression?>; var ski
     let takeCountName = names.takeCountName
     let skippingName  = names.skippingName
     if (skipExpr != null) {
-        var skipInit = clone_expression(skipExpr)
         preludeStmts |> push <| qmacro_expr() {
-            var $i(skipName) = $e(skipInit)
+            var $i(skipName) = $e(skipExpr)
         }
     }
     if (takeExpr != null) {
@@ -494,10 +493,9 @@ def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeE
     var prefixed : array<Expression?>
     prefixed |> reserve(length(stmts) + 5)
     if (takeExpr != null) {
-        var takeLimit = clone_expression(takeExpr)
         // `>=` (not `==`) so non-positive N short-circuits on the first iteration —
         prefixed |> push <| qmacro_expr() {
-            if ($i(takeCountName) >= $e(takeLimit)) {
+            if ($i(takeCountName) >= $e(takeExpr)) {
                 break
             }
         }
@@ -511,10 +509,9 @@ def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeE
         }
     }
     if (skipWhileCond != null) {
-        var swPred = clone_expression(skipWhileCond)
         prefixed |> push <| qmacro_expr() {
             if ($i(skippingName)) {
-                if ($e(swPred)) {
+                if ($e(skipWhileCond)) {
                     continue
                 }
                 $i(skippingName) = false
@@ -522,9 +519,8 @@ def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeE
         }
     }
     if (takeWhileCond != null) {
-        var twPred = clone_expression(takeWhileCond)
         prefixed |> push <| qmacro_expr() {
-            if (!($e(twPred))) {
+            if (!($e(takeWhileCond))) {
                 break
             }
         }
@@ -633,10 +629,8 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
     if (sourceHasLength && !isIter) {
         if (takeExpr != null) {
             // Inline `min` so the emission doesn't depend on `require math` at the call site.
-            var takeReserveA = clone_expression(takeExpr)
-            var takeReserveB = clone_expression(takeExpr)
             bodyStmts |> push <| qmacro_expr() {
-                $i(accName) |> reserve($e(takeReserveA) < length($i(srcName)) ? $e(takeReserveB) : length($i(srcName)))
+                $i(accName) |> reserve($e(takeExpr) < length($i(srcName)) ? $e(takeExpr) : length($i(srcName)))
             }
         } else {
             bodyStmts |> push <| qmacro_expr() {
@@ -841,9 +835,8 @@ def private emit_early_exit_lane(
     } elif (opName == "first_or_default") {
         // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
         let defaultName = qn("dval", at)
-        var defaultExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
-            let $i(defaultName) = $e(defaultExpr)
+            let $i(defaultName) = $e(terminatorCall.arguments[1])
         }
         perMatchStmts |> push <| qmacro_expr() {
             return $i(valueName)
@@ -881,9 +874,8 @@ def private emit_early_exit_lane(
     } elif (opName == "contains") {
         // `v` is bound once at the top of the block; per-element compare uses the bound name
         let containsValName = qn("cval", at)
-        var valExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
-            let $i(containsValName) = $e(valExpr)
+            let $i(containsValName) = $e(terminatorCall.arguments[1])
         }
         perMatchStmts |> push <| qmacro_expr() {
             if ($i(valueName) == $i(containsValName)) {
@@ -925,9 +917,8 @@ def private emit_early_exit_lane(
         } else {
             // Bind `d` once at the top (eager, matches linq.das line 2621).
             let defaultName = qn("dval", at)
-            var defaultExpr = clone_expression(terminatorCall.arguments[1])
             preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(defaultExpr)
+                let $i(defaultName) = $e(terminatorCall.arguments[1])
             }
             tailStmts <- qmacro_block_to_array() {
                 if (!$i(foundName)) {
@@ -970,9 +961,8 @@ def private emit_early_exit_lane(
             }
         } else {
             let defaultName = qn("dval", at)
-            var defaultExpr = clone_expression(terminatorCall.arguments[1])
             preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(defaultExpr)
+                let $i(defaultName) = $e(terminatorCall.arguments[1])
             }
             // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
             perMatchStmts |> push_from <| qmacro_block_to_array() {
@@ -1003,9 +993,8 @@ def private emit_early_exit_lane(
         }
         let idxName = qn("idx", at)
         let cntName = qn("ec", at)
-        var idxExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
-            let $i(idxName) = $e(idxExpr)
+            let $i(idxName) = $e(terminatorCall.arguments[1])
         }
         if (opName == "element_at") {
             preludeStmts |> push <| qmacro_expr() {
@@ -1751,9 +1740,8 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                 return $i(lastName)
             }
         } else {
-            var defaultExpr = clone_expression(terminatorCall.arguments[1])
             body = qmacro_block() {
-                let $i(dBindName) = $e(defaultExpr)
+                let $i(dBindName) = $e(terminatorCall.arguments[1])
                 var $i(foundName) = false
                 var $i(lastName) : $t(lastType) = default<$t(lastType)>
                 for ($i(itName) in $i(srcName)) {
@@ -1773,13 +1761,10 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             let lenName   = qn("rlen", at)
             let takeNName = qn("rtn", at)
             let kName     = qn("rk", at)
-            var takeA = clone_expression(takeExpr)
-            var takeB = clone_expression(takeExpr)
-            var takeC = clone_expression(takeExpr)
             var returnExpr = buffer_return(bufName, needIterWrap)
             body = qmacro_block() {
                 let $i(lenName) = length($i(srcName))
-                let $i(takeNName) = $e(takeA) <= 0 ? 0 : ($e(takeB) < $i(lenName) ? $e(takeC) : $i(lenName))
+                let $i(takeNName) = $e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < $i(lenName) ? $e(takeExpr) : $i(lenName))
                 var $i(bufName) : array<$t(bufElemType)>
                 $i(bufName) |> reserve($i(takeNName))
                 for ($i(kName) in 0 .. $i(takeNName)) {
@@ -1808,11 +1793,8 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             var resizeStmts : array<Expression?>
             if (takeExpr != null) {
                 // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
-                var takeA = clone_expression(takeExpr)
-                var takeB = clone_expression(takeExpr)
-                var takeC = clone_expression(takeExpr)
                 resizeStmts |> push <| qmacro_expr() {
-                    $i(bufName) |> resize($e(takeA) <= 0 ? 0 : ($e(takeB) < length($i(bufName)) ? $e(takeC) : length($i(bufName))))
+                    $i(bufName) |> resize($e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < length($i(bufName)) ? $e(takeExpr) : length($i(bufName))))
                 }
             }
             var returnExpr = buffer_return(bufName, needIterWrap)
@@ -1895,9 +1877,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     var elemType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
     var stmts : array<Expression?>
     if (isDistinctBy) {
-        var keyTypeBlock = clone_expression(distinctKeyBlock)
         stmts |> push <| qmacro_expr() {
-            var inscope $i(seenName) : table<typedecl(_::unique_key(invoke($e(keyTypeBlock), default<$t(elemType)>)))>
+            var inscope $i(seenName) : table<typedecl(_::unique_key(invoke($e(distinctKeyBlock), default<$t(elemType)>)))>
         }
     } else {
         stmts |> push <| qmacro_expr() {
@@ -1919,9 +1900,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     // Bind take(N) limit once at outer scope so a side-effecting arg fires once, not on every fresh-key check.
     let takeLimName = qn("takeLim", at)
     if (takeExpr != null) {
-        var takeBind = clone_expression(takeExpr)
         stmts |> push_from <| qmacro_block_to_array() {
-            let $i(takeLimName) = $e(takeBind)
+            let $i(takeLimName) = $e(takeExpr)
             var $i(takenName) = 0
         }
     }
@@ -1944,10 +1924,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     }
     var keyExpr : Expression?
     if (isDistinctBy) {
-        var keyBlk = clone_expression(distinctKeyBlock)
-        var keyArg = clone_expression(pushExpr)
         keyExpr = qmacro_expr() {
-            invoke($e(keyBlk), $e(keyArg))
+            invoke($e(distinctKeyBlock), $e(pushExpr))
         }
     } else {
         keyExpr = clone_expression(pushExpr)
@@ -1963,14 +1941,12 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         $i(seenName) |> insert($i(keyName))
     }
     if (needBuffer) {
-        var pushClone = clone_expression(pushExpr)
         consumeStmts |> push <| qmacro_expr() {
-            $i(bufName) |> push_clone($e(pushClone))
+            $i(bufName) |> push_clone($e(pushExpr))
         }
     } elif (isSumTerminator) {
-        var sumExpr = clone_expression(pushExpr)
         consumeStmts |> push <| qmacro_expr() {
-            $i(accName) += $e(sumExpr)
+            $i(accName) += $e(pushExpr)
         }
     }
     var consumeBody = stmts_to_expr(consumeStmts)
@@ -1981,9 +1957,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     }
     var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
     if (bindProjection) {
-        var pvBind = clone_expression(projection)
         perMatchStmts |> push <| qmacro_expr() {
-            let $i(pvName) = $e(pvBind)
+            let $i(pvName) = $e(projection)
         }
     }
     perMatchStmts |> push <| qmacro_expr() {
@@ -2194,13 +2169,11 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
     } elif (nm == "sum_inner_select") {
         var l1 = mk_slot_ref(at, entryName, spec.slot)
         var l2 = mk_slot_ref(at, entryName, spec.slot)
-        var b1 = clone_expression(spec.innerBody)
-        var b2 = clone_expression(spec.innerBody)
         missInit = qmacro_expr() {
-            $e(l1) = $e(b1)
+            $e(l1) = $e(spec.innerBody)
         }
         hitUpdate = qmacro_expr() {
-            $e(l2) += $e(b2)
+            $e(l2) += $e(spec.innerBody)
         }
     } elif (nm == "min" || nm == "max") {
         let workhorse = spec.accType != null && spec.accType.isWorkhorseType
@@ -2244,35 +2217,33 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
         var lInit = mk_slot_ref(at, entryName, spec.slot)
         var lCmp  = mk_slot_ref(at, entryName, spec.slot)
         var lAsn  = mk_slot_ref(at, entryName, spec.slot)
-        var bMiss = clone_expression(spec.innerBody)
-        var bHit  = clone_expression(spec.innerBody)
         missInit = qmacro_expr() {
-            $e(lInit) := $e(bMiss)
+            $e(lInit) := $e(spec.innerBody)
         }
         if (workhorse && isMin) {
             hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(bHit)
+                let $i(tmp) = $e(spec.innerBody)
                 if ($i(tmp) < $e(lCmp)) {
                     $e(lAsn) := $i(tmp)
                 }
             }
         } elif (workhorse) {
             hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(bHit)
+                let $i(tmp) = $e(spec.innerBody)
                 if ($i(tmp) > $e(lCmp)) {
                     $e(lAsn) := $i(tmp)
                 }
             }
         } elif (isMin) {
             hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(bHit)
+                let $i(tmp) = $e(spec.innerBody)
                 if (_::less($i(tmp), $e(lCmp))) {
                     $e(lAsn) := $i(tmp)
                 }
             }
         } else {
             hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(bHit)
+                let $i(tmp) = $e(spec.innerBody)
                 if (_::less($e(lCmp), $i(tmp))) {
                     $e(lAsn) := $i(tmp)
                 }
@@ -2285,9 +2256,8 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
         }
     } elif (nm == "first_inner_select") {
         var l1 = mk_slot_ref(at, entryName, spec.slot)
-        var b1 = clone_expression(spec.innerBody)
         missInit = qmacro_expr() {
-            $e(l1) := $e(b1)
+            $e(l1) := $e(spec.innerBody)
         }
     } elif (nm == "average") {
         // 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source-element cast to double once per side.
@@ -2307,14 +2277,12 @@ def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, 
         var lInit = mk_slot_ref(at, entryName, spec.slot)
         var lSum  = mk_slot_ref(at, entryName, spec.slot)
         var lCnt  = mk_slot_ref(at, entryName, spec.slot)
-        var bMiss = clone_expression(spec.innerBody)
-        var bHit  = clone_expression(spec.innerBody)
         missInit = qmacro_block() {
-            let $i(tmp) = $e(bMiss)
+            let $i(tmp) = $e(spec.innerBody)
             $e(lInit) = (double($i(tmp)), 1ul)
         }
         hitUpdate = qmacro_block() {
-            let $i(tmp) = $e(bHit)
+            let $i(tmp) = $e(spec.innerBody)
             $e(lSum)._0 += double($i(tmp))
             $e(lCnt)._1 ++
         }
@@ -2603,11 +2571,9 @@ def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : 
     // Per-element source loop. Body has been segment-wrapped (inside-out where_/select) by the caller. For array: simple `for(it in src) { body }`. For decs: inner multi-iter for via build_decs_inner_for_pruned (Wave 4 prunes unreferenced components) + outer for_each_archetype.
     if (adapter.isDecs) {
         var forExprNode = build_decs_inner_for_pruned(adapter.decsBridge, adapter.initialBindName, body, at)
-        var reqExpr = clone_expression(adapter.decsBridge.reqHashExpr)
-        var erqExpr = clone_expression(adapter.decsBridge.erqExpr)
         let archName = adapter.decsBridge.archName
         return qmacro_expr() {
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(adapter.decsBridge.reqHashExpr), $e(adapter.decsBridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
         }
@@ -2737,9 +2703,6 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         }
     }
     // Table + matching dummy. Dummy is bound on miss so first-key-wins is detected via addr-compare (one hash op/elem on hits).
-    var keyBlk1 = clone_expression(keyBlock)
-    var keyBlk2 = clone_expression(keyBlock)
-    var keyBlkD = clone_expression(keyBlock)
     var stmts : array<Expression?>
     if (usesNamedTuple) {
         var tabValueType = strip_const_ref(clone_type(groupProjBody._type))
@@ -2765,19 +2728,18 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         }
         var tabValueType2 = clone_type(tabValueType)
         stmts |> push_from <| qmacro_block_to_array() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlock), default<$t(elemType)>))); $t(tabValueType)>
             var $i(dummyName) : $t(tabValueType2)
         }
     } else {
         var accType  = clone_type(specs[0].accType)
         var accType2 = clone_type(specs[0].accType)
         stmts |> push_from <| qmacro_block_to_array() {
-            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(accType)>>
-            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
+            var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlock), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlock), default<$t(elemType)>)) -const -&; $t(accType)>>
+            var $i(dummyName) : tuple<typedecl(invoke($e(keyBlock), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     }
     // `tab?[uk] ?? dummy` + addr-compare: one hash op/elem on hits, two on misses (insert).
-    var keyBlk3 = clone_expression(keyBlock)
     var missInitStmts : array<Expression?>
     var hitUpdateStmts : array<Expression?>
     for (s in specs) {
@@ -2823,7 +2785,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     }
     // Per-element core: key derive + unique_key derive + table-update splice.
     var coreBody = qmacro_block() {
-        let $i(kName) = invoke($e(keyBlk3), $i(itName))
+        let $i(kName) = invoke($e(keyBlock), $i(itName))
         let $i(ukName) = _::unique_key($i(kName))
         $e(tableUpdate)
     }
@@ -3417,10 +3379,9 @@ def private wrap_inner_for_with_decs_ranges(var body : Expression?;
         }
     }
     if (rangeInfo.skipWhileCond != null) {
-        var swPred = clone_expression(rangeInfo.skipWhileCond)
         stmts |> push <| qmacro_expr() {
             if ($i(skippingName)) {
-                if ($e(swPred)) {
+                if ($e(rangeInfo.skipWhileCond)) {
                     continue
                 }
                 $i(skippingName) = false
@@ -3428,10 +3389,9 @@ def private wrap_inner_for_with_decs_ranges(var body : Expression?;
         }
     }
     if (rangeInfo.takeWhileCond != null) {
-        var twPred = clone_expression(rangeInfo.takeWhileCond)
         // First false ends iteration globally (across all archetypes). `return true` exits inner-for AND archetype-find lambda.
         stmts |> push <| qmacro_expr() {
-            if (!($e(twPred))) {
+            if (!($e(rangeInfo.takeWhileCond))) {
                 return true
             }
         }
@@ -3455,15 +3415,13 @@ def private decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStat
     let skippingName  = names.skippingName
     var stmts : array<Expression?>
     if (rangeInfo.skipExpr != null) {
-        var skipInit = clone_expression(rangeInfo.skipExpr)
         stmts |> push <| qmacro_expr() {
-            var $i(skipName) = $e(skipInit)
+            var $i(skipName) = $e(rangeInfo.skipExpr)
         }
     }
     if (rangeInfo.takeExpr != null) {
-        var takeInit = clone_expression(rangeInfo.takeExpr)
         stmts |> push_from <| qmacro_block_to_array() {
-            let $i(takeLimitName) = $e(takeInit)
+            let $i(takeLimitName) = $e(rangeInfo.takeExpr)
             var $i(takeCountName) = 0
         }
     }
@@ -3481,12 +3439,10 @@ def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) :
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
     let accName = qn("decs_acc", at)
     let archName = qn("decs_arch", at)
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     // arch.size is int64; count() returns int and the += site truncates past INT_MAX — chain `long_count()` when an int64-safe total is required.
     var emission : Expression? = qmacro(invoke($() : int {
         var $i(accName) = 0
-        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+        for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
             $i(accName) += int($i(archName).size)
         })
         return $i(accName)
@@ -3536,8 +3492,6 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     if (body == null) return null
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
     if (opName == "long_count") {
@@ -3589,14 +3543,14 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
         }
     } else {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
         }
@@ -3647,9 +3601,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             var $i(resultName) : $t(elemType)
         }
         if (opName == "first_or_default") {
-            var defaultExpr = clone_expression(terminatorCall.arguments[1])
             preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(defaultExpr)
+                let $i(defaultName) = $e(terminatorCall.arguments[1])
             }
         }
         perElement = qmacro_block() {
@@ -3729,9 +3682,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         }
     } elif (opName == "contains") {
-        var valExpr = clone_expression(terminatorCall.arguments[1])
         preludeStmts |> push <| qmacro_expr() {
-            let $i(containsValName) = $e(valExpr)
+            let $i(containsValName) = $e(terminatorCall.arguments[1])
         }
         if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
             // Same disambiguation as any: take-cap / take_while-stop and "value matched" both inner-return true, route through foundName.
@@ -3761,8 +3713,6 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     if (body == null) return null
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     var rangeStmts <- decs_range_prelude(rangeInfo, names)
     // Combine prelude + invocation + tail into ONE bodyStmts list — multiple $b splices in the same qmacro fragment isolate variable scope.
     var bodyStmts : array<Expression?>
@@ -3773,7 +3723,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let useExplicitState = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) && (opName == "any" || opName == "all" || opName == "contains"))
     if (useExplicitState) {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
@@ -3781,7 +3731,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         bodyStmts |> push_from(tailStmts)
     } elif (opName == "any" || opName == "contains") {
         bodyStmts |> push <| qmacro_expr() {
-            return for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            return for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
@@ -3789,14 +3739,14 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     } elif (opName == "all") {
         // `all` is "no counterexample found" — inner returns true on FAIL, so negate.
         bodyStmts |> push <| qmacro_expr() {
-            return !for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            return !for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
         }
     } else {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
@@ -3840,8 +3790,6 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     if (body == null) return null
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     var rangeStmts <- decs_range_prelude(rangeInfo, names)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 3)
@@ -3852,14 +3800,14 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
         }
     } else {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
         }
@@ -3918,8 +3866,6 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     if (body == null) return null
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     var rangeStmts <- decs_range_prelude(rangeInfo, names)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 5)
@@ -3932,14 +3878,14 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
         // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
         }
     } else {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
         }
@@ -4116,14 +4062,12 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         }
     }
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     let archName = bridge.archName
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(5)
     bodyStmts |> push_from <| qmacro_block_to_array() {
         var $i(bufName) : array<$t(elemType)>
-        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+        for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
             $e(forExprNode)
         })
     }
@@ -4264,8 +4208,6 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
         }
     }
     if (!hasReverse || (takeExpr != null && terminatorName != "")) return null
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     let archName = bridge.archName
     if (terminatorName == "count") {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
@@ -4292,7 +4234,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
         var emission : Expression? = qmacro(invoke($() : int {
             var $i(cntName) = 0
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
             return $i(cntName)
@@ -4333,7 +4275,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             emission = qmacro(invoke($() : $t(lastType) {
                 var $i(foundName) = false
                 var $i(lastName) : $t(lastType) = default<$t(lastType)>
-                for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                     $e(forExprNode)
                 })
                 if (!$i(foundName)) {
@@ -4342,12 +4284,11 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
                 return $i(lastName)
             }))
         } else {
-            var defaultExpr = clone_expression(terminatorCall.arguments[1])
             emission = qmacro(invoke($() : $t(lastType) {
-                let $i(dBindName) = $e(defaultExpr)
+                let $i(dBindName) = $e(terminatorCall.arguments[1])
                 var $i(foundName) = false
                 var $i(lastName) : $t(lastType) = default<$t(lastType)>
-                for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                     $e(forExprNode)
                 })
                 return $i(foundName) ? $i(lastName) : $i(dBindName)
@@ -4391,7 +4332,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     }
     var emission : Expression? = qmacro(invoke($() : array<$t(bufElemType)> {
         var $i(bufName) : array<$t(bufElemType)>
-        for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+        for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
             $e(forExprNode)
         })
         _::reverse_inplace($i(bufName))
@@ -4475,9 +4416,8 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     // Prelude: seen-table + (buffer | accumulator | take counter). All hoisted at invoke scope so state spans archetypes.
     var preludeStmts : array<Expression?>
     if (isDistinctBy) {
-        var keyTypeBlock = clone_expression(distinctKeyBlock)
         preludeStmts |> push <| qmacro_expr() {
-            var inscope $i(seenName) : table<typedecl(_::unique_key(invoke($e(keyTypeBlock), default<$t(elemType)>)))>
+            var inscope $i(seenName) : table<typedecl(_::unique_key(invoke($e(distinctKeyBlock), default<$t(elemType)>)))>
         }
     } else {
         preludeStmts |> push <| qmacro_expr() {
@@ -4495,9 +4435,8 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     if (takeExpr != null) {
         // Bind take(N) limit once at outer scope so a side-effecting arg fires once (matches plan_distinct).
-        var takeBind = clone_expression(takeExpr)
         preludeStmts |> push_from <| qmacro_block_to_array() {
-            let $i(takeLimName) = $e(takeBind)
+            let $i(takeLimName) = $e(takeExpr)
             var $i(takenName) = 0
         }
     }
@@ -4519,10 +4458,8 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     var keyExpr : Expression?
     if (isDistinctBy) {
-        var keyBlk = clone_expression(distinctKeyBlock)
-        var keyArg = clone_expression(pushExpr)
         keyExpr = qmacro_expr() {
-            invoke($e(keyBlk), $e(keyArg))
+            invoke($e(distinctKeyBlock), $e(pushExpr))
         }
     } else {
         keyExpr = clone_expression(pushExpr)
@@ -4538,14 +4475,12 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
         $i(seenName) |> insert($i(keyName))
     }
     if (needBuffer) {
-        var pushClone = clone_expression(pushExpr)
         consumeStmts |> push <| qmacro_expr() {
-            $i(bufName) |> push_clone($e(pushClone))
+            $i(bufName) |> push_clone($e(pushExpr))
         }
     } elif (isSumTerminator) {
-        var sumExpr = clone_expression(pushExpr)
         consumeStmts |> push <| qmacro_expr() {
-            $i(accName) += $e(sumExpr)
+            $i(accName) += $e(pushExpr)
         }
     }
     var consumeBody = stmts_to_expr(consumeStmts)
@@ -4556,9 +4491,8 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
     if (bindProjection) {
-        var pvBind = clone_expression(projection)
         perMatchStmts |> push <| qmacro_expr() {
-            let $i(pvName) = $e(pvBind)
+            let $i(pvName) = $e(projection)
         }
     }
     perMatchStmts |> push <| qmacro_expr() {
@@ -4577,22 +4511,20 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
         }
     }
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
-    var reqExpr = clone_expression(bridge.reqHashExpr)
-    var erqExpr = clone_expression(bridge.erqExpr)
     let archName = bridge.archName
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + 2)
     bodyStmts |> push_from(preludeStmts)
     if (takeExpr != null) {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) : bool {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 $e(forExprNode)
                 return false
             })
         }
     } else {
         bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
         }

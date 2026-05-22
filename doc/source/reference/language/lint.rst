@@ -877,6 +877,63 @@ hand-rolled shape ``for (s in src) { dst |> emplace(s) }`` does not
 compile. The ``emplace_from`` bulk overload still exists in
 ``daslib/builtin.das`` for direct calls with a mutable source array.
 
+PERF023 — redundant ``clone_expression`` before qmacro splice
+===============================================================
+
+``qmacro``, ``qmacro_block``, ``qmacro_expr``, and ``qmacro_block_to_array``
+all go through ``apply_template`` (``daslib/templates_boost.das``), which
+calls ``clone_expression`` on every ``$e(...)`` substitution input. Pre-cloning
+into a local variable and then splicing the local is wasted work — the same
+substitution gets cloned a second time at apply-template time.
+
+.. code-block:: das
+
+    // Bad
+    var defaultExpr = clone_expression(terminatorCall.arguments[1])     // PERF023
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(defaultName) = $e(defaultExpr)
+    }
+
+    // Good
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(defaultName) = $e(terminatorCall.arguments[1])
+    }
+
+The rule fires only when **every** use of the candidate variable lives inside
+a ``$e(...)`` splice tag — any other use (assignment, passing to a non-splice
+consumer, storing into a struct field) means the pre-clone is load-bearing
+and the lint stays silent.
+
+**Multi-clone cases.** When the same source feeds N ``$e(...)`` slots in one
+qmacro body, the rule still flags every pre-clone. ``apply_template`` clones
+each substitution independently, so ``$e(E)`` repeated N times yields N
+independent clones — equivalent to one user-side clone repeated N times via
+``$e(X)``:
+
+.. code-block:: das
+
+    // Bad — three pre-clones for three splice slots
+    var takeA = clone_expression(takeExpr)                              // PERF023
+    var takeB = clone_expression(takeExpr)                              // PERF023
+    var takeC = clone_expression(takeExpr)                              // PERF023
+    body = qmacro_block() {
+        let $i(takeNName) = $e(takeA) <= 0 ? 0 : ($e(takeB) < $i(lenName) ? $e(takeC) : $i(lenName))
+    }
+
+    // Good — inline takeExpr at each splice; apply_template clones each one
+    body = qmacro_block() {
+        let $i(takeNName) = $e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < $i(lenName) ? $e(takeExpr) : $i(lenName))
+    }
+
+For sources with side effects (rare in AST-building code), bind once via plain
+``let baseE = E`` (no clone) and splice the local — that preserves single-eval
+semantics while still letting ``apply_template`` produce N clones.
+
+``clone_type`` is out of scope. Types take a different path through
+``apply_qrules`` (the ``$<TT>`` tag form emits ``add_type_ptr_ref``, but
+``clone_type`` call sites typically feed direct AST construction, not qmacro
+splices).
+
 .. _style_lint:
 
 -----------

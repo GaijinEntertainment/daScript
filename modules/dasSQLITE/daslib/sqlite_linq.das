@@ -464,8 +464,7 @@ def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : 
                                            xSql : string; negated : bool; nullable : bool) : string {
     // nolint:STYLE015 Captured-collection lowering for `_in` / `_not_in`: encode arr as JSON TEXT,
     // single bind, query via SQLite's table-valued json_each. EF Core 8's default.
-    var rawArg : ExpressionPtr = clone_expression(collArg)
-    var wrapped : ExpressionPtr = qmacro(_::write_json(_::JV($e(rawArg))))
+    var wrapped : ExpressionPtr = qmacro(_::write_json(_::JV($e(collArg))))
     if (q.inHaving) {
         q.havingBindExprs |> push(wrapped)
     } else {
@@ -2782,8 +2781,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (fname == "starts_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
-        var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
-        var wrapped : ExpressionPtr = qmacro(_::like_escape_prefix($e(rawArg)))
+        var wrapped : ExpressionPtr = qmacro(_::like_escape_prefix($e(call.arguments[1])))
         if (q.inHaving) {
             q.havingBindExprs |> push(wrapped)
         } else {
@@ -2794,8 +2792,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (fname == "ends_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
-        var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
-        var wrapped : ExpressionPtr = qmacro(_::like_escape_suffix($e(rawArg)))
+        var wrapped : ExpressionPtr = qmacro(_::like_escape_suffix($e(call.arguments[1])))
         if (q.inHaving) {
             q.havingBindExprs |> push(wrapped)
         } else {
@@ -2811,8 +2808,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         } else {
             let lhs = pred_to_sql(call.arguments[0], q, prog, at)
             return "" if (q.hadError)
-            var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
-            var wrapped : ExpressionPtr = qmacro(_::like_escape_substring($e(rawArg)))
+            var wrapped : ExpressionPtr = qmacro(_::like_escape_substring($e(call.arguments[1])))
             if (q.inHaving) {
                 q.havingBindExprs |> push(wrapped)
             } else {
@@ -3457,8 +3453,7 @@ class private SqlCreateViewMacro : AstCallMacro {
         }
         // Pipe-rewrite turns `db |> _create_view(...)` into `_create_view(db, ...)` —
         // arg 0 is exactly what the user wrote.
-        var dbExpr = clone_expression(call.arguments[0])
-        var res = qmacro(_::exec($e(dbExpr), $e(sb)))
+        var res = qmacro(_::exec($e(call.arguments[0]), $e(sb)))
         res.force_at(call.at)
         return res
     }
@@ -3507,8 +3502,7 @@ def private emit_pragma_or_vacuum(prog : ProgramPtr; var call : ExprCallMacro?;
     var sqlExpr : ExpressionPtr
     var bindExprs : array<ExpressionPtr>
     fold_to_builder(frags, call.at, sqlExpr, bindExprs)
-    var dbExpr = clone_expression(call.arguments[0])
-    var res = qmacro(_::try_exec($e(dbExpr), $e(sqlExpr)))
+    var res = qmacro(_::try_exec($e(call.arguments[0]), $e(sqlExpr)))
     res.force_at(call.at)
     return res
 }
@@ -4420,11 +4414,10 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
         sql += build_returning_clause(rootT)
     }
     // 5) Bind order: row binds (1..N_row) via `_sql_bind_row`, then SET binds (N_row+1..).
-    var rowClone = clone_expression(rowE)
     var bindStmts : array<ExpressionPtr>
     bindStmts |> reserve(1 + length(setBindExprs))
     bindStmts |> push <| qmacro_expr(${
-        _::_sql_bind_row(_sql_stmt, $e(rowClone), true);
+        _::_sql_bind_row(_sql_stmt, $e(rowE), true);
     })
     for (i in range(length(setBindExprs))) {
         let bindIdx = nRowBinds + i + 1

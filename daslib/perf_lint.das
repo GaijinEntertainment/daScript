@@ -35,6 +35,7 @@ module perf_lint shared private
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
 //!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
+//!   PERF023 — var X = clone_expression(E); ... $e(X) ... — qmacro splice already clones; drop the pre-clone
 
 require daslib/ast_boost
 require strings
@@ -85,6 +86,20 @@ struct Perf022State {
     matched : bool
 }
 
+struct Perf023Candidate {
+    //! PERF023 per-candidate state. One entry per `var X = clone_expression(E)`
+    //! decl seen in the current function. `safe_uses` counts ExprVar refs to X
+    //! whose ancestor chain (within this function) includes an `add_ptr_ref(...)`
+    //! call — the splice-wrapper installed by `apply_qrules` for every `$e(...)`
+    //! tag. `disqualified` is set on any other use (assignment, call arg passed
+    //! to a non-splice consumer, etc.); the pre-clone is then load-bearing. The
+    //! `var` carries the decl `at` directly (v.at), so the warning location is
+    //! derived without storing LineInfo in the array.
+    @do_not_delete v : Variable?
+    safe_uses : int
+    disqualified : bool
+}
+
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
     // variable + loop tracking
@@ -133,6 +148,15 @@ class PerfLintVisitor : AstVisitor {
     // pointer lives in a parallel `perf022_for_exprs` array.
     perf022_stack : array<Perf022State>
     @do_not_delete perf022_for_exprs : array<ExprFor?>
+    // PERF023: per-function candidates for `var X = clone_expression(E)`. Cleared
+    // in preVisitFunction; finalized in visitFunction. `perf023_splice_depth` is
+    // a counter incremented when visiting INTO an `add_ptr_ref(...)` call
+    // (post-expansion form of `$e(...)` splice tags) and decremented on exit; an
+    // ExprVar reference to a candidate that fires while the counter is >0 is a
+    // "safe use" (apply_template will clone the substitution anyway), otherwise
+    // the candidate is disqualified.
+    perf023_candidates : array<Perf023Candidate>
+    perf023_splice_depth : int = 0
     warning_count : int = 0
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
@@ -492,9 +516,22 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         in_template = fn.moreFlags.isTemplate
+        // PERF023: reset per-function candidate set.
+        perf023_candidates |> clear
+        perf023_splice_depth = 0
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
+        // PERF023: report any candidate whose uses are all splice-safe.
+        for (c in perf023_candidates) {
+            if (!c.disqualified && c.safe_uses >= 1 && c.v != null) {
+                self->perf_warning(
+                    "PERF023: var initialized via clone_expression and only spliced into qmacro/qmacro_block/qmacro_expr/qmacro_block_to_array; the splice already clones (apply_template), so drop the pre-clone and inline the source expression",
+                    c.v.at)
+            }
+        }
+        perf023_candidates |> clear
+        perf023_splice_depth = 0
         current_function = null
         in_template = false
         return <- fn
@@ -531,6 +568,17 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
         if (in_closure == 0) {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth, is_iter = false))
+        }
+        // PERF023: seed candidate when init is `clone_expression(...)`.
+        // Closure-scoped lets are skipped — `apply_template` rules block IS a
+        // closure (the `(var rules : Template)` block argument), and pre-clones
+        // declared there have different lifetime semantics than parent-scope
+        // ones. We only fire on user-level decls.
+        if (in_closure == 0 && v != null && v.init != null && v.init is ExprCall) {
+            let initCall = v.init as ExprCall
+            if (initCall.name == "clone_expression" && length(initCall.arguments) == 1) {
+                perf023_candidates |> push(Perf023Candidate(v = v, safe_uses = 0, disqualified = false))
+            }
         }
         // PERF009: track last move-initialized variable (only explicit `var x <- expr`)
         if (last && v.flags.init_via_move && v.init != null) {
@@ -1492,6 +1540,14 @@ class PerfLintVisitor : AstVisitor {
         if (expr.func == null) return
         // PERF020: redundant same-type cast — fires anywhere, including in closures
         self->check_perf020_redundant_cast(expr)
+        // PERF023: track splice-wrapper depth. apply_qrules emits `add_ptr_ref(...)`
+        // around every `$e(...)` tag; matching the function NAME is sufficient
+        // because the templates_boost wrapper is the only producer of that name
+        // and it sits at every $e splice site post-expansion. Must fire BEFORE
+        // the in_closure gate — the rules block is itself a closure.
+        if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
+            perf023_splice_depth++
+        }
         // Loop/while-aware rules below skip closure bodies (they run later, not in the loop)
         if (in_closure > 0) return
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
@@ -1510,6 +1566,12 @@ class PerfLintVisitor : AstVisitor {
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (expr.func == null) return <- expr
+        // PERF023: pop splice-wrapper depth when leaving an add_ptr_ref call.
+        // Symmetric with the preVisitExprCall push above; fires regardless of
+        // closure depth.
+        if (expr.name == "add_ptr_ref" && perf023_splice_depth > 0) {
+            perf023_splice_depth--
+        }
         // PERF003: character_at anywhere — fires even inside closures
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
             var ecall = expr
@@ -1611,6 +1673,24 @@ class PerfLintVisitor : AstVisitor {
     // --- Central ExprVar handler (PERF002, PERF004, PERF005) ---
 
     def override preVisitExprVar(expr : ExprVar?) : void {
+        // PERF023: classify this var-ref as safe (inside add_ptr_ref) or
+        // disqualifying. Runs before the in_closure gate because the splice
+        // site lives inside the rules-block closure.
+        if (!empty(perf023_candidates)) {
+            let vv = expr.variable
+            if (vv != null) {
+                for (i in 0 .. length(perf023_candidates)) {
+                    if (perf023_candidates[i].v == vv) {
+                        if (perf023_splice_depth > 0) {
+                            perf023_candidates[i].safe_uses++
+                        } else {
+                            perf023_candidates[i].disqualified = true
+                        }
+                        break
+                    }
+                }
+            }
+        }
         if (in_closure > 0) return
         let v = expr.variable
         // PERF018: a bare iter_var reference outside a qualifying ExprAt index slot disqualifies the loop.

@@ -176,6 +176,53 @@ Canonical examples in `modules/dasSQLITE/daslib/sqlite_linq.das` — search for 
 - **`$a(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as function call **arguments**
 - **`$b(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as a **block body** (sequence of statements). Build the array with `push <| qmacro_expr(...)`, then `$b(bodyExprs)` inlines all statements into the function body
 
+### Splice inputs are cloned for you — don't pre-clone with `clone_expression`
+
+`qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` all go through [`apply_template`](../daslib/templates_boost.das#L249), which calls `clone_expression` on every `$e(...)` substitution input. So this is wasted work:
+
+```das
+// WRONG — clones twice (once explicitly, once inside apply_template)
+var defaultExpr = clone_expression(terminatorCall.arguments[1])
+preludeStmts |> push <| qmacro_expr() {
+    let $i(defaultName) = $e(defaultExpr)
+}
+```
+
+```das
+// RIGHT — inline the source; apply_template clones during substitution
+preludeStmts |> push <| qmacro_expr() {
+    let $i(defaultName) = $e(terminatorCall.arguments[1])
+}
+```
+
+**Multi-splice cases.** Even when the same source feeds N `$e(...)` slots in one qmacro, you don't need to pre-clone. `apply_template` clones each substitution independently:
+
+```das
+// WRONG — three pre-clones for three splice slots
+var takeA = clone_expression(takeExpr)
+var takeB = clone_expression(takeExpr)
+var takeC = clone_expression(takeExpr)
+body = qmacro_block() {
+    let $i(takeNName) = $e(takeA) <= 0 ? 0 : ($e(takeB) < $i(lenName) ? $e(takeC) : $i(lenName))
+}
+```
+
+```das
+// RIGHT — inline takeExpr at each slot; apply_template gives you 3 independent clones
+body = qmacro_block() {
+    let $i(takeNName) = $e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < $i(lenName) ? $e(takeExpr) : $i(lenName))
+}
+```
+
+If the source expression has side effects (rare in AST-building code — most sources are bare variable reads), bind once via plain `let baseE = E` (no clone) and splice the local:
+
+```das
+let baseE = make_side_effecty_expr()  // 1 eval, no clone
+body = qmacro_block() { let _x = $e(baseE) + $e(baseE) }
+```
+
+The lint rule `PERF023` (see `skills/perf_lint.md`) catches the wasted-pre-clone shape automatically.
+
 ### Default-initializing generated struct variables
 
 In macro-generated code, `var x : $t(st)` fails with "uninitialized variable" for structs without field defaults. Use `default<T>` instead:
