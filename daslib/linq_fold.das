@@ -2600,10 +2600,9 @@ struct private GroupBySourceAdapter {
 
 [macro_function]
 def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
-    // Per-element source loop. Body has been segment-wrapped (inside-out where_/select) by the caller. For array: simple `for(it in src) { body }`. For decs: tupBind from build_decs_tup_bind + inner multi-iter for via build_decs_inner_for + outer for_each_archetype.
+    // Per-element source loop. Body has been segment-wrapped (inside-out where_/select) by the caller. For array: simple `for(it in src) { body }`. For decs: inner multi-iter for via build_decs_inner_for_pruned (Wave 4 prunes unreferenced components) + outer for_each_archetype.
     if (adapter.isDecs) {
-        var tupBind = build_decs_tup_bind(adapter.decsBridge, adapter.initialBindName, at)
-        var forExprNode = build_decs_inner_for(adapter.decsBridge, tupBind, body, at)
+        var forExprNode = build_decs_inner_for_pruned(adapter.decsBridge, adapter.initialBindName, body, at)
         var reqExpr = clone_expression(adapter.decsBridge.reqHashExpr)
         var erqExpr = clone_expression(adapter.decsBridge.erqExpr)
         let archName = adapter.decsBridge.archName

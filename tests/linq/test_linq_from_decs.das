@@ -2635,3 +2635,68 @@ def test_wave4_pruned_select_distinct_count_splice_shape(t : T?) {
     }
 }
 
+// ── C3: group_by via shared adapter_emit_source_loop ───────────────────────────
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)).to_array())
+}
+
+[test]
+def test_wave4_pruned_groupby_count_parity(t : T?) {
+    fixture_wave4(10)
+    // _group_by_lazy(_.brand) — only `brand` referenced (key extraction). Reducer is `length`
+    // (counts bucket members, doesn't touch tuple fields). Pruning fires → only get_ro(brand).
+    // brand cycles 0..3 across 10 rows → 4 distinct buckets with sizes [3,3,2,2].
+    let got <- target_wave4_pruned_groupby_count_fold()
+    t |> equal(got |> length, 4, "4 distinct brand buckets")
+    var total = 0
+    for (b in got) {
+        total += b.N
+    }
+    t |> equal(total, 10, "buckets sum to source count")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_groupby_sum_fold() : array<tuple<Brand : int; S : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, S = _._1 |> _select(_.price) |> sum)).to_array())
+}
+
+[test]
+def test_wave4_pruned_groupby_sum_parity(t : T?) {
+    fixture_wave4(10)
+    // _group_by_lazy(_.brand) + inner-select-sum(_.price). Chain references brand (key) + price
+    // (reducer). Pruning fires → 2 get_ros (brand, price); year pruned.
+    let got <- target_wave4_pruned_groupby_sum_fold()
+    t |> equal(got |> length, 4, "4 distinct brand buckets")
+    // Sum of all prices across all buckets = 10*(0+1+...+9) = 450 — fixture independent of bucket layout.
+    var total = 0
+    for (b in got) {
+        total += b.S
+    }
+    t |> equal(total, 450, "all-bucket price sum = full-table price sum")
+}
+
+[test]
+def test_wave4_pruned_groupby_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_groupby_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Documented: plan_group_by_core builds a `bucket` (array of source tuples) per key, then
+        // computes reducers over the bucket. The bucket-build site pushes `decs_tup` as a whole
+        // value — walker sees whole-var → pruning DISABLED → all 3 get_ros present. This is the
+        // safety rule firing as designed (group_by needs the full tuple for the bucket). Pruning
+        // would only fire if the splice itself were refactored to avoid materializing tuples.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "group_by bucket-build needs full tuple; pruning disabled by design")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand present")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "price present (bucket needs full tuple)")
+        t |> success(describe_count(body_expr, "wave4_year") >= 1, "year present (bucket needs full tuple)")
+    }
+}
+
