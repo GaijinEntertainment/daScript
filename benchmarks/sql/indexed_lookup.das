@@ -53,16 +53,19 @@ def run_m3f(b : B?; n : int) {
 // --- m4: decs eid lookup (O(1) hash) ---
 // query(eid, $(...)) wraps for_eid_archetype, which hashes the eid into entityLookup
 // and dispatches the block once if the archetype matches. The block-arg `car_id` is
-// the request-shape witness — any field of DecsCar would do; we use id to mirror m1/m3.
+// the request-shape witness AND a fixture-drift gate: fixture_decs_capture_mid sets
+// id = i+1 on the n/2-th entity, so reading car_id back gives us a non-trivial value
+// that proves the lookup actually visited the expected entity (not a coincidence).
 def run_m4(b : B?; n : int) {
     let target_eid = fixture_decs_capture_mid(n)
+    let expected_id = n / 2 + 1
     b |> run("m4_decs_eid/{n}") {
         var found = 0
         query(target_eid) $(car_id : int) {
-            found = 1
+            found = car_id
         }
         b |> accept(found)
-        if (found == 0) {
+        if (found != expected_id) {
             b->failNow()
         }
     }
