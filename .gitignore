@@ -79,6 +79,11 @@ utils/mcp/mcp_server.log
 # Emscripten SDK (local install)
 emsdk/
 
+# Local `cmake --install` tree (produced by `cmake --install build --prefix install`
+# during dev iteration — used by sibling-repo work like dasProfile that consumes
+# the SDK via `find_package(DAS)`).
+install/
+
 # daspkg artifacts
 daspkg.lock
 .daspkg_global.lock

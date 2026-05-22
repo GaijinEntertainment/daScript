@@ -51,16 +51,45 @@ pageInit = function () {
              }
          })();
 
-         // Skip the default sample if pgInit already restored state from URL
-         // hash or localStorage autosave (otherwise the async fetch overwrites
-         // the user's work ~200ms after page load).
+         // Selection priority:
+         //   1. URL hash (#code= or #z=) restored by playground-tabs.js — wins.
+         //   2. URL query (?example=<slug>) — slug = files[0]'s basename
+         //      without the `.das` suffix (so `examples/sha256.das` → `sha256`).
+         //      Used by the daslang.io § 01 cycler's "try <test> on the
+         //      playground →" deep-link.
+         //   3. Autosave from localStorage — handled by playground-tabs.js.
+         //   4. Default first sample.
          if (!window.pgRestoredFromState) {
+             const params = new URLSearchParams(window.location.search);
+             const wanted = params.get("example");
+             if (wanted) {
+                 const entries = samplesData["examples"] || [];
+                 const idx = entries.findIndex(function(e) {
+                     return slugForSample(e) === wanted;
+                 });
+                 if (idx >= 0) {
+                     selectSample("examples", idx);
+                     return;
+                 }
+                 // Unknown slug — silently fall through to default.
+             }
              selectSample("examples", 0);
          }
 
     });
 
 
+}
+
+// Derive a URL-friendly slug from a sample entry. Used by the ?example=
+// query-string deep-link from daslang.io's § 01 bench cycler. The slug is
+// the first file's basename without the `.das` suffix, which by convention
+// matches the dasProfile bench test name (`sha256.das` → `sha256`, etc.).
+function slugForSample(entry) {
+    if (!entry || !entry.files || !entry.files.length) return null;
+    const f = entry.files[0];
+    const base = f.split('/').pop();
+    return base.replace(/\.das$/, '');
 }
 
 // Current sample's JIT-wasm basename (null for multi-file samples or when the

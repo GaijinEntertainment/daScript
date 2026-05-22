@@ -18,6 +18,10 @@
       "files" : ["examples/macros/main.das", "examples/macros/for_loop_macro_mod.das"]
     },
     {
+      "name" : "Tests",
+      "files" : ["examples/tests.das"]
+    },
+    {
       "name" : "Dictionary (benchmark)",
       "files" : ["examples/dict.das"]
     },
@@ -26,8 +30,56 @@
       "files" : ["examples/sha256.das"]
     },
     {
-      "name" : "Tests",
-      "files" : ["examples/tests.das"]
+      "name" : "Exp loop (benchmark)",
+      "files" : ["examples/exp.das"]
+    },
+    {
+      "name" : "String→Float (benchmark)",
+      "files" : ["examples/f2i.das"]
+    },
+    {
+      "name" : "Float→String (benchmark)",
+      "files" : ["examples/f2s.das"]
+    },
+    {
+      "name" : "Fibonacci loop (benchmark)",
+      "files" : ["examples/fib_loop.das"]
+    },
+    {
+      "name" : "Fibonacci recursive (benchmark)",
+      "files" : ["examples/fib_recursive.das"]
+    },
+    {
+      "name" : "Mandelbrot (benchmark)",
+      "files" : ["examples/mandelbrot.das"]
+    },
+    {
+      "name" : "N-bodies (benchmark)",
+      "files" : ["examples/nbodies.das"]
+    },
+    {
+      "name" : "Particles (benchmark)",
+      "files" : ["examples/particles.das"]
+    },
+    {
+      "name" : "Primes loop (benchmark)",
+      "files" : ["examples/primes.das"]
+    },
+    {
+      "name" : "N-Queens (benchmark)",
+      "files" : ["examples/queen.das"]
+    },
+    {
+      "name" : "Spectral norm (benchmark)",
+      "files" : ["examples/spectral_norm.das"]
+    },
+    {
+      "name" : "Table sort (benchmark)",
+      "files" : ["examples/table_sort.das"]
+    },
+    {
+      "name" : "Tree (benchmark)",
+      "files" : ["examples/tree.das"]
     }
   ]
 }
