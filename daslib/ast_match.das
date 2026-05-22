@@ -2249,9 +2249,10 @@ def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expressio
 }
 
 def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression?) : Expression? {
-    //! Variant of ``peel_lambda_rename_var`` using ``replaceVariablePeeling`` — substitutes the bound
-    //! variable with an arbitrary expression (peel-aware: strips typer-inserted ``ExprRef2Value``
-    //! wrappers on already-typed AST). Falls back to ``invoke(expr, replacement)`` when non-peelable.
+    //! Variant of ``peel_lambda_rename_var`` — substitutes the bound variable with an
+    //! arbitrary expression in the cloned body. ``replaceVariable`` is now peel-aware
+    //! (single unified path strips typer-inserted ``ExprRef2Value`` wrappers when
+    //! present). Falls back to ``invoke(expr, replacement)`` when non-peelable.
     if (expr is ExprMakeBlock) {
         var mblk = expr as ExprMakeBlock
         var blk = mblk._block as ExprBlock
@@ -2260,7 +2261,7 @@ def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression
             if (ret.subexpr != null) {
                 var res = clone_expression(ret.subexpr)
                 var rules : Template
-                rules |> replaceVariablePeeling(string(blk.arguments[0].name), replacement)
+                rules |> replaceVariable(string(blk.arguments[0].name), replacement)
                 apply_template(rules, res.at, res)
                 return res
             }
