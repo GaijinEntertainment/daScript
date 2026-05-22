@@ -256,15 +256,6 @@ jobs:
             ;;
         esac
 
-    # sccache on PRs: per-TU content-hash cache via GHA backend. Master clean.
-    - if: github.event_name == 'pull_request'
-      uses: mozilla-actions/sccache-action@v0.0.10
-    - if: github.event_name == 'pull_request'
-      run: |
-        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
-        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
-
     - name: "Build: Daslang"
       run: |
         set -eux
