@@ -925,9 +925,8 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
     body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
     if (!has_tags_in_args(call)) {
         // Fast path: all args are constants — clone the call, compiler folds it, compare with !=
-        var pat_clone = clone_expression(unsafe(reinterpret<Expression?>(call)))
         let pat_var = next_var(index)
-        body |> push <| qmacro_expr(${ var $i(pat_var) = $e(pat_clone); })
+        body |> push <| qmacro_expr(${ var $i(pat_var) = $e(unsafe(reinterpret<Expression?>(call))); })
         var cond = qmacro($i(cast_var).value != $i(pat_var))
         qm_const_value_guard(at, cast_var, actual_var, cond, body)
     } else {
