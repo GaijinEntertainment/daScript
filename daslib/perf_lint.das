@@ -86,6 +86,18 @@ struct Perf022State {
     matched : bool
 }
 
+struct Perf024Candidate {
+    //! PERF024 per-candidate state. One entry per `var X = clone_*(E)` decl
+    //! seen in the current function (any of clone_expression / clone_type /
+    //! clone_function / clone_variable / clone_structure). `safe_uses` counts
+    //! ExprVar refs to X passed directly as an arg at a [clone(...)]-annotated
+    //! position; `disqualified` is set on any other use. Reports the same way
+    //! as PERF023: !disqualified && safe_uses >= 1.
+    @do_not_delete v : Variable?
+    safe_uses : int
+    disqualified : bool
+}
+
 struct Perf023Candidate {
     //! PERF023 per-candidate state. One entry per `var X = clone_expression(E)`
     //! decl seen in the current function. `safe_uses` counts ExprVar refs to X
@@ -157,6 +169,13 @@ class PerfLintVisitor : AstVisitor {
     // the candidate is disqualified.
     perf023_candidates : array<Perf023Candidate>
     perf023_splice_depth : int = 0
+    // PERF024: per-function candidates for `var X = clone_*(E)` whose only
+    // uses are direct args at [clone(...)]-annotated positions. `perf024_skip_iptr`
+    // holds the intptr identity of a Variable that's about to be visited via
+    // a pre-classified annotated-arg position; cleared in preVisitExprVar so
+    // that ExprVar visit doesn't re-classify (would otherwise disqualify).
+    perf024_candidates : array<Perf024Candidate>
+    perf024_skip_iptr : uint64 = 0ul
     warning_count : int = 0
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
@@ -511,6 +530,39 @@ class PerfLintVisitor : AstVisitor {
         return Type.none
     }
 
+    // --- PERF024: redundant pre-clone before [clone(...)]-annotated function helpers ---
+
+    def is_clone_init_call(expr : Expression const?) : bool {
+        //! True when expr is a single-arg call to one of the AST clone primitives.
+        //! Used to seed PERF024 candidates (`var X = clone_*(E)`) and to detect
+        //! Type-A direct-splice form (`func(clone_*(X))`).
+        if (expr == null || !(expr is ExprCall)) return false
+        let c = expr as ExprCall
+        if (length(c.arguments) != 1) return false
+        let n = string(c.name)
+        return (n == "clone_expression" || n == "clone_type"
+            || n == "clone_function" || n == "clone_variable"
+            || n == "clone_structure")
+    }
+
+    def get_clone_param_indices(callee : Function?; var out : array<int>&) : void {
+        //! Fills `out` with the param-index list for any [clone(...)] annotations
+        //! on callee. Caller-owned out array avoids array return ownership.
+        out |> clear
+        if (callee == null) return
+        for (ann in callee.annotations) {
+            if (ann == null || ann.annotation == null || ann.annotation.name != "clone") continue
+            for (a in ann.arguments) {
+                for (i in 0 .. length(callee.arguments)) {
+                    if (callee.arguments[i].name == a.name) {
+                        out |> push(i)
+                        break
+                    }
+                }
+            }
+        }
+    }
+
     // --- function tracking ---
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
@@ -519,6 +571,9 @@ class PerfLintVisitor : AstVisitor {
         // PERF023: reset per-function candidate set.
         perf023_candidates |> clear
         perf023_splice_depth = 0
+        // PERF024: reset per-function candidate set.
+        perf024_candidates |> clear
+        perf024_skip_iptr = 0ul
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
@@ -530,8 +585,18 @@ class PerfLintVisitor : AstVisitor {
                     c.v.at)
             }
         }
+        // PERF024: report any candidate whose only uses are annotated-arg-safe.
+        for (c in perf024_candidates) {
+            if (!c.disqualified && c.safe_uses >= 1 && c.v != null) {
+                perf_warning(
+                    "PERF024: var initialized via clone_* and only passed to a function annotated [clone(...)] at the matching arg position; the callee clones internally, so drop the pre-clone and inline the source",
+                    c.v.at)
+            }
+        }
         perf023_candidates |> clear
         perf023_splice_depth = 0
+        perf024_candidates |> clear
+        perf024_skip_iptr = 0ul
         current_function = null
         in_template = false
         return <- fn
@@ -579,6 +644,13 @@ class PerfLintVisitor : AstVisitor {
             if (initCall.name == "clone_expression" && length(initCall.arguments) == 1) {
                 perf023_candidates |> push(Perf023Candidate(v = v, safe_uses = 0, disqualified = false))
             }
+        }
+        // PERF024: seed candidate when init is any clone_* primitive. Broader
+        // than PERF023's clone_expression-only seed because the [clone(...)]
+        // contract covers all five AST clone primitives. Same closure-gating
+        // rationale as PERF023.
+        if (in_closure == 0 && v != null && is_clone_init_call(v.init)) {
+            perf024_candidates |> push(Perf024Candidate(v = v, safe_uses = 0, disqualified = false))
         }
         // PERF009: track last move-initialized variable (only explicit `var x <- expr`)
         if (last && v.flags.init_via_move && v.init != null) {
@@ -1534,6 +1606,59 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
+    // --- PERF024: detect args at [clone(...)]-annotated positions ---
+
+    def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
+        // Fires once per argument of an ExprCall, in declaration order, BEFORE
+        // the visitor descends into the arg subtree. Used by PERF024:
+        //   Arm A (direct splice): if arg is clone_*(X) at an annotated index → flag.
+        //   Arm B (var-init-only-clone-use): if arg is a bare ExprVar matching a
+        //     candidate, at an annotated index → mark as safe_use and set
+        //     perf024_skip_var so the imminent preVisitExprVar doesn't
+        //     disqualify the candidate.
+        if (expr == null || expr.func == null) return
+        var indices : array<int>
+        get_clone_param_indices(expr.func, indices)
+        if (empty(indices)) return
+        // Compute this arg's index by identity-matching against expr.arguments.
+        var arg_index = -1
+        for (i in 0 .. length(expr.arguments)) {
+            if (intptr(expr.arguments[i]) == intptr(arg)) {
+                arg_index = i
+                break
+            }
+        }
+        if (arg_index < 0 || !has_value(indices, arg_index)) return
+        // Peel typer-inserted ExprRef2Value wrapper — when the var has reference
+        // type (e.g. `var X = clone_expression(...)`), the typer inserts a
+        // dereference wrapper around uses passed to non-ref params.
+        var inner = arg
+        if (inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value).subexpr
+        }
+        // Arm A: inner is itself a clone_* call → redundant.
+        if (is_clone_init_call(inner)) {
+            perf_warning(
+                "PERF024: argument to function annotated [clone({string(expr.func.arguments[arg_index].name)})] is wrapped in clone_*; the callee clones internally, drop the outer clone wrap",
+                arg.at)
+            return
+        }
+        // Arm B: inner is a bare ExprVar matching a candidate.
+        if (inner is ExprVar) {
+            let vv = (inner as ExprVar).variable
+            if (vv != null) {
+                let vv_iptr = intptr(vv)
+                for (i in 0 .. length(perf024_candidates)) {
+                    if (intptr(perf024_candidates[i].v) == vv_iptr) {
+                        perf024_candidates[i].safe_uses++
+                        perf024_skip_iptr = vv_iptr
+                        break
+                    }
+                }
+            }
+        }
+    }
+
     // --- PERF002 + PERF003: character_at (counter-based) ---
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
@@ -1687,6 +1812,26 @@ class PerfLintVisitor : AstVisitor {
                             perf023_candidates[i].disqualified = true
                         }
                         break
+                    }
+                }
+            }
+        }
+        // PERF024: classify this var-ref as safe (pre-classified in
+        // preVisitExprCallArgument as a direct annotated-arg) or disqualifying.
+        // perf024_skip_iptr is set just-in-time by the call-arg hook and
+        // consumed here. Same closure-skip rationale as PERF023.
+        if (!empty(perf024_candidates)) {
+            let vv4 = expr.variable
+            if (vv4 != null) {
+                let vv4_iptr = intptr(vv4)
+                if (perf024_skip_iptr == vv4_iptr && vv4_iptr != 0ul) {
+                    perf024_skip_iptr = 0ul   // already classified safe above
+                } else {
+                    for (i in 0 .. length(perf024_candidates)) {
+                        if (intptr(perf024_candidates[i].v) == vv4_iptr) {
+                            perf024_candidates[i].disqualified = true
+                            break
+                        }
                     }
                 }
             }
