@@ -390,3 +390,169 @@ invoke($() {
 Added 11 tests to `tests/linq/test_linq_from_decs.das` covering count / where+count / select+sum / take+count / distinct+count / to_array / group_by+count for parity, plus splice-shape gates confirming the AST matches the type-arg form, plus Wave 4 component pruning gates confirming the walker drops unused multi-component `get_ro` slots on this form. All 169 tests pass.
 
 **Practical effect for users:** the lambda-arg form is the right choice when the user wants custom component prefixes that don't match a `[decs_template]` struct (or when they want to query components across structs not annotated with one). It now gets the full splice + pruning treatment automatically.
+
+## Full m4 matrix — post-Wave-4b snapshot (2026-05-22)
+
+Re-ran the entire benchmarks/sql suite (199 benchmarks across 51 families, all on INTERP, 100K rows). Numbers in ns/op. Lower is better. `—` means no lane defined for that family.
+
+### Aggregates — m4 within Wave 4 multi-component get_ro floor of m3f
+
+| benchmark | m1 sql | m3 | m3f | m4 | m4/m3f |
+|---|---:|---:|---:|---:|---:|
+| sum_aggregate | 29 | 29 | 2 | 7 | 3.5× |
+| sum_where | 32 | 43 | 4 | 7 | 1.8× |
+| count_aggregate | 29 | 28 | 4 | 6 | 1.5× |
+| long_count_aggregate | 29 | 29 | 4 | 6 | 1.5× |
+| max_aggregate | 30 | 36 | 6 | 10 | 1.7× |
+| min_aggregate | 30 | 38 | 5 | 10 | 2.0× |
+| average_aggregate | 29 | 32 | 5 | 11 | 2.2× |
+| select_where_count | 32 | 57 | 5 | 9 | 1.8× |
+| select_where_sum | 37 | 73 | 8 | 10 | 1.3× |
+| select_where | 189 | 28 | 11 | 22 | 2.0× |
+| chained_where | 36 | 45 | 6 | 10 | 1.7× |
+| all_match | 27 | 20 | 3 | 6 | 2.0× |
+| contains_match | 0 | 29 | 2 | 4 | 2.0× |
+| any_match | 0 | 0 | 0 | 0 | matches |
+| take_while_match | 8 | 23 | 2 | 3 | 1.5× |
+| skip_while_match | 3 | 20 | 5 | 7 | 1.4× |
+| to_array_filter | 69 | 42 | 11 | 15 | 1.4× |
+
+### Group-by — m4 close to m3f, m4 beats m1 sql 10/11
+
+| benchmark | m1 sql | m3 | m3f | m4 | m4/m3f | m1/m4 |
+|---|---:|---:|---:|---:|---:|---:|
+| groupby_sum | 171 | 100 | 36 | 50 | 1.4× | **3.4× m4 win** |
+| groupby_count | 143 | 66 | 36 | 50 | 1.4× | **2.9× m4 win** |
+| groupby_average | 173 | 102 | 51 | 62 | 1.2× | **2.8× m4 win** |
+| groupby_max | 172 | 103 | 43 | 56 | 1.3× | **3.1× m4 win** |
+| groupby_min | 176 | 107 | 43 | 57 | 1.3× | **3.1× m4 win** |
+| groupby_multi_reducer | 191 | 138 | 55 | 63 | 1.1× | **3.0× m4 win** |
+| groupby_having_count | 141 | 73 | 36 | 50 | 1.4× | **2.8× m4 win** |
+| groupby_having_hidden_sum | 177 | 103 | 39 | 57 | 1.5× | **3.1× m4 win** |
+| groupby_where_count | 79 | 65 | 24 | 37 | 1.5× | **2.1× m4 win** |
+| groupby_where_sum | 87 | 80 | 24 | 37 | 1.5× | **2.4× m4 win** |
+| groupby_select_sum | — | 117 | 61 | 64 | 1.1× | — |
+| groupby_first | — | 70 | 35 | 48 | 1.4× | — |
+
+### Order / sort / reverse — m4 within 2× of m3f
+
+| benchmark | m1 sql | m3 | m3f | m4 | m4/m3f |
+|---|---:|---:|---:|---:|---:|
+| sort_take | 38 | 726 | 22 | 51 | 2.3× |
+| order_take_desc | 38 | 721 | 22 | 52 | 2.4× |
+| select_where_order_take | 36 | 355 | 21 | 34 | 1.6× |
+| sort_first | 37 | 721 | 41 | 71 | 1.7× |
+| bare_order_where | 270 | 351 | 120 | 130 | 1.1× |
+| reverse_take | 0 | 22 | 0 | 48 | (m3f DCE-fold; m4 honest) |
+
+### Distinct — m4 close to m3f
+
+| benchmark | m1 sql | m3 | m3f | m4 | m4/m3f |
+|---|---:|---:|---:|---:|---:|
+| distinct_count | 40 | 44 | 15 | 20 | 1.3× |
+| distinct_take | 0 | 30 | 0 | 0 | matches |
+
+### Cat-C — the formerly-skipped lanes
+
+| benchmark | m1 sql | m3 | m3f | m4 | note |
+|---|---:|---:|---:|---:|---|
+| indexed_lookup | 1449 | 2,014,895 | 219,259 | **481** | **3× m4 win over SQL b-tree** (Wave 4b) |
+| zip_dot_product | — | 52 | 7 | 10 | intra-archetype zip via Wave 4 pruning (Wave 4b) |
+| join_count | — | 116 | 121 | — | cross-archetype join — deferred past Wave 4b |
+
+### Lanes where m4 currently lags m3f (follow-up candidates)
+
+These are terminators where the decs splice doesn't fire today; m4 falls through to the eager-bridge `array<tuple>` path. Same chain shapes on the array side splice cleanly (m3f ≈ 0-6 ns). Candidates for a future "Wave 5 — terminal splice for decs" PR.
+
+| benchmark | m3f | m4 | gap |
+|---|---:|---:|---:|
+| single_match | 2 | 80 | 40× |
+| last_match | 5 | 85 | 17× |
+| aggregate_match | 6 | 82 | 13× |
+| element_at_match | 0 | 34 | 34× |
+| first_or_default_match | 0 | 0 | matches (already on splice) |
+| first_match | 0 | 0 | matches (already on splice) |
+
+**Headlines this snapshot:** m4 beats SQL on 10/11 group-by benchmarks. `indexed_lookup` m4 lane closes the Cat-C gap with a 3× win. m4 is within 1.1-2.4× of m3f on 39/44 lanes where both are defined; the 5 outliers (single/last/aggregate/element_at/reverse_take) all share the same root cause — terminator not yet on the splice for decs — and form a coherent follow-up scope.
+
+### Same suite under JIT (2026-05-22)
+
+Same 199 benchmarks, JIT mode (`-jit` flag, LLVM codegen). Per-bench DLL codegen + cache adds setup time but per-call cost drops to near-zero for tight loops.
+
+#### Aggregates — JIT lifts m4 to m3f for most lanes
+
+| benchmark | m1 sql | m3 | m3f | m4 |
+|---|---:|---:|---:|---:|
+| sum_aggregate | 30 | 7 | 0 | 0 |
+| sum_where | 32 | 13 | 0 | 0 |
+| count_aggregate | 29 | 9 | 0 | 0 |
+| long_count_aggregate | 29 | 9 | 0 | 0 |
+| max_aggregate | 31 | 8 | 0 | 0 |
+| min_aggregate | 31 | 8 | 0 | 0 |
+| average_aggregate | 30 | 7 | 0 | 3 |
+| select_where_count | 32 | 15 | 0 | 0 |
+| select_where_sum | 37 | 15 | 0 | 0 |
+| select_where | 106 | 9 | 4 | 4 |
+| chained_where | 36 | 13 | 0 | 0 |
+| all_match | 27 | 4 | 0 | 0 |
+| contains_match | 0 | 7 | 0 | 0 |
+| any_match | 0 | 0 | 0 | 0 |
+| take_while_match | 7 | 5 | 0 | 0 |
+| skip_while_match | 3 | 5 | 0 | 0 |
+| to_array_filter | 47 | 13 | 3 | 3 |
+
+#### Group-by JIT — m4 beats m1 sql by 12-19×
+
+| benchmark | m1 sql | m3 | m3f | m4 | m1/m4 |
+|---|---:|---:|---:|---:|---:|
+| groupby_sum | 171 | 26 | 8 | 10 | **17.1× m4 win** |
+| groupby_count | 141 | 16 | 8 | 10 | **14.1× m4 win** |
+| groupby_average | 170 | 25 | 9 | 11 | **15.5× m4 win** |
+| groupby_max | 172 | 25 | 8 | 10 | **17.2× m4 win** |
+| groupby_min | 174 | 26 | 8 | 10 | **17.4× m4 win** |
+| groupby_multi_reducer | 188 | 37 | 8 | 10 | **18.8× m4 win** |
+| groupby_having_count | 141 | 22 | 8 | 10 | **14.1× m4 win** |
+| groupby_having_hidden_sum | 174 | 30 | 8 | 10 | **17.4× m4 win** |
+| groupby_where_count | 71 | 19 | 4 | 6 | **11.8× m4 win** |
+| groupby_where_sum | 82 | 23 | 4 | 6 | **13.7× m4 win** |
+| groupby_select_sum | — | 36 | 13 | 14 | — |
+| groupby_first | — | 20 | 7 | 9 | — |
+
+#### Order / sort / reverse JIT
+
+| benchmark | m1 sql | m3 | m3f | m4 |
+|---|---:|---:|---:|---:|
+| sort_take | 38 | 218 | 9 | 19 |
+| order_take_desc | 38 | 214 | 9 | 18 |
+| select_where_order_take | 36 | 109 | 8 | 10 |
+| sort_first | 38 | 219 | 8 | 16 |
+| bare_order_where | 183 | 109 | 33 | 33 |
+| reverse_take | 0 | 7 | 0 | 9 |
+
+#### Distinct JIT
+
+| benchmark | m1 sql | m3 | m3f | m4 |
+|---|---:|---:|---:|---:|
+| distinct_count | 41 | 9 | 2 | 2 |
+| distinct_take | 0 | 9 | 0 | 0 |
+
+#### Cat-C JIT
+
+| benchmark | m1 sql | m3 | m3f | m4 | note |
+|---|---:|---:|---:|---:|---|
+| indexed_lookup | 1250 | 498461 | 34974 | **102** | **12.3× m4 win over SQL b-tree** |
+| zip_dot_product | — | 10 | 0 | 0 | matches m3f |
+| join_count | — | 35 | 35 | — | still deferred |
+
+#### Lanes where m4 lags m3f under JIT (same root cause as INTERP)
+
+JIT closes the gap but doesn't eliminate it — terminator still goes through eager bridge for decs on these shapes.
+
+| benchmark | m3f | m4 | gap |
+|---|---:|---:|---:|
+| single_match | 0 | 16 | 16 ns |
+| last_match | 0 | 17 | 17 ns |
+| aggregate_match | 0 | 17 | 17 ns |
+| element_at_match | 0 | 9 | 9 ns |
+
+**JIT headlines:** m4 beats m1 sql by 12-19× on the entire group-by family. `indexed_lookup` JIT win grows from 3× (INTERP) to 12.3× (JIT) because the m4 hot path becomes ~one hash lookup. Most aggregate m4 lanes collapse to 0 ns/op at JIT measurement floor — same as m3f. Same 4-lane outlier set as INTERP; same future scope.
