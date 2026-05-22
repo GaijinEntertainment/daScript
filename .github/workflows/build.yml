@@ -45,6 +45,10 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     env:
       das_dll_build: 'NO'
       das_llvm_disabled: 'OFF'
@@ -267,6 +271,32 @@ jobs:
             ;;
         esac
 
+    # sccache with LOCAL-DISK backend, wrapped in ONE actions/cache entry per
+    # matrix config. The GHA backend writes one cache item per TU (~40k items,
+    # quota fragmentation, ~74% concurrent-write failures); local disk keeps
+    # all objects in $SCCACHE_DIR and we persist it as a single tarball.
+    # Skip on Windows: VS/MSBuild generator ignores CMAKE_*_COMPILER_LAUNCHER,
+    # so sccache does nothing there, and its post-cleanup errors on the runner.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+      if: runner.os != 'Windows'
+    - if: runner.os != 'Windows'
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+    # Stable per-config key, one fixed slot. Restore always; on master,
+    # delete + re-save the same key after Build so the slot is overwritten
+    # with fresh objects (GHA caches are immutable — plain save under an
+    # existing key is a no-op, so we delete first). PRs read-only. Bounded
+    # footprint: N configs × one tarball, no run_id pileup.
+    - name: "Restore sccache objects"
+      if: runner.os != 'Windows'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+
     - name: "Build: Daslang"
       run: |
         set -eux
@@ -304,6 +334,20 @@ jobs:
             esac
             ;;
         esac
+
+    - name: "Refresh sccache slot"
+      if: github.ref == 'refs/heads/master' && runner.os != 'Windows'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: github.ref == 'refs/heads/master' && runner.os != 'Windows'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+
     - name: "Test"
       run: |
         set -eux
