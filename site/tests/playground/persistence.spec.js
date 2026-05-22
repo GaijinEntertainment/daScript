@@ -21,8 +21,25 @@ test('three-file state survives a reload', async ({ playground }) => {
         window.pgSwitchFile('main.das');
     });
 
-    // Wait for the debounced autosave (250ms) to actually fire.
-    await playground.waitForTimeout(400);
+    // Wait until autosave has actually persisted both the file set AND the
+    // active-tab pointer. A fixed-150ms-margin `waitForTimeout(400)` over a
+    // 250ms debounce is enough on localhost but flakes on CI under load —
+    // poll the localStorage payload directly instead, so we proceed the
+    // moment the writer fires (and don't proceed before it).
+    await expect.poll(
+        () => playground.evaluate(() => {
+            const raw = localStorage.getItem('daslang.playground.state.v1');
+            if (!raw) return null;
+            try {
+                const j = JSON.parse(raw);
+                return {
+                    files: Object.keys(j.files || {}).sort().join(','),
+                    active: j.active,
+                };
+            } catch (e) { return null; }
+        }),
+        { timeout: 5_000 }
+    ).toEqual({ files: 'main.das,types.das,utils.das', active: 'main.das' });
 
     await playground.reload();
     await waitTabsReady(playground);
@@ -62,4 +79,35 @@ test('autosave does not override URL #code hash on reload', async ({ playground 
     expect(files).toEqual(['main.das']);
     const mainText = await playground.evaluate(() => window.pgState.files['main.das'].getValue());
     expect(mainText).toContain('shared via hash');
+});
+
+test('autosave does not override ?example= deep-link', async ({ playground }) => {
+    // Same intent-signal rule as #code=: a visitor following the daslang.io
+    // § 01 "try sha256 on the playground" deep-link should land on sha256,
+    // even if they've used the playground before and have an autosaved buffer.
+    await waitTabsReady(playground);
+
+    await playground.evaluate(() => {
+        window.code.getDoc().setValue('// stale autosave buffer\n');
+    });
+    await playground.waitForTimeout(400);
+
+    await playground.goto('/playground/?example=sha256');
+    await waitTabsReady(playground);
+
+    // sha256.das ships a `// SHA-256` header comment — content match is
+    // sturdier than asserting the dropdown label since selectSample resets
+    // the <select> back to "Select example" after firing.
+    //
+    // Poll instead of a bare evaluate: waitTabsReady returns as soon as
+    // pgState exists (initial empty doc), but main.js's `?example=` branch
+    // still has to async-fetch data.json + sha256.das before pgLoadFiles
+    // swaps the buffer content. Polling on the sha256 header marker is the
+    // direct signal that the deep-link load actually landed.
+    await expect.poll(
+        () => playground.evaluate(() => window.pgState.files['main.das'].getValue()),
+        { timeout: 5_000 }
+    ).toMatch(/sha[- ]?256/i);
+    const mainText = await playground.evaluate(() => window.pgState.files['main.das'].getValue());
+    expect(mainText).not.toContain('stale autosave buffer');
 });

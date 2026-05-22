@@ -105,10 +105,31 @@ function deriveJitName(files) {
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
-    if (!name) { jitRadio.disabled = true; return; }
+    // When JIT becomes unavailable for the new sample, fall back to the
+    // interpreter — leaving the radio merely `disabled` but still `checked`
+    // would keep selectedEngine() returning 'jit' and runCode() would 404
+    // on the missing .wasm.
+    const disableJit = () => {
+        jitRadio.disabled = true;
+        if (jitRadio.checked) {
+            jitRadio.checked = false;
+            const interpRadio = document.querySelector('input[name=engine][value=interpreter]');
+            if (interpRadio) interpRadio.checked = true;
+        }
+    };
+    if (!name) { disableJit(); return; }
+    // Rapid sample-switching can land HEAD-fetch responses out of order
+    // (HTTP/2). Gate the late .then/.catch on the sample still being current
+    // — currentJitName is the source of truth for "what sample is loaded".
     fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
-        .then(r => { jitRadio.disabled = !r.ok; })
-        .catch(() => { jitRadio.disabled = true; });
+        .then(r => {
+            if (name !== currentJitName) return;
+            if (r.ok) jitRadio.disabled = false; else disableJit();
+        })
+        .catch(() => {
+            if (name !== currentJitName) return;
+            disableJit();
+        });
 }
 
 selectSample = function(type, id) {
