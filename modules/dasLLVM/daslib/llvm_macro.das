@@ -153,6 +153,10 @@ struct JitCliOptions {
     @clarg_name = "jit-linker-string"
     @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd (e.g. -fsanitize=undefined)"
     linker_string : Option<string>
+
+    @clarg_name = "jit-path-to-linker"
+    @clarg_doc = "JIT: explicit linker binary (overrides default c++/clang-cl). Match the compiler daslang was built with to avoid sanitizer runtime mismatch."
+    path_to_linker : Option<string>
 }
 
 
@@ -190,7 +194,8 @@ class JIT_LLVM : AstSimulateMacro {
         assume config_out_path = string(prog.policies.jit_output_path)
         var output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
-        assume path_to_linker = string(prog.policies.jit_path_to_linker)
+        // CLI --jit-path-to-linker wins over the script-level policy.
+        let path_to_linker = cli_opts.path_to_linker |> unwrap_or(string(prog.policies.jit_path_to_linker))
         // Cross-compile triple: --jit-target=<triple> CLI wins over the
         // script-level `options jit_target = "..."`.
         let opt_target = (prog._options |> find_arg("jit_target")) ?as tString ?? ""
