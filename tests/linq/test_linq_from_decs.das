@@ -1415,10 +1415,7 @@ def test_unroll5e_groupby_count_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_count_fold()
     t |> equal(got.length(), 3, "3 brand buckets")
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.N
-    }
+    var perBrand <- {for (item in got); item.Brand => item.N}
     t |> equal(perBrand[0], 2)
     t |> equal(perBrand[1], 3)
     t |> equal(perBrand[2], 2)
@@ -1429,10 +1426,7 @@ def test_unroll5e_groupby_sum_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_sum_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.S
-    }
+    var perBrand <- {for (item in got); item.Brand => item.S}
     t |> equal(perBrand[0], 27)
     t |> equal(perBrand[1], 39)
     t |> equal(perBrand[2], 25)
@@ -1443,10 +1437,7 @@ def test_unroll5e_groupby_min_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_min_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.Min
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Min}
     t |> equal(perBrand[0], 12)
     t |> equal(perBrand[1], 10)
     t |> equal(perBrand[2], 11)
@@ -1457,10 +1448,7 @@ def test_unroll5e_groupby_max_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_max_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.Max
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Max}
     t |> equal(perBrand[0], 15)
     t |> equal(perBrand[1], 16)
     t |> equal(perBrand[2], 14)
@@ -1471,10 +1459,7 @@ def test_unroll5e_groupby_avg_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_avg_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; double>
-    for (item in got) {
-        perBrand[item.Brand] = item.Avg
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Avg}
     t |> equal(perBrand[0], 13.5lf)
     t |> equal(perBrand[1], 13.0lf)
     t |> equal(perBrand[2], 12.5lf)
@@ -1585,10 +1570,7 @@ def test_unroll5e_groupby_where_count_parity(t : T?) {
     // flag==1 → odd vals: {11,13,15}. Buckets: brand 0→{15} N=1, brand 1→{13} N=1, brand 2→{11} N=1.
     let got <- target_unroll5e_groupby_where_count_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.N
-    }
+    var perBrand <- {for (item in got); item.Brand => item.N}
     t |> equal(perBrand[0], 1)
     t |> equal(perBrand[1], 1)
     t |> equal(perBrand[2], 1)
@@ -1601,10 +1583,7 @@ def test_unroll5e_groupby_select_sum_parity(t : T?) {
     // key 0 (vals 12,15) S=27, key 1 (vals 10,13,16) S=39, key 2 (vals 11,14) S=25.
     let got <- target_unroll5e_groupby_select_sum_fold()
     t |> equal(got.length(), 3)
-    var perKey : table<int; int>
-    for (item in got) {
-        perKey[item.K] = item.S
-    }
+    var perKey <- {for (item in got); item.K => item.S}
     t |> equal(perKey[0], 27)
     t |> equal(perKey[1], 39)
     t |> equal(perKey[2], 25)
