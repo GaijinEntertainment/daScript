@@ -35,6 +35,7 @@ module style_lint shared private
 //!   STYLE025 — 'unsafe { ... }' block where only one statement needs unsafe — narrow to 'unsafe(<sub-expr>)'
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
+//!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 
 require daslib/ast_boost
 require daslib/is_local
@@ -343,6 +344,59 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitExprInvoke(var expr : ExprInvoke?) : void {
         self->check_block_pipe(expr.at, expr.arguments)
+        self->check_style028_self_arrow(expr)
+    }
+
+    // --- STYLE028: self->method(...) inside a class method ---
+
+    def check_style028_self_arrow(expr : ExprInvoke?) : void {
+        //! `self->method(args)` inside a class method body lowers to ExprInvoke
+        //! (isInvokeMethod=true) with arguments[0]=ExprField(value=ExprTypeDecl, name=method) —
+        //! after type inference the same shape is produced by `self.method(args)` AND by the
+        //! compiler's auto-promotion of bare `method(args)` to a method invoke. So the
+        //! AST alone cannot distinguish the three forms — source inspection is required.
+        //! `expr.at.column` points at the dispatch operator: '-' (of `->`) for the arrow form,
+        //! '.' for the dot form, or the start of the bare identifier when there is no receiver.
+        //! Confirm `self` precedes that operator before flagging.
+        if (expr == null || expr.genFlags.generated || !expr.isInvokeMethod) return
+        if (current_function == null || !current_function.flags.isClassMethod
+            || current_function.fromGeneric != null) return
+        if (length(expr.arguments) < 1) return
+        var arg0 = expr.arguments[0]
+        if (arg0 != null && arg0 is ExprRef2Value) {
+            arg0 = (arg0 as ExprRef2Value).subexpr
+        }
+        if (arg0 == null || !(arg0 is ExprField)) return
+        let f = arg0 as ExprField
+        if (expr.at.fileInfo == null || expr.at.line == 0u) return
+        var lineTxt = ""
+        get_file_source_line(expr.at.fileInfo, expr.at.line) $(s) {
+            lineTxt := s
+        }
+        let col = expr.at.column
+        let llen = length(lineTxt)
+        if (col < 0 || col + 1 >= llen) return
+        var is_arrow = false
+        peek_data(lineTxt) $(data) {
+            is_arrow = int(data[col]) == int('-') && int(data[col + 1]) == int('>')
+        }
+        if (!is_arrow) return
+        let prefix = strip_right(slice(lineTxt, 0, col))
+        if (!ends_with(prefix, "self")) return
+        // Make sure the "self" we matched is a whole word — not "myself" or "_self".
+        let plen = length(prefix)
+        if (plen > 4) {
+            var prev_ok = false
+            peek_data(prefix) $(pd) {
+                let ch = int(pd[plen - 5])
+                prev_ok = !((ch >= int('a') && ch <= int('z')) ||
+                            (ch >= int('A') && ch <= int('Z')) ||
+                            (ch >= int('0') && ch <= int('9')) ||
+                            ch == int('_'))
+            }
+            if (!prev_ok) return
+        }
+        self->style_warning("STYLE028: 'self->{f.name}(...)' on the class instance is optional; drop 'self->' and call '{f.name}(...)' directly (compiler auto-promotes to the same method invoke). Use 'self.{f.name}(...)' if you prefer an explicit receiver", expr.at)
     }
 
 
