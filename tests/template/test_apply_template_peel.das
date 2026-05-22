@@ -23,7 +23,7 @@ def test_substitutes_bare_var(t : T?) {
     ast_gc_guard() {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "x")
         var tmpl : Template
-        var replacement : Expression? = qmacro(REPLACEMENT)
+        var replacement : Expression? = new ExprVar(at = LineInfo(), name := "REPLACEMENT")
         tmpl |> replaceVariable("x", replacement)
         bare = apply_template(tmpl, bare.at, bare)
         t |> success(bare is ExprVar, "result is ExprVar")
@@ -38,7 +38,7 @@ def test_strips_r2v_wrapper_around_bare_var(t : T?) {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "x")
         var wrapped : Expression? = new ExprRef2Value(at = LineInfo(), subexpr = bare)
         var tmpl : Template
-        var replacement : Expression? = qmacro(REPLACEMENT)
+        var replacement : Expression? = new ExprVar(at = LineInfo(), name := "REPLACEMENT")
         tmpl |> replaceVariable("x", replacement)
         wrapped = apply_template(tmpl, wrapped.at, wrapped)
         t |> success(wrapped is ExprVar, "R2V wrapper stripped, result is bare ExprVar")
@@ -57,7 +57,7 @@ def test_substitutes_var_under_r2v_around_field(t : T?) {
         var fld : Expression? = new ExprField(at = LineInfo(), value = inner_var, name := "field")
         var wrapped : Expression? = new ExprRef2Value(at = LineInfo(), subexpr = fld)
         var tmpl : Template
-        var replacement : Expression? = qmacro(REPLACEMENT)
+        var replacement : Expression? = new ExprVar(at = LineInfo(), name := "REPLACEMENT")
         tmpl |> replaceVariable("x", replacement)
         wrapped = apply_template(tmpl, wrapped.at, wrapped)
         // Expected: R2V(ExprField(ExprVar(REPLACEMENT), "field"))
@@ -78,7 +78,7 @@ def test_no_substitute_when_name_does_not_match(t : T?) {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "other")
         var wrapped : Expression? = new ExprRef2Value(at = LineInfo(), subexpr = bare)
         var tmpl : Template
-        var replacement : Expression? = qmacro(REPLACEMENT)
+        var replacement : Expression? = new ExprVar(at = LineInfo(), name := "REPLACEMENT")
         tmpl |> replaceVariable("x", replacement)  // rule for "x", not "other"
         wrapped = apply_template(tmpl, wrapped.at, wrapped)
         t |> success(wrapped is ExprRef2Value, "wrapper unchanged (no matching rule)")
