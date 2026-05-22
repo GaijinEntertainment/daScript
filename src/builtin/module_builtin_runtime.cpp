@@ -81,6 +81,17 @@ namespace das
         };
     };
 
+    // [clone(paramName1, paramName2, ...)] — marker for daslang-side PERF024 lint.
+    // Declares that the callee unconditionally clones the named parameters internally,
+    // so callers passing clone_expression(X) at those positions are redundantly cloning.
+    // Pure metadata; args stored in func->annotations for lint consumption.
+    struct CloneFunctionAnnotation : MarkFunctionAnnotation {
+        CloneFunctionAnnotation() : MarkFunctionAnnotation("clone") { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        };
+    };
+
     struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
         RequestJitFunctionAnnotation() : MarkFunctionAnnotation("jit") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1894,6 +1905,7 @@ namespace das
         addAnnotation(new GenericFunctionAnnotation());
         addAnnotation(new MacroFunctionAnnotation());
         addAnnotation(new MacroFnFunctionAnnotation());
+        addAnnotation(new CloneFunctionAnnotation());
         addAnnotation(new HintFunctionAnnotation());
         addAnnotation(new RequestJitFunctionAnnotation());
         addAnnotation(new RequestNoJitFunctionAnnotation());

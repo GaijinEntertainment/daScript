@@ -374,7 +374,7 @@ def private finalize_lane_emission(var topExprs : array<Expression?>; srcNames :
     return finalize_invoke(res, at)
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
     // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
     var topExpr = clone_expression(top)
@@ -587,7 +587,7 @@ def private build_accumulator_perelement_stmts(opName : string;
     return <- stmts
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                               var skipExpr, takeExpr, skipWhileCond : Expression?;
                               var loopBody : Expression?; at : LineInfo) : Expression? {
@@ -610,7 +610,7 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName : 
     return finalize_invoke(res, at)
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
                             srcName, accName, itName : string; names : RangeStateNames;
                             var skipExpr, takeExpr, skipWhileCond : Expression?;
@@ -1123,7 +1123,7 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
     return t
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private finalize_emission_stmts(var top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)

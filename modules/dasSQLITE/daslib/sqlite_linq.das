@@ -217,17 +217,17 @@ def private push_text(var out : array<SqlFrag>; s : string) {
     out |> push(SqlFrag(text = s))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_bind(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(bind = clone_expression(e)))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_inline_id(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(inline_id = clone_expression(e)))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_inline_lit(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(inline_lit = clone_expression(e)))
 }
