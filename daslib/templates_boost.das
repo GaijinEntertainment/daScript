@@ -26,8 +26,7 @@ struct Template {
     call2name : table<string; string>                                           //! call name replacement rules
     field2name : table<string; string>                                          //! field name replacement rules
     var2name : table<string; string>                                            //! variable name replacement rules
-    var2expr : table<string; Expression?>                                        //! variable expression replacement rules
-    var2exprPeeling : table<string; Expression?>                                 //! variable expression replacement rules that also peel ExprRef2Value wrappers (use on typed AST)
+    var2expr : table<string; Expression?>                                        //! variable expression replacement rules (peel-aware: also strips ExprRef2Value wrappers around the target)
     var2exprList : table<string; array<Expression?>>                             //! variable expression list replacement rules
     type2type : table<string; string>                                           //! type name replacement rules
     type2etype : table<string; TypeDeclPtr>                                     //! type to type declaration replacement rules
@@ -47,20 +46,6 @@ def kaboomVarField(var self : Template; name, prefix, suffix : string) {
 def replaceVariable(var self : Template; name : string; var expr : ast::Expression?) {
     //! Adds a rule to the template to replace a variable with an expression.
     self.var2expr |> emplace(name, expr)
-}
-
-def replaceVariablePeeling(var self : Template; name : string; var expr : ast::Expression?) {
-    //! Variant of ``replaceVariable`` for substituting into typed AST. Replaces
-    //! ``ExprRef2Value(ExprVar(name))`` with the replacement directly — stripping
-    //! the wrapper that the typer inserts around reference-typed variable reads.
-    //! Use this when the destination AST has already been through type inference
-    //! (e.g. inside a ``call_macro`` body); plain ``replaceVariable`` leaves the
-    //! ``ExprRef2Value`` orphaned around a non-reference value and fails with
-    //! ``can only dereference a reference``.
-    //! Do not register the same name with both ``replaceVariable`` and
-    //! ``replaceVariablePeeling`` — bottom-up traversal makes the bare-var rule win
-    //! and re-introduces the orphan-wrapper bug.
-    self.var2exprPeeling |> emplace(name, expr)
 }
 
 def replaceVarTag(var self : Template; name : string; var expr : ast::Expression?) {
@@ -241,13 +226,28 @@ class private TemplateVisitor : AstVisitor {
         }
         return expr
     }
+    in_r2v_direct_var : int = 0  //! counter: in_r2v_direct_var > 0 ⇔ inside an ExprRef2Value whose direct subexpr is ExprVar
+    def override preVisitExprRef2Value(expr : ExprRef2Value?) : void {
+        //! Only gate visitExprVar when the wrapper is the exact shape visitExprRef2Value
+        //! will peel-and-substitute (direct ExprVar child). For nested cases like
+        //! ``ExprRef2Value(ExprField(ExprVar(temp), "f"))`` the inner var still needs
+        //! visitExprVar to substitute it — visitExprRef2Value's post peel doesn't fire
+        //! because subexpr isn't an ExprVar.
+        if (expr.subexpr is ExprVar) {
+            in_r2v_direct_var++
+        }
+    }
     def override visitExprVar(var expr : ExprVar?) : Expression? {
-        //! Visits variable expression and applies variable renaming and replacement rules.
+        //! Variable rename + bare-var substitution. When the direct parent is an
+        //! ``ExprRef2Value`` wrapping THIS ExprVar, defer to ``visitExprRef2Value``
+        //! (which strips the wrapper as part of the substitution); otherwise the
+        //! bare-var rule fires first and leaves an orphan wrapper around the
+        //! replacement.
         let vn = string(expr.name)
         if (key_exists(rules.var2name, vn)) {
             expr.name := rules.var2name |> get_value(vn)
         }
-        if (key_exists(rules.var2expr, vn)) {
+        if (in_r2v_direct_var == 0 && key_exists(rules.var2expr, vn)) {
             var rexpr = clone_expression(unsafe(rules.var2expr[vn]))
             rexpr.at = expr.at
             return rexpr
@@ -255,15 +255,16 @@ class private TemplateVisitor : AstVisitor {
         return expr
     }
     def override visitExprRef2Value(var expr : ExprRef2Value?) : Expression? {
-        //! Peeling substitution for typed AST. When the inner ExprVar matches a
-        //! ``var2exprPeeling`` rule, returns the replacement directly — stripping
-        //! the typer-inserted ExprRef2Value wrapper that would otherwise be left
-        //! orphaned around a non-reference value.
+        //! Peel-and-substitute: when the wrapped ``ExprVar`` matches a ``var2expr`` rule,
+        //! return the replacement directly — stripping the typer-inserted wrapper that
+        //! would otherwise be left orphaned around a non-reference value (which trips
+        //! ``can only dereference a reference``).
         if (expr.subexpr is ExprVar) {
+            in_r2v_direct_var--
             let vvar = expr.subexpr as ExprVar
             let vn = string(vvar.name)
-            if (key_exists(rules.var2exprPeeling, vn)) {
-                var rexpr = clone_expression(unsafe(rules.var2exprPeeling[vn]))
+            if (key_exists(rules.var2expr, vn)) {
+                var rexpr = clone_expression(unsafe(rules.var2expr[vn]))
                 rexpr.at = expr.at
                 return rexpr
             }
@@ -288,13 +289,13 @@ class private TemplateVisitor : AstVisitor {
             }
         }
         if (typ.firstType != null) {
-            self->replaceAlias(typ.firstType)
+            replaceAlias(typ.firstType)
         }
         if (typ.secondType != null) {
-            self->replaceAlias(typ.secondType)
+            replaceAlias(typ.secondType)
         }
         for (arg in typ.argTypes) {
-            self->replaceAlias(arg)
+            replaceAlias(arg)
         }
     }
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
