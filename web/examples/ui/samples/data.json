@@ -34,7 +34,7 @@
       "files" : ["examples/exp.das"]
     },
     {
-      "name" : "Float→Int (benchmark)",
+      "name" : "String→Float (benchmark)",
       "files" : ["examples/f2i.das"]
     },
     {

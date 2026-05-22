@@ -16,7 +16,7 @@ def makeRandomSequence(var src : array<int>) {
 }
 
 def sort_table(var tab : array<int>) {
-    sort(tab, $(a, b) => a >= b)
+    sort(tab, $(a, b) => a > b)
 }
 
 [export]

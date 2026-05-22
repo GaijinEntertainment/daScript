@@ -352,6 +352,15 @@ def main() {
                 pIdx = parseInt(el.dataset.idx, 10);
                 root.querySelectorAll('.forge-bench__platform').forEach(x =>
                     x.classList.toggle('is-active', parseInt(x.dataset.idx, 10) === pIdx));
+                // If the active workload doesn't exist on the new platform/cat,
+                // fall back to the first available so the chart doesn't render
+                // empty. Current dasProfile data has identical workload sets
+                // across platforms; this guards against future asymmetry.
+                const cat = profiles[pIdx]?.sections[benchCat] || {};
+                if (!(benchBm in cat)) {
+                    const first = Object.keys(cat)[0];
+                    if (first) benchBm = first;
+                }
                 renderHeader();
                 renderBench();
                 renderFooter();
@@ -468,10 +477,19 @@ def main() {
         }).join('');
     }
 
+    // dasProfile workload names use hyphens (`spectral-norm`, `table-sort`);
+    // playground sample basenames use underscores (`spectral_norm.das`,
+    // `table_sort.das`). The cross-language harness keeps hyphens upstream
+    // so its scripts (`spectral-norm.lua`, etc.) keep working. Normalize
+    // here when building the playground URL.
+    function benchToSampleSlug(name) {
+        return name.replace(/-/g, '_');
+    }
+
     function renderFooter() {
         const el = document.getElementById('bench-footer');
         if (!el) return;
-        const slug = encodeURIComponent(benchBm);
+        const slug = encodeURIComponent(benchToSampleSlug(benchBm));
         el.innerHTML =
             `<a href="/playground/index.html?example=${slug}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`;
     }
