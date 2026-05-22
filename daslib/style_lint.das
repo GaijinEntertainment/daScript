@@ -393,7 +393,7 @@ class StyleLintVisitor : AstVisitor {
             }
             if (!prev_ok) return
         }
-        style_warning("STYLE028: 'self->{f.name}(...)' on the class instance is optional; drop '' and call '{f.name}(...)' directly (compiler auto-promotes to the same method invoke). Use 'self.{f.name}(...)' if you prefer an explicit receiver", expr.at)
+        style_warning("STYLE028: 'self->{f.name}(...)' on the class instance is optional; drop 'self->' and call '{f.name}(...)' directly (compiler auto-promotes to the same method invoke). Use 'self.{f.name}(...)' if you prefer an explicit receiver", expr.at)
     }
 
 
