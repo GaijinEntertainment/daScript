@@ -6359,11 +6359,9 @@ class public ResolveExternVisitor : AstVisitor {
         } else {
             if (!empty(expr.typeexpr.dim)) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
-                    var elemT = clone_type(expr.typeexpr)
-                    elemT.dim |> clear() // hack to get correct ptr to ctor
-                    var new_handle_ptr = get_jit_new(elemT.annotation)
+                    var new_handle_ptr = get_jit_new(expr.typeexpr.annotation)
                     if (new_handle_ptr == null) {
-                        failed_T(elemT, "missing new`handle function pointer for {describe(elemT)}")
+                        failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
                         return
                     }
                     dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)

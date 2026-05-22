@@ -8,6 +8,19 @@ if(DAS_LLVM_DISABLED)
     return()
 endif()
 
+# JIT-linked util.exe pulls in libDaScriptDyn_runtime.so. When daslang is built
+# with -fsanitize=*, the .so references sanitizer runtime helpers that the JIT
+# link cmd (c++ without -fsanitize) can't satisfy. Forward the flag via
+# --jit-linker-string so daslang's link cmd resolves the right runtime.
+set(DAS_JIT_LINKER_STRING "")
+if(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+    set(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=address")
+elseif(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
+    set(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=undefined")
+elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
+    set(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
+endif()
+
 set(DAS_UTILS
     aot
     dascov
@@ -43,6 +56,8 @@ foreach(util ${DAS_UTILS})
     add_custom_command(
         OUTPUT  ${UTIL_BIN_DIR}/${util}.exe
         COMMAND daslang -exe -output ${UTIL_BIN_DIR}/${util} ${UTIL_MAIN}
+                $<$<BOOL:${DAS_JIT_LINKER_STRING}>:-->
+                ${DAS_JIT_LINKER_STRING}
         DEPENDS ${UTIL_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Building ${util} executable (daslang -exe)"
@@ -56,6 +71,8 @@ SET(TEST_MAIN ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
 add_custom_command(
     OUTPUT  ${UTIL_BIN_DIR}/dastest.exe
     COMMAND daslang -exe -output ${UTIL_BIN_DIR}/dastest ${TEST_MAIN}
+            $<$<BOOL:${DAS_JIT_LINKER_STRING}>:-->
+            ${DAS_JIT_LINKER_STRING}
     DEPENDS ${TEST_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Building dastest executable (daslang -exe)"

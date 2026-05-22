@@ -235,8 +235,9 @@ extern "C" {
                 globalVariables[i] = GlobalVariable{};
             }
             context.allocateGlobalsAndShared();
-            memset(context.globals, 0, context.globalsSize);
-            memset(context.shared, 0, context.sharedSize);
+            // UBSAN forbid memset(null, 0, 0)
+            if (context.globalsSize) memset(context.globals, 0, context.globalsSize);
+            if (context.sharedSize)  memset(context.shared,  0, context.sharedSize);
             if ( pinvoke ) {
                 context.contextMutex = new recursive_mutex;
             }
@@ -824,12 +825,12 @@ extern "C" {
     //   cmd          — complete shell command, already includes 2>&1.
     //   artifactPath — output file path (logged on success/failure).
     //   artifactKind — short label for messages ("Library", "Wasm", ...).
-    static void run_link_cmd(const char * cmd, const char * artifactPath,
+    static bool run_link_cmd(const char * cmd, const char * artifactPath,
                              const char * artifactKind, Context * context) {
         FILE * fp = popen(cmd, "r");
         if ( fp == NULL ) {
             LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
-            return;
+            return false;
         }
         static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
         char buffer[1024], output[MAX_OUTPUT_SIZE];
@@ -851,14 +852,16 @@ extern "C" {
             context->to_out(&li, LogLevel::error, msg.c_str());
             string err = string("Output:\n") + output;
             context->to_out(&li, LogLevel::error, err.c_str());
-        } else {
-            string msg = string(artifactKind) + " " + artifactPath + " linked - ok\n";
-            context->to_out(&li, LogLevel::info, msg.c_str());
+            return false;
         }
+        string msg = string(artifactKind) + " " + artifactPath + " linked - ok\n";
+        context->to_out(&li, LogLevel::info, msg.c_str());
+        return true;
     }
 
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib, Context *context ) {
+    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, Context *context ) {
         char cmd[1024];
+        const char * extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
         const auto paths = get_real_lib_linker_paths(dasLib, customLinker, isShared, linkWholeLib);
         const auto & linker = paths.linker;
         const auto & runtimeLibrary = paths.runtimeLibrary;
@@ -867,20 +870,20 @@ extern "C" {
         #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
         if (!check_file_present(runtimeLibrary.c_str())) {
             LOG(LogLevel::error) << "File '" << runtimeLibrary << "' , containing daslang runtime library, does not exist\n";
-            return;
+            return false;
         }
         #endif
         if (!check_file_present(objFilePath)) {
             LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
-            return;
+            return false;
         }
 
 
         #if defined(_WIN32) || defined(_WIN64)
             const auto linkerParam = isShared ? "-DLL" : "";
             auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, linkerParam, libraryName)
-                : fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, compilerLibrary, linkerParam, libraryName);
+                ? fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, extra, linkerParam, libraryName)
+                : fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, compilerLibrary, extra, linkerParam, libraryName);
         #elif defined(__APPLE__)
             const auto linkerParam = isShared ? "-shared " : "";
             // @executable_path first → relocated bundle finds dylibs next to the exe;
@@ -889,8 +892,8 @@ extern "C" {
             // sees two distinct -Wl,-rpath flags, not one with an embedded space.
             const auto rpath = "-Wl,-rpath,@executable_path\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, objFilePath)
-                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, compilerLibrary, objFilePath);
+                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, objFilePath, extra)
+                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, compilerLibrary, objFilePath, extra);
         #else
             const auto linkerParam = isShared ? "-shared" : "";
             // $ORIGIN first → relocated bundle finds .so next to the exe;
@@ -900,16 +903,16 @@ extern "C" {
             // sees two distinct -Wl,-rpath flags, not one with an embedded space.
             const auto rpath = "-Wl,-rpath,\\$ORIGIN\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"),
-                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary)
-                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" 2>&1"),
-                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, compilerLibrary);
+                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"),
+                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, extra)
+                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"),
+                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
         #endif
             *result = '\0';
-        run_link_cmd(cmd, libraryName, "Library", context);
+        return run_link_cmd(cmd, libraryName, "Library", context);
     }
 #else
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib, Context *context ) { }
+    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, Context *context ) { return true; }
 #endif
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
@@ -922,7 +925,7 @@ extern "C" {
     //                bin/ then PATH).
     // emcc drives wasm-ld plus libc / wasi / wasm-exceptions glue, so output
     // is self-contained -sSTANDALONE_WASM (only wasi imports).
-    void link_wasm ( const char * objFilePath, const char * wasmPath,
+    bool link_wasm ( const char * objFilePath, const char * wasmPath,
                      const char * runtimeLibPath, const char * customEmcc,
                      Context * context ) {
         #if defined(_WIN32) || defined(_WIN64)
@@ -932,7 +935,7 @@ extern "C" {
         #endif
         if ( !check_file_present(objFilePath) ) {
             LOG(LogLevel::error) << "File '" << objFilePath << "' , containing wasm32 object, does not exist\n";
-            return;
+            return false;
         }
         const bool withRuntime = runtimeLibPath != nullptr && runtimeLibPath[0] != '\0'
                                  && check_file_present(runtimeLibPath);
@@ -947,10 +950,10 @@ extern "C" {
         const string cmd = fmt::format(
             FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 2>&1"),
             linker, objFilePath, runtimeArg, wasmPath);
-        run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
+        return run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
     }
 #else
-    void link_wasm ( const char *, const char *, const char *, const char *, Context * ) { }
+    bool link_wasm ( const char *, const char *, const char *, const char *, Context * ) { return true; }
 #endif
 
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
@@ -1098,7 +1101,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared", "linkWholeLib", "context"});
+                    ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","context"});
             addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
                 SideEffects::worstDefault, "link_wasm")
                     ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","context"});
