@@ -1415,10 +1415,7 @@ def test_unroll5e_groupby_count_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_count_fold()
     t |> equal(got.length(), 3, "3 brand buckets")
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.N
-    }
+    var perBrand <- {for (item in got); item.Brand => item.N}
     t |> equal(perBrand[0], 2)
     t |> equal(perBrand[1], 3)
     t |> equal(perBrand[2], 2)
@@ -1429,10 +1426,7 @@ def test_unroll5e_groupby_sum_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_sum_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.S
-    }
+    var perBrand <- {for (item in got); item.Brand => item.S}
     t |> equal(perBrand[0], 27)
     t |> equal(perBrand[1], 39)
     t |> equal(perBrand[2], 25)
@@ -1443,10 +1437,7 @@ def test_unroll5e_groupby_min_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_min_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.Min
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Min}
     t |> equal(perBrand[0], 12)
     t |> equal(perBrand[1], 10)
     t |> equal(perBrand[2], 11)
@@ -1457,10 +1448,7 @@ def test_unroll5e_groupby_max_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_max_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.Max
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Max}
     t |> equal(perBrand[0], 15)
     t |> equal(perBrand[1], 16)
     t |> equal(perBrand[2], 14)
@@ -1471,10 +1459,7 @@ def test_unroll5e_groupby_avg_parity(t : T?) {
     fixture_unroll5e()
     let got <- target_unroll5e_groupby_avg_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; double>
-    for (item in got) {
-        perBrand[item.Brand] = item.Avg
-    }
+    var perBrand <- {for (item in got); item.Brand => item.Avg}
     t |> equal(perBrand[0], 13.5lf)
     t |> equal(perBrand[1], 13.0lf)
     t |> equal(perBrand[2], 12.5lf)
@@ -1585,10 +1570,7 @@ def test_unroll5e_groupby_where_count_parity(t : T?) {
     // flag==1 → odd vals: {11,13,15}. Buckets: brand 0→{15} N=1, brand 1→{13} N=1, brand 2→{11} N=1.
     let got <- target_unroll5e_groupby_where_count_fold()
     t |> equal(got.length(), 3)
-    var perBrand : table<int; int>
-    for (item in got) {
-        perBrand[item.Brand] = item.N
-    }
+    var perBrand <- {for (item in got); item.Brand => item.N}
     t |> equal(perBrand[0], 1)
     t |> equal(perBrand[1], 1)
     t |> equal(perBrand[2], 1)
@@ -1601,10 +1583,7 @@ def test_unroll5e_groupby_select_sum_parity(t : T?) {
     // key 0 (vals 12,15) S=27, key 1 (vals 10,13,16) S=39, key 2 (vals 11,14) S=25.
     let got <- target_unroll5e_groupby_select_sum_fold()
     t |> equal(got.length(), 3)
-    var perKey : table<int; int>
-    for (item in got) {
-        perKey[item.K] = item.S
-    }
+    var perKey <- {for (item in got); item.K => item.S}
     t |> equal(perKey[0], 27)
     t |> equal(perKey[1], 39)
     t |> equal(perKey[2], 25)
@@ -2367,5 +2346,336 @@ def test_unroll5c_select_distinct_long_count_pred_parity(t : T?) {
     fixture_unroll5c()
     let got = _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().long_count($(x : int) => x >= 2))
     t |> equal(got, 2l, "predicate must be honored, not dropped")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 4 — chain-driven component pruning (build_decs_inner_for_pruned)
+// Tests that emit_decs_* paths prune get_ro/iter slots down to fields the chain references,
+// and that whole-tuple references (bare to_array, pass-to-user-fn) correctly disable pruning.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[decs_template(prefix = "wave4_")]
+struct Wave4Row {
+    brand : int
+    price : int
+    year  : int
+}
+
+def private fixture_wave4(n : int) {
+    restart()
+    for (i in range(n)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.wave4_brand := i % 4
+            cmp.wave4_price := i * 10
+            cmp.wave4_year  := 2000 + (i % 25)
+        }
+    }
+    commit()
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_sum_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._select(_.price).sum())
+}
+
+[test]
+def test_wave4_pruned_select_sum_parity(t : T?) {
+    fixture_wave4(10)
+    // sum(price) for i in 0..10 = 10*(0+1+...+9) = 450
+    t |> equal(target_wave4_pruned_select_sum_fold(), 450, "_select(_.price).sum() — only price referenced; pruning must preserve semantics")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_where_count_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50).count())
+}
+
+[test]
+def test_wave4_pruned_where_count_parity(t : T?) {
+    fixture_wave4(10)
+    // i=0..9 → price=0,10,20,...90; price>50 → i in {6,7,8,9} → 4 rows
+    t |> equal(target_wave4_pruned_where_count_fold(), 4, "_where(_.price>50).count() — only price referenced; pruning must preserve semantics")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_where_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50)._select(_.brand).to_array())
+}
+
+[test]
+def test_wave4_pruned_select_where_to_array_parity(t : T?) {
+    fixture_wave4(10)
+    // Survivors: i=6,7,8,9 → brand = 6%4=2, 7%4=3, 8%4=0, 9%4=1
+    let got <- target_wave4_pruned_select_where_to_array_fold()
+    t |> equal(got |> length, 4, "4 surviving brands")
+    t |> equal(got |> sum, 2 + 3 + 0 + 1, "brand sum independent of order")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_bare_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).to_array())
+}
+
+[test]
+def test_wave4_unpruned_bare_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // Bare to_array: walker sees `push_clone(decs_tup)` whole-var ref → no pruning → full tuple preserved
+    let got <- target_wave4_unpruned_bare_to_array_fold()
+    t |> equal(got |> length, 3, "3 rows materialized")
+    // Sum each field independently — order-agnostic full-tuple check
+    var brand_sum = 0
+    var price_sum = 0
+    var year_sum = 0
+    for (c in got) {
+        brand_sum += c.brand
+        price_sum += c.price
+        year_sum += c.year
+    }
+    t |> equal(brand_sum, 0 + 1 + 2, "brand sum (full tuple preserved)")
+    t |> equal(price_sum, 0 + 10 + 20, "price sum (full tuple preserved)")
+    t |> equal(year_sum, 2000 + 2001 + 2002, "year sum (full tuple preserved)")
+}
+
+def private wave4_pred_uses_whole_tup(t : tuple<brand : int; price : int; year : int>) : bool {
+    return (t.brand + t.price + t.year) > 0
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_pass_to_fn_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._where(wave4_pred_uses_whole_tup(_)).count())
+}
+
+[test]
+def test_wave4_unpruned_pass_to_fn_parity(t : T?) {
+    fixture_wave4(3)
+    // _where peel renames `_` to `decs_tup`; the predicate body becomes
+    // `wave4_pred_uses_whole_tup(decs_tup)` — decs_tup referenced as a whole-var arg →
+    // walker sets allFieldsUsed=true → pruning disabled. All 3 fields materialized.
+    // All 3 rows pass the > 0 predicate (year always ≥ 2000), so count = 3.
+    t |> equal(target_wave4_unpruned_pass_to_fn_fold(), 3, "pass-to-fn predicate must see full tuple")
+}
+
+[test]
+def test_wave4_unpruned_pass_to_fn_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_unpruned_pass_to_fn_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Whole-tup reference in the where predicate disables pruning — all 3 get_ros present.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "pass-to-fn must emit all 3 get_ros (no pruning)")
+    }
+}
+
+[test]
+def test_wave4_pruned_where_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_where_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Wave 4 contract: chain reads only `price`; helper prunes brand+year out of the multi-iter for-loop.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "_where(_.price>50).count() must emit exactly 1 get_ro (price)")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "kept slot is for price")
+        t |> equal(describe_count(body_expr, "wave4_brand"), 0, "brand pruned out")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "year pruned out")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no _find — no take/early-exit)")
+    }
+}
+
+[test]
+def test_wave4_unpruned_bare_to_array_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_unpruned_bare_to_array_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Wave 4 contract: bare to_array → push_clone(decs_tup) is a whole-var ref → walker disables pruning → all 3 components present.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "bare to_array must emit all 3 get_ros (no pruning)")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand slot present")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "price slot present")
+        t |> success(describe_count(body_expr, "wave4_year") >= 1, "year slot present")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_wave4_take_count_no_field_ref_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>).take(5).count())
+}
+
+[test]
+def test_wave4_take_count_no_field_ref_parity(t : T?) {
+    fixture_wave4(10)
+    // .take(5).count() — the per-element body only references the take counter + acc; no
+    // tuple field refs. Walker reports empty usedNames → helper short-circuits to unpruned
+    // emission (still safe; no field referenced → no real difference).
+    t |> equal(target_wave4_take_count_no_field_ref_fold(), 5, "take(5).count() splice must still return 5")
+}
+
+// ── C2: buffer-required planners (order/reverse/distinct) ──────────────────────
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_reverse_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).reverse().to_array())
+}
+
+[test]
+def test_wave4_unpruned_reverse_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // reverse + to_array (no _select): buffer holds full tuples → push_clone(decs_tup) →
+    // walker sees whole-var → pruning disabled. All 3 fields preserved.
+    let got <- target_wave4_unpruned_reverse_to_array_fold()
+    t |> equal(got |> length, 3, "3 rows after reverse")
+    var brand_sum = 0
+    var price_sum = 0
+    var year_sum = 0
+    for (c in got) {
+        brand_sum += c.brand
+        price_sum += c.price
+        year_sum += c.year
+    }
+    t |> equal(brand_sum, 0 + 1 + 2, "brand sum preserved (reverse + bare to_array)")
+    t |> equal(price_sum, 0 + 10 + 20, "price sum preserved")
+    t |> equal(year_sum, 2000 + 2001 + 2002, "year sum preserved")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_distinct_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).distinct().to_array())
+}
+
+[test]
+def test_wave4_unpruned_distinct_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // distinct + to_array (no _select): each row distinct by full-tuple → push_clone(decs_tup) →
+    // walker sees whole-var → pruning disabled.
+    let got <- target_wave4_unpruned_distinct_to_array_fold()
+    t |> equal(got |> length, 3, "3 distinct rows preserved as full tuples")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_reverse_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._select(_.brand).reverse().to_array())
+}
+
+[test]
+def test_wave4_pruned_select_reverse_to_array_parity(t : T?) {
+    fixture_wave4(4)
+    // _select(_.brand).reverse().to_array() — chain rebinds to a scalar; the reverse buffer
+    // holds projected brands (not the full tuple). Pruning safe — only brand referenced.
+    // Brands for i=0..3 are 0,1,2,3; reverse order = 3,2,1,0; sum = 6.
+    let got <- target_wave4_pruned_select_reverse_to_array_fold()
+    t |> equal(got |> length, 4, "4 brands after reverse")
+    t |> equal(got |> sum, 6, "sum preserved across projection + reverse")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_distinct_count_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._select(_.brand).distinct().count())
+}
+
+[test]
+def test_wave4_pruned_select_distinct_count_parity(t : T?) {
+    fixture_wave4(10)
+    // _select(_.brand).distinct().count() — brand cycles 0..3 (4 distinct values) across 10 rows.
+    // Chain references only brand → walker collects {brand} → pruning fires → only get_ro("wave4_brand").
+    t |> equal(target_wave4_pruned_select_distinct_count_fold(), 4, "4 distinct brand values")
+}
+
+[test]
+def test_wave4_pruned_select_distinct_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_select_distinct_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Pruned via C2 (plan_decs_distinct path): only brand referenced.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "distinct.count chain emits exactly 1 get_ro")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "kept slot is brand")
+        t |> equal(describe_count(body_expr, "wave4_price"), 0, "price pruned out")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "year pruned out")
+    }
+}
+
+// ── C3: group_by via shared adapter_emit_source_loop ───────────────────────────
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)).to_array())
+}
+
+[test]
+def test_wave4_pruned_groupby_count_parity(t : T?) {
+    fixture_wave4(10)
+    // _group_by_lazy(_.brand) — only `brand` referenced (key extraction). Reducer is `length`
+    // (counts bucket members, doesn't touch tuple fields). Pruning fires → only get_ro(brand).
+    // brand cycles 0..3 across 10 rows → 4 distinct buckets with sizes [3,3,2,2].
+    let got <- target_wave4_pruned_groupby_count_fold()
+    t |> equal(got |> length, 4, "4 distinct brand buckets")
+    var total = 0
+    for (b in got) {
+        total += b.N
+    }
+    t |> equal(total, 10, "buckets sum to source count")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_groupby_sum_fold() : array<tuple<Brand : int; S : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, S = _._1 |> _select(_.price) |> sum)).to_array())
+}
+
+[test]
+def test_wave4_pruned_groupby_sum_parity(t : T?) {
+    fixture_wave4(10)
+    // _group_by_lazy(_.brand) + inner-select-sum(_.price). Chain references brand (key) + price
+    // (reducer). Pruning fires → 2 get_ros (brand, price); year pruned.
+    let got <- target_wave4_pruned_groupby_sum_fold()
+    t |> equal(got |> length, 4, "4 distinct brand buckets")
+    // Sum of all prices across all buckets = 10*(0+1+...+9) = 450 — fixture independent of bucket layout.
+    var total = 0
+    for (b in got) {
+        total += b.S
+    }
+    t |> equal(total, 450, "all-bucket price sum = full-table price sum")
+}
+
+[test]
+def test_wave4_pruned_groupby_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_groupby_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Documented: plan_group_by_core builds a `bucket` (array of source tuples) per key, then
+        // computes reducers over the bucket. The bucket-build site pushes `decs_tup` as a whole
+        // value — walker sees whole-var → pruning DISABLED → all 3 get_ros present. This is the
+        // safety rule firing as designed (group_by needs the full tuple for the bucket). Pruning
+        // would only fire if the splice itself were refactored to avoid materializing tuples.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "group_by bucket-build needs full tuple; pruning disabled by design")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand present")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "price present (bucket needs full tuple)")
+        t |> success(describe_count(body_expr, "wave4_year") >= 1, "year present (bucket needs full tuple)")
+    }
 }
 
