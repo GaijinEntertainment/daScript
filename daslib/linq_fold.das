@@ -3065,14 +3065,8 @@ def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
     var mkTup = pushCall.arguments[1] as ExprMakeTuple
     if (mkTup.recordNames |> length != forExpr.sources |> length
             || forExpr.iteratorVariables |> length != forExpr.sources |> length) return null
-    var userNames : array<string>
-    for (n in mkTup.recordNames) {
-        userNames |> push(string(n))
-    }
-    var iterNames : array<string>
-    for (v in forExpr.iteratorVariables) {
-        iterNames |> push(string(v.name))
-    }
+    var userNames <- [for (n in mkTup.recordNames); string(n)]
+    var iterNames <- [for (v in forExpr.iteratorVariables); string(v.name)]
     // Statement 2: return res.to_sequence() — must reference the same `res`.
     var retStmt = blk.list[2] as ExprReturn
     if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null

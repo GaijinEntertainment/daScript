@@ -337,10 +337,7 @@ def cmd_search_all(root : string; json : bool = false) : int {
         return 0
     }
     // collect and sort by name
-    var names : array<string>
-    for (name in keys(index)) {
-        names |> push_clone(name)
-    }
+    var names <- [for (name in keys(index)); name]
     sort(names) $(a, b : string) : bool {
         return a < b
     }
@@ -586,10 +583,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
                 }
             }
         }
-        var tag_names : array<string>
-        for (t in keys(all_tags)) {
-            tag_names |> push_clone(t)
-        }
+        var tag_names <- [for (t in keys(all_tags)); t]
         sort(tag_names) $(a, b : string) : bool {
             return a < b
         }

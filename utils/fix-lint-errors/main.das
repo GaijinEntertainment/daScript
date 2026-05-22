@@ -1548,12 +1548,7 @@ def main() : int {
         return 0
     }
     let cli_args <- get_user_args()
-    var paths : array<string>
-    for (arg in cli_args) {
-        if (!starts_with(arg, "-")) {
-            paths |> push(arg)
-        }
-    }
+    let paths <- [for (arg in cli_args); arg; where !starts_with(arg, "-")]
     if (empty(paths)) {
         print("Error: no files or directories specified\n\n")
         print_help(get_command_info(type<Config>), "utils/fix-lint-errors/main.das")

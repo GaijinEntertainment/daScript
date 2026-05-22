@@ -290,13 +290,7 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
 // Collect MemberRefs of all candidate records — used to feed the
 // per-candidate report writer.
 def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef> {
-    var out : array<MemberRef>
-    for (r in records) {
-        if (r.is_candidate) {
-            out |> push(r.ref)
-        }
-    }
-    return <- out
+    return <- [for (r in records); r.ref; where r.is_candidate]
 }
 
 

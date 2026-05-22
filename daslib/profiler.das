@@ -322,12 +322,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         }
     }
     def dump_top_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
-        var entries : array<FlatEntry>
-        for (e in values(flat)) {
-            if (e.own_heap > 0l) {
-                entries |> push(e)
-            }
-        }
+        var entries <- [for (e in values(flat)); e; where e.own_heap > 0l]
         if (empty(entries)) return
         entries |> sort() <| $(a, b) => a.own_heap > b.own_heap
         to_log(LOG_INFO, "\nTop heap offenders (own allocations):\n")
@@ -335,16 +330,11 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         for (e in entries) {
             if (shown >= 10) break
             shown ++
-            to_log(LOG_INFO, "  {e.fun.mangledName} heap={int64(e.own_heap)} count={int64(e.count)}\n")
+            to_log(LOG_INFO, "  {e.fun.mangledName} heap={e.own_heap} count={e.count}\n")
         }
     }
     def dump_top_string_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
-        var entries : array<FlatEntry>
-        for (e in values(flat)) {
-            if (e.own_string_heap > 0l) {
-                entries |> push(e)
-            }
-        }
+        var entries <- [for (e in values(flat)); e; where e.own_string_heap > 0l]
         if (empty(entries)) return
         entries |> sort() <| $(a, b) => a.own_string_heap > b.own_string_heap
         to_log(LOG_INFO, "\nTop string-heap offenders (own allocations):\n")
@@ -352,7 +342,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         for (e in entries) {
             if (shown >= 10) break
             shown ++
-            to_log(LOG_INFO, "  {e.fun.mangledName} string_heap={int64(e.own_string_heap)} count={int64(e.count)}\n")
+            to_log(LOG_INFO, "  {e.fun.mangledName} string_heap={e.own_string_heap} count={e.count}\n")
         }
     }
     def dump_context_stack(tid : uint64) {
@@ -544,7 +534,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
             if (!empty(ctx.name)) {
                 ctxName = "{ctx.name}"
             }
-            emit_line("=== Memory leaks in context '{ctxName}' ({int(length(sorted))} allocations, {totalBytes} bytes) ===")
+            emit_line("=== Memory leaks in context '{ctxName}' ({length(sorted)} allocations, {totalBytes} bytes) ===")
             for (e in sorted) {
                 var rec & = lc.allocations[e._1]
                 emit_line("[leak] size={rec.size} bytes")

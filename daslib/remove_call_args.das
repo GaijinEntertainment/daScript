@@ -29,12 +29,7 @@ def get_remove_indices(func) {
 
 [macro_function]
 def get_remove_indices(args : AnnotationArgumentList) {
-    var indices : array<int>
-    for (arg in args) {
-        if (arg.name == "arg") {
-            indices |> push(arg.iValue)
-        }
-    }
+    var indices <- [for (arg in args); arg.iValue; where arg.name == "arg"]
     if (!empty(indices)) {
         indices |> sort() <| $(a, b) => a > b
     }

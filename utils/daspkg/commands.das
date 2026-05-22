@@ -923,12 +923,7 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
         }
     }
     // upgrade root packages only — deps get pulled along
-    var names : array<string>
-    for (entry in lf.packages) {
-        if (entry.root && !entry.local) {
-            names |> push_clone(entry.name)
-        }
-    }
+    let names <- [for (entry in lf.packages); entry.name; where entry.root && !entry.local]
     if (empty(names)) {
         print("No upgradeable packages\n")
         return 0
@@ -1837,20 +1832,9 @@ def cmd_release(root : string; out_dir : string) : int {
     // Contents/MacOS/, so all subsequent ship logic uses bundle_dir unchanged
     // and the rpath / module resolver still see the same <exe_dir> layout.
     let is_mac_app = get_platform_name() == "darwin"
-    var app_root = ""
-    if (is_mac_app) {
-        app_root = path_join(out_dir, "{bundle_name}.app")
-    }
-    var bundle_dir = ""
-    if (is_mac_app) {
-        bundle_dir = path_join(app_root, "Contents/MacOS")
-    } else {
-        bundle_dir = path_join(out_dir, bundle_name)
-    }
-    var cleanup_target = bundle_dir
-    if (is_mac_app) {
-        cleanup_target = app_root
-    }
+    let app_root = is_mac_app ? path_join(out_dir, "{bundle_name}.app") : ""
+    let bundle_dir = is_mac_app ? path_join(app_root, "Contents/MacOS") : path_join(out_dir, bundle_name)
+    let cleanup_target = is_mac_app ? app_root : bundle_dir
     if (fexist(cleanup_target)) {
         force_rmdir(cleanup_target)
     }
