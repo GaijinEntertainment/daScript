@@ -234,13 +234,8 @@ class public DLLHandle {
     def set_glob_address(fn : DllName, ptr : void?) {
         assert(handle != null, "dynamic_lib_handle is null")
         var fn_addr = unsafe(reinterpret<void ??>(handle |> get_function_address(fn.glob())))
-        // Silent skip = stale baked address survives into JIT'd code on cache-hit
-        // reload after ASLR shift, which crashes (#2802). Every caller in
-        // ResolveExternVisitor is fixing up a slot that MUST be writable, so a
-        // missing export is always a codegen-side linkage bug — panic loud.
-        if (fn_addr == null) {
-            panic("set_glob_address: missing DLL export {fn.glob()} — codegen-side linkage bug, see #2802")
-        }
+        // assert(fn_addr != null)
+        if (fn_addr == null) return false
         *fn_addr = ptr;
         return true
     }

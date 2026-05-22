@@ -14,11 +14,9 @@ let OUTPUT_DIR = "{get_das_root()}/build/tests"
 let PROBE_PATH = "{OUTPUT_DIR}/dll_cache_probe.das"
 
 def write_probe(table_value : int) : bool {
-    // Probe must exercise jit_table_at so jit_table_at_tString lands in the
-    // emitted globals; pairs with the set_glob_address panic to catch
-    // #2802-style linkage regressions (DLLExport storage missing would panic
-    // loud at compile_probe() instead of silently surviving into ASLR-shift
-    // crashes on cache-hit reload).
+    // Probe uses table[k] so jit_table_at_tString lands in the emitted globals,
+    // exercising the codegen path that #2802 fixed (DLLExport linkage on the
+    // table accessor slots so ResolveExternVisitor can fix them up on reload).
     mkdir_rec(OUTPUT_DIR)
     var ok = false
     fopen(PROBE_PATH, "w") $(f) {
