@@ -647,6 +647,15 @@ class FromDecsMacro : AstCallMacro {
     //!             res |> push((index, text))
     //!         })
     //!         return res.to_sequence()
+    //!
+    //! When this iterator is consumed by a daslib/linq_fold chain (`_fold(from_decs(...).where_(...).count())`,
+    //! etc.) the chain splice in plan_decs_unroll recognizes the expanded shape via extract_decs_bridge
+    //! and fuses where/select/take/distinct/group_by/order_by/reverse + the final terminator into a
+    //! single for_each_archetype loop with inline accumulator — no array<tuple> materialization. The
+    //! splice is shape-based: the same recognizer matches both this macro and from_decs_template
+    //! (which differs only in deriving the field list from a [decs_template] struct). Wave 4 component
+    //! pruning also fires: if the chain only references a subset of the lambda's declared args, the
+    //! emitted for-loop drops the unused get_ro slots.
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         macro_verify(length(expr.arguments) == 1, prog, expr.at, "expecting from_decs($(block_with_arguments))")
         macro_verify(expr.arguments[0] is ExprMakeBlock, prog, expr.at, "expecting from_decs($(block_with_arguments))")

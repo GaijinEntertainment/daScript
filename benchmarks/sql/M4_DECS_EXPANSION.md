@@ -372,3 +372,21 @@ Two of the three Cat-C benchmarks that were skipped during the original m4 expan
 **Net coverage:** 47 → 49 m4 lanes (`indexed_lookup` + `zip_dot_product`). Only `join_count` remains skipped — it's a cross-archetype join, which requires real design (eid linkage between archetypes) and is appropriately deferred past Wave 4b.
 
 **No new decs surface needed for these lanes.** Pure benchmark additions + one helper in `_common.das`. The Wave 4b PR is documentation that the existing decs surface already covers these chain shapes — the team's pre-Wave-4b suspicion that we'd need new helpers turned out to be incorrect. (The same PR also bundled 6 small daslib/linq_fold cleanups in its commit 1 — those were unrelated PR #2806 review follow-ups, not Wave 4b code.)
+
+## Update — from_decs lambda-arg form splice validation (2026-05-22)
+
+While planning a follow-up to extend the splice to the lambda-arg form (`from_decs($(args){})`), an empirical spike showed the splice was already firing on it. Both `from_decs` ([decs_boost.das:632](../../daslib/decs_boost.das#L632)) and `from_decs_template` ([decs_boost.das:706](../../daslib/decs_boost.das#L706)) expand to byte-identical invoke-block shapes:
+
+```
+invoke($() {
+    var res : array<tuple<...>>
+    query(...)
+    return res.to_sequence()
+})
+```
+
+`extract_decs_bridge` ([linq_fold.das:3015](../../daslib/linq_fold.das#L3015)) pattern-matches the post-expansion AST, not the call macro that produced it — so it transparently recognizes both forms with zero additional code. The eager-bridge prose in earlier planning docs about this form needing splice work was incorrect.
+
+Added 11 tests to `tests/linq/test_linq_from_decs.das` covering count / where+count / select+sum / take+count / distinct+count / to_array / group_by+count for parity, plus splice-shape gates confirming the AST matches the type-arg form, plus Wave 4 component pruning gates confirming the walker drops unused multi-component `get_ro` slots on this form. All 169 tests pass.
+
+**Practical effect for users:** the lambda-arg form is the right choice when the user wants custom component prefixes that don't match a `[decs_template]` struct (or when they want to query components across structs not annotated with one). It now gets the full splice + pruning treatment automatically.
