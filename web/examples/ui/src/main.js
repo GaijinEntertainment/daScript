@@ -118,9 +118,18 @@ function updateEngineAvailability(name) {
         }
     };
     if (!name) { disableJit(); return; }
+    // Rapid sample-switching can land HEAD-fetch responses out of order
+    // (HTTP/2). Gate the late .then/.catch on the sample still being current
+    // — currentJitName is the source of truth for "what sample is loaded".
     fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
-        .then(r => { if (r.ok) jitRadio.disabled = false; else disableJit(); })
-        .catch(disableJit);
+        .then(r => {
+            if (name !== currentJitName) return;
+            if (r.ok) jitRadio.disabled = false; else disableJit();
+        })
+        .catch(() => {
+            if (name !== currentJitName) return;
+            disableJit();
+        });
 }
 
 selectSample = function(type, id) {

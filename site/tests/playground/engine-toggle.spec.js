@@ -27,22 +27,39 @@ async function waitDropdownsPopulated(page) {
 const jitSel = 'input[name=engine][value=jit]';
 const interpSel = 'input[name=engine][value=interpreter]';
 
-// Make the HEAD fetch for any /samples/examples/*.wasm resolve to 200 OK so
-// updateEngineAvailability flips the JIT radio to enabled without relying on
-// build artifacts being present in the served tree.
-async function stubWasmAvailable(page) {
+// Deterministic HEAD-probe world: 200 for sha256.wasm only, 404 for every
+// other sample's .wasm regardless of what's actually present in the served
+// tree. A narrower `route('**/samples/examples/sha256.wasm', ...)` would let
+// the startup probe for the default Hello world sample hit a real hello.wasm
+// (if a local build has staged any), and JIT would be enabled from page
+// load — the "JIT enables on sha256 select" test would then pass even if
+// the sample-switch path stopped working.
+async function stubSha256WasmAvailable(page) {
     await page.route('**/samples/examples/*.wasm', route => {
-        if (route.request().method() === 'HEAD') {
-            return route.fulfill({ status: 200, body: '' });
-        }
-        return route.continue();
+        if (route.request().method() !== 'HEAD') return route.continue();
+        const ok = route.request().url().endsWith('/sha256.wasm');
+        return route.fulfill({ status: ok ? 200 : 404, body: '' });
     });
 }
 
 test('JIT radio enables for samples with a precompiled .wasm', async ({ playground }) => {
-    await stubWasmAvailable(playground);
+    await stubSha256WasmAvailable(playground);
     await waitDropdownsPopulated(playground);
 
+    // The `playground` fixture's navigate-before-route ordering means the
+    // startup HEAD probe for the default sample's .wasm has already happened
+    // against the real http.server. Force a fresh probe by selecting a sample
+    // the stub returns 404 for — that establishes the "JIT disabled" baseline
+    // we need so the SHA-256 transition actually proves the sample-switch
+    // path works.
+    await playground.locator('#examples').selectOption({ label: 'Functions' });
+    await expect.poll(
+        () => playground.locator(jitSel).isDisabled(),
+        { timeout: 5_000 }
+    ).toBe(true);
+
+    // Switching to SHA-256 must flip the radio to enabled — that transition
+    // is what the test name asserts.
     await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
     await expect.poll(
         () => playground.locator(jitSel).isDisabled(),
@@ -51,7 +68,7 @@ test('JIT radio enables for samples with a precompiled .wasm', async ({ playgrou
 });
 
 test('JIT radio auto-reverts to interpreter when sample has no .wasm', async ({ playground }) => {
-    await stubWasmAvailable(playground);
+    await stubSha256WasmAvailable(playground);
     await waitDropdownsPopulated(playground);
 
     await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });

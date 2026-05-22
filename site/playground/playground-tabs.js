@@ -306,7 +306,10 @@
         // data.json loads; here we just refuse to clobber it with autosave.
         const hash = window.location.hash || '';
         const hasHash = hash.startsWith('#code=') || hash.startsWith('#z=');
-        const hasExampleParam = new URLSearchParams(window.location.search).has('example');
+        // Truthy on non-empty value only — matches main.js's `params.get` use,
+        // so `?example=` / `?example` (no value) doesn't silently clobber
+        // autosave only to then fall through to the default sample.
+        const hasExampleParam = !!new URLSearchParams(window.location.search).get('example');
 
         if (hasHash && window.__pendingSampleBundle) {
             const bundle = window.__pendingSampleBundle;
