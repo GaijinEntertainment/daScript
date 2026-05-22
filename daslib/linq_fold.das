@@ -444,10 +444,27 @@ def private prepend_precond(var body : Expression?; var preCondStmts : array<Exp
     return stmts_to_expr(stmts)
 }
 
+struct private RangeStateNames {
+    skipName      : string
+    takeCountName : string
+    skippingName  : string
+}
+
+[macro_function]
+def private make_range_names(at : LineInfo) : RangeStateNames {
+    return <- RangeStateNames(
+        skipName      = qn("skip", at),
+        takeCountName = qn("tc", at),
+        skippingName  = qn("skipping", at))
+}
+
 [macro_function]
 def private append_ranges_prelude(var preludeStmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond : Expression?;
-                                  skipName, takeCountName, skippingName : string) {
+                                  names : RangeStateNames) {
     // Loop-level state for skip/take counters + skip_while flag (one-way, flips on first false-pred).
+    let skipName      = names.skipName
+    let takeCountName = names.takeCountName
+    let skippingName  = names.skippingName
     if (skipExpr != null) {
         var skipInit = clone_expression(skipExpr)
         preludeStmts |> push <| qmacro_expr() {
@@ -468,9 +485,12 @@ def private append_ranges_prelude(var preludeStmts : array<Expression?>; var ski
 
 [macro_function]
 def private wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
-                             skipName, takeCountName, skippingName : string) {
+                             names : RangeStateNames) {
     // Per-match prefix order: take-guard → skip counter → skip_while flip → take_while break → takeCount++ → body. takeCount++ sits AFTER skip_while/take_while so gated-out elements don't eat the take(N) budget.
     if (skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null) return
+    let skipName      = names.skipName
+    let takeCountName = names.takeCountName
+    let skippingName  = names.skippingName
     var prefixed : array<Expression?>
     prefixed |> reserve(length(stmts) + 5)
     if (takeExpr != null) {
@@ -528,7 +548,51 @@ def private min_max_compare(workhorse : bool; opName : string; valName, accName 
 }
 
 [macro_function]
-def private emit_counter_lane(var top : Expression?; srcName, accName, itName, skipName, takeCountName, skippingName : string;
+def private build_accumulator_perelement_stmts(opName : string;
+                                               accName, valBindName, firstName, cntName : string;
+                                               var valueExpr : Expression?;
+                                               workhorse : bool;
+                                               isDoubleAccType : bool) : array<Expression?> {
+    // Per-element accumulator update for sum / min / max / average / count / long_count. Shared between emit_accumulator_lane (array side, valueExpr is the cloned projection or `it`) and emit_decs_accumulator (decs side, valueExpr wraps chainInfo.finalBind as a qmacro_expr). Preludes + return-expr stay caller-side because acc types and empty-source guards differ.
+    var stmts : array<Expression?>
+    if (opName == "count" || opName == "long_count") {
+        stmts |> push <| qmacro_expr() {
+            $i(accName) ++
+        }
+    } elif (opName == "sum") {
+        stmts |> push <| qmacro_expr() {
+            $i(accName) += $e(valueExpr)
+        }
+    } elif (opName == "average") {
+        // double accumulator matches linq.das:1545 average() semantics. Already-double sources skip the cast (PERF020).
+        if (isDoubleAccType) {
+            stmts |> push_from <| qmacro_block_to_array() {
+                $i(accName) += $e(valueExpr)
+                $i(cntName) ++
+            }
+        } else {
+            stmts |> push_from <| qmacro_block_to_array() {
+                $i(accName) += double($e(valueExpr))
+                $i(cntName) ++
+            }
+        }
+    } elif (opName == "min" || opName == "max") {
+        var compareExpr = min_max_compare(workhorse, opName, valBindName, accName)
+        stmts |> push_from <| qmacro_block_to_array() {
+            let $i(valBindName) = $e(valueExpr)
+            if ($i(firstName)) {
+                $i(accName) := $i(valBindName)
+                $i(firstName) = false
+            } elif ($e(compareExpr)) {
+                $i(accName) := $i(valBindName)
+            }
+        }
+    }
+    return <- stmts
+}
+
+[macro_function]
+def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                               var skipExpr, takeExpr, skipWhileCond : Expression?;
                               var loopBody : Expression?; at : LineInfo) : Expression? {
     // Counter lane: `[skip/take init]; var acc = 0; for (it in src) { $loopBody }; return acc`
@@ -536,7 +600,7 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName, s
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
     bodyStmts |> push_from <| qmacro_block_to_array() {
         var $i(accName) = 0
         for ($i(itName) in $i(srcName)) {
@@ -552,7 +616,7 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName, s
 
 [macro_function]
 def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
-                            srcName, accName, itName, skipName, takeCountName, skippingName : string;
+                            srcName, accName, itName : string; names : RangeStateNames;
                             var skipExpr, takeExpr, skipWhileCond : Expression?;
                             at : LineInfo) : Expression? {
     // Array lane: `[skip/take init]; var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
@@ -562,7 +626,7 @@ def private emit_array_lane(var top : Expression?; var expr : Expression?; var l
     topExpr.genFlags.alwaysSafe = true
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
     bodyStmts |> push <| qmacro_expr() {
         var $i(accName) : array<$t(elementType)>
     }
@@ -610,7 +674,8 @@ def private emit_accumulator_lane(
                                   var preCondStmts : array<Expression?>;
                                   var elementType : TypeDeclPtr;
                                   srcNames : array<string>;
-                                  accName, itName, skipName, takeCountName, skippingName : string;
+                                  accName, itName : string;
+                                  names : RangeStateNames;
                                   var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                   at : LineInfo
                                   ) : Expression? {
@@ -637,6 +702,9 @@ def private emit_accumulator_lane(
     let valBindName = qn("val", at)
     let firstName = qn("first", at)
     let cntName = qn("cnt", at)
+    let workhorse = ((projection != null && projection._type != null && projection._type.isWorkhorseType)
+        || (projection == null && elementType != null && elementType.isWorkhorseType))
+    let isDoubleAccType = accType != null && accType.baseType == Type.tDouble
     var preludeStmts : array<Expression?>
     var perMatchStmts : array<Expression?>
     var returnExpr : Expression?
@@ -644,15 +712,12 @@ def private emit_accumulator_lane(
         preludeStmts <- qmacro_block_to_array() {
             var $i(accName) : int64 = 0l
         }
-        // Value is unused; mirror counter-lane discipline and bind only when projection has
+        // Value is unused; mirror counter-lane discipline and bind only when projection has side effects (keeps the AST visit but discards the value).
         if (projection != null && has_sideeffects(projection)) {
             let finalBindName = qn("vfinal", at)
             perMatchStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
-        }
-        perMatchStmts |> push <| qmacro_expr() {
-            $i(accName) ++
         }
         returnExpr = qmacro_expr() {
             $i(accName)
@@ -661,28 +726,14 @@ def private emit_accumulator_lane(
         preludeStmts <- qmacro_block_to_array() {
             var $i(accName) : $t(accType) = default<$t(accType)>
         }
-        perMatchStmts <- qmacro_block_to_array() {
-            $i(accName) += $e(valueExpr)
-        }
         returnExpr = qmacro_expr() {
             $i(accName)
         }
     } elif (opName == "average") {
-        // Matches linq.das:1545 average(iterator) — always-double accumulator, uint64 counter, empty source returns 0.0lf instead of NaN. Source-element cast lifted out at macro time to avoid PERF020 redundant-cast trip when the input is already double.
+        // Matches linq.das:1545 average(iterator) — always-double accumulator, uint64 counter, empty source returns 0.0lf instead of NaN.
         preludeStmts <- qmacro_block_to_array() {
             var $i(accName) : double = 0lf
             var $i(cntName) : uint64 = 0ul
-        }
-        if (accType != null && accType.baseType == Type.tDouble) {
-            perMatchStmts <- qmacro_block_to_array() {
-                $i(accName) += $e(valueExpr)
-                $i(cntName) ++
-            }
-        } else {
-            perMatchStmts <- qmacro_block_to_array() {
-                $i(accName) += double($e(valueExpr))
-                $i(cntName) ++
-            }
         }
         returnExpr = qmacro_expr() {
             $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
@@ -692,31 +743,20 @@ def private emit_accumulator_lane(
             var $i(firstName) = true
             var $i(accName) : $t(accType)
         }
-        let workhorse = ((projection != null && projection._type != null && projection._type.isWorkhorseType)
-            || (projection == null && elementType != null && elementType.isWorkhorseType))
-        var compareExpr = min_max_compare(workhorse, opName, valBindName, accName)
-        perMatchStmts <- qmacro_block_to_array() {
-            let $i(valBindName) = $e(valueExpr)
-            if ($i(firstName)) {
-                $i(accName) := $i(valBindName)
-                $i(firstName) = false
-            } elif ($e(compareExpr)) {
-                $i(accName) := $i(valBindName)
-            }
-        }
         returnExpr = qmacro_expr() {
             $i(accName)
         }
     } else {
         return null
     }
+    perMatchStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
     prepend_binds(perMatchStmts, intermediateBinds)
-    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Collect all body statements into one list so they share scope when spliced via $b.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + 4)
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
     bodyStmts |> push_from(preludeStmts)
     // For-loop emission: single-source uses one iter var (itName); 2-source (zip) uses literal `itA, itB` parallel iter vars (qmacro for-loop iter-var position doesn't accept $i(...) splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts so itName resolves inside the loop body.
     if (length(srcNames) == 1) {
@@ -760,7 +800,8 @@ def private emit_early_exit_lane(
                                  var elementType : TypeDeclPtr;
                                  terminatorCall : ExprCall?;
                                  srcNames : array<string>;
-                                 itName, skipName, takeCountName, skippingName : string;
+                                 itName : string;
+                                 names : RangeStateNames;
                                  var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                                  at : LineInfo
                                  ) : Expression? {
@@ -1053,12 +1094,12 @@ def private emit_early_exit_lane(
         return null
     }
     prepend_binds(perMatchStmts, intermediateBinds)
-    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
     // Single-$b body so all stmts (skip/take counters + prelude + for + tail) share scope
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 3)
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
     bodyStmts |> push_from(preludeStmts)
     // For-loop emission: 1-source uses itName; 2-source (zip) uses literal `itA, itB` (qmacro for-iter-var position doesn't accept $i splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts.
     if (length(srcNames) == 1) {
@@ -1420,9 +1461,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     let srcName = qn("source", at)
     let itName  = qn("it", at)
     let accName = qn("acc", at)
-    let skipName = qn("skip", at)
-    let takeCountName = qn("tc", at)
-    let skippingName = qn("skipping", at)
+    let names <- make_range_names(at)
     var whereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
@@ -1541,8 +1580,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         var laneSrcs : array<string>
         laneSrcs |> push(srcName)
         return emit_accumulator_lane(lastName, laneTops, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, skipName, takeCountName,
-            skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
     if (lane == LinqLane.EARLY_EXIT) {
@@ -1556,8 +1595,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         var laneSrcs : array<string>
         laneSrcs |> push(srcName)
         return emit_early_exit_lane(lastName, laneTops, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, skipName,
-            takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
     var loopBody : Expression?
@@ -1574,7 +1613,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             $i(accName) ++
         }
         prepend_binds(stmts, intermediateBinds)
-        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     } else {
         // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
@@ -1594,15 +1633,15 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             return null
         }
         prepend_binds(stmts, intermediateBinds)
-        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     }
     if (counterLane) {
-        return emit_counter_lane(top, srcName, accName, itName, skipName, takeCountName, skippingName,
+        return emit_counter_lane(top, srcName, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, loopBody, at)
     } else {
         return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName,
-            skipName, takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, at)
+            names, skipExpr, takeExpr, skipWhileCond, at)
     }
 }
 
@@ -3172,6 +3211,22 @@ struct private DecsRangeInfo {
     chainEnd      : int
 }
 
+struct private DecsRangeStateNames {
+    skipName      : string
+    takeCountName : string
+    takeLimitName : string    // decs adds an explicit take-limit local so the take(N) expression evaluates exactly once at invoke entry.
+    skippingName  : string
+}
+
+[macro_function]
+def private make_decs_range_names(at : LineInfo) : DecsRangeStateNames {
+    return <- DecsRangeStateNames(
+        skipName      = qn("decs_skip", at),
+        takeCountName = qn("decs_takec", at),
+        takeLimitName = qn("decs_takel", at),
+        skippingName  = qn("decs_skipping", at))
+}
+
 [macro_function]
 def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                 intermediateEnd : int;
@@ -3236,9 +3291,13 @@ def private extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
 [macro_function]
 def private wrap_inner_for_with_decs_ranges(var body : Expression?;
                                             rangeInfo : DecsRangeInfo?;
-                                            skipName, takeCountName, takeLimitName, skippingName : string) : Expression? {
+                                            names : DecsRangeStateNames) : Expression? {
     // Slice 5a/5b: prefix per-element body with range guards in canonical order: take-cap → skip-counter → skip_while flag → take_while break → takeC++. Mirrors array-side wrap_with_ranges (linq_fold.das:556). All early exits (`return true`) work both for plain inner-for break AND for the bool-lambda archetype-find — caller switches outer iterator to for_each_archetype_find when takeExpr != null OR takeWhileCond != null. Counters / flags live at invoke scope (decs_range_prelude). Take limit is read from a hoisted local (takeLimitName) so the user's take(N) expression evaluates exactly once at invoke entry.
     if (rangeInfo.skipExpr == null && rangeInfo.takeExpr == null && rangeInfo.skipWhileCond == null && rangeInfo.takeWhileCond == null) return body
+    let skipName      = names.skipName
+    let takeCountName = names.takeCountName
+    let takeLimitName = names.takeLimitName
+    let skippingName  = names.skippingName
     var stmts : array<Expression?>
     stmts |> reserve(6)
     if (rangeInfo.takeExpr != null) {
@@ -3288,8 +3347,12 @@ def private wrap_inner_for_with_decs_ranges(var body : Expression?;
 }
 
 [macro_function]
-def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountName, takeLimitName, skippingName : string) : array<Expression?> {
+def private decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStateNames) : array<Expression?> {
     // Counter / flag init statements hoisted ABOVE the for_each_archetype call so they survive across archetypes (take cap, skip count, skip_while flag are all globally-stateful). takeLimit hoisted to a local so the user's take(N) expression evaluates exactly once (matches take(src, total:int) semantics).
+    let skipName      = names.skipName
+    let takeCountName = names.takeCountName
+    let takeLimitName = names.takeLimitName
+    let skippingName  = names.skippingName
     var stmts : array<Expression?>
     if (rangeInfo.skipExpr != null) {
         var skipInit = clone_expression(rangeInfo.skipExpr)
@@ -3349,47 +3412,14 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     let cntName = qn("decs_cnt", at)
     let firstName = qn("decs_first", at)
     let valBindName = qn("decs_val", at)
-    let skipName = qn("decs_skip", at)
-    let takeCountName = qn("decs_takec", at)
-    let takeLimitName = qn("decs_takel", at)
-    let skippingName = qn("decs_skipping", at)
+    let names <- make_decs_range_names(at)
     let finalBind = chainInfo.finalBind
-    var perElement : Expression?
-    if (opName == "sum") {
-        perElement = qmacro_expr() {
-            $i(accName) += $i(finalBind)
-        }
-    } elif (opName == "average") {
-        // Matches linq.das:1545 average() — always-double accumulator, uint64 counter, empty source returns 0.0lf. Cast lifted out at macro time so already-double chains don't trip PERF020.
-        if (chainInfo.finalType != null && chainInfo.finalType.baseType == Type.tDouble) {
-            perElement = qmacro_block() {
-                $i(accName) += $i(finalBind)
-                $i(cntName) ++
-            }
-        } else {
-            perElement = qmacro_block() {
-                $i(accName) += double($i(finalBind))
-                $i(cntName) ++
-            }
-        }
-    } elif (opName == "min" || opName == "max") {
-        let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
-        var compareExpr = min_max_compare(workhorse, opName, valBindName, accName)
-        perElement = qmacro_block() {
-            let $i(valBindName) = $i(finalBind)
-            if ($i(firstName)) {
-                $i(accName) := $i(valBindName)
-                $i(firstName) = false
-            } elif ($e(compareExpr)) {
-                $i(accName) := $i(valBindName)
-            }
-        }
-    } else {
-        // count, long_count
-        perElement = qmacro_expr() {
-            $i(accName) ++
-        }
-    }
+    // Wrap finalBind as an Expression so the shared per-element builder (lane uses `$e(projection)`, decs uses `$e(qmacro($i(finalBind)))`) sees one shape.
+    var valueExpr : Expression? = qmacro($i(finalBind))
+    let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
+    let isDoubleAccType = (chainInfo.finalType != null && chainInfo.finalType.baseType == Type.tDouble)
+    var perElementStmts <- build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
+    var perElement : Expression? = stmts_to_expr(perElementStmts)
     // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
     if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
         var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
@@ -3401,7 +3431,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
         }
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3452,7 +3482,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     } else {
         return null
     }
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
     bodyStmts |> push_from(preludeStmts)
@@ -3506,10 +3536,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let resultName = qn("decs_result", at)
     let containsValName = qn("decs_cv", at)
     let defaultName = qn("decs_dv", at)
-    let skipName = qn("decs_skip", at)
-    let takeCountName = qn("decs_takec", at)
-    let takeLimitName = qn("decs_takel", at)
-    let skippingName = qn("decs_skipping", at)
+    let names <- make_decs_range_names(at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression?
@@ -3630,7 +3657,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
         return null
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3638,7 +3665,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
     // Combine prelude + invocation + tail into ONE bodyStmts list — multiple $b splices in the same qmacro fragment isolate variable scope.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
@@ -3703,17 +3730,14 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind. Slice 5a adds take/skip ranges via rangeInfo.
     let tupName = qn("decs_tup", at)
     let bufName = qn("decs_buf", at)
-    let skipName = qn("decs_skip", at)
-    let takeCountName = qn("decs_takec", at)
-    let takeLimitName = qn("decs_takel", at)
-    let skippingName = qn("decs_skipping", at)
+    let names <- make_decs_range_names(at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var perElement : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(finalBind))
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3721,7 +3745,7 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 3)
     bodyStmts |> push <| qmacro_expr() {
@@ -3769,10 +3793,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let bestKeyName = qn("decs_bkey", at)
     let bestElemName = qn("decs_belem", at)
     let keyBindName = qn("decs_key", at)
-    let skipName = qn("decs_skip", at)
-    let takeCountName = qn("decs_takec", at)
-    let takeLimitName = qn("decs_takel", at)
-    let skippingName = qn("decs_skipping", at)
+    let names <- make_decs_range_names(at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     var keyExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
@@ -3795,7 +3816,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
         }
     }
     // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3803,7 +3824,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
-    var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 5)
     bodyStmts |> push_from <| qmacro_block_to_array() {
@@ -4570,9 +4591,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
     let srcBName = qn("srcB", at)
     let bufName  = qn("buf", at)
     let accName  = qn("acc", at)
-    let skipName = qn("skip", at)
-    let takeCountName = qn("tc", at)
-    let skippingName = qn("skipping", at)
+    let names <- make_range_names(at)
     // itName binds the tuple `(itA, itB)` at the top of the for-body; chain ops (where_/select/while-family) reference it by name.
     let itName = qn("it", at)
     var srcAExpr = peel_each(clone_expression(zipCall.arguments[0]))
@@ -4676,8 +4695,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
         var laneTops <- [srcAExpr, srcBExpr]
         let laneSrcs <- [srcAName, srcBName]
         return emit_accumulator_lane(lastName, laneTops, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, skipName, takeCountName,
-            skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     if (lane == LinqLane.EARLY_EXIT) {
         var preCondStmts : array<Expression?>
@@ -4689,8 +4708,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
         var laneTops <- [srcAExpr, srcBExpr]
         let laneSrcs <- [srcAName, srcBName]
         return emit_early_exit_lane(lastName, laneTops, projection, whereCond,
-            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, skipName,
-            takeCountName, skippingName, skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     // Length shortcut: count/long_count, no chain, both length-bearing → return min(lenA, lenB) without entering the loop.
     if (noChain && bothHaveLength && isCounter) {
@@ -4737,7 +4756,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
             }
         }
     }
-    wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, skipName, takeCountName, skippingName)
+    wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
     // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path.
     let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure)
@@ -4774,7 +4793,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
             }
         }
     }
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
+    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
     // Underscore-prefix iter vars (LINT002) only when neither needsItBind nor identity-tuple push references them.
     let bodyReferencesIterVars = needsItBind || !isCounter
     if (isCounter && !bodyReferencesIterVars) {
