@@ -322,12 +322,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         }
     }
     def dump_top_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
-        var entries : array<FlatEntry>
-        for (e in values(flat)) {
-            if (e.own_heap > 0l) {
-                entries |> push(e)
-            }
-        }
+        var entries <- [for (e in values(flat)); e; where e.own_heap > 0l]
         if (empty(entries)) return
         entries |> sort() <| $(a, b) => a.own_heap > b.own_heap
         to_log(LOG_INFO, "\nTop heap offenders (own allocations):\n")
@@ -339,12 +334,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         }
     }
     def dump_top_string_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
-        var entries : array<FlatEntry>
-        for (e in values(flat)) {
-            if (e.own_string_heap > 0l) {
-                entries |> push(e)
-            }
-        }
+        var entries <- [for (e in values(flat)); e; where e.own_string_heap > 0l]
         if (empty(entries)) return
         entries |> sort() <| $(a, b) => a.own_string_heap > b.own_string_heap
         to_log(LOG_INFO, "\nTop string-heap offenders (own allocations):\n")

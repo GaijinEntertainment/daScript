@@ -422,12 +422,7 @@ def verify_unused_by_recompilation(var ctx : RequirefixContext?; var usage_tab :
         return
     }
 
-    var candidates : array<string>
-    for (mod_name, mod_usage in keys(usage_tab), values(usage_tab)) {
-        if (empty(mod_usage.refs)) {
-            candidates |> push(mod_name)
-        }
-    }
+    let candidates <- [for (mod_name, mod_usage in keys(usage_tab), values(usage_tab)); mod_name; where empty(mod_usage.refs)]
     for (mod_name in candidates) {
         let skip_line = usage_tab[mod_name].required_at
         if (skip_line <= 0) continue

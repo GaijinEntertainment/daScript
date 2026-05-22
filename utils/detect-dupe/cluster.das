@@ -158,12 +158,7 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
     // during the iteration whose outer index is smaller — `candidate_indices`
     // is built in ascending order, so when records[j].is_candidate &&
     // j < i, the pair was already emitted at iteration j.
-    var candidate_indices : array<int>
-    for (i in range(n)) {
-        if (records[i].is_candidate) {
-            candidate_indices |> push(i)
-        }
-    }
+    let candidate_indices <- [for (i in range(n)); i; where records[i].is_candidate]
     for (i in candidate_indices) {
         for (j in range(n)) {
             if (j == i || (records[j].is_candidate && j < i)) continue

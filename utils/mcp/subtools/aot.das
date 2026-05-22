@@ -83,12 +83,7 @@ def run_aot(file, func_name : string; project : string = "") : string {
         }
     return compile_and_simulate_ctx(file, project) $(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) {
         let all_funcs <- collect_aot_functions(program)
-        var matches : array<int>
-        for (i in range(length(all_funcs))) {
-            if (all_funcs[i].name == func_name) {
-                matches |> push(i)
-            }
-        }
+        var matches <- [for (i in range(length(all_funcs))); i; where all_funcs[i].name == func_name]
         if (empty(matches)) {
             for (i in range(length(all_funcs))) {
                 if (all_funcs[i].aot_name == func_name) {
@@ -104,10 +99,7 @@ def run_aot(file, func_name : string; project : string = "") : string {
             }
         }
         if (empty(matches)) {
-            var sigs : array<string>
-            for (fi in all_funcs) {
-                sigs |> push(fi.signature)
-            }
+            let sigs <- [for (fi in all_funcs); fi.signature]
             return "No function matching '{func_name}' found.\nAvailable functions:\n" + join(sigs, "\n")
         }
         if (length(matches) == 1) {
@@ -121,10 +113,7 @@ def run_aot(file, func_name : string; project : string = "") : string {
             if (empty(result)) return "Function '{matched_name}' produced no AOT output (marked noAot or no_aot)."
             return result
         }
-        var lines : array<string>
-        for (idx in matches) {
-            lines |> push("{all_funcs[idx].signature}  [{all_funcs[idx].aot_name}]")
-        }
+        let lines <- [for (idx in matches); "{all_funcs[idx].signature}  [{all_funcs[idx].aot_name}]"]
         return "Multiple functions match '{func_name}':\n" + join(lines, "\n") + "\nUse the bracketed name for exact selection."
     }
 }

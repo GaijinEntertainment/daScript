@@ -458,10 +458,7 @@ class CoveragePass : AstPassMacro {
             blk.list |> clear()
             for (file, values in keys(coverageData), values(coverageData)) {
                 // register lines
-                var lineArr : array<uint>
-                for (line in keys(values.line_cov.lines)) {
-                    lineArr |> push(line)
-                }
+                let lineArr <- [for (line in keys(values.line_cov.lines)); line]
                 blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(string(file)), $v(lineArr)))
             }
             for (file, reg_data in keys(registration_data), values(registration_data)) {
@@ -476,10 +473,7 @@ class CoveragePass : AstPassMacro {
 
                 // register per-function lines
                 for (fname, flines in keys(reg_data.funcLines), values(reg_data.funcLines)) {
-                    var flineArr : array<uint>
-                    for (fl in keys(flines)) {
-                        flineArr |> push(fl)
-                    }
+                    let flineArr <- [for (fl in keys(flines)); fl]
                     blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(string(file)), $v(string(fname)), $v(flineArr)))
                 }
 

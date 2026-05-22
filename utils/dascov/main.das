@@ -38,12 +38,7 @@ def main() {
     let sep = find_index(args, "--") + 1
     let numArgs = args |> length() - sep
     // Collect --exclude prefixes.
-    var excludes : array<string>
-    for (i in range(sep, args |> length() - 1)) {
-        if (args[i] == "--exclude") {
-            excludes |> push(args[i + 1])
-        }
-    }
+    let excludes <- [for (i in range(sep, args |> length() - 1)); args[i + 1]; where args[i] == "--exclude"]
     if (numArgs == 1 || (numArgs >= 2 && args[sep + 1] == "--exclude")) {
         // LCOV summary mode: parse existing LCOV file and print summary.
         print(coverage::summary_from_lcov_file(args[sep], excludes))

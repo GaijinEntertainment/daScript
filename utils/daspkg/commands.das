@@ -923,12 +923,7 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
         }
     }
     // upgrade root packages only — deps get pulled along
-    var names : array<string>
-    for (entry in lf.packages) {
-        if (entry.root && !entry.local) {
-            names |> push_clone(entry.name)
-        }
-    }
+    let names <- [for (entry in lf.packages); entry.name; where entry.root && !entry.local]
     if (empty(names)) {
         print("No upgradeable packages\n")
         return 0

@@ -50,10 +50,7 @@ def run_list_requires(file : string; project : string = ""; json : bool = false)
         var transitive_text : array<string>
         var transitive_entries : array<RequireEntry>
         let thisMod = get_this_module(program)
-        var visited : table<string; bool>
-        for (dm in direct_modules) {
-            visited |> insert(dm, true)
-        }
+        var visited <- {for (dm in direct_modules); dm => true}
         visited |> insert("$", true)
         var queue : array<Module?>
         module_for_each_dependency(thisMod) $(var dep : Module?; var is_pub : bool) {

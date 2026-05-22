@@ -664,12 +664,7 @@ def cpp_extend_class_ranges(var entries : array<CppMatch>) {
 // Returns the modified `entries` (move-out). `entries` is left empty on the caller side.
 def cpp_filter_entries(var entries : array<CppMatch>) : array<CppMatch> {
     // Build a set of (file, start_line) pairs that have a class/struct match.
-    var class_struct_at : table<string; bool>
-    for (e in entries) {
-        if (e.kind == "class" || e.kind == "struct") {
-            class_struct_at["{e.file}:{e.line}"] = true
-        }
-    }
+    let class_struct_at <- {for (e in entries); "{e.file}:{e.line}" => true; where e.kind == "class" || e.kind == "struct"}
     // Walk forward, write the survivors to a write_idx; truncate at the end.
     var write_idx = 0
     for (read_idx in range(length(entries))) {

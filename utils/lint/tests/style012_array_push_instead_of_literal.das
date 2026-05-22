@@ -66,9 +66,10 @@ def good_push_clone() {
     a |> push_clone(s)
 }
 
-// good: push inside a loop is fine (not a literal candidate)
+// good: push inside a loop is fine *for STYLE012* (no contiguous push run after the
+// let). The shape DOES match STYLE027 (use a comprehension), so suppress that here.
 def good_loop_push() {
-    var a : array<int>
+    var a : array<int>  // nolint:STYLE027
     for (i in range(5)) {
         a |> push(i)
     }

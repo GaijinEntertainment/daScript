@@ -598,12 +598,9 @@ class TemplateTuple : AstStructureAnnotation {
         // resolved type (``int``), and in the generic path it's
         // ``auto(<caller-name>)`` — exactly the binding-slot the recursive
         // unifier (``inferGenericType`` / ``updateAliasMap``) needs.
-        var rulesStmts : array<ExpressionPtr>
-        for (an in argNames) {
-            rulesStmts |> push(qmacro_expr() {
-                rules |> replaceTypeWithTypeDecl($v(an), clone_type($i(an)));
-            })
-        }
+        var rulesStmts <- [for (an in argNames); qmacro_expr() {
+            rules |> replaceTypeWithTypeDecl($v(an), clone_type($i(an)));
+        }]
         var typeMacroFunction = qmacro_function(typeMacroFunctionName) $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             if (passArgument != null) {
                 if (passArgument.baseType != Type.tTuple) {

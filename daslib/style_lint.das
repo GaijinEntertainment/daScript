@@ -34,6 +34,7 @@ module style_lint shared private
 //!   STYLE024 — redundant 'unsafe' wrap; inner expression / block body has no operation requiring unsafe — drop the wrap
 //!   STYLE025 — 'unsafe { ... }' block where only one statement needs unsafe — narrow to 'unsafe(<sub-expr>)'
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
+//!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 
 require daslib/ast_boost
 require daslib/is_local
@@ -798,6 +799,7 @@ class StyleLintVisitor : AstVisitor {
             self->check_style012_array_init(blk, expr as ExprLet)
             self->check_style013_struct_field_init(blk, expr as ExprLet)
             self->check_style021_jv_table_init(blk, expr as ExprLet)
+            self->check_style027_for_loop_comprehension(blk, expr as ExprLet)
         }
     }
 
@@ -1031,6 +1033,115 @@ class StyleLintVisitor : AstVisitor {
                 self->style_warning("STYLE021: table<string; JsonValue?> built by repeated insert calls; use 'var v = JV((k1=..., k2=..., ...))' (named-tuple JV form from json_boost)", v.at)
             }
         }
+    }
+
+    // --- STYLE027: var array<T>/table<K;V> followed by for-loop push/insert → comprehension ---
+
+    def check_style027_for_loop_comprehension(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        if (idx < 0 || idx + 1 >= n) return
+        let nextStmt = blk.list[idx + 1]
+        if (!(nextStmt is ExprFor)) return
+        let forE = nextStmt as ExprFor
+        for (v in elet.variables) {
+            if (v.init != null
+                || v.flags.generated || v.flags.inScope
+                || v._type == null || !empty(v._type.dim)) continue
+            let isArray = v._type.baseType == Type.tArray
+            let isTable = v._type.baseType == Type.tTable
+            if ((!isArray && !isTable)
+                || !self->for_loop_matches_comprehension(forE, v, isArray, 1)) continue
+            let kindLabel = isArray ? "array<T>" : "table<K;V>"
+            let rewriteForm = (isArray
+                ? "{v.name} <- [for (x in SRC); EXPR; where COND]"
+                : "{v.name} <- \{for (x in SRC); KEY => VAL; where COND\}")
+            self->style_warning("STYLE027: var {kindLabel} '{v.name}' followed by a for-loop that only push/insert into it; use a comprehension `{rewriteForm}` (drop `; where COND` when there is no filter)", v.at)
+        }
+    }
+
+    def for_loop_matches_comprehension(forE : ExprFor?; target : Variable?;
+                                       isArray : bool; for_budget : int) : bool {
+        //! Recursively verifies forE's body is built solely from pushes/inserts/at-assigns
+        //! into `target`, optionally wrapped in if-filters and nested-for (up to `for_budget`
+        //! additional nested ExprFor levels). Returns false on any side-effecting statement
+        //! or unrelated shape, so the all-or-nothing structure guarantees the suggested
+        //! comprehension rewrite is semantically equivalent.
+        if (forE == null || forE.genFlags.generated
+            || forE.body == null || !(forE.body is ExprBlock)) return false
+        let blk = forE.body as ExprBlock
+        if (length(blk.list) != 1) return false
+        return self->stmt_matches_in_for(blk.list[0], target, isArray, for_budget)
+    }
+
+    def stmt_matches_in_for(stmt : Expression?; target : Variable?;
+                            isArray : bool; for_budget : int) : bool {
+        if (stmt == null || stmt.genFlags.generated) return false
+        if (stmt is ExprIfThenElse) {
+            let ifte = stmt as ExprIfThenElse
+            if (ifte.if_false != null || ifte.if_flags.isStatic
+                || ifte.if_true == null || !(ifte.if_true is ExprBlock)) return false
+            let tb = ifte.if_true as ExprBlock
+            if (length(tb.list) != 1) return false
+            return self->stmt_matches_in_for(tb.list[0], target, isArray, for_budget)
+        }
+        if (stmt is ExprFor) {
+            if (for_budget <= 0) return false
+            return self->for_loop_matches_comprehension(stmt as ExprFor, target, isArray, for_budget - 1)
+        }
+        if (isArray) {
+            if (!(stmt is ExprCall)) return false
+            let call = stmt as ExprCall
+            return (self->is_named_target_call(call, target, 2, "push")
+                || self->is_named_target_call(call, target, 2, "push_clone"))
+        }
+        if (stmt is ExprCall && self->is_named_target_call(stmt as ExprCall, target, 3, "insert")) return true
+        return self->is_at_assign_of(stmt, target)
+    }
+
+    def is_named_target_call(call : ExprCall?; target : Variable?;
+                             min_args : int; fname : string) : bool {
+        //! Pipe-lowered call shape: `target |> fname(...)` resolves to fname(target, ...).
+        //! Returns true when call's func.fromGeneric.name == fname, arg count >= min_args,
+        //! and arg[0] (after one ExprRef2Value peel) is ExprVar(target).
+        if (call == null || call.func == null || call.func.fromGeneric == null
+            || call.func.fromGeneric.name != fname
+            || length(call.arguments) < min_args) return false
+        var arg = call.arguments[0]
+        if (arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value.subexpr)
+        }
+        if (!(arg is ExprVar)) return false
+        return (arg as ExprVar).variable == target
+    }
+
+    def is_at_assign_of(stmt : Expression?; target : Variable?) : bool {
+        //! True when stmt is `target[<key>] = <expr>` — ExprCopy/Clone/Move whose LHS is
+        //! ExprAt with subexpr resolving (after one ExprRef2Value peel) to ExprVar(target).
+        var lhs : Expression? = null
+        if (stmt is ExprCopy) {
+            lhs = (stmt as ExprCopy).left
+        } elif (stmt is ExprClone) {
+            lhs = (stmt as ExprClone).left
+        } elif (stmt is ExprMove) {
+            lhs = (stmt as ExprMove).left
+        } else {
+            return false
+        }
+        return false if (lhs == null || !(lhs is ExprAt))
+        var src = (lhs as ExprAt).subexpr
+        if (src != null && src is ExprRef2Value) {
+            src = (src as ExprRef2Value).subexpr
+        }
+        return false if (src == null || !(src is ExprVar))
+        return (src as ExprVar).variable == target
     }
 
     def is_push_or_emplace_of(call : ExprCall?; target : Variable?) : bool {
