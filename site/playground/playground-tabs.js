@@ -293,12 +293,20 @@
         bindTabsHandlers();
         renderTabs();
 
-        // Priority: URL hash > autosave > default sample > empty editor.
+        // Priority: URL hash > ?example= > autosave > default sample > empty editor.
         // When restored from hash or autosave we set pgRestoredFromState so
         // main.js skips its default selectSample("examples", 0) call (whose
         // async fetch would otherwise clobber the restored state ~200ms in).
+        //
+        // `?example=<slug>` (used by the daslang.io § 01 "try <test> on the
+        // playground →" deep-link) is also a URL-borne intent signal — it must
+        // override autosave, or visitors who've used the playground before
+        // land on their autosaved buffer instead of the workload they clicked
+        // through for. main.js's pageInit handles the actual selection once
+        // data.json loads; here we just refuse to clobber it with autosave.
         const hash = window.location.hash || '';
         const hasHash = hash.startsWith('#code=') || hash.startsWith('#z=');
+        const hasExampleParam = new URLSearchParams(window.location.search).has('example');
 
         if (hasHash && window.__pendingSampleBundle) {
             const bundle = window.__pendingSampleBundle;
@@ -310,7 +318,7 @@
             return;
         }
 
-        const saved = !hasHash ? loadAutosave() : null;
+        const saved = (!hasHash && !hasExampleParam) ? loadAutosave() : null;
         if (saved && saved.files && Object.keys(saved.files).length > 0) {
             pgLoadFiles(saved.files, saved.active);
             window.pgRestoredFromState = true;

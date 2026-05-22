@@ -63,3 +63,25 @@ test('autosave does not override URL #code hash on reload', async ({ playground 
     const mainText = await playground.evaluate(() => window.pgState.files['main.das'].getValue());
     expect(mainText).toContain('shared via hash');
 });
+
+test('autosave does not override ?example= deep-link', async ({ playground }) => {
+    // Same intent-signal rule as #code=: a visitor following the daslang.io
+    // § 01 "try sha256 on the playground" deep-link should land on sha256,
+    // even if they've used the playground before and have an autosaved buffer.
+    await waitTabsReady(playground);
+
+    await playground.evaluate(() => {
+        window.code.getDoc().setValue('// stale autosave buffer\n');
+    });
+    await playground.waitForTimeout(400);
+
+    await playground.goto('/playground/?example=sha256');
+    await waitTabsReady(playground);
+
+    // sha256.das ships a `// SHA-256` header comment — content match is
+    // sturdier than asserting the dropdown label since selectSample resets
+    // the <select> back to "Select example" after firing.
+    const mainText = await playground.evaluate(() => window.pgState.files['main.das'].getValue());
+    expect(mainText).toMatch(/sha[- ]?256/i);
+    expect(mainText).not.toContain('stale autosave buffer');
+});

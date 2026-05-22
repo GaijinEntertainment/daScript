@@ -105,10 +105,22 @@ function deriveJitName(files) {
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
-    if (!name) { jitRadio.disabled = true; return; }
+    // When JIT becomes unavailable for the new sample, fall back to the
+    // interpreter — leaving the radio merely `disabled` but still `checked`
+    // would keep selectedEngine() returning 'jit' and runCode() would 404
+    // on the missing .wasm.
+    const disableJit = () => {
+        jitRadio.disabled = true;
+        if (jitRadio.checked) {
+            jitRadio.checked = false;
+            const interpRadio = document.querySelector('input[name=engine][value=interpreter]');
+            if (interpRadio) interpRadio.checked = true;
+        }
+    };
+    if (!name) { disableJit(); return; }
     fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
-        .then(r => { jitRadio.disabled = !r.ok; })
-        .catch(() => { jitRadio.disabled = true; });
+        .then(r => { if (r.ok) jitRadio.disabled = false; else disableJit(); })
+        .catch(disableJit);
 }
 
 selectSample = function(type, id) {
