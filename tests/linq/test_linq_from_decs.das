@@ -2369,3 +2369,180 @@ def test_unroll5c_select_distinct_long_count_pred_parity(t : T?) {
     t |> equal(got, 2l, "predicate must be honored, not dropped")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 4 — chain-driven component pruning (build_decs_inner_for_pruned)
+// Tests that emit_decs_* paths prune get_ro/iter slots down to fields the chain references,
+// and that whole-tuple references (bare to_array, pass-to-user-fn) correctly disable pruning.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[decs_template(prefix = "wave4_")]
+struct Wave4Row {
+    brand : int
+    price : int
+    year  : int
+}
+
+def private fixture_wave4(n : int) {
+    restart()
+    for (i in range(n)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.wave4_brand := i % 4
+            cmp.wave4_price := i * 10
+            cmp.wave4_year  := 2000 + (i % 25)
+        }
+    }
+    commit()
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_sum_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._select(_.price).sum())
+}
+
+[test]
+def test_wave4_pruned_select_sum_parity(t : T?) {
+    fixture_wave4(10)
+    // sum(price) for i in 0..10 = 10*(0+1+...+9) = 450
+    t |> equal(target_wave4_pruned_select_sum_fold(), 450, "_select(_.price).sum() — only price referenced; pruning must preserve semantics")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_where_count_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50).count())
+}
+
+[test]
+def test_wave4_pruned_where_count_parity(t : T?) {
+    fixture_wave4(10)
+    // i=0..9 → price=0,10,20,...90; price>50 → i in {6,7,8,9} → 4 rows
+    t |> equal(target_wave4_pruned_where_count_fold(), 4, "_where(_.price>50).count() — only price referenced; pruning must preserve semantics")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_where_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50)._select(_.brand).to_array())
+}
+
+[test]
+def test_wave4_pruned_select_where_to_array_parity(t : T?) {
+    fixture_wave4(10)
+    // Survivors: i=6,7,8,9 → brand = 6%4=2, 7%4=3, 8%4=0, 9%4=1
+    let got <- target_wave4_pruned_select_where_to_array_fold()
+    t |> equal(got |> length, 4, "4 surviving brands")
+    t |> equal(got |> sum, 2 + 3 + 0 + 1, "brand sum independent of order")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_bare_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).to_array())
+}
+
+[test]
+def test_wave4_unpruned_bare_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // Bare to_array: walker sees `push_clone(decs_tup)` whole-var ref → no pruning → full tuple preserved
+    let got <- target_wave4_unpruned_bare_to_array_fold()
+    t |> equal(got |> length, 3, "3 rows materialized")
+    // Sum each field independently — order-agnostic full-tuple check
+    var brand_sum = 0
+    var price_sum = 0
+    var year_sum = 0
+    for (c in got) {
+        brand_sum += c.brand
+        price_sum += c.price
+        year_sum += c.year
+    }
+    t |> equal(brand_sum, 0 + 1 + 2, "brand sum (full tuple preserved)")
+    t |> equal(price_sum, 0 + 10 + 20, "price sum (full tuple preserved)")
+    t |> equal(year_sum, 2000 + 2001 + 2002, "year sum (full tuple preserved)")
+}
+
+def private wave4_pred_uses_whole_tup(t : tuple<brand : int; price : int; year : int>) : bool {
+    return (t.brand + t.price + t.year) > 0
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_pass_to_fn_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._where(wave4_pred_uses_whole_tup(_)).count())
+}
+
+[test]
+def test_wave4_unpruned_pass_to_fn_parity(t : T?) {
+    fixture_wave4(3)
+    // _where peel renames `_` to `decs_tup`; the predicate body becomes
+    // `wave4_pred_uses_whole_tup(decs_tup)` — decs_tup referenced as a whole-var arg →
+    // walker sets allFieldsUsed=true → pruning disabled. All 3 fields materialized.
+    // All 3 rows pass the > 0 predicate (year always ≥ 2000), so count = 3.
+    t |> equal(target_wave4_unpruned_pass_to_fn_fold(), 3, "pass-to-fn predicate must see full tuple")
+}
+
+[test]
+def test_wave4_unpruned_pass_to_fn_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_unpruned_pass_to_fn_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Whole-tup reference in the where predicate disables pruning — all 3 get_ros present.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "pass-to-fn must emit all 3 get_ros (no pruning)")
+    }
+}
+
+[test]
+def test_wave4_pruned_where_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_where_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Wave 4 contract: chain reads only `price`; helper prunes brand+year out of the multi-iter for-loop.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "_where(_.price>50).count() must emit exactly 1 get_ro (price)")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "kept slot is for price")
+        t |> equal(describe_count(body_expr, "wave4_brand"), 0, "brand pruned out")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "year pruned out")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no _find — no take/early-exit)")
+    }
+}
+
+[test]
+def test_wave4_unpruned_bare_to_array_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_unpruned_bare_to_array_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Wave 4 contract: bare to_array → push_clone(decs_tup) is a whole-var ref → walker disables pruning → all 3 components present.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "bare to_array must emit all 3 get_ros (no pruning)")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand slot present")
+        t |> success(describe_count(body_expr, "wave4_price") >= 1, "price slot present")
+        t |> success(describe_count(body_expr, "wave4_year") >= 1, "year slot present")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_wave4_take_count_no_field_ref_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>).take(5).count())
+}
+
+[test]
+def test_wave4_take_count_no_field_ref_parity(t : T?) {
+    fixture_wave4(10)
+    // .take(5).count() — the per-element body only references the take counter + acc; no
+    // tuple field refs. Walker reports empty usedNames → helper short-circuits to unpruned
+    // emission (still safe; no field referenced → no real difference).
+    t |> equal(target_wave4_take_count_no_field_ref_fold(), 5, "take(5).count() splice must still return 5")
+}
+

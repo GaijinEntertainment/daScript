@@ -3120,6 +3120,115 @@ def private build_decs_inner_for(bridge : DecsBridgeShape?; var tupBind : Expres
     return clonedForExpr
 }
 
+// Walks a chain body to collect which fields of the decs_tup named-tuple bind are actually referenced. allFieldsUsed flips when the bind is referenced as a whole-var (not via field access) — e.g. push_clone(decs_tup) in a bare to_array, or pass-to-user-fn — so the helper falls back to unpruned emission and preserves the user-visible output shape.
+class private DecsTupUsageScanner : AstVisitor {
+    tupName       : string
+    @do_not_delete usedFields : table<string>
+    allFieldsUsed : bool = false
+    inTargetField : bool = false
+    def DecsTupUsageScanner(n : string) {
+        tupName = n
+    }
+    def override preVisitExprField(expr : ExprField?) : void {
+        var v = expr.value
+        if (v is ExprRef2Value) {
+            v = (v as ExprRef2Value).subexpr
+        }
+        if (v is ExprVar && (v as ExprVar).name == tupName) {
+            usedFields |> insert(string(expr.name))
+            inTargetField = true
+        }
+    }
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        inTargetField = false
+        return unsafe(reinterpret<ExpressionPtr>(expr))
+    }
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        if (expr.name == tupName && !inTargetField) {
+            allFieldsUsed = true
+        }
+    }
+}
+
+[macro_function]
+def private collect_decs_tup_usage(var e : Expression?; tupName : string) : tuple<bool; array<string>> {
+    // Returns (allFieldsUsed, usedFieldNames). usedFieldNames is unordered — caller filters bridge.userNames in original order to preserve get_ro emission order.
+    var allUsed = false
+    var used : array<string>
+    if (e == null) return (allUsed, used)
+    var sc = new DecsTupUsageScanner(tupName)
+    make_visitor(*sc) $(astVisitorAdapter) {
+        visit_expression(e, astVisitorAdapter)
+    }
+    allUsed = sc.allFieldsUsed
+    for (k in keys(sc.usedFields)) {
+        used |> push(k)
+    }
+    unsafe {
+        delete sc
+    }
+    return (allUsed, used)
+}
+
+[macro_function]
+def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
+                                        tupName : string;
+                                        var body : Expression?;
+                                        at : LineInfo) : Expression? {
+    // Walks body for `tupName.<field>` references; when pruning is safe + beneficial, emits the inner multi-iter for with unused get_ro slots dropped and a matching shrunk named-tuple bind. Otherwise falls through to the unpruned path so user-visible shape stays intact (bare to_array, push_clone(decs_tup), pass-to-user-fn).
+    let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName)
+    if (allUsed || empty(usedNames) || length(usedNames) == length(bridge.userNames)) {
+        var tupBind = build_decs_tup_bind(bridge, tupName, at)
+        return build_decs_inner_for(bridge, tupBind, body, at)
+    }
+    var usedSet : table<string>
+    for (n in usedNames) {
+        usedSet |> insert(n)
+    }
+    var prunedUserNames : array<string>
+    var prunedIterNames : array<string>
+    var keepIdxs : array<int>
+    for (i in 0 .. length(bridge.userNames)) {
+        if (key_exists(usedSet, bridge.userNames[i])) {
+            prunedUserNames |> push(bridge.userNames[i])
+            prunedIterNames |> push(bridge.iterNames[i])
+            keepIdxs |> push(i)
+        }
+    }
+    // Pruned named-tuple bind — mirrors build_decs_tup_bind on the kept subset.
+    var mkTup = new ExprMakeTuple(at = at)
+    mkTup.recordNames |> resize(length(prunedUserNames))
+    for (i in 0 .. length(prunedUserNames)) {
+        mkTup.recordNames[i] := prunedUserNames[i]
+        mkTup.values |> emplace_new(new ExprVar(at = at, name := prunedIterNames[i]))
+    }
+    var tupBind = qmacro_expr() {
+        var $i(tupName) = $e(mkTup)
+    }
+    // Clone forExpr; drop the iter slots not in keepIdxs from all 5 parallel dasvectors (sources/iterators/iteratorsAt/iteratorsAka/iteratorsTags). iteratorVariables is cleared so the typer rebuilds it during re-type — same pattern as daslib/soa.das:381.
+    var clonedForExpr = clone_expression(bridge.forExpr)
+    var clonedFor = clonedForExpr as ExprFor
+    let nSlots = length(bridge.userNames)
+    for (i in 0 .. nSlots) {
+        let revIdx = nSlots - 1 - i
+        if (!key_exists(usedSet, bridge.userNames[revIdx])) {
+            clonedFor.sources       |> erase(revIdx)
+            clonedFor.iterators     |> erase(revIdx)
+            clonedFor.iteratorsAt   |> erase(revIdx)
+            clonedFor.iteratorsAka  |> erase(revIdx)
+            clonedFor.iteratorsTags |> erase(revIdx)
+        }
+    }
+    clonedFor.iteratorVariables |> clear()
+    // Install body — same layering as build_decs_inner_for.
+    var forBodyStmts <- [tupBind, body]
+    var forBody = stmts_to_expr(forBodyStmts)
+    var newForBody = new ExprBlock(at = at)
+    newForBody.list |> push(forBody)
+    clonedFor.body = newForBody
+    return clonedForExpr
+}
+
 struct private DecsChainInfo {
     bindAt      : array<string>    // bind name visible at each chain position
     finalBind   : string            // bind name AFTER full chain — what terminator references
@@ -3434,8 +3543,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
@@ -3660,8 +3768,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
@@ -3740,8 +3847,7 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
     perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
@@ -3819,8 +3925,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, body, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
     let archName = bridge.archName
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
