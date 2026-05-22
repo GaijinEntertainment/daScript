@@ -205,10 +205,21 @@ jobs:
     - if: runner.os == 'Windows'
       uses: ilammy/setup-nasm@v1 # need nasm for openssl
 
+    - name: "Cache vcpkg + openssl"
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        # Whole vcpkg/ dir: bootstrapped vcpkg.exe + installed/<triplet>/openssl.
+        # On hit, install step skips clone + bootstrap + openssl build.
+        path: vcpkg
+        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v1
+
     - name: "Install openssl windows"
       if: runner.os == 'Windows'
       run: |
-        git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+            git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        fi
         ./vcpkg/vcpkg install openssl:${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows --binarycaching
         echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
         echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
