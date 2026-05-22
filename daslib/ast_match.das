@@ -2229,7 +2229,7 @@ def peel_lambda_single_return(var lam : Expression?) : Expression?  {
 }
 
 [clone(expr)]
-def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expression? {
+def peel_lambda_rename_var(expr : Expression?; argName : string) : Expression? {
     //! Peel a single-arg, single-return lambda by renaming its bound variable to ``argName`` in the
     //! cloned body. If the input is not a peelable lambda, fall back to ``invoke(expr, argName)`` so
     //! callers can splice the result unconditionally.
@@ -2251,7 +2251,7 @@ def peel_lambda_rename_var(var expr : Expression?; argName : string) : Expressio
 }
 
 [clone(expr, replacement)]
-def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression?) : Expression? {
+def peel_lambda_replace_var(expr : Expression?; var replacement : Expression?) : Expression? {
     //! Variant of ``peel_lambda_rename_var`` — substitutes the bound variable with an
     //! arbitrary expression in the cloned body. ``replaceVariable`` is now peel-aware
     //! (single unified path strips typer-inserted ``ExprRef2Value`` wrappers when
@@ -2274,7 +2274,7 @@ def peel_lambda_replace_var(var expr : Expression?; var replacement : Expression
 }
 
 [clone(expr)]
-def peel_lambda_rename_2vars(var expr : Expression?; arg0Name, arg1Name : string) : Expression? {
+def peel_lambda_rename_2vars(expr : Expression?; arg0Name, arg1Name : string) : Expression? {
     //! 2-arg peel variant for shapes like aggregate's ``block<(acc, x) : AGG>``. Returns ``null``
     //! when the input is not a peelable 2-arg, single-return lambda — caller decides the fallback
     //! (this differs from the 1-arg form, which falls back to ``invoke``).

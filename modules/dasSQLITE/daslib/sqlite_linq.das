@@ -3492,12 +3492,12 @@ def private emit_pragma_or_vacuum(prog : ProgramPtr; var call : ExprCallMacro?;
     var frags : array<SqlFrag>
     if (isPragma) {
         frags |> push_text("PRAGMA ")
-        frags |> push_inline_id(clone_expression(call.arguments[1]))
+        frags |> push_inline_id(call.arguments[1])
         frags |> push_text(" = ")
-        frags |> push_inline_lit(clone_expression(call.arguments[2]))
+        frags |> push_inline_lit(call.arguments[2])
     } else {
         frags |> push_text("VACUUM INTO ")
-        frags |> push_inline_lit(clone_expression(call.arguments[1]))
+        frags |> push_inline_lit(call.arguments[1])
     }
     var sqlExpr : ExpressionPtr
     var bindExprs : array<ExpressionPtr>
