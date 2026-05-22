@@ -303,6 +303,15 @@ jobs:
     - name: "Test"
       run: |
         set -eux
+        # When daslang is sanitizer-instrumented, its JIT-emitted .dll cache
+        # link cmd needs -fsanitize=<kind> to pull the sanitizer runtime
+        # (otherwise unresolved __ubsan_*/__asan_*/__tsan_* symbols in lib.so).
+        JIT_LINKER_STRING=""
+        case "${{ matrix.sanitizers }}" in
+            ubsan) JIT_LINKER_STRING="--jit-linker-string=-fsanitize=undefined" ;;
+            asan)  JIT_LINKER_STRING="--jit-linker-string=-fsanitize=address"   ;;
+            tsan)  JIT_LINKER_STRING="--jit-linker-string=-fsanitize=thread"    ;;
+        esac
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
@@ -314,7 +323,7 @@ jobs:
             printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --timeout 900 --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
            windows32)
@@ -323,7 +332,7 @@ jobs:
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --timeout 900 --color --failures-only --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --timeout 900 --color --failures-only --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --isolated-mode --timeout 3600 --test ../../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../../tests
             ;;
            linux_arm64)
@@ -334,12 +343,12 @@ jobs:
             # runs JIT — keep --failures-only off there so PASS lines print and
             # name the test running just before the hang if it reoccurs (see
             # RC2 release run #25572466058).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
            *)
             cd bin
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac
