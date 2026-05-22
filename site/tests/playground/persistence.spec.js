@@ -81,7 +81,16 @@ test('autosave does not override ?example= deep-link', async ({ playground }) =>
     // sha256.das ships a `// SHA-256` header comment — content match is
     // sturdier than asserting the dropdown label since selectSample resets
     // the <select> back to "Select example" after firing.
+    //
+    // Poll instead of a bare evaluate: waitTabsReady returns as soon as
+    // pgState exists (initial empty doc), but main.js's `?example=` branch
+    // still has to async-fetch data.json + sha256.das before pgLoadFiles
+    // swaps the buffer content. Polling on the sha256 header marker is the
+    // direct signal that the deep-link load actually landed.
+    await expect.poll(
+        () => playground.evaluate(() => window.pgState.files['main.das'].getValue()),
+        { timeout: 5_000 }
+    ).toMatch(/sha[- ]?256/i);
     const mainText = await playground.evaluate(() => window.pgState.files['main.das'].getValue());
-    expect(mainText).toMatch(/sha[- ]?256/i);
     expect(mainText).not.toContain('stale autosave buffer');
 });
