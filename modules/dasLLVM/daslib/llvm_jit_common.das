@@ -222,8 +222,10 @@ def public FN_JIT_TABLE_FIND(t : Type) {
 }
 
 def private add_table_linkage(val : LLVMOpaqueValue?) {
-    // windows crashes with weak linkage
-    LLVMSetLinkage(val, LLVMLinkage.LLVMExternalLinkage)
+    // DLLExport storage so ResolveExternVisitor's set_glob_address (GetProcAddress
+    // on Windows) can find the slot on cache-hit reload; otherwise #2802 stale-addr.
+    LLVMSetLinkage(val, LLVMLinkage.LLVMDLLExportLinkage)
+    LLVMSetDLLStorageClass(val, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
 }
 
 def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : DllName; at_type : LLVMOpaqueType?; fn_ptr : void?) {
