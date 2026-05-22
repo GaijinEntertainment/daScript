@@ -537,15 +537,11 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName, s
     var srcParamType = invoke_src_param_type(top)
     var bodyStmts : array<Expression?>
     append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, skipName, takeCountName, skippingName)
-    bodyStmts |> push <| qmacro_expr() {
+    bodyStmts |> push_from <| qmacro_block_to_array() {
         var $i(accName) = 0
-    }
-    bodyStmts |> push <| qmacro_expr() {
         for ($i(itName) in $i(srcName)) {
             $e(loopBody)
         }
-    }
-    bodyStmts |> push <| qmacro_expr() {
         return $i(accName)
     }
     var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
@@ -870,16 +866,12 @@ def private emit_early_exit_lane(
         }
         let foundName = qn("found", at)
         let lastBindName = qn("lst", at)
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(foundName) = false
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(lastBindName) : $t(retType)
         }
-        perMatchStmts |> push <| qmacro_expr() {
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
             $i(foundName) = true
-        }
-        perMatchStmts |> push <| qmacro_expr() {
             $i(lastBindName) := $i(valueName)
         }
         if (opName == "last") {
@@ -917,22 +909,16 @@ def private emit_early_exit_lane(
         }
         let foundName = qn("found", at)
         let bindName = qn("sng", at)
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(foundName) = false
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(bindName) : $t(retType)
         }
         if (opName == "single") {
-            perMatchStmts |> push <| qmacro_expr() {
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
                 if ($i(foundName)) {
                     panic("sequence contains more than one element")
                 }
-            }
-            perMatchStmts |> push <| qmacro_expr() {
                 $i(foundName) = true
-            }
-            perMatchStmts |> push <| qmacro_expr() {
                 $i(bindName) := $i(valueName)
             }
             tailStmts <- qmacro_block_to_array() {
@@ -948,15 +934,11 @@ def private emit_early_exit_lane(
                 let $i(defaultName) = $e(defaultExpr)
             }
             // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
-            perMatchStmts |> push <| qmacro_expr() {
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
                 if ($i(foundName)) {
                     return $i(defaultName)
                 }
-            }
-            perMatchStmts |> push <| qmacro_expr() {
                 $i(foundName) = true
-            }
-            perMatchStmts |> push <| qmacro_expr() {
                 $i(bindName) := $i(valueName)
             }
             tailStmts <- qmacro_block_to_array() {
@@ -1000,12 +982,10 @@ def private emit_early_exit_lane(
         preludeStmts |> push <| qmacro_expr() {
             var $i(cntName) = 0
         }
-        perMatchStmts |> push <| qmacro_expr() {
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
             if ($i(cntName) == $i(idxName)) {
                 return $i(valueName)
             }
-        }
-        perMatchStmts |> push <| qmacro_expr() {
             $i(cntName) ++
         }
         if (opName == "element_at") {
@@ -1901,10 +1881,8 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     let takeLimName = qn("takeLim", at)
     if (takeExpr != null) {
         var takeBind = clone_expression(takeExpr)
-        stmts |> push <| qmacro_expr() {
+        stmts |> push_from <| qmacro_block_to_array() {
             let $i(takeLimName) = $e(takeBind)
-        }
-        stmts |> push <| qmacro_expr() {
             var $i(takenName) = 0
         }
     }
@@ -2748,19 +2726,15 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
             }
         }
         var tabValueType2 = clone_type(tabValueType)
-        stmts |> push <| qmacro_expr() {
+        stmts |> push_from <| qmacro_block_to_array() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); $t(tabValueType)>
-        }
-        stmts |> push <| qmacro_expr() {
             var $i(dummyName) : $t(tabValueType2)
         }
     } else {
         var accType  = clone_type(specs[0].accType)
         var accType2 = clone_type(specs[0].accType)
-        stmts |> push <| qmacro_expr() {
+        stmts |> push_from <| qmacro_block_to_array() {
             var inscope $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyBlk1), default<$t(elemType)>))); tuple<typedecl(invoke($e(keyBlk2), default<$t(elemType)>)) -const -&; $t(accType)>>
-        }
-        stmts |> push <| qmacro_expr() {
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlkD), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     }
@@ -2904,10 +2878,8 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
             retType = new TypeDecl(baseType = Type.tArray)
             retType.firstType = clone_type(bufElemType)
         }
-        stmts |> push <| qmacro_expr() {
+        stmts |> push_from <| qmacro_block_to_array() {
             var $i(bufName) : array<$t(bufElemType)>
-        }
-        stmts |> push <| qmacro_expr() {
             $i(bufName) |> reserve(length($i(tabName)))
         }
         if (havingPred != null) {
@@ -3327,10 +3299,8 @@ def private decs_range_prelude(rangeInfo : DecsRangeInfo?; skipName, takeCountNa
     }
     if (rangeInfo.takeExpr != null) {
         var takeInit = clone_expression(rangeInfo.takeExpr)
-        stmts |> push <| qmacro_expr() {
+        stmts |> push_from <| qmacro_block_to_array() {
             let $i(takeLimitName) = $e(takeInit)
-        }
-        stmts |> push <| qmacro_expr() {
             var $i(takeCountName) = 0
         }
     }
@@ -3463,10 +3433,8 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
             return $i(accName)
         }
     } elif (opName == "average") {
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(accName) : double = 0lf
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(cntName) : uint64 = 0ul
         }
         tailStmts |> push <| qmacro_expr() {
@@ -3474,10 +3442,8 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
         }
     } elif (opName == "min" || opName == "max") {
         // No empty-panic — matches non-decs emit_accumulator_lane (returns default-initialized acc).
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(firstName) = true
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(accName) : $t(accType)
         }
         tailStmts |> push <| qmacro_expr() {
@@ -3550,10 +3516,8 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
     if (opName == "first" || opName == "first_or_default") {
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(foundName) = false
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(resultName) : $t(elemType)
         }
         if (opName == "first_or_default") {
@@ -3568,17 +3532,13 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             return true
         }
         if (opName == "first") {
-            tailStmts |> push <| qmacro_expr() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 if (!$i(foundName)) panic("sequence contains no elements")
-            }
-            tailStmts |> push <| qmacro_expr() {
                 return $i(resultName)
             }
         } else {
-            tailStmts |> push <| qmacro_expr() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 if (!$i(foundName)) return $i(defaultName)
-            }
-            tailStmts |> push <| qmacro_expr() {
                 return $i(resultName)
             }
         }
@@ -3846,13 +3806,9 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     var rangeStmts <- decs_range_prelude(rangeInfo, skipName, takeCountName, takeLimitName, skippingName)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(rangeStmts) + 5)
-    bodyStmts |> push <| qmacro_expr() {
+    bodyStmts |> push_from <| qmacro_block_to_array() {
         var $i(firstName) = true
-    }
-    bodyStmts |> push <| qmacro_expr() {
         var $i(bestKeyName) : $t(keyType)
-    }
-    bodyStmts |> push <| qmacro_expr() {
         var $i(bestElemName) : $t(elemType)
     }
     bodyStmts |> push_from(rangeStmts)
@@ -4049,10 +4005,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     let archName = bridge.archName
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(5)
-    bodyStmts |> push <| qmacro_expr() {
+    bodyStmts |> push_from <| qmacro_block_to_array() {
         var $i(bufName) : array<$t(elemType)>
-    }
-    bodyStmts |> push <| qmacro_expr() {
         for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
             $e(forExprNode)
         })
@@ -4317,10 +4271,8 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     if (takeExpr != null) {
         // take(N) of reversed-buffer = last N of source reversed. Hoist once to a let so a side-effecting take expression evaluates exactly once.
         let takeNName = qn("take_n", at)
-        resizeStmts |> push <| qmacro_expr() {
+        resizeStmts |> push_from <| qmacro_block_to_array() {
             let $i(takeNName) = $e(takeExpr)
-        }
-        resizeStmts |> push <| qmacro_expr() {
             $i(bufName) |> resize($i(takeNName) <= 0 ? 0 : ($i(takeNName) < length($i(bufName)) ? $i(takeNName) : length($i(bufName))))
         }
     }
@@ -4431,10 +4383,8 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     if (takeExpr != null) {
         // Bind take(N) limit once at outer scope so a side-effecting arg fires once (matches plan_distinct).
         var takeBind = clone_expression(takeExpr)
-        preludeStmts |> push <| qmacro_expr() {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
             let $i(takeLimName) = $e(takeBind)
-        }
-        preludeStmts |> push <| qmacro_expr() {
             var $i(takenName) = 0
         }
     }
