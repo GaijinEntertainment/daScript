@@ -153,7 +153,13 @@ set(_web_ex_out ${DAS_WEB_OUTPUT_DIR}/samples/examples)
 
 add_custom_target(all_wasm)
 set(_wasm_run_cmds)
-foreach(ex hello loop func dict sha256)
+# Each name maps to web/examples/ui/samples/examples/<name>.das. Names match
+# the bench `name` slug emitted by dasProfile (and the playground `?example=`
+# URL param), with hyphens replaced by underscores (`spectral-norm` →
+# `spectral_norm`) so they're valid CMake target stems.
+foreach(ex hello loop func
+        dict sha256 exp f2i f2s fib_loop fib_recursive mandelbrot
+        nbodies particles primes queen spectral_norm table_sort tree)
     add_custom_command(OUTPUT ${_web_ex_out}/${ex}.wasm
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
         COMMAND ${DAS_HOST_DASLANG} -exe -output ${_web_ex_out}/${ex}

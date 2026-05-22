@@ -234,8 +234,20 @@ def main() {
 
     // ─── Benchmarks (§ 01) ─────────────────────────────────────────
     //
-    // Source: site/files/profile_results.json, vendored from
-    // github.com/borisbat/dasProfile. Refreshed by .github/workflows/pages.yml.
+    // Multi-platform cycler. One profile JSON per platform; left rail lists
+    // platforms, clicking a row swaps the bars on the right. Mode tabs
+    // (Interpreted / AOT or JIT) and a test-selector chip live in the card
+    // header; a "try <test> on the playground →" deep-link in the footer
+    // jumps into /playground/?example=<slug>.
+    //
+    // Source: site/files/profile_results_<platform>.json, vendored from
+    // github.com/borisbat/dasProfile and fetched by pages.yml.
+
+    // Hardcoded platform list. Mirrors the curl loop in pages.yml — when
+    // Linux numbers exist, append 'linux' to both lists.
+    const PLATFORMS      = ['darwin', 'windows'];
+    const PLATFORM_ORDER = { darwin: 0, linux: 1, windows: 2 };
+    const PLATFORM_OS    = { darwin: 'macOS', linux: 'Linux', windows: 'Windows' };
 
     // Column order + display headers per category. Ported from
     // dasProfile/update_readme_benchmarks.py:SECTION_CONFIGS so the chart
@@ -261,32 +273,117 @@ def main() {
         ],
     };
 
-    let benchData = null;
-    let benchCat  = 'Interpreted';
-    let benchBm   = 'sha256';
+    let profiles = [];          // normalized BenchProfile[] (see normalizeProfile)
+    let pIdx     = 0;
+    let benchCat = 'Interpreted';
+    let benchBm  = 'sha256';
 
     async function loadBench() {
-        try {
-            const r = await fetch('./files/profile_results.json');
-            benchData = await r.json();
-        } catch (e) {
-            const cap = document.getElementById('bench-caption');
-            if (cap) cap.textContent = 'benchmark data unavailable';
+        const results = await Promise.allSettled(PLATFORMS.map(p =>
+            fetch('./files/profile_results_' + p + '.json')
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(json => ({ platform: p, json }))
+        ));
+        for (const r of results) {
+            if (r.status === 'fulfilled') {
+                profiles.push(normalizeProfile(r.value.platform, r.value.json));
+            }
+            // Rejected fetches drop silently — pages.yml controls which
+            // files ship; a missing JSON is a build-time issue, not UX.
+        }
+        if (!profiles.length) {
+            const rowsEl = document.getElementById('bench-rows');
+            if (rowsEl) rowsEl.innerHTML = '<div class="forge-bench__caption">benchmark data unavailable</div>';
             return;
         }
-        populateBmDropdown();
+        profiles.sort((a, b) =>
+            (PLATFORM_ORDER[a.platform] ?? 99) - (PLATFORM_ORDER[b.platform] ?? 99)
+        );
+
+        // Optional ?bench=<test> URL param — symmetric with the playground's
+        // ?example=<slug>. Lets the cycler land on a specific workload when
+        // the visitor follows a deep-link from elsewhere.
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const wantedBench = params.get('bench');
+            if (wantedBench && profiles.some(p =>
+                wantedBench in (p.sections['Interpreted'] || {}) ||
+                wantedBench in (p.sections['AOT or JIT']  || {})
+            )) {
+                benchBm = wantedBench;
+            }
+        } catch (e) { /* swallow */ }
+
+        renderPlatformList();
+        renderHeader();
         renderBench();
+        renderFooter();
         wireBenchControls();
     }
 
-    function populateBmDropdown() {
-        const sel = document.getElementById('bench-bm');
-        if (!sel || !benchData) return;
-        const cat = benchData[benchCat];
-        if (!cat) return;
-        sel.innerHTML = Object.keys(cat).map(name =>
-            `<option${name === benchBm ? ' selected' : ''}>${escapeHtml(name)}</option>`
+    function normalizeProfile(platform, json) {
+        const cpu = json.cpu || '(unknown CPU)';
+        const os  = PLATFORM_OS[platform] || platform;
+        const v   = json.versions || {};
+        const ts  = (json.timestamp || '').split(' ').slice(0, 4).join(' ');
+        return {
+            platform,
+            cpu, os,
+            label: `${cpu} · ${os}`,
+            meta:  `daslang ${v.daslang || '?'} · LLVM ${v.llvm || '?'} · captured ${ts}`,
+            sections: {
+                'Interpreted': json['Interpreted'] || {},
+                'AOT or JIT':  json['AOT or JIT']  || {},
+            },
+        };
+    }
+
+    function renderPlatformList() {
+        const root = document.getElementById('bench-platforms');
+        if (!root) return;
+        root.innerHTML = profiles.map((p, i) =>
+            `<div class="forge-bench__platform${i === pIdx ? ' is-active' : ''}" data-idx="${i}">
+                <div class="forge-bench__platform-label">${escapeHtml(p.label)}</div>
+                <div class="forge-bench__platform-meta">${escapeHtml(p.meta)}</div>
+            </div>`
         ).join('');
+        root.querySelectorAll('.forge-bench__platform').forEach(el => {
+            el.addEventListener('click', () => {
+                pIdx = parseInt(el.dataset.idx, 10);
+                root.querySelectorAll('.forge-bench__platform').forEach(x =>
+                    x.classList.toggle('is-active', parseInt(x.dataset.idx, 10) === pIdx));
+                renderHeader();
+                renderBench();
+                renderFooter();
+            });
+        });
+    }
+
+    function renderHeader() {
+        // Decorative chip in single-workload mode; when 2+ workloads exist we
+        // show the <select> and populate it. Use inline `style.display`
+        // rather than the `hidden` attribute because `.forge-bench__test-chip
+        // { display: inline-flex }` overrides the UA `[hidden] { display:
+        // none }` rule.
+        const chip = document.getElementById('bench-chip');
+        const sel  = document.getElementById('bench-bm');
+        const cat  = profiles[pIdx]?.sections[benchCat] || {};
+        const workloads = Object.keys(cat);
+        if (workloads.length <= 1) {
+            if (chip) {
+                chip.style.display = '';   // restore inline-flex from stylesheet
+                chip.firstChild && (chip.firstChild.nodeValue = benchBm + ' ');
+            }
+            if (sel) sel.style.display = 'none';
+        } else {
+            if (chip) chip.style.display = 'none';
+            if (sel) {
+                sel.style.display = '';
+                sel.innerHTML = workloads.map(name =>
+                    `<option${name === benchBm ? ' selected' : ''}>${escapeHtml(name)}</option>`
+                ).join('');
+            }
+        }
     }
 
     function wireBenchControls() {
@@ -295,25 +392,34 @@ def main() {
                 benchCat = btn.dataset.cat;
                 document.querySelectorAll('.forge-bench__cat').forEach(b =>
                     b.classList.toggle('is-active', b.dataset.cat === benchCat));
-                if (!(benchBm in (benchData[benchCat] || {}))) {
-                    benchBm = Object.keys(benchData[benchCat] || { sha256: [] })[0];
+                // Make sure the active test still exists in the new category.
+                const cat = profiles[pIdx]?.sections[benchCat] || {};
+                if (!(benchBm in cat)) {
+                    const first = Object.keys(cat)[0];
+                    if (first) benchBm = first;
                 }
-                populateBmDropdown();
+                renderHeader();
                 renderBench();
+                renderFooter();
             });
         });
         const sel = document.getElementById('bench-bm');
         if (sel) sel.addEventListener('change', () => {
             benchBm = sel.value;
             renderBench();
+            renderFooter();
         });
     }
 
     function renderBench() {
         const rowsEl = document.getElementById('bench-rows');
-        const capEl  = document.getElementById('bench-caption');
-        if (!rowsEl || !benchData) return;
-        const cat = benchData[benchCat] || {};
+        if (!rowsEl) return;
+        const profile = profiles[pIdx];
+        if (!profile) {
+            rowsEl.innerHTML = '<div class="forge-bench__caption">benchmark data unavailable</div>';
+            return;
+        }
+        const cat = profile.sections[benchCat] || {};
         const series = cat[benchBm] || [];
         const byLang = Object.fromEntries(series.map(e => [e.language, e.time]));
         let cols = BENCH_COLS[benchCat] || [];
@@ -323,7 +429,7 @@ def main() {
         // can see how the interp tier stacks against the compiled tiers. It's
         // an outlier — clearly slower — but informative.
         if (benchCat === 'AOT or JIT') {
-            const interpSeries = (benchData['Interpreted'] || {})[benchBm] || [];
+            const interpSeries = (profile.sections['Interpreted'] || {})[benchBm] || [];
             const interpEntry = interpSeries.find(e => e.language === 'DAS INTERPRETER');
             if (interpEntry) {
                 byLang['DAS INTERP (ref)'] = interpEntry.time;
@@ -360,13 +466,14 @@ def main() {
                 <div class="forge-bench__num">${rel.toFixed(2)}×</div>
             </div>`;
         }).join('');
+    }
 
-        if (capEl) {
-            const cpu = benchData.cpu || 'unknown CPU';
-            const v   = benchData.versions || {};
-            const ts  = (benchData.timestamp || '').split(' ').slice(0, 4).join(' ');
-            capEl.textContent = `${cpu} · daslang ${v.daslang || '?'} · LLVM ${v.llvm || '?'} · captured ${ts} · source: github.com/borisbat/dasProfile`;
-        }
+    function renderFooter() {
+        const el = document.getElementById('bench-footer');
+        if (!el) return;
+        const slug = encodeURIComponent(benchBm);
+        el.innerHTML =
+            `<a href="/playground/index.html?example=${slug}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`;
     }
 
     // ─── § 05 News feed (top 5 from news.json) ─────────────────────

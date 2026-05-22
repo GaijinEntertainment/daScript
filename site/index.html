@@ -146,17 +146,16 @@ def main() {
                 <div>
                     <h2 class="forge-h2">The fastest interpreter, and a JIT that often beats C++.</h2>
                     <p class="forge-p">
-                        Daslang's interpreter wins 12 of 16 cross-language
-                        benchmarks — against LuaJIT (no-JIT), Luau, Lua,
-                        Quirrel, QuickJS, and Mono interpreter. The AOT compiler
-                        to C++ typically matches native C++; the LLVM JIT
-                        regularly beats it. Same source, same semantics across
-                        all three tiers — pick the one that fits your deployment.
-                        Lower numbers are faster.
+                        Daslang wins most cross-language benchmarks. Same source,
+                        same semantics across all three tiers. Lower numbers are
+                        faster.
                     </p>
+                    <div class="forge-bench__eyebrow">captured on</div>
+                    <div class="forge-bench__platforms" id="bench-platforms">
+                        <!-- platform rows rendered by forge.js -->
+                    </div>
                     <div class="forge-bench__meta">
-                        <div>· captured on Apple M1 Max · daslang 0.6.2</div>
-                        <div>· normalised to fastest entry in the row</div>
+                        <div>· normalised to fastest entry per row</div>
                         <div>· source: <a class="forge-bench__source" href="https://github.com/borisbat/dasProfile">github.com/borisbat/dasProfile</a></div>
                     </div>
                 </div>
@@ -166,15 +165,20 @@ def main() {
                             <button class="forge-bench__cat is-active" data-cat="Interpreted">interpreted</button>
                             <button class="forge-bench__cat" data-cat="AOT or JIT">AOT · JIT</button>
                         </div>
-                        <select class="forge-bench__bm" id="bench-bm">
+                        <!-- bm <select> stays in DOM for the multi-workload future. forge.js
+                             toggles inline `style.display` to switch between it and the chip
+                             based on the active platform's workload count. Initial style:
+                             select hidden (single-workload default for current data). -->
+                        <select class="forge-bench__bm" id="bench-bm" style="display:none">
                             <option>sha256</option>
                         </select>
+                        <div class="forge-bench__test-chip" id="bench-chip">sha256 <span class="forge-bench__test-chip-chevron">▾</span></div>
                     </div>
                     <div id="bench-rows">
-                        <!-- bars rendered by forge.js in phase 3 -->
+                        <div class="forge-bench__caption">loading benchmark data…</div>
                     </div>
-                    <div class="forge-bench__caption" id="bench-caption">
-                        loading benchmark data…
+                    <div class="forge-bench__playground-link" id="bench-footer">
+                        <!-- "try <test> on the playground →" rendered by forge.js -->
                     </div>
                 </div>
             </div>

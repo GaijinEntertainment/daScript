@@ -23,8 +23,11 @@ playground/daslang_static.wasm
 # WASM artifact built by pages.yml from web/.
 files/wasm/
 
-# dasProfile snapshot fetched fresh by pages.yml from
-# https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results.json
+# Per-platform dasProfile snapshots fetched fresh by pages.yml from
+# https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_<platform>.json
+files/profile_results_*.json
+# Old single-platform filename — gitignored too in case anything still
+# writes to that path during local preview.
 files/profile_results.json
 
 # Playwright e2e suite local artifacts.

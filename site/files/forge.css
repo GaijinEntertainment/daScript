@@ -524,6 +524,89 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     color: var(--fg-faint);
 }
 
+/* Platform cycler — left rail under the copy block. forge.js renders one row
+   per profile JSON; clicking a row swaps the bars in the right card. */
+.forge-bench__eyebrow {
+    margin-top: 30px;
+    margin-bottom: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-faint);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+.forge-bench__platforms { display: flex; flex-direction: column; }
+.forge-bench__platform {
+    padding: 10px 14px;
+    border-left: 2px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+.forge-bench__platform:hover { background: rgba(28, 26, 20, 0.5); }
+.forge-bench__platform.is-active {
+    border-left-color: var(--amber);
+    background: var(--bg-3);
+}
+.forge-bench__platform-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg-dim);
+    font-weight: 400;
+}
+.forge-bench__platform.is-active .forge-bench__platform-label {
+    color: var(--fg);
+    font-weight: 600;
+}
+.forge-bench__platform-meta {
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--fg-faint);
+}
+
+/* Test-selector chip in the card header. Decorative until 2+ workloads
+   exist; then forge.js will hide it and unhide the .forge-bench__bm select. */
+.forge-bench__test-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+.forge-bench__test-chip-chevron {
+    color: var(--fg-faint);
+    font-size: 10px;
+}
+
+/* Playground deep-link footer — replaces the old static caption with an
+   actionable link that carries the current test as a ?example=<slug>
+   query into /playground/. */
+.forge-bench__playground-link {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+}
+.forge-bench__playground-link a {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--amber);
+    text-decoration: none;
+    border-bottom: 1px solid var(--amber-dim);
+    padding-bottom: 1px;
+}
+.forge-bench__playground-link a:hover { border-bottom-color: var(--amber); }
+.forge-bench__playground-test { color: var(--fg); }
+
 /* ───── § 02 Features ───── */
 
 .forge-features__grid {

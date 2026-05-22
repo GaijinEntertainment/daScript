@@ -91,11 +91,19 @@ jobs:
         ninja daslang_static stage_site_playground stage_site_playground_wasm
       continue-on-error: true
 
-    - name: "Fetch dasProfile benchmark JSON"
+    - name: "Fetch dasProfile per-platform benchmark JSONs"
+      # dasProfile now ships a per-platform JSON file
+      # (profile_results_<platform>.json). forge.js's bench cycler fetches
+      # each one and renders a platform-list rail. Add `linux` to the loop
+      # below when a Linux capture lands upstream. Missing-platform files
+      # don't abort the build — the cycler silently drops them client-side.
       run: |
         set -eux
-        curl -sSL -o site/files/profile_results.json \
-            https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results.json
+        for plat in darwin windows; do
+            curl -sSL -o "site/files/profile_results_${plat}.json" \
+                "https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_${plat}.json" \
+              || echo "WARNING: missing profile_results_${plat}.json"
+        done
       continue-on-error: true
 
     - name: "Stage site for deployment"
