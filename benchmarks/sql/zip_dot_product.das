@@ -6,6 +6,9 @@ require _common public
 // zip(a, b) |> select(t => t._0 * t._1) |> sum — dot product of two int sequences.
 // No clean SQL form (zip is not a natural relational operation), so m1 is omitted.
 // Splice mode should fuse zip + select + sum into a single accumulator loop.
+// m4 is the intra-archetype analogue: two int components on the same DecsCar entity
+// (price * year), summed over all entities. Wave 4 pruning keeps only those two
+// get_ro slots, so per-element cost matches the m3f two-column read.
 
 def make_ints(n : int) : array<int> {
     var a : array<int>
@@ -39,6 +42,17 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let s = _fold(from_decs_template(type<DecsCar>)._select(_.price * _.year).sum())
+        b |> accept(s)
+        if (s == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def zip_dot_product_m3(b : B?) {
     run_m3(b, 100000)
@@ -47,4 +61,9 @@ def zip_dot_product_m3(b : B?) {
 [benchmark]
 def zip_dot_product_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def zip_dot_product_m4(b : B?) {
+    run_m4(b, 100000)
 }

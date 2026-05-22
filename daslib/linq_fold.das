@@ -3116,7 +3116,7 @@ def private build_decs_inner_for(bridge : DecsBridgeShape?; var tupBind : Expres
 // Walks a chain body to collect which fields of the decs_tup named-tuple bind are actually referenced. allFieldsUsed flips when the bind is referenced as a whole-var (not via field access) — e.g. push_clone(decs_tup) in a bare to_array, or pass-to-user-fn — so the helper falls back to unpruned emission and preserves the user-visible output shape.
 class private DecsTupUsageScanner : AstVisitor {
     tupName       : string
-    @do_not_delete usedFields : table<string>
+    usedFields    : table<string>
     allFieldsUsed : bool = false
     inTargetField : bool = false
     def DecsTupUsageScanner(n : string) {
@@ -3134,7 +3134,7 @@ class private DecsTupUsageScanner : AstVisitor {
     }
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
         inTargetField = false
-        return unsafe(reinterpret<ExpressionPtr>(expr))
+        return expr
     }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.name == tupName && !inTargetField) {
@@ -3180,12 +3180,10 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
     }
     var prunedUserNames : array<string>
     var prunedIterNames : array<string>
-    var keepIdxs : array<int>
     for (i in 0 .. length(bridge.userNames)) {
         if (key_exists(usedSet, bridge.userNames[i])) {
             prunedUserNames |> push(bridge.userNames[i])
             prunedIterNames |> push(bridge.iterNames[i])
-            keepIdxs |> push(i)
         }
     }
     // Pruned named-tuple bind — mirrors build_decs_tup_bind on the kept subset.
@@ -3198,7 +3196,7 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
     var tupBind = qmacro_expr() {
         var $i(tupName) = $e(mkTup)
     }
-    // Clone forExpr; drop the iter slots not in keepIdxs from all 5 parallel dasvectors (sources/iterators/iteratorsAt/iteratorsAka/iteratorsTags). iteratorVariables is cleared so the typer rebuilds it during re-type — same pattern as daslib/soa.das:381.
+    // Clone forExpr; drop the iter slots not in usedSet from all 5 parallel dasvectors (sources/iterators/iteratorsAt/iteratorsAka/iteratorsTags). iteratorVariables is cleared so the typer rebuilds it during re-type — same pattern as daslib/soa.das:381.
     var clonedForExpr = clone_expression(bridge.forExpr)
     var clonedFor = clonedForExpr as ExprFor
     let nSlots = length(bridge.userNames)

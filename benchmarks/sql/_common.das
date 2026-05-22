@@ -101,3 +101,25 @@ def public fixture_decs(n : int) {
         ))
     }
 }
+
+// Same fixture as fixture_decs, but returns the eid of the n/2-th entity for indexed-lookup benches.
+// The decs O(1) lookup path keys on EntityId (not the Car.id column), so the bench needs an actual eid
+// captured at creation time. fixture_decs has no return so call sites can't reuse it for this.
+def public fixture_decs_capture_mid(n : int) : EntityId {
+    restart()
+    var target_eid : EntityId
+    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        if (i == n / 2) {
+            target_eid = eid
+        }
+        apply_decs_template(cmp, DecsCar(
+            id = i + 1,
+            name = "Car{i}",
+            price = (i * 37) % 1000,
+            brand = i % BRAND_COUNT,
+            year = 2010 + (i * 7) % 16,
+            dealer_id = (i % DEALER_COUNT) + 1
+        ))
+    }
+    return target_eid
+}

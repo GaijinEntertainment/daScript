@@ -2382,7 +2382,7 @@ def target_wave4_pruned_select_sum_fold() : int {
 [test]
 def test_wave4_pruned_select_sum_parity(t : T?) {
     fixture_wave4(10)
-    // sum(price) for i in 0..10 = 10*(0+1+...+9) = 450
+    // sum(price) for i in 0..9 = 10*(0+1+...+9) = 450
     t |> equal(target_wave4_pruned_select_sum_fold(), 450, "_select(_.price).sum() — only price referenced; pruning must preserve semantics")
 }
 
@@ -2624,8 +2624,9 @@ def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>
 [test]
 def test_wave4_pruned_groupby_count_parity(t : T?) {
     fixture_wave4(10)
-    // _group_by_lazy(_.brand) — only `brand` referenced (key extraction). Reducer is `length`
-    // (counts bucket members, doesn't touch tuple fields). Pruning fires → only get_ro(brand).
+    // _group_by_lazy(_.brand). plan_group_by_core's bucket-build pushes `decs_tup` as a whole
+    // value, so the walker disables pruning (safety rule) → all 3 get_ros emit. See
+    // test_wave4_pruned_groupby_count_splice_shape for the AST gate.
     // brand cycles 0..3 across 10 rows → 4 distinct buckets with sizes [3,3,2,2].
     let got <- target_wave4_pruned_groupby_count_fold()
     t |> equal(got |> length, 4, "4 distinct brand buckets")
@@ -2644,8 +2645,9 @@ def target_wave4_pruned_groupby_sum_fold() : array<tuple<Brand : int; S : int>> 
 [test]
 def test_wave4_pruned_groupby_sum_parity(t : T?) {
     fixture_wave4(10)
-    // _group_by_lazy(_.brand) + inner-select-sum(_.price). Chain references brand (key) + price
-    // (reducer). Pruning fires → 2 get_ros (brand, price); year pruned.
+    // _group_by_lazy(_.brand) + inner-select-sum(_.price). Same safety rule as the count case:
+    // plan_group_by_core bucket-build pushes the whole `decs_tup` → walker disables pruning →
+    // all 3 get_ros emit, even though the chain only reads brand + price.
     let got <- target_wave4_pruned_groupby_sum_fold()
     t |> equal(got |> length, 4, "4 distinct brand buckets")
     // Sum of all prices across all buckets = 10*(0+1+...+9) = 450 — fixture independent of bucket layout.
