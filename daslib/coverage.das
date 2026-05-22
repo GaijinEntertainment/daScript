@@ -143,7 +143,7 @@ def get_summary(cov_data) : array<FileSummary> {
     //! Returns per-file coverage summary with hit/missed counts for lines, functions, and branches.
     var res : array<FileSummary>
     for (file, data in keys(cov_data), values(cov_data)) {
-        var s = FileSummary(file = string(file))
+        var s = FileSummary(file = file)
         for (v in values(data.line_cov.lines)) {
             if (v > 0u) {
                 s.lineHits++
@@ -251,7 +251,7 @@ def public add_func_coverage(file : string; name : string) {
 def public add_branch_coverage(file : string; branch_idx : uint) {
     //! Records a coverage hit for the given file and branch index.
     coverageData |> get_with_default(file) $(var branches) {
-        branches.branch_cov |> modify(uint(branch_idx)) $(value) {
+        branches.branch_cov |> modify(branch_idx) $(value) {
             var res = value
             res.hits++
             return res
@@ -459,22 +459,22 @@ class CoveragePass : AstPassMacro {
             for (file, values in keys(coverageData), values(coverageData)) {
                 // register lines
                 let lineArr <- [for (line in keys(values.line_cov.lines)); line]
-                blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(string(file)), $v(lineArr)))
+                blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(file), $v(lineArr)))
             }
             for (file, reg_data in keys(registration_data), values(registration_data)) {
                 // register functions
                 var nameArr : array<string>
                 var lineArr : array<uint>
                 for (fname, fline in keys(reg_data.allFunctions), values(reg_data.allFunctions)) {
-                    nameArr |> push(string(fname))
+                    nameArr |> push(fname)
                     lineArr |> push(fline)
                 }
-                blk.list |> emplace_new <| qmacro(coverage::register_coverage_functions($v(string(file)), $v(nameArr), $v(lineArr)))
+                blk.list |> emplace_new <| qmacro(coverage::register_coverage_functions($v(file), $v(nameArr), $v(lineArr)))
 
                 // register per-function lines
                 for (fname, flines in keys(reg_data.funcLines), values(reg_data.funcLines)) {
                     let flineArr <- [for (fl in keys(flines)); fl]
-                    blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(string(file)), $v(string(fname)), $v(flineArr)))
+                    blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(file), $v(fname), $v(flineArr)))
                 }
 
                 // register branches
@@ -490,7 +490,7 @@ class CoveragePass : AstPassMacro {
                     block_nums |> push(reg_data.allBranches[i]._1)
                     branch_nums |> push(reg_data.allBranches[i]._2)
                 }
-                blk.list |> emplace_new <| qmacro(coverage::register_coverage_branches($v(string(file)), $v(blines), $v(block_nums), $v(branch_nums)))
+                blk.list |> emplace_new <| qmacro(coverage::register_coverage_branches($v(file), $v(blines), $v(block_nums), $v(branch_nums)))
 
             }
             initFn.flags |= FunctionFlags.generated | FunctionFlags.init | FunctionFlags.privateFunction
@@ -610,7 +610,7 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
                             fc.line = fline
                         }
                         funcStarts |> get_with_default(currentFile) $(var starts) {
-                            starts |> push(tuple(fline, string(fname)))
+                            starts |> push(tuple(fline, fname))
                         }
                     }
                 } elif (line |> starts_with("FNDA:")) {

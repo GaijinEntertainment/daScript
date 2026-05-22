@@ -19,6 +19,10 @@ options gen2
 //
 // `push_clone` is intentionally NOT flagged — no clean array-literal equivalent.
 
+expect 31209:3
+
+require daslib/style_lint
+
 struct Foo {
     x : int
 }

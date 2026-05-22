@@ -330,7 +330,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         for (e in entries) {
             if (shown >= 10) break
             shown ++
-            to_log(LOG_INFO, "  {e.fun.mangledName} heap={int64(e.own_heap)} count={int64(e.count)}\n")
+            to_log(LOG_INFO, "  {e.fun.mangledName} heap={e.own_heap} count={e.count}\n")
         }
     }
     def dump_top_string_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
@@ -342,7 +342,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         for (e in entries) {
             if (shown >= 10) break
             shown ++
-            to_log(LOG_INFO, "  {e.fun.mangledName} string_heap={int64(e.own_string_heap)} count={int64(e.count)}\n")
+            to_log(LOG_INFO, "  {e.fun.mangledName} string_heap={e.own_string_heap} count={e.count}\n")
         }
     }
     def dump_context_stack(tid : uint64) {
@@ -534,7 +534,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
             if (!empty(ctx.name)) {
                 ctxName = "{ctx.name}"
             }
-            emit_line("=== Memory leaks in context '{ctxName}' ({int(length(sorted))} allocations, {totalBytes} bytes) ===")
+            emit_line("=== Memory leaks in context '{ctxName}' ({length(sorted)} allocations, {totalBytes} bytes) ===")
             for (e in sorted) {
                 var rec & = lc.allocations[e._1]
                 emit_line("[leak] size={rec.size} bytes")
