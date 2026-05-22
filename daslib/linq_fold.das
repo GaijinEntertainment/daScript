@@ -4124,8 +4124,7 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             }
         }
     }
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
     let archName = bridge.archName
@@ -4299,8 +4298,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
                 }
             }
         }
-        var tupBind = build_decs_tup_bind(bridge, tupName, at)
-        var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
         var emission : Expression? = qmacro(invoke($() : int {
             var $i(cntName) = 0
             for_each_archetype($e(reqExpr), $e(erqExpr), $($i(archName) : Archetype) {
@@ -4338,8 +4336,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
                 }
             }
         }
-        var tupBind = build_decs_tup_bind(bridge, tupName, at)
-        var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
         var emission : Expression?
         if (terminatorName == "first") {
             emission = qmacro(invoke($() : $t(lastType) {
@@ -4391,8 +4388,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             }
         }
     }
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
     var resizeStmts : array<Expression?>
     if (takeExpr != null) {
         // take(N) of reversed-buffer = last N of source reversed. Hoist once to a let so a side-effecting take expression evaluates exactly once.
@@ -4589,8 +4585,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
             }
         }
     }
-    var tupBind = build_decs_tup_bind(bridge, tupName, at)
-    var forExprNode = build_decs_inner_for(bridge, tupBind, perElement, at)
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
     var reqExpr = clone_expression(bridge.reqHashExpr)
     var erqExpr = clone_expression(bridge.erqExpr)
     let archName = bridge.archName

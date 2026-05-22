@@ -2546,3 +2546,92 @@ def test_wave4_take_count_no_field_ref_parity(t : T?) {
     t |> equal(target_wave4_take_count_no_field_ref_fold(), 5, "take(5).count() splice must still return 5")
 }
 
+// ── C2: buffer-required planners (order/reverse/distinct) ──────────────────────
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_reverse_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).reverse().to_array())
+}
+
+[test]
+def test_wave4_unpruned_reverse_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // reverse + to_array (no _select): buffer holds full tuples → push_clone(decs_tup) →
+    // walker sees whole-var → pruning disabled. All 3 fields preserved.
+    let got <- target_wave4_unpruned_reverse_to_array_fold()
+    t |> equal(got |> length, 3, "3 rows after reverse")
+    var brand_sum = 0
+    var price_sum = 0
+    var year_sum = 0
+    for (c in got) {
+        brand_sum += c.brand
+        price_sum += c.price
+        year_sum += c.year
+    }
+    t |> equal(brand_sum, 0 + 1 + 2, "brand sum preserved (reverse + bare to_array)")
+    t |> equal(price_sum, 0 + 10 + 20, "price sum preserved")
+    t |> equal(year_sum, 2000 + 2001 + 2002, "year sum preserved")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_unpruned_distinct_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
+    return <- _fold(from_decs_template(type<Wave4Row>).distinct().to_array())
+}
+
+[test]
+def test_wave4_unpruned_distinct_to_array_parity(t : T?) {
+    fixture_wave4(3)
+    // distinct + to_array (no _select): each row distinct by full-tuple → push_clone(decs_tup) →
+    // walker sees whole-var → pruning disabled.
+    let got <- target_wave4_unpruned_distinct_to_array_fold()
+    t |> equal(got |> length, 3, "3 distinct rows preserved as full tuples")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_reverse_to_array_fold() : array<int> {
+    return <- _fold(from_decs_template(type<Wave4Row>)._select(_.brand).reverse().to_array())
+}
+
+[test]
+def test_wave4_pruned_select_reverse_to_array_parity(t : T?) {
+    fixture_wave4(4)
+    // _select(_.brand).reverse().to_array() — chain rebinds to a scalar; the reverse buffer
+    // holds projected brands (not the full tuple). Pruning safe — only brand referenced.
+    // Brands for i=0..3 are 0,1,2,3; reverse order = 3,2,1,0; sum = 6.
+    let got <- target_wave4_pruned_select_reverse_to_array_fold()
+    t |> equal(got |> length, 4, "4 brands after reverse")
+    t |> equal(got |> sum, 6, "sum preserved across projection + reverse")
+}
+
+[export, marker(no_coverage)]
+def target_wave4_pruned_select_distinct_count_fold() : int {
+    return _fold(from_decs_template(type<Wave4Row>)._select(_.brand).distinct().count())
+}
+
+[test]
+def test_wave4_pruned_select_distinct_count_parity(t : T?) {
+    fixture_wave4(10)
+    // _select(_.brand).distinct().count() — brand cycles 0..3 (4 distinct values) across 10 rows.
+    // Chain references only brand → walker collects {brand} → pruning fires → only get_ro("wave4_brand").
+    t |> equal(target_wave4_pruned_select_distinct_count_fold(), 4, "4 distinct brand values")
+}
+
+[test]
+def test_wave4_pruned_select_distinct_count_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_pruned_select_distinct_count_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // Pruned via C2 (plan_decs_distinct path): only brand referenced.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "distinct.count chain emits exactly 1 get_ro")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "kept slot is brand")
+        t |> equal(describe_count(body_expr, "wave4_price"), 0, "price pruned out")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "year pruned out")
+    }
+}
+
