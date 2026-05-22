@@ -1061,8 +1061,8 @@ class StyleLintVisitor : AstVisitor {
                 || !self->for_loop_matches_comprehension(forE, v, isArray, 1)) continue
             let kindLabel = isArray ? "array<T>" : "table<K;V>"
             let rewriteForm = (isArray
-                ? "{v.name} <- [for (x in SRC); EXPR; where COND]"
-                : "{v.name} <- \{for (x in SRC); KEY => VAL; where COND\}")
+                ? "var {v.name} <- [for (x in SRC); EXPR; where COND]"
+                : "var {v.name} <- \{for (x in SRC); KEY => VAL; where COND\}")
             self->style_warning("STYLE027: var {kindLabel} '{v.name}' followed by a for-loop that only push/insert into it; use a comprehension `{rewriteForm}` (drop `; where COND` when there is no filter)", v.at)
         }
     }
