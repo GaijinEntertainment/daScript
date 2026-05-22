@@ -21,8 +21,25 @@ test('three-file state survives a reload', async ({ playground }) => {
         window.pgSwitchFile('main.das');
     });
 
-    // Wait for the debounced autosave (250ms) to actually fire.
-    await playground.waitForTimeout(400);
+    // Wait until autosave has actually persisted both the file set AND the
+    // active-tab pointer. A fixed-150ms-margin `waitForTimeout(400)` over a
+    // 250ms debounce is enough on localhost but flakes on CI under load —
+    // poll the localStorage payload directly instead, so we proceed the
+    // moment the writer fires (and don't proceed before it).
+    await expect.poll(
+        () => playground.evaluate(() => {
+            const raw = localStorage.getItem('daslang.playground.state.v1');
+            if (!raw) return null;
+            try {
+                const j = JSON.parse(raw);
+                return {
+                    files: Object.keys(j.files || {}).sort().join(','),
+                    active: j.active,
+                };
+            } catch (e) { return null; }
+        }),
+        { timeout: 5_000 }
+    ).toEqual({ files: 'main.das,types.das,utils.das', active: 'main.das' });
 
     await playground.reload();
     await waitTabsReady(playground);
