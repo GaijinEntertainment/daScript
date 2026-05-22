@@ -235,8 +235,9 @@ extern "C" {
                 globalVariables[i] = GlobalVariable{};
             }
             context.allocateGlobalsAndShared();
-            memset(context.globals, 0, context.globalsSize);
-            memset(context.shared, 0, context.sharedSize);
+            // UBSAN forbid memset(null, 0, 0)
+            if (context.globalsSize) memset(context.globals, 0, context.globalsSize);
+            if (context.sharedSize)  memset(context.shared,  0, context.sharedSize);
             if ( pinvoke ) {
                 context.contextMutex = new recursive_mutex;
             }
