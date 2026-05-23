@@ -819,7 +819,21 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     LLVMInitializeAllTargetMCs()
     LLVMInitializeAllAsmPrinters()
 
-    let triple_msg = LLVMGetDefaultTargetTriple()
+    // host_jit_triple() returns the daslang-host toolchain's triple when it
+    // differs from LLVM.dll's default. On clang-mingw64, the prebuilt LLVM.dll
+    // (MSVC clang-cl-built) defaults to x86_64-pc-windows-msvc — emitting
+    // MSVC-ABI .o files that mingw's linker can't satisfy (_fltused etc).
+    // Empty string means "use LLVM default" (existing MSVC / linux / macOS
+    // builds where LLVM.dll's triple already matches the host).
+    let host_triple = host_jit_triple()
+    var triple_msg : string
+    var triple_owned_by_llvm = false
+    if (empty(host_triple)) {
+        triple_msg = LLVMGetDefaultTargetTriple()
+        triple_owned_by_llvm = true
+    } else {
+        triple_msg = host_triple
+    }
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
@@ -829,7 +843,9 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
         LLVMDisposeMessage(cpu_msg)
         LLVMDisposeMessage(features_msg)
     }
-    LLVMDisposeMessage(triple_msg)
+    if (triple_owned_by_llvm) {
+        LLVMDisposeMessage(triple_msg)
+    }
 }
 
 // @mod - module to dump to dll
