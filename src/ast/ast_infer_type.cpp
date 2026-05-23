@@ -173,10 +173,19 @@ namespace das {
                 if (auto fenum = getConstExpr(value)) {
                     reportAstChanged();
                     return fenum;
-                } else {
-                    error("enumeration value '" + name + "' must be integer constant, and not an expression", "", "",
-                          value->at, CompilationError::invalid_enumerator);
                 }
+                // Enum values are fundamentally compile-time integer constants —
+                // force-fold even when no_infer_time_folding is set (lint policies).
+                // We already know !value->rtti_isConstant() above, so a constant
+                // result here means evalAndFold actually folded (vs returning expr
+                // unchanged for an unsupported value).
+                auto folded = evalAndFold(value);
+                if (folded && folded->rtti_isConstant()) {
+                    reportAstChanged();
+                    return folded;
+                }
+                error("enumeration value '" + name + "' must be integer constant, and not an expression", "", "",
+                      value->at, CompilationError::invalid_enumerator);
             } else if (value->type->baseType != enu->baseType) {
                 reportAstChanged();
                 int64_t thisInt = getConstExprIntOrUInt(value);

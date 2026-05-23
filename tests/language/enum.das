@@ -88,11 +88,10 @@ def test_enum(t : T?) {
     t |> equal(efn_takeOne_giveTwo(SomeEnum.one), SomeEnum.two)
     t |> equal(efn_takeOne_giveTwo_98(SomeEnum98.SomeEnum98_one), SomeEnum98.SomeEnum98_two)
 
-    var result_efn = efn_takeOne_giveTwo(SomeEnum.one)
+    let result_efn = efn_takeOne_giveTwo(SomeEnum.one)
     t |> equal(result_efn, SomeEnum.two)
 
-    var goo : GooEnum
-    goo = GooEnum.regular
+    let goo : GooEnum = GooEnum.regular
     t |> equal(efn_flip(goo), GooEnum.hazardous)
     var foo16 : TestObjectFoo
     t |> equal(foo16.e16, SomeEnum_16.SomeEnum_16_zero)
