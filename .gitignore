@@ -15,6 +15,7 @@ build-asan/
 build-ubsan/
 build-linux-asan/
 build-linux/
+build-mingw/
 build_eastl/
 # EASTL local-verify checkouts (build_eastl uses these via -isystem)
 eastl/
@@ -37,6 +38,11 @@ _aot_generated/
 .cache/
 
 opencoede.json
+
+# scratch smoke scripts from clang-mingw64 enablement (not part of any feature)
+_smoke*.das
+_smoke*.cpp
+_smoke*.o
 
 modules/dasSFML/libsfml/
 # site/doc/ is the Sphinx HTML output deployed by .github/workflows/pages.yml.
