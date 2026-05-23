@@ -21,9 +21,17 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	ELSEIF(UNIX)
 		SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/libglfw3.a)
 		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_VERSION})
-	ELSE()
-		SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/glfw3.lib)
-		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/glfw3dll.lib)
+	ELSE()  # WIN32
+		IF(MSVC)
+			SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/glfw3.lib)
+			SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/glfw3dll.lib)
+		ELSE()  # mingw (clang-mingw / gcc-mingw)
+			# GLFW v3.4 on mingw: static -> libglfw3.a; dynamic import lib ->
+			# libglfw3dll.a; .dll itself stays glfw3.dll (no lib prefix), so
+			# the runtime install line below is unchanged.
+			SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/libglfw3.a)
+			SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw3dll.a)
+		ENDIF()
 	ENDIF()
 
 	MACRO(BUILD_GLFW glfw_libraries glfw3_target build_shared_libs install_prefix prefix_dir)
