@@ -601,6 +601,16 @@ def top_n_by_with_cmp(var a : iterator<auto(TT)>; n : int; cmp : block<(v1 : TT 
     return <- buf
 }
 
+def public spliced_push_heap(var buf : array<auto(TT)>; cmp : block<(x, y : TT) : bool>) {
+    //! Thin re-export of sort_boost::push_heap so plan_decs_order_family's bounded-heap splice can call it via _:: from any user module without requiring sort_boost directly.
+    sort_boost::push_heap(buf, cmp)
+}
+
+def public spliced_pop_heap(var buf : array<auto(TT)>; cmp : block<(x, y : TT) : bool>) {
+    //! Thin re-export of sort_boost::pop_heap for the bounded-heap splice (see spliced_push_heap).
+    sort_boost::pop_heap(buf, cmp)
+}
+
 def unique_key(a) {
     //! generates unique key of workhorse type for the value
     static_if (typeinfo is_workhorse(a)) {

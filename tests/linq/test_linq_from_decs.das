@@ -1987,8 +1987,10 @@ def test_unroll5d_order_by_take_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "order family uses for_each_archetype (no early-exit needed)")
         // Buffer hoisted ABOVE for_each_archetype so it survives the archetype walk.
         t |> success(describe_count(body_expr, "decs_buf") >= 2, "decs_buf declared + populated")
-        // top_n_by call replaces the array-side to_array / sort sequence.
-        t |> equal(describe_count(body_expr, "top_n_by"), 1, "splice dispatches to top_n_by")
+        // Bounded-heap emit: spliced_push_heap appears twice (fill + replace), spliced_pop_heap once (replace). top_n_by is no longer used.
+        t |> equal(describe_count(body_expr, "spliced_push_heap"), 2, "bounded-heap fill + replace each call spliced_push_heap")
+        t |> equal(describe_count(body_expr, "spliced_pop_heap"), 1, "bounded-heap replace calls spliced_pop_heap once")
+        t |> equal(describe_count(body_expr, "top_n_by"), 0, "bounded-heap path does NOT call top_n_by")
     }
 }
 
@@ -2005,10 +2007,12 @@ def test_unroll5d_order_by_first_splice_shape(t : T?) {
         t |> success(r.matched, "qmatch must capture body")
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "order_by+first splice must NOT fall to tier-2 to_sequence")
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
-        // first → min_by on the buffer (NOT top_n_by + index).
-        t |> equal(describe_count(body_expr, "min_by"), 1, "order_by+first emits min_by call")
-        t |> equal(describe_count(body_expr, "top_n_by"), 0, "order_by+first should NOT use top_n_by")
-        // Empty-buffer panic guard present.
+        // Streaming-min emit: best + seen state vars, no buffer + min_by/top_n.
+        t |> equal(describe_count(body_expr, "min_by"), 0, "streaming-min path does NOT call min_by")
+        t |> equal(describe_count(body_expr, "top_n_by"), 0, "streaming-min path does NOT call top_n_by")
+        t |> success(describe_count(body_expr, "decs_best") >= 2, "best state var declared + updated")
+        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen flag declared + updated")
+        // Empty-source panic guard preserved.
         t |> equal(describe_count(body_expr, "sequence contains no elements"), 1, "panic-on-empty guard for first()")
     }
 }

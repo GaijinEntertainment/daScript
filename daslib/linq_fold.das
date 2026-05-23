@@ -1200,10 +1200,33 @@ def private try_make_inline_cmp(orderKey : Expression?; orderName : string;
     } else {
         cmpExpr = qmacro(_::less($e(b1), $e(b2)))
     }
-    // Emit untyped block args (`$(v1, v2) { ... }`). The typer infers v1/v2 types from
+    // Emit untyped block args (`$(v1, v2) { ... }`); typer infers v1/v2 types from the call site (top_n_by_with_cmp / order_inplace cmp-param signatures).
     return qmacro($(v1, v2) {
         return $e(cmpExpr)
     })
+}
+
+def private make_inline_less_call(orderKey : Expression?; orderName : string;
+                                  var lhsExpr, rhsExpr : Expression?; at : LineInfo) : Expression? {
+    // Direct-call mirror of try_make_inline_cmp: builds `less(KEY_BODY[lhsExpr], KEY_BODY[rhsExpr])` (or flipped for descending) for inline use without a block dispatch — needed for the bounded-heap less-test where invoking a block on a 100K-element hot path costs ~5ns/op extra.
+    if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
+    var mblk = orderKey as ExprMakeBlock
+    var blk = mblk._block as ExprBlock
+    if (blk.arguments |> length != 1 || blk.list |> length != 1
+            || !(blk.list[0] is ExprReturn)) return null
+    var ret = blk.list[0] as ExprReturn
+    if (ret.subexpr == null || has_sideeffects(ret.subexpr)) return null
+    let argName = string(blk.arguments[0].name)
+    var b1 = clone_expression(ret.subexpr)
+    var b2 = clone_expression(ret.subexpr)
+    var r1 : Template
+    r1 |> replaceVariable(argName, lhsExpr)
+    var r2 : Template
+    r2 |> replaceVariable(argName, rhsExpr)
+    apply_template(r1, b1.at, b1)
+    apply_template(r2, b2.at, b2)
+    return qmacro(_::less($e(b2), $e(b1))) if (orderName == "order_by_descending")
+    return qmacro(_::less($e(b1), $e(b2)))
 }
 
 [macro_function]
@@ -4424,6 +4447,99 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     if (hasKey) {
         inlineCmp = try_make_inline_cmp(orderKey, orderName, elemType, at)
     }
+    // Bounded-heap / streaming-min fast paths: when the key is inline-able, skip the materialize-all + min_by/top_n pattern in favor of a per-walk state (single best for first[_or_default], heap of size N for take). Slashes 100K push_clones to ~N — the rest of the elements only pay a cmp.
+    let useBoundedHeap = takeExpr != null && inlineCmp != null && firstName == ""
+    let useStreamingMin = firstName != "" && inlineCmp != null
+    let archName = bridge.archName
+    let needIterWrap = expr._type.isIterator
+    var emission : Expression?
+    if (useStreamingMin) {
+        let bestName = qn("decs_best", at)
+        let seenName = qn("decs_seen", at)
+        var lessTest = make_inline_less_call(orderKey, orderName,
+            qmacro($i(tupName)), qmacro($i(bestName)), at)
+        var perElement : Expression? = qmacro_expr() {
+            if (!$i(seenName)) {
+                $i(bestName) := $i(tupName)
+                $i(seenName) = true
+            } elif ($e(lessTest)) {
+                $i(bestName) := $i(tupName)
+            }
+        }
+        if (whereCond != null) {
+            perElement = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $e(perElement)
+                }
+            }
+        }
+        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
+        if (firstName == "first") {
+            emission = qmacro(invoke($() : $t(elemType) {
+                var $i(bestName) = default<$t(elemType)>
+                var $i(seenName) = false
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+                panic("sequence contains no elements") if (!$i(seenName))
+                return $i(bestName)
+            }))
+        } else {
+            let dBindName = qn("order_d", at)
+            emission = qmacro(invoke($() : $t(elemType) {
+                let $i(dBindName) = $e(firstDefaultExpr)
+                var $i(bestName) = default<$t(elemType)>
+                var $i(seenName) = false
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+                return $i(bestName) if ($i(seenName))
+                return $i(dBindName)
+            }))
+        }
+        return finalize_decs_emission(emission, at, false)
+    }
+    if (useBoundedHeap) {
+        let takeNName = qn("decs_take_n", at)
+        // Direct less-test on the hot path: `less(KEY[decs_tup], KEY[buf[0]])` inlined, no block dispatch.
+        var lessTest = make_inline_less_call(orderKey, orderName,
+            qmacro($i(tupName)), qmacro($i(bufName)[0]), at)
+        var perElement : Expression? = qmacro_expr() {
+            if (length($i(bufName)) < $i(takeNName)) {
+                $i(bufName) |> push_clone($i(tupName))
+                _::spliced_push_heap($i(bufName), $e(inlineCmp))
+            } elif ($e(lessTest)) {
+                _::spliced_pop_heap($i(bufName), $e(inlineCmp))
+                $i(bufName)[length($i(bufName)) - 1] := $i(tupName)
+                _::spliced_push_heap($i(bufName), $e(inlineCmp))
+            }
+        }
+        if (whereCond != null) {
+            perElement = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $e(perElement)
+                }
+            }
+        }
+        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
+        var bhStmts : array<Expression?>
+        bhStmts |> reserve(7)
+        bhStmts |> push_from <| qmacro_block_to_array() {
+            let $i(takeNName) = $e(takeExpr)
+            var $i(bufName) : array<$t(elemType)>
+            return <- $i(bufName) if ($i(takeNName) <= 0)
+            $i(bufName) |> reserve($i(takeNName))
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            _::order_inplace($i(bufName), $e(inlineCmp))
+            return <- $i(bufName)
+        }
+        emission = qmacro(invoke($() : array<$t(elemType)> {
+            $b(bhStmts)
+        }))
+        return finalize_decs_emission(emission, at, needIterWrap)
+    }
     var perElement : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(tupName))
     }
@@ -4435,7 +4551,6 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         }
     }
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
-    let archName = bridge.archName
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(5)
     bodyStmts |> push_from <| qmacro_block_to_array() {
@@ -4444,8 +4559,6 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             $e(forExprNode)
         })
     }
-    let needIterWrap = expr._type.isIterator
-    var emission : Expression?
     if (firstName == "first") {
         // order + first → min/max on buffer. Empty buf must panic to match eager `first()` semantics.
         bodyStmts |> push <| qmacro_expr() {
