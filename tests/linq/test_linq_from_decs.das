@@ -2624,9 +2624,6 @@ def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>
 [test]
 def test_wave4_pruned_groupby_count_parity(t : T?) {
     fixture_wave4(10)
-    // _group_by_lazy(_.brand). plan_group_by_core's bucket-build pushes `decs_tup` as a whole
-    // value, so the walker disables pruning (safety rule) → all 3 get_ros emit. See
-    // test_wave4_pruned_groupby_count_splice_shape for the AST gate.
     // brand cycles 0..3 across 10 rows → 4 distinct buckets with sizes [3,3,2,2].
     let got <- target_wave4_pruned_groupby_count_fold()
     t |> equal(got |> length, 4, "4 distinct brand buckets")
@@ -2669,15 +2666,11 @@ def test_wave4_pruned_groupby_count_splice_shape(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "qmatch must capture body")
-        // Documented: plan_group_by_core builds a `bucket` (array of source tuples) per key, then
-        // computes reducers over the bucket. The bucket-build site pushes `decs_tup` as a whole
-        // value — walker sees whole-var → pruning DISABLED → all 3 get_ros present. This is the
-        // safety rule firing as designed (group_by needs the full tuple for the bucket). Pruning
-        // would only fire if the splice itself were refactored to avoid materializing tuples.
-        t |> equal(describe_count(body_expr, "get_ro"), 3, "group_by bucket-build needs full tuple; pruning disabled by design")
-        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand present")
-        t |> success(describe_count(body_expr, "wave4_price") >= 1, "price present (bucket needs full tuple)")
-        t |> success(describe_count(body_expr, "wave4_year") >= 1, "year present (bucket needs full tuple)")
+        // plan_group_by_core peels the key block (`_.brand` → `decs_tup.brand`) inline; the count-by-group shape avoids materializing the bucket — only `brand` survives in the body, so pruning drops `price`+`year`.
+        t |> equal(describe_count(body_expr, "get_ro"), 1, "count-by-group reads only brand → pruning keeps 1 get_ro")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand slot present")
+        t |> equal(describe_count(body_expr, "wave4_price"), 0, "price pruned out")
+        t |> equal(describe_count(body_expr, "wave4_year"), 0, "year pruned out")
     }
 }
 

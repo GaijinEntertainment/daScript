@@ -1,3 +1,5 @@
+options gen2
+
 module dastest_clargs shared
 
 require daslib/clargs public
