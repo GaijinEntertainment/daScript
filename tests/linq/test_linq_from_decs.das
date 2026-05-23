@@ -2507,8 +2507,9 @@ def test_wave4_unpruned_bare_to_array_splice_shape(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "qmatch must capture body")
-        // Wave 4 contract: bare to_array → push_clone(decs_tup) is a whole-var ref → walker disables pruning → all 3 components present.
-        t |> equal(describe_count(body_expr, "get_ro"), 3, "bare to_array must emit all 3 get_ros (no pruning)")
+        // Whole-tup-rewriter contract: push_clone(decs_tup) → push_clone((brand=wave4_brand, price=wave4_price, year=wave4_year)) — all 3 iter vars survive so the pruner keeps all 3 slots, but the named-tuple bind is elided (no per-iter `var decs_tup = ...`). Test name says "unpruned" historically — slot pruning still doesn't fire, but bind elision does.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "bare to_array must emit all 3 get_ros (no slot pruning)")
+        t |> equal(describe_count(body_expr, "decs_tup"), 0, "named-tuple bind elided — whole-var rewriter inlined (brand=iter,...) literal")
         t |> success(describe_count(body_expr, "wave4_brand") >= 1, "brand slot present")
         t |> success(describe_count(body_expr, "wave4_price") >= 1, "price slot present")
         t |> success(describe_count(body_expr, "wave4_year") >= 1, "year slot present")
