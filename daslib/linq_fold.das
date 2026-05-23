@@ -915,14 +915,13 @@ def private emit_early_exit_lane(
                 return <- $i(lastBindName)
             }
         } else {
-            // Bind `d` once at the top (eager, matches linq.das line 2621).
+            // Bind `d` once at the top (eager, matches linq.das line 2621); copy/move probe matches linq.das can_copy/clone_to_move branch.
             let defaultName = qn("dval", at)
-            preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(terminatorCall.arguments[1])
-            }
+            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
             tailStmts <- qmacro_block_to_array() {
                 if (!$i(foundName)) {
-                    return $i(defaultName)
+                    $e(emit_default_return(defaultName, dvCanCopy))
                 }
                 return <- $i(lastBindName)
             }
@@ -961,20 +960,19 @@ def private emit_early_exit_lane(
             }
         } else {
             let defaultName = qn("dval", at)
-            preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(terminatorCall.arguments[1])
-            }
+            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
             // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
             perMatchStmts |> push_from <| qmacro_block_to_array() {
                 if ($i(foundName)) {
-                    return $i(defaultName)
+                    $e(emit_default_return(defaultName, dvCanCopy))
                 }
                 $i(foundName) = true
                 $i(bindName) := $i(valueName)
             }
             tailStmts <- qmacro_block_to_array() {
                 if (!$i(foundName)) {
-                    return $i(defaultName)
+                    $e(emit_default_return(defaultName, dvCanCopy))
                 }
                 return <- $i(bindName)
             }
@@ -1003,9 +1001,12 @@ def private emit_early_exit_lane(
                 }
             }
         } else {
-            preludeStmts |> push <| qmacro_expr() {
+            // `var t : TT; return <- t` (move-init) works for both copyable and non-copyable element types; matches linq.das line 2547.
+            let tName = qn("emptyT", at)
+            preludeStmts |> push_from <| qmacro_block_to_array() {
                 if ($i(idxName) < 0) {
-                    return default<$t(retType)>
+                    var $i(tName) : $t(retType)
+                    return <- $i(tName)
                 }
             }
         }
@@ -1019,13 +1020,17 @@ def private emit_early_exit_lane(
             $i(cntName) ++
         }
         if (opName == "element_at") {
+            let tName = qn("emptyT", at)
             tailStmts <- qmacro_block_to_array() {
                 panic("element index out of range")
-                return default<$t(retType)>
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
             }
         } else {
-            tailStmts |> push <| qmacro_expr() {
-                return default<$t(retType)>
+            let tName = qn("emptyT", at)
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
             }
         }
     } elif (opName == "aggregate") {
@@ -3434,6 +3439,38 @@ def private decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStat
 }
 
 [macro_function]
+def private emit_default_bind(name : string; argExpr : Expression?; canCopy : bool) : Expression? {
+    // Bind user-supplied default once. Non-copyable uses `var dv <- clone_to_move(arg)` — fully-owned local so multiple return-default sites can each clone-out without consuming.
+    var out : Expression?
+    if (canCopy) {
+        out = qmacro_expr() {
+            let $i(name) = $e(argExpr)
+        }
+    } else {
+        out = qmacro_expr() {
+            var $i(name) <- clone_to_move($e(argExpr))
+        }
+    }
+    return out
+}
+
+[macro_function]
+def private emit_default_return(name : string; canCopy : bool) : Expression? {
+    // Non-copyable uses `return <- clone_to_move(name)` (safe repeated calls — clone_to_move does NOT consume).
+    var out : Expression?
+    if (canCopy) {
+        out = qmacro_expr() {
+            return $i(name)
+        }
+    } else {
+        out = qmacro_expr() {
+            return <- clone_to_move($i(name))
+        }
+    }
+    return out
+}
+
+[macro_function]
 def private emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
     let accName = qn("decs_acc", at)
@@ -3938,11 +3975,12 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
             }
         } else {
             let defaultName = qn("decs_dv", at)
-            preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(terminatorCall.arguments[1])
-            }
+            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
             tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) return $i(defaultName)
+                if (!$i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
                 return <- $i(bindName)
             }
         }
@@ -3970,14 +4008,13 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
         let stopName = qn("decs_stop", at)
         let bindName = qn("decs_sng", at)
         let defaultName = qn("decs_dv", at)
+        let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
         preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(foundName) = false
             var $i(stopName) = false
             var $i(bindName) : $t(retType)
         }
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(defaultName) = $e(terminatorCall.arguments[1])
-        }
+        preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
         // 2nd match → set stop, return true (exits inner lambda); for_each_archetype_find then stops the walk.
         perElement = qmacro_block() {
             if ($i(foundName)) {
@@ -3988,7 +4025,9 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
             $i(bindName) := $i(finalBind)
         }
         tailStmts |> push_from <| qmacro_block_to_array() {
-            if ($i(stopName) || !$i(foundName)) return $i(defaultName)
+            if ($i(stopName) || !$i(foundName)) {
+                $e(emit_default_return(defaultName, dvCanCopy))
+            }
             return <- $i(bindName)
         }
         earlyExitFind = true
@@ -4110,12 +4149,19 @@ def private emit_decs_element_at(bridge : DecsBridgeShape?;
             return <- $i(resultName)
         }
     } else {
-        // element_at_or_default has no user-supplied default arg; returns default<TT>.
-        preludeStmts |> push <| qmacro_expr() {
-            if ($i(idxName) < 0) return default<$t(retType)>
+        // element_at_or_default has no user-supplied default; mirrors linq.das via `var t : TT; return <- t` (move-init, works for both copyable and non-copyable element types).
+        let tName = qn("decs_emptyT", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(idxName) < 0) {
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
+            }
         }
         tailStmts |> push_from <| qmacro_block_to_array() {
-            if (!$i(foundName)) return default<$t(retType)>
+            if (!$i(foundName)) {
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
+            }
             return <- $i(resultName)
         }
     }
