@@ -306,9 +306,22 @@ ENDIF()
 
 # All shared libraries should pass through this macro.
 # It sets required properties for shared libraries.
+# Mingw's ADD_LIBRARY auto-prepends "lib" to the output filename. When the
+# target name already starts with "lib" (libDaScript / libDaScriptDyn /
+# libDasModuleX), this produces ugly double-lib names like liblibDaScript.a
+# or liblibDaScriptDyn.dll on disk. Strip the auto-prefix so output names
+# match MSVC convention. Only fires on Windows-non-MSVC: Linux/macOS keep
+# their conventional `lib` prefix (which they need to be linkable as -lname).
+MACRO(STRIP_DOUBLE_LIB_PREFIX_ON_MINGW lib)
+    IF(WIN32 AND NOT MSVC AND "${lib}" MATCHES "^lib")
+        SET_TARGET_PROPERTIES(${lib} PROPERTIES PREFIX "" IMPORT_PREFIX "")
+    ENDIF()
+ENDMACRO()
+
 MACRO(SETUP_DAS_SHARED_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
     SETUP_LIB_DEFINITIONS(${lib})
+    STRIP_DOUBLE_LIB_PREFIX_ON_MINGW(${lib})
     if(MSVC)
         # We export a lot of structures, some of them has not exported internals.
         # Instead of marking everything as exported let's disable
@@ -323,6 +336,7 @@ ENDMACRO()
 MACRO(ADD_DAS_STATIC_LIBRARY lib)
     ADD_LIBRARY(${lib} STATIC ${ARGN})
     SETUP_LIB_DEFINITIONS(${lib})
+    STRIP_DOUBLE_LIB_PREFIX_ON_MINGW(${lib})
 ENDMACRO()
 
 
