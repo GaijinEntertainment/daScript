@@ -528,6 +528,7 @@ namespace das {
     DAS_API bool isExprConst ( ExpressionPtr expr );
     DAS_API bool isTempType ( TypeDeclPtr ptr, bool refMatters );
     DAS_API float4 evalSingleExpression ( ExpressionPtr expr, bool & ok );
+    DAS_API float4 evalSingleExpressionInContext ( ExpressionPtr expr, smart_ptr_raw<Context> useCtx, bool & ok );
     DAS_API ExpressionPtr makeCall ( const LineInfo & at, const char * name );
     DAS_API bool builtin_isVisibleDirectly ( Module * from, Module * too );
     DAS_API bool builtin_hasField ( TypeDeclPtr ptr, const char * field, bool constant );
