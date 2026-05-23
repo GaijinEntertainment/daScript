@@ -2525,6 +2525,43 @@ def test_wave4_take_count_no_field_ref_parity(t : T?) {
     t |> equal(target_wave4_take_count_no_field_ref_fold(), 5, "take(5).count() splice must still return 5")
 }
 
+[export, marker(no_coverage)]
+def target_wave4_all_fields_via_access_fold() : int {
+    // All 3 fields referenced via field access (chained single-field where_s — same all-fields trigger as a compound predicate, but each peeled body has a single field-access node, matching the predicate shape the rest of the suite uses).
+    return _fold(from_decs_template(type<Wave4Row>)
+        ._where(_.brand >= 0)
+        ._where(_.price >= 0)
+        ._where(_.year > 0)
+        .count())
+}
+
+[test]
+def test_wave4_all_fields_via_access_parity(t : T?) {
+    fixture_wave4(10)
+    // brand = i%4 (always >= 0), price = i*10 (always >= 0), year = 2000+(i%25) (always > 0) → all 10 rows match.
+    t |> equal(target_wave4_all_fields_via_access_fold(), 10, "all-fields-access predicate must return all rows")
+}
+
+[test]
+def test_wave4_all_fields_via_access_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_all_fields_via_access_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // No slots pruned (all 3 fields read), but the bind is elided and body references iter vars directly.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "all 3 get_ros present (no slot pruning)")
+        t |> equal(describe_count(body_expr, "decs_tup"), 0, "named-tuple bind elided when no whole-var ref")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 2, "brand iter var read directly (slot + body ref)")
+        t |> success(describe_count(body_expr, "wave4_price") >= 2, "price iter var read directly")
+        t |> success(describe_count(body_expr, "wave4_year") >= 2, "year iter var read directly")
+    }
+}
+
 // ── C2: buffer-required planners (order/reverse/distinct) ──────────────────────
 
 [export, marker(no_coverage)]
@@ -3086,5 +3123,140 @@ def test_unroll_take_last_splice_shape(t : T?) {
         // take present → bool-lambda dispatch (for_each_archetype_find) so the range's `return true` exits the walk
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take+last uses _find when range present")
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 1: trivial-let elision for `_select(_.userName)` → iter var (skips
+//          the `let decs_sel_N = car_price` no-op binding when the projection
+//          is a single field access on decs_tup)
+// ─────────────────────────────────────────────────────────────────────────────
+
+[test]
+def test_unroll_select_sum_trivial_let_elision_splice_shape(t : T?) {
+    // `_select(_.val).sum()` peels to a single ExprField(decs_tup.val) which the flattener would rewrite to a bare iter var anyway — slice 1 elides the synthetic `let decs_sel_N = car_price` entirely and rewrites finalBind to the iter var, leaving body as `acc += <iterVar>` with no intermediate binding.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_select_sum_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_select_sum_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "decs_sel"), 0, "trivial single-field _select elided — no synthetic decs_sel binding")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "still exactly one for_each_archetype walk")
+    }
+}
+
+[test]
+def test_unroll_where_select_sum_trivial_let_elision_splice_shape(t : T?) {
+    // Same elision applies through a where filter: where(_.flag==1).select(_.val).sum() — the select still peels to a single ExprField on decs_tup, so elision fires and the binding is dropped. Asserts the elision is not gated on whether the chain is bare or filtered.
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_where_select_sum_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_where_select_sum_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "decs_sel"), 0, "trivial single-field _select elided after a where_")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 2: reverse + take(N) skip-into-tail fast path on decs
+//          Two-pass: sum arch.size, then for_each_archetype_find skips whole
+//          archetypes that fit below the threshold + early-exits once the
+//          takeN-sized buffer is full. Reverses the small N buffer at end.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[test]
+def test_unroll5d_reverse_take_skip_into_tail_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll5d_reverse_take_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll5d_reverse_take_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "skip-into-tail uses _find for early-exit once buf reaches takeN")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 2, "two walks total: 1 size-sum + 1 _find (describe_count is substring match)")
+        // decs_skips is the slice-2 unique skip-counter local (qn(\"decs_skips\", at)). Its presence proves the fast path fired vs. the legacy buffer+reverse_inplace+resize emit.
+        t |> success(describe_count(body_expr, "decs_skips") >= 1, "decs_skips local present — slice-2 fast path fired")
+    }
+}
+
+// ── Multi-archetype reverse + take: exercises whole-archetype-skip arm + partial-archetype skip-counter arm ──
+
+[decs_template(prefix = "rev2_")]
+struct RevTakeMultiArchA {
+    id : int
+}
+
+[decs_template(prefix = "rev2_b_")]
+struct RevTakeMultiArchB {
+    bid  : int
+    bval : int
+}
+
+[test]
+def test_reverse_take_multi_archetype_parity(t : T?) {
+    // Creates two MATCHING archetypes — both have `rev2_id` so both satisfy `from_decs_template(type<RevTakeMultiArchA>)`. Group A1: just rev2_id. Group A2: rev2_id + extra rev2_b_* components — same query matches, but the extra components land it in a separate archetype. With A1=4 + A2=5 → totalCount=9, take(3) → skip=6: A1 (size 4) skipped entirely via the size-sum arm, A2 enters with skipsLeft=2 → drains 2 then pushes 3 then returns true. Exercises both the whole-archetype-skip and partial-archetype skip-counter + early-exit.
+    restart()
+    for (i in 0..4) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.rev2_id := i
+        }
+    }
+    for (i in 0..5) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.rev2_id := i + 100
+            cmp.rev2_b_bid := i + 1000
+            cmp.rev2_b_bval := i * 10
+        }
+    }
+    commit()
+    let got <- _fold(from_decs_template(type<RevTakeMultiArchA>).reverse().take(3).to_array())
+    t |> equal(got.length(), 3, "reverse+take(3) on two matching archetypes returns 3 rows")
+    var idSet : table<int>
+    for (r in got) {
+        idSet |> insert(r.id)
+    }
+    t |> equal(length(idSet), 3, "all 3 ids are distinct")
+    // All returned ids must be from one of the two matching archetypes: A1 (ids 0..3) or A2 (ids 100..104). The exact subset depends on archetype iteration order (a decs-internal detail), so we just check membership.
+    for (r in got) {
+        let inA1 = r.id >= 0 && r.id < 4
+        let inA2 = r.id >= 100 && r.id < 105
+        t |> success(inA1 || inA2, "row id {r.id} must be from one of the two matching archetypes")
+    }
+}
+
+[test]
+def test_reverse_take_skip_zero_when_take_exceeds_total(t : T?) {
+    // takeN > totalCount → skip = 0, returns all rows reversed. Exercises the actualTake = totalCount branch and the early-exit not firing (buf never reaches takeN before iteration completes).
+    restart()
+    for (i in 0..3) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.rev2_id := i
+        }
+    }
+    commit()
+    let got <- _fold(from_decs_template(type<RevTakeMultiArchA>).reverse().take(99).to_array())
+    t |> equal(got.length(), 3, "take(N) where N > total returns all rows")
+}
+
+[test]
+def test_reverse_take_empty_source(t : T?) {
+    // No matching archetypes → totalCount = 0 → early-return empty buf before for_each_archetype_find.
+    restart()
+    commit()
+    let got <- _fold(from_decs_template(type<RevTakeMultiArchA>).reverse().take(3).to_array())
+    t |> success(empty(got), "empty source returns empty")
 }
 
