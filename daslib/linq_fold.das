@@ -3180,6 +3180,11 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
     var fieldToIter <- {for (i in 0 .. length(bridge.userNames));
         bridge.userNames[i] => bridge.iterNames[i];
         where key_exists(usedSet, bridge.userNames[i])}
+    // Diagnostic-friendly fallback when some `usedNames` entry has no bridge match. Today the typer pipeline checks user `_.<field>` lambdas before plan_decs_unroll runs, so this is unreachable in practice — but if a future macro ever synthesizes `decs_tup.<unknownField>`, the unpruned bind keeps the typer's "unknown field of <named-tuple>" diagnostic intact instead of degrading it to "unknown identifier decs_tup".
+    if (length(fieldToIter) < length(usedSet)) {
+        var tupBind = build_decs_tup_bind(bridge, tupName, at)
+        return build_decs_inner_for(bridge, tupBind, body, at)
+    }
     // Pruned path: no whole-var ref → no need for the named tuple. Rewrite every `decs_tup.<userName>` in the body to the matching iter var, then drop the bind entirely. Eliminates one tuple-make + N per-element field reads per iter.
     flatten_decs_tup_to_iter(body, tupName, fieldToIter)
     // Clone forExpr; drop the iter slots not in usedSet from all 5 parallel dasvectors (sources/iterators/iteratorsAt/iteratorsAka/iteratorsTags). iteratorVariables is cleared so the typer rebuilds it during re-type — same pattern as daslib/soa.das:381.
