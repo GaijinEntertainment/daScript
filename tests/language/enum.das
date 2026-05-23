@@ -113,3 +113,33 @@ def test_enum(t : T?) {
     let bind_ok = testBindEnumFunction()
     t |> success(bind_ok, "testBindEnumFunction failed")
 }
+
+[test]
+def test_enum_bool_not_ops(t : T?) {
+    // daslib/enum_trait.das `operator !(arg)` and `bool(arg)` for any enum:
+    // returns true/false based on the underlying integer being zero / non-zero.
+    // Enables flag-op-enum read-side: `if (bool(flags & MASK))` / `if (!(flags & MASK))`.
+
+    // Zen — default int32 backing
+    t |> success(!Zen.zero, "!Zen.zero (value 0) must be true")
+    t |> success(!!Zen.not_zero, "!!Zen.not_zero (value 1) must be true")
+    t |> success(!bool(Zen.zero), "bool(Zen.zero) must be false")
+    t |> success(bool(Zen.not_zero), "bool(Zen.not_zero) must be true")
+
+    // Numbers — int16 backing, including negative-valued members
+    t |> success(!Numbers.zero, "!Numbers.zero must be true")
+    t |> success(!!Numbers.one, "Numbers.one is non-zero")
+    t |> success(!bool(Numbers.zero), "bool(Numbers.zero) must be false")
+    t |> success(bool(Numbers.one), "bool(Numbers.one) must be true")
+    t |> success(bool(Numbers.neg_one), "bool(Numbers.neg_one) must be true (non-zero)")
+    t |> success(bool(Numbers.neg_ten), "bool(Numbers.neg_ten) must be true (non-zero)")
+
+    // BooHoo8 — int8 backing, no zero member, all values non-zero
+    t |> success(bool(BooHoo8.boo), "bool(BooHoo8.boo=1) must be true")
+    t |> success(!!BooHoo8.hoo, "BooHoo8.hoo=2 is non-zero")
+    t |> success(!(!BooHoo8.boo_hoo), "BooHoo8.boo_hoo=3 is non-zero")
+
+    // BooHoo16 — int16 backing, same shape
+    t |> success(bool(BooHoo16.boo), "bool(BooHoo16.boo=4) must be true")
+    t |> success(!!BooHoo16.boo_hoo, "BooHoo16.boo_hoo=6 is non-zero")
+}
