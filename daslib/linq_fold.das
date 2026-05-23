@@ -3168,7 +3168,8 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                         at : LineInfo) : Expression? {
     // Walks body for `tupName.<field>` references; when pruning is safe + beneficial, emits the inner multi-iter for with unused get_ro slots dropped and a matching shrunk named-tuple bind. Otherwise falls through to the unpruned path so user-visible shape stays intact (bare to_array, push_clone(decs_tup), pass-to-user-fn).
     let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName)
-    if (allUsed || empty(usedNames) || length(usedNames) == length(bridge.userNames)) {
+    // Fallback to the unpruned bind ONLY for whole-var refs (bare to_array, push_clone(decs_tup), pass-to-user-fn) or the edge case where the body never touches decs_tup at all. The "all fields used via field access" case still benefits from flatten + bind elision — no slots dropped, but the per-iter tuple-make and field reads disappear.
+    if (allUsed || empty(usedNames)) {
         var tupBind = build_decs_tup_bind(bridge, tupName, at)
         return build_decs_inner_for(bridge, tupBind, body, at)
     }
