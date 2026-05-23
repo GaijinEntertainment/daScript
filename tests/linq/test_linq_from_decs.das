@@ -3198,13 +3198,13 @@ struct RevTakeMultiArchA {
 
 [decs_template(prefix = "rev2_b_")]
 struct RevTakeMultiArchB {
-    bid : int
+    bid  : int
     bval : int
 }
 
 [test]
 def test_reverse_take_multi_archetype_parity(t : T?) {
-    // Creates two archetypes (A with 4 rows, B with 5 rows). A 9-row sum across archetypes; reverse + take(3) must return 3 rows. The unrelated B archetype is filtered out by the from_decs_template request anyway — but its presence in the decs state ensures for_each_archetype iterates across more than one archetype-class even when the request matches just one.
+    // Creates two MATCHING archetypes — both have `rev2_id` so both satisfy `from_decs_template(type<RevTakeMultiArchA>)`. Group A1: just rev2_id. Group A2: rev2_id + extra rev2_b_* components — same query matches, but the extra components land it in a separate archetype. With A1=4 + A2=5 → totalCount=9, take(3) → skip=6: A1 (size 4) skipped entirely via the size-sum arm, A2 enters with skipsLeft=2 → drains 2 then pushes 3 then returns true. Exercises both the whole-archetype-skip and partial-archetype skip-counter + early-exit.
     restart()
     for (i in 0..4) {
         create_entity() @(eid, cmp) {
@@ -3215,22 +3215,25 @@ def test_reverse_take_multi_archetype_parity(t : T?) {
     for (i in 0..5) {
         create_entity() @(eid, cmp) {
             cmp.eid := eid
-            cmp.rev2_b_bid := i + 100
+            cmp.rev2_id := i + 100
+            cmp.rev2_b_bid := i + 1000
             cmp.rev2_b_bval := i * 10
         }
     }
     commit()
     let got <- _fold(from_decs_template(type<RevTakeMultiArchA>).reverse().take(3).to_array())
-    t |> equal(got.length(), 3, "reverse+take(3) on multi-archetype world returns 3 rows from the matching archetype only")
+    t |> equal(got.length(), 3, "reverse+take(3) on two matching archetypes returns 3 rows")
     var idSet : table<int>
     for (r in got) {
         idSet |> insert(r.id)
     }
-    // All returned ids must be from the A archetype (0..3); none from B (100..104).
-    for (r in got) {
-        t |> success(r.id >= 0 && r.id < 4, "row id {r.id} must be from RevTakeMultiArchA archetype")
-    }
     t |> equal(length(idSet), 3, "all 3 ids are distinct")
+    // All returned ids must be from one of the two matching archetypes: A1 (ids 0..3) or A2 (ids 100..104). The exact subset depends on archetype iteration order (a decs-internal detail), so we just check membership.
+    for (r in got) {
+        let inA1 = r.id >= 0 && r.id < 4
+        let inA2 = r.id >= 100 && r.id < 105
+        t |> success(inA1 || inA2, "row id {r.id} must be from one of the two matching archetypes")
+    }
 }
 
 [test]
