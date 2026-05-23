@@ -300,7 +300,7 @@ class JIT_LLVM : AstSimulateMacro {
                     }
                 }
                 if (gen_exe) {
-                    let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict, target_triple)
+                    let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
                     LINK_WHOLE_LIB = res.link_whole_lib
                     if (res.fn == null) {
                         finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
