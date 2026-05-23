@@ -618,20 +618,19 @@ def private bench_on_finished_impl(var suite_ctx : SuiteCtx; var benchmarking : 
 
     if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
         let entries = [
-            (int64(avg_time), "ns/op", 18, false),
-            (int64(avg_heap_bytes), "B/op", 14, true),
-            (int64(avg_num_allocs), "allocs/op", 16, true),
-            (int64(avg_string_heap_bytes), "SB/op", 14, true),
-            (int64(avg_string_num_allocs), "strings/op", 16, true),
+            ("{avg_time:.1f}", "ns/op", 18, false),
+            ("{int64(avg_heap_bytes)}", "B/op", 14, true),
+            ("{int64(avg_num_allocs)}", "allocs/op", 16, true),
+            ("{int64(avg_string_heap_bytes)}", "SB/op", 14, true),
+            ("{int64(avg_string_num_allocs)}", "strings/op", 16, true),
         ]
         let msg = build_string() $(var w) {
-            for (i, (val, measure, width, is_alloc) in range(length(entries)), entries) {
-                let val_s = "{val}"
+            for (i, (val_s, measure, width, is_alloc) in range(length(entries)), entries) {
                 let printed_width = length(val_s + " " + measure)
                 let sep = repeat(" ", max(width - printed_width, 1))
                 let is_last = i == length(entries) - 1
                 var colored_val = yellow_str(val_s)
-                if (is_alloc && val == 0l) {
+                if (is_alloc && val_s == "0") {
                     colored_val = green_str(val_s)
                 }
                 w |> write(colored_val + " " + measure)
