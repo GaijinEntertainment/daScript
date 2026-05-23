@@ -1,0 +1,1 @@
+Marks named parameters as cloned internally by the function (e.g. ``[clone(expr)]`` or ``[clone(expr, replacement)]``). Pure metadata — consumed by the PERF024 perf lint to flag callers that wrap those args in ``clone_expression`` / ``clone_type`` / ``clone_function`` / ``clone_variable`` / ``clone_structure``, since the outer clone is redundant when the callee already clones.

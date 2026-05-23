@@ -1108,6 +1108,7 @@ def public apply_qblock_expr(var expr : Expression?; blk : block<(var rules : Te
     return clone_to_move(qblk.list[0])
 }
 
+[clone(blockExpr)]
 def public push_block_list(var stmts : array<Expression?>; var blockExpr : Expression?) {
     //! Splice every statement from a ``qmacro_block(...) { ... }`` result into ``stmts``, cloning
     //! each. Use in place of a cluster of ``stmts |> push <| qmacro_expr() { single_stmt }`` calls
@@ -1439,6 +1440,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     return instance_type
 }
 
+[clone(func)]
 def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var rules : Template) : void>) : FunctionPtr {
     //! Applies template rules to a function, cloning it with substituted types.
     var inscope rules : Template

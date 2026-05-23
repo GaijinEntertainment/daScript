@@ -374,7 +374,7 @@ def private finalize_lane_emission(var topExprs : array<Expression?>; srcNames :
     return finalize_invoke(res, at)
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
     // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
     var topExpr = clone_expression(top)
@@ -393,7 +393,7 @@ def private emit_length_shortcut(opName : string; var top : Expression?; srcName
 }
 
 [macro_function]
-def private invoke_src_param_type(var top : Expression?) : TypeDeclPtr {
+def private invoke_src_param_type(top : Expression?) : TypeDeclPtr {
     // Compute the invoke block's `$src` parameter type from the chain top:
     var srcParamType = clone_type(top._type)
     if (top._type.isIterator) {
@@ -587,7 +587,7 @@ def private build_accumulator_perelement_stmts(opName : string;
     return <- stmts
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                               var skipExpr, takeExpr, skipWhileCond : Expression?;
                               var loopBody : Expression?; at : LineInfo) : Expression? {
@@ -610,7 +610,7 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName : 
     return finalize_invoke(res, at)
 }
 
-[macro_function]
+[clone(top), macro_function]
 def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
                             srcName, accName, itName : string; names : RangeStateNames;
                             var skipExpr, takeExpr, skipWhileCond : Expression?;
@@ -847,7 +847,7 @@ def private emit_early_exit_lane(
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
         if (argCount > 1) {
-            var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), valueName)
+            var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
             perMatchStmts |> push <| qmacro_expr() {
                 if ($e(predExpr)) {
                     return true
@@ -862,7 +862,7 @@ def private emit_early_exit_lane(
             return false
         }
     } elif (opName == "all") {
-        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), valueName)
+        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
         perMatchStmts |> push <| qmacro_expr() {
             if (!$e(predExpr)) {
                 return false
@@ -1123,8 +1123,8 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
     return t
 }
 
-[macro_function]
-def private finalize_emission_stmts(var top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
+[clone(top), macro_function]
+def private finalize_emission_stmts(top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
@@ -2080,7 +2080,7 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
     if (okBare) {
         var innerBody : Expression?
         if (innerBare != null) {
-            innerBody = peel_lambda_rename_var(clone_expression(innerBare), itName)
+            innerBody = peel_lambda_rename_var(innerBare, itName)
             if (innerBody == null) return <- (<- specs, false)
         }
         let isAvgBare = rnBare == "average" || rnBare == "average_inner_select"
@@ -2104,7 +2104,7 @@ def private recognize_reducer_specs(var groupProjBody : Expression?; bindName, i
         }
         var innerBody : Expression?
         if (innerLam != null) {
-            innerBody = peel_lambda_rename_var(clone_expression(innerLam), itName)
+            innerBody = peel_lambda_rename_var(innerLam, itName)
             if (innerBody == null) {
                 specs |> clear
                 return <- (<- specs, false)
@@ -2376,7 +2376,7 @@ def private having_reducer_append_if_missing(var expr : Expression?; hbName, itN
         // Match against a select-side spec (visible slot): v1 trusts the user wrote identical lambdas (pre-existing PR-D limitation, documented in LINQ.md). Match against an already-added hidden spec from this having scan would silently route two different inner lambdas to the same slot — bail to tier 2 instead, where each select() is evaluated separately.
         if (s.name == comboName) return s.slot <= userVisibleSlotCount
     }
-    var innerBody = peel_lambda_rename_var(clone_expression(ic.arguments[1]), itName)
+    var innerBody = peel_lambda_rename_var(ic.arguments[1], itName)
     if (innerBody == null || innerBody._type == null) return false
     var accType = mk_hidden_acc_type(comboName, true, bucketElemType, innerBody._type, at)
     if (accType == null) return false
@@ -2598,8 +2598,7 @@ def private adapter_finalize_emission(adapter : GroupBySourceAdapter; var stmts 
         emission.force_generated(true)
         return emission
     }
-    var topClone = clone_expression(adapter.arrayTop)
-    return finalize_emission_stmts(topClone, adapter.arraySrcName, at, stmts)
+    return finalize_emission_stmts(adapter.arrayTop, adapter.arraySrcName, at, stmts)
 }
 
 [macro_function]
@@ -3478,7 +3477,7 @@ def private emit_decs_accumulator(bridge : DecsBridgeShape?;
     var perElement : Expression? = stmts_to_expr(perElementStmts)
     // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
     if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
-        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
+        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
         if (predExpr == null) return null
         perElement = qmacro_expr() {
             if ($e(predExpr)) {
@@ -3629,7 +3628,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
                 var $i(foundName) = false
             }
             if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
+                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
                 if (predExpr == null) return null
                 perElement = qmacro_expr() {
                     if ($e(predExpr)) {
@@ -3648,7 +3647,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         } else {
             if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
+                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
                 if (predExpr == null) return null
                 perElement = qmacro_expr() {
                     if ($e(predExpr)) return true
@@ -3660,7 +3659,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
             }
         }
     } elif (opName == "all") {
-        var predExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
+        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
         if (predExpr == null) return null
         if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
             // Take-cap / take_while-stop hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
@@ -3841,7 +3840,7 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
     let names <- make_decs_range_names(at)
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
-    var keyExpr = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), finalBind)
+    var keyExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
     if (keyExpr == null || keyExpr._type == null) return null
     var keyType = clone_type(keyExpr._type)
     keyType.flags.constant = false

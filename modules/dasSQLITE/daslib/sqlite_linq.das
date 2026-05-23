@@ -217,17 +217,17 @@ def private push_text(var out : array<SqlFrag>; s : string) {
     out |> push(SqlFrag(text = s))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_bind(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(bind = clone_expression(e)))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_inline_id(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(inline_id = clone_expression(e)))
 }
 
-[macro_function]
+[clone(e), macro_function]
 def private push_inline_lit(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(inline_lit = clone_expression(e)))
 }
@@ -3492,12 +3492,12 @@ def private emit_pragma_or_vacuum(prog : ProgramPtr; var call : ExprCallMacro?;
     var frags : array<SqlFrag>
     if (isPragma) {
         frags |> push_text("PRAGMA ")
-        frags |> push_inline_id(clone_expression(call.arguments[1]))
+        frags |> push_inline_id(call.arguments[1])
         frags |> push_text(" = ")
-        frags |> push_inline_lit(clone_expression(call.arguments[2]))
+        frags |> push_inline_lit(call.arguments[2])
     } else {
         frags |> push_text("VACUUM INTO ")
-        frags |> push_inline_lit(clone_expression(call.arguments[1]))
+        frags |> push_inline_lit(call.arguments[1])
     }
     var sqlExpr : ExpressionPtr
     var bindExprs : array<ExpressionPtr>
