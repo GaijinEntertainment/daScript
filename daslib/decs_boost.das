@@ -241,7 +241,7 @@ def private append_iterator(arch_name : string; var qloop : ExprFor?; a; prefix,
     qloop.iterators |> resize(qli + 1)
     qloop.iterators[qli] := "{prefix}{a.name}{suffix}"
     qloop.iteratorsAka |> resize(qli + 1)
-    if (typeinfo has_field<_aka>(a)) {
+    static_if (typeinfo has_field<_aka>(a)) {
         qloop.iteratorsAka[qli] := a._aka
     } else {
         qloop.iteratorsAka[qli] := ""
@@ -384,7 +384,7 @@ class DecsQueryMacro : AstCallMacro {
         macro_verify(totalArgs == 1 || totalArgs == 2, prog, expr.at, "expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
         let qt = totalArgs == 2 ? DecsQueryType.eid_query : DecsQueryType.query
         let block_arg_index = totalArgs - 1
-        return <- self->implement(expr, block_arg_index, qt)
+        return <- implement(expr, block_arg_index, qt)
     }
     def implement(var expr : ExprCallMacro?; block_arg_index : int; qt : DecsQueryType) : ExpressionPtr {
         for (arg in expr.arguments) {
@@ -539,7 +539,7 @@ class DecsFindQueryMacro : DecsQueryMacro {
     //! Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         macro_verify(length(expr.arguments) == 1, prog, expr.at, "expecting find_query($(block_with_arguments))")
-        return <- self->implement(expr, 0, DecsQueryType.find_query)
+        return <- implement(expr, 0, DecsQueryType.find_query)
     }
 }
 
