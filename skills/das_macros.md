@@ -110,7 +110,7 @@ For these:
 | `match_call_in_linq` | `(expr, name) → ExprCall?` | Thin wrapper on `match_call_in_module` with `modName="linq"`. |
 | `peel_lambda_single_return` | `(lam) → Expression?` | For `@(x : T) => expr`, return `expr`. `null` if shape doesn't match. |
 | `peel_lambda_rename_var` | `(expr, argName) → Expression?` | Peel + rename the bound variable. Falls back to `invoke(expr, argName)` when non-peelable so callers can splice the result unconditionally. |
-| `peel_lambda_replace_var` | `(expr, replacement) → Expression?` | Variant using `replaceVariablePeeling` — substitutes the bound variable with an arbitrary expression (peel-aware: strips typer-inserted `ExprRef2Value` on already-typed AST). |
+| `peel_lambda_replace_var` | `(expr, replacement) → Expression?` | Variant of `peel_lambda_rename_var` that substitutes the bound variable with an arbitrary expression. Uses the unified peel-aware `replaceVariable` (single rule strips typer-inserted `ExprRef2Value` on already-typed AST). |
 | `peel_lambda_rename_2vars` | `(expr, a, b) → Expression?` | 2-arg form for `aggregate`-style `block<(acc, x) : AGG>` lambdas. Returns `null` on shape mismatch — caller decides fallback. |
 | `peel_tuple_field_read` | `(expr, bindName, fieldIndex) → bool` | `true` when `expr` matches `<bindName>._<fieldIndex>` — tuple-slot read on a named bind. Single-level `ExprRef2Value` peel on each side. |
 | `extract_const_string` | `(e) → tuple<bool; string>` | For `ExprConstString` returns `(true, value)`, else `(false, "")`. Use to consume compile-time string literals threaded through macro args. |
@@ -222,6 +222,35 @@ body = qmacro_block() { let _x = $e(baseE) + $e(baseE) }
 ```
 
 The lint rule `PERF023` (see `skills/perf_lint.md`) catches the wasted-pre-clone shape automatically.
+
+### `[clone(...)]`-annotated functions clone for you too
+
+The same wasted-pre-clone shape exists at **direct calls** to functions that promise to clone internally — e.g. `peel_lambda_rename_var`, `apply_qmacro_template_function`, `push_inline_id`. Each carries a `[clone(paramName, ...)]` annotation declaring which params it clones:
+
+```das
+// WRONG — peel_lambda_rename_var has [clone(expr)], clones internally
+var pred = peel_lambda_rename_var(clone_expression(terminatorCall.arguments[1]), valueName)
+
+// RIGHT
+var pred = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
+```
+
+Var-init-then-pass form is also flagged when every use is into an annotated arg position:
+
+```das
+// WRONG — topClone's only use is annotated arg of finalize_emission_stmts
+var topClone = clone_expression(adapter.arrayTop)
+return finalize_emission_stmts(topClone, ...)
+
+// RIGHT
+return finalize_emission_stmts(adapter.arrayTop, ...)
+```
+
+PERF024 catches both shapes. Canonical annotated set (grows over time): `peel_lambda_rename_var`/`_replace_var`/`_rename_2vars` + `qm_extract_stmts` in `ast_match`, `push_block_list` + `apply_qmacro_template_function` in `templates_boost`, the `emit_*`/`finalize_emission_stmts` family in `linq_fold`, `push_bind`/`push_inline_id`/`push_inline_lit` in `sqlite_linq`.
+
+**To mark your own function** — add `[clone(p1, p2)]` (one annotation per function, comma-separated param names). The annotation is registered C++-side, no `require` needed.
+
+**Before annotating, verify the function CONSUMES `p` cleanly — does not MUTATE `p` and does not retain shared aliases.** The correct contract is: every code path either ignores `p`, clones (or deep-iterates-and-clones) the pieces of `p` it needs into its output, OR forwards `p` to another `[clone(p)]`-annotated function — and never mutates `p` or stores raw aliases that outlive the call. `clone_expression(p)` directly is the common case; cloning sub-pieces is also fine (e.g. `push_block_list` clones each element of `blockExpr.list`, `qm_extract_stmts` clones each element of `blk_expr.list`). What MUST NOT happen: `apply_template(rules, at, p)` — that mutates `p` in place via `TemplateVisitor`. Same for every `apply_qmacro_*` / `apply_qblock_*` variant; pre-clones at their callsites are **load-bearing**, not redundant. Marking them `[clone(...)]` would make PERF024 flag callers who are doing the right thing.
 
 ### Default-initializing generated struct variables
 
