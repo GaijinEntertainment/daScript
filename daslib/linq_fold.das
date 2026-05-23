@@ -3078,14 +3078,16 @@ def private build_decs_inner_for(bridge : DecsBridgeShape?; var tupBind : Expres
     return clonedForExpr
 }
 
-// Walks a chain body to collect which fields of the decs_tup named-tuple bind are actually referenced. allFieldsUsed flips when the bind is referenced as a whole-var (not via field access) — e.g. push_clone(decs_tup) in a bare to_array, or pass-to-user-fn — so the helper falls back to unpruned emission and preserves the user-visible output shape.
+// Walks a chain body to collect which fields of the decs_tup named-tuple bind are actually referenced. allFieldsUsed flips when the bind is referenced as a whole-var (not via field access) — e.g. push_clone(decs_tup) in a bare to_array, or pass-to-user-fn — so the helper falls back to unpruned emission and preserves the user-visible output shape. Also picks up bare iter-var refs (when `iterToUser` is non-empty) so the trivial-let-elision path — which rewrites `decs_sel_N`-bound projections to the iter var directly, bypassing `decs_tup` entirely — still hits the pruned arm instead of falling through to unpruned-default.
 class private DecsTupUsageScanner : AstVisitor {
     tupName       : string
+    iterToUser    : table<string; string>
     usedFields    : table<string>
     allFieldsUsed : bool = false
     inTargetField : bool = false
-    def DecsTupUsageScanner(n : string) {
+    def DecsTupUsageScanner(n : string; var i2u : table<string; string>) {
         tupName = n
+        iterToUser <- i2u
     }
     def override preVisitExprField(expr : ExprField?) : void {
         var v = expr.value
@@ -3104,17 +3106,23 @@ class private DecsTupUsageScanner : AstVisitor {
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.name == tupName && !inTargetField) {
             allFieldsUsed = true
+            return
+        }
+        let nm = string(expr.name)
+        if (key_exists(iterToUser, nm)) {
+            usedFields |> insert(iterToUser[nm])
         }
     }
 }
 
 [macro_function]
-def private collect_decs_tup_usage(var e : Expression?; tupName : string) : tuple<bool; array<string>> {
-    // Returns (allFieldsUsed, usedFieldNames). usedFieldNames is unordered — caller filters bridge.userNames in original order to preserve get_ro emission order.
+def private collect_decs_tup_usage(var e : Expression?; tupName : string; bridge : DecsBridgeShape?) : tuple<bool; array<string>> {
+    // Returns (allFieldsUsed, usedFieldNames). usedFieldNames is unordered — caller filters bridge.userNames in original order to preserve get_ro emission order. The bridge feeds an iter-var → user-name reverse map so bare iter-var refs (from trivial-let elision) count as field usage too.
     var allUsed = false
     var used : array<string>
     if (e == null) return (allUsed, used)
-    var sc = new DecsTupUsageScanner(tupName)
+    var iterToUser <- {for (i in 0 .. length(bridge.iterNames)); bridge.iterNames[i] => bridge.userNames[i]}
+    var sc = new DecsTupUsageScanner(tupName, iterToUser)
     make_visitor(*sc) $(astVisitorAdapter) {
         visit_expression(e, astVisitorAdapter)
     }
@@ -3167,7 +3175,7 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                         var body : Expression?;
                                         at : LineInfo) : Expression? {
     // Walks body for `tupName.<field>` references; when pruning is safe + beneficial, emits the inner multi-iter for with unused get_ro slots dropped and a matching shrunk named-tuple bind. Otherwise falls through to the unpruned path so user-visible shape stays intact (bare to_array, push_clone(decs_tup), pass-to-user-fn).
-    let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName)
+    let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName, bridge)
     // Fallback to the unpruned bind ONLY for whole-var refs (bare to_array, push_clone(decs_tup), pass-to-user-fn) or the edge case where the body never touches decs_tup at all. The "all fields used via field access" case still benefits from flatten + bind elision — no slots dropped, but the per-iter tuple-make and field reads disappear.
     if (allUsed || empty(usedNames)) {
         var tupBind = build_decs_tup_bind(bridge, tupName, at)
@@ -3211,6 +3219,7 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
 
 struct private DecsChainInfo {
     bindAt      : array<string>    // bind name visible at each chain position
+    elidedAt    : array<bool>      // true when the select at position i was elided (peeled to a single decs_tup field access → reused iter var as next bind, no `let decs_sel_N = ...` emit needed)
     finalBind   : string            // bind name AFTER full chain — what terminator references
     finalType   : TypeDeclPtr       // element type AFTER full chain (constant + ref stripped)
     selectCount : int               // number of `select` ops in chain; 0 means finalBind == tupName
@@ -3229,17 +3238,47 @@ def private compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?
         selectCount = 0
     )
     info.bindAt |> reserve(intermediateEnd)
+    info.elidedAt |> reserve(intermediateEnd)
     var curBind = tupName
     var curType : TypeDeclPtr = clone_type(bridge.elementType)
     for (i in 0 .. intermediateEnd) {
         info.bindAt |> push(curBind)
+        info.elidedAt |> push(false)
         var cll & = unsafe(calls[i])
         let opName = cll._1.name
         if (opName == "select") {
             info.selectCount ++
-            curBind = "`decs_sel`{at.line}`{at.column}`{info.selectCount}"
             var peeled = peel_lambda_rename_var(cll._0.arguments[1], info.bindAt[i])
             if (peeled == null || peeled._type == null) return null
+            // Trivial-let elision: `_select(_.userName)` against decs_tup → iter var directly. The pruned-for keeps the iter var (its name = bridge.iterNames[idx]) and the flattener would otherwise rewrite the synthetic `let decs_sel_N = decs_tup.userName` to `let decs_sel_N = <iterVar>` — a pure copy. Renaming finalBind to the iter var name skips the binding entirely and the action references it natively. Typer wraps both the projection root (`peeled` may be ExprRef2Value) AND the ExprVar inside the ExprField in ExprRef2Value — peel both.
+            var elided = false
+            if (curBind == tupName) {
+                var top = peeled
+                if (top is ExprRef2Value) {
+                    top = (top as ExprRef2Value).subexpr
+                }
+                if (top is ExprField) {
+                    var pf = top as ExprField
+                    var pv = pf.value
+                    if (pv is ExprRef2Value) {
+                        pv = (pv as ExprRef2Value).subexpr
+                    }
+                    if (pv is ExprVar && (pv as ExprVar).name == tupName) {
+                        let fname = string(pf.name)
+                        for (ui in 0 .. length(bridge.userNames)) {
+                            if (bridge.userNames[ui] == fname) {
+                                curBind = bridge.iterNames[ui]
+                                elided = true
+                                info.elidedAt[i] = true
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+            if (!elided) {
+                curBind = "`decs_sel`{at.line}`{at.column}`{info.selectCount}"
+            }
             curType = clone_type(peeled._type)
         } elif (opName != "where_") return null
     }
@@ -3274,6 +3313,8 @@ def private wrap_decs_chain(var action : Expression?;
                 }
             }
         } elif (opName == "select") {
+            // Skip emission entirely when this select was elided in compute_decs_chain_info — the next bind is already the iter var the flattener would have produced for `let nextBind = decs_tup.userName`. No copy needed; downstream `current` already references the iter var by the elided name.
+            continue if (chainInfo.elidedAt[i])
             var proj = peel_lambda_rename_var(cll._0.arguments[1], bindHere)
             if (proj == null) return null
             let nextBind = (i + 1 < intermediateEnd) ? chainInfo.bindAt[i + 1] : chainInfo.finalBind
@@ -4634,6 +4675,63 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     let bufName = qn("decs_buf", at)
     let needIterWrap = expr._type.isIterator
     var bufElemType = strip_const_ref(clone_type(projection != null ? projection._type : bridge.elementType))
+    // Skip-into-tail fast path: `reverse |> take(N) |> to_array` with no where/select. Walk archetypes once to sum `arch.size` (cheap, no entity load), compute skip = total - takeN, then for_each_archetype_find skips whole archetypes whose size still fits below the skip threshold and short-circuits once the buffer reaches takeN. `where` would invalidate the size-based skip (count after filter is unknown without iterating); `select` would only affect element shape, not count, but is skipped here to keep v1 minimal.
+    if (takeExpr != null && whereCond == null && projection == null) {
+        let takeNName = qn("take_n", at)
+        let totalName = qn("decs_total", at)
+        let actualName = qn("decs_actual", at)
+        let skipName = qn("decs_skip", at)
+        let seenName = qn("decs_seen", at)
+        let skipsLeftName = qn("decs_skips", at)
+        let tupBind = build_decs_tup_bind(bridge, tupName, at)
+        // Inner-for body: skip-counter early-out before the named-tuple wrap (so skipped iters pay no per-component load); push + break-on-quota after.
+        var innerBody : Expression? = qmacro_block() {
+            if ($i(skipsLeftName) > 0_l) {
+                $i(skipsLeftName) --
+                continue
+            }
+            $e(tupBind)
+            $i(bufName) |> push_clone($i(tupName))
+            if (int64(length($i(bufName))) >= $i(actualName)) {
+                break
+            }
+        }
+        var clonedForExpr = clone_expression(bridge.forExpr)
+        var clonedFor = clonedForExpr as ExprFor
+        var newForBody = new ExprBlock(at = at)
+        newForBody.list |> push(innerBody)
+        clonedFor.body = newForBody
+        var emission : Expression? = qmacro(invoke($() : array<$t(bufElemType)> {
+            // Pass 1: arch.size sum — no entity walk, just archetype-header iteration.
+            var $i(totalName) = 0_l
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $i(totalName) += $i(archName).size
+            })
+            let $i(takeNName) = $e(takeExpr)
+            let $i(actualName) = ($i(takeNName) <= 0) ? 0_l : ((int64($i(takeNName)) < $i(totalName)) ? int64($i(takeNName)) : $i(totalName))
+            let $i(skipName) = $i(totalName) - $i(actualName)
+            var $i(bufName) : array<$t(bufElemType)>
+            if ($i(actualName) == 0_l) {
+                return <- $i(bufName)
+            }
+            $i(bufName) |> reserve(int($i(actualName)))
+            // Pass 2: skip whole archetypes via size sum; partial archetype uses skip-counter; subsequent archetypes feed directly. Returns true once buf reaches actualTake to stop iteration across remaining archetypes.
+            var $i(seenName) = 0_l
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+                if ($i(seenName) + $i(archName).size <= $i(skipName)) {
+                    $i(seenName) += $i(archName).size
+                    return false
+                }
+                var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
+                $e(clonedForExpr)
+                $i(seenName) += $i(archName).size
+                return int64(length($i(bufName))) >= $i(actualName)
+            })
+            _::reverse_inplace($i(bufName))
+            return <- $i(bufName)
+        }))
+        return finalize_decs_emission(emission, at, needIterWrap)
+    }
     var pushExpr : Expression?
     if (projection != null) {
         pushExpr = qmacro_expr() {
