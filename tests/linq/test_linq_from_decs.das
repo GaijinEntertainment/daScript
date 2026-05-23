@@ -2527,15 +2527,39 @@ def test_wave4_take_count_no_field_ref_parity(t : T?) {
 
 [export, marker(no_coverage)]
 def target_wave4_all_fields_via_access_fold() : int {
-    // All 3 fields referenced via field access (no whole-var ref). No slots can be pruned, but the named-tuple wrap + per-field reads should still be elided.
-    return _fold(from_decs_template(type<Wave4Row>)._where(_.brand + _.price + _.year > 0).count())
+    // All 3 fields referenced via field access (chained single-field where_s — same all-fields trigger as a compound predicate, but each peeled body has a single field-access node, matching the predicate shape the rest of the suite uses).
+    return _fold(from_decs_template(type<Wave4Row>)
+        ._where(_.brand >= 0)
+        ._where(_.price >= 0)
+        ._where(_.year > 0)
+        .count())
 }
 
 [test]
 def test_wave4_all_fields_via_access_parity(t : T?) {
     fixture_wave4(10)
-    // Wave4Row.brand = i%4, price = i*10, year = 2000+(i%25). Sum > 0 always (year ≥ 2000), so count = 10.
+    // brand = i%4 (always >= 0), price = i*10 (always >= 0), year = 2000+(i%25) (always > 0) → all 10 rows match.
     t |> equal(target_wave4_all_fields_via_access_fold(), 10, "all-fields-access predicate must return all rows")
+}
+
+[test]
+def test_wave4_all_fields_via_access_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_all_fields_via_access_fold)
+        t |> success(func != null, "RTTI must resolve target")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "qmatch must capture body")
+        // No slots pruned (all 3 fields read), but the bind is elided and body references iter vars directly.
+        t |> equal(describe_count(body_expr, "get_ro"), 3, "all 3 get_ros present (no slot pruning)")
+        t |> equal(describe_count(body_expr, "decs_tup"), 0, "named-tuple bind elided when no whole-var ref")
+        t |> success(describe_count(body_expr, "wave4_brand") >= 2, "brand iter var read directly (slot + body ref)")
+        t |> success(describe_count(body_expr, "wave4_price") >= 2, "price iter var read directly")
+        t |> success(describe_count(body_expr, "wave4_year") >= 2, "year iter var read directly")
+    }
 }
 
 
