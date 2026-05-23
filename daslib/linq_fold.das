@@ -3159,6 +3159,60 @@ def private collect_decs_tup_usage(var e : Expression?; tupName : string; bridge
     return (allUsed, used)
 }
 
+// Rewrites every whole-var ref to `decs_tup` into a freshly synthesized `(userName1 = iterVar1, ...)` named-tuple literal — same shape build_decs_tup_bind produces, but inlined at each use site. Lets emitters that store the whole element (last/single/aggregate seed of element type, min_by/max_by, to_array push_clone) avoid forcing the unpruned bind path: after rewrite the body contains only `decs_tup.<field>` refs (flattenable) plus iter-var refs in the synthesized literals (picked up by the usage scanner). build_decs_inner_for_pruned then flattens + drops the bind entirely. Inside ExprField the inner ExprVar is left alone so the field path still matches.
+class private DecsTupWholeRewriter : AstVisitor {
+    tupName       : string
+    userNames     : array<string>
+    iterNames     : array<string>
+    inTargetField : bool = false
+    rewroteAny    : bool = false
+    def DecsTupWholeRewriter(t : string; var un, in_ : array<string>) {
+        tupName = t
+        userNames <- un
+        iterNames <- in_
+    }
+    def override preVisitExprField(expr : ExprField?) : void {
+        var v = expr.value
+        if (v is ExprRef2Value) {
+            v = (v as ExprRef2Value).subexpr
+        }
+        if (v is ExprVar && (v as ExprVar).name == tupName) {
+            inTargetField = true
+        }
+    }
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        inTargetField = false
+        return expr
+    }
+    def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
+        if (expr.name != tupName || inTargetField) return expr
+        var mkTup = new ExprMakeTuple(at = expr.at)
+        mkTup.recordNames |> resize(length(userNames))
+        for (i in 0 .. length(userNames)) {
+            mkTup.recordNames[i] := userNames[i]
+            mkTup.values |> emplace_new(new ExprVar(at = expr.at, name := iterNames[i]))
+        }
+        rewroteAny = true
+        return mkTup
+    }
+}
+
+[macro_function]
+def private rewrite_decs_tup_wholes(var body : Expression?; tupName : string; bridge : DecsBridgeShape?) : bool {
+    if (body == null) return false
+    var unCopy <- [for (n in bridge.userNames); n]
+    var inCopy <- [for (n in bridge.iterNames); n]
+    var rw = new DecsTupWholeRewriter(tupName, unCopy, inCopy)
+    make_visitor(*rw) $(astVisitorAdapter) {
+        visit_expression(body, astVisitorAdapter)
+    }
+    let any = rw.rewroteAny
+    unsafe {
+        delete rw
+    }
+    return any
+}
+
 // When the body only references `decs_tup` via field access (no whole-var refs), the named-tuple wrap plus every per-element `decs_tup.<field>` read are pure overhead — rewrite each field access to the matching iter var directly and skip the bind. Drops one tuple-make + one field-read per kept field per iteration.
 class private DecsTupFieldFlattener : AstVisitor {
     tupName     : string
@@ -3198,8 +3252,14 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                         var body : Expression?;
                                         at : LineInfo) : Expression? {
     // Walks body for `tupName.<field>` references; when pruning is safe + beneficial, emits the inner multi-iter for with unused get_ro slots dropped and a matching shrunk named-tuple bind. Otherwise falls through to the unpruned path so user-visible shape stays intact (bare to_array, push_clone(decs_tup), pass-to-user-fn).
-    let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName, bridge)
-    // Fallback to the unpruned bind ONLY for whole-var refs (bare to_array, push_clone(decs_tup), pass-to-user-fn) or the edge case where the body never touches decs_tup at all. The "all fields used via field access" case still benefits from flatten + bind elision — no slots dropped, but the per-iter tuple-make and field reads disappear.
+    var (allUsed, usedNames) = collect_decs_tup_usage(body, tupName, bridge)
+    // Whole-var refs (`lst := decs_tup`, `push_clone(buf, decs_tup)`, etc) would force the unpruned bind path — but they're all semantically equivalent to a synthesized `(userName1=iter1, ...)` literal. Rewrite them inline so the flatten + bind-elision path unlocks; saves the per-iteration `var decs_tup = (...)` wrap (~12 ns/op on last/single/select_where 100K-row benches).
+    if (allUsed && rewrite_decs_tup_wholes(body, tupName, bridge)) {
+        var (allUsed2, usedNames2) = collect_decs_tup_usage(body, tupName, bridge)
+        allUsed = allUsed2
+        usedNames <- usedNames2
+    }
+    // Fallback to the unpruned bind ONLY for whole-var refs that survived rewrite (pass-to-user-fn) or the edge case where the body never touches decs_tup at all. The "all fields used via field access" case still benefits from flatten + bind elision — no slots dropped, but the per-iter tuple-make and field reads disappear.
     if (allUsed || empty(usedNames)) {
         var tupBind = build_decs_tup_bind(bridge, tupName, at)
         return build_decs_inner_for(bridge, tupBind, body, at)
