@@ -27,16 +27,29 @@ fi
 BUNDLE="$(cd "$1" 2>/dev/null && pwd -P)" \
     || { echo "ERROR: bundle dir not found or not enterable: $1" >&2; exit 2; }
 
-if [[ -x "$BUNDLE/bin/daslang.exe" ]]; then
+# Two exe naming conventions coexist in the bundle:
+#   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
+#     daslang-live, das-fmt): platform-natural suffix (.exe on Windows,
+#     none on Linux/macOS).
+#   * DASEXE_SUFFIX — for binaries built via `daslang -exe` (aot, benchctl,
+#     dascov, daspkg, dastest, detect-dupe, hygiene, mcp): ALWAYS `.exe`
+#     on every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe`
+#     to the output path"). On Linux the bundle has `daslang` + `mcp.exe`
+#     side by side.
+# Use `-f` (file-exists) rather than `-x` (executable bit) — Windows Git-Bash
+# doesn't see the +x bit on Linux ELF binaries even when this script runs
+# locally on a Linux-bundle for cross-platform repro.
+if [[ -f "$BUNDLE/bin/daslang.exe" ]]; then
     DASLANG="$BUNDLE/bin/daslang.exe"
-    EXE_SUFFIX=".exe"
-elif [[ -x "$BUNDLE/bin/daslang" ]]; then
+    CPP_SUFFIX=".exe"
+elif [[ -f "$BUNDLE/bin/daslang" ]]; then
     DASLANG="$BUNDLE/bin/daslang"
-    EXE_SUFFIX=""
+    CPP_SUFFIX=""
 else
     echo "ERROR: daslang binary not found in $BUNDLE/bin/" >&2
     exit 2
 fi
+DASEXE_SUFFIX=".exe"
 
 cd "$BUNDLE"
 
@@ -63,21 +76,22 @@ COMPILE_TESTS=(
 #               fetched at runtime + ANTHROPIC_API_KEY.
 
 # Prebuilt exes that `cmake --install` should drop into bin/ when build flags
-# allow it (DAS_LLVM, DAS_SQLITE, DAS_HV gates). Presence-checked only — we
-# don't run them with `--help` because daslang itself intercepts `--help` and
-# prints its own usage even after the `--` separator, swallowing the script's
-# CLI surface.
+# allow it (DAS_LLVM, DAS_SQLITE, DAS_HV gates). Each row is `name|kind` where
+# kind is `dasexe` (daslang -exe output, always .exe) or `cpp` (cmake
+# add_executable, platform suffix). Presence-checked only — we don't run them
+# with `--help` because daslang itself intercepts `--help` and prints its own
+# usage even after the `--` separator, swallowing the script's CLI surface.
 EXE_PRESENCE_TESTS=(
-    "aot"
-    "benchctl"
-    "das-fmt"
-    "dascov"
-    "daslang-live"
-    "daspkg"
-    "dastest"
-    "detect-dupe"
-    "hygiene"
-    "mcp"
+    "aot|dasexe"
+    "benchctl|dasexe"
+    "das-fmt|cpp"
+    "dascov|dasexe"
+    "daslang-live|cpp"
+    "daspkg|dasexe"
+    "dastest|dasexe"
+    "detect-dupe|dasexe"
+    "hygiene|dasexe"
+    "mcp|dasexe"
 )
 
 # Stdio launch test for mcp.exe — it's a JSON-RPC server, so the only safe
@@ -120,10 +134,17 @@ done
 
 echo
 echo "Prebuilt exe presence (bin/):"
-for name in "${EXE_PRESENCE_TESTS[@]}"; do
-    exe="$BUNDLE/bin/${name}${EXE_SUFFIX}"
+for entry in "${EXE_PRESENCE_TESTS[@]}"; do
+    name="${entry%%|*}"
+    kind="${entry#*|}"
+    case "$kind" in
+        dasexe) suffix="$DASEXE_SUFFIX" ;;
+        cpp)    suffix="$CPP_SUFFIX" ;;
+        *)      echo "ERROR: unknown kind '$kind' for $name" >&2; FAIL=$((FAIL + 1)); continue ;;
+    esac
+    exe="$BUNDLE/bin/${name}${suffix}"
     printf '  %-30s ' "$name"
-    if [[ -x "$exe" ]]; then
+    if [[ -f "$exe" ]]; then
         echo "OK"
         PASS=$((PASS + 1))
     else
@@ -135,7 +156,7 @@ done
 echo
 echo "Runtime launch:"
 run_check "mcp.exe (empty stdin)" bash -c \
-    "'$BUNDLE/bin/mcp${EXE_SUFFIX}' < /dev/null"
+    "'$BUNDLE/bin/mcp${DASEXE_SUFFIX}' < /dev/null"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
 
