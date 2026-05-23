@@ -130,13 +130,9 @@ def private internalFileCtx(ctx : SuiteCtx) : FileCtx {
 // was specified via --test-names parameter.
 // If it's empty, the test is always accepted and therefore executed.
 def private match_func_name(name : string; allowed : array<string>&) {
-    if (length(allowed) == 0) {
-        return true
-    }
+    if (empty(allowed)) return true
     for (match in allowed) {
-        if (name |> starts_with(match)) {
-            return true
-        }
+        if (name |> starts_with(match)) return true
     }
     return false
 }
@@ -144,7 +140,7 @@ def private match_func_name(name : string; allowed : array<string>&) {
 
 def test_file(file_name : string; var ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(ctx)
-    var res = test_file(file_name, ctx, fileCtx)
+    let res = test_file(file_name, ctx, fileCtx)
     return res
 }
 
@@ -195,7 +191,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 }
 
                 if (!failed) {
-                    for (errC, errN in keys(expectedErrors), values(expectedErrors)) {
+                    for (_errC, errN in keys(expectedErrors), values(expectedErrors)) {
                         if (errN > 0) {
                             failed = true
                             break
@@ -228,18 +224,18 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                         }
                     }
 
-                    res.total += 1
+                    res.total ++
                     if (failed) {
-                        res.errors += 1
+                        res.errors ++
                     } else {
-                        res.passed += 1
+                        res.passed ++
                     }
                     return
                 }
                 simulate(program) $(sok; context; serrors) {
                     if (!sok) {
-                        res.total += 1
-                        res.errors += 1
+                        res.total ++
+                        res.errors ++
                         log::error("Failed to simulate {file_name}\n{serrors}")
                         return
                     }
@@ -269,8 +265,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                         }
                         res += module_result
                     } else {
-                        res.errors += 1
-                        res.total += 1
+                        res.errors ++
+                        res.total ++
                         var msg = "Failed to execute {file_name}"
                         if (mod == null) {
                             msg = "{msg}. Current module is null."
@@ -298,15 +294,13 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
 
 def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(suite_ctx)
-    var res = test_module(mod, context, suite_ctx, fileCtx)
+    let res = test_module(mod, context, suite_ctx, fileCtx)
     return res
 }
 
 
 def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult {
-    if (suite_ctx.compile_only) {
-        return default<SuiteResult>
-    }
+    if (suite_ctx.compile_only) return default<SuiteResult>
     var res : SuiteResult
     var inscope fileCtx := file_ctx
     var modPtr : Module?
@@ -315,21 +309,15 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         modPtr = addr(mod)
     }
     modPtr |> module_for_each_function() $(f) {
-        if (f.hash == 0ul) {
-            return
-        }
+        if (f.hash == 0ul) return
         let func = context |> get_function_by_mnh(f.hash)
         var fn = modPtr |> find_module_function_via_rtti(func)
-        if (fn == null) {
-            return
-        }
+        if (fn == null) return
         var test_name = ""
         var test_kind = ""
         for (ann in fn.annotations) {
-            var tag = "{ann.annotation.name}"
-            if (tag != "test" && tag != "benchmark") {
-                continue
-            }
+            let tag = "{ann.annotation.name}"
+            if (tag != "test" && tag != "benchmark") continue
             test_kind = tag
             var name = "{fn.name}"
             // Both [test] and [benchmark] allow a form like [test(name=foo)]
@@ -342,14 +330,10 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
             test_name = name
             break
         }
-        if (test_kind == "") {
-            // Not a test nor benchmark.
-            return
-        }
+        // Not a test nor benchmark.
+        if (test_kind == "") return
         let allowed_list & = test_kind == "benchmark" ? suite_ctx.bench_names : suite_ctx.testNames
-        if (!match_func_name(test_name, allowed_list)) {
-            return
-        }
+        if (!match_func_name(test_name, allowed_list)) return
         if (test_kind == "test") {
             test_any(test_name, func, length(fn.arguments), fileCtx, res)
         } elif (test_kind == "benchmark" && suite_ctx.bench_enabled) {
@@ -424,7 +408,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     }
     let beforeFailed = res.failed
     let beforeErrors = res.errors
-    res.total += 1
+    res.total ++
     var dt = 0
     var deliberateRecover = false
     var failed = false
@@ -440,7 +424,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     }
     try {
         if (args_num == 0) {
-            unsafe {
+            unsafe { // nolint:STYLE025 — both deref + invoke_in_context need unsafe; expression form can't wrap a pipe
                 *context.context |> invoke_in_context(func)
             }
             dt = get_time_usec(t0)
@@ -489,7 +473,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
         if (!deliberateRecover) {
             dt = get_time_usec(t0)
             failed = true
-            res.errors += 1
+            res.errors ++
             errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
             if (!empty(context.context.exception)) {
                 let loc = file_info_hr(context.context.exceptionAt, context.uriPaths)
@@ -516,6 +500,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     // clone strings from test context into dastest context
     if (!empty(testMessages)) {
         var clonedMessages : array<string>
+        clonedMessages |> reserve(length(testMessages))
         for (m in testMessages) {
             clonedMessages |> push(clone_string(m))
         }
@@ -535,13 +520,13 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
 
     if (failed) {
         if (beforeErrors == res.errors) {
-            res.failed += 1
+            res.failed ++
         }
     } elif (skipped) {
-        res.skipped += 1
+        res.skipped ++
         log::info("{context.indenting}--- SKIPPED '{name}' {time_dt_hr(dt)}")
     } else {
-        res.passed += 1
+        res.passed ++
     }
 
     if (beforeFailed < res.failed || beforeErrors < res.errors) {
@@ -563,11 +548,9 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
 def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileCtx, var res : SuiteResult&) {
     for (q in suite_ctx.queued_benchmarks) {
         let failed = res.failed
-        for (i in range(suite_ctx.bench_count)) {
+        for (_i in range(suite_ctx.bench_count)) {
             run_benchmark(suite_ctx, file_ctx, res, q.name, q.fn)
-            if (res.failed > failed) {
-                break
-            }
+            if (res.failed > failed) break
         }
     }
 }
@@ -649,7 +632,7 @@ def private bench_on_finished_impl(var suite_ctx : SuiteCtx; var benchmarking : 
     }
 
     if (suite_ctx.bench_format == BenchmarkOutputFormat.json) {
-        var s = sprint_json(stats, false)
+        let s = sprint_json(stats, false)
         info_raw("{s}\n")
         return
     }
