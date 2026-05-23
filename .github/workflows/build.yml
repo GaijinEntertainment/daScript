@@ -471,3 +471,79 @@ jobs:
     - name: "Smoke-test installed bundle"
       run: bash ci/smoke_test_bundle.sh ./daslang_bundle
 
+  ###########################################################
+  build_windows_mingw:
+  ###########################################################
+  # Catches clang-mingw64 toolchain regressions at PR time. The mingw path
+  # diverges from MSVC in src/hal/debug_break.cpp, src/hal/project_specific_crash_handler.cpp,
+  # and src/builtin/module_jit.cpp (PR #2838). Without this job, a Windows-touching
+  # change that compiles under MSVC but breaks mingw would only surface when a
+  # maintainer rebuilds locally. Same runner pool as the MSVC matrix
+  # (windows-latest-fat), separate top-level job so mingw churn doesn't risk
+  # the much-larger MSVC entries.
+  #
+  # dasClangBind stays disabled here — pinned to libclang 16.0.6 (find_package
+  # strict version), which the msys2 clang64 sysroot doesn't ship. Tracked
+  # separately as the bind_clangbind regen followup.
+  ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: windows-latest-fat
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install MSYS2 + clang-mingw64 toolchain"
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANG64
+        update: true
+        cache: true
+        install: >-
+          mingw-w64-clang-x86_64-toolchain
+          mingw-w64-clang-x86_64-cmake
+          mingw-w64-clang-x86_64-ninja
+          mingw-w64-clang-x86_64-openssl
+          mingw-w64-clang-x86_64-glfw
+          bison
+
+    - name: "Build: Daslang (clang-mingw64)"
+      run: |
+        set -eux
+        mkdir -p build-mingw
+        cmake --no-warn-unused-cli -B./build-mingw -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DDAS_CLANGBIND_DISABLED=ON
+        cmake --build ./build-mingw --parallel
+
+    - name: "Test: interpreter sweep"
+      run: |
+        set -eux
+        cd bin
+        ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests \
+          || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+
+    - name: "Test: JIT sweep"
+      run: |
+        set -eux
+        cd bin
+        ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test ../tests \
+          || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+
+    - name: "Small C++ Tests"
+      run: |
+        set -eux
+        cd build-mingw
+        ctest -L small --output-on-failure
+
+    - name: "Slow Release Tests (AOT)"
+      run: |
+        set -eux
+        cd bin
+        ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../tests
+
