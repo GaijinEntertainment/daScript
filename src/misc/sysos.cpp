@@ -2,7 +2,11 @@
 
 #include "daScript/misc/sysos.h"
 
-#if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+#if defined(_WIN32) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+// All Windows toolchains use the same <windows.h> Win32 API for executable
+// path, dynamic loader, and hardware breakpoints. The old _MSC_VER gate sent
+// clang-mingw / gcc-mingw to the platform-fallback branch, which fatally
+// throws on getExecutablePathName().
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
     namespace das {

@@ -309,10 +309,11 @@ ENDIF()
 MACRO(SETUP_DAS_SHARED_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
     SETUP_LIB_DEFINITIONS(${lib})
-    if(WIN32)
+    if(MSVC)
         # We export a lot of structures, some of them has not exported internals.
         # Instead of marking everything as exported let's disable
         # warning and refactor our public API in future.
+        # MSVC-frontend gate (not WIN32) — clang-mingw doesn't understand /wd flags.
         TARGET_COMPILE_OPTIONS(${lib} PUBLIC /wd4251 /wd4661 /wd4275)
     else()
         SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -1041,7 +1042,12 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
             TARGET_LINK_LIBRARIES(${library} network uuid)
         ENDIF()
         IF(WIN32)
-            target_link_libraries(${library} dbghelp)
+            # System libs that source files reference via `#pragma comment(lib,...)`.
+            # MSVC honors those pragmas, but clang-mingw + ld.lld does not always
+            # pick up the .drectve defaultlib directives — list them explicitly so
+            # every Windows toolchain links the same set. Harmless on MSVC (each
+            # lib gets added once regardless of how it was requested).
+            target_link_libraries(${library} dbghelp ws2_32 mswsock advapi32 rpcrt4)
         ENDIF()
     ENDIF()
     SETUP_CPP11(${library})

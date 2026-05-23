@@ -35,7 +35,8 @@ static bool das_crash_frame_filter(const char * symbolName) {
 
 // ---- Platform-specific safe memory reads --------------------------------
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
+// MSVC + clang-cl: SEH __try/__except (clang-cl defines _MSC_VER so it lands here).
 
 static uint32_t safe_read_u32(uint64_t addr) {
     uint32_t result = 0;
@@ -55,6 +56,37 @@ static void * safe_read_ptr(uint64_t addr) {
         result = nullptr;
     }
     return result;
+}
+
+#elif defined(_WIN32)
+// clang-mingw / gcc-mingw: SEH __try/__except is not enabled by default.
+// VirtualQuery probes the page-protection state cheaply and never faults,
+// so it gives us the same safety guarantee without needing SEH.
+
+static bool is_addr_readable(uint64_t addr, size_t size) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery((LPCVOID)(uintptr_t)addr, &mbi, sizeof(mbi)) == 0) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    // We only need byte-level readability; the page-spanning case is rare for
+    // 4/8-byte reads and a single VirtualQuery covers the start page.
+    (void)size;
+    const DWORD protect = mbi.Protect & 0xFF;
+    return protect == PAGE_READONLY
+        || protect == PAGE_READWRITE
+        || protect == PAGE_EXECUTE_READ
+        || protect == PAGE_EXECUTE_READWRITE
+        || protect == PAGE_WRITECOPY
+        || protect == PAGE_EXECUTE_WRITECOPY;
+}
+
+static uint32_t safe_read_u32(uint64_t addr) {
+    if (!is_addr_readable(addr, sizeof(uint32_t))) return 0;
+    return *(uint32_t *)(uintptr_t)addr;
+}
+
+static void * safe_read_ptr(uint64_t addr) {
+    if (!is_addr_readable(addr, sizeof(void *))) return nullptr;
+    return *(void **)(uintptr_t)addr;
 }
 
 #elif defined(__linux__) && !defined(__EMSCRIPTEN__)

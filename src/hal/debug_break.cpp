@@ -7,7 +7,10 @@
 
 DAS_API void os_debug_break()
 {
-#ifdef _MSC_VER
+#ifdef _WIN32
+    // __debugbreak is a clang/MSVC intrinsic that compiles on all Windows
+    // toolchains (MSVC, clang-cl, clang-mingw, gcc-mingw — gcc-mingw provides
+    // it via its <intrin.h>).
     __debugbreak();
 #else
     raise(SIGTRAP);
