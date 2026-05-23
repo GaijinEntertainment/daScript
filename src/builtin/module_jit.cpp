@@ -946,9 +946,15 @@ extern "C" {
         // -sSTANDALONE_WASM: emit self-contained .wasm with wasi imports only.
         // -fwasm-exceptions + -sWASM_LEGACY_EXCEPTIONS=0: match the runtime
         // archive's modern wasm EH, avoid emcc's JS invoke_* trampolines.
+        // -sINITIAL_MEMORY=128MB: standalone wasm cannot grow memory under
+        // wasmtime (-sALLOW_MEMORY_GROWTH adds an unsatisfiable
+        // emscripten_notify_memory_growth import), so reserve up front. Cost
+        // is virtual address space only — lazy paging keeps RSS proportional
+        // to actual use. 128MB covers all current playground benchmarks; see
+        // #2805.
         const string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
         const string cmd = fmt::format(
-            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 2>&1"),
+            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB 2>&1"),
             linker, objFilePath, runtimeArg, wasmPath);
         return run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
     }

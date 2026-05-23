@@ -158,17 +158,7 @@ set(_wasm_run_cmds)
 # URL param), with hyphens replaced by underscores (`spectral-norm` →
 # `spectral_norm`) so they're valid CMake target stems.
 #
-# `table_sort` + `f2s` + `tree` are intentionally excluded from the
-# cross-compile foreach — they each fail wasm_cross in a way that doesn't
-# affect playground UX (the playground runs them through the embedded daslang
-# interpreter, not via cross-compile). Tracked at
-# GaijinEntertainment/daScript#2805:
-#   * table_sort.wasm — wasm-ld error: undefined symbol `jit_register_fusion`
-#   * f2s.wasm        — wasmtime runtime trap (Wasm exception)
-#   * tree.wasm       — wasmtime runtime trap (Wasm exception) — treap impl
-#                       with recursive merge/split + explicit `delete` under
-#                       wasm-exceptions ABI
-foreach(ex hello loop func
+foreach(ex hello loop func table_sort f2s tree
         dict sha256 exp f2i fib_loop fib_recursive mandelbrot
         nbodies particles primes queen spectral_norm)
     add_custom_command(OUTPUT ${_web_ex_out}/${ex}.wasm

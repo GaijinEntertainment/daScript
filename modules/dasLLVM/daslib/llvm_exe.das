@@ -740,8 +740,7 @@ def private write_release_deps(prog : Program?) {
 // all compiled functions, runs init scripts, then calls the program entry point.
 def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
-                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
-                       target_triple : string = "") : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
 
     let builder = LLVMCreateBuilder()
     defer() {
@@ -807,7 +806,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     )
     // wasm32-emscripten: emcc's libstandalonewasm already defines `main`,
     // emit `__main_argc_argv` instead and let crt1 chain through.
-    let main_sym = (target_triple |> starts_with("wasm32-")) ? "__main_argc_argv" : "main"
+    let main_sym = g_target_is_wasm ? "__main_argc_argv" : "main"
     let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
@@ -977,8 +976,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         }
     }
 
-    // When linking whole compiler lib, register fusion engine (needed by simulate)
-    if (needs_whole_lib) {
+    // When linking whole compiler lib, register fusion engine (needed by simulate).
+    // Skip on wasm: cross-link only sees libDaScript_runtime.a (no
+    // jit_register_fusion symbol), and standalone exes never read the pointers
+    // it sets anyway — ShutdownStandalone passes resetFusion=false, see #2805.
+    if (needs_whole_lib && !g_target_is_wasm) {
         let reg_fusion_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
         let reg_fusion_fn = LLVMAddFunctionWithType(g_mod, "jit_register_fusion", reg_fusion_type)
         LLVMBuildCall2(builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
