@@ -7,7 +7,11 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 
 	include(ExternalProject)
 
-	IF(WIN32)
+	IF(WIN32 AND MSVC)
+		# MSVC: build OpenSSL from sources via `perl Configure VC-WIN64A` + nmake.
+		# Both are MSVC-only — perl invokes OpenSSL's MSVC-flavored config and
+		# nmake is the MSVC make tool. clang-mingw / gcc-mingw take the ELSE
+		# branch below and pick up the system OpenSSL from the mingw sysroot.
 		set(OPENSSL_ROOT_DIR "${CMAKE_BINARY_DIR}/openssl")
 		find_package(OpenSSL QUIET PATHS ${OPENSSL_ROOT_DIR})
 		IF(NOT OpenSSL_FOUND)
@@ -41,10 +45,30 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 
 		SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/hv_static.lib)
 	ELSE()
+		# POSIX + mingw (clang-mingw / gcc-mingw): use system OpenSSL.
+		IF(WIN32 AND NOT DEFINED OPENSSL_ROOT_DIR)
+			# FindOpenSSL.cmake on Windows is MSVC-centric and doesn't look in
+			# the mingw sysroot by default. Derive the sysroot from the C
+			# compiler path: <SYSROOT>/bin/clang.exe -> <SYSROOT>. clang64
+			# ships <SYSROOT>/lib/libcrypto.dll.a + libssl.dll.a, which
+			# find_package then locates correctly with this hint.
+			get_filename_component(_MINGW_BIN ${CMAKE_C_COMPILER} DIRECTORY)
+			get_filename_component(OPENSSL_ROOT_DIR ${_MINGW_BIN} DIRECTORY)
+		ENDIF()
 		find_package(OpenSSL REQUIRED)
-		# libhv ≥ master renames hv_static's OUTPUT_NAME to "hv" on POSIX,
-		# so the installed file is libhv.a (was libhv_static.a in v1.3.4).
-		SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv.a)
+		# libhv ≥ master renames hv_static's OUTPUT_NAME to "hv" on POSIX
+		# (-> libhv.a) but keeps the original name on mingw (-> libhv_static.a).
+		IF(WIN32)
+			# mingw: also need winmm for timeSetEvent/timeKillEvent. MSVC
+			# auto-pulls it via libhv's #pragma comment(lib, "winmm"); mingw
+			# does not honor those reliably, so list it explicitly.
+			SET(HV_LIBRARIES
+				${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv_static.a
+				winmm
+			)
+		ELSE()
+			SET(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv.a)
+		ENDIF()
 		SET(OPENSSL_LIBRARIES_FILES OpenSSL::Crypto OpenSSL::SSL)
 	ENDIF()
 

@@ -777,6 +777,45 @@ extern "C" {
         return fallback;
     }
 
+    // Host-toolchain JIT triple — when non-empty, daslib uses this instead of
+    // LLVMGetDefaultTargetTriple() to drive JIT codegen.
+    //
+    // The prebuilt LLVM.dll shipped via dasLLVM's FetchContent is built with
+    // MSVC clang-cl, so LLVMGetDefaultTargetTriple() always returns
+    // x86_64-pc-windows-msvc regardless of what host compiler built
+    // daslang.exe. On mingw daslang.exe, MSVC-ABI .o files reference
+    // _fltused (msvcrt marker symbol) and other MSVC-CRT-isms that mingw's
+    // ld.lld + libc CRT cannot satisfy. Forcing a mingw triple makes LLVM
+    // emit a mingw-flavored .o with no MSVC marker symbols, links cleanly
+    // against libDaScriptDyn_runtime.dll.a, and the resulting DLL calls
+    // into the mingw daslang.exe via the same C ABI without CRT-mismatch
+    // hazards.
+    //
+    // The arch suffix has to match the host — clang32 (i686), clang64
+    // (x86_64), clangarm64 (aarch64), clangarm32 (armv7) all share the
+    // mingw vendor/os/env suffix but differ on the arch component.
+    // Detection uses the standard GCC/Clang arch predefined macros so
+    // this works for both compilers on every supported mingw arch.
+    const char * host_jit_triple ( ) {
+    #if defined(_WIN32) && !defined(_MSC_VER)
+        #if defined(__aarch64__) || defined(_M_ARM64)
+            return "aarch64-w64-windows-gnu";
+        #elif defined(__arm__) || defined(_M_ARM)
+            return "armv7-w64-windows-gnu";
+        #elif defined(__x86_64__) || defined(_M_X64)
+            return "x86_64-w64-windows-gnu";
+        #elif defined(__i386__) || defined(_M_IX86)
+            return "i686-w64-windows-gnu";
+        #else
+            // Unknown mingw arch — fall back to LLVM's default and let
+            // the user explicitly override via the customLinker path.
+            return "";
+        #endif
+    #else
+        return "";
+    #endif
+    }
+
     static LinkerPaths get_real_lib_linker_paths(const char * dasLib, const char * customLinker, bool isShared, bool linkWholeLib) {
         LinkerPaths result;
         result.linker = customLinker != nullptr ? customLinker : "";
@@ -784,18 +823,45 @@ extern "C" {
 
         if (result.linker.empty() || result.runtimeLibrary.empty()) {
             #if defined(_WIN32) || defined(_WIN64)
-                if (result.linker.empty()) {
-                    result.linker = find_linker(nullptr, "clang-cl.exe", "clang-cl");
-                }
-                if (result.runtimeLibrary.empty()) {
-                    const auto path = get_prefix(getExecutableFileName());
-                    const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
-                    const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
-                    result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.lib";
-                    if (linkWholeLib) {
-                        result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
+                // Two distinct Windows toolchains share the _WIN32 macro:
+                //   MSVC (incl. clang-cl) → MSVC-style import libs (libFoo.lib),
+                //     linked via clang-cl.exe with -DLL / -link / -OUT: syntax.
+                //   mingw (clang-mingw / gcc-mingw) → mingw import libs
+                //     (libFoo.dll.a), linked via clang.exe with -shared / -o
+                //     syntax (Unix-like — clang.exe driver is identical to
+                //     posix clang). The split keeps daslang.exe built with one
+                //     toolchain talking to a JIT'd DLL built with the same one.
+                #if defined(_MSC_VER)
+                    if (result.linker.empty()) {
+                        result.linker = find_linker(nullptr, "clang-cl.exe", "clang-cl");
                     }
-                }
+                    if (result.runtimeLibrary.empty()) {
+                        const auto path = get_prefix(getExecutableFileName());
+                        const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
+                        const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
+                        result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.lib";
+                        if (linkWholeLib) {
+                            result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
+                        }
+                    }
+                #else
+                    // mingw — note bundled clang-cl.exe (from dasLLVM prebuilt
+                    // LLVM) is MSVC-flavored and cannot read .dll.a, so don't
+                    // probe for it; default to "clang" on PATH (clang64/bin
+                    // when daslang.exe was built with clang-mingw64).
+                    if (result.linker.empty()) {
+                        result.linker = "clang";
+                    }
+                    if (result.runtimeLibrary.empty()) {
+                        const auto path = get_prefix(getExecutableFileName());
+                        const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
+                        const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
+                        result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.dll.a";
+                        if (linkWholeLib) {
+                            result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.dll.a";
+                        }
+                    }
+                #endif
             #else
                 if (result.linker.empty()) {
                     result.linker = "c++";
@@ -818,7 +884,7 @@ extern "C" {
         return result;
     }
 
-#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+#if (defined(_WIN32) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     // Run a fully-formed linker command via popen, capture combined stdout/
     // stderr into a 16KB buffer, then log success or a failure diagnostic
     // (with the captured output) through the daslang Context.
@@ -860,7 +926,10 @@ extern "C" {
     }
 
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, Context *context ) {
-        char cmd[1024];
+        // cmd is built via fmt::format (heap-allocated std::string) rather
+        // than a fixed stack buffer — long paths (deep build roots, spaces,
+        // long extraLinkerArgs) can easily exceed a few hundred bytes, and
+        // a fixed buffer would silently corrupt the stack on overflow.
         const char * extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
         const auto paths = get_real_lib_linker_paths(dasLib, customLinker, isShared, linkWholeLib);
         const auto & linker = paths.linker;
@@ -878,12 +947,36 @@ extern "C" {
             return false;
         }
 
-
+        string cmd;
         #if defined(_WIN32) || defined(_WIN64)
-            const auto linkerParam = isShared ? "-DLL" : "";
-            auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, extra, linkerParam, libraryName)
-                : fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, compilerLibrary, extra, linkerParam, libraryName);
+            #if defined(_MSC_VER)
+                // MSVC clang-cl: -DLL marks shared, -link separates link-only
+                // flags, -OUT: names the output, msvcrt.lib pulls the import
+                // CRT. Outer doubled quotes wrap the whole command for cmd.exe
+                // because the linker path itself contains spaces on Program
+                // Files installs.
+                const auto linkerParam = isShared ? "-DLL" : "";
+                cmd = compilerLibrary.empty()
+                    ? fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, extra, linkerParam, libraryName)
+                    : fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, compilerLibrary, extra, linkerParam, libraryName);
+            #else
+                // mingw clang/gcc: Unix-flavored driver, -shared/-o syntax.
+                // No rpath on Windows (DLLs resolve via PATH / LoadLibrary
+                // search order), so the linux branch's rpath escape is
+                // dropped. linkWholeLib gets -Wl,--no-as-needed so the
+                // compiler-library symbols are forced into the JIT'd DLL
+                // even when no JIT'd code references them directly.
+                // Outer doubled quotes `\"...2>&1\"` wrap the whole command
+                // — popen → cmd.exe strips one quote pair, leaving the
+                // inner per-arg quotes intact. Without this wrap cmd.exe
+                // misparses the very first quoted token as the command name.
+                const auto linkerParam = isShared ? "-shared" : "";
+                cmd = compilerLibrary.empty()
+                    ? fmt::format(FMT_STRING("\"\"{}\" {} -o \"{}\" \"{}\" \"{}\" {} 2>&1\""),
+                                            linker, linkerParam, libraryName, objFilePath, runtimeLibrary, extra)
+                    : fmt::format(FMT_STRING("\"\"{}\" {} -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1\""),
+                                            linker, linkerParam, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
+            #endif
         #elif defined(__APPLE__)
             const auto linkerParam = isShared ? "-shared " : "";
             // @executable_path first → relocated bundle finds dylibs next to the exe;
@@ -891,9 +984,9 @@ extern "C" {
             // The embedded `\" \"` splits the format-string's outer quotes so the linker
             // sees two distinct -Wl,-rpath flags, not one with an embedded space.
             const auto rpath = "-Wl,-rpath,@executable_path\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
-            auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, objFilePath, extra)
-                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, compilerLibrary, objFilePath, extra);
+            cmd = compilerLibrary.empty()
+                ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, objFilePath, extra)
+                : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, compilerLibrary, objFilePath, extra);
         #else
             const auto linkerParam = isShared ? "-shared" : "";
             // $ORIGIN first → relocated bundle finds .so next to the exe;
@@ -902,20 +995,19 @@ extern "C" {
             // The embedded `\" \"` splits the format-string's outer quotes so the linker
             // sees two distinct -Wl,-rpath flags, not one with an embedded space.
             const auto rpath = "-Wl,-rpath,\\$ORIGIN\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
-            auto result = compilerLibrary.empty()
-                ? fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"),
+            cmd = compilerLibrary.empty()
+                ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"),
                                         linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, extra)
-                : fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"),
+                : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"),
                                         linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
         #endif
-            *result = '\0';
-        return run_link_cmd(cmd, libraryName, "Library", context);
+        return run_link_cmd(cmd.c_str(), libraryName, "Library", context);
     }
 #else
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, Context *context ) { return true; }
 #endif
 
-#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+#if (defined(_WIN32) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     // Cross-compile-link a wasm32 object into a standalone .wasm via emcc.
     //   runtimeLibPath — path to libDaScript_runtime.a (wasm32). Optional:
     //     present  → link runtime symbols (das_*, malloc, memcpy, …) in.
@@ -1108,6 +1200,8 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","context"});
+            addExtern<DAS_BIND_FUN(host_jit_triple)>(*this, lib, "host_jit_triple",
+                SideEffects::none, "host_jit_triple");
             addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
                 SideEffects::worstDefault, "link_wasm")
                     ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","context"});

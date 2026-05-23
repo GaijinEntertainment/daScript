@@ -25,7 +25,6 @@ require jit
 
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
-let LLVM_ENABLE_DIAGNOSTIC = false
 
 let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
@@ -363,9 +362,6 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     init_jit_clopts()
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
-    if (LLVM_ENABLE_DIAGNOSTIC) {
-        set_context_diagnostics_to_log(g_ctx)
-    }
     g_failed = false
     g_fn_types |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
@@ -819,7 +815,21 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     LLVMInitializeAllTargetMCs()
     LLVMInitializeAllAsmPrinters()
 
-    let triple_msg = LLVMGetDefaultTargetTriple()
+    // host_jit_triple() returns the daslang-host toolchain's triple when it
+    // differs from LLVM.dll's default. On clang-mingw64, the prebuilt LLVM.dll
+    // (MSVC clang-cl-built) defaults to x86_64-pc-windows-msvc — emitting
+    // MSVC-ABI .o files that mingw's linker can't satisfy (_fltused etc).
+    // Empty string means "use LLVM default" (existing MSVC / linux / macOS
+    // builds where LLVM.dll's triple already matches the host).
+    let host_triple = host_jit_triple()
+    var triple_msg : string
+    var triple_owned_by_llvm = false
+    if (empty(host_triple)) {
+        triple_msg = LLVMGetDefaultTargetTriple()
+        triple_owned_by_llvm = true
+    } else {
+        triple_msg = host_triple
+    }
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
@@ -829,7 +839,9 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
         LLVMDisposeMessage(cpu_msg)
         LLVMDisposeMessage(features_msg)
     }
-    LLVMDisposeMessage(triple_msg)
+    if (triple_owned_by_llvm) {
+        LLVMDisposeMessage(triple_msg)
+    }
 }
 
 // @mod - module to dump to dll

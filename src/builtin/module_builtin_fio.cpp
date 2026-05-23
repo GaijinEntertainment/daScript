@@ -223,7 +223,7 @@ MAKE_TYPE_FACTORY(DiskSpaceInfo, das::DiskSpaceInfo)
 
 namespace das {
     void builtin_sleep ( uint32_t msec ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
         _sleep(msec);
 #else
         usleep(1000 * msec);
@@ -424,7 +424,7 @@ namespace das {
 
     char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at ) {
         if ( name ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
             char full_path[ _MAX_PATH ];
             char dir[ _MAX_DIR ];
             char fname[ _MAX_FNAME ];
@@ -452,7 +452,7 @@ namespace das {
 
     char * builtin_basename ( const char * name, Context * context, LineInfoArg * at ) {
         if ( name ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
             char drive[ _MAX_DRIVE ];
             char full_path[ _MAX_PATH ];
             char dir[ _MAX_DIR ];
@@ -486,7 +486,7 @@ namespace das {
     }
 
      void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
         _finddata_t c_file;
         intptr_t hFile;
         string findPath = string(path ? path : "") + "/*";
@@ -545,7 +545,7 @@ namespace das {
 
     bool builtin_mkdir ( const char * path ) {
         if ( path ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
             return _mkdir(path) == 0;
 #elif defined(_EMSCRIPTEN_VER)
             return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
@@ -566,7 +566,7 @@ namespace das {
             context->throw_error_at(at, "popen of null");
             return -1;
         }
-#ifdef _MSC_VER
+#ifdef _WIN32
         FILE * f = _popen(cmd, bin ? "rb" : "rt");
 #elif defined(__linux__)
         FILE * f = popen(cmd, "r");
@@ -585,7 +585,7 @@ namespace das {
         vec4f args[1];
         args[0] = cast<FILE *>::from(f);
         context->invoke(blk, args, nullptr, at);
-#ifdef _MSC_VER
+#ifdef _WIN32
         return _pclose( f );
 #elif defined(__APPLE__)
         {
@@ -615,7 +615,7 @@ namespace das {
         if ( timeout_sec <= 0.0f ) {
             return builtin_popen_impl(cmd, false, blk, context, at);
         }
-#ifdef _MSC_VER
+#ifdef _WIN32
         // Windows: CreateProcess with stdout pipe + job object for process tree kill
         SECURITY_ATTRIBUTES sa;
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
@@ -739,7 +739,7 @@ namespace das {
 #endif
     }
 
-#ifdef _MSC_VER
+#ifdef _WIN32
     // Quote a single argv element for Windows CommandLineToArgvW parsing.
     // Wraps in double quotes if needed, doubles backslashes that precede a
     // quote (or end-of-string inside a quoted token), and escapes embedded
@@ -797,7 +797,7 @@ namespace das {
             context->throw_error_at(at, "popen_argv with null exe");
             return -1;
         }
-#ifdef _MSC_VER
+#ifdef _WIN32
         SECURITY_ATTRIBUTES sa;
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
         sa.bInheritHandle = TRUE;
@@ -965,7 +965,7 @@ namespace das {
 
     bool builtin_rmdir ( const char * path ) {
         if ( !path ) return false;
-#if defined(_MSC_VER)
+#if defined(_WIN32)
         return _rmdir(path) == 0;
 #else
         return rmdir(path) == 0;
@@ -978,7 +978,7 @@ namespace das {
         return stat(path, &st) == 0;
     }
 
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     static bool rmdir_rec_impl ( const string & path ) {
         _finddata_t c_file;
         intptr_t hFile;
@@ -1050,7 +1050,7 @@ namespace das {
     bool builtin_mkdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-#if defined(_MSC_VER)
+#if defined(_WIN32)
         if ( _mkdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #elif defined(_EMSCRIPTEN_VER)
         if ( mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0 ) { error = errno_to_string(ctx, at); return false; }
@@ -1063,7 +1063,7 @@ namespace das {
     bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-#if defined(_MSC_VER)
+#if defined(_WIN32)
         if ( _rmdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #else
         if ( rmdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
@@ -1182,7 +1182,7 @@ namespace das {
         if ( !cmd ) return nullptr;
         stringstream ss;
         for ( const char * ch=cmd; *ch; ) {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
             if ( *ch=='^' || *ch=='|' || *ch=='<' || *ch=='>' || *ch=='&' ||
                     *ch=='%' || *ch=='$' || *ch=='`' || *ch=='\'' || *ch=='@' ) {
                 ss.put('^');

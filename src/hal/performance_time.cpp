@@ -25,7 +25,8 @@ namespace das {
 // Prefer `get_time_usec(start)` / `get_time_nsec(start)` for elapsed-time
 // comparisons — those wrap the subtraction and continue to work portably.
 
-#ifdef _MSC_VER
+#ifdef _WIN32
+// QueryPerformanceCounter is the right Windows clock on any toolchain.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

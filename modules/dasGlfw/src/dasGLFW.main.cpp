@@ -7,7 +7,9 @@
 #include "need_dasGLFW.h"
 #include "aot_dasGLFW.h"
 
-#if defined(_MSC_VER)
+#if defined(_WIN32)
+// Win32 native handles are available on every Windows toolchain (MSVC,
+// clang-cl, clang-mingw, gcc-mingw).
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
@@ -62,6 +64,7 @@ namespace das {
     void * DAS_glfwGetNativeWindow(GLFWwindow* window) {
         return nullptr;
     }
+    void * DAS_glfwGetNativeDisplay() { return nullptr; }
 }
 
 #endif
