@@ -1,10 +1,20 @@
 name: Release
 
-# Run on pre-release, full release, or manual trigger
+# Trigger only on initial prerelease creation (the project's release pattern is
+# always cut-as-prerelease, iterate RCs, then optionally unflag to promote to
+# stable). `published` was double-firing: GitHub emits both `prereleased` and
+# `published` on a fresh prerelease, so every RC cut ran two identical builds
+# racing to clobber each other's assets. `released` would fire on promotion-
+# to-stable (the unflag step) — not adding it because promotion doesn't change
+# artifacts, and the artifacts uploaded at RC-cut time are exactly what ships.
+# `workflow_dispatch` is build+smoke validation only — the asset upload step
+# gates on `github.event_name == 'release'`, so dispatch runs never publish
+# anything. Use it to sanity-check workflow / build / smoke changes without
+# touching real release assets; recreate the release to re-upload.
 on:
   workflow_dispatch:
   release:
-    types: [prereleased, published]
+    types: [prereleased]
 defaults:
   run:
     shell: bash
