@@ -4524,11 +4524,11 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
         var bhStmts : array<Expression?>
         bhStmts |> reserve(7)
+        // No `reserve(takeN)` on the bounded buf — matches the policy in linq.das top_n_by_with_cmp iterator variant. Caller may pass takeN >> actual source size, and the decs cardinality is unknown ahead of the walk; pre-reserving N slots would risk a large upfront allocation for no win (fill phase grows geometrically to min(N, M) in O(log) reallocs anyway).
         bhStmts |> push_from <| qmacro_block_to_array() {
             let $i(takeNName) = $e(takeExpr)
             var $i(bufName) : array<$t(elemType)>
             return <- $i(bufName) if ($i(takeNName) <= 0)
-            $i(bufName) |> reserve($i(takeNName))
             for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                 $e(forExprNode)
             })
