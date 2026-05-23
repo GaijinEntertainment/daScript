@@ -331,18 +331,7 @@ body {
 footer { color: var(--fg-faint) !important; padding: 24px 32px; background: var(--bg); border-top: 1px solid var(--rule); }
 .footer_p { font-size: 12px !important; font-family: var(--font-mono); }
 
-/* ───── Mobile notice — replaces the WASM IDE on narrow viewports ───── */
-html.is-pg-mobile .main,
-html.is-pg-mobile .header,
-html.is-pg-mobile footer,
-html.is-pg-mobile .forge-nav__version { display: none !important; }
-html.is-pg-mobile body { background: var(--bg); }
-
-#pg-mobile-notice {
-    padding: 64px 0 96px;
-    background: var(--bg);
-    color: var(--fg);
-}
+/* ───── Notice card — used by placeholder.html when the WASM build is missing ───── */
 .pg-mobile-notice__title {
     margin: 18px 0 14px;
     font-family: var(--font-sans);
