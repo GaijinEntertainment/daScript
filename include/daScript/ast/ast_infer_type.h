@@ -60,6 +60,8 @@ namespace das {
         const Structure *cppLayoutParent = nullptr;
         bool needRestart = false;
         bool enableInferTimeFolding = true;
+        bool savedFoldingForEnum = true;        // preVisitEnumerationValue / visitEnumerationValue save-restore
+        bool savedFoldingForStaticIf = true;    // preVisit(ExprIfThenElse) / preVisitIfBlock save-restore
         bool disableAot = false;
         bool multiContext = false;
         bool standaloneContext = false;
