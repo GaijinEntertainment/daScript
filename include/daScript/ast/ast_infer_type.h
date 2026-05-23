@@ -260,6 +260,8 @@ namespace das {
 
         ExpressionPtr makeEnumConstValue(Enumeration *enu, int64_t nextInt) const;
 
+        virtual void preVisitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) override;
+
         virtual ExpressionPtr visitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) override;
 
         virtual void preVisit(Enumeration *enu) override;

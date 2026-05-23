@@ -49,6 +49,30 @@ enum BooHoo16 : int16 {
     boo_hoo = 6
 }
 
+enum BooHoo64 : int64 {
+    boo = 7l
+    hoo = 8l
+    boo_hoo = 9l
+}
+
+// Exercises high bits beyond int32 to lock in the int64-width cast in
+// enum_trait's operator !/bool() — a naive int() cast would truncate
+// (1ul << 63) to zero and incorrectly report the value as "no bits set".
+enum BooHooU64 : uint64 {
+    zero = 0ul
+    low_bit = 1ul
+    high_bit = 0x8000000000000000ul   // 2^63 — bit 63 set, all bits 0..62 zero
+}
+
+// Auto-increment after an expression initializer (lastEnuValue path) —
+// requires infer-time folding to be on for the expression visit so that
+// the +1 path sees a real ExprConstInt rather than the unfolded ExprOp1.
+enum AutoIncrAfterExpr {
+    first = -10
+    second   // expected: -9 via lastEnuValue + 1
+    third    // expected: -8
+}
+
 [sideeffects]
 def getZenOne {
     return Zen.not_zero
@@ -141,4 +165,25 @@ def test_enum_bool_not_ops(t : T?) {
     // BooHoo16 — int16 backing, same shape
     t |> success(bool(BooHoo16.boo), "bool(BooHoo16.boo=4) must be true")
     t |> success(!!BooHoo16.boo_hoo, "BooHoo16.boo_hoo=6 is non-zero")
+
+    // BooHoo64 — int64 backing
+    t |> success(bool(BooHoo64.boo), "bool(BooHoo64.boo=7) must be true")
+
+    // BooHooU64 — uint64 backing, exercises bit 63 (the truncation hazard).
+    // A naive `int(arg)` cast would chop high bits and read `high_bit` as 0.
+    t |> success(!BooHooU64.zero, "!BooHooU64.zero must be true")
+    t |> success(!bool(BooHooU64.zero), "bool(BooHooU64.zero) must be false")
+    t |> success(bool(BooHooU64.low_bit), "bool(BooHooU64.low_bit) must be true")
+    t |> success(bool(BooHooU64.high_bit),
+        "bool(BooHooU64.high_bit=2^63) must be true (int-truncation regression check)")
+    t |> success(!!BooHooU64.high_bit,
+        "!!BooHooU64.high_bit=2^63 must be true (int-truncation regression check)")
+
+    // Auto-increment after expression initializer — confirms preVisitEnumerationValue
+    // folds the `-10` literal so lastEnuValue carries a real ExprConstInt into the
+    // +1 path. (Pre-fix: `error[30147] must be integer constant, and not an expression`
+    // under lint policies; post-fix: AutoIncrAfterExpr.second resolves to -9.)
+    t |> equal(int(AutoIncrAfterExpr.first), -10)
+    t |> equal(int(AutoIncrAfterExpr.second), -9)
+    t |> equal(int(AutoIncrAfterExpr.third), -8)
 }

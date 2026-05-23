@@ -142,7 +142,21 @@ namespace das {
         nextValue->type = enu->makeBaseType();
         return nextValue;
     }
+    void InferTypes::preVisitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) {
+        Visitor::preVisitEnumerationValue(enu, name, value, last);
+        // Enum value initializers must fold to compile-time integer constants —
+        // force-enable infer-time folding for this value's subtree visit even when
+        // no_infer_time_folding is set (lint policies). Mirrors the static_if
+        // condition precedent at preVisit(ExprIfThenElse) further below.
+        if (!enableInferTimeFolding) {
+            enableInferTimeFolding = true;
+        }
+    }
     ExpressionPtr InferTypes::visitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) {
+        // restore folding state to policy default after the value subtree visit.
+        if (program->policies.no_infer_time_folding) {
+            enableInferTimeFolding = false;
+        }
         if (!value) {
             if (lastEnuValue) {
                 if (lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isInteger()) {
@@ -173,19 +187,10 @@ namespace das {
                 if (auto fenum = getConstExpr(value)) {
                     reportAstChanged();
                     return fenum;
+                } else {
+                    error("enumeration value '" + name + "' must be integer constant, and not an expression", "", "",
+                          value->at, CompilationError::invalid_enumerator);
                 }
-                // Enum values are fundamentally compile-time integer constants —
-                // force-fold even when no_infer_time_folding is set (lint policies).
-                // We already know !value->rtti_isConstant() above, so a constant
-                // result here means evalAndFold actually folded (vs returning expr
-                // unchanged for an unsupported value).
-                auto folded = evalAndFold(value);
-                if (folded && folded->rtti_isConstant()) {
-                    reportAstChanged();
-                    return folded;
-                }
-                error("enumeration value '" + name + "' must be integer constant, and not an expression", "", "",
-                      value->at, CompilationError::invalid_enumerator);
             } else if (value->type->baseType != enu->baseType) {
                 reportAstChanged();
                 int64_t thisInt = getConstExprIntOrUInt(value);
