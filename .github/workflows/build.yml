@@ -518,7 +518,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
-          -DDAS_CLANGBIND_DISABLED=ON
+          -DDAS_CLANG_BIND_DISABLED=ON
         cmake --build ./build-mingw --parallel
 
     - name: "Test: interpreter sweep"

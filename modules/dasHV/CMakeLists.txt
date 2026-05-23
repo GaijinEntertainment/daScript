@@ -145,6 +145,38 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	SETUP_HV(libDasModuleHV)
 	SETUP_HV(dasModuleHV)
 
+	IF(WIN32 AND NOT MSVC)
+		# mingw: land libssl-*.dll + libcrypto-*.dll NEXT TO daslang.exe so
+		# dasModuleHV.shared_module can resolve its openssl deps at dlopen
+		# time. MSVC has its own openssl build path (no-shared above), so it
+		# doesn't need this. Without these copies, build-time AOT codegen
+		# fails silently because register_dynamic_module's default overload
+		# (register_dynamic_module_silent) suppresses the LoadLibrary error
+		# and `require dashv` then surfaces as 20605 missing-prerequisite.
+		# Glob picks up the version suffix (libssl-3-x64.dll today, future
+		# major bumps without CMake churn).
+		FILE(GLOB _DAS_HV_OPENSSL_DLLS
+			"${OPENSSL_ROOT_DIR}/bin/libssl-*.dll"
+			"${OPENSSL_ROOT_DIR}/bin/libcrypto-*.dll")
+		IF(_DAS_HV_OPENSSL_DLLS)
+			# Mirror dasGlfw's multi-config / single-config split — Ninja
+			# (mingw default) is single-config; left in for symmetry with
+			# the glfw rule and any future generator switch.
+			IF(CMAKE_CONFIGURATION_TYPES)
+				SET(_DAS_HV_COPY_DIR "${EXECUTABLE_OUTPUT_PATH}/$<CONFIG>")
+			ELSE()
+				SET(_DAS_HV_COPY_DIR "${EXECUTABLE_OUTPUT_PATH}")
+			ENDIF()
+			ADD_CUSTOM_COMMAND(TARGET dasModuleHV POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					${_DAS_HV_OPENSSL_DLLS}
+					"${_DAS_HV_COPY_DIR}/"
+			)
+		ELSE()
+			MESSAGE(WARNING "dasHV mingw: no libssl/libcrypto DLLs found under ${OPENSSL_ROOT_DIR}/bin — dasModuleHV.shared_module may fail to load at runtime")
+		ENDIF()
+	ENDIF()
+
 	ADD_MODULE_DAS(dashv dashv dashv_boost)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasHV/dashv
