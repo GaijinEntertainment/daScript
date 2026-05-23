@@ -25,7 +25,6 @@ require jit
 
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
-let LLVM_ENABLE_DIAGNOSTIC = false
 
 let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
@@ -363,9 +362,6 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     init_jit_clopts()
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
-    if (LLVM_ENABLE_DIAGNOSTIC) {
-        set_context_diagnostics_to_log(g_ctx)
-    }
     g_failed = false
     g_fn_types |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
