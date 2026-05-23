@@ -3128,6 +3128,39 @@ def private collect_decs_tup_usage(var e : Expression?; tupName : string) : tupl
     return (allUsed, used)
 }
 
+// When the body only references `decs_tup` via field access (no whole-var refs), the named-tuple wrap plus every per-element `decs_tup.<field>` read are pure overhead — rewrite each field access to the matching iter var directly and skip the bind. Drops one tuple-make + one field-read per kept field per iteration.
+class private DecsTupFieldFlattener : AstVisitor {
+    tupName     : string
+    fieldToIter : table<string; string>
+    def DecsTupFieldFlattener(t : string; var f : table<string; string>) {
+        tupName = t
+        fieldToIter <- f
+    }
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        var v = expr.value
+        if (v is ExprRef2Value) {
+            v = (v as ExprRef2Value).subexpr
+        }
+        if (v is ExprVar && (v as ExprVar).name == tupName) {
+            let fname = string(expr.name)
+            if (key_exists(fieldToIter, fname)) return new ExprVar(at = expr.at, name := fieldToIter[fname])
+        }
+        return expr
+    }
+}
+
+[macro_function]
+def private flatten_decs_tup_to_iter(var body : Expression?; tupName : string; var fieldToIter : table<string; string>) : void {
+    if (body == null) return
+    var fl = new DecsTupFieldFlattener(tupName, fieldToIter)
+    make_visitor(*fl) $(astVisitorAdapter) {
+        visit_expression(body, astVisitorAdapter)
+    }
+    unsafe {
+        delete fl
+    }
+}
+
 [macro_function]
 def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                         tupName : string;
@@ -3135,7 +3168,8 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                         at : LineInfo) : Expression? {
     // Walks body for `tupName.<field>` references; when pruning is safe + beneficial, emits the inner multi-iter for with unused get_ro slots dropped and a matching shrunk named-tuple bind. Otherwise falls through to the unpruned path so user-visible shape stays intact (bare to_array, push_clone(decs_tup), pass-to-user-fn).
     let (allUsed, usedNames) = collect_decs_tup_usage(body, tupName)
-    if (allUsed || empty(usedNames) || length(usedNames) == length(bridge.userNames)) {
+    // Fallback to the unpruned bind ONLY for whole-var refs (bare to_array, push_clone(decs_tup), pass-to-user-fn) or the edge case where the body never touches decs_tup at all. The "all fields used via field access" case still benefits from flatten + bind elision — no slots dropped, but the per-iter tuple-make and field reads disappear.
+    if (allUsed || empty(usedNames)) {
         var tupBind = build_decs_tup_bind(bridge, tupName, at)
         return build_decs_inner_for(bridge, tupBind, body, at)
     }
@@ -3143,24 +3177,16 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
     for (n in usedNames) {
         usedSet |> insert(n)
     }
-    var prunedUserNames : array<string>
-    var prunedIterNames : array<string>
-    for (i in 0 .. length(bridge.userNames)) {
-        if (key_exists(usedSet, bridge.userNames[i])) {
-            prunedUserNames |> push(bridge.userNames[i])
-            prunedIterNames |> push(bridge.iterNames[i])
-        }
+    var fieldToIter <- {for (i in 0 .. length(bridge.userNames));
+        bridge.userNames[i] => bridge.iterNames[i];
+        where key_exists(usedSet, bridge.userNames[i])}
+    // Diagnostic-friendly fallback when some `usedNames` entry has no bridge match. Today the typer pipeline checks user `_.<field>` lambdas before plan_decs_unroll runs, so this is unreachable in practice — but if a future macro ever synthesizes `decs_tup.<unknownField>`, the unpruned bind keeps the typer's "unknown field of <named-tuple>" diagnostic intact instead of degrading it to "unknown identifier decs_tup".
+    if (length(fieldToIter) < length(usedSet)) {
+        var tupBind = build_decs_tup_bind(bridge, tupName, at)
+        return build_decs_inner_for(bridge, tupBind, body, at)
     }
-    // Pruned named-tuple bind — mirrors build_decs_tup_bind on the kept subset.
-    var mkTup = new ExprMakeTuple(at = at)
-    mkTup.recordNames |> resize(length(prunedUserNames))
-    for (i in 0 .. length(prunedUserNames)) {
-        mkTup.recordNames[i] := prunedUserNames[i]
-        mkTup.values |> emplace_new(new ExprVar(at = at, name := prunedIterNames[i]))
-    }
-    var tupBind = qmacro_expr() {
-        var $i(tupName) = $e(mkTup)
-    }
+    // Pruned path: no whole-var ref → no need for the named tuple. Rewrite every `decs_tup.<userName>` in the body to the matching iter var, then drop the bind entirely. Eliminates one tuple-make + N per-element field reads per iter.
+    flatten_decs_tup_to_iter(body, tupName, fieldToIter)
     // Clone forExpr; drop the iter slots not in usedSet from all 5 parallel dasvectors (sources/iterators/iteratorsAt/iteratorsAka/iteratorsTags). iteratorVariables is cleared so the typer rebuilds it during re-type — same pattern as daslib/soa.das:381.
     var clonedForExpr = clone_expression(bridge.forExpr)
     var clonedFor = clonedForExpr as ExprFor
@@ -3176,11 +3202,9 @@ def private build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
         }
     }
     clonedFor.iteratorVariables |> clear()
-    // Install body — same layering as build_decs_inner_for.
-    var forBodyStmts <- [tupBind, body]
-    var forBody = stmts_to_expr(forBodyStmts)
+    // Install body — body now references iter vars directly; no tupBind needed.
     var newForBody = new ExprBlock(at = at)
-    newForBody.list |> push(forBody)
+    newForBody.list |> push(body)
     clonedFor.body = newForBody
     return clonedForExpr
 }
