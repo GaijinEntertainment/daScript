@@ -2578,6 +2578,17 @@ namespace das
                 }
             }
         } else {
+            // Variables whose `used` flag stayed false get index<0 in allocateStack and no
+            // runtime slot. Inside compiled function bodies this is unreachable -- ConstFolding
+            // rewrites such refs to their literal init before simulate. But rtti-exposed ASTs
+            // (e.g. struct field defaults) bypass folding, so the original ExprVar reference
+            // survives. Re-simulating it would emit a GetSharedMnh / GetGlobalMnh that looks
+            // up a mnh not in tabGMnLookup -> crash. Emit the const init directly instead.
+            if ( expr->variable->index < 0 && expr->variable->init
+                 && expr->variable->init->rtti_isConstant() ) {
+                setE(expr, simulateExpression(expr->variable->init));
+                return expr;
+            }
             DAS_ASSERT(expr->variable->index >= 0 && "using variable which is not used. how?");
             uint64_t mnh = expr->variable->getMangledNameHash();
             if ( !expr->variable->module->isSolidContext ) {

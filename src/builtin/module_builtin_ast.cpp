@@ -623,6 +623,21 @@ namespace das {
         return result;
     }
 
+    float4 evalSingleExpressionInContext ( ExpressionPtr expr, smart_ptr_raw<Context> useCtxPtr, bool & ok ) {
+        // Refuse to run if the caller's context is already in a panic state -- we'd otherwise
+        // smear our eval over inconsistent state. On success or our-own-panic we leave the
+        // exception fields alone: ok=false plus the context's existing diagnostics is the
+        // honest signal, and there's no fragile save/restore of `exception` (which aliases
+        // into `exceptionMessage` and would dangle on string reassignment).
+        if ( !expr || !useCtxPtr || useCtxPtr->getException() ) { ok = false; return v_zero(); }
+        Context & useCtx = *useCtxPtr;
+        ok = true;
+        SimNode * node = simulateExpression(useCtx, expr);
+        vec4f result = useCtx.evalWithCatch(node);
+        if ( useCtx.getException() ) ok = false;
+        return result;
+    }
+
     bool builtin_isVisibleDirectly ( Module * from, Module * too ) {
         return from->isVisibleDirectly(too);
     }
@@ -1357,6 +1372,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(evalSingleExpression)>(*this, lib, "eval_single_expression",
             SideEffects::modifyArgument, "evalSingleExpression")
                 ->args({"expr","ok"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(evalSingleExpressionInContext)>(*this, lib, "eval_single_expression",
+            SideEffects::modifyArgumentAndExternal, "evalSingleExpressionInContext")
+                ->args({"expr","ctx","ok"})->unsafeOperation = true;
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
             SideEffects::modifyArgumentAndExternal, "ast_error")
