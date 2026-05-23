@@ -4410,8 +4410,11 @@ namespace das {
         // static_if needs infer-time folding for its condition (e.g. typeinfo && typeinfo),
         // even when folding is currently off (lint policies, source-level
         // `options infer_time_folding = false`, or any future reason). Save the prior
-        // state so preVisitIfBlock can restore it exactly — restore-by-policy alone
-        // permanently leaks the enable when folding was off for a non-policy reason.
+        // state so visit(ExprIfThenElse) below can restore it exactly. We can't restore
+        // via preVisitIfBlock / preVisitElseBlock because canVisitIfSubexpr returns
+        // false for static_if (line 4404) — the traversal skips both block hooks and
+        // goes straight from cond->visit to vis.visit(this). visit() is the only hook
+        // guaranteed to fire after the cond, so that's where the restore lives.
         if (expr->isStatic) {
             savedFoldingForStaticIf = enableInferTimeFolding;
             if (!enableInferTimeFolding) {
@@ -4419,14 +4422,12 @@ namespace das {
             }
         }
     }
-    void InferTypes::preVisitIfBlock(ExprIfThenElse *expr, Expression *) {
-        // Restore folding to the state observed in preVisit — regardless of policy.
-        // Idempotent across the multiple preVisitIfBlock invocations (then / else).
+    ExpressionPtr InferTypes::visit(ExprIfThenElse *expr) {
+        // Restore folding state for static_if before any early-return path below.
+        // See the matching preVisit above for why this is the right hook.
         if (expr->isStatic) {
             enableInferTimeFolding = savedFoldingForStaticIf;
         }
-    }
-    ExpressionPtr InferTypes::visit(ExprIfThenElse *expr) {
         if (!expr->cond->type) {
             return Visitor::visit(expr);
         }
