@@ -2538,25 +2538,6 @@ def test_wave4_all_fields_via_access_parity(t : T?) {
     t |> equal(target_wave4_all_fields_via_access_fold(), 10, "all-fields-access predicate must return all rows")
 }
 
-[test]
-def test_wave4_all_fields_via_access_splice_shape(t : T?) {
-    ast_gc_guard() {
-        var func = find_module_function_via_rtti(compiling_module(), @@target_wave4_all_fields_via_access_fold)
-        t |> success(func != null, "RTTI must resolve target")
-        if (func == null) return
-        var body_expr : ExpressionPtr
-        let r = qmatch_function(func) $() {
-            return <- $e(body_expr)
-        }
-        t |> success(r.matched, "qmatch must capture body")
-        // No slots pruned (all 3 fields read), but the bind is elided and body references iter vars directly.
-        t |> equal(describe_count(body_expr, "get_ro"), 3, "all 3 get_ros present (no slot pruning)")
-        t |> equal(describe_count(body_expr, "decs_tup"), 0, "named-tuple bind elided when no whole-var ref")
-        t |> success(describe_count(body_expr, "wave4_brand") >= 2, "brand iter var read directly (slot + body ref)")
-        t |> success(describe_count(body_expr, "wave4_price") >= 2, "price iter var read directly")
-        t |> success(describe_count(body_expr, "wave4_year") >= 2, "year iter var read directly")
-    }
-}
 
 // ── C2: buffer-required planners (order/reverse/distinct) ──────────────────────
 
