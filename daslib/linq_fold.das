@@ -3901,6 +3901,263 @@ def private emit_decs_min_max_by(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
+def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
+                                opName : string;
+                                chainInfo : DecsChainInfo?;
+                                rangeInfo : DecsRangeInfo?;
+                                var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                intermediateEnd : int;
+                                terminatorCall : ExprCall?;
+                                at : LineInfo) : Expression? {
+    // Slice 5f walk-lane: last/single/aggregate. State (found flag + retained element / accumulator) hoisted at invoke scope so it persists across archetype boundaries. single_or_default uses for_each_archetype_find for early-exit on 2nd match; others use plain for_each_archetype unless take/take_while is present.
+    let tupName = qn("decs_tup", at)
+    let names <- make_decs_range_names(at)
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
+    var preludeStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    var perElement : Expression?
+    var retType : TypeDeclPtr
+    var earlyExitFind = false
+    if (opName == "last" || opName == "last_or_default") {
+        retType = clone_type(elemType)
+        let foundName = qn("decs_found", at)
+        let bindName = qn("decs_lst", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(bindName) : $t(retType)
+        }
+        perElement = qmacro_block() {
+            $i(foundName) = true
+            $i(bindName) := $i(finalBind)
+        }
+        if (opName == "last") {
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) panic("sequence contains no elements")
+                return <- $i(bindName)
+            }
+        } else {
+            let defaultName = qn("decs_dv", at)
+            preludeStmts |> push <| qmacro_expr() {
+                let $i(defaultName) = $e(terminatorCall.arguments[1])
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) return $i(defaultName)
+                return <- $i(bindName)
+            }
+        }
+    } elif (opName == "single") {
+        retType = clone_type(elemType)
+        let foundName = qn("decs_found", at)
+        let bindName = qn("decs_sng", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(bindName) : $t(retType)
+        }
+        // Panic on 2nd match terminates the invoke regardless of nesting — no need for early-exit dispatch.
+        perElement = qmacro_block() {
+            if ($i(foundName)) panic("sequence contains more than one element")
+            $i(foundName) = true
+            $i(bindName) := $i(finalBind)
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) panic("sequence contains no elements")
+            return <- $i(bindName)
+        }
+    } elif (opName == "single_or_default") {
+        retType = clone_type(elemType)
+        let foundName = qn("decs_found", at)
+        let stopName = qn("decs_stop", at)
+        let bindName = qn("decs_sng", at)
+        let defaultName = qn("decs_dv", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(stopName) = false
+            var $i(bindName) : $t(retType)
+        }
+        preludeStmts |> push <| qmacro_expr() {
+            let $i(defaultName) = $e(terminatorCall.arguments[1])
+        }
+        // 2nd match → set stop, return true (exits inner lambda); for_each_archetype_find then stops the walk.
+        perElement = qmacro_block() {
+            if ($i(foundName)) {
+                $i(stopName) = true
+                return true
+            }
+            $i(foundName) = true
+            $i(bindName) := $i(finalBind)
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(stopName) || !$i(foundName)) return $i(defaultName)
+            return <- $i(bindName)
+        }
+        earlyExitFind = true
+    } elif (opName == "aggregate") {
+        var seedExpr = clone_expression(terminatorCall.arguments[1])
+        var aggFn = clone_expression(terminatorCall.arguments[2])
+        if (seedExpr._type == null) return null
+        var accType = clone_type(seedExpr._type)
+        accType.flags.constant = false
+        accType.flags.ref = false
+        retType = clone_type(accType)
+        let aggAccName = qn("decs_agg", at)
+        let aggIsWorkhorse = seedExpr._type.isWorkhorseType
+        if (aggIsWorkhorse) {
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(aggAccName) : $t(accType) = $e(seedExpr)
+            }
+        } else {
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(aggAccName) : $t(accType) <- $e(seedExpr)
+            }
+        }
+        var peeled = peel_lambda_rename_2vars(aggFn, aggAccName, finalBind)
+        if (peeled != null) {
+            if (aggIsWorkhorse) {
+                perElement = qmacro_expr() {
+                    $i(aggAccName) = $e(peeled)
+                }
+            } else {
+                perElement = qmacro_expr() {
+                    $i(aggAccName) <- $e(peeled)
+                }
+            }
+        } else {
+            if (aggIsWorkhorse) {
+                perElement = qmacro_expr() {
+                    $i(aggAccName) = invoke($e(aggFn), $i(aggAccName), $i(finalBind))
+                }
+            } else {
+                perElement = qmacro_expr() {
+                    $i(aggAccName) <- invoke($e(aggFn), $i(aggAccName), $i(finalBind))
+                }
+            }
+        }
+        if (aggIsWorkhorse) {
+            tailStmts |> push <| qmacro_expr() {
+                return $i(aggAccName)
+            }
+        } else {
+            tailStmts |> push <| qmacro_expr() {
+                return <- $i(aggAccName)
+            }
+        }
+    } else {
+        return null
+    }
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
+    let archName = bridge.archName
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
+    bodyStmts |> push_from(preludeStmts)
+    bodyStmts |> push_from(rangeStmts)
+    if (earlyExitFind || rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+                $e(forExprNode)
+                return false
+            })
+        }
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    bodyStmts |> push_from(tailStmts)
+    var emission = qmacro(invoke($() : $t(retType) {
+        $b(bodyStmts)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
+def private emit_decs_element_at(bridge : DecsBridgeShape?;
+                                 opName : string;
+                                 chainInfo : DecsChainInfo?;
+                                 rangeInfo : DecsRangeInfo?;
+                                 var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                 intermediateEnd : int;
+                                 terminatorCall : ExprCall?;
+                                 at : LineInfo) : Expression? {
+    // Slice 5f element_at: counter-driven early-exit via for_each_archetype_find. idx + counter + found + result hoisted at invoke scope; perElement writes result + returns true on cnt == idx match.
+    let tupName = qn("decs_tup", at)
+    let names <- make_decs_range_names(at)
+    let finalBind = chainInfo.finalBind
+    var retType = clone_type(chainInfo.finalType)
+    let idxName = qn("decs_idx", at)
+    let cntName = qn("decs_ec", at)
+    let foundName = qn("decs_found", at)
+    let resultName = qn("decs_res", at)
+    var preludeStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(idxName) = $e(terminatorCall.arguments[1])
+    }
+    if (opName == "element_at") {
+        preludeStmts |> push <| qmacro_expr() {
+            if ($i(idxName) < 0) panic("element index out of range")
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) panic("element index out of range")
+            return <- $i(resultName)
+        }
+    } else {
+        // element_at_or_default has no user-supplied default arg; returns default<TT>.
+        preludeStmts |> push <| qmacro_expr() {
+            if ($i(idxName) < 0) return default<$t(retType)>
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) return default<$t(retType)>
+            return <- $i(resultName)
+        }
+    }
+    preludeStmts |> push_from <| qmacro_block_to_array() {
+        var $i(cntName) = 0
+        var $i(foundName) = false
+        var $i(resultName) : $t(retType)
+    }
+    var perElement : Expression? = qmacro_block() {
+        if ($i(cntName) == $i(idxName)) {
+            $i(resultName) := $i(finalBind)
+            $i(foundName) = true
+            return true
+        }
+        $i(cntName) ++
+    }
+    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
+    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
+    if (body == null) return null
+    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
+    let archName = bridge.archName
+    var rangeStmts <- decs_range_prelude(rangeInfo, names)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(preludeStmts) + length(rangeStmts) + length(tailStmts) + 1)
+    bodyStmts |> push_from(preludeStmts)
+    bodyStmts |> push_from(rangeStmts)
+    bodyStmts |> push <| qmacro_expr() {
+        for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+            $e(forExprNode)
+            return false
+        })
+    }
+    bodyStmts |> push_from(tailStmts)
+    var emission = qmacro(invoke($() : $t(retType) {
+        $b(bodyStmts)
+    }))
+    emission.force_at(at)
+    emission.force_generated(true)
+    return emission
+}
+
+[macro_function]
 def private plan_decs_unroll(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     let bridge = extract_decs_bridge(top)
@@ -3915,7 +4172,12 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     let isEarlyExit = (lastName == "first" || lastName == "first_or_default"
         || lastName == "any" || lastName == "all" || lastName == "contains")
     let isMinMaxBy = (lastName == "min_by" || lastName == "max_by")
-    let isTerminator = isAccum || isEarlyExit || isMinMaxBy
+    // Slice 5f: walk-lane (last/single/aggregate) + element_at counter early-exit.
+    let isWalk = (lastName == "last" || lastName == "last_or_default"
+        || lastName == "single" || lastName == "single_or_default"
+        || lastName == "aggregate")
+    let isElementAt = (lastName == "element_at" || lastName == "element_at_or_default")
+    let isTerminator = isAccum || isEarlyExit || isMinMaxBy || isWalk || isElementAt
     let tupName = qn("decs_tup", at)
     let intermediateEnd = isTerminator ? length(calls) - 1 : length(calls)
     // Slice 5a/5b: peel trailing take/skip/take_while/skip_while into rangeInfo. chainEnd is the index past which only range ops live (or == intermediateEnd if none). tupName passed so predicate-driven ranges peel against the source tuple.
@@ -3934,6 +4196,8 @@ def private plan_decs_unroll(var expr : Expression?) : Expression? {
     }
     if (isEarlyExit) return emit_decs_early_exit(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
     if (isMinMaxBy) return emit_decs_min_max_by(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
+    if (isWalk) return emit_decs_walk_lane(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
+    if (isElementAt) return emit_decs_element_at(bridge, lastName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, calls.back()._0, at)
     // Iterator-typed chains cascade to tier-2; only fire to_array when expr is array-typed (user wrote `.to_array()`, peeled by skip=true).
     if (expr._type == null || !expr._type.isGoodArrayType) return null
     return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)

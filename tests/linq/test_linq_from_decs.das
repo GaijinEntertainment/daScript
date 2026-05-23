@@ -2878,3 +2878,220 @@ def test_lambda_pruned_select_sum_splice_shape(t : T?) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 5f: walk terminators (last / single / aggregate) + element_at
+//          — the 4 outliers from PR #2812's m4 bench snapshot
+// ─────────────────────────────────────────────────────────────────────────────
+
+[export, marker(no_coverage)]
+def target_unroll_last_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).last())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_last_or_default_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).last_or_default(-9))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_single_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val == 3)._select(_.val).single())
+}
+
+[export, marker(no_coverage)]
+def target_unroll_single_or_default_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).single_or_default(-7))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_aggregate_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).aggregate(0) <| $(a, x) => a + x * x)
+}
+
+[export, marker(no_coverage)]
+def target_unroll_element_at_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).element_at(3))
+}
+
+[export, marker(no_coverage)]
+def target_unroll_element_at_or_default_fold() : int {
+    // element_at_or_default returns default<int> (0) on out-of-range; no user-supplied default.
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).element_at_or_default(999))
+}
+
+[test]
+def test_unroll_last_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0..4 → last is 4
+    t |> equal(target_unroll_last_fold(), 4, "last splice parity")
+}
+
+[test]
+def test_unroll_last_or_default_empty(t : T?) {
+    fixture_unroll2(5)
+    // val>1000 → none → default -9
+    t |> equal(target_unroll_last_or_default_fold(), -9, "last_or_default empty source")
+}
+
+[test]
+def test_unroll_single_parity(t : T?) {
+    fixture_unroll2(5)
+    // val==3 matches exactly once → 3
+    t |> equal(target_unroll_single_fold(), 3, "single splice parity")
+}
+
+[test]
+def test_unroll_single_or_default_empty(t : T?) {
+    fixture_unroll2(5)
+    // val>1000 → none → default -7
+    t |> equal(target_unroll_single_or_default_fold(), -7, "single_or_default empty source")
+}
+
+[export, marker(no_coverage)]
+def target_unroll_single_or_default_multi_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val < 100)._select(_.val).single_or_default(-7))
+}
+
+[test]
+def test_unroll_single_or_default_multi(t : T?) {
+    fixture_unroll2(5)
+    // 5 rows match → single_or_default returns default on 2nd match
+    t |> equal(target_unroll_single_or_default_multi_fold(), -7, "single_or_default returns default when >1 match")
+}
+
+[test]
+def test_unroll_aggregate_parity(t : T?) {
+    fixture_unroll2(5)
+    // 0^2 + 1^2 + 2^2 + 3^2 + 4^2 = 30
+    t |> equal(target_unroll_aggregate_fold(), 30, "aggregate sum-of-squares splice parity")
+}
+
+[test]
+def test_unroll_aggregate_empty(t : T?) {
+    fixture_unroll2(0)
+    // empty source → returns seed
+    t |> equal(target_unroll_aggregate_fold(), 0, "aggregate empty returns seed")
+}
+
+[test]
+def test_unroll_element_at_parity(t : T?) {
+    fixture_unroll2(5)
+    // vals 0..4, element_at(3) → 3
+    t |> equal(target_unroll_element_at_fold(), 3, "element_at splice parity")
+}
+
+[test]
+def test_unroll_element_at_or_default_out_of_range(t : T?) {
+    fixture_unroll2(5)
+    // idx 999 way past end → default<int> == 0
+    t |> equal(target_unroll_element_at_or_default_fold(), 0, "element_at_or_default out-of-range → default<int>")
+}
+
+// Range interaction: take + last / take + aggregate
+[export, marker(no_coverage)]
+def target_unroll_take_last_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).last())
+}
+
+[test]
+def test_unroll_take_last_parity(t : T?) {
+    fixture_unroll2(10)
+    // take(3) of 0..9 → 0,1,2 → last is 2
+    t |> equal(target_unroll_take_last_fold(), 2, "take+last interaction")
+}
+
+[export, marker(no_coverage)]
+def target_unroll_where_aggregate_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).aggregate(0) <| $(a, x) => a + x)
+}
+
+[test]
+def test_unroll_where_aggregate_parity(t : T?) {
+    fixture_unroll2(5)
+    // flag==1 rows: vals 1,3 → 1+3 = 4
+    t |> equal(target_unroll_where_aggregate_fold(), 4, "where+aggregate interaction")
+}
+
+// Splice-shape gates: emit must not hit to_sequence; exact for_each_archetype{,_find} dispatch
+[test]
+def test_unroll_last_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_last_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_last_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "last splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "last (no range) uses plain for_each_archetype")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "last (no range) does NOT need _find")
+    }
+}
+
+[test]
+def test_unroll_single_or_default_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_single_or_default_multi_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_single_or_default_multi_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "single_or_default splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "single_or_default uses _find for early-exit on 2nd match")
+    }
+}
+
+[test]
+def test_unroll_aggregate_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_aggregate_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_aggregate_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "aggregate splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "aggregate (no range) uses plain for_each_archetype")
+    }
+}
+
+[test]
+def test_unroll_element_at_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_element_at_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_element_at_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "element_at splice must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "element_at uses _find for counter early-exit")
+    }
+}
+
+[test]
+def test_unroll_take_last_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_last_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_take_last_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "take+last splice must NOT call to_sequence")
+        // take present → bool-lambda dispatch (for_each_archetype_find) so the range's `return true` exits the walk
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take+last uses _find when range present")
+    }
+}
+
