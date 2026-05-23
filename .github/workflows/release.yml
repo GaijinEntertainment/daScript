@@ -261,6 +261,10 @@ jobs:
           mkdir artifacts
           cmake --install ./build --prefix ./daslang_bundle --config ${{ matrix.cmake_preset }} --strip
           7z a artifacts/daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip ./daslang_bundle
+      - name: "Smoke-test installed bundle"
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: bash ci/smoke_test_bundle.sh ./daslang_bundle
       - name: "Upload release asset"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
         env:
