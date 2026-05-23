@@ -1542,6 +1542,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/main.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/protocol.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_search_config.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/README.md
     DESTINATION utils/mcp
 )
