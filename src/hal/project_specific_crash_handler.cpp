@@ -63,20 +63,45 @@ static void * safe_read_ptr(uint64_t addr) {
 // VirtualQuery probes the page-protection state cheaply and never faults,
 // so it gives us the same safety guarantee without needing SEH.
 
+// Check a single MEMORY_BASIC_INFORMATION region for readability. Rejects
+// PAGE_GUARD / PAGE_NOACCESS / PAGE_TARGETS_INVALID — accessing those raises
+// EXCEPTION_GUARD_PAGE / EXCEPTION_ACCESS_VIOLATION which would defeat the
+// whole point of the safe-read fallback. The protection-flag mask is
+// 0xFFFF (not 0xFF) because PAGE_GUARD / PAGE_NOCACHE / PAGE_WRITECOMBINE
+// live in the top byte of the DWORD and a too-narrow mask would silently
+// strip them.
+static bool is_region_readable(const MEMORY_BASIC_INFORMATION & mbi) {
+    if (mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) return false;
+    const DWORD prot = mbi.Protect & 0xFF;
+    return prot == PAGE_READONLY
+        || prot == PAGE_READWRITE
+        || prot == PAGE_EXECUTE_READ
+        || prot == PAGE_EXECUTE_READWRITE
+        || prot == PAGE_WRITECOPY
+        || prot == PAGE_EXECUTE_WRITECOPY;
+}
+
+// Validate that [addr, addr+size) is fully covered by readable committed
+// memory. A 4- or 8-byte read can straddle a page boundary (rare but real,
+// e.g. unaligned reads near end-of-region), so when the first VirtualQuery's
+// region ends inside [addr, addr+size) we requery for the second region and
+// require it to also be readable. Without the second query a read could
+// reach into the next page which may be unmapped / PAGE_GUARD / PAGE_NOACCESS
+// and fault — exactly what this function exists to prevent.
 static bool is_addr_readable(uint64_t addr, size_t size) {
+    if (size == 0) return true;
     MEMORY_BASIC_INFORMATION mbi;
     if (VirtualQuery((LPCVOID)(uintptr_t)addr, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    // We only need byte-level readability; the page-spanning case is rare for
-    // 4/8-byte reads and a single VirtualQuery covers the start page.
-    (void)size;
-    const DWORD protect = mbi.Protect & 0xFF;
-    return protect == PAGE_READONLY
-        || protect == PAGE_READWRITE
-        || protect == PAGE_EXECUTE_READ
-        || protect == PAGE_EXECUTE_READWRITE
-        || protect == PAGE_WRITECOPY
-        || protect == PAGE_EXECUTE_WRITECOPY;
+    if (!is_region_readable(mbi)) return false;
+    const uintptr_t region_end = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+    const uintptr_t read_end = (uintptr_t)addr + size;
+    if (read_end <= region_end) return true;
+    // Read spans a region boundary — check the next region too.
+    MEMORY_BASIC_INFORMATION mbi2;
+    if (VirtualQuery((LPCVOID)region_end, &mbi2, sizeof(mbi2)) == 0) return false;
+    if (!is_region_readable(mbi2)) return false;
+    return read_end <= (uintptr_t)mbi2.BaseAddress + mbi2.RegionSize;
 }
 
 static uint32_t safe_read_u32(uint64_t addr) {
