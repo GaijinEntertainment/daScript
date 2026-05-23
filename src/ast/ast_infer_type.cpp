@@ -142,7 +142,24 @@ namespace das {
         nextValue->type = enu->makeBaseType();
         return nextValue;
     }
+    void InferTypes::preVisitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) {
+        Visitor::preVisitEnumerationValue(enu, name, value, last);
+        // Enum value initializers must fold to compile-time integer constants —
+        // force-enable infer-time folding for this value's subtree visit even when
+        // it was disabled (lint policies via no_infer_time_folding, or source-level
+        // `options infer_time_folding = false`, or any future reason). Save the
+        // prior state so visitEnumerationValue can restore it exactly, regardless
+        // of WHY folding was off. Auto-increment members (value == nullptr) have
+        // no subtree to visit, so we skip the toggle entirely for them.
+        savedFoldingForEnum = enableInferTimeFolding;
+        if (value && !enableInferTimeFolding) {
+            enableInferTimeFolding = true;
+        }
+    }
     ExpressionPtr InferTypes::visitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) {
+        // Restore folding state captured by preVisitEnumerationValue — same value
+        // we observed there, regardless of policy/option/etc.
+        enableInferTimeFolding = savedFoldingForEnum;
         if (!value) {
             if (lastEnuValue) {
                 if (lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isInteger()) {
@@ -4391,18 +4408,26 @@ namespace das {
         if (expr->cond)
             markNoDiscard(expr->cond);
         // static_if needs infer-time folding for its condition (e.g. typeinfo && typeinfo),
-        // even when no_infer_time_folding is set
-        if (expr->isStatic && !enableInferTimeFolding) {
-            enableInferTimeFolding = true;
-        }
-    }
-    void InferTypes::preVisitIfBlock(ExprIfThenElse *expr, Expression *) {
-        // restore folding state after visiting the static_if condition
-        if (expr->isStatic && program->policies.no_infer_time_folding) {
-            enableInferTimeFolding = false;
+        // even when folding is currently off (lint policies, source-level
+        // `options infer_time_folding = false`, or any future reason). Save the prior
+        // state so visit(ExprIfThenElse) below can restore it exactly. We can't restore
+        // via preVisitIfBlock / preVisitElseBlock because canVisitIfSubexpr returns
+        // false for static_if (line 4404) — the traversal skips both block hooks and
+        // goes straight from cond->visit to vis.visit(this). visit() is the only hook
+        // guaranteed to fire after the cond, so that's where the restore lives.
+        if (expr->isStatic) {
+            savedFoldingForStaticIf = enableInferTimeFolding;
+            if (!enableInferTimeFolding) {
+                enableInferTimeFolding = true;
+            }
         }
     }
     ExpressionPtr InferTypes::visit(ExprIfThenElse *expr) {
+        // Restore folding state for static_if before any early-return path below.
+        // See the matching preVisit above for why this is the right hook.
+        if (expr->isStatic) {
+            enableInferTimeFolding = savedFoldingForStaticIf;
+        }
         if (!expr->cond->type) {
             return Visitor::visit(expr);
         }

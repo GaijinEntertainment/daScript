@@ -36,6 +36,28 @@ def public string(arg) {
     return "{arg}"
 }
 
+[expect_any_enum(arg)]
+def public operator !(arg) : bool {
+    //! True when the enum value's underlying integer is zero.
+    //! Lets flag-op enums (registered via ``addEnumFlagOps``) read like bitfields:
+    //! ``if (!(flags & MASK)) { /* no bits set */ }``
+    //!
+    //! Width-safe via ``int64`` cast: all 8 enum backings (int8/uint8 .. int64/uint64)
+    //! sign- or zero-extend correctly, so high-bit ``uint64`` members like ``1ul << 63``
+    //! are still detected as non-zero.
+    return int64(arg) == 0l
+}
+
+[expect_any_enum(arg)]
+def public bool(arg) : bool {
+    //! True when the enum value's underlying integer is non-zero.
+    //! Lets flag-op enums read like bitfields:
+    //! ``if (bool(flags & MASK)) { /* at least one bit set */ }``
+    //!
+    //! Width-safe — see the ``operator !`` note above.
+    return int64(arg) != 0l
+}
+
 [template(ent), unused_argument(ent)]
 def public to_enum(ent : auto(EnumT), name : string) : EnumT {
     //! converts string to enum value, panics if not found
