@@ -21,8 +21,11 @@ if [[ $# -lt 1 ]]; then
     exit 2
 fi
 
-BUNDLE="$1"
-[[ -d "$BUNDLE" ]] || { echo "ERROR: bundle dir not found: $BUNDLE" >&2; exit 2; }
+# Canonicalize to absolute up front. The script `cd "$BUNDLE"` later, so any
+# relative path baked into $DASLANG / exe paths would resolve from the wrong
+# cwd and every check would fail with command-not-found.
+BUNDLE="$(cd "$1" 2>/dev/null && pwd -P)" \
+    || { echo "ERROR: bundle dir not found or not enterable: $1" >&2; exit 2; }
 
 if [[ -x "$BUNDLE/bin/daslang.exe" ]]; then
     DASLANG="$BUNDLE/bin/daslang.exe"
