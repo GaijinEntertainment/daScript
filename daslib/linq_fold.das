@@ -1929,9 +1929,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     }
     var keyExpr : Expression?
     if (isDistinctBy) {
-        keyExpr = qmacro_expr() {
-            invoke($e(distinctKeyBlock), $e(pushExpr))
-        }
+        keyExpr = peel_lambda_replace_var(distinctKeyBlock, pushExpr)
     } else {
         keyExpr = clone_expression(pushExpr)
     }
@@ -2787,9 +2785,10 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
             }
         }
     }
-    // Per-element core: key derive + unique_key derive + table-update splice.
+    // Peel keyBlock so `_.field` becomes a direct field read on itName, eliminating per-element invoke + (on decs) freeing the pruner to drop unused tuple slots that the whole-tup lambda arg otherwise pins.
+    var keyExpr = peel_lambda_rename_var(keyBlock, itName)
     var coreBody = qmacro_block() {
-        let $i(kName) = invoke($e(keyBlock), $i(itName))
+        let $i(kName) = $e(keyExpr)
         let $i(ukName) = _::unique_key($i(kName))
         $e(tableUpdate)
     }
@@ -4767,9 +4766,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     var keyExpr : Expression?
     if (isDistinctBy) {
-        keyExpr = qmacro_expr() {
-            invoke($e(distinctKeyBlock), $e(pushExpr))
-        }
+        keyExpr = peel_lambda_replace_var(distinctKeyBlock, pushExpr)
     } else {
         keyExpr = clone_expression(pushExpr)
     }
