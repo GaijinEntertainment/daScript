@@ -1223,8 +1223,9 @@ def private make_inline_less_call(orderKey : Expression?; orderName : string;
     r1 |> replaceVariable(argName, lhsExpr)
     var r2 : Template
     r2 |> replaceVariable(argName, rhsExpr)
-    apply_template(r1, b1.at, b1)
-    apply_template(r2, b2.at, b2)
+    // apply_template returns the new root expression when the visitor replaces it (e.g. body == ExprVar(argName) → root substitution for identity keys like `_order_by(_)`). For non-root replacements (ExprField, etc.) the root pointer is unchanged. Always reassign.
+    b1 = apply_template(r1, b1.at, b1)
+    b2 = apply_template(r2, b2.at, b2)
     return qmacro(_::less($e(b2), $e(b1))) if (orderName == "order_by_descending")
     return qmacro(_::less($e(b1), $e(b2)))
 }
@@ -1295,6 +1296,103 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         inlineCmp = try_make_inline_cmp(orderKey, orderName, orderElemType, at)
     }
     let minMaxName = order_min_call_name(orderName, hasKey)
+    // Streaming-min / bounded-heap fast paths (mirror of plan_decs_order_family). When the key is inline-able, skip the materialize-all + min_by/top_n* dispatch in favor of a per-walk state (single best for first[_or_default], heap of size N for take). For first[_or_default]: avoids the per-element `invoke(keyLambda, x)` cost in min_by_impl (~28 ns/op win on 100K-row sort_first). For take(N): avoids materializing the full filtered set before top_n_by (~7-9 ns/op win on sort_take / select_where_order_take).
+    let useBoundedHeap = takeExpr != null && inlineCmp != null && firstName == ""
+    let useStreamingMin = firstName != "" && inlineCmp != null
+    if (useStreamingMin) {
+        let bestName = qn("order_best", at)
+        let seenName = qn("order_seen", at)
+        let srcName = qn("source", at)
+        var srcParamType = invoke_src_param_type(top)
+        var topExpr = clone_expression(top)
+        topExpr.genFlags.alwaysSafe = true
+        var elemType = clone_type(orderElemType)
+        var lessTest = make_inline_less_call(orderKey, orderName,
+            qmacro($i(itName)), qmacro($i(bestName)), at)
+        var perElement : Expression? = qmacro_expr() {
+            if (!$i(seenName)) {
+                $i(bestName) := $i(itName)
+                $i(seenName) = true
+            } elif ($e(lessTest)) {
+                $i(bestName) := $i(itName)
+            }
+        }
+        if (whereCond != null) {
+            perElement = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $e(perElement)
+                }
+            }
+        }
+        var emission : Expression?
+        if (firstName == "first") {
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(elemType) {
+                var $i(bestName) = default<$t(elemType)>
+                var $i(seenName) = false
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                panic("sequence contains no elements") if (!$i(seenName))
+                return $i(bestName)
+            }, $e(topExpr)))
+        } else {
+            let dBindName = qn("order_d", at)
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(elemType) {
+                let $i(dBindName) = $e(firstDefaultExpr)
+                var $i(bestName) = default<$t(elemType)>
+                var $i(seenName) = false
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                return $i(bestName) if ($i(seenName))
+                return $i(dBindName)
+            }, $e(topExpr)))
+        }
+        return finalize_invoke(emission, at)
+    }
+    if (useBoundedHeap) {
+        let takeNName = qn("order_take_n", at)
+        let bhBufName = qn("order_buf", at)
+        let srcName = qn("source", at)
+        var srcParamType = invoke_src_param_type(top)
+        var topExpr = clone_expression(top)
+        topExpr.genFlags.alwaysSafe = true
+        var bufElemType = clone_type(orderElemType)
+        var lessTest = make_inline_less_call(orderKey, orderName,
+            qmacro($i(itName)), qmacro($i(bhBufName)[0]), at)
+        var perElement : Expression? = qmacro_expr() {
+            if (length($i(bhBufName)) < $i(takeNName)) {
+                $i(bhBufName) |> push_clone($i(itName))
+                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+            } elif ($e(lessTest)) {
+                _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
+                $i(bhBufName)[length($i(bhBufName)) - 1] := $i(itName)
+                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+            }
+        }
+        if (whereCond != null) {
+            perElement = qmacro_expr() {
+                if ($e(whereCond)) {
+                    $e(perElement)
+                }
+            }
+        }
+        // No `reserve(takeN)` on the bounded buf — matches the upstream top_n_by_with_cmp iterator-variant policy (linq.das:482-484). Caller may pass takeN >> actual source size, so pre-reserving N risks a large upfront allocation for no win.
+        var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
+            let $i(takeNName) = $e(takeExpr)
+            var $i(bhBufName) : array<$t(bufElemType)>
+            return <- $i(bhBufName) if ($i(takeNName) <= 0)
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
+            _::order_inplace($i(bhBufName), $e(inlineCmp))
+            return <- $i(bhBufName)
+        }, $e(topExpr)))
+        if (needIterWrap) {
+            emission = qmacro($e(emission).to_sequence_move())
+        }
+        return finalize_invoke(emission, at)
+    }
     if (whereCond == null) {
         // No prefilter — direct call to daslib helper.
         var topExpr = clone_expression(top)

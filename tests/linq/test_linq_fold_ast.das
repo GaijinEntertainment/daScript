@@ -2061,9 +2061,9 @@ def target_where_order_by_take_splices_fold() : array<int> {
 
 [test]
 def test_order_by_take_emits_top_n_by_with_cmp(t : T?) {
-    // `order_by(key) |> take(K)` with an inlineable key body now splices to
-    // top_n_by_with_cmp(src, K, $(v1, v2) => _::less(body[v1], body[v2])) — the comparator
-    // block embeds the key body twice, eliminating the per-comparison key() dispatch.
+    // `order_by(key) |> take(K)` with an inlineable key now splices to the bounded-heap
+    // walk: `spliced_push_heap` fill+replace pair + a `_::less(it, buf[0])` replace-test on
+    // the heap top, `order_inplace(buf, cmp)` at the end. No top_n_by/top_n_by_with_cmp.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_take_splices_fold)
         if (func == null) return
@@ -2072,7 +2072,10 @@ def test_order_by_take_emits_top_n_by_with_cmp(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1, "should emit a top_n_by_with_cmp call")
+        t |> equal(count_call(body_expr, "spliced_push_heap"), 2, "bounded-heap fill + replace each call spliced_push_heap")
+        t |> equal(count_call(body_expr, "spliced_pop_heap"), 1, "bounded-heap replace pops first")
+        t |> success(count_call(body_expr, "order_inplace") >= 1, "final order_inplace on the bounded buf")
+        t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"), "bounded-heap supersedes top_n_by_with_cmp")
         t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit non-cmp top_n_by")
         t |> equal(0, count_call(body_expr, "order_by"), "should not emit order_by")
         t |> equal(0, count_call(body_expr, "take"), "should not emit take")
@@ -2081,9 +2084,9 @@ def test_order_by_take_emits_top_n_by_with_cmp(t : T?) {
 
 [test]
 def test_order_by_descending_take_emits_top_n_by_with_cmp(t : T?) {
-    // `order_by_descending(key) |> take(K)` with an inlineable key dispatches to the same
-    // top_n_by_with_cmp entry as ascending — direction is encoded by flipping the
-    // comparator argument order (`_::less(body[v2], body[v1])`), no `_descending` helper.
+    // `order_by_descending(key) |> take(K)` with an inlineable key hits the same bounded-heap
+    // entry as ascending — direction is encoded by flipping the inline less-test's operand
+    // order (`_::less(buf[0], it)`).
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(),
             @@target_order_by_descending_take_splices_fold)
@@ -2093,8 +2096,9 @@ def test_order_by_descending_take_emits_top_n_by_with_cmp(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1,
-            "should emit a top_n_by_with_cmp call (flipped comparator embeds direction)")
+        t |> equal(count_call(body_expr, "spliced_push_heap"), 2, "bounded-heap fill + replace each call spliced_push_heap (descending shares the same path)")
+        t |> equal(count_call(body_expr, "spliced_pop_heap"), 1, "bounded-heap replace pops first")
+        t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"), "bounded-heap supersedes top_n_by_with_cmp")
         t |> equal(0, count_call(body_expr, "top_n_by_descending"),
             "should not emit the key-taking top_n_by_descending")
         t |> equal(0, count_call(body_expr, "order_by_descending"),
@@ -2141,8 +2145,9 @@ def test_where_order_by_emits_fused_loop_with_inline_cmp(t : T?) {
 
 [test]
 def test_where_order_by_take_emits_fused_top_n_with_cmp(t : T?) {
-    // `where |> order_by(key) |> take(K)` splices into a fused prefilter loop +
-    // top_n_by_with_cmp(buf, K, cmp) when the key is inlineable.
+    // `where |> order_by(key) |> take(K)` with an inlineable key splices into the bounded-heap
+    // walk wrapped in `if (whereCond)`. Single fused loop — no prefilter buffer, the heap IS
+    // the buffer, and at most K elements ever live in it.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(),
             @@target_where_order_by_take_splices_fold)
@@ -2152,10 +2157,13 @@ def test_where_order_by_take_emits_fused_top_n_with_cmp(t : T?) {
             return <- $e(body_expr)
         }
         t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for fused emission")
-        t |> equal(1, count_inner_for_loops(body_expr), "single fused prefilter loop")
-        t |> success(count_call(body_expr, "top_n_by_with_cmp") >= 1, "should call top_n_by_with_cmp on the buffer")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused walk over source")
+        t |> equal(count_call(body_expr, "spliced_push_heap"), 2, "bounded-heap fill + replace each call spliced_push_heap")
+        t |> equal(count_call(body_expr, "spliced_pop_heap"), 1, "bounded-heap replace pops first")
+        t |> success(count_call(body_expr, "order_inplace") >= 1, "final order_inplace on the bounded buf")
+        t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"), "bounded-heap supersedes top_n_by_with_cmp")
         t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit non-cmp top_n_by")
-        t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the buffer")
+        t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the heap during fill")
     }
 }
 
@@ -3870,7 +3878,9 @@ def target_order_with_cmp_first_bails_to_tier2() : int {
 
 [test]
 def test_order_by_first_emits_min_by(t : T?) {
-    // order_by + first → min_by(top, key) directly. No sort, no take, no order_by/order helpers.
+    // order_by + first with an inlineable key now splices to the streaming-min walk —
+    // single `var order_best` + `var order_seen` state, per-element `_::less(it, order_best)`
+    // direct call. No min_by lambda dispatch, no full materialization.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_first_splices_min_by)
         if (func == null) return
@@ -3879,15 +3889,18 @@ def test_order_by_first_emits_min_by(t : T?) {
             return $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "min_by") >= 1, "should emit a min_by call")
+        t |> equal(0, count_call(body_expr, "min_by"), "streaming-min supersedes min_by")
         t |> equal(0, count_call(body_expr, "max_by"), "should NOT emit max_by (ascending)")
         t |> equal(0, count_call(body_expr, "order_by"), "should NOT emit order_by")
         t |> equal(0, count_call(body_expr, "first"), "should NOT emit first (splice absorbs)")
+        t |> success(count_call(body_expr, "less") >= 1, "streaming-min uses inline less-test")
     }
 }
 
 [test]
 def test_order_by_descending_first_emits_max_by(t : T?) {
+    // Streaming-min handles descending by flipping the inline less-test operand order
+    // (`_::less(order_best, it)`); same shape as ascending.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_descending_first_splices_max_by)
         if (func == null) return
@@ -3896,17 +3909,18 @@ def test_order_by_descending_first_emits_max_by(t : T?) {
             return $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "max_by") >= 1, "should emit a max_by call")
+        t |> equal(0, count_call(body_expr, "max_by"), "streaming-min supersedes max_by")
         t |> equal(0, count_call(body_expr, "min_by"), "should NOT emit min_by (descending)")
         t |> equal(0, count_call(body_expr, "order_by_descending"), "should NOT emit order_by_descending")
         t |> equal(0, count_call(body_expr, "first"), "should NOT emit first (splice absorbs)")
+        t |> success(count_call(body_expr, "less") >= 1, "streaming-min uses inline less-test (descending flips args)")
     }
 }
 
 [test]
 def test_where_order_by_first_emits_min_by_on_prefilter(t : T?) {
-    // where + order_by + first → fused prefilter loop + min_by on buf. Same shape as
-    // where + order_by + take, but min_by instead of top_n_by.
+    // where + order_by + first with an inlineable key splices to streaming-min with the
+    // per-element body wrapped in `if (whereCond)`. Single fused loop — no prefilter buffer.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_where_order_by_first_splices_min_by_on_buf)
         if (func == null) return
@@ -3915,16 +3929,18 @@ def test_where_order_by_first_emits_min_by_on_prefilter(t : T?) {
             return $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "min_by") >= 1, "should emit min_by on prefilter buf")
+        t |> equal(0, count_call(body_expr, "min_by"), "streaming-min supersedes min_by")
         t |> equal(0, count_call(body_expr, "order_by"), "should NOT emit order_by")
         t |> equal(0, count_call(body_expr, "first"), "should NOT emit first (splice absorbs)")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused walk over source (no prefilter buf)")
+        t |> success(count_call(body_expr, "less") >= 1, "streaming-min uses inline less-test")
     }
 }
 
 [test]
 def test_order_by_first_or_default_emits_top_n_by_first_or_default(t : T?) {
-    // order_by + first_or_default → top_n_by(top, 1, key) |> first_or_default(d) — empty
-    // array handles the default fallback; no min_by_or_default helper exists.
+    // order_by + first_or_default with inlineable key splices to streaming-min + return-default
+    // when !seen. No top_n_by(_, 1, _) materialization, no min_by_or_default helper.
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_order_by_first_or_default_splices_top_n_by)
         if (func == null) return
@@ -3933,11 +3949,11 @@ def test_order_by_first_or_default_emits_top_n_by_first_or_default(t : T?) {
             return $e(body_expr)
         }
         t |> success(r.matched, "should have return expression")
-        t |> success(count_call(body_expr, "top_n_by_with_cmp") + count_call(body_expr, "top_n_by") >= 1,
-            "should emit top_n_by (or top_n_by_with_cmp for inline key)")
-        t |> success(count_call(body_expr, "first_or_default") >= 1,
-            "should emit first_or_default on the 1-elem array")
+        t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"), "streaming-min supersedes top_n_by_with_cmp")
+        t |> equal(0, count_call(body_expr, "top_n_by"), "streaming-min supersedes top_n_by")
+        t |> equal(0, count_call(body_expr, "first_or_default"), "streaming-min absorbs first_or_default")
         t |> equal(0, count_call(body_expr, "order_by"), "should NOT emit order_by")
+        t |> success(count_call(body_expr, "less") >= 1, "streaming-min uses inline less-test")
     }
 }
 
