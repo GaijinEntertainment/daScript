@@ -62,6 +62,7 @@ namespace das {
         bool enableInferTimeFolding = true;
         bool savedFoldingForEnum = true;        // preVisitEnumerationValue / visitEnumerationValue save-restore
         bool savedFoldingForStaticIf = true;    // preVisit(ExprIfThenElse) / visit(ExprIfThenElse) save-restore (block hooks skipped for static_if)
+        bool savedFoldingForStaticAssert = true; // preVisit(ExprStaticAssert) / visit(ExprStaticAssert) save-restore
         bool disableAot = false;
         bool multiContext = false;
         bool standaloneContext = false;

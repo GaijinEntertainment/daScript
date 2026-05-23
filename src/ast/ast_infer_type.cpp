@@ -1215,8 +1215,23 @@ namespace das {
         for (auto &arg : expr->arguments) {
             markNoDiscard(arg);
         }
+        // static_assert / concept_assert needs the cond to fold to a const
+        // before verifyAndFoldContracts runs. Mirror the static_if path
+        // above: with `no_infer_time_folding` set (lint policies) plus
+        // `no_optimizations`, `int_const op int_const` shapes (typically
+        // `typeinfo sizeof(X) <= typeinfo sizeof(Y)` after typeinfo rewrites
+        // itself to ExprConstInt) stay as unfolded ExprOp1/Op2/Op3, and the
+        // contract pass raises a spurious "static assert condition is not
+        // constexpr or const" (30151). Force-enable folding for the cond
+        // subtree; restore in visit().
+        savedFoldingForStaticAssert = enableInferTimeFolding;
+        if (!enableInferTimeFolding) {
+            enableInferTimeFolding = true;
+        }
     }
     ExpressionPtr InferTypes::visit(ExprStaticAssert *expr) {
+        // Restore folding state before any early-return path below.
+        enableInferTimeFolding = savedFoldingForStaticAssert;
         if (expr->argumentsFailedToInfer) {
             if (func)
                 func->notInferred();

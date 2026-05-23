@@ -400,7 +400,7 @@ def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
 def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            if (typeinfo can_clone_from_const(varr)) {
+            static_if (typeinfo can_clone_from_const(varr)) {
                 for (t in varr) {
                     Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
                 }
@@ -889,7 +889,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val
 [unused_argument(Tab, at, val)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
     static_if (typeinfo can_clone(val)) {
-        if (typeinfo can_clone_from_const(val)) {
+        static_if (typeinfo can_clone_from_const(val)) {
             unsafe(Tab[at]) := val
         } else {
             concept_assert(false, "can't insert value, which can't be cloned from const")
@@ -911,7 +911,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var v
 [unused_argument(Tab, at, val)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[] ==const | #) {
     static_if (typeinfo can_clone(val)) {
-        if (typeinfo can_clone_from_const(val)) {
+        static_if (typeinfo can_clone_from_const(val)) {
             unsafe(Tab[at]) := val
         } else {
             concept_assert(false, "can't insert value, which can't be cloned from const")
@@ -1180,7 +1180,7 @@ def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
 
 def clone_dim(var a; b : auto | #) {
     static_if (typeinfo is_dim(a) && typeinfo is_dim(b) && typeinfo dim(a) == typeinfo dim(b)) {
-        if (typeinfo is_pod(a)) {
+        static_if (typeinfo is_pod(a)) {
             unsafe {
                 memcpy(addr(a[0]), addr(b[0]), typeinfo sizeof(a[0]) * length(a))
             }
