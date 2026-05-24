@@ -14,9 +14,16 @@ Generated 2026-05-23 from `0a2da407f`. Probe files live under
 
 Coverage extension: 1395 → 1415 linq tests (10 new tests in `tests/linq/test_linq_fold_terminal_select.das`).
 
+**Theme 2 (trailing `_where` / HAVING) — landed 2026-05-24**:
+
+- **8a, C6** (`plan_decs_join`): single trailing `_where` between `_join` and the terminator. Predicate references join-result fields; emission binds the result once per pair and gates `count++` / `push_clone`. Composes with the terminal `_select` from Theme 1.
+- **4a** (`plan_group_by`) + **4e** (`plan_decs_group_by` via shared `plan_group_by_core`): trailing `_where` AFTER `_select(reducer)`, i.e. SQL HAVING on the post-aggregate tuple. Binds the constructed output once per bucket and gates buf-emit / count-emit. Distinct from the existing `having_` slot (which is pre-select and can lift hidden reducer slots) — both can fire on the same chain.
+- **5c** (`plan_loop_or_count` across all 4 lanes — counter / accumulator / early-exit / array): `take(N)._where(p).terminator` accepted. Take cap ticks unconditionally per element; trailing `_where` gates only the per-element contribution, preserving the "first N elements, then keep matching" semantic that auto-rewriting can't reproduce.
+
+Coverage extension: 1415 → 1437 linq tests (12 new tests in `tests/linq/test_linq_fold_theme2_trailing_where.das`).
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Theme 2 — trailing `_where` / HAVING (chains 4, 5, 8).
 - Theme 3 — cross-arm composition (5 of 6 composition probes).
 - Themes 4–8 — see "Cross-cutting findings" section.
 
