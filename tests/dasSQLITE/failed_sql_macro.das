@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:21
+expect 30341, 30928:2, 50503:23
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -144,6 +144,19 @@ def main() {
     //     keys lower to `COUNT(DISTINCT "col")`; computed keys like `_.Price %
     //     100` would need a general expression-to-SQL emitter not yet wired.
     let bad23 <- _sql(db |> select_from(type<Car>) |> _distinct_by(_.Price % 100) |> count())
+
+    // 24. `_distinct_by(<outer-capture>.Field)` — the key reads a captured
+    //     variable instead of the lambda's bound parameter (`_`); without
+    //     the arg-name check this would silently emit `COUNT(DISTINCT "Field")`
+    //     against the SQL row source — wrong result.
+    var capturedRow = Car(Id = 0, Name = "captured", Price = 0)
+    let bad24 <- _sql(db |> select_from(type<Car>) |> _distinct_by(capturedRow.Name) |> count())
+
+    // 25. `_group_by(_.Col - <runtime-var>)` — expression-key support inlines
+    //     constants only; a runtime-var bind would need to be re-pushed at each
+    //     re-use of the key fragment (SELECT, GROUP BY, ORDER BY positions).
+    let runtimeOffset = 5
+    let bad25 <- _sql(db |> select_from(type<Car>) |> _group_by(_.Price - runtimeOffset) |> _select((K = _._0, N = _._1 |> length)))
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees

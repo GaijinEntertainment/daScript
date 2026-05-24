@@ -160,6 +160,9 @@ struct private SqlQuery {
     orderByCols : array<string>
     orderByInlineExprs : array<ExpressionPtr>
     groupByCols : array<string>
+    // nolint:STYLE014 Parallel to groupByCols: null for `_.Field` keys (groupByCols holds the daslang field name quoted, emitter translates); body for computed-expression keys (groupByCols holds the rendered SQL fragment).
+    groupByKeyExprs : array<ExpressionPtr>
+    groupByKeyTypes : array<TypeDeclPtr>
     havingSql : string
     havingBindExprs : array<ExpressionPtr>
     groupedSelectExprs : array<string>
@@ -189,6 +192,8 @@ struct private SqlQuery {
     inView      : bool
     hadError    : bool
     lastError   : string
+    // nolint:STYLE014 When true, pred_to_sql's bind fallthrough inlines ExprConst* literals into the SQL string instead of pushing `?` binds — used by expression-key contexts (e.g. _group_by) where the rendered fragment is re-used in multiple SQL positions and can't carry binds.
+    inlineConstants : bool
     // Multi-Q lowering: phase-order conflict (e.g. `take(n) |> _where(p)`) snapshots
     // the inner subtree's SQL+binds here; outer FROM renders as `(<innerSql>) AS t0`.
     innerSql       : string                 // null/empty = base-table FROM; else nested SELECT body
@@ -576,7 +581,7 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
     return true
 }
 
-// nolint:STYLE015 Receiver-pin to ExprVar rejects `u.opt.X` keys SQL can't reproduce.
+// nolint:STYLE015 Verifies the receiver IS the lambda's bound param — outer captures (`outer.Brand`) reject loudly instead of emitting a wrong `COUNT(DISTINCT "Brand")` against the SQL source.
 [macro_function]
 def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSource : ExpressionPtr&;
                                        var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
@@ -587,7 +592,20 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
         q.hadError = true
         return ""
     }
-    var body = peel_lambda_single_return(dbCall.arguments[1])
+    var lam = dbCall.arguments[1]
+    if (lam == null || !(lam is ExprMakeBlock)) {
+        macro_error(prog, at, "_sql: _distinct_by key has unexpected shape (not a lambda)")
+        q.hadError = true
+        return ""
+    }
+    var blk = (lam as ExprMakeBlock)._block as ExprBlock
+    if (blk == null || blk.arguments |> length != 1) {
+        macro_error(prog, at, "_sql: _distinct_by key lambda must take exactly one argument")
+        q.hadError = true
+        return ""
+    }
+    let expectedArgName = string(blk.arguments[0].name)
+    var body = peel_lambda_single_return(lam)
     if (body == null) {
         macro_error(prog, at, "_sql: _distinct_by key lambda has unexpected shape")
         q.hadError = true
@@ -598,6 +616,12 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
     if (!qmatch(body, $e(receiver).$f(fieldName)).matched
             || receiver == null || !(receiver is ExprVar)) {
         macro_error(prog, at, "_sql: _distinct_by key must be `<arg>.<field>` (single column reference) — computed keys are not yet translatable to SQL")
+        q.hadError = true
+        return ""
+    }
+    let argName = string((receiver as ExprVar).name)
+    if (argName != expectedArgName) {
+        macro_error(prog, at, "_sql: _distinct_by key references `{argName}` but the lambda's argument is `{expectedArgName}` — outer captures can't be translated, the key must read `{expectedArgName}.<field>`")
         q.hadError = true
         return ""
     }
@@ -618,7 +642,7 @@ def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
         return true
     }
     if (cCall.arguments |> length != 1) {
-        macro_error(prog, at, "_sql: `_{linqName}(predicate)` is not yet supported — use `|> _where(predicate) |> _{linqName}()` instead")
+        macro_error(prog, at, "_sql: `{linqName}(predicate)` is not yet supported — use `|> _where(predicate) |> {linqName}()` instead")
         q.hadError = true
         return true
     }
@@ -758,6 +782,8 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.orderByCols |> clear
     q.orderByInlineExprs |> clear
     q.groupByCols |> clear
+    q.groupByKeyExprs |> clear
+    q.groupByKeyTypes |> clear
     q.havingSql := ""
     q.havingBindExprs |> clear
     q.groupedSelectExprs |> clear
@@ -1580,9 +1606,11 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _group_by key lambda has unexpected shape")
                 return false
             }
-            if (!collect_group_keys(body, q, prog, at)) return false
+            // nolint:STYLE015 Source first so q.rootType is set before pred_to_sql on computed keys.
+            if (!analyze_chain(gbCall.arguments[0], q, prog, at)
+                    || !collect_group_keys(body, q, prog, at)) return false
             q.seenGroupBy = true
-            return analyze_chain(gbCall.arguments[0], q, prog, at)
+            return true
         }
     }
     // Peel _where — recurse first so q.rootType is set before pred_to_sql runs (needs it for @sql_json/@sql_blob descent).
@@ -2145,6 +2173,13 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         var val = mkTup.values[i]
         // single-key `_._0` — direct group-key reference.
         if (nKeys == 1 && qmatch(val, _._0).matched) {
+            if (q.groupByKeyExprs[0] != null) {
+                // Computed-expression key — reuse the rendered SQL fragment from collect_group_keys.
+                q.groupedSelectExprs |> push(q.groupByCols[0])
+                q.groupedSelectTypes |> push(q.groupByKeyTypes[0])
+                q.projRecordNames |> push(string(tupT.argNames[i]))
+                continue
+            }
             let col = group_key_column_name(q, 0)
             var fieldType = lookup_struct_field_type(q.rootType, col)
             if (fieldType == null) {
@@ -2164,6 +2199,12 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
                     let suffix = slice(outerName, 1, length(outerName))
                     let keyIdx = try_to_int(suffix) ?? -1
                     if (keyIdx >= 0 && keyIdx < nKeys) {
+                        if (q.groupByKeyExprs[keyIdx] != null) {
+                            q.groupedSelectExprs |> push(q.groupByCols[keyIdx])
+                            q.groupedSelectTypes |> push(q.groupByKeyTypes[keyIdx])
+                            q.projRecordNames |> push(string(tupT.argNames[i]))
+                            continue
+                        }
                         let col = group_key_column_name(q, keyIdx)
                         var fieldType = lookup_struct_field_type(q.rootType, col)
                         if (fieldType == null) {
@@ -2230,6 +2271,10 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         if (nKeys == 1 && recv != null && recv is ExprVar
                 && (recv as ExprVar).name == "_"
                 && outerName == "_0") {
+            if (q.groupByKeyExprs[0] != null) {
+                q.orderByCols |> push("{q.groupByCols[0]} {direction}")
+                return true
+            }
             let dasName = group_key_column_name(q, 0)
             let sqlCol = field_to_column_name(q.rootType, dasName)
             q.orderByCols |> push("\"{sqlCol}\" {direction}")
@@ -2249,6 +2294,10 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
                 let suffix = slice(outerName, 1, length(outerName))
                 let keyIdx = try_to_int(suffix) ?? -1
                 if (keyIdx >= 0 && keyIdx < nKeys) {
+                    if (q.groupByKeyExprs[keyIdx] != null) {
+                        q.orderByCols |> push("{q.groupByCols[keyIdx]} {direction}")
+                        return true
+                    }
                     let dasName = group_key_column_name(q, keyIdx)
                     let sqlCol = field_to_column_name(q.rootType, dasName)
                     q.orderByCols |> push("\"{sqlCol}\" {direction}")
@@ -2300,6 +2349,35 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
 }
 
 [macro_function]
+def private push_group_key(var entry : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+    var fieldName : string
+    if (qmatch(entry, _.$f(fieldName)).matched) {
+        q.groupByCols |> push("\"{fieldName}\"")
+        q.groupByKeyExprs |> push(null)
+        q.groupByKeyTypes |> push(null)
+        return true
+    }
+    // nolint:STYLE015 Render with constants inlined so the fragment carries no binds and can be re-used in SELECT/GROUP BY/ORDER BY positions.
+    let savedInlineFlag = q.inlineConstants
+    let beforeBinds = length(q.bindExprs)
+    q.inlineConstants = true
+    let exprSql = pred_to_sql(entry, q, prog, at)
+    q.inlineConstants = savedInlineFlag
+    if (q.hadError || empty(exprSql)) return false
+    if (length(q.bindExprs) > beforeBinds) {
+        // nolint:STYLE015 Runtime bind in a key fragment would have to be re-pushed at each use site (SELECT/GROUP BY/ORDER BY); reject loud instead.
+        q.bindExprs |> resize(beforeBinds)
+        macro_error(prog, at, "_sql: _group_by expression key references a runtime value — only column refs (`_.X`) and constant literals (`100`, `0.5`) are allowed inside the key expression; got: {describe(entry)}")
+        q.hadError = true
+        return false
+    }
+    q.groupByCols |> push("({exprSql})")
+    q.groupByKeyExprs |> push <| clone_expression(entry)
+    q.groupByKeyTypes |> push(entry._type)
+    return true
+}
+
+[macro_function]
 def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (body == null) {
         macro_error(prog, at, "_sql: _group_by: missing key expression")
@@ -2312,15 +2390,7 @@ def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog
             return false
         }
     }
-    // Single-column form: _.FieldName. groupByCols stores DASLANG names; SQL translation deferred to emission.
-    {
-        var fieldName : string
-        if (qmatch(body, _.$f(fieldName)).matched) {
-            q.groupByCols |> push("\"{fieldName}\"")
-            return true
-        }
-    }
-    // Multi-column form: tuple literal `(_.k1, _.k2)`.
+    // Multi-column form: tuple literal `(k1, k2, ...)` — each entry is either `_.Field` or a computed expression.
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
         if (empty(mkTup.values)) {
@@ -2328,19 +2398,12 @@ def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog
             return false
         }
         for (i in range(length(mkTup.values))) {
-            var val = mkTup.values[i]
-            var fieldName : string
-            if (qmatch(val, _.$f(fieldName)).matched) {
-                q.groupByCols |> push("\"{fieldName}\"")
-            } else {
-                macro_error(prog, at, "_sql: _group_by: tuple-key entries must be `_.Field`; got: {describe(val)}")
-                return false
-            }
+            if (!push_group_key(mkTup.values[i], q, prog, at)) return false
         }
         return true
     }
-    macro_error(prog, at, "_sql: _group_by: key must be `_.Field` or a tuple of `_.Field`s; got: {describe(body)}")
-    return false
+    // Single key: `_.Field`, or any expression pred_to_sql can render (`_.X % 100`, `_.X + _.Y`, etc.).
+    return push_group_key(body, q, prog, at)
 }
 
 [macro_function]
@@ -2706,6 +2769,17 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 }
             }
         }
+    }
+    // Literal-inline mode (set by expression-key contexts) — emit ExprConst* value directly so the fragment carries no binds and can be re-used at multiple SQL positions.
+    if (q.inlineConstants) {
+        if (node is ExprConstInt) return "{(node as ExprConstInt).value}"
+        if (node is ExprConstInt64) return "{(node as ExprConstInt64).value}"
+        if (node is ExprConstUInt) return "{(node as ExprConstUInt).value}"
+        if (node is ExprConstUInt64) return "{(node as ExprConstUInt64).value}"
+        if (node is ExprConstFloat) return fmt(":.9g",  (node as ExprConstFloat).value)
+        if (node is ExprConstDouble) return fmt(":.17g", (node as ExprConstDouble).value)
+        if (node is ExprConstBool) return (node as ExprConstBool).value ? "1" : "0"
+        if (node is ExprConstString) return sql_quote_lit(string((node as ExprConstString).value))
     }
     // Bind fallthrough: unrecognized exprs become `?`; sql_bind catch-all + concept_assert error if not bindable.
     if (q.inHaving) {
@@ -3295,18 +3369,22 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" WHERE ")
             w |> write(q.whereSql)
         }
-        // groupByCols hold daslang field names (quoted); translate to SQL identifier here.
+        // nolint:STYLE015 groupByCols hold either daslang field names (quoted) or pre-rendered SQL expression fragments; discriminate via groupByKeyExprs.
         if (!empty(q.groupByCols)) {
             w |> write(" GROUP BY ")
             for (i in range(length(q.groupByCols))) {
                 if (i > 0) {
                     w |> write(", ")
                 }
-                let dasName = group_key_column_name(q, i)
-                let sqlCol = field_to_column_name(q.rootType, dasName)
-                w |> write("\"")
-                w |> write(sqlCol)
-                w |> write("\"")
+                if (q.groupByKeyExprs[i] != null) {
+                    w |> write(q.groupByCols[i])
+                } else {
+                    let dasName = group_key_column_name(q, i)
+                    let sqlCol = field_to_column_name(q.rootType, dasName)
+                    w |> write("\"")
+                    w |> write(sqlCol)
+                    w |> write("\"")
+                }
             }
         }
         if (!empty(q.havingSql)) {
