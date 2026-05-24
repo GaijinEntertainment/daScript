@@ -5,7 +5,7 @@ Generated 2026-05-23 from `0a2da407f`. Probe files live under
 
 ## Status — what this audit has closed
 
-**Theme 1 (terminal `_select` extension) — landed 2026-05-24** (commit TBD):
+**Theme 1 (terminal `_select` extension) — landed 2026-05-24** (`59c4f3f98`):
 
 - **1a, 1e + motivating** (`plan_order_family` / `plan_decs_order_family`): terminal `_select` accepted after `take(N)`. Bounded-heap holds the raw element; projection runs ≤K times at return.
 - **plan_reverse / plan_decs_reverse**: terminal `_select` accepted after `reverse [+ take(N)]`. Closes the natural "filter, reverse for newest-first, take K, project" idiom. NOT closed: the `reverse + _select + take` ordering (2c / 2e exact shape) — user must reorder to `reverse + take + _select`.
