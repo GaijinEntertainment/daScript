@@ -154,7 +154,10 @@ footer_p {
     display: inline-block;
     word-break: break-all;
     margin-block: 0;
-
+    /* Preserve leading whitespace from compiler / runtime output
+       (indented log dumps, ASCII tables). pre-wrap keeps soft-wrap
+       on long lines instead of forcing horizontal scroll. */
+    white-space: pre-wrap;
 }
 
 *.unselectable {

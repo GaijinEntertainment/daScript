@@ -171,14 +171,11 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-mark__glyph {
     width: 22px; height: 22px;
-    border-radius: 4px;
-    background: linear-gradient(135deg, var(--amber), var(--amber-dim));
-    display: grid;
-    place-items: center;
-    color: var(--bg);
-    font-size: 13px;
-    font-weight: 800;
+    color: var(--amber);
+    display: block;
+    flex-shrink: 0;
 }
+.forge-mark__glyph svg { width: 100%; height: 100%; display: block; }
 .forge-mark__tld { color: var(--fg-faint); font-weight: 400; }
 
 /* ───── Hero ───── */
@@ -191,13 +188,29 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     align-items: center;
 }
 
-.forge-kicker {
+.forge-hero__lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+.forge-hero__glyph {
+    width: 64px;
+    height: 64px;
+    color: var(--amber);
+    display: block;
+    flex-shrink: 0;
+}
+.forge-hero__glyph svg { width: 100%; height: 100%; display: block; }
+.forge-hero__eyebrow {
     font-family: var(--font-mono);
     font-size: 12px;
+    font-weight: 500;
     color: var(--amber);
-    letter-spacing: 1.5px;
+    letter-spacing: 1.4px;
+    line-height: 1.15;
     text-transform: uppercase;
-    margin-bottom: 20px;
+    max-width: 260px;
 }
 
 .forge-hero h1 {
@@ -1016,6 +1029,9 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-hero { padding: 48px 0 64px; }
     .forge-hero h1 { font-size: 38px; }
     .forge-hero__lede { font-size: 15px; }
+    .forge-hero__lockup { gap: 14px; margin-bottom: 18px; }
+    .forge-hero__glyph { width: 44px; height: 44px; }
+    .forge-hero__eyebrow { font-size: 11px; }
     .forge-hero__ctas { flex-direction: column; align-items: stretch; }
     .forge-btn-primary, .forge-btn-secondary { justify-content: center; }
     .forge-stats { gap: 18px; flex-wrap: wrap; }
