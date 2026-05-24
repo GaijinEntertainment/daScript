@@ -6110,10 +6110,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // Theme 4: count(p) / long_count(p) fuses as an extra where_-clause AND'd in after the chain. Peel against the projection result (post-select element) when select is present so `zip(a,b)._select(F).count(P)` binds P's param to F's output, not the pre-select tuple — mirrors plan_distinct's pushExpr-peel. With no select, peel against itName.
+    // Theme 4: count(p) / long_count(p) fuses as an extra where_-clause AND'd in after the chain. When select is present we bind projection to a per-element `vproj` local (emitted below, outside the where guard) and peel the predicate against that name — single-evaluation matches eager `select(F).count(P)` semantics (projection fires once per element, predicate sees the projected value). Without select, peel against itName.
+    let vprojName = qn("vproj", at)
+    let bindProjForCounter = counterPred != null && projection != null
     if (counterPred != null) {
         if (projection != null) {
-            counterPred = peel_lambda_replace_var(counterPred, projection)
+            counterPred = peel_lambda_replace_var(counterPred, qmacro($i(vprojName)))
         } else {
             counterPred = peel_lambda_rename_var(counterPred, itName)
         }
@@ -6177,8 +6179,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
     // Build per-element body inside the for-loop. wrap_with_ranges adds skip/take/while guards; wrap_with_condition wraps with `if (whereCond)`.
     var perStmts : array<Expression?>
     if (isCounter) {
-        // Counter lane: if projection has side effects, evaluate it for those effects; then `acc++`.
-        if (seenSelect && !allProjectionsPure) {
+        // Counter lane: if projection has side effects, evaluate it for those effects; then `acc++`. When bindProjForCounter is set, the outer `let vproj = projection` (emitted below, outside the where guard) already covers the side-effect bind — skip vfinal to avoid double evaluation.
+        if (seenSelect && !allProjectionsPure && !bindProjForCounter) {
             let finalBindName = qn("vfinal", at)
             perStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
@@ -6206,8 +6208,18 @@ def private plan_zip(var expr : Expression?) : Expression? {
     }
     wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
-    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path.
-    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure)
+    // vproj must wrap OUTSIDE the where guard — whereCond's spliced-in counterPred references vproj, and projection runs exactly once per element regardless of whether the predicate matches (eager semantics).
+    if (bindProjForCounter) {
+        var preProjStmts : array<Expression?>
+        preProjStmts |> reserve(2)
+        preProjStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            var $i(vprojName) = $e(projection)
+        }
+        preProjStmts |> push(perBody)
+        perBody = stmts_to_expr(preProjStmts)
+    }
+    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path. bindProjForCounter forces projection eval (it reads itA/itB through F), so it needs the `it` bind too.
+    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure || bindProjForCounter)
     let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null
     if (needsItBind) {
         var preStmts : array<Expression?>
