@@ -7,10 +7,11 @@ require _common public
 // SQL lane works via `_sql(... |> _join(db |> select_from(type<Dealer>), ...))`
 // — the projection must be a named-tuple (positional tuples like `(c.name, d.name)`
 // are rejected by `_sql`'s _select shape check; use `(CarName=..., DealerName=...)`).
-// The Decs lane is absent — `_join` doesn't lower onto the archetype walk, and
-// faithfully porting cross-archetype lookup would need a Dealer decs template +
-// hash-by-id index. [Follow-up TODO 2026-05-23: decs join / cross-archetype lookup
-// machinery — see plan_join in linq_fold.das, currently only handles iterator/array.]
+// Decs lane: plan_decs_join (linq_fold.das) builds a hash from the smaller side
+// (dealers) inside one `for_each_archetype` pass, then walks the larger side
+// (cars) and probes — same algorithm as `join_impl` in linq.das (line 1674).
+// Auto-typed result lambda (`$(l,r)=>...`) skips the verbose tuple type spelling
+// over decs sources.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -43,6 +44,20 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
+def run_m4(b : B?; n : int) {
+    fixture_decs_cars_and_dealers(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let c = _fold(from_decs_template(type<DecsCar>) |> _join(from_decs_template(type<DecsDealer>),
+                                                                  $(l, r) => l.dealer_id == r.id,
+                                                                  $(l, r) => (CarName = l.name, DealerName = r.name))
+                                                         |> count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def join_count_m1(b : B?) {
     run_m1(b, 100000)
@@ -51,4 +66,9 @@ def join_count_m1(b : B?) {
 [benchmark]
 def join_count_m3f(b : B?) {
     run_m3f(b, 100000)
+}
+
+[benchmark]
+def join_count_m4(b : B?) {
+    run_m4(b, 100000)
 }
