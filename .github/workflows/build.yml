@@ -556,13 +556,6 @@ jobs:
     # a separate SO chain, and the mingw worker doesn't exercise JIT-uses-
     # dasClangBind paths, so they coexist cleanly.
     #
-    # No `git diff --exit-code` here: the regen emits libclang's reported
-    # source-file paths in `// from ...` comments, and those paths aren't
-    # canonical across --clang_path invocations on Windows (forward-slash
-    # form vs `cygpath -w` mixed-separator form). Verifies "binder runs
-    # end-to-end" only, not "regen output is byte-canonical". A proper
-    # fix (strip path prefix in cbind_boost.das) is a follow-up.
-    #
     # TODO: bind_llvm.das self-binder doesn't run on mingw — libclang as
     # library doesn't find <cstddef> via msys2's libcxx auto-detection.
     # Needs explicit -resource-dir / -isystem injection. Tracked as a
@@ -573,4 +566,6 @@ jobs:
         set -eux
         CLANG_INCLUDE="$(cygpath -w "${MSYSTEM_PREFIX}/include")"
         ./bin/daslang.exe modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
+        git diff --exit-code -- modules/dasClangBind/src/ \
+          || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
 
