@@ -566,7 +566,18 @@ namespace das
         else if ( isnan(val) ) return "NAN";
         else {
             char buf[256];
-            auto result = fmt::format_to(buf, FMT_STRING("{:e}f"), val);
+            // {:e} defaults to %e semantics (6 digits after decimal = 7 sig figs
+            // total), which is below FLT_DECIMAL_DIG=9 — the minimum precision
+            // C++ guarantees for an exact float→text→float roundtrip. Without
+            // 9 sig figs the AOT-emitted literal can parse back to a float that
+            // differs from the value the interpreter/JIT computes at runtime,
+            // shifting boundary cases by 1 ULP. Surfaced as a tests/language/
+            // random_numbers.das failure on the mingw AOT worker: emitting
+            // 1.0f/32767.0f as "3.051851e-05f" reparses slightly high, so
+            // 32767.0f * F rounds to exactly 1.0f and the test's f < 1.0
+            // assertion flips. {:.8e} gives 9 sig figs, matching to_cpp_double's
+            // {:.17e} (= DBL_DECIMAL_DIG=17).
+            auto result = fmt::format_to(buf, FMT_STRING("{:.8e}f"), val);
             *result = 0;
             return buf;
         }

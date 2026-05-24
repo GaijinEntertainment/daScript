@@ -963,9 +963,15 @@ extern "C" {
                 // mingw clang/gcc: Unix-flavored driver, -shared/-o syntax.
                 // No rpath on Windows (DLLs resolve via PATH / LoadLibrary
                 // search order), so the linux branch's rpath escape is
-                // dropped. linkWholeLib gets -Wl,--no-as-needed so the
-                // compiler-library symbols are forced into the JIT'd DLL
-                // even when no JIT'd code references them directly.
+                // dropped. The linux branch's -Wl,--no-as-needed is also
+                // dropped: on ELF, --no-as-needed forces a DT_NEEDED entry
+                // for libraries that the linker would otherwise mark as
+                // not-required (lazy bind). PE/COFF has no such concept —
+                // listed libraries are always recorded in the import table,
+                // so the flag has no effect. Worse, lld on newer mingw
+                // sysroots rejects --no-as-needed as an unknown argument
+                // (older clangs / GNU ld silently ignore it, which is why
+                // this only surfaces on fresh CI installs).
                 // Outer doubled quotes `\"...2>&1\"` wrap the whole command
                 // — popen → cmd.exe strips one quote pair, leaving the
                 // inner per-arg quotes intact. Without this wrap cmd.exe
@@ -974,7 +980,7 @@ extern "C" {
                 cmd = compilerLibrary.empty()
                     ? fmt::format(FMT_STRING("\"\"{}\" {} -o \"{}\" \"{}\" \"{}\" {} 2>&1\""),
                                             linker, linkerParam, libraryName, objFilePath, runtimeLibrary, extra)
-                    : fmt::format(FMT_STRING("\"\"{}\" {} -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1\""),
+                    : fmt::format(FMT_STRING("\"\"{}\" {} -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1\""),
                                             linker, linkerParam, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
             #endif
         #elif defined(__APPLE__)
