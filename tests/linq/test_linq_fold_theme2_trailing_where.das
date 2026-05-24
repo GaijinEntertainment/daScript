@@ -180,7 +180,7 @@ def test_groupby_having_where_decs(t : T?) {
         unsafe {
             let rows <- _fold(from_decs_template(type<DecsItem>)
                 ._group_by(_.category)
-                ._select((Cat = _._0, Total = _._1 |> select(@(i : tuple<category:string;price:int>) => i.price) |> sum))
+                ._select((Cat = _._0, Total = _._1 |> select(@(i : tuple<category : string; price : int>) => i.price) |> sum))
                 ._where(_.Total > 500)
                 |> to_array())
             // Same data as array: A=400, B=1200, C=50. Filter keeps B.
