@@ -23,28 +23,36 @@ How dispatch works
 
 ``_fold`` walks the chain inside-out (terminator first), flattens the
 ``ExprCall`` spine via ``flatten_linq``, and hands the whole thing to
-one of the ``plan_*`` functions below. Each ``plan_*`` either returns
-a specialized expression (the splice) or ``null`` (defer to the
-default). The first non-null wins.
+each ``plan_*`` function below in turn. Each ``plan_*`` either returns
+a specialized expression (the splice) or ``null`` (defer to the next).
+The first non-null wins.
 
-The dispatch order — in priority — is:
+The dispatch order in ``LinqFold.visit`` (``daslib/linq_fold.das``) is:
 
-1. **Decs source** (the source is ``from_decs_template(type<T>)`` or
-   ``from_decs(...)``): ``plan_decs_unroll``,
-   ``plan_decs_group_by``, ``plan_decs_order_family``,
-   ``plan_decs_reverse``, ``plan_decs_distinct``. Decs splices write
-   ``for_each_archetype`` walks; the per-element body reads components
-   directly out of archetype storage.
-2. **Zip source** (``zip(a, b).<...>``): ``plan_zip``. Fuses zip +
-   select + count/sum into a single accumulator loop indexed by the
-   shorter side.
-3. **Array source** with order-family: ``plan_order_family``.
-4. **Array source** with distinct/distinct_by: ``plan_distinct``.
-5. **Array source** with reverse: ``plan_reverse``.
-6. **Array source** with group_by: ``plan_group_by`` →
-   ``plan_group_by_core``.
-7. **Generic array loop**: ``plan_loop_or_count`` — the
-   ``where/select/skip/take + count/sum/aggregate`` workhorse.
+1. ``plan_decs_order_family`` — decs source with order family.
+2. ``plan_order_family`` — array source with order family.
+3. ``plan_decs_reverse`` — decs source with ``reverse``.
+4. ``plan_reverse`` — array source with ``reverse``.
+5. ``plan_decs_distinct`` — decs source with ``distinct``/``distinct_by``.
+6. ``plan_distinct`` — array source with ``distinct``/``distinct_by``.
+7. ``plan_decs_group_by`` — decs source with ``group_by`` (dispatches
+   to the shared ``plan_group_by_core``).
+8. ``plan_group_by`` — array source with ``group_by`` (same shared core).
+9. ``plan_decs_unroll`` — generic decs walk
+   (``where``/``select``/``skip``/``take`` + counter / accumulator /
+   early-exit / walk lane).
+10. ``plan_zip`` — ``zip(a, b)`` source.
+11. ``plan_loop_or_count`` — generic array walk
+    (``where``/``select``/``skip``/``take`` + counter / accumulator /
+    early-exit terminator).
+12. ``fold_linq_default`` — fallback, no splice.
+
+The decs and array variants are interleaved (each decs plan runs
+before its array counterpart) because a chain starting with
+``from_decs_template(...)`` must hit the decs splice — falling through
+to the array plan would not match and would force the default. The
+generic decs walk (``plan_decs_unroll``) runs after the specialized
+decs plans so it doesn't shadow them.
 
 Source-side entry points
 ========================
@@ -84,7 +92,7 @@ Array-source patterns
      - O(1) length read when the source has a known length.
    * - ``._where(P).count()`` / ``.long_count()``
      - ``plan_loop_or_count`` → ``emit_counter_lane``
-     - Per-archetype counter, no allocation.
+     - Single counter, no allocation; one pass over the array.
    * - ``._where(P)._select(F).sum()`` / ``.average()`` / ``.min()`` / ``.max()`` / ``.aggregate(seed, op)``
      - ``plan_loop_or_count`` → ``emit_accumulator_lane``
      - Single-pass scalar reduce; ``where`` and ``select`` fuse into the body.

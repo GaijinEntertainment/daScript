@@ -6,7 +6,6 @@ LINQ over DECS
 
 .. index::
     single: Tutorial; LINQ over DECS
-    single: Tutorial; from_decs
     single: Tutorial; from_decs_template
     single: Tutorial; _fold over decs
     single: Tutorial; decs splice
@@ -16,6 +15,8 @@ This tutorial covers ``daslib/linq_fold``'s decs lane — how a
 ``from_decs_template(type<T>)``, and how the ``_fold`` macro splices
 ``where`` / ``select`` / ``order_by`` / ``group_by`` chains into a
 single per-archetype walk without materializing intermediate iterators.
+The runtime component-name variant (``from_decs(...)``) is out of
+scope here — see the ``decs_boost`` module reference.
 
 It assumes you have read :ref:`tutorial_linq` (the linq surface and the
 ``_fold`` macro) and :ref:`tutorial_decs` (entities, components, queries,

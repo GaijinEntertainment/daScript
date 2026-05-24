@@ -2,7 +2,6 @@
 //
 // This tutorial covers:
 //   - from_decs_template — exposes a [decs_template] type as a linq source
-//   - from_decs — same, but driven by a runtime list of component names
 //   - _fold over decs — single-pass per-archetype walks (no intermediate array)
 //   - Canonical fold shapes: where + count, order_by + first, group_by + select
 //   - When to reach for the decs lane vs an in-memory array lane

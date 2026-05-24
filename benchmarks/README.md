@@ -66,7 +66,7 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|---|
 | `m1` (SQL) | `:memory:` SQLite | `_sql` macro — compile-time SQL emission, work pushed to the engine |
 | `m3f` (Array) | pre-populated `array<Car>` | `_fold` over `each(arr).chain()` — fuses the chain into a single pass |
-| `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<Car>).chain()` — fuses into a per-archetype walk |
+| `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<DecsCar>).chain()` — fuses into a per-archetype walk |
 
 The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 

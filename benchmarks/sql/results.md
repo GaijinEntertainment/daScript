@@ -142,20 +142,27 @@ The reasons each cell is empty are also recorded as a comment in the
 corresponding `.das` bench file; the bullets below quote that comment.
 
 - **`distinct_by_count` SQL** — sqlite_linq does not currently lower
-  `_distinct_by(...) |> count()`. Probe error: `_sql: unsupported chain
-  root or operator. Got: __::linq\`distinct_by\`...`. Follow-up TODO
-  2026-05-23: add a dispatch arm in sqlite_linq for
-  distinct/distinct_by.
+  `_distinct_by(...) |> count()`. Follow-up TODO 2026-05-23: add a
+  dispatch arm in sqlite_linq for distinct/distinct_by. Probe error:
+
+  ```
+  error[50503]: _sql: unsupported chain root or operator.
+    Got: __::linq`distinct_by`...
+  ```
 - **`groupby_first` SQL** — no direct SQL aggregator for "first
   source-order row per group". Window functions (`ROW_NUMBER() OVER
   (PARTITION BY brand ORDER BY id)` + outer `WHERE rn=1`) would be the
   SQL equivalent; sqlite_linq does not currently lower window
   functions. Follow-up TODO 2026-05-23.
 - **`groupby_select_sum` SQL** — sqlite_linq's `_group_by` requires
-  `_.Field` or a tuple of `_.Field`s; the expression key (`_ % 100`) is
-  rejected. Probe error: `_sql: _group_by: key must be \`_.Field\` or a
-  tuple of \`_.Field\`s; got: (_ % 100)`. Follow-up TODO 2026-05-23:
-  expression-key support in sqlite_linq lowering.
+  `_.Field` or a tuple of `_.Field`s; the expression key (`_ % 100`)
+  is rejected. Follow-up TODO 2026-05-23: expression-key support in
+  sqlite_linq lowering. Probe error:
+
+  ```
+  error[50503]: _sql: _group_by: key must be `_.Field` or
+    a tuple of `_.Field`s; got: (_ % 100)
+  ```
 - **`take_count_filtered` SQL** — by design. In SQL, LIMIT after an
   aggregate has no effect (the aggregate collapses to one row), so the
   bound-then-count shape has no faithful SQL translation. No follow-up.
