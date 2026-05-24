@@ -77,10 +77,14 @@ namespace das {
         program->library.foreach ([&](Module *mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList ) {
+                    // Hoist module-level visibility — pFn->module == mod for non-generic fns (set in addFunction).
+                    const bool modVis = isVisibleFunc(inWhichModule, mod);
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         // if ( pFn->isTemplate ) continue;
-                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
+                        const bool funcVis = !pFn->fromGeneric ? modVis
+                                          : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                        if ( funcVis ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 result.push_back(pFn);
                             }
@@ -391,11 +395,16 @@ namespace das {
         program->library.foreach ([&](Module *mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList ) {
+                    // Hoist module-level visibility — pFn->module == mod for non-generic fns.
+                    const bool modVis = isVisibleFunc(inWhichModule, mod);
+                    const bool modVisFromThis = thisModule->isVisibleDirectly(mod);
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
-                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
-                            if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                        const bool funcVis = !pFn->fromGeneric ? modVis
+                                          : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                        if ( funcVis ) {
+                            if ( !pFn->fromGeneric || modVisFromThis ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( isFunctionCompatible(pFn, types, arguments, false, inferBlock) ) {
                                         result.push_back(pFn);
@@ -428,12 +437,18 @@ namespace das {
         program->library.foreach ([&](Module *mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList ) {
+                    // Hoist module-level visibility — pFn->module == mod for non-generic fns.
+                    const bool modVis = visCheck ? isVisibleFunc(inWhichModule, mod) : true;
+                    const bool modVisFromThis = thisModule->isVisibleDirectly(mod);
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->jitOnly && !jitEnabled() ) continue;
                         if ( pFn->isTemplate ) continue;
-                        if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
-                            if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                        const bool funcVis = !visCheck ? true
+                                          : !pFn->fromGeneric ? modVis
+                                          : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                        if ( funcVis ) {
+                            if ( !pFn->fromGeneric || modVisFromThis ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( !argHash ) {
                                         argHash = fragile_bit_set::key(getLookupHash(types));
@@ -468,11 +483,16 @@ namespace das {
                 {   // functions
                     auto itFnList = mod->functionsByName.find(hFuncName);
                     if ( itFnList ) {
+                        // Hoist module-level visibility — pFn->module == mod by construction.
+                        const bool modVis = isVisibleFunc(inWhichModule, mod);
+                        const bool modVisFromThis = thisModule->isVisibleDirectly(mod);
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
-                                if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                            const bool funcVis = !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
+                                if ( !pFn->fromGeneric || modVisFromThis ) {
                                     if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         if ( isFunctionCompatible(pFn, types, arguments, false, inferBlock) ) {
                                             resultFunctions.push_back(pFn);
@@ -486,11 +506,14 @@ namespace das {
                 {   // generics
                     auto itFnList = mod->genericsByName.find(hFuncName);
                     if ( itFnList ) {
+                        const bool modVis = isVisibleFunc(inWhichModule, mod);
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !jitEnabled() ) continue;
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
+                            const bool funcVis = !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?
                                         resultGenerics.push_back(pFn);
@@ -512,12 +535,18 @@ namespace das {
                 { // functions
                     auto itFnList = mod->functionsByName.find(hFuncName);
                     if ( itFnList ) {
+                        // Hoist module-level visibility — pFn->module == mod by construction.
+                        const bool modVis = visCheck ? isVisibleFunc(inWhichModule, mod) : true;
+                        const bool modVisFromThis = thisModule->isVisibleDirectly(mod);
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !jitEnabled() ) continue;
                             if ( pFn->isTemplate ) continue;
-                            if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
-                                if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                            const bool funcVis = !visCheck ? true
+                                              : !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
+                                if ( !pFn->fromGeneric || modVisFromThis ) {
                                     if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
                                         if ( *itLook ) {
@@ -541,10 +570,14 @@ namespace das {
                 { // generics
                     auto itFnList = mod->genericsByName.find(hFuncName);
                     if ( itFnList ) {
+                        const bool modVis = visCheck ? isVisibleFunc(inWhichModule, mod) : true;
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
-                            if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
+                            const bool funcVis = !visCheck ? true
+                                              : !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
                                 if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
                                     if ( *itLook ) {
