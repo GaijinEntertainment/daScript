@@ -20,6 +20,15 @@ static void clear_store_data_locked() {
             ++it;
         }
     }
+    for (auto it = g_state.store_strings.begin(); it != g_state.store_strings.end(); ) {
+        const auto & key = it->first;
+        if (key.compare(0, 12, "__live_vars_") == 0 ||
+            key.compare(0, 7, "__decs_") == 0) {
+            it = g_state.store_strings.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 // Exported C functions for the host executable to access state.
@@ -51,6 +60,13 @@ extern "C" {
         for (auto it = g_state.store.begin(); it != g_state.store.end(); ) {
             if (it->first.compare(0, 12, "__live_vars_") == 0) {
                 it = g_state.store.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = g_state.store_strings.begin(); it != g_state.store_strings.end(); ) {
+            if (it->first.compare(0, 12, "__live_vars_") == 0) {
+                it = g_state.store_strings.erase(it);
             } else {
                 ++it;
             }
@@ -181,6 +197,21 @@ bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx) {
     if (sz > 0) {
         memcpy(data.data, src.data(), sz);
     }
+    return true;
+}
+
+void live_store_string(const char * key, const char * value) {
+    if (!key) return;
+    lock_guard<mutex> lock(g_state.store_mutex);
+    g_state.store_strings[key] = value ? value : "";
+}
+
+bool live_load_string(const char * key, char * & value, Context * ctx) {
+    if (!key) return false;
+    lock_guard<mutex> lock(g_state.store_mutex);
+    auto it = g_state.store_strings.find(key);
+    if (it == g_state.store_strings.end()) return false;
+    value = ctx->allocateString(it->second, nullptr);
     return true;
 }
 
@@ -378,6 +409,15 @@ public:
         addExtern<DAS_BIND_FUN(live_load_bytes)>(*this, lib, "live_load_bytes",
             SideEffects::modifyArgumentAndExternal, "das::live_load_bytes")
                 ->args({"key", "data", "context"});
+        // String siblings of live_store_bytes / live_load_bytes — JSON-text rail
+        // for the LiveVarsPassMacro / dasImgui widget serializer pivot. Separate
+        // store from `store` so runtime-debugger output of JSON text stays readable.
+        addExtern<DAS_BIND_FUN(live_store_string)>(*this, lib, "live_store_string",
+            SideEffects::modifyExternal, "das::live_store_string")
+                ->args({"key", "value"});
+        addExtern<DAS_BIND_FUN(live_load_string)>(*this, lib, "live_load_string",
+            SideEffects::modifyArgumentAndExternal, "das::live_load_string")
+                ->args({"key", "value", "context"});
 
         // GC
         addExtern<DAS_BIND_FUN(live_collect_gc)>(*this, lib, "live_collect_gc",
