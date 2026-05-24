@@ -77,11 +77,16 @@ jobs:
       uses: emscripten-core/setup-emsdk@v11
       with:
         # Every emsdk pin snapshots LLVM main (not a release tag). 5.0.3
-        # resolves to clang 23.0.0git from 2026-03-13 — recent enough that
-        # the preprocessor has intermittently bus-errored on the bison-
-        # generated utils/dasFormatter/ds_parser.cpp. If that recurs we'll
-        # downgrade the family (4.0.23 ≈ pre-LLVM-22.1.0 main snapshot).
-        version: '5.0.3'
+        # resolved to clang 23.0.0git (2026-03-13 main snapshot) and
+        # repeatedly broke on the bison-generated
+        # utils/dasFormatter/ds_parser.cpp — bus-errors one run, EOF-inside-
+        # `#ifndef` parse errors the next, while native clang on the same
+        # runner compiled the same file fine. 4.0.23 is the last 4.x
+        # release (2026-01-10), pinning LLVM main from 2026-01-09 (pre-
+        # LLVM-22.1.0-release, roughly clang 22.0.0git) — far enough back
+        # to dodge the clang-23-preview preprocessor regression and the
+        # closest emsdk we have to dasLLVM's 22.1.5 pin.
+        version: '4.0.23'
 
     - name: "Build WASM (Emscripten) for /playground/ + /files/wasm/"
       run: |
