@@ -5261,6 +5261,136 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     return finalize_decs_emission(emission, at, expr._type.isIterator && needBuffer)
 }
 
+// ── decs join splice (Session 3 — hashed O(N+M) via collect-on-srcb + probe-on-srca) ───────
+
+[macro_function]
+def private plan_decs_join(var expr : Expression?) : Expression? {
+    // Hashed equi-join over two from_decs_template eager bridges. Walks the smaller side (srcb in the source order — the user writes the smaller side as srcb) into a `table<KEY; array<TUPB>>`, then walks the larger side (srca) and probes via `table.get`. Matches array-side `join_impl` algorithm (linq.das:1674) but inlines keya/keyb/result lambdas so per-pair invoke overhead vanishes. For v1: only the `[join, count]` and `[join, <implicit to_array>]` shapes; interleaved where/select bails to tier-2. Runtime-value or non-primitive keys: keya/keyb's block return type is used directly as the table key type — primitive equi-keys (int, string) are the common case and the `_join` macro's equi-shape constraint keeps the key expression on one side of `==`.
+    var (top, calls) = flatten_linq(expr)
+    if (expr._type == null) return null
+    // Terminator: count (1-arg) or implicit to_array. Anything else cascades.
+    var terminatorName : string = ""
+    {
+        let lastName = empty(calls) ? "" : calls.back()._1.name
+        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
+            terminatorName = lastName
+            calls |> pop
+        }
+    }
+    // Must end on a single `join` call now — interleaved where/select unsupported in v1.
+    if (empty(calls) || calls.back()._1.name != "join") return null
+    var joinCall = calls.back()._0
+    calls |> pop
+    if (!empty(calls) || (terminatorName == "" && !expr._type.isGoodArrayType)) return null
+    // Both sides must be from_decs_template eager bridges.
+    var bridgeA = extract_decs_bridge(top)
+    if (bridgeA == null || joinCall.arguments |> length != 5) return null
+    var bridgeB = extract_decs_bridge(joinCall.arguments[1])
+    if (bridgeB == null) return null
+    // keya/keyb are LinqJoin-macro-synthesized: $($i(la_fresh) : iterTypeA) => keya_body — 1-arg single-return. Block return type IS the key type.
+    var keyaLam = joinCall.arguments[2]
+    var keybLam = joinCall.arguments[3]
+    if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
+    let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+    // Primitive-only key types — non-primitive keys would need `_::unique_key()` wrapping at probe/insert sites to match join_impl's hash semantics (daslib/linq.das:1678). Cascade everything else to tier-2 so join_impl handles them correctly.
+    if (keyType == null
+            || (keyType.baseType != Type.tInt && keyType.baseType != Type.tInt64
+                && keyType.baseType != Type.tUInt && keyType.baseType != Type.tUInt64
+                && keyType.baseType != Type.tInt8 && keyType.baseType != Type.tUInt8
+                && keyType.baseType != Type.tInt16 && keyType.baseType != Type.tUInt16
+                && keyType.baseType != Type.tString
+                && keyType.baseType != Type.tFloat && keyType.baseType != Type.tDouble
+                && keyType.baseType != Type.tBool)) return null
+    let at = joinCall.at
+    let tupAName = qn("decs_tup_a", at)
+    let tupBName = qn("decs_tup_b", at)
+    let hashName = qn("decs_hash", at)
+    let cntName = qn("decs_jcnt", at)
+    let bufName = qn("decs_jbuf", at)
+    let bElemName = qn("decs_jb", at)
+    let arrName = qn("decs_jarr", at)
+    var keyaBody = peel_lambda_rename_var(keyaLam, tupAName)
+    var keybBody = peel_lambda_rename_var(keybLam, tupBName)
+    if (keyaBody == null || keybBody == null) return null
+    var tupBindA = build_decs_tup_bind(bridgeA, tupAName, at)
+    var tupBindB = build_decs_tup_bind(bridgeB, tupBName, at)
+    if (tupBindA == null || tupBindB == null) return null
+    let tupBType = strip_const_ref(clone_type(bridgeB.elementType))
+    // Collect loop: hash all of srcb keyed by keyb(tupb).
+    var collectBody <- qmacro_block_to_array() {
+        // nolint:PERF006 per-key bucket size unknown ahead of time
+        $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
+    }
+    var collectInner = build_decs_inner_for(bridgeB, tupBindB, stmts_to_expr(collectBody), at)
+    // Result builder branches on terminator.
+    var probeStmts : array<Expression?>
+    var preludeStmts : array<Expression?>
+    var returnStmt : Expression?
+    if (terminatorName == "count") {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(cntName) : int = 0
+        }
+        probeStmts |> push <| qmacro_expr() {
+            $i(cntName) += length($i(arrName))
+        }
+        returnStmt = qmacro_expr() {
+            return $i(cntName)
+        }
+    } else {
+        var resultLam = joinCall.arguments[4]
+        if (resultLam == null) return null
+        var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
+        if (resultBody == null) return null
+        let resultType = clone_type(expr._type.firstType)
+        if (resultType == null) return null
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(resultType)>
+        }
+        probeStmts |> push <| qmacro_expr() {
+            for ($i(bElemName) in $i(arrName)) {
+                $i(bufName) |> push_clone($e(resultBody))
+            }
+        }
+        returnStmt = qmacro_expr() {
+            return <- $i(bufName)
+        }
+    }
+    // Probe loop: walk srca; on hash hit invoke probeStmts with the matched bucket bound as arrName. Block takes `var arr` so it matches table::get's mutating overload (we don't mutate, but the const overload is gated on a const Tab which a `var hash` local is not).
+    var probeWrapBody <- qmacro_block_to_array() {
+        get($i(hashName), $e(keyaBody), $(var $i(arrName) : array<$t(tupBType)>) {
+            $b(probeStmts)
+        })
+    }
+    var probeInner = build_decs_inner_for(bridgeA, tupBindA, stmts_to_expr(probeWrapBody), at)
+    // Assemble outer zero-arg invoke.
+    var allStmts : array<Expression?>
+    allStmts |> push_from(preludeStmts)
+    allStmts |> push <| qmacro_expr() {
+        var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+    }
+    allStmts |> push <| qmacro_expr() {
+        for_each_archetype($e(bridgeB.reqHashExpr), $e(bridgeB.erqExpr), $($i(bridgeB.archName) : Archetype) {
+            $e(collectInner)
+        })
+    }
+    allStmts |> push <| qmacro_expr() {
+        for_each_archetype($e(bridgeA.reqHashExpr), $e(bridgeA.erqExpr), $($i(bridgeA.archName) : Archetype) {
+            $e(probeInner)
+        })
+    }
+    allStmts |> push(returnStmt)
+    var retType : TypeDeclPtr
+    if (terminatorName == "count") {
+        retType = new TypeDecl(baseType = Type.tInt, at = at)
+    } else {
+        retType = clone_type(expr._type)
+    }
+    var emission = qmacro(invoke($() : $t(retType) {
+        $b(allStmts)
+    }))
+    return finalize_decs_emission(emission, at, false)
+}
+
 [macro_function]
 def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
@@ -5586,6 +5716,8 @@ class private LinqFold : AstCallMacro {
         res = plan_group_by(call.arguments[0])
         if (res != null) return res
         res = plan_decs_unroll(call.arguments[0])
+        if (res != null) return res
+        res = plan_decs_join(call.arguments[0])
         if (res != null) return res
         res = plan_zip(call.arguments[0])
         if (res != null) return res

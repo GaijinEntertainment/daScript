@@ -535,6 +535,22 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         let lb_fresh = "__lb__"
         var keya_body = rename_var_in_expr(parts.keya_body, parts.larg_name, la_fresh)
         var keyb_body = rename_var_in_expr(parts.keyb_body, parts.rarg_name, lb_fresh)
+        // Auto-type the result lambda's args when untyped — symmetric with `on`, which accepts `(l,r)=>...` without types. Lets users write `_join(..., $(l,r)=>l.id==r.id, $(l,r)=>(l.x,r.y))` against any source — including from_decs_template(type<T>) where the iterator element is a tuple<...> that's painful to spell out by hand. Plain `_join` only: `_left_join` / `_right_join` / `_full_outer_join` need Option<T> on one or both sides, so their untyped result lambdas must stay user-spelled.
+        if (fnName == "join") {
+            var resultArg = call.arguments[3]
+            if (resultArg != null && resultArg is ExprMakeBlock) {
+                var rblk = (resultArg as ExprMakeBlock)._block
+                if (rblk != null && rblk is ExprBlock) {
+                    var rb = rblk as ExprBlock
+                    if (rb.arguments |> length == 2
+                            && (rb.arguments[0]._type == null || rb.arguments[0]._type.isAutoOrAlias)
+                            && (rb.arguments[1]._type == null || rb.arguments[1]._type.isAutoOrAlias)) {
+                        rb.arguments[0]._type = clone_type(iterTypeA)
+                        rb.arguments[1]._type = clone_type(iterTypeB)
+                    }
+                }
+            }
+        }
         var res = qmacro($c(fnName)(
             $e(call.arguments[0]),
             $e(call.arguments[1]),

@@ -88,6 +88,12 @@ struct public DecsCar {
     dealer_id : int
 }
 
+[decs_template(prefix = "dealer_")]
+struct public DecsDealer {
+    id   : int
+    name : string
+}
+
 def public fixture_decs(n : int) {
     restart()
     create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
@@ -98,6 +104,27 @@ def public fixture_decs(n : int) {
             brand = i % BRAND_COUNT,
             year = 2010 + (i * 7) % 16,
             dealer_id = (i % DEALER_COUNT) + 1
+        ))
+    }
+}
+
+// Cars + Dealers together for the decs join lane. Both archetypes co-exist in the same decs world; plan_decs_join builds an in-query hash from the smaller side (dealers) then walks the larger side (cars).
+def public fixture_decs_cars_and_dealers(n : int) {
+    restart()
+    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsCar(
+            id = i + 1,
+            name = "Car{i}",
+            price = (i * 37) % 1000,
+            brand = i % BRAND_COUNT,
+            year = 2010 + (i * 7) % 16,
+            dealer_id = (i % DEALER_COUNT) + 1
+        ))
+    }
+    create_entities(DEALER_COUNT) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsDealer(
+            id = i + 1,
+            name = "Dealer{i}"
         ))
     }
 }

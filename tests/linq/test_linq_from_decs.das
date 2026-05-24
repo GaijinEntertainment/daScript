@@ -3265,3 +3265,94 @@ def test_reverse_take_empty_source(t : T?) {
     t |> success(empty(got), "empty source returns empty")
 }
 
+// ── Session 3: plan_decs_join — hashed equi-join over two from_decs_template eager bridges ──
+
+[decs_template(prefix = "jt_car_")]
+struct JoinTestCar {
+    id        : int
+    dealer_id : int
+}
+
+[decs_template(prefix = "jt_dealer_")]
+struct JoinTestDealer {
+    id   : int
+    name : string
+}
+
+def private join_test_fixture(numCars, numDealers : int) {
+    restart()
+    create_entities(numCars) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, JoinTestCar(id = i + 100, dealer_id = (i % max(numDealers, 1)) + 1))
+    }
+    create_entities(numDealers) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, JoinTestDealer(id = i + 1, name = "D{i}"))
+    }
+}
+
+[test]
+def test_decs_join_count_basic(t : T?) {
+    // 10 cars × 5 dealers, each car matches exactly one dealer.
+    join_test_fixture(10, 5)
+    let c = _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
+                                                                  $(l, r) => l.dealer_id == r.id,
+                                                                  $(l, r) => (l.id, r.name))
+                                                         |> count())
+    t |> equal(c, 10, "every car matches exactly one dealer")
+}
+
+[test]
+def test_decs_join_count_unmatched_cars(t : T?) {
+    // 5 cars with dealer_id 1..5, only 3 dealers (ids 1..3) — cars whose dealer_id is 4 or 5 (the 4th and 5th car) are unmatched, so 3 of 5 cars contribute.
+    restart()
+    create_entities(5) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, JoinTestCar(id = i + 100, dealer_id = i + 1))
+    }
+    create_entities(3) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, JoinTestDealer(id = i + 1, name = "D{i}"))
+    }
+    let c = _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
+                                                                  $(l, r) => l.dealer_id == r.id,
+                                                                  $(l, r) => (l.id, r.name))
+                                                         |> count())
+    t |> equal(c, 3, "only cars with matching dealer ids contribute")
+}
+
+[test]
+def test_decs_join_empty_sides(t : T?) {
+    restart()
+    let c = _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
+                                                                  $(l, r) => l.dealer_id == r.id,
+                                                                  $(l, r) => (l.id, r.name))
+                                                         |> count())
+    t |> equal(c, 0, "no entities → 0 pairs")
+}
+
+[test]
+def test_decs_join_many_to_one(t : T?) {
+    // 10 cars distributed across 2 dealers — each car matches one dealer; counts 10.
+    join_test_fixture(10, 2)
+    let c = _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
+                                                                  $(l, r) => l.dealer_id == r.id,
+                                                                  $(l, r) => (l.id, r.name))
+                                                         |> count())
+    t |> equal(c, 10, "many-cars-to-one-dealer-each yields one pair per car")
+}
+
+[test]
+def test_decs_join_to_array_projection(t : T?) {
+    // to_array path: named-tuple projection picks up CarId / DealerName.
+    join_test_fixture(6, 3)
+    let arr <- _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
+                                                                     $(l, r) => l.dealer_id == r.id,
+                                                                     $(l, r) => (CarId = l.id, DealerName = r.name))
+                                                            |> to_array())
+    t |> equal(length(arr), 6, "every car matched")
+    // Each row's CarId is 100..105, DealerName is D0..D2 in round-robin order. Order isn't guaranteed across archetypes, so check the set.
+    var seen : table<int>
+    for (row in arr) {
+        seen |> insert(row.CarId)
+        t |> success(row.DealerName |> starts_with("D"), "dealer name prefixed D")
+    }
+    t |> equal(length(seen), 6, "all 6 distinct car ids present")
+}
+
