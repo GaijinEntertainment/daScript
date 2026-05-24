@@ -224,6 +224,7 @@ namespace das {
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
+        bool computeAliasCache();     // eager full walk, populates aliasCacheValid/aliasCacheHasAlias on every visited node; returns true if subtree contains any alias
         int findArgumentIndex(const string & name) const;
         int tupleFieldIndex( const string & name ) const;
         int variantFieldIndex( const string & name ) const;
@@ -284,6 +285,8 @@ namespace das {
                                                 //  unsigned-underlying enum (uint8/uint16/uint64). Lets `int(uint8Enum)`
                                                 //  resolve to enum8u_to_int instead of enum8_to_int so the byte
                                                 //  zero-extends instead of sign-extending.
+                bool    aliasCacheValid : 1;    // findAlias subtree cache validity flag
+                bool    aliasCacheHasAlias : 1; // findAlias subtree cache result (only meaningful when aliasCacheValid)
             };
             uint32_t flags = 0;
         };
