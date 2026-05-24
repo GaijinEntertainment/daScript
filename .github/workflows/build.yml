@@ -548,3 +548,23 @@ jobs:
         cd bin
         ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../tests
 
+    # bind_clangbind self-binder lives here (not on linux extended_checks)
+    # because dasClangBind on linux pulls libclang.so → libLLVM-22.so.1,
+    # which collides with dasLLVM in the same process (shared pass
+    # registry, double-init breaks JIT). msys2 clang64 ships libclang as
+    # a separate SO chain, and the mingw worker doesn't exercise JIT-uses-
+    # dasClangBind paths, so they coexist cleanly.
+    #
+    # TODO: bind_llvm.das self-binder doesn't run on mingw — libclang as
+    # library doesn't find <cstddef> via msys2's libcxx auto-detection.
+    # Needs explicit -resource-dir / -isystem injection. Tracked as a
+    # follow-up; we lose master's previous bind_llvm.das CI coverage in
+    # the meantime.
+    - name: "Run self-binder (bind_clangbind.das)"
+      run: |
+        set -eux
+        CLANG_INCLUDE="$(cygpath -w "${MSYSTEM_PREFIX}/include")"
+        ./bin/daslang.exe modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
+        git diff --exit-code -- modules/dasClangBind/src/ \
+          || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
+
