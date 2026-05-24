@@ -76,8 +76,11 @@ jobs:
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
       with:
-        # Pinned: 5.0.7's clang crashes on utils/dasFormatter/ds_parser.cpp
-        # in diagnostic snippet rendering. 5.0.3 known-good.
+        # Every emsdk pin snapshots LLVM main (not a release tag). 5.0.3
+        # resolves to clang 23.0.0git from 2026-03-13 — recent enough that
+        # the preprocessor has intermittently bus-errored on the bison-
+        # generated utils/dasFormatter/ds_parser.cpp. If that recurs we'll
+        # downgrade the family (4.0.23 ≈ pre-LLVM-22.1.0 main snapshot).
         version: '5.0.3'
 
     - name: "Build WASM (Emscripten) for /playground/ + /files/wasm/"
@@ -89,7 +92,6 @@ jobs:
         # daslang_static.wasm playground + stage_site_playground (vendored UI
         # + js/wasm) + stage_site_playground_wasm (cross-compiled examples).
         ninja daslang_static stage_site_playground stage_site_playground_wasm
-      continue-on-error: true
 
     - name: "Fetch dasProfile per-platform benchmark JSONs"
       # dasProfile now ships a per-platform JSON file
@@ -136,12 +138,12 @@ jobs:
             --out _site/
 
         # Playground: vendor web/ui IDE + WASM artifacts.
-        # The WASM build step has continue-on-error so docs/blog still publish
-        # when emsdk hiccups. The cost of that resilience is partial state:
-        # web/output may exist without the daslang_static.{js,wasm} artifacts.
-        # Refuse to stage a half-built playground in that case — Pages preserves
-        # the previously-deployed /playground/, so the visible Run button keeps
-        # working instead of 404'ing its runtime.
+        # The WASM build step now fails the workflow (no continue-on-error),
+        # so under normal master deploys we always take the if-branch. The
+        # else-branch survives as defense-in-depth — if the artifacts ever
+        # go missing despite a green build, we stage a placeholder rather
+        # than 404'ing the route (actions/deploy-pages publishes _site as
+        # a complete snapshot, no layering over the prior deploy).
         if [ -f web/output/daslang_static.js ] && [ -f web/output/daslang_static.wasm ]; then
             mkdir -p _site/playground _site/files/wasm
             # Copy IDE source files (CodeMirror, jQuery, main.js/css, etc.)
