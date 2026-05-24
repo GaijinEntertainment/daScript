@@ -106,10 +106,17 @@
 #endif
 
 #ifndef _MSC_VER
-    #define __forceinline inline __attribute__((always_inline))
-    #define ___noinline __attribute__((noinline))
+    // Only define if not already defined by the compiler/system headers
+    #ifndef __forceinline
+        #define __forceinline inline __attribute__((always_inline))
+    #endif
+    #ifndef ___noinline
+        #define ___noinline __attribute__((noinline))
+    #endif
 #else
-    #define ___noinline __declspec(noinline)
+    #ifndef ___noinline
+        #define ___noinline __declspec(noinline)
+    #endif
 #endif
 
 #if defined(__has_feature)

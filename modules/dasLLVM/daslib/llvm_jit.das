@@ -5759,7 +5759,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f_ptr(v4f : LLVMOpaqueValue?; ptr_type : LLVMOpaqueType?) : LLVMOpaqueValue? {
         var tres : LLVMOpaqueValue?
-        if (typeinfo sizeof(type<void?>) == 8) {
+        static_if (typeinfo sizeof(type<void?>) == 8) {
             var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(types.t_int64, 2u), "")
             var tbit = LLVMBuildExtractElement(g_builder, v2, types.ConstI32(0ul), "")
             tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "vec4f_to_ptr")
@@ -5946,7 +5946,7 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (etype.baseType == Type.anyArgument) {
             tres = tsrc
         } elif (etype.isFunction) {
-            assert(typeinfo sizeof(type<void?>) == 8)
+            static_assert(typeinfo sizeof(type<void?>) == 8)
             var vvec = LLVMGetUndef(LLVMVectorType(types.t_int64, 2u))
             var tbits = LLVMBuildExtractValue(g_builder, tsrc, 0u, "")
             tbits = LLVMBuildPtrToInt(g_builder, tbits, types.t_int64, "")
