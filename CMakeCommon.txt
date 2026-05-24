@@ -129,6 +129,21 @@ MACRO(SETUP_COMPILER)
         ADD_COMPILE_OPTIONS(-Wno-strict-aliasing) # disable warnings
         ADD_COMPILE_OPTIONS(-fno-strict-aliasing) # disable strict aliasing optimizations
     ENDIF()
+    # Treat signed integer overflow as two's-complement wrap.
+    # daslang signed arithmetic is defined to wrap. AOT lowers it to plain C++
+    # `int * int` / `int + int`, which is UB at the C++ level and modern
+    # clangs (AppleClang 21+, mingw clang 22+, presumably newer linux clangs)
+    # exploit it (e.g. the LCG step in daslib/random.das becomes miscompiled,
+    # producing values that violate the trailing `& 0x7FFF` mask). -fwrapv
+    # makes the C++ output faithfully match daslang's semantics across every
+    # gcc / clang-driver build (excluding clang-cl, which uses MSVC-style
+    # flags and doesn't expose this option; MSVC defaults to wrap anyway).
+    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR
+       ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND
+        NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC") OR
+       "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+        ADD_COMPILE_OPTIONS(-fwrapv)
+    ENDIF()
     IF(EMSCRIPTEN)
         ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
@@ -138,12 +153,9 @@ MACRO(SETUP_COMPILER)
 	ELSEIF(APPLE)
 		ADD_DEFINITIONS(-DITS_PLATFORM_APPLE=1)
 		ADD_DEFINITIONS(-Wall -Wextra -pedantic)
-		# Treat signed integer overflow as two's-complement wrap.
-		# daslang signed arithmetic is defined to wrap. AOT lowers it to plain C++
-		# `int * int` / `int + int`, which is UB at the C++ level and AppleClang 21+
-		# exploits it (e.g. the LCG step in daslib/random.das becomes miscompiled).
-		# -fwrapv makes the C++ output faithfully match daslang's semantics.
-		ADD_COMPILE_OPTIONS(-fwrapv)
+		# -fwrapv now applied unconditionally to every gcc/clang build at the
+		# top of SETUP_COMPILER (was Apple-only originally; mingw clang 22+
+		# hits the same UB-exploit, see comment above the unified gate).
 		# UNCOMMENT FOR ASAN
 		# ADD_DEFINITIONS("-fsanitize=thread")
 		# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
