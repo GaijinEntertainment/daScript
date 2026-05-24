@@ -7,10 +7,9 @@ let THRESHOLD = 1000
 
 // _select(_.price * 2) |> _where(_ > T) |> count — where-after-select pattern.
 // SQL: SELECT COUNT(*) FROM Cars WHERE price * 2 > T.
-// m3 (plain LINQ) materializes a projection iterator, then a filter array, then counts.
-// m3f (spliced via Phase 3d via replaceVariablePeeling) substitutes the projection into
-// the where predicate (peeling the typer-inserted ExprRef2Value wrapper) and emits a single
-// fused counter loop — no intermediate arrays.
+// Array and Decs lanes (spliced via Phase 3d via replaceVariablePeeling) substitute
+// the projection into the where predicate (peeling the typer-inserted ExprRef2Value
+// wrapper) and emit a single fused counter loop — no intermediate arrays.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -23,17 +22,6 @@ def run_m1(b : B?; n : int) {
             if (c == 0) {
                 b->failNow()
             }
-        }
-    }
-}
-
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let c = arr |> _select(_.price * 2) |> _where(_ > THRESHOLD) |> count
-        b |> accept(c)
-        if (c == 0) {
-            b->failNow()
         }
     }
 }
@@ -63,11 +51,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def select_where_count_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def select_where_count_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

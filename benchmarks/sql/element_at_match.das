@@ -7,8 +7,8 @@ let THRESHOLD = 500
 let INDEX = 100
 
 // SQL: SELECT ... WHERE price > T LIMIT 1 OFFSET N — engine skips N then takes 1.
-// m3 materializes full filtered array then indexes [N].
-// m3f counts matches and early-exits when counter hits N.
+// Array and Decs lanes count matches and early-exit when the counter hits N
+// (no full filter materialization).
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -24,16 +24,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let row = arr |> _where(_.price > THRESHOLD) |> element_at(INDEX)
-        b |> accept(row)
-        if (row.price == 0) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -59,11 +49,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def element_at_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def element_at_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

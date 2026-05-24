@@ -4,9 +4,9 @@ options persistent_heap
 require _common public
 
 // User-supplied binary reducer: sum of prices over a where-filtered slice. SQL
-// can express this as `SELECT SUM(price)`. m3 traverses the array with the
-// user-block invoked per element; m3f peels the block body and inlines alongside
-// the where predicate — single pass with no per-element block invoke.
+// can express this as `SELECT SUM(price)`. The Array lane peels the block body
+// and inlines alongside the where predicate — single pass with no per-element
+// block invoke. Decs runs the same fused shape over the archetype walk.
 
 let THRESHOLD = 200
 
@@ -24,17 +24,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let total = (arr |> _where(_.price > THRESHOLD)
-                         |> aggregate(0, $(acc : int, c : Car) => acc + c.price))
-        b |> accept(total)
-        if (total == 0) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -62,11 +51,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def aggregate_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def aggregate_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

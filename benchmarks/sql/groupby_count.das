@@ -5,8 +5,8 @@ require _common public
 
 // _group_by(_.brand) |> _select((Brand=key, N=count)) — per-group count.
 // SQL: SELECT brand, COUNT(*) GROUP BY brand — engine hashes once, returns BRAND_COUNT rows.
-// Array variants must buffer (group_by is fundamentally buffering); splice mode
-// can still inline the projection and `length` aggregation per group.
+// Array and Decs lanes must buffer (group_by is fundamentally buffering); splice
+// mode still inlines the projection and `length` aggregation per group.
 // Expected result: BRAND_COUNT (5) groups, each ~n/5 in size.
 
 def run_m1(b : B?; n : int) {
@@ -24,16 +24,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let groups <- (arr._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)))
-        b |> accept(groups)
-        if (empty(groups)) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -65,11 +55,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def groupby_count_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def groupby_count_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

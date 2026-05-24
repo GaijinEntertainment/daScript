@@ -4,7 +4,7 @@ options persistent_heap
 require _common public
 
 // SQL: SELECT MIN(price) FROM Cars.
-// m3/m3f scan the array tracking the minimum seen.
+// Array and Decs lanes scan the source tracking the minimum seen.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -19,16 +19,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let m = arr |> _select(_.price) |> min()
-        b |> accept(m)
-        if (m > 999) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -54,11 +44,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def min_aggregate_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def min_aggregate_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

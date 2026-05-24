@@ -24,16 +24,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let rows <- (arr |> skip(SKIP_N) |> take(TAKE_N))
-        b |> accept(rows)
-        if (empty(rows)) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -59,11 +49,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def skip_take_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def skip_take_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

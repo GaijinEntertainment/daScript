@@ -83,6 +83,7 @@ introduced in earlier tutorials.
    tutorials/52_option_and_result.rst
    tutorials/53_clargs.rst
    tutorials/54_glob.rst
+   tutorials/55_linq_decs.rst
 
 .. _tutorials_building_from_sdk:
 

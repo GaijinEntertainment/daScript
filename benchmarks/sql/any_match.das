@@ -7,7 +7,7 @@ let THRESHOLD = 500
 
 // SQL: SELECT ... LIMIT 1 — engine stops at first hit. Use _first_opt then is_some
 // since sqlite_linq doesn't expose `_any()` as a chain terminal.
-// Array variants use `_any(pred)` which short-circuits at the first match.
+// Array and Decs lanes use `_any(pred)` which short-circuits at the first match.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -22,16 +22,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let yes = arr |> _any(_.price > THRESHOLD)
-        b |> accept(yes)
-        if (!yes) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -57,11 +47,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def any_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def any_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

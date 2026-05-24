@@ -23,18 +23,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        // Project ids out then contains. Mirrors what `_fold(...select.contains(...))` does
-        // — an array-source linq chain materializes `select` first then iterates contains.
-        let yes = arr |> _select(_.id) |> contains(TARGET_ID)
-        b |> accept(yes)
-        if (!yes) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -60,11 +48,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def contains_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def contains_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

@@ -6,10 +6,9 @@ require _common public
 let THRESHOLD = 500
 
 // SQL pushes COUNT(*) to the engine returning one row.
-// m3 must materialize the full filtered array, then walk to count it.
-// m3f folds where+count into a single fused pass (no intermediate array).
+// Array and Decs lanes fold where+count into a single fused pass
+// (no intermediate filter array).
 
-// --- m1: _sql over :memory: ---
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
@@ -23,19 +22,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-// --- m3: array LINQ (materializes intermediate filter array) ---
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let c = arr |> _where(_.price > THRESHOLD) |> count()
-        b |> accept(c)
-        if (c == 0) {
-            b->failNow()
-        }
-    }
-}
-
-// --- m3f: array LINQ folded into a single fused pass ---
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -61,11 +47,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def count_aggregate_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def count_aggregate_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]
