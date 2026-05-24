@@ -13,6 +13,12 @@ change.
 See also :doc:`linq` for the underlying query operations and
 :doc:`linq_boost` for the surrounding macro family.
 
+.. seealso::
+
+   :doc:`/reference/linq_fold_patterns`
+       Catalog of chain shapes that ``_fold`` recognizes, and the
+       splice arm each one fires.
+
 All functions and symbols are in "linq_fold" module, use require to get
 access to it.
 
