@@ -874,6 +874,8 @@ namespace das
             }
         }
         flags = decl.flags;
+        aliasCacheValid = false;            // not cloned — recompute lazily
+        aliasCacheHasAlias = false;
         alias = decl.alias;
         at = decl.at;
         module = decl.module;
@@ -916,6 +918,8 @@ namespace das
             }
         }
         dest->flags = src->flags;
+        dest->aliasCacheValid = false;      // not cloned — recompute lazily
+        dest->aliasCacheHasAlias = false;
         dest->alias = src->alias;
         dest->at = src->at;
         dest->module = src->module;
@@ -944,7 +948,27 @@ namespace das
         if ( annotation ) annotation->gc_collect(target, from);
     }
 
+    bool TypeDecl::computeAliasCache() {
+        // Eager full walk independent of name/allowAuto. Sets aliasCache* on every visited node.
+        // alias-type subtrees are dead ends for findAlias, so treated as NoAlias.
+        if (baseType == Type::alias) {
+            aliasCacheValid = true;
+            aliasCacheHasAlias = false;
+            return false;
+        }
+        bool hasAny = !alias.empty();
+        if (firstType && firstType->computeAliasCache()) hasAny = true;
+        if (secondType && secondType->computeAliasCache()) hasAny = true;
+        for (auto & arg : argTypes) {
+            if (arg && arg->computeAliasCache()) hasAny = true;
+        }
+        aliasCacheValid = true;
+        aliasCacheHasAlias = hasAny;
+        return hasAny;
+    }
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
+        if (!aliasCacheValid) computeAliasCache();
+        if (!aliasCacheHasAlias) return nullptr;        // proven no aliases anywhere
         if (baseType == Type::alias) {
             return nullptr; // if it is another alias, can't find it
         } else if (baseType == Type::autoinfer && !allowAuto) {
