@@ -37,6 +37,12 @@ namespace das {
         // Persistent key-value store (survives reloads)
         mutex store_mutex;
         unordered_map<string, vector<uint8_t>> store;
+        // String-typed sibling of `store`. Used by live_store_string / live_load_string,
+        // the JSON-text rail for the LiveVarsPassMacro / dasImgui widget serializer
+        // pivot (PR1 of the sprint_json_at refactor). Kept separate from `store`
+        // so the runtime debugger can present JSON text directly without bytes-as-string
+        // squinting.
+        unordered_map<string, string> store_strings;
 
         // Command dispatch bridge (set by host after compile)
         Context * dispatch_context = nullptr;
@@ -63,6 +69,8 @@ namespace das {
     const char * live_get_watched_file(int32_t index, Context * ctx);
     void live_store_bytes(const char * key, const TArray<uint8_t> & data);
     bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx);
+    void live_store_string(const char * key, const char * value);
+    bool live_load_string(const char * key, char * & value, Context * ctx);
     void live_collect_gc(Context * ctx);
     void live_collect_string_gc(Context * ctx);
     const char * live_dispatch_command_via_host(const char * cmd_json, Context * callerCtx);

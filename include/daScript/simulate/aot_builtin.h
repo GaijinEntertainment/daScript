@@ -34,6 +34,8 @@ namespace das {
     DAS_API vec4f builtin_json_sscan ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API char * builtin_print_data ( const void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
     DAS_API char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_json_sprint_at ( const void * addr, const TypeInfo & typeInfo, bool humanReadable, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_json_sscan_at ( char * json, void * addr, const TypeInfo & typeInfo, Context * context, LineInfoArg * at );
     DAS_API char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at );
     DAS_API char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context, LineInfoArg * lineInfo );
     DAS_API char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at );

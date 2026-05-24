@@ -1444,6 +1444,17 @@ namespace das {
         return context->allocateString(ssw.str(), at);
     }
 
+    char * builtin_json_sprint_at ( const void * addr, const TypeInfo & typeInfo, bool humanReadable, Context * context, LineInfoArg * at ) {
+        auto s = debug_json_value((void *)addr, (TypeInfo *)&typeInfo, humanReadable);
+        return context->allocateString(s, at);
+    }
+
+    bool builtin_json_sscan_at ( char * json, void * addr, const TypeInfo & typeInfo, Context * context, LineInfoArg * at ) {
+        if ( !json || !addr ) return false;
+        return debug_json_scan(*context, (char *)addr, (TypeInfo *)&typeInfo,
+                               json, uint32_t(strlen(json)), at);
+    }
+
     char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at ) {
         if ( !typeInfo ) return nullptr;
         auto dt = debug_type(typeInfo);
@@ -1880,6 +1891,18 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_print_data_v)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data_v")
                     ->args({"data","type","flags","context","at"});
+            // sprint_json_at / sscan_json_at — addr+TypeInfo entry points.
+            // Unlike sprint_json / sscan_json (which use any+SimNode_CallBase::types[]
+            // and require a typed value expression at the call site), these take an
+            // explicit (addr, ti) pair. Use when you have only a raw address
+            // (e.g. from `unsafe(addr(g))`) plus a TypeInfo pointer from
+            // `typeinfo rtti_typeinfo(type<T>)`. No per-call-site daslang code emit.
+            addExtern<DAS_BIND_FUN(builtin_json_sprint_at)>(*this, lib, "sprint_json_at",
+                SideEffects::none, "builtin_json_sprint_at")
+                    ->args({"addr","type","humanReadable","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_json_sscan_at)>(*this, lib, "sscan_json_at",
+                SideEffects::modifyArgumentAndExternal, "builtin_json_sscan_at")
+                    ->args({"json","addr","type","context","at"});
             // debug typeinfo
             addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_type")
