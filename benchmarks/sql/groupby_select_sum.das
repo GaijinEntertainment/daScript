@@ -3,14 +3,28 @@ options persistent_heap
 
 require _common public
 
-// _select(c => c.price) |> _group_by(price % 100) |> _select((K=key, S=sum)).
-// SQL omitted: sqlite_linq's `_group_by` requires `_.Field` or a tuple of `_.Field`s.
-// The expression key (`_ % 100`) is rejected. [Follow-up TODO 2026-05-23: error[50503]
-// `_sql: _group_by: key must be \`_.Field\` or a tuple of \`_.Field\`s; got: (_ % 100)`
-// — would need expression-key support in sqlite_linq lowering.]
-// Array vs Decs is the headline comparison. Splice (PR-B) fuses the upstream Car→price
-// projection into an intermediate var bind so the key + sum acc reference the projected
-// int (no per-element Car re-access).
+// _group_by(price % 100) |> _select((K = key, S = sum(price))).
+// SQL: `SELECT (price % 100), SUM(price) FROM Cars GROUP BY (price % 100)` — exercises
+// sqlite_linq's expression-key support in _group_by (PR S2). The m1 form uses
+// `_group_by(_.price % 100)` + explicit inner select inside SUM (the shape the
+// grouped-aggregate dispatch recognises); the m3f/m4 forms keep their splice-friendly
+// `_select(_.price) |> _group_by(_ % 100) |> _select((K, S=_._1 |> sum()))` pattern,
+// which fuses the upstream Car→price projection into an intermediate var bind.
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let groups <- _sql(db |> select_from(type<Car>)
+                                  |> _group_by(_.price % 100)
+                                  |> _select((K = _._0, S = _._1 |> select($(c : Car) => c.price) |> sum())))
+            b |> accept(groups)
+            if (empty(groups)) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -40,6 +54,11 @@ def run_m4(b : B?; n : int) {
             b->failNow()
         }
     }
+}
+
+[benchmark]
+def groupby_select_sum_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]
