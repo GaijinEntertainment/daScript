@@ -139,6 +139,7 @@ jobs:
               -DCMAKE_BUILD_TYPE:STRING=Release \
               -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
               -DDAS_CLANG_BIND_DISABLED=OFF \
+              -DPATH_TO_LIBCLANG=/usr/lib/llvm-22 \
               -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
             cmake --build ./build --config Release --target daslang daslang_static

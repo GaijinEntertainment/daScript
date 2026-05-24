@@ -124,9 +124,14 @@ IF(WIN32)
     ELSE()
         MESSAGE(WARNING "dasClangBind: no libclang DLLs found under ${LLVM_INSTALL_PREFIX}/bin — dasModuleClangBind.shared_module dlopen will fail at runtime.")
     ENDIF()
-    install(FILES ${_DAS_CLANG_BIND_DLLS}
-        DESTINATION ${DAS_INSTALL_BINDIR}
-    )
+    # Guard install() with the same predicate as POST_BUILD —
+    # install(FILES "" DESTINATION ...) errors at configure time, which
+    # would defeat the soft warning above.
+    IF(_DAS_CLANG_BIND_DLLS)
+        install(FILES ${_DAS_CLANG_BIND_DLLS}
+            DESTINATION ${DAS_INSTALL_BINDIR}
+        )
+    ENDIF()
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
 ENDIF()
 
