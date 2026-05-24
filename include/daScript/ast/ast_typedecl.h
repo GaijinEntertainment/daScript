@@ -333,7 +333,12 @@ namespace das {
     template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };
     template<> struct ToBasicType<void>         { enum { type = Type::tVoid }; };
     template<> struct ToBasicType<char>         { enum { type = Type::tInt8 }; };
-#if defined(_MSC_VER)
+#if defined(_WIN32)
+    // Broadened from _MSC_VER to cover mingw (clang-mingw64 + gcc-mingw) too —
+    // Windows LLP64 makes `long`/`unsigned long` 32-bit regardless of compiler.
+    // Without this, dasClangBind fails to build on mingw because libclang's
+    // CXUnsavedFile::Length (unsigned long) hits the primary template's
+    // static_assert.
     template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
     template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<long double>      { enum { type = Type::tDouble }; };

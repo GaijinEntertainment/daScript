@@ -17,6 +17,8 @@ auto ann_CXUnsavedFile = new CXUnsavedFile_GeneratedAnnotation(lib);
 addAnnotation(ann_CXUnsavedFile);
 auto ann_CXVersion = new CXVersion_GeneratedAnnotation(lib);
 addAnnotation(ann_CXVersion);
+auto ann_CXIndexOptions = new CXIndexOptions_GeneratedAnnotation(lib);
+addAnnotation(ann_CXIndexOptions);
 auto ann_CXTUResourceUsageEntry = new CXTUResourceUsageEntry_GeneratedAnnotation(lib);
 addAnnotation(ann_CXTUResourceUsageEntry);
 auto ann_CXTUResourceUsage = new CXTUResourceUsage_GeneratedAnnotation(lib);

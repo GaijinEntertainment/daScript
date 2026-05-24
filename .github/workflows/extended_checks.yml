@@ -109,9 +109,6 @@ jobs:
               libxcursor-dev \
               libxinerama-dev \
               libxi-dev \
-              libclang-16-dev \
-              llvm-16-dev \
-              clang-16 \
               libclang-22-dev \
               llvm-22-dev
             ;;
@@ -256,7 +253,7 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path /usr/lib/llvm-16/include/
+        $BIN/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path /usr/lib/llvm-22/include/
         git diff --exit-code -- modules/dasClangBind/src/ \
           || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
 

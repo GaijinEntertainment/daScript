@@ -12,85 +12,85 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_12() {
-// from clang-c/Index.h:4106:30
+// from clang-c/Index.h:4360:23
+	makeExtern< CXType (*)(CXCursor) , clang_Cursor_getReceiverType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getReceiverType","clang_Cursor_getReceiverType")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4390:1
+	makeExtern< unsigned int (*)(CXCursor,unsigned int) , clang_Cursor_getObjCPropertyAttributes , SimNode_ExtFuncCall >(lib,"clang_Cursor_getObjCPropertyAttributes","clang_Cursor_getObjCPropertyAttributes")
+		->args({"C","reserved"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4396:25
+	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getObjCPropertyGetterName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getObjCPropertyGetterName","clang_Cursor_getObjCPropertyGetterName")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4402:25
+	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getObjCPropertySetterName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getObjCPropertySetterName","clang_Cursor_getObjCPropertySetterName")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4424:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_getObjCDeclQualifiers , SimNode_ExtFuncCall >(lib,"clang_Cursor_getObjCDeclQualifiers","clang_Cursor_getObjCDeclQualifiers")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4431:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_isObjCOptional , SimNode_ExtFuncCall >(lib,"clang_Cursor_isObjCOptional","clang_Cursor_isObjCOptional")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4436:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_isVariadic , SimNode_ExtFuncCall >(lib,"clang_Cursor_isVariadic","clang_Cursor_isVariadic")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4451:25
+	makeExtern< unsigned int (*)(CXCursor,CXString *,CXString *,unsigned int *) , clang_Cursor_isExternalSymbol , SimNode_ExtFuncCall >(lib,"clang_Cursor_isExternalSymbol","clang_Cursor_isExternalSymbol")
+		->args({"C","language","definedIn","isGenerated"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:4461:30
 	makeExtern< CXSourceRange (*)(CXCursor) , clang_Cursor_getCommentRange , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getCommentRange","clang_Cursor_getCommentRange")
 		->args({"C"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4112:25
+// from clang-c/Index.h:4467:25
 	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getRawCommentText , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getRawCommentText","clang_Cursor_getRawCommentText")
 		->args({"C"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4119:25
+// from clang-c/Index.h:4474:25
 	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getBriefCommentText , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getBriefCommentText","clang_Cursor_getBriefCommentText")
 		->args({"C"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4133:25
+// from clang-c/Index.h:4488:25
 	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getMangling , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getMangling","clang_Cursor_getMangling")
 		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4139:29
+// from clang-c/Index.h:4494:29
 	makeExtern< CXStringSet * (*)(CXCursor) , clang_Cursor_getCXXManglings , SimNode_ExtFuncCall >(lib,"clang_Cursor_getCXXManglings","clang_Cursor_getCXXManglings")
 		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4145:29
+// from clang-c/Index.h:4500:29
 	makeExtern< CXStringSet * (*)(CXCursor) , clang_Cursor_getObjCManglings , SimNode_ExtFuncCall >(lib,"clang_Cursor_getObjCManglings","clang_Cursor_getObjCManglings")
 		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4164:25
-	makeExtern< void * (*)(CXCursor) , clang_Cursor_getModule , SimNode_ExtFuncCall >(lib,"clang_Cursor_getModule","clang_Cursor_getModule")
-		->args({"C"})
+// from clang-c/Index.h:4533:25
+	makeExtern< CXString (*)(CXCursor) , clang_Cursor_getGCCAssemblyTemplate , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getGCCAssemblyTemplate","clang_Cursor_getGCCAssemblyTemplate")
+		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4170:25
-	makeExtern< void * (*)(CXTranslationUnitImpl *,void *) , clang_getModuleForFile , SimNode_ExtFuncCall >(lib,"clang_getModuleForFile","clang_getModuleForFile")
-		->args({"",""})
+// from clang-c/Index.h:4542:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_isGCCAssemblyHasGoto , SimNode_ExtFuncCall >(lib,"clang_Cursor_isGCCAssemblyHasGoto","clang_Cursor_isGCCAssemblyHasGoto")
+		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4177:23
-	makeExtern< void * (*)(void *) , clang_Module_getASTFile , SimNode_ExtFuncCall >(lib,"clang_Module_getASTFile","clang_Module_getASTFile")
-		->args({"Module"})
+// from clang-c/Index.h:4550:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_getGCCAssemblyNumOutputs , SimNode_ExtFuncCall >(lib,"clang_Cursor_getGCCAssemblyNumOutputs","clang_Cursor_getGCCAssemblyNumOutputs")
+		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4185:25
-	makeExtern< void * (*)(void *) , clang_Module_getParent , SimNode_ExtFuncCall >(lib,"clang_Module_getParent","clang_Module_getParent")
-		->args({"Module"})
+// from clang-c/Index.h:4558:25
+	makeExtern< unsigned int (*)(CXCursor) , clang_Cursor_getGCCAssemblyNumInputs , SimNode_ExtFuncCall >(lib,"clang_Cursor_getGCCAssemblyNumInputs","clang_Cursor_getGCCAssemblyNumInputs")
+		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4193:25
-	makeExtern< CXString (*)(void *) , clang_Module_getName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Module_getName","clang_Module_getName")
-		->args({"Module"})
+// from clang-c/Index.h:4573:25
+	makeExtern< unsigned int (*)(CXCursor,unsigned int,CXString *,CXCursor *) , clang_Cursor_getGCCAssemblyInput , SimNode_ExtFuncCall >(lib,"clang_Cursor_getGCCAssemblyInput","clang_Cursor_getGCCAssemblyInput")
+		->args({"Cursor","Index","Constraint","Expr"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4200:25
-	makeExtern< CXString (*)(void *) , clang_Module_getFullName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Module_getFullName","clang_Module_getFullName")
-		->args({"Module"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4207:20
-	makeExtern< int (*)(void *) , clang_Module_isSystem , SimNode_ExtFuncCall >(lib,"clang_Module_isSystem","clang_Module_isSystem")
-		->args({"Module"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4214:25
-	makeExtern< unsigned int (*)(CXTranslationUnitImpl *,void *) , clang_Module_getNumTopLevelHeaders , SimNode_ExtFuncCall >(lib,"clang_Module_getNumTopLevelHeaders","clang_Module_getNumTopLevelHeaders")
-		->args({"","Module"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4225:8
-	makeExtern< void * (*)(CXTranslationUnitImpl *,void *,unsigned int) , clang_Module_getTopLevelHeader , SimNode_ExtFuncCall >(lib,"clang_Module_getTopLevelHeader","clang_Module_getTopLevelHeader")
-		->args({"","Module","Index"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4245:1
-	makeExtern< unsigned int (*)(CXCursor) , clang_CXXConstructor_isConvertingConstructor , SimNode_ExtFuncCall >(lib,"clang_CXXConstructor_isConvertingConstructor","clang_CXXConstructor_isConvertingConstructor")
-		->args({"C"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4250:25
-	makeExtern< unsigned int (*)(CXCursor) , clang_CXXConstructor_isCopyConstructor , SimNode_ExtFuncCall >(lib,"clang_CXXConstructor_isCopyConstructor","clang_CXXConstructor_isCopyConstructor")
-		->args({"C"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4255:25
-	makeExtern< unsigned int (*)(CXCursor) , clang_CXXConstructor_isDefaultConstructor , SimNode_ExtFuncCall >(lib,"clang_CXXConstructor_isDefaultConstructor","clang_CXXConstructor_isDefaultConstructor")
-		->args({"C"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4260:25
-	makeExtern< unsigned int (*)(CXCursor) , clang_CXXConstructor_isMoveConstructor , SimNode_ExtFuncCall >(lib,"clang_CXXConstructor_isMoveConstructor","clang_CXXConstructor_isMoveConstructor")
-		->args({"C"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:4265:25
-	makeExtern< unsigned int (*)(CXCursor) , clang_CXXField_isMutable , SimNode_ExtFuncCall >(lib,"clang_CXXField_isMutable","clang_CXXField_isMutable")
-		->args({"C"})
+// from clang-c/Index.h:4591:25
+	makeExtern< unsigned int (*)(CXCursor,unsigned int,CXString *,CXCursor *) , clang_Cursor_getGCCAssemblyOutput , SimNode_ExtFuncCall >(lib,"clang_Cursor_getGCCAssemblyOutput","clang_Cursor_getGCCAssemblyOutput")
+		->args({"Cursor","Index","Constraint","Expr"})
 		->addToModule(*this, SideEffects::worstDefault);
 }
 }

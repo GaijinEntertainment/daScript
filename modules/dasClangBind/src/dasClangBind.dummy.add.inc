@@ -3,4 +3,6 @@
 
 addAnnotation(new DummyTypeAnnotation("CXTranslationUnitImpl", "CXTranslationUnitImpl", 1, 1));
 addAnnotation(new DummyTypeAnnotation("CXCursorSetImpl", "CXCursorSetImpl", 1, 1));
+addAnnotation(new DummyTypeAnnotation("_CXChildVisitResult", "_CXChildVisitResult", 1, 1));
+addAnnotation(new DummyTypeAnnotation("_CXCursorAndRangeVisitorBlock", "_CXCursorAndRangeVisitorBlock", 1, 1));
 addAnnotation(new DummyTypeAnnotation("CXTargetInfoImpl", "CXTargetInfoImpl", 1, 1));

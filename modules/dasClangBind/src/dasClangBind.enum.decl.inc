@@ -13,6 +13,8 @@ DAS_BASE_BIND_ENUM_GEN(CXAvailabilityKind,CXAvailabilityKind);
 
 DAS_BASE_BIND_ENUM_GEN(CXCursor_ExceptionSpecificationKind,CXCursor_ExceptionSpecificationKind);
 
+DAS_BASE_BIND_ENUM_GEN(CXChoice,CXChoice);
+
 DAS_BASE_BIND_ENUM_GEN(CXGlobalOptFlags,CXGlobalOptFlags);
 
 DAS_BASE_BIND_ENUM_GEN(CXTranslationUnit_Flags,CXTranslationUnit_Flags);
@@ -50,6 +52,8 @@ DAS_BASE_BIND_ENUM_GEN(CXRefQualifierKind,CXRefQualifierKind);
 DAS_BASE_BIND_ENUM_GEN(CX_CXXAccessSpecifier,CX_CXXAccessSpecifier);
 
 DAS_BASE_BIND_ENUM_GEN(CX_StorageClass,CX_StorageClass);
+
+DAS_BASE_BIND_ENUM_GEN(CX_BinaryOperatorKind,CX_BinaryOperatorKind);
 
 DAS_BASE_BIND_ENUM_GEN(CXChildVisitResult,CXChildVisitResult);
 
@@ -92,4 +96,8 @@ DAS_BASE_BIND_ENUM_GEN(CXIdxEntityRefKind,CXIdxEntityRefKind);
 DAS_BASE_BIND_ENUM_GEN(CXSymbolRole,CXSymbolRole);
 
 DAS_BASE_BIND_ENUM_GEN(CXIndexOptFlags,CXIndexOptFlags);
+
+DAS_BASE_BIND_ENUM_GEN(CXBinaryOperatorKind,CXBinaryOperatorKind);
+
+DAS_BASE_BIND_ENUM_GEN(CXUnaryOperatorKind,CXUnaryOperatorKind);
 
