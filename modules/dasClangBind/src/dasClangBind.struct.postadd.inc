@@ -9,6 +9,7 @@ initRecAnnotation(ann_CXSourceRange,lib);
 initRecAnnotation(ann_CXSourceRangeList,lib);
 initRecAnnotation(ann_CXUnsavedFile,lib);
 initRecAnnotation(ann_CXVersion,lib);
+initRecAnnotation(ann_CXIndexOptions,lib);
 initRecAnnotation(ann_CXTUResourceUsageEntry,lib);
 initRecAnnotation(ann_CXTUResourceUsage,lib);
 initRecAnnotation(ann_CXCursor,lib);

@@ -482,9 +482,9 @@ jobs:
   # (windows-latest-fat), separate top-level job so mingw churn doesn't risk
   # the much-larger MSVC entries.
   #
-  # dasClangBind stays disabled here — pinned to libclang 16.0.6 (find_package
-  # strict version), which the msys2 clang64 sysroot doesn't ship. Tracked
-  # separately as the bind_clangbind regen followup.
+  # dasClangBind is enabled here — find_package(Clang 22.1) matches msys2's
+  # libclang 22.1.x and POST_BUILD copies the libclang+libLLVM+libc++ chain
+  # next to daslang.exe so the .shared_module dlopen resolves at runtime.
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
@@ -509,6 +509,7 @@ jobs:
           mingw-w64-clang-x86_64-openssl
           mingw-w64-clang-x86_64-glfw
           bison
+          git
 
     - name: "Build: Daslang (clang-mingw64)"
       run: |
@@ -518,7 +519,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
-          -DDAS_CLANG_BIND_DISABLED=ON \
+          -DDAS_CLANG_BIND_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=OFF
         cmake --build ./build-mingw --parallel
 
@@ -547,4 +548,29 @@ jobs:
         set -eux
         cd bin
         ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../tests
+
+    # bind_clangbind self-binder lives here (not on linux extended_checks)
+    # because dasClangBind on linux pulls libclang.so → libLLVM-22.so.1,
+    # which collides with dasLLVM in the same process (shared pass
+    # registry, double-init breaks JIT). msys2 clang64 ships libclang as
+    # a separate SO chain, and the mingw worker doesn't exercise JIT-uses-
+    # dasClangBind paths, so they coexist cleanly.
+    #
+    # No `git diff --exit-code` here: the regen emits libclang's reported
+    # source-file paths in `// from ...` comments, and those paths aren't
+    # canonical across --clang_path invocations on Windows (forward-slash
+    # form vs `cygpath -w` mixed-separator form). Verifies "binder runs
+    # end-to-end" only, not "regen output is byte-canonical". A proper
+    # fix (strip path prefix in cbind_boost.das) is a follow-up.
+    #
+    # TODO: bind_llvm.das self-binder doesn't run on mingw — libclang as
+    # library doesn't find <cstddef> via msys2's libcxx auto-detection.
+    # Needs explicit -resource-dir / -isystem injection. Tracked as a
+    # follow-up; we lose master's previous bind_llvm.das CI coverage in
+    # the meantime.
+    - name: "Run self-binder (bind_clangbind.das)"
+      run: |
+        set -eux
+        CLANG_INCLUDE="$(cygpath -w "${MSYSTEM_PREFIX}/include")"
+        ./bin/daslang.exe modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
 

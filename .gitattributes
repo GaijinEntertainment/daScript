@@ -7,3 +7,11 @@ daslib/_aot_generated/*.cpp binary
 
 # Shell scripts must keep LF endings even when checked out under autocrlf=true.
 *.sh text eol=lf
+
+# dasClangBind generated bindings: emit LF on every platform. The mingw
+# CI worker re-runs bind_clangbind.das to detect regen drift; without
+# eol=lf, autocrlf-true on the Windows runner checks out CRLF and the
+# regen (which writes LF) reports every line as changed.
+modules/dasClangBind/src/*.cpp text eol=lf
+modules/dasClangBind/src/*.h text eol=lf
+modules/dasClangBind/src/*.inc text eol=lf

@@ -12,84 +12,83 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_15() {
-// from clang-c/Index.h:5347:6
+// from clang-c/Index.h:5146:21
+	makeExtern< void (*)(CXCursor,const char **,const char **,unsigned int *,unsigned int *,unsigned int *,unsigned int *) , clang_getDefinitionSpellingAndExtent , SimNode_ExtFuncCall >(lib,"clang_getDefinitionSpellingAndExtent","clang_getDefinitionSpellingAndExtent")
+		->args({"","startBuf","endBuf","startLine","startColumn","endLine","endColumn"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5149:21
+	makeExtern< void (*)() , clang_enableStackTraces , SimNode_ExtFuncCall >(lib,"clang_enableStackTraces","clang_enableStackTraces")
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5388:1
+	makeExtern< CXCompletionChunkKind (*)(void *,unsigned int) , clang_getCompletionChunkKind , SimNode_ExtFuncCall >(lib,"clang_getCompletionChunkKind","clang_getCompletionChunkKind")
+		->args({"completion_string","chunk_number"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5401:25
+	makeExtern< CXString (*)(void *,unsigned int) , clang_getCompletionChunkText , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCompletionChunkText","clang_getCompletionChunkText")
+		->args({"completion_string","chunk_number"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5415:35
+	makeExtern< void * (*)(void *,unsigned int) , clang_getCompletionChunkCompletionString , SimNode_ExtFuncCall >(lib,"clang_getCompletionChunkCompletionString","clang_getCompletionChunkCompletionString")
+		->args({"completion_string","chunk_number"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5422:1
+	makeExtern< unsigned int (*)(void *) , clang_getNumCompletionChunks , SimNode_ExtFuncCall >(lib,"clang_getNumCompletionChunks","clang_getNumCompletionChunks")
+		->args({"completion_string"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5437:1
+	makeExtern< unsigned int (*)(void *) , clang_getCompletionPriority , SimNode_ExtFuncCall >(lib,"clang_getCompletionPriority","clang_getCompletionPriority")
+		->args({"completion_string"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5448:1
+	makeExtern< CXAvailabilityKind (*)(void *) , clang_getCompletionAvailability , SimNode_ExtFuncCall >(lib,"clang_getCompletionAvailability","clang_getCompletionAvailability")
+		->args({"completion_string"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5460:1
+	makeExtern< unsigned int (*)(void *) , clang_getCompletionNumAnnotations , SimNode_ExtFuncCall >(lib,"clang_getCompletionNumAnnotations","clang_getCompletionNumAnnotations")
+		->args({"completion_string"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5473:25
+	makeExtern< CXString (*)(void *,unsigned int) , clang_getCompletionAnnotation , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCompletionAnnotation","clang_getCompletionAnnotation")
+		->args({"completion_string","annotation_number"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5492:25
+	makeExtern< CXString (*)(void *,CXCursorKind *) , clang_getCompletionParent , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCompletionParent","clang_getCompletionParent")
+		->args({"completion_string","kind"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5500:1
+	makeExtern< CXString (*)(void *) , clang_getCompletionBriefComment , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCompletionBriefComment","clang_getCompletionBriefComment")
+		->args({"completion_string"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5512:1
+	makeExtern< void * (*)(CXCursor) , clang_getCursorCompletionString , SimNode_ExtFuncCall >(lib,"clang_getCursorCompletionString","clang_getCursorCompletionString")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5548:1
+	makeExtern< unsigned int (*)(CXCodeCompleteResults *,unsigned int) , clang_getCompletionNumFixIts , SimNode_ExtFuncCall >(lib,"clang_getCompletionNumFixIts","clang_getCompletionNumFixIts")
+		->args({"results","completion_index"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5594:25
+	makeExtern< CXString (*)(CXCodeCompleteResults *,unsigned int,unsigned int,CXSourceRange *) , clang_getCompletionFixIt , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCompletionFixIt","clang_getCompletionFixIt")
+		->args({"results","completion_index","fixit_index","replacement_range"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5778:25
+	makeExtern< unsigned int (*)() , clang_defaultCodeCompleteOptions , SimNode_ExtFuncCall >(lib,"clang_defaultCodeCompleteOptions","clang_defaultCodeCompleteOptions")
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5850:1
+	makeExtern< CXCodeCompleteResults * (*)(CXTranslationUnitImpl *,const char *,unsigned int,unsigned int,CXUnsavedFile *,unsigned int,unsigned int) , clang_codeCompleteAt , SimNode_ExtFuncCall >(lib,"clang_codeCompleteAt","clang_codeCompleteAt")
+		->args({"TU","complete_filename","complete_line","complete_column","unsaved_files","num_unsaved_files","options"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5863:6
+	makeExtern< void (*)(CXCompletionResult *,unsigned int) , clang_sortCodeCompletionResults , SimNode_ExtFuncCall >(lib,"clang_sortCodeCompletionResults","clang_sortCodeCompletionResults")
+		->args({"Results","NumResults"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/Index.h:5870:6
 	makeExtern< void (*)(CXCodeCompleteResults *) , clang_disposeCodeCompleteResults , SimNode_ExtFuncCall >(lib,"clang_disposeCodeCompleteResults","clang_disposeCodeCompleteResults")
 		->args({"Results"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5354:10
+// from clang-c/Index.h:5877:10
 	makeExtern< unsigned int (*)(CXCodeCompleteResults *) , clang_codeCompleteGetNumDiagnostics , SimNode_ExtFuncCall >(lib,"clang_codeCompleteGetNumDiagnostics","clang_codeCompleteGetNumDiagnostics")
 		->args({"Results"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5366:14
-	makeExtern< void * (*)(CXCodeCompleteResults *,unsigned int) , clang_codeCompleteGetDiagnostic , SimNode_ExtFuncCall >(lib,"clang_codeCompleteGetDiagnostic","clang_codeCompleteGetDiagnostic")
-		->args({"Results","Index"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5380:1
-	makeExtern< unsigned long long (*)(CXCodeCompleteResults *) , clang_codeCompleteGetContexts , SimNode_ExtFuncCall >(lib,"clang_codeCompleteGetContexts","clang_codeCompleteGetContexts")
-		->args({"Results"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5400:1
-	makeExtern< CXCursorKind (*)(CXCodeCompleteResults *,unsigned int *) , clang_codeCompleteGetContainerKind , SimNode_ExtFuncCall >(lib,"clang_codeCompleteGetContainerKind","clang_codeCompleteGetContainerKind")
-		->args({"Results","IsIncomplete"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5413:10
-	makeExtern< CXString (*)(CXCodeCompleteResults *) , clang_codeCompleteGetContainerUSR , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_codeCompleteGetContainerUSR","clang_codeCompleteGetContainerUSR")
-		->args({"Results"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5427:10
-	makeExtern< CXString (*)(CXCodeCompleteResults *) , clang_codeCompleteGetObjCSelector , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_codeCompleteGetObjCSelector","clang_codeCompleteGetObjCSelector")
-		->args({"Results"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5443:25
-	makeExtern< CXString (*)() , clang_getClangVersion , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getClangVersion","clang_getClangVersion")
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5451:21
-	makeExtern< void (*)(unsigned int) , clang_toggleCrashRecovery , SimNode_ExtFuncCall >(lib,"clang_toggleCrashRecovery","clang_toggleCrashRecovery")
-		->args({"isEnabled"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5502:29
-	makeExtern< void * (*)(CXCursor) , clang_Cursor_Evaluate , SimNode_ExtFuncCall >(lib,"clang_Cursor_Evaluate","clang_Cursor_Evaluate")
-		->args({"C"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5507:33
-	makeExtern< CXEvalResultKind (*)(void *) , clang_EvalResult_getKind , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getKind","clang_EvalResult_getKind")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5513:20
-	makeExtern< int (*)(void *) , clang_EvalResult_getAsInt , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getAsInt","clang_EvalResult_getAsInt")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5520:26
-	makeExtern< long long (*)(void *) , clang_EvalResult_getAsLongLong , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getAsLongLong","clang_EvalResult_getAsLongLong")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5526:25
-	makeExtern< unsigned int (*)(void *) , clang_EvalResult_isUnsignedInt , SimNode_ExtFuncCall >(lib,"clang_EvalResult_isUnsignedInt","clang_EvalResult_isUnsignedInt")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5533:1
-	makeExtern< unsigned long long (*)(void *) , clang_EvalResult_getAsUnsigned , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getAsUnsigned","clang_EvalResult_getAsUnsigned")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5539:23
-	makeExtern< double (*)(void *) , clang_EvalResult_getAsDouble , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getAsDouble","clang_EvalResult_getAsDouble")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5547:28
-	makeExtern< const char * (*)(void *) , clang_EvalResult_getAsStr , SimNode_ExtFuncCall >(lib,"clang_EvalResult_getAsStr","clang_EvalResult_getAsStr")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5552:21
-	makeExtern< void (*)(void *) , clang_EvalResult_dispose , SimNode_ExtFuncCall >(lib,"clang_EvalResult_dispose","clang_EvalResult_dispose")
-		->args({"E"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5575:28
-	makeExtern< void * (*)(const char *) , clang_getRemappings , SimNode_ExtFuncCall >(lib,"clang_getRemappings","clang_getRemappings")
-		->args({"path"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/Index.h:5588:13
-	makeExtern< void * (*)(const char **,unsigned int) , clang_getRemappingsFromFileList , SimNode_ExtFuncCall >(lib,"clang_getRemappingsFromFileList","clang_getRemappingsFromFileList")
-		->args({"filePaths","numFiles"})
 		->addToModule(*this, SideEffects::worstDefault);
 }
 }

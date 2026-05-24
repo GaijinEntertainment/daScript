@@ -2,7 +2,7 @@ IF (NOT DEFINED PATH_TO_LIBCLANG)
 	SET(PATH_TO_LIBCLANG "${PROJECT_SOURCE_DIR}/../libclang")
 ENDIF()
 IF ((NOT ${DAS_CLANG_BIND_DISABLED}) OR (NOT DEFINED DAS_CLANG_BIND_DISABLED))
-	find_package(Clang 16.0.6 PATHS "${PATH_TO_LIBCLANG}")
+	find_package(Clang 22.1 PATHS "${PATH_TO_LIBCLANG}")
 ENDIF()
 IF ((NOT DAS_CLANG_BIND_INCLUDED) AND (${Clang_FOUND}) AND ((NOT ${DAS_CLANG_BIND_DISABLED}) OR (NOT DEFINED DAS_CLANG_BIND_DISABLED)))
     SET(DAS_CLANG_BIND_INCLUDED TRUE)
@@ -51,6 +51,7 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND (${Clang_FOUND}) AND ((NOT ${DAS_CLANG_BIN
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_15.cpp
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_16.cpp
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_17.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_18.cpp
 	)
 
 	ADD_MODULE_CPP(dasClangBind)
@@ -68,24 +69,70 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND (${Clang_FOUND}) AND ((NOT ${DAS_CLANG_BIN
 	TARGET_INCLUDE_DIRECTORIES(dasModuleClangBind PUBLIC ${CLANG_BIND_INCLUDE_DIR} ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 IF(WIN32)
-    set(DAS_CLANG_DLLS
-        ${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
-        ${LLVM_INSTALL_PREFIX}/bin/LTO.dll
-        ${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
-        ${LLVM_INSTALL_PREFIX}/bin/libclang.dll
-    )
-    foreach(dll ${DAS_CLANG_DLLS})
-        get_filename_component(dll_name "${dll}" NAME)
-        add_custom_command(TARGET libDasModuleClangBind POST_BUILD
+    # POST_BUILD copy libclang + transitive runtime deps next to daslang.exe.
+    # daslang loads .shared_module files via LoadLibraryEx with restricted
+    # search flags (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | _APPLICATION_DIR |
+    # _DEFAULT_DIRS — see src/misc/sysos.cpp:loadDynamicLibrary). PATH is
+    # NOT searched, so the .shared_module's libclang.dll import must live
+    # in bin/ or alongside the .shared_module itself.
+    #
+    # Hook on dasModuleClangBind (the shared lib target), NOT on the static
+    # libDasModuleClangBind — single-config Ninja builds only realize the
+    # shared target when dynamic daslang.exe is the link consumer.
+    #
+    # Multi-config / single-config split mirrors dasHV/CMakeLists.txt.
+    IF(MSVC)
+        # Official LLVM Windows release ships a self-contained libclang.dll
+        # (LLVM statically linked in). Companion DLLs LLVM-C/LTO/Remarks are
+        # NOT deps of libclang.dll — copied for completeness only.
+        SET(_DAS_CLANG_BIND_DLLS
+            ${LLVM_INSTALL_PREFIX}/bin/libclang.dll
+            ${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
+            ${LLVM_INSTALL_PREFIX}/bin/LTO.dll
+            ${LLVM_INSTALL_PREFIX}/bin/Remarks.dll)
+    ELSE()
+        # mingw / clang-mingw64: msys2 ships libclang.dll dynamically linked
+        # against libLLVM-N.dll, which in turn drags in libffi/zlib/zstd/libxml2.
+        # Full chain (from objdump -p libclang.dll + libLLVM-N.dll):
+        #   libclang.dll → libLLVM-N.dll, libc++, KERNEL32, api-ms-win-crt-*
+        #   libLLVM-N.dll → libffi-N, zlib1, libzstd, libxml2-N, libc++,
+        #                   SHELL32, ole32, ADVAPI32, WS2_32, ntdll, ...
+        #   libc++.dll → libunwind, api-ms-win-crt-*
+        # Glob the numbered variants (libLLVM-22, libffi-8, libxml2-16, …) to
+        # absorb major-version bumps without per-bump CMake churn.
+        FILE(GLOB _DAS_CLANG_BIND_DLLS
+            "${LLVM_INSTALL_PREFIX}/bin/libclang.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libLLVM-*.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libffi-*.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/zlib1.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libzstd.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libxml2-*.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libiconv-*.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libc++.dll"
+            "${LLVM_INSTALL_PREFIX}/bin/libunwind.dll")
+    ENDIF()
+    IF(_DAS_CLANG_BIND_DLLS)
+        IF(CMAKE_CONFIGURATION_TYPES)
+            SET(_DAS_CLANG_BIND_COPY_DIR "${EXECUTABLE_OUTPUT_PATH}/$<CONFIG>")
+        ELSE()
+            SET(_DAS_CLANG_BIND_COPY_DIR "${EXECUTABLE_OUTPUT_PATH}")
+        ENDIF()
+        ADD_CUSTOM_COMMAND(TARGET dasModuleClangBind POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${dll}"
-            "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/${dll_name}"
+                ${_DAS_CLANG_BIND_DLLS}
+                "${_DAS_CLANG_BIND_COPY_DIR}/")
+    ELSE()
+        MESSAGE(WARNING "dasClangBind: no libclang DLLs found under ${LLVM_INSTALL_PREFIX}/bin — dasModuleClangBind.shared_module dlopen will fail at runtime.")
+    ENDIF()
+    # Guard install() with the same predicate as POST_BUILD —
+    # install(FILES "" DESTINATION ...) errors at configure time, which
+    # would defeat the soft warning above.
+    IF(_DAS_CLANG_BIND_DLLS)
+        install(FILES ${_DAS_CLANG_BIND_DLLS}
+            DESTINATION ${DAS_INSTALL_BINDIR}
         )
-    endforeach()
-	install(FILES ${DAS_CLANG_DLLS}
-        DESTINATION ${DAS_INSTALL_BINDIR}
-    )
-	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
+    ENDIF()
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
 ENDIF()
 
     ADD_MODULE_DAS(cbind cbind cbind_boost)

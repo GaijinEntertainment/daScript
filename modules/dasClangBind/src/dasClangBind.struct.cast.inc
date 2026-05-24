@@ -49,6 +49,12 @@ template <> struct cast_arg<CXVersion> {
 		return * cast<CXVersion *>::to(res);
 	}
 };
+template <> struct cast_arg<CXIndexOptions> {
+	static __forceinline const CXIndexOptions & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<CXIndexOptions *>::to(res);
+	}
+};
 template <> struct cast_arg<CXTUResourceUsageEntry> {
 	static __forceinline const CXTUResourceUsageEntry & to ( Context & ctx, SimNode * node ) {
 		vec4f res = node->eval(ctx);

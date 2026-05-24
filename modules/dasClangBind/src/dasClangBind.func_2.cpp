@@ -12,19 +12,23 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_2() {
-// from clang-c/CXSourceLocation.h:247:21
+// from clang-c/CXSourceLocation.h:229:21
+	makeExtern< void (*)(CXSourceLocation,void **,unsigned int *,unsigned int *,unsigned int *) , clang_getSpellingLocation , SimNode_ExtFuncCall >(lib,"clang_getSpellingLocation","clang_getSpellingLocation")
+		->args({"location","file","line","column","offset"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from clang-c/CXSourceLocation.h:257:21
 	makeExtern< void (*)(CXSourceLocation,void **,unsigned int *,unsigned int *,unsigned int *) , clang_getFileLocation , SimNode_ExtFuncCall >(lib,"clang_getFileLocation","clang_getFileLocation")
 		->args({"location","file","line","column","offset"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/CXSourceLocation.h:255:33
+// from clang-c/CXSourceLocation.h:265:33
 	makeExtern< CXSourceLocation (*)(CXSourceRange) , clang_getRangeStart , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getRangeStart","clang_getRangeStart")
 		->args({"range"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/CXSourceLocation.h:261:33
+// from clang-c/CXSourceLocation.h:271:33
 	makeExtern< CXSourceLocation (*)(CXSourceRange) , clang_getRangeEnd , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getRangeEnd","clang_getRangeEnd")
 		->args({"range"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/CXSourceLocation.h:278:21
+// from clang-c/CXSourceLocation.h:288:21
 	makeExtern< void (*)(CXSourceRangeList *) , clang_disposeSourceRangeList , SimNode_ExtFuncCall >(lib,"clang_disposeSourceRangeList","clang_disposeSourceRangeList")
 		->args({"ranges"})
 		->addToModule(*this, SideEffects::worstDefault);
@@ -85,10 +89,6 @@ void Module_dasClangBind::initFunctions_2() {
 		->addToModule(*this, SideEffects::worstDefault);
 // from clang-c/CXDiagnostic.h:315:25
 	makeExtern< CXString (*)(void *) , clang_getDiagnosticCategoryText , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getDiagnosticCategoryText","clang_getDiagnosticCategoryText")
-		->args({""})
-		->addToModule(*this, SideEffects::worstDefault);
-// from clang-c/CXDiagnostic.h:321:25
-	makeExtern< unsigned int (*)(void *) , clang_getDiagnosticNumRanges , SimNode_ExtFuncCall >(lib,"clang_getDiagnosticNumRanges","clang_getDiagnosticNumRanges")
 		->args({""})
 		->addToModule(*this, SideEffects::worstDefault);
 }
