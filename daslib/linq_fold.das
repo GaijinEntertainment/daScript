@@ -1243,6 +1243,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var firstName : string
     var firstDefaultExpr : Expression?
     var hasOrder = false
+    var selectLam : Expression?
+    var selectElemType : TypeDeclPtr
     let at = calls[0]._0.at
     let itName = qn("it", at)
     for (i in 0 .. length(calls)) {
@@ -1274,13 +1276,20 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
             takeExpr = clone_expression(arg)
         } elif (name == "first" || name == "first_or_default") {
-            // order + first → min/max (O(N) instead of sort + index). Must be terminal.
+            // order + first → min/max (O(N) instead of sort + index). Must be terminal (no select after).
             if (!hasOrder || takeExpr != null || firstName != "" || i != length(calls) - 1) return null
             firstName = name
             if (name == "first_or_default") {
                 if ((cll._0.arguments |> length) < 2) return null
                 firstDefaultExpr = clone_expression(cll._0.arguments[1])
             }
+        } elif (name == "select") {
+            // Terminal _select after take/first: project at return, heap cmp stays on source type.
+            if (i != length(calls) - 1 || !hasOrder
+                    || cll._0._type == null || cll._0._type.firstType == null) return null
+            selectLam = cll._0.arguments[1]
+            if (selectLam == null) return null
+            selectElemType = clone_type(cll._0._type.firstType)
         } else {
             return null
         }
@@ -1299,6 +1308,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     // Streaming-min / bounded-heap fast paths (mirror of plan_decs_order_family). When the key is inline-able, skip the materialize-all + min_by/top_n* dispatch in favor of a per-walk state (single best for first[_or_default], heap of size N for take). For first[_or_default]: avoids the per-element `invoke(keyLambda, x)` cost in min_by_impl (~28 ns/op win on 100K-row sort_first). For take(N): avoids materializing the full filtered set before top_n_by (~7-9 ns/op win on sort_take / select_where_order_take).
     let useBoundedHeap = takeExpr != null && inlineCmp != null && firstName == ""
     let useStreamingMin = firstName != "" && inlineCmp != null
+    // Terminal _select only splices on inline-cmp / where_+order paths; direct calls would re-emit the cascade.
+    if (selectLam != null && !useStreamingMin && !useBoundedHeap && whereCond == null) return null
     if (useStreamingMin) {
         let bestName = qn("order_best", at)
         let seenName = qn("order_seen", at)
@@ -1325,27 +1336,43 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
         var emission : Expression?
+        let outElemType = (selectLam != null) ? selectElemType : elemType
         if (firstName == "first") {
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(elemType) {
+            var firstRetExpr : Expression?
+            if (selectLam != null) {
+                firstRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(bestName)))
+            } else {
+                firstRetExpr = qmacro($i(bestName))
+            }
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
                 var $i(bestName) = default<$t(elemType)>
                 var $i(seenName) = false
                 for ($i(itName) in $i(srcName)) {
                     $e(perElement)
                 }
                 panic("sequence contains no elements") if (!$i(seenName))
-                return $i(bestName)
+                return $e(firstRetExpr)
             }, $e(topExpr)))
         } else {
             let dBindName = qn("order_d", at)
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(elemType) {
+            var bestRetExpr : Expression?
+            var dRetExpr : Expression?
+            if (selectLam != null) {
+                bestRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(bestName)))
+                dRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(dBindName)))
+            } else {
+                bestRetExpr = qmacro($i(bestName))
+                dRetExpr = qmacro($i(dBindName))
+            }
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
                 let $i(dBindName) = $e(firstDefaultExpr)
                 var $i(bestName) = default<$t(elemType)>
                 var $i(seenName) = false
                 for ($i(itName) in $i(srcName)) {
                     $e(perElement)
                 }
-                return $i(bestName) if ($i(seenName))
-                return $i(dBindName)
+                return $e(bestRetExpr) if ($i(seenName))
+                return $e(dRetExpr)
             }, $e(topExpr)))
         }
         return finalize_invoke(emission, at)
@@ -1378,16 +1405,39 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
         // No `reserve(takeN)` on the bounded buf — matches the upstream top_n_by_with_cmp iterator-variant policy (linq.das:482-484). Caller may pass takeN >> actual source size, so pre-reserving N risks a large upfront allocation for no win.
-        var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
-            let $i(takeNName) = $e(takeExpr)
-            var $i(bhBufName) : array<$t(bufElemType)>
-            return <- $i(bhBufName) if ($i(takeNName) <= 0)
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
-            _::order_inplace($i(bhBufName), $e(inlineCmp))
-            return <- $i(bhBufName)
-        }, $e(topExpr)))
+        var emission : Expression?
+        if (selectLam != null) {
+            // Terminal _select projects ≤K heap survivors at return (heap holds raw type for cmp).
+            let outBufName = qn("order_proj_buf", at)
+            let elemName = qn("order_proj_e", at)
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
+                let $i(takeNName) = $e(takeExpr)
+                var $i(bhBufName) : array<$t(bufElemType)>
+                var $i(outBufName) : array<$t(selectElemType)>
+                return <- $i(outBufName) if ($i(takeNName) <= 0)
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                _::order_inplace($i(bhBufName), $e(inlineCmp))
+                $i(outBufName) |> reserve(length($i(bhBufName)))
+                for ($i(elemName) in $i(bhBufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }, $e(topExpr)))
+        } else {
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
+                let $i(takeNName) = $e(takeExpr)
+                var $i(bhBufName) : array<$t(bufElemType)>
+                return <- $i(bhBufName) if ($i(takeNName) <= 0)
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                _::order_inplace($i(bhBufName), $e(inlineCmp))
+                return <- $i(bhBufName)
+            }, $e(topExpr)))
+        }
         if (needIterWrap) {
             emission = qmacro($e(emission).to_sequence_move())
         }
@@ -1490,6 +1540,13 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             $e(loopBody)
         }
     }
+    // Terminal _select projects at return; buffer/scalar carries source type so cmp/sort sees raw.
+    let elemName = qn("order_proj_e", at)
+    let outBufName = qn("order_proj_buf", at)
+    var projBody : Expression?
+    if (selectLam != null) {
+        projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+    }
     if (firstName == "first") {
         // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager `first()` semantics; min/max return uninitialized refs on empty.
         stmts |> push <| qmacro_expr() {
@@ -1501,8 +1558,15 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         } else {
             minMaxCall = qmacro($c(minMaxName)($i(bufName)))
         }
-        stmts |> push <| qmacro_expr() {
-            return $e(minMaxCall)
+        if (selectLam != null) {
+            stmts |> push_from <| qmacro_block_to_array() {
+                let $i(elemName) = $e(minMaxCall)
+                return $e(projBody)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return $e(minMaxCall)
+            }
         }
     } elif (firstName == "first_or_default") {
         // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case.
@@ -1514,8 +1578,18 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), 1))
         }
-        stmts |> push <| qmacro_expr() {
-            return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+        if (selectLam != null) {
+            // first_or_default + select: bind default once (side-effect order), project both branches.
+            let dBindName = qn("order_d", at)
+            stmts |> push_from <| qmacro_block_to_array() {
+                let $i(dBindName) = $e(firstDefaultExpr)
+                let $i(elemName) = _::first_or_default($e(topNCall), $i(dBindName))
+                return $e(projBody)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+            }
         }
     } elif (takeExpr == null) {
         // Sort the prefilter buffer in place and return it. order*_inplace is void
@@ -1529,8 +1603,19 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             sortCall = qmacro($c(inplaceName)($i(bufName)))
         }
         stmts |> push(sortCall)
-        stmts |> push <| qmacro_expr() {
-            return <- $i(bufName)
+        if (selectLam != null) {
+            stmts |> push_from <| qmacro_block_to_array() {
+                var $i(outBufName) : array<$t(selectElemType)>
+                $i(outBufName) |> reserve(length($i(bufName)))
+                for ($i(elemName) in $i(bufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return <- $i(bufName)
+            }
         }
     } else {
         // top_n* on the prefilter buffer.
@@ -1542,8 +1627,21 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr)))
         }
-        stmts |> push <| qmacro_expr() {
-            return <- $e(topNCall)
+        if (selectLam != null) {
+            let topResName = qn("order_top_res", at)
+            stmts |> push_from <| qmacro_block_to_array() {
+                var $i(topResName) <- $e(topNCall)
+                var $i(outBufName) : array<$t(selectElemType)>
+                $i(outBufName) |> reserve(length($i(topResName)))
+                for ($i(elemName) in $i(topResName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return <- $e(topNCall)
+            }
         }
     }
     var bodyBlock = new ExprBlock(at = at)
@@ -1781,6 +1879,8 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     var hasReverse = false
     var seenSelect = false
     var takeExpr : Expression?
+    var terminalSelectLam : Expression?
+    var terminalSelectElemType : TypeDeclPtr
     let at = calls[0]._0.at
     let srcName = qn("source", at)
     let itName  = qn("it", at)
@@ -1797,9 +1897,19 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             if (hasReverse || seenSelect) return null
             whereCond = merge_where_cond(whereCond, peel_lambda_rename_var(cll._0.arguments[1], itName))
         } elif (name == "select") {
-            if (hasReverse || seenSelect) return null
-            seenSelect = true
-            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
+            if (!hasReverse && !seenSelect) {
+                // Pre-reverse select: existing path (buffer holds projected values).
+                seenSelect = true
+                projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
+            } elif (hasReverse && !seenSelect && terminalSelectLam == null && i == length(calls) - 1) {
+                // Terminal post-reverse select: project at return (R1-R4 buf or first scalar).
+                terminalSelectLam = cll._0.arguments[1]
+                if (terminalSelectLam == null
+                        || cll._0._type == null || cll._0._type.firstType == null) return null
+                terminalSelectElemType = clone_type(cll._0._type.firstType)
+            } else {
+                return null
+            }
         } elif (name == "reverse") {
             if (hasReverse) return null
             hasReverse = true
@@ -1813,7 +1923,9 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasReverse || (takeExpr != null && terminatorName != "")) return null
+    // count + terminal _select would drop projection side effects (count ≡ count after pure select). Defer.
+    if (!hasReverse || (takeExpr != null && terminatorName != "")
+            || (terminalSelectLam != null && terminatorName == "count")) return null
     var body : Expression?
     if (terminatorName == "count") {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
@@ -1853,6 +1965,16 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             $i(foundName) = true
         }
         var perElement = wrap_with_condition(matchBlock, whereCond)
+        // Terminal _select: `last` stays source-typed; project (and the default) at return.
+        var lastRetExpr : Expression?
+        var dRetExpr : Expression?
+        if (terminalSelectLam != null) {
+            lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
+            dRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(dBindName)))
+        } else {
+            lastRetExpr = qmacro($i(lastName))
+            dRetExpr = qmacro($i(dBindName))
+        }
         if (terminatorName == "first") {
             body = qmacro_block() {
                 var $i(foundName) = false
@@ -1863,7 +1985,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                 if (!$i(foundName)) {
                     panic("sequence contains no elements")
                 }
-                return $i(lastName)
+                return $e(lastRetExpr)
             }
         } else {
             body = qmacro_block() {
@@ -1873,14 +1995,22 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                 for ($i(itName) in $i(srcName)) {
                     $e(perElement)
                 }
-                return $i(foundName) ? $i(lastName) : $i(dBindName)
+                return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
             }
         }
     } else {
         // R1-R4 path: buffer + reverse_inplace + optional resize + return buffer.
         let needIterWrap = expr._type.isIterator
         var bufElemType = strip_const_ref(clone_type(reverseCall._type.firstType))
+        // Terminal _select projects buffer survivors at return (after resize trims to take(N)).
+        let outBufName = qn("rev_proj_buf", at)
+        let elemName = qn("rev_proj_e", at)
+        var projBody : Expression?
+        if (terminalSelectLam != null) {
+            projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
+        }
         let canBackwardIndex = (takeExpr != null && projection == null && whereCond == null
+                && terminalSelectLam == null
                 && (top._type.isGoodArrayType || top._type.isArray))
         if (canBackwardIndex) {
             // R6: visit only the last takeN indices — skips full-source push + O(length) reverse_inplace.
@@ -1923,16 +2053,36 @@ def private plan_reverse(var expr : Expression?) : Expression? {
                     $i(bufName) |> resize($e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < length($i(bufName)) ? $e(takeExpr) : length($i(bufName))))
                 }
             }
-            var returnExpr = buffer_return(bufName, needIterWrap)
-            body = qmacro_block() {
-                var $i(bufName) : array<$t(bufElemType)>
-                $b(reserveStmts)
-                for ($i(itName) in $i(srcName)) {
-                    $e(pushExpr)
+            if (terminalSelectLam != null) {
+                // Post-reverse projection: outBuf returned in place of bufName.
+                var returnExpr = buffer_return(outBufName, needIterWrap)
+                body = qmacro_block() {
+                    var $i(bufName) : array<$t(bufElemType)>
+                    $b(reserveStmts)
+                    for ($i(itName) in $i(srcName)) {
+                        $e(pushExpr)
+                    }
+                    _::reverse_inplace($i(bufName))
+                    $b(resizeStmts)
+                    var $i(outBufName) : array<$t(terminalSelectElemType)>
+                    $i(outBufName) |> reserve(length($i(bufName)))
+                    for ($i(elemName) in $i(bufName)) {
+                        $i(outBufName) |> push_clone($e(projBody))
+                    }
+                    $e(returnExpr)
                 }
-                _::reverse_inplace($i(bufName))
-                $b(resizeStmts)
-                $e(returnExpr)
+            } else {
+                var returnExpr = buffer_return(bufName, needIterWrap)
+                body = qmacro_block() {
+                    var $i(bufName) : array<$t(bufElemType)>
+                    $b(reserveStmts)
+                    for ($i(itName) in $i(srcName)) {
+                        $e(pushExpr)
+                    }
+                    _::reverse_inplace($i(bufName))
+                    $b(resizeStmts)
+                    $e(returnExpr)
+                }
             }
         }
     }
@@ -4559,6 +4709,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     var takeExpr : Expression?
     var firstName : string = ""
     var firstDefaultExpr : Expression?
+    var selectLam : Expression?
+    var selectElemType : TypeDeclPtr
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
@@ -4591,6 +4743,13 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
                 if ((cll._0.arguments |> length) < 2) return null
                 firstDefaultExpr = clone_expression(cll._0.arguments[1])
             }
+        } elif (name == "select") {
+            // Terminal _select after take(N): heap/sort sees raw tuple, project at return.
+            if (i != length(calls) - 1 || !hasOrder
+                    || cll._0._type == null || cll._0._type.firstType == null) return null
+            selectLam = cll._0.arguments[1]
+            if (selectLam == null) return null
+            selectElemType = clone_type(cll._0._type.firstType)
         } else {
             return null
         }
@@ -4681,21 +4840,46 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         }
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
         var bhStmts : array<Expression?>
-        bhStmts |> reserve(7)
+        bhStmts |> reserve(10)
         // No `reserve(takeN)` on the bounded buf — matches the policy in linq.das top_n_by_with_cmp iterator variant. Caller may pass takeN >> actual source size, and the decs cardinality is unknown ahead of the walk; pre-reserving N slots would risk a large upfront allocation for no win (fill phase grows geometrically to min(N, M) in O(log) reallocs anyway).
-        bhStmts |> push_from <| qmacro_block_to_array() {
-            let $i(takeNName) = $e(takeExpr)
-            var $i(bufName) : array<$t(elemType)>
-            return <- $i(bufName) if ($i(takeNName) <= 0)
-            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
-            _::order_inplace($i(bufName), $e(inlineCmp))
-            return <- $i(bufName)
+        if (selectLam != null) {
+            // Terminal _select projects ≤K heap survivors at return (heap holds raw tuples).
+            let outBufName = qn("decs_proj_buf", at)
+            let elemName = qn("decs_proj_e", at)
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+            bhStmts |> push_from <| qmacro_block_to_array() {
+                let $i(takeNName) = $e(takeExpr)
+                var $i(bufName) : array<$t(elemType)>
+                var $i(outBufName) : array<$t(selectElemType)>
+                return <- $i(outBufName) if ($i(takeNName) <= 0)
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+                _::order_inplace($i(bufName), $e(inlineCmp))
+                $i(outBufName) |> reserve(length($i(bufName)))
+                for ($i(elemName) in $i(bufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+            emission = qmacro(invoke($() : array<$t(selectElemType)> {
+                $b(bhStmts)
+            }))
+        } else {
+            bhStmts |> push_from <| qmacro_block_to_array() {
+                let $i(takeNName) = $e(takeExpr)
+                var $i(bufName) : array<$t(elemType)>
+                return <- $i(bufName) if ($i(takeNName) <= 0)
+                for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+                _::order_inplace($i(bufName), $e(inlineCmp))
+                return <- $i(bufName)
+            }
+            emission = qmacro(invoke($() : array<$t(elemType)> {
+                $b(bhStmts)
+            }))
         }
-        emission = qmacro(invoke($() : array<$t(elemType)> {
-            $b(bhStmts)
-        }))
         return finalize_decs_emission(emission, at, needIterWrap)
     }
     var perElement : Expression? = qmacro_expr() {
@@ -4769,12 +4953,29 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             sortCall = qmacro($c(inplaceName)($i(bufName)))
         }
         bodyStmts |> push(sortCall)
-        bodyStmts |> push <| qmacro_expr() {
-            return <- $i(bufName)
+        if (selectLam != null) {
+            let outBufName = qn("decs_proj_buf", at)
+            let elemName = qn("decs_proj_e", at)
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+            bodyStmts |> push_from <| qmacro_block_to_array() {
+                var $i(outBufName) : array<$t(selectElemType)>
+                $i(outBufName) |> reserve(length($i(bufName)))
+                for ($i(elemName) in $i(bufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+            emission = qmacro(invoke($() : array<$t(selectElemType)> {
+                $b(bodyStmts)
+            }))
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return <- $i(bufName)
+            }
+            emission = qmacro(invoke($() : array<$t(elemType)> {
+                $b(bodyStmts)
+            }))
         }
-        emission = qmacro(invoke($() : array<$t(elemType)> {
-            $b(bodyStmts)
-        }))
     } else {
         // order + take → top_n* dispatch on the buffer.
         var topNCall : Expression?
@@ -4785,12 +4986,31 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr)))
         }
-        bodyStmts |> push <| qmacro_expr() {
-            return <- $e(topNCall)
+        if (selectLam != null) {
+            let topResName = qn("decs_top_res", at)
+            let outBufName = qn("decs_proj_buf", at)
+            let elemName = qn("decs_proj_e", at)
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+            bodyStmts |> push_from <| qmacro_block_to_array() {
+                var $i(topResName) <- $e(topNCall)
+                var $i(outBufName) : array<$t(selectElemType)>
+                $i(outBufName) |> reserve(length($i(topResName)))
+                for ($i(elemName) in $i(topResName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+            emission = qmacro(invoke($() : array<$t(selectElemType)> {
+                $b(bodyStmts)
+            }))
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return <- $e(topNCall)
+            }
+            emission = qmacro(invoke($() : array<$t(elemType)> {
+                $b(bodyStmts)
+            }))
         }
-        emission = qmacro(invoke($() : array<$t(elemType)> {
-            $b(bodyStmts)
-        }))
     }
     // Bare order + take both return array; wrap to iterator when the user's outer context demands it. first/first_or_default return scalar — no wrap.
     return finalize_decs_emission(emission, at, needIterWrap && firstName == "")
@@ -4826,6 +5046,8 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     var hasReverse = false
     var seenSelect = false
     var takeExpr : Expression?
+    var terminalSelectLam : Expression?
+    var terminalSelectElemType : TypeDeclPtr
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
@@ -4835,10 +5057,18 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
         } elif (name == "select") {
-            if (hasReverse || seenSelect) return null
-            seenSelect = true
-            projection = peel_lambda_rename_var(cll._0.arguments[1], tupName)
-            if (projection == null) return null
+            if (!hasReverse && !seenSelect) {
+                seenSelect = true
+                projection = peel_lambda_rename_var(cll._0.arguments[1], tupName)
+                if (projection == null) return null
+            } elif (hasReverse && !seenSelect && terminalSelectLam == null && i == length(calls) - 1) {
+                terminalSelectLam = cll._0.arguments[1]
+                if (terminalSelectLam == null
+                        || cll._0._type == null || cll._0._type.firstType == null) return null
+                terminalSelectElemType = clone_type(cll._0._type.firstType)
+            } else {
+                return null
+            }
         } elif (name == "reverse") {
             if (hasReverse) return null
             hasReverse = true
@@ -4851,7 +5081,8 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasReverse || (takeExpr != null && terminatorName != "")) return null
+    if (!hasReverse || (takeExpr != null && terminatorName != "")
+            || (terminalSelectLam != null && terminatorName == "count")) return null
     let archName = bridge.archName
     if (terminatorName == "count") {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
@@ -4914,9 +5145,20 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             }
         }
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
+        // Terminal _select: `last` stays source-typed; project at return.
+        let outElemType = (terminalSelectLam != null) ? terminalSelectElemType : lastType
+        var lastRetExpr : Expression?
+        var dRetExpr : Expression?
+        if (terminalSelectLam != null) {
+            lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
+            dRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(dBindName)))
+        } else {
+            lastRetExpr = qmacro($i(lastName))
+            dRetExpr = qmacro($i(dBindName))
+        }
         var emission : Expression?
         if (terminatorName == "first") {
-            emission = qmacro(invoke($() : $t(lastType) {
+            emission = qmacro(invoke($() : $t(outElemType) {
                 var $i(foundName) = false
                 var $i(lastName) : $t(lastType) = default<$t(lastType)>
                 for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
@@ -4925,17 +5167,17 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
                 if (!$i(foundName)) {
                     panic("sequence contains no elements")
                 }
-                return $i(lastName)
+                return $e(lastRetExpr)
             }))
         } else {
-            emission = qmacro(invoke($() : $t(lastType) {
+            emission = qmacro(invoke($() : $t(outElemType) {
                 let $i(dBindName) = $e(terminatorCall.arguments[1])
                 var $i(foundName) = false
                 var $i(lastName) : $t(lastType) = default<$t(lastType)>
                 for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                     $e(forExprNode)
                 })
-                return $i(foundName) ? $i(lastName) : $i(dBindName)
+                return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
             }))
         }
         emission.force_at(at)
@@ -4947,7 +5189,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     let needIterWrap = expr._type.isIterator
     var bufElemType = strip_const_ref(clone_type(projection != null ? projection._type : bridge.elementType))
     // Skip-into-tail fast path: `reverse |> take(N) |> to_array` with no where/select. Walk archetypes once to sum `arch.size` (cheap, no entity load), compute skip = total - takeN, then for_each_archetype_find skips whole archetypes whose size still fits below the skip threshold and short-circuits once the buffer reaches takeN. `where` would invalidate the size-based skip (count after filter is unknown without iterating); `select` would only affect element shape, not count, but is skipped here to keep v1 minimal.
-    if (takeExpr != null && whereCond == null && projection == null) {
+    if (takeExpr != null && whereCond == null && projection == null && terminalSelectLam == null) {
         let takeNName = qn("take_n", at)
         let totalName = qn("decs_total", at)
         let actualName = qn("decs_actual", at)
@@ -5031,15 +5273,36 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
             $i(bufName) |> resize($i(takeNName) <= 0 ? 0 : ($i(takeNName) < length($i(bufName)) ? $i(takeNName) : length($i(bufName))))
         }
     }
-    var emission : Expression? = qmacro(invoke($() : array<$t(bufElemType)> {
-        var $i(bufName) : array<$t(bufElemType)>
-        for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-            $e(forExprNode)
-        })
-        _::reverse_inplace($i(bufName))
-        $b(resizeStmts)
-        return <- $i(bufName)
-    }))
+    var emission : Expression?
+    if (terminalSelectLam != null) {
+        let outBufName = qn("decs_rev_proj_buf", at)
+        let elemName = qn("decs_rev_proj_e", at)
+        var projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
+        emission = qmacro(invoke($() : array<$t(terminalSelectElemType)> {
+            var $i(bufName) : array<$t(bufElemType)>
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            _::reverse_inplace($i(bufName))
+            $b(resizeStmts)
+            var $i(outBufName) : array<$t(terminalSelectElemType)>
+            $i(outBufName) |> reserve(length($i(bufName)))
+            for ($i(elemName) in $i(bufName)) {
+                $i(outBufName) |> push_clone($e(projBody))
+            }
+            return <- $i(outBufName)
+        }))
+    } else {
+        emission = qmacro(invoke($() : array<$t(bufElemType)> {
+            var $i(bufName) : array<$t(bufElemType)>
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+            _::reverse_inplace($i(bufName))
+            $b(resizeStmts)
+            return <- $i(bufName)
+        }))
+    }
     return finalize_decs_emission(emission, at, needIterWrap)
 }
 
@@ -5277,10 +5540,21 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
             calls |> pop
         }
     }
+    // Trailing _select composes with the join's result lambda: bind once, project once.
+    var selectLam : Expression?
+    var selectElemType : TypeDeclPtr
+    if (terminatorName != "count" && !empty(calls) && calls.back()._1.name == "select") {
+        var selCall = calls.back()._0
+        selectLam = selCall.arguments[1]
+        if (selectLam == null || selCall._type == null || selCall._type.firstType == null) return null
+        selectElemType = clone_type(selCall._type.firstType)
+        calls |> pop
+    }
     // Must end on a single `join` call now — interleaved where/select unsupported in v1.
     if (empty(calls) || calls.back()._1.name != "join") return null
     var joinCall = calls.back()._0
     calls |> pop
+    // Iterator-typed context bails regardless of selectLam: the emission below returns `array<elemType>` and is not wrapped to iterator. (Currently user-unreachable when selectLam != null — `_select` after `_join` can't infer its result_selector without a downstream terminator — but kept for defensive splice hygiene.)
     if (!empty(calls) || (terminatorName == "" && !expr._type.isGoodArrayType)) return null
     // Both sides must be from_decs_template eager bridges.
     var bridgeA = extract_decs_bridge(top)
@@ -5346,9 +5620,22 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
         preludeStmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(resultType)>
         }
-        probeStmts |> push <| qmacro_expr() {
-            for ($i(bElemName) in $i(arrName)) {
-                $i(bufName) |> push_clone($e(resultBody))
+        if (selectLam != null) {
+            // Bind join result once per pair (side effects once), then project.
+            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            let resBindName = qn("decs_jres", at)
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(resBindName)))
+            probeStmts |> push <| qmacro_expr() {
+                for ($i(bElemName) in $i(arrName)) {
+                    let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                    $i(bufName) |> push_clone($e(projBody))
+                }
+            }
+        } else {
+            probeStmts |> push <| qmacro_expr() {
+                for ($i(bElemName) in $i(arrName)) {
+                    $i(bufName) |> push_clone($e(resultBody))
+                }
             }
         }
         returnStmt = qmacro_expr() {
@@ -5398,8 +5685,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
     if (empty(calls) || calls[0]._1.name != "zip") return null
     var zipCall = calls[0]._0
     let zipArgCount = zipCall.arguments |> length
-    // Z6 bail: result-selector form (3-arg zip = 2 sources + selector) yields scalar element stream — different splice shape, defer.
-    if (zipArgCount != 2) return null
+    // 3-arg zip(a, b, sel): pre-lower the selector into `projection` (peeled with it._0/_1 binds).
+    if (zipArgCount != 2 && zipArgCount != 3) return null
     // Identify recognized terminator. Counter: count/long_count. Accumulator: sum/min/max/average. Early-exit: first/first_or_default/any/all/contains. Anything else: treat as no-terminator (bare → ARRAY lane); unrecognized chain op bails inside the chain walk.
     var lastName = ""
     var intermediateEnd = length(calls)
@@ -5467,6 +5754,29 @@ def private plan_zip(var expr : Expression?) : Expression? {
     var seenTakeWhile = false
     var seenTake = false
     var allProjectionsPure = true
+    // Pre-lower 3-arg zip(a,b,sel) → seeded projection (2-arg lambda replaced with it._0/_1).
+    if (zipArgCount == 3) {
+        var resultLam = zipCall.arguments[2]
+        if (resultLam == null || !(resultLam is ExprMakeBlock)) return null
+        var mblk = resultLam as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk == null || blk.arguments |> length != 2 || blk.list |> length != 1
+                || !(blk.list[0] is ExprReturn)) return null
+        var ret = blk.list[0] as ExprReturn
+        if (ret.subexpr == null || ret.subexpr._type == null) return null
+        var projBody = clone_expression(ret.subexpr)
+        var projElemType = strip_const_ref(clone_type(ret.subexpr._type))
+        var zipRules : Template
+        zipRules |> replaceVariable(string(blk.arguments[0].name), qmacro($i(itName)._0))
+        zipRules |> replaceVariable(string(blk.arguments[1].name), qmacro($i(itName)._1))
+        projBody = apply_template(zipRules, projBody.at, projBody)
+        projection = projBody
+        elementType = projElemType
+        seenSelect = true
+        if (has_sideeffects(projection)) {
+            allProjectionsPure = false
+        }
+    }
     // Z3 chain walk: fuse where_/select/take/skip/take_while/skip_while between zip and terminator. Predicates/projections receive the tuple element via peel_lambda_replace_var substitution with `(itA, itB)` — typer collapses `t._0/_1` to the raw iter vars.
     for (i in 1 .. intermediateEnd) {
         var cll & = unsafe(calls[i])
