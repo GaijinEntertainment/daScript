@@ -7,9 +7,9 @@ let THRESHOLD = 500
 
 // _where(_.price > T) |> _order_by(_.price) — fused prefilter + sort, NO take.
 // SQL: WHERE price > T ORDER BY price.
-// m3 (plain LINQ) materializes a filter array, then sorts a clone (two allocations).
-// m3f (spliced via plan_order_family Phase 3c) emits a single fused loop that collects
-// matching elements into one pre-allocated buffer, then sort_inplace's the buffer.
+// Array (spliced via plan_order_family Phase 3c) emits a single fused loop that
+// collects matching elements into one pre-allocated buffer, then sort_inplace's
+// the buffer. Decs runs the same fused shape over the archetype walk.
 
 def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
@@ -22,18 +22,6 @@ def run_m1(b : B?; n : int) {
             if (empty(rows)) {
                 b->failNow()
             }
-        }
-    }
-}
-
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let rows <- (arr |> _where(_.price > THRESHOLD)
-                         |> _order_by(_.price))
-        b |> accept(rows)
-        if (empty(rows)) {
-            b->failNow()
         }
     }
 }
@@ -67,11 +55,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def bare_order_where_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def bare_order_where_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

@@ -7,7 +7,7 @@ require _common public
 // (semantically — exactly-one-match), but the splice still fuses upstream where.
 //
 // SQL: SELECT * FROM Cars WHERE id = 42 — pk lookup returns the single row.
-// m3/m3f traverse the array filtering and asserting one survivor.
+// Array and Decs lanes traverse the source filtering and asserting one survivor.
 
 let TARGET_ID = 42
 
@@ -24,16 +24,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let row = arr |> _where(_.id == TARGET_ID) |> single()
-        b |> accept(row)
-        if (row.id == 0) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -59,11 +49,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def single_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def single_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

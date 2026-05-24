@@ -11,21 +11,11 @@ require _common public
 // distinct_by, the path that goes through the invoke-block-on-tuple shape.
 //
 // SQL: `SELECT COUNT(DISTINCT brand) FROM Cars` — sqlite_linq doesn't lower
-// `distinct() |> count()` so the m1 lane is omitted (same as join_count).
+// `_distinct_by(...) |> count()`. [Follow-up TODO 2026-05-23: error[50503]
+// `_sql: unsupported chain root or operator. Got: __::linq\`distinct_by\`...` —
+// would need a new dispatch arm in sqlite_linq for distinct/distinct_by.]
 //
 // Expected result: BRAND_COUNT (5).
-
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let dedup <- arr |> _distinct_by(_.brand)
-        let c = dedup |> length
-        b |> accept(c)
-        if (c == 0) {
-            b->failNow()
-        }
-    }
-}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -47,11 +37,6 @@ def run_m4(b : B?; n : int) {
             b->failNow()
         }
     }
-}
-
-[benchmark]
-def distinct_by_count_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

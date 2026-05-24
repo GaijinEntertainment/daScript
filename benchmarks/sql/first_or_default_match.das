@@ -23,17 +23,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    let sentinel = Car(id = SENTINEL_ID, name = "none", price = 0, brand = 0, year = 0, dealer_id = 0)
-    b |> run("m3_array/{n}", n) {
-        let row = arr |> _where(_.price > THRESHOLD) |> first_or_default(sentinel)
-        b |> accept(row)
-        if (row.id == SENTINEL_ID) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     let sentinel = Car(id = SENTINEL_ID, name = "none", price = 0, brand = 0, year = 0, dealer_id = 0)
@@ -61,11 +50,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def first_or_default_match_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def first_or_default_match_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

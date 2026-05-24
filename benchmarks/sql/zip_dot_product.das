@@ -4,11 +4,11 @@ options persistent_heap
 require _common public
 
 // zip(a, b) |> select(t => t._0 * t._1) |> sum — dot product of two int sequences.
-// No clean SQL form (zip is not a natural relational operation), so m1 is omitted.
-// Splice mode should fuse zip + select + sum into a single accumulator loop.
-// m4 is the intra-archetype analogue: two int components on the same DecsCar entity
-// (price * year), summed over all entities. Wave 4 pruning keeps only those two
-// get_ro slots, so per-element cost matches the m3f two-column read.
+// No clean SQL form (zip is not a natural relational operation), so the SQL lane is
+// omitted. Splice mode fuses zip + select + sum into a single accumulator loop.
+// The Decs lane is the intra-archetype analogue: two int components on the same
+// DecsCar entity (price * year), summed over all entities. Wave 4 pruning keeps
+// only those two get_ro slots, so per-element cost matches the Array two-column read.
 
 def make_ints(n : int) : array<int> {
     var a : array<int>
@@ -19,17 +19,6 @@ def make_ints(n : int) : array<int> {
     return <- a
 }
 
-def run_m3(b : B?; n : int) {
-    let xs <- make_ints(n)
-    let ys <- make_ints(n)
-    b |> run("m3_array/{n}", n) {
-        let s = (zip(xs, ys) |> _select(_._0 * _._1) |> sum())
-        b |> accept(s)
-        if (s == 0) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let xs <- make_ints(n)
     let ys <- make_ints(n)
@@ -51,11 +40,6 @@ def run_m4(b : B?; n : int) {
             b->failNow()
         }
     }
-}
-
-[benchmark]
-def zip_dot_product_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]

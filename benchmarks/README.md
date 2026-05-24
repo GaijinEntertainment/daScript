@@ -60,18 +60,68 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 ## sql/
 
-3-mode comparison: `_sql` macro over `:memory:` SQLite vs pure in-memory `array<T>` LINQ, with the array form measured both in its naive (intermediate-materializing) and `_fold`-fused shapes. Mirrors the `tests/dasSQLITE/parity_check_*.das` pattern but oriented to throughput.
+3-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice. Each bench builds the same data three ways via `_common.das` fixtures and runs the same query expression through each lane. See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
 
-| Mode | Source | Form |
+| Lane | Source | Form |
 |---|---|---|
-| `m1` | `:memory:` SQLite | `_sql` — compile-time SQL emission, work pushed to the engine |
-| `m3` | pre-populated `array<Car>` | plain LINQ chain — materializes intermediate filter/sort arrays |
-| `m3f` | pre-populated `array<Car>` | `_fold` from `daslib/linq_boost` — fuses the chain into a single pass, in-place where possible |
+| `m1` (SQL) | `:memory:` SQLite | `_sql` macro — compile-time SQL emission, work pushed to the engine |
+| `m3f` (Array) | pre-populated `array<Car>` | `_fold` over `each(arr).chain()` — fuses the chain into a single pass |
+| `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<Car>).chain()` — fuses into a per-archetype walk |
+
+The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 
 | File | Description |
 |---|---|
-| `_common.das` | Shared `Car` `[sql_table]` + `fixture_db` / `fixture_array` (not a benchmark) |
-| `select_where.das` | Filter chain — `_where(_.price > 500)` over 10K rows. Modest asymmetry; m3 walks every row. |
-| `select_where_order_take.das` | Filter + sort + limit — `_where \|> _order_by(_.price) \|> take(10)`. SQL ORDER BY + LIMIT bounds work; m3 sorts the full filtered set. |
-| `count_aggregate.das` | Aggregate — `count()` after `_where` over 1M rows. SQL pushes `COUNT(*)` to the engine returning one row; m3 materializes the full filtered array then counts it; m3f fuses where+count into one pass. Highest-asymmetry chain in daslang's favor. |
-| `indexed_lookup.das` | Indexed point lookup — `_where(_.id == K)` against the PRIMARY KEY over 1M rows. SQLite uses the PK b-tree (O(log n)); m3/m3f have no index (O(n) linear scan). Inverse-asymmetry: SQLite wins by ~1000×, illustrating where indexed storage earns its keep. |
+| `_common.das` | Shared `Car` `[sql_table]` + `[decs_template]` + `Dealer` schema + fixture builders (not a benchmark) |
+| `aggregate_match.das` | `_where + aggregate(seed, op)` — user-supplied binary reducer over a filtered slice |
+| `all_match.das` | `all(P)` with always-true predicate — full scan, returns true |
+| `any_match.das` | `any(P)` — first-hit early exit |
+| `average_aggregate.das` | `average(_.price)` — single-row scalar reduce |
+| `bare_order_where.das` | `_where + _order_by(_.price)` — fused prefilter + sort, no take |
+| `chained_where.das` | `_where + _where + count` — two filter stages then count |
+| `contains_match.das` | `contains(needle)` — early-exit equality scan |
+| `count_aggregate.das` | `count()` — engine pushes `COUNT(*)`; array/decs fuse where+count |
+| `distinct_by_count.das` | `_distinct_by(_.brand) \|> count()` (Array/Decs only; SQL TODO) |
+| `distinct_count.das` | `_select(_.brand).distinct() \|> count()` — projection then dedup |
+| `distinct_take.das` | `_select(_.brand).distinct().take(N)` — early-exit dedup |
+| `element_at_match.das` | `_where + element_at(N)` — skip then take 1 |
+| `first_match.das` | `_where + first()` — first-hit |
+| `first_or_default_match.das` | `_where + first_or_default(d)` — first-hit with default |
+| `groupby_average.das` | `_group_by(_.brand) + _select(AvgPrice = avg)` |
+| `groupby_count.das` | `_group_by(_.brand) + _select(N = count)` |
+| `groupby_first.das` | `_group_by(_.brand) + _select(FirstCar = first per group)` (Array/Decs only; SQL TODO) |
+| `groupby_having_count.das` | `_group_by + _having(length >= 5) + _select` |
+| `groupby_having_hidden_sum.das` | `_group_by + _having(sum > 50000) + _select` |
+| `groupby_max.das` | `_group_by(_.brand) + _select(MaxPrice = max)` |
+| `groupby_min.das` | `_group_by(_.brand) + _select(MinPrice = min)` |
+| `groupby_multi_reducer.das` | `_group_by + 4-slot named tuple` — count + sum + max + … fused |
+| `groupby_select_sum.das` | `_select(_.price) + _group_by(_ % 100) + _select((K, S=sum))` (Array/Decs only; SQL TODO — expression keys) |
+| `groupby_sum.das` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
+| `groupby_where_count.das` | `_where + _group_by + _select(N = length)` |
+| `groupby_where_sum.das` | `_where + _group_by + _select(TotalPrice = sum)` |
+| `indexed_lookup.das` | `_where(_.id == K)` against the PRIMARY KEY — SQLite uses PK b-tree; Array/Decs scan linearly |
+| `join_count.das` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
+| `last_match.das` | `_where + last()` — carry-last terminator |
+| `long_count_aggregate.das` | `long_count()` — int64 counter |
+| `max_aggregate.das` | `max(_.price)` — streaming max |
+| `min_aggregate.das` | `min(_.price)` — streaming min |
+| `order_take_desc.das` | `_order_by_descending(_.price) + take(N)` — top-N largest |
+| `reverse_take.das` | `reverse + take(N)` — tail N rows |
+| `select_count.das` | `_select + count` — projection then counter (DCE'd in some lanes) |
+| `select_where.das` | `_where + _select` — filter then project |
+| `select_where_count.das` | `_select(2*price) + _where(> T) + count` — where-after-select |
+| `select_where_order_take.das` | `_where + _select + _order_by + take(N)` — full chain |
+| `select_where_sum.das` | `_select(2*price) + _where(> T) + sum` — where-after-select fused with accumulator |
+| `single_match.das` | `single` — assert-one-element with full scan |
+| `skip_take.das` | `skip(M) + take(K) + to_array` — windowing |
+| `skip_while_match.das` | `skip_while(P) + count` — predicate-driven skip |
+| `sort_first.das` | `_order_by + first` — streaming-min (no buffer) |
+| `sort_take.das` | `_order_by + take(N)` — bounded-heap (size N) |
+| `sum_aggregate.das` | `sum(_.price)` — engine pushes `SUM(price)`; array/decs accumulator |
+| `sum_where.das` | `_where + _select + sum` — three-stage |
+| `take_count.das` | `take(N) + to_array` — bounded materialization |
+| `take_count_filtered.das` | `_where + take(N) + count` (Array/Decs only; SQL semantically distinct — LIMIT-on-aggregate) |
+| `take_sum_aggregate.das` | `take(N) + sum` (Array/Decs only; SQL semantically distinct) |
+| `take_while_match.das` | `take_while(P) + count` — predicate-driven take |
+| `to_array_filter.das` | `_where + _select + to_array` — three-stage materialize |
+| `zip_dot_product.das` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |

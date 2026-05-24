@@ -25,17 +25,6 @@ def run_m1(b : B?; n : int) {
     }
 }
 
-def run_m3(b : B?; n : int) {
-    let arr <- fixture_array(n)
-    b |> run("m3_array/{n}", n) {
-        let groups <- (arr._where(_.price > 500)._group_by(_.brand)._select((Brand = _._0,
-                                                                              TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum())))
-        b |> accept(groups)
-        if (empty(groups)) {
-            b->failNow()
-        }
-    }
-}
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
     b |> run("m3f_array_fold/{n}", n) {
@@ -71,11 +60,6 @@ def run_m4(b : B?; n : int) {
 [benchmark]
 def groupby_where_sum_m1(b : B?) {
     run_m1(b, 100000)
-}
-
-[benchmark]
-def groupby_where_sum_m3(b : B?) {
-    run_m3(b, 100000)
 }
 
 [benchmark]
