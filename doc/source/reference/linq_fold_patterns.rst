@@ -54,6 +54,24 @@ to the array plan would not match and would force the default. The
 generic decs walk (``plan_decs_unroll``) runs after the specialized
 decs plans so it doesn't shadow them.
 
+Pre-planner normalizations
+==========================
+
+A few chain rewrites fire before any ``plan_*`` is consulted, so the
+plans see the normalized shape and a single arm covers what would
+otherwise be many lookalike chains:
+
+- ``_order_by(K).reverse()`` ⇒ ``_order_by_descending(K)``
+  (and the three symmetric flips: ``order_by_descending → order_by``,
+  ``order → order_descending``, ``order_descending → order``). Applied
+  by ``normalize_order_reverse``, called from every ``plan_*order_family``
+  and ``plan_*reverse`` planner right after ``flatten_linq``. The
+  registry pointer is swapped to the flipped variant in place — the
+  ``ExprCall`` arg list is identical for ascending/descending order
+  variants, so no AST clone is needed. Iterative: a chain like
+  ``_order_by(K).reverse().reverse()`` collapses to ``_order_by(K)`` in
+  two passes.
+
 Source-side entry points
 ========================
 
@@ -129,6 +147,9 @@ Array-source patterns
    * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count()`` / ``.to_array()``
      - ``plan_distinct``
      - Single-hash set lane; ``count`` reads ``length(set)``.
+   * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count(P)`` / ``.long_count(P)``
+     - ``plan_distinct`` (predicate counter)
+     - Dedup table is built unconditionally so ``distinct_by`` semantics keep FIRST occurrence per key; a separate ``var acc`` increments only when ``P`` matches that first occurrence. Mirrors tier-2 ``distinct.count(P)`` semantics (distinct-then-filter, not filter-then-distinct).
    * - ``._group_by(K)._select(reduce).to_array()``
      - ``plan_group_by_core`` → ``emit_reducer_branches``
      - Per-key bucket reducer; single hash, one entry per group.
@@ -189,6 +210,9 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._distinct()`` / ``._distinct_by(K)``
      - ``plan_decs_distinct``
      - Single-hash set lane mirroring ``plan_distinct``.
+   * - ``from_decs_template(...)._distinct()`` / ``._distinct_by(K)`` followed by ``.count(P)`` / ``.long_count(P)``
+     - ``plan_decs_distinct`` (predicate counter)
+     - Decs mirror of the array-side predicate-distinct splice. Same dedup-unconditional / counter-gated-on-P shape across archetypes.
    * - ``from_decs_template(...).reverse().take(N).to_array()``
      - ``plan_decs_reverse``
      - Whole-archetype skip + partial-archetype skip-counter + early-exit.
@@ -257,6 +281,9 @@ Zip patterns
    * - ``zip(a, b).first()`` / ``.first_or_default()`` / ``.aggregate(...)``
      - ``plan_zip`` (early-exit / accumulator)
      - Early-exit terminator on the zipped pair.
+   * - ``zip(a, b)._select(F).count(P)`` / ``.long_count(P)``
+     - ``plan_zip`` (counter with predicate fused as where)
+     - The 2-arg ``count(P)`` / ``long_count(P)`` form fuses into the existing zip walk by AND-ing the predicate into ``whereCond`` after the chain walk. Length-shortcut is suppressed when ``P`` is present (the counter loop runs).
 
 What falls back
 ===============
