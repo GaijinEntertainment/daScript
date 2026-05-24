@@ -109,6 +109,7 @@ jobs:
               libxcursor-dev \
               libxinerama-dev \
               libxi-dev \
+              clang-22 \
               libclang-22-dev \
               llvm-22-dev
             ;;
