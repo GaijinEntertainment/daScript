@@ -951,6 +951,7 @@ namespace das
     bool TypeDecl::computeAliasCache() {
         // Eager full walk independent of name/allowAuto. Sets aliasCache* on every visited node.
         // alias-type subtrees are dead ends for findAlias, so treated as NoAlias.
+        if (aliasCacheValid) return aliasCacheHasAlias;
         if (baseType == Type::alias) {
             aliasCacheValid = true;
             aliasCacheHasAlias = false;
