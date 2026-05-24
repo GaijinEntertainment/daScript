@@ -178,6 +178,36 @@ def private is_linq_call(var expr : Expression?) : bool {
     return false
 }
 
+// Theme 5: `_order_by(k).reverse()` → `_order_by_descending(k)` (and symmetric: order/order_descending, order_by/order_by_descending). Mutates `calls` in place by swapping the LinqCall metadata to the flipped registry entry and erasing the trailing reverse. The ExprCall arg list is identical between ascending/descending order variants, so no AST rewrite is needed. Runs once per planner that walks an order/reverse chain; idempotent (a fully-normalized chain produces no work). Closes audit 1b (order + reverse + take) and 2b (reverse over order) — after normalization, the existing plan_*order_family arms fire naturally.
+[macro_function]
+def private normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+    var i = 0
+    while (i + 1 < length(calls)) {
+        let curName = calls[i]._1.name
+        let nextName = calls[i + 1]._1.name
+        var flipped = ""
+        if (nextName == "reverse") {
+            if (curName == "order_by") {
+                flipped = "order_by_descending"
+            } elif (curName == "order_by_descending") {
+                flipped = "order_by"
+            } elif (curName == "order") {
+                flipped = "order_descending"
+            } elif (curName == "order_descending") {
+                flipped = "order"
+            }
+        }
+        if (flipped != "" && linqCalls.key_exists(flipped)) {
+            var linqCall & = unsafe(linqCalls?[flipped] ?? default<LinqCall>)
+            calls[i] = (calls[i]._0, unsafe(addr(linqCall)))
+            calls |> erase(i + 1)
+            // Don't advance `i` — the newly flipped order call might itself be followed by another reverse (`order_by(k).reverse().reverse()` → `order_by_descending(k).reverse()` → `order_by(k)`).
+        } else {
+            i ++
+        }
+    }
+}
+
 [macro_function]
 def private flatten_linq(var expr : Expression?)  {
     var top = expr
@@ -1248,6 +1278,7 @@ def private make_inline_less_call(orderKey : Expression?; orderName : string;
 def private plan_order_family(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
+    normalize_order_reverse(calls)
     top = peel_each(top)
     var whereCond : Expression?
     var orderName : string
@@ -1885,6 +1916,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
 def private plan_reverse(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
+    normalize_order_reverse(calls)
     top = peel_each(top)
     var terminatorName : string  = ""
     var terminatorCall : ExprCall?
@@ -2120,11 +2152,17 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     if (empty(calls)) return null
     top = peel_each(top)
     var terminatorName : string  = ""
+    var countPred : Expression?
     {
         let lastName = calls.back()._1.name
-        // 1-arg form only — `count(src, predicate)` / `long_count(src, predicate)` would silently drop the predicate (splice emits `length(seen)`). Bail to tier-2 which correctly evaluates the predicate.
-        if ((lastName == "count" || lastName == "sum" || lastName == "long_count")
-                && length(calls.back()._0.arguments) == 1) {
+        let lastArgs = calls.back()._0.arguments |> length
+        // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): dedup runs UNCONDITIONALLY (distinct_by keeps the FIRST occurrence per key); a separate `acc` counter increments only when the predicate matches that first occurrence. Wrapping dedup in `if(P)` would diverge from tier-2 when a later duplicate matches but the first didn't.
+        if ((lastName == "count" || lastName == "sum" || lastName == "long_count") && lastArgs == 1) {
+            terminatorName = lastName
+            calls |> pop
+        } elif ((lastName == "count" || lastName == "long_count") && lastArgs == 2) {
+            countPred = calls.back()._0.arguments[1]
+            if (countPred == null) return null
             terminatorName = lastName
             calls |> pop
         }
@@ -2195,6 +2233,14 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         stmts |> push <| qmacro_expr() {
             var $i(accName) : $t(elemType) = default<$t(elemType)>
         }
+    } elif (countPred != null && terminatorName == "count") {
+        stmts |> push <| qmacro_expr() {
+            var $i(accName) = 0
+        }
+    } elif (countPred != null && terminatorName == "long_count") {
+        stmts |> push <| qmacro_expr() {
+            var $i(accName) = 0l
+        }
     }
     // Bind take(N) limit once at outer scope so a side-effecting arg fires once, not on every fresh-key check.
     let takeLimName = qn("takeLim", at)
@@ -2227,6 +2273,11 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     } else {
         keyExpr = clone_expression(pushExpr)
     }
+    // count(p) / long_count(p): peel against pushExpr so the predicate sees the post-projection element (`_select(_.brand)._distinct().count(b => b > 0)` → b binds to the projected brand, not the source tuple).
+    if (countPred != null) {
+        countPred = peel_lambda_replace_var(countPred, pushExpr)
+        if (countPred == null) return null
+    }
     // Per-match consume: only inside the fresh-key branch; take-break is the outer-loop guard below.
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
@@ -2244,6 +2295,14 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     } elif (isSumTerminator) {
         consumeStmts |> push <| qmacro_expr() {
             $i(accName) += $e(pushExpr)
+        }
+    }
+    // count(p) / long_count(p): dedup happens unconditionally so `distinct_by` semantics stay correct (FIRST occurrence per key); the predicate gates only the matched counter. Without this split the chain `distinct_by(k).count(p)` would diverge from tier-2 when a later duplicate matches p but the first one didn't.
+    if (countPred != null && isCountTerminator) {
+        consumeStmts |> push <| qmacro_expr() {
+            if ($e(countPred)) {
+                $i(accName) ++
+            }
         }
     }
     var consumeBody = stmts_to_expr(consumeStmts)
@@ -2282,12 +2341,24 @@ def private plan_distinct(var expr : Expression?) : Expression? {
         }
     }
     if (terminatorName == "count") {
-        stmts |> push <| qmacro_expr() {
-            return length($i(seenName))
+        if (countPred != null) {
+            stmts |> push <| qmacro_expr() {
+                return $i(accName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return length($i(seenName))
+            }
         }
     } elif (terminatorName == "long_count") {
-        stmts |> push <| qmacro_expr() {
-            return int64(length($i(seenName)))
+        if (countPred != null) {
+            stmts |> push <| qmacro_expr() {
+                return $i(accName)
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                return int64(length($i(seenName)))
+            }
         }
     } elif (isSumTerminator) {
         stmts |> push <| qmacro_expr() {
@@ -3385,9 +3456,25 @@ def private extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
             || !(pushCall.arguments[1] is ExprMakeTuple)) return null
     var mkTup = pushCall.arguments[1] as ExprMakeTuple
     if (mkTup.recordNames |> length != forExpr.sources |> length
-            || forExpr.iteratorVariables |> length != forExpr.sources |> length) return null
+            || mkTup.values |> length != forExpr.sources |> length) return null
+    // forExpr.iteratorVariables can be empty when the bridge feeds a no-chain terminator (e.g. bare `from_decs_template(...).count()` / `.count(p)`): no chain op forces a second inference pass over the for-loop, so the iter-var name list never gets populated. Recover names from mkTup.values, where each tuple element references the corresponding iter var by name — peeled through the ExprRef2Value wrap the typer adds around iter-var reads. The recovered names match what the loop will bind once a later pass infers it.
+    var iterNames : array<string>
+    iterNames |> reserve(mkTup.values |> length)
+    if ((forExpr.iteratorVariables |> length) == (forExpr.sources |> length)) {
+        for (v in forExpr.iteratorVariables) {
+            iterNames |> push(string(v.name))
+        }
+    } else {
+        for (v in mkTup.values) {
+            var inner = v
+            if (inner is ExprRef2Value) {
+                inner = (inner as ExprRef2Value).subexpr
+            }
+            if (!(inner is ExprVar)) return null
+            iterNames |> push(string((inner as ExprVar).name))
+        }
+    }
     var userNames <- [for (n in mkTup.recordNames); string(n)]
-    var iterNames <- [for (v in forExpr.iteratorVariables); string(v.name)]
     // Statement 2: return res.to_sequence() — must reference the same `res`.
     var retStmt = blk.list[2] as ExprReturn
     if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null
@@ -4792,6 +4879,7 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
+    normalize_order_reverse(calls)
     let at = calls[0]._0.at
     let tupName = qn("decs_tup", at)
     let bufName = qn("decs_buf", at)
@@ -5117,6 +5205,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
+    normalize_order_reverse(calls)
     var terminatorName : string = ""
     var terminatorCall : ExprCall?
     {
@@ -5408,11 +5497,17 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
     var terminatorName : string = ""
+    var countPred : Expression?
     {
         let lastName = calls.back()._1.name
-        if ((lastName == "count" || lastName == "long_count" || lastName == "sum")
-                && length(calls.back()._0.arguments) == 1) {
-            // 1-arg form only — `count(src, predicate)` / `long_count(src, predicate)` would silently drop the predicate (sum has no selector overload today, but kept under the same guard for symmetry with plan_distinct). Bail to tier-2 which correctly evaluates the predicate.
+        let lastArgs = calls.back()._0.arguments |> length
+        // 1-arg `sum` only (no count/long_count overload here yet); count(p) / long_count(p) Theme 4 mirror of plan_distinct — dedup UNCONDITIONAL (distinct_by FIRST-per-key semantics); separate `acc` counter increments only when p matches that first occurrence. Wrapping dedup in `if(p)` would diverge from tier-2 when a later duplicate matches but the first didn't.
+        if ((lastName == "count" || lastName == "long_count" || lastName == "sum") && lastArgs == 1) {
+            terminatorName = lastName
+            calls |> pop
+        } elif ((lastName == "count" || lastName == "long_count") && lastArgs == 2) {
+            countPred = calls.back()._0.arguments[1]
+            if (countPred == null) return null
             terminatorName = lastName
             calls |> pop
         }
@@ -5489,6 +5584,14 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
         preludeStmts |> push <| qmacro_expr() {
             var $i(accName) : $t(elemType) = default<$t(elemType)>
         }
+    } elif (countPred != null && terminatorName == "count") {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(accName) = 0
+        }
+    } elif (countPred != null && terminatorName == "long_count") {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(accName) = 0l
+        }
     }
     if (takeExpr != null) {
         // Bind take(N) limit once at outer scope so a side-effecting arg fires once (matches plan_distinct).
@@ -5519,6 +5622,11 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     } else {
         keyExpr = clone_expression(pushExpr)
     }
+    // count(p) / long_count(p): peel against pushExpr so the predicate sees the post-projection element (mirror of array-side).
+    if (countPred != null) {
+        countPred = peel_lambda_replace_var(countPred, pushExpr)
+        if (countPred == null) return null
+    }
     // Per-fresh-key consume: only inside the fresh-key branch. take++ first (matches plan_distinct).
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
@@ -5536,6 +5644,14 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     } elif (isSumTerminator) {
         consumeStmts |> push <| qmacro_expr() {
             $i(accName) += $e(pushExpr)
+        }
+    }
+    // count(p) / long_count(p) Theme 4 (mirror of plan_distinct): dedup is unconditional; the predicate gates only the matched counter — otherwise `distinct_by(k).count(p)` would diverge from tier-2 when a later duplicate matches p but the first one didn't.
+    if (countPred != null && isCountTerminator) {
+        consumeStmts |> push <| qmacro_expr() {
+            if ($e(countPred)) {
+                $i(accName) ++
+            }
         }
     }
     var consumeBody = stmts_to_expr(consumeStmts)
@@ -5586,15 +5702,27 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     }
     var emission : Expression?
     if (terminatorName == "count") {
-        bodyStmts |> push <| qmacro_expr() {
-            return length($i(seenName))
+        if (countPred != null) {
+            bodyStmts |> push <| qmacro_expr() {
+                return $i(accName)
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return length($i(seenName))
+            }
         }
         emission = qmacro(invoke($() : int {
             $b(bodyStmts)
         }))
     } elif (terminatorName == "long_count") {
-        bodyStmts |> push <| qmacro_expr() {
-            return int64(length($i(seenName)))
+        if (countPred != null) {
+            bodyStmts |> push <| qmacro_expr() {
+                return $i(accName)
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return int64(length($i(seenName)))
+            }
         }
         emission = qmacro(invoke($() : int64 {
             $b(bodyStmts)
@@ -5829,13 +5957,18 @@ def private plan_zip(var expr : Expression?) : Expression? {
     // Identify recognized terminator. Counter: count/long_count. Accumulator: sum/min/max/average. Early-exit: first/first_or_default/any/all/contains. Anything else: treat as no-terminator (bare → ARRAY lane); unrecognized chain op bails inside the chain walk.
     var lastName = ""
     var intermediateEnd = length(calls)
+    var counterPred : Expression?
     if (length(calls) > 1) {
         let candidateName = calls.back()._1.name
         let candidateCall = calls.back()._0
         let candidateArgs = candidateCall.arguments |> length
         if (candidateName == "count" || candidateName == "long_count") {
-            // No-pred form only (1 arg = the source). Predicate-form bails (would change per-element work).
-            if (candidateArgs != 1) return null
+            // No-pred form (1 arg = source) or 2-arg `count(src, pred)` / `long_count(src, pred)` (Theme 4). The 2-arg form is captured into counterPred and emitted as a dedicated inner gate around `acc++` after the upstream where/projection (see Theme 4 block ~6113 for why we DON'T merge into whereCond — it would break eager `where(W).select(F).count(P)` ordering when select has side effects).
+            if (candidateArgs != 1 && candidateArgs != 2) return null
+            if (candidateArgs == 2) {
+                if (candidateCall.arguments[1] == null) return null
+                counterPred = clone_expression(candidateCall.arguments[1])
+            }
             lastName = candidateName
             intermediateEnd = length(calls) - 1
         } elif (candidateName == "sum" || candidateName == "min" || candidateName == "max" || candidateName == "average") {
@@ -5977,8 +6110,20 @@ def private plan_zip(var expr : Expression?) : Expression? {
             return null
         }
     }
+    // Theme 4: count(p) / long_count(p). Kept SEPARATE from whereCond so the upstream `where_` chain still gates projection evaluation — eager `where(W).select(F).count(P)` runs W first, then F only on W-passes; merging counterPred into whereCond would lift the predicate ahead of projection and (worse) merge upstream where filters under the same gate as P, masking which one filters first. When select is present we bind projection to a per-element `vproj` local INSIDE the upstream-where guard and peel the predicate against that name. Without select, peel against itName.
+    let vprojName = qn("vproj", at)
+    let bindProjForCounter = counterPred != null && projection != null
+    if (counterPred != null) {
+        if (projection != null) {
+            counterPred = peel_lambda_replace_var(counterPred, qmacro($i(vprojName)))
+        } else {
+            counterPred = peel_lambda_rename_var(counterPred, itName)
+        }
+        if (counterPred == null) return null
+    }
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
-    let noChain = whereCond == null && projection == null && noLimits
+    // counterPred has its own inner gate (emitted around acc++ below), so noChain stays true only when there is no count predicate either — otherwise the length-shortcut would skip the predicate.
+    let noChain = whereCond == null && projection == null && noLimits && counterPred == null
     let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
     let isCounter = lastName == "count" || lastName == "long_count"
     // Semantic guard: impure `select` projection AHEAD of a range op (skip/take/skip_while/take_while). The eager `select(proj)|>skip(K)` pipeline runs proj on every element; our spliced order (skip-then-push) would drop the side effects on skipped items. Bail to tier-2 which preserves eager semantics. Plan_loop_or_count has the analogous gap (see PR #2741 review thread #r3269663361); fixing both planners uniformly is a separate follow-up.
@@ -6030,15 +6175,27 @@ def private plan_zip(var expr : Expression?) : Expression? {
     // Build per-element body inside the for-loop. wrap_with_ranges adds skip/take/while guards; wrap_with_condition wraps with `if (whereCond)`.
     var perStmts : array<Expression?>
     if (isCounter) {
-        // Counter lane: if projection has side effects, evaluate it for those effects; then `acc++`.
-        if (seenSelect && !allProjectionsPure) {
+        // Counter lane body: inside the upstream-where wrap below. bindProjForCounter emits `let vproj = projection` so projection runs exactly once per where-passing element (eager `where.select.count(P)` semantics) and the count predicate references vproj. Without count(p), only the impure-select side-effect bind remains.
+        if (bindProjForCounter) {
+            perStmts |> push <| qmacro_expr() {
+                var $i(vprojName) = $e(projection)
+            }
+        } elif (seenSelect && !allProjectionsPure) {
             let finalBindName = qn("vfinal", at)
             perStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
         }
-        perStmts |> push <| qmacro_expr() {
-            $i(accName) ++
+        if (counterPred != null) {
+            perStmts |> push <| qmacro_expr() {
+                if ($e(counterPred)) {
+                    $i(accName) ++
+                }
+            }
+        } else {
+            perStmts |> push <| qmacro_expr() {
+                $i(accName) ++
+            }
         }
     } else {
         // Array lane: push projection (if select fused), bound tuple `it` (when any chain op needs it), or raw `(itA, itB)` tuple (bare zip with no chain). needsItBind below decides whether `it` is bound.
@@ -6059,9 +6216,9 @@ def private plan_zip(var expr : Expression?) : Expression? {
     }
     wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
-    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path.
-    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure)
-    let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null
+    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path. bindProjForCounter forces projection eval (it reads itA/itB through F), so it needs the `it` bind too; no-select counterPred peels against itName, so it also needs the bind.
+    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure || bindProjForCounter)
+    let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null || counterPred != null
     if (needsItBind) {
         var preStmts : array<Expression?>
         preStmts |> reserve(2)

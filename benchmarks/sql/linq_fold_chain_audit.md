@@ -22,10 +22,22 @@ Coverage extension: 1395 → 1415 linq tests (10 new tests in `tests/linq/test_l
 
 Coverage extension: 1415 → 1437 linq tests (12 new tests in `tests/linq/test_linq_fold_theme2_trailing_where.das`).
 
+**Theme 4 (2-arg terminator predicates) — landed 2026-05-24** (bundled with Theme 5 in the same PR):
+
+- **3c** (`plan_distinct` + `plan_decs_distinct`): trailing `_distinct().count(P)` / `_distinct_by(K).count(P)` / `.long_count(P)`. Dedup remains unconditional so `distinct_by` keeps FIRST occurrence per key; a separate counter increments only when `P` matches that first occurrence — matches tier-2 `distinct.count(P)` semantics (distinct-then-filter, not filter-then-distinct). When a `_select` precedes `_distinct`, the predicate peels against the post-projection element so `_select(F)._distinct().count(P)` binds `P`'s parameter to the projected value.
+- **`plan_zip`**: trailing `zip(a, b)[._select(F)].count(P)` / `.long_count(P)`. Predicate is captured into a dedicated counter-predicate gate emitted around `acc++` *inside* the upstream where/select wrap (NOT merged into `whereCond`), so eager `where(W).select(F).count(P)` ordering is preserved when `F` has side effects. With `_select`, the predicate peels against the projected value via a `vproj` bind. Length-shortcut is suppressed once `P` is present.
+- **`plan_decs_unroll` bare-chain `count()` / `count(P)`** (separate root-cause fix to `extract_decs_bridge`): `from_decs_template(...).count()` / `.count(P)` over a no-chain source was bailing because `forExpr.iteratorVariables` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop. The bridge now recovers iter names from `mkTup.values` (peeling the `ExprRef2Value` wrap), so both the Slice 1 `arch.size` shortcut and the `emit_decs_accumulator` 2-arg `count(P)` path are reachable on bare chains.
+
+**Theme 5 (`_order_by(K).reverse()` normalization) — landed 2026-05-24** (same PR):
+
+- **1b, 2b**: pre-planner `normalize_order_reverse` pass runs from every `plan_*order_family` / `plan_*reverse` planner immediately after `flatten_linq`. Adjacent `(order_by|order_by_descending|order|order_descending, reverse)` pairs swap to the flipped variant and the `reverse` element is erased. The `ExprCall` arg list is identical between ascending/descending order variants, so no AST clone is needed — only the `LinqCall` metadata pointer is repointed to the flipped registry entry. Iterative: `_order_by(K).reverse().reverse()` collapses to `_order_by(K)` in two passes; `_order_by_descending(K).reverse()` flips to `_order_by(K)`.
+
+Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `tests/linq/test_linq_fold_theme45_quick_wins.das`); the existing `test_unroll5c_select_distinct_count_pred_parity` + `_long_count_pred_parity` parity tests in `test_linq_from_decs.das` now exercise the splice path instead of bailing.
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Theme 3 — cross-arm composition (5 of 6 composition probes).
-- Themes 4–8 — see "Cross-cutting findings" section.
+- Theme 3 — cross-arm composition (5 of 6 composition probes; HIGHEST impact, LARGE effort).
+- Themes 6, 7, 8 — see "Cross-cutting findings" section.
 
 
 The audit catalogs **silent fall-off** in `daslib/linq_fold.das`: chains where a
