@@ -236,7 +236,12 @@ class AnyGenBind {
     }
     def init_args(pfn, pfp : string; args : array<string>) {
         PARSE_FILE_NAME = pfn
-        PARSE_FILE_PREFIX = pfp
+        // Normalize backslashes — libclang's cursor-location paths (see
+        // clang_getCursorLocationFullPath) come back with forward slashes,
+        // so for the starts_with prefix-strip in
+        // clang_getCursorLocationDescription to match on every OS+path-form
+        // combination the stored prefix must use forward slashes too.
+        PARSE_FILE_PREFIX = pfp |> replace_multiple([(text = "\\", replacement = "/")])
         ARGV := args
     }
     def openFile(path : string) {
