@@ -520,11 +520,16 @@ public:
     DasThreadLocal & operator=(const SelfType & other) = delete;
     DasThreadLocal & operator=(SelfType && other) = delete;
 
-    inline T & operator *() { return value_; }
-    inline T * operator->() { return &value_; }
+    // Function-local static thread_local: dynamic-init code lives inside the
+    // function body with a guard, so there is no separately-emitted TLS init
+    // routine (_ZTH...) for thin-LTO + COFF (mingw-clang) to drop. Same hot-path
+    // cost as a class-static thread_local (TLS load + first-touch guard).
+    // operator-> routes through operator* so both share the same storage.
+    // https://github.com/llvm/llvm-project/issues/199462
+    inline T & operator *() { static thread_local T value_{}; return value_; }
+    inline T * operator->() { return &(**this); }
 
 private:
-    inline static thread_local T value_{};
     inline static std::atomic<int> initCounter{0};
 };
 
