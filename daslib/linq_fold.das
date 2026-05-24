@@ -5963,7 +5963,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
         let candidateCall = calls.back()._0
         let candidateArgs = candidateCall.arguments |> length
         if (candidateName == "count" || candidateName == "long_count") {
-            // No-pred form (1 arg = source) or 2-arg `count(src, pred)` / `long_count(src, pred)` (Theme 4). The 2-arg form fuses as an extra where_-clause via counterPred merge below, so per-element work stays bounded.
+            // No-pred form (1 arg = source) or 2-arg `count(src, pred)` / `long_count(src, pred)` (Theme 4). The 2-arg form is captured into counterPred and emitted as a dedicated inner gate around `acc++` after the upstream where/projection (see Theme 4 block ~6113 for why we DON'T merge into whereCond — it would break eager `where(W).select(F).count(P)` ordering when select has side effects).
             if (candidateArgs != 1 && candidateArgs != 2) return null
             if (candidateArgs == 2) {
                 if (candidateCall.arguments[1] == null) return null

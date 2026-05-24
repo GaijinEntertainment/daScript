@@ -283,8 +283,8 @@ Zip patterns
      - ``plan_zip`` (early-exit / accumulator)
      - Early-exit terminator on the zipped pair.
    * - ``zip(a, b)._select(F).count(P)`` / ``.long_count(P)``
-     - ``plan_zip`` (counter with predicate fused as where)
-     - The 2-arg ``count(P)`` / ``long_count(P)`` form fuses into the existing zip walk by AND-ing the predicate into ``whereCond`` after the chain walk. Length-shortcut is suppressed when ``P`` is present (the counter loop runs).
+     - ``plan_zip`` (counter with separate predicate gate)
+     - The 2-arg ``count(P)`` / ``long_count(P)`` form is captured into a dedicated counter-predicate gate emitted around ``acc++`` *inside* the upstream where/select wrap, so eager ``where(W).select(F).count(P)`` ordering is preserved (W filters first, then F runs once per surviving element, then P decides whether to count). With ``_select``, the predicate peels against the projected value via a ``vproj`` bind. Length-shortcut is suppressed when ``P`` is present (the counter loop runs).
 
 What falls back
 ===============
