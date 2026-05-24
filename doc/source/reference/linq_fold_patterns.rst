@@ -67,9 +67,9 @@ Source-side entry points
    * - ``each(array<T>)``
      - ``peel_each``
      - Strips the ``each`` wrapper; subsequent chain plans see the raw ``array<T>`` source.
-   * - ``zip(a, b)`` / ``zip(a, b, c)``
+   * - ``zip(a, b)`` / ``zip(a, b, sel)``
      - ``plan_zip``
-     - Two- or three-source zip. Splice fuses zip + select + aggregate.
+     - Two-source zip. The three-argument form ``zip(a, b, sel)`` is pre-lowered to ``zip(a, b) |> _select(sel-as-tuple)`` so the standard zip+select fusion fires (closes the dot-product idiom).
    * - ``from_decs_template(type<T>)``
      - ``plan_decs_unroll`` etc.
      - Surfaces a ``[decs_template]`` schema. Decs splices fire.
@@ -108,6 +108,9 @@ Array-source patterns
    * - ``._where(P).take(N).count()`` / ``.sum()``
      - ``plan_loop_or_count`` (counter / accumulator with ``takeExpr``)
      - Bounded counter/accumulator; loop exits at N matches.
+   * - ``.take(N)._where(P).<terminator>`` (counter / accumulator / early-exit / array)
+     - ``plan_loop_or_count`` (``postTakeWhereCond`` gate)
+     - Take cap ticks unconditionally; ``where`` gates only the per-element contribution. Preserves the "first N elements, then keep matching" semantic that ``where.take`` cannot express. Single trailing ``where`` only — skip / skip_while / take_while + where still cascade.
    * - ``._where(P).take_while(P2).<...>`` / ``.skip_while(P2).<...>``
      - ``plan_loop_or_count`` (predicate-driven ranges)
      - ``take_while`` exits on first non-match; ``skip_while`` toggles state.
@@ -117,6 +120,9 @@ Array-source patterns
    * - ``._order_by(K).take(N).to_array()``
      - ``plan_order_family`` (bounded-heap)
      - ``spliced_push_heap`` fill + replace, ``spliced_pop_heap`` on replace, ``order_inplace`` at end. Buffer of size N.
+   * - ``._order_by(K).take(N)._select(F).to_array()`` / ``.first()._select(F)`` / ``.first_or_default()._select(F)``
+     - ``plan_order_family`` (terminal ``_select``)
+     - Bounded-heap / streaming-min holds the raw element; projection ``F`` runs ≤K times at return. Closes the natural "take top-K then project" idiom.
    * - ``._order_by(K).to_array()`` / ``.order_by_descending(K).to_array()`` / ``.order(K).to_array()`` / ``.order_descending(K).to_array()``
      - ``plan_order_family`` (full-sort fallback)
      - Materializes + sorts. No bounded-heap shortcut.
@@ -128,10 +134,16 @@ Array-source patterns
      - Per-key bucket reducer; single hash, one entry per group.
    * - ``._group_by(K)._having(P)._select(...).to_array()``
      - ``plan_group_by`` → ``plan_group_by_core``
-     - HAVING filter applied after the per-key reduce.
+     - HAVING filter on the bucket reference (pre-aggregate); can lift hidden reducer slots referenced by ``P`` but absent from the select.
+   * - ``._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
+     - ``plan_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
+     - HAVING filter on the constructed post-aggregate tuple (predicate references ``_.AggField`` by name). Distinct from ``_having(P)`` and orthogonal — both can fire on the same chain.
    * - ``.reverse().take(N).to_array()`` (with no ``where`` / ``select``)
      - ``plan_reverse`` (two-pass)
      - Sum archetype sizes, then walk tail-first with skip-counter and early-exit.
+   * - ``.reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
+     - ``plan_reverse`` (terminal ``_select``)
+     - Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
 
 Decs-source patterns
 ====================
@@ -168,6 +180,9 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._order_by(K).take(N).to_array()``
      - ``plan_decs_order_family`` (bounded-heap)
      - Same heap pattern as the array variant; buffer size N.
+   * - ``from_decs_template(...)._order_by(K).take(N)._select(F).to_array()``
+     - ``plan_decs_order_family`` (terminal ``_select``)
+     - Decs mirror of ``plan_order_family``'s terminal ``_select`` — heap holds raw element, projection runs ≤K times at return.
    * - ``from_decs_template(...).min_by(K)`` / ``.max_by(K)``
      - ``plan_decs_unroll`` → ``emit_decs_min_max_by``
      - Streaming-min/max with key.
@@ -177,12 +192,48 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...).reverse().take(N).to_array()``
      - ``plan_decs_reverse``
      - Whole-archetype skip + partial-archetype skip-counter + early-exit.
+   * - ``from_decs_template(...).reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
+     - ``plan_decs_reverse`` (terminal ``_select``)
+     - Decs mirror of ``plan_reverse``'s terminal ``_select``. Skip-into-tail fast path is gated off when ``_select`` is present.
    * - ``from_decs_template(...)._group_by(K)._select(reduce).to_array()``
      - ``plan_decs_group_by`` → ``plan_group_by_core``
      - Shared bucket-reducer with the array path; differs only in the per-element source.
+   * - ``from_decs_template(...)._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
+     - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
+     - Decs mirror of the array-side post-aggregate HAVING. Same predicate-on-output-tuple semantics.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
      - Hoists ``skippingName`` state across archetypes.
+
+Decs-decs equi-join
+-------------------
+
+``plan_decs_join`` is the hashed equi-join splice over two
+``from_decs_template`` sources. It collects the right side into a
+``table<KEY; array<TUPB>>`` in one ``for_each_archetype`` pass, then
+walks the left side and probes via ``table.get``. The key must be a
+primitive (``int*`` / ``uint*`` / ``float`` / ``double`` / ``bool`` /
+``string``); tuple keys cascade to the standard ``join_impl``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 25 40
+
+   * - Chain shape
+     - Splice arm
+     - Notes
+   * - ``from_decs_template(A) |> _join(from_decs_template(B), ka, kb, result) |> count()``
+     - ``plan_decs_join``
+     - Hash-fill + probe; ``count`` bumped by bucket length per hit. No per-pair invoke.
+   * - ``from_decs_template(A) |> _join(...) |> to_array()``
+     - ``plan_decs_join``
+     - Hash-fill + probe; ``result`` lambda inlined at the push site (no per-pair invoke into ``join_impl``).
+   * - ``from_decs_template(A) |> _join(...) |> _select(F) |> to_array()``
+     - ``plan_decs_join`` (terminal ``_select``)
+     - Single bind of the join result per matched pair, then projection.
+   * - ``from_decs_template(A) |> _join(...) |> _where(P) |> count() / to_array()``
+     - ``plan_decs_join`` (trailing ``_where``)
+     - Bind join result, evaluate predicate, gate ``count++`` / ``push_clone``. Composes with the trailing ``_select`` form (filter then project, single bind per pair).
 
 Zip patterns
 ============
@@ -219,9 +270,13 @@ Common cases that fall back:
 - **Mixed-source operators** like ``union(a, b)``, ``except(a, b)``,
   ``intersect(a, b)``, ``concat(a, b)`` after the first source has
   been transformed (e.g. ``each(a)._select(F).union(b)``).
-- **Join terminators**: ``_join`` / ``_left_join`` / ``_right_join`` /
-  ``_full_outer_join`` / ``_cross_join``. The join itself does not yet
-  splice; downstream ``.count()`` / ``.sum()`` chains fall back.
+- **Joins other than decs-decs equi-join**: ``_left_join`` /
+  ``_right_join`` / ``_full_outer_join`` / ``_cross_join`` don't splice;
+  array-source ``_join`` also falls back. Only the decs-decs primitive-key
+  ``_join`` shape catalogued above splices (via ``plan_decs_join``);
+  tuple keys, non-primitive keys, mixed array/decs sources, or chain ops
+  beyond a single trailing ``_where`` / ``_select`` all cascade to
+  ``join_impl``.
 - **Aggregations on lazy groupings**: ``_group_by_lazy(K)._select(F)``
   with a non-bucket-reducing ``_select``.
 - **Materialization-only chains** that the standard linq surface
