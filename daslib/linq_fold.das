@@ -197,8 +197,9 @@ def private normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?
                 flipped = "order"
             }
         }
-        if (flipped != "") {
-            calls[i] = (calls[i]._0, unsafe(addr(linqCalls?[flipped] ?? default<LinqCall>)))
+        if (flipped != "" && linqCalls.key_exists(flipped)) {
+            var linqCall & = unsafe(linqCalls?[flipped] ?? default<LinqCall>)
+            calls[i] = (calls[i]._0, unsafe(addr(linqCall)))
             calls |> erase(i + 1)
             // Don't advance `i` — the newly flipped order call might itself be followed by another reverse (`order_by(k).reverse().reverse()` → `order_by_descending(k).reverse()` → `order_by(k)`).
         } else {
@@ -2155,7 +2156,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     {
         let lastName = calls.back()._1.name
         let lastArgs = calls.back()._0.arguments |> length
-        // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): predicate gates `seen |> insert` so length(seen) reports distinct items matching the predicate.
+        // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): dedup runs UNCONDITIONALLY (distinct_by keeps the FIRST occurrence per key); a separate `acc` counter increments only when the predicate matches that first occurrence. Wrapping dedup in `if(P)` would diverge from tier-2 when a later duplicate matches but the first didn't.
         if ((lastName == "count" || lastName == "sum" || lastName == "long_count") && lastArgs == 1) {
             terminatorName = lastName
             calls |> pop
@@ -5500,7 +5501,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     {
         let lastName = calls.back()._1.name
         let lastArgs = calls.back()._0.arguments |> length
-        // 1-arg `sum` only (no count/long_count overload here yet); count(p) / long_count(p) Theme 4 mirror of plan_distinct — gate `seen |> insert` on the predicate so length(seen) reports distinct items matching p. Impure predicate bails (would re-evaluate side-effects on duplicates).
+        // 1-arg `sum` only (no count/long_count overload here yet); count(p) / long_count(p) Theme 4 mirror of plan_distinct — dedup UNCONDITIONAL (distinct_by FIRST-per-key semantics); separate `acc` counter increments only when p matches that first occurrence. Wrapping dedup in `if(p)` would diverge from tier-2 when a later duplicate matches but the first didn't.
         if ((lastName == "count" || lastName == "long_count" || lastName == "sum") && lastArgs == 1) {
             terminatorName = lastName
             calls |> pop
@@ -6109,9 +6110,13 @@ def private plan_zip(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // Theme 4: count(p) / long_count(p) fuses as an extra where_-clause AND'd in after the chain. Peeled against itName so it sees the post-select element (when select is present), matching plan_loop_or_count's analogous handling.
+    // Theme 4: count(p) / long_count(p) fuses as an extra where_-clause AND'd in after the chain. Peel against the projection result (post-select element) when select is present so `zip(a,b)._select(F).count(P)` binds P's param to F's output, not the pre-select tuple — mirrors plan_distinct's pushExpr-peel. With no select, peel against itName.
     if (counterPred != null) {
-        counterPred = peel_lambda_rename_var(counterPred, itName)
+        if (projection != null) {
+            counterPred = peel_lambda_replace_var(counterPred, projection)
+        } else {
+            counterPred = peel_lambda_rename_var(counterPred, itName)
+        }
         if (counterPred == null) return null
         if (whereCond == null) {
             whereCond = counterPred

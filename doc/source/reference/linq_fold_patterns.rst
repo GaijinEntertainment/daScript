@@ -61,7 +61,7 @@ A few chain rewrites fire before any ``plan_*`` is consulted, so the
 plans see the normalized shape and a single arm covers what would
 otherwise be many lookalike chains:
 
-- ``_order_by(K).reverse()`` ⇒ ``_order_by_descending(K)``
+- ``_order_by(K).reverse()`` → ``_order_by_descending(K)``
   (and the three symmetric flips: ``order_by_descending → order_by``,
   ``order → order_descending``, ``order_descending → order``). Applied
   by ``normalize_order_reverse``, called from every ``plan_*order_family``

@@ -151,6 +151,33 @@ def test_zip_where_then_count_pred(t : T?) {
     }
 }
 
+[test]
+def test_zip_select_then_count_pred(t : T?) {
+    t |> run("plan_zip: zip + _select(F) + count(p) — p binds to post-select element") @(tt : T?) {
+        let a <- [1, 2, 3, 4, 5]
+        let b <- [10, 20, 30, 40, 50]
+        unsafe {
+            // Pairs: (1,10),(2,20),(3,30),(4,40),(5,50). Projected sums: 11,22,33,44,55. Count where sum > 30 → 3.
+            // Critical: P's `s` must bind to the projected sum, not the pre-select tuple.
+            let n = _fold(each(a) |> zip(each(b)) |> select($(p : tuple<int; int>) => p._0 + p._1) |> count($(s) => s > 30))
+            tt |> equal(n, 3)
+        }
+    }
+}
+
+[test]
+def test_zip_select_then_long_count_pred(t : T?) {
+    t |> run("plan_zip: zip + _select(F) + long_count(p) — p binds to post-select element") @(tt : T?) {
+        let a <- [1, 2, 3, 4, 5]
+        let b <- [10, 20, 30, 40, 50]
+        unsafe {
+            // Projected products: 10,40,90,160,250. Count where product is even AND > 50 → 3 (90,160,250).
+            let n = _fold(each(a) |> zip(each(b)) |> select($(p : tuple<int; int>) => p._0 * p._1) |> long_count($(v) => v > 50))
+            tt |> equal(n, 3l)
+        }
+    }
+}
+
 // ── Theme 4: bare from_decs_template + count() and count(p) (extract_decs_bridge fix) ──
 
 [test]
