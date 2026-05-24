@@ -178,6 +178,35 @@ def test_zip_select_then_long_count_pred(t : T?) {
     }
 }
 
+var g_side_effect_calls = 0
+
+def side_effect_proj(x : int) : int {
+    g_side_effect_calls ++
+    return x * 2
+}
+
+[test]
+def test_zip_where_select_count_pred_side_effect_order(t : T?) {
+    t |> run("plan_zip: where filters BEFORE side-effecting select runs (R3-1 regression)") @(tt : T?) {
+        let a <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let b <- [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        // Upstream where keeps 5 elements (a._0 in {2,4,6,8,10}). Eager `where(W).select(F).count(P)` runs F only on those 5.
+        // If counterPred merged into whereCond (old bug), F would run on all 10 — driving g_side_effect_calls to 10.
+        g_side_effect_calls = 0
+        unsafe {
+            let n = _fold(
+                each(a) |> zip(each(b))
+                |> where_($(p : tuple<int; int>) => p._0 % 2 == 0)
+                |> select($(p : tuple<int; int>) => side_effect_proj(p._0))
+                |> count($(v) => v > 5)
+            )
+            // 5 elements survive where (2,4,6,8,10) → projected to (4,8,12,16,20) → 4 are > 5.
+            tt |> equal(n, 4)
+            tt |> equal(g_side_effect_calls, 5)
+        }
+    }
+}
+
 // ── Theme 4: bare from_decs_template + count() and count(p) (extract_decs_bridge fix) ──
 
 [test]

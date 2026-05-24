@@ -54,12 +54,13 @@ to the array plan would not match and would force the default. The
 generic decs walk (``plan_decs_unroll``) runs after the specialized
 decs plans so it doesn't shadow them.
 
-Pre-planner normalizations
-==========================
+Pre-dispatch normalizations
+===========================
 
-A few chain rewrites fire before any ``plan_*`` is consulted, so the
-plans see the normalized shape and a single arm covers what would
-otherwise be many lookalike chains:
+A few chain rewrites fire at the start of the relevant planners (right
+after ``flatten_linq``, before the per-arm pattern-match) so the rest of
+that planner's logic sees the normalized shape and a single arm covers
+what would otherwise be many lookalike chains:
 
 - ``_order_by(K).reverse()`` → ``_order_by_descending(K)``
   (and the three symmetric flips: ``order_by_descending → order_by``,
