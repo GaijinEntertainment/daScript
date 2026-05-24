@@ -509,6 +509,7 @@ jobs:
           mingw-w64-clang-x86_64-openssl
           mingw-w64-clang-x86_64-glfw
           bison
+          git
 
     - name: "Build: Daslang (clang-mingw64)"
       run: |
