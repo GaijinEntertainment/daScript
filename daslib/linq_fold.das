@@ -5554,7 +5554,8 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
     if (empty(calls) || calls.back()._1.name != "join") return null
     var joinCall = calls.back()._0
     calls |> pop
-    if (!empty(calls) || (terminatorName == "" && selectLam == null && !expr._type.isGoodArrayType)) return null
+    // Iterator-typed context bails regardless of selectLam: the emission below returns `array<elemType>` and is not wrapped to iterator. (Currently user-unreachable when selectLam != null — `_select` after `_join` can't infer its result_selector without a downstream terminator — but kept for defensive splice hygiene.)
+    if (!empty(calls) || (terminatorName == "" && !expr._type.isGoodArrayType)) return null
     // Both sides must be from_decs_template eager bridges.
     var bridgeA = extract_decs_bridge(top)
     if (bridgeA == null || joinCall.arguments |> length != 5) return null
