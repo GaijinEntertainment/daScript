@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:20
+expect 30341, 30928:2, 50503:21
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -139,6 +139,11 @@ def main() {
     //     accept the syntax but match on nothing useful. The fixit
     //     suggests `contains` (LIKE-based) or `[sql_fts5]`.
     let bad22 <- _sql(db |> select_from(type<Car>) |> _where(_.Name |> text_match("foo")))
+
+    // 23. `_distinct_by(<computed expr>)` before count() — only `<arg>.<field>`
+    //     keys lower to `COUNT(DISTINCT "col")`; computed keys like `_.Price %
+    //     100` would need a general expression-to-SQL emitter not yet wired.
+    let bad23 <- _sql(db |> select_from(type<Car>) |> _distinct_by(_.Price % 100) |> count())
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees
