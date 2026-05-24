@@ -1897,8 +1897,13 @@ namespace das {
             // explicit (addr, ti) pair. Use when you have only a raw address
             // (e.g. from `unsafe(addr(g))`) plus a TypeInfo pointer from
             // `typeinfo rtti_typeinfo(type<T>)`. No per-call-site daslang code emit.
+            // SideEffects::modifyExternal matches sprint_json (module_builtin_runtime.cpp).
+            // sprint_json_at reads memory THROUGH addr — tagging this as `none` would let
+            // the optimizer CSE/hoist calls across mutations of *addr, producing stale JSON.
+            // The flag is intentionally pessimistic ("modify" is a superset of "access");
+            // the read-only semantics are correct in code but invisible to the typer.
             addExtern<DAS_BIND_FUN(builtin_json_sprint_at)>(*this, lib, "sprint_json_at",
-                SideEffects::none, "builtin_json_sprint_at")
+                SideEffects::modifyExternal, "builtin_json_sprint_at")
                     ->args({"addr","type","humanReadable","context","at"});
             addExtern<DAS_BIND_FUN(builtin_json_sscan_at)>(*this, lib, "sscan_json_at",
                 SideEffects::modifyArgumentAndExternal, "builtin_json_sscan_at")
