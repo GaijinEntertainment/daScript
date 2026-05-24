@@ -5633,14 +5633,12 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
             calls |> pop
         }
     }
-    // Trailing _select composes with the join's result lambda: bind once, project once.
+    // Trailing _select composes with the join's result lambda: bind once, project once. Element type is derived later from expr._type.firstType (set by the user's downstream typer) — no need to record it here.
     var selectLam : Expression?
-    var selectElemType : TypeDeclPtr
     if (terminatorName != "count" && !empty(calls) && calls.back()._1.name == "select") {
         var selCall = calls.back()._0
         selectLam = selCall.arguments[1]
         if (selectLam == null || selCall._type == null || selCall._type.firstType == null) return null
-        selectElemType = clone_type(selCall._type.firstType)
         calls |> pop
     }
     // Trailing _where (Theme 2 — closes audit 8a + C6). Predicate references join-result fields, so we bind the result once per pair and gate the push/incr. Comes BEFORE select in chain order, so pop AFTER select.
