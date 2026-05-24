@@ -576,6 +576,70 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
     return true
 }
 
+// nolint:STYLE015 Receiver-pin to ExprVar rejects `u.opt.X` keys SQL can't reproduce.
+[macro_function]
+def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSource : ExpressionPtr&;
+                                       var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
+    var dbCall = match_call_in_linq(node, "distinct_by")
+    if (dbCall == null) return ""
+    if (dbCall.arguments |> length != 2) {
+        macro_error(prog, at, "_sql: _distinct_by expects (prev, key)")
+        q.hadError = true
+        return ""
+    }
+    var body = peel_lambda_single_return(dbCall.arguments[1])
+    if (body == null) {
+        macro_error(prog, at, "_sql: _distinct_by key lambda has unexpected shape")
+        q.hadError = true
+        return ""
+    }
+    var receiver : ExpressionPtr
+    var fieldName : string
+    if (!qmatch(body, $e(receiver).$f(fieldName)).matched
+            || receiver == null || !(receiver is ExprVar)) {
+        macro_error(prog, at, "_sql: _distinct_by key must be `<arg>.<field>` (single column reference) — computed keys are not yet translatable to SQL")
+        q.hadError = true
+        return ""
+    }
+    distinctSource = dbCall.arguments[0]
+    return fieldName
+}
+
+// nolint:STYLE015 Shared `count` / `long_count` peeler — `isLong` widens binding to int64; recognizes `_distinct_by(_.col)` wrap.
+[macro_function]
+def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
+                                linqName : string; isLong : bool;
+                                prog : ProgramPtr; at : LineInfo) : bool {
+    var cCall = match_call_in_linq(node, linqName)
+    if (cCall == null) return false
+    if (q.seenTerminal || q.seenToArray) {
+        macro_error(prog, at, "_sql: only one terminal allowed per chain")
+        q.hadError = true
+        return true
+    }
+    if (cCall.arguments |> length != 1) {
+        macro_error(prog, at, "_sql: `_{linqName}(predicate)` is not yet supported — use `|> _where(predicate) |> _{linqName}()` instead")
+        q.hadError = true
+        return true
+    }
+    q.matr = Materializer.One
+    q.seenTerminal = true
+    q.proj = ProjectionShape.Aggregate
+    let countBaseType = isLong ? Type.tInt64 : Type.tInt
+    q.aggregateType = new TypeDecl(at = at, baseType = countBaseType)
+    var distinctSource : ExpressionPtr
+    let distinctField = try_peel_distinct_by_field(cCall.arguments[0], distinctSource, q, prog, at)
+    if (q.hadError) return true
+    if (!empty(distinctField)) {
+        if (!analyze_chain(distinctSource, q, prog, at)) return true
+        let sqlCol = field_to_column_name(q.rootType, distinctField)
+        q.aggregateExpr = "COUNT(DISTINCT \"{sqlCol}\")"
+        return true
+    }
+    q.aggregateExpr = "COUNT(*)"
+    return analyze_chain(cCall.arguments[0], q, prog, at)
+}
+
 [macro_function]
 def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedArgName : string;
                                        prog : ProgramPtr; at : LineInfo) : string {
@@ -1306,26 +1370,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(foCall.arguments[0], q, prog, at)
         }
     }
-    // Peel count(prev) — `|> _count()` → SELECT COUNT(*) ...
+    // Peel count(prev) / long_count(prev) → SELECT COUNT(*) (or COUNT(DISTINCT col) when fronted by `_distinct_by(_.col)`).
     {
-        var cCall = match_call_in_linq(node, "count")
-        if (cCall != null) {
-            if (q.seenTerminal || q.seenToArray) {
-                macro_error(prog, at, "_sql: only one terminal allowed per chain")
-                return false
-            }
-            if (cCall.arguments |> length != 1) {
-                macro_error(prog, at, "_sql: `_count(predicate)` is not yet supported — use `|> _where(predicate) |> _count()` instead")
-                return false
-            }
-            q.matr = Materializer.One
-            q.seenTerminal = true
-            q.proj = ProjectionShape.Aggregate
-            q.aggregateExpr = "COUNT(*)"
-            // Narrow SQLite int64 to daslang int — matches length()/count() return type.
-            q.aggregateType = new TypeDecl(at = at, baseType = Type.tInt)
-            return analyze_chain(cCall.arguments[0], q, prog, at)
-        }
+        if (peel_count_terminal(node, q, "count", false, prog, at)
+                || peel_count_terminal(node, q, "long_count", true, prog, at)) return !q.hadError
     }
     // ---- Column aggregates: sum / average / min / max ----
     {
@@ -2010,11 +2058,12 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
         fname = string(call.func.fromGeneric.name)
     }
     let argc = user_arg_count(call)
-    // length(_._1) / count(_._1) → COUNT(*) (narrowed to int).
-    if ((fname == "length" || fname == "count") && argc == 1
+    // length / count / long_count of `_._1` → COUNT(*); long_count widens binding to int64.
+    if ((fname == "length" || fname == "count" || fname == "long_count") && argc == 1
             && qmatch(call.arguments[0], _._1).matched) {
         sqlOut = "COUNT(*)"
-        typeOut = new TypeDecl(at = at, baseType = Type.tInt)
+        let countBaseType = fname == "long_count" ? Type.tInt64 : Type.tInt
+        typeOut = new TypeDecl(at = at, baseType = countBaseType)
         return true
     }
     // sum/average/min/max over `_._1 |> select($(p:T)=>p.X)` → SUM("X") etc.
