@@ -255,6 +255,34 @@ function selectedEngine() {
     return el ? el.value : 'interpreter';
 }
 
+// Emscripten's stdout/stderr TTYs line-buffer bytes and flush only on '\n'.
+// daslang's last print() can omit the trailing newline (e.g. print("Hello")),
+// leaving those bytes pending in tty.output. They never surface in the output
+// panel — until the NEXT run writes a '\n', concatenating the prior tail with
+// the new run's first line. Fix: synthesize a '\n' through put_char per stream
+// that has pending bytes, which the TTY flush hook will turn into a print
+// without producing a spurious empty line.
+function flushStdioBuffers() {
+    if (typeof FS === 'undefined' || !FS.streams) return;
+    for (const fd of [1, 2]) {
+        const s = FS.streams[fd];
+        if (s && s.tty && s.tty.output && s.tty.output.length > 0 &&
+            s.tty.ops && typeof s.tty.ops.put_char === 'function') {
+            s.tty.ops.put_char(s.tty, 10);
+        }
+    }
+}
+
+// Module.callMain throws Emscripten's ExitStatus on normal exit AND can throw
+// user errors. Flush either way so the trailing print always lands in the panel.
+function callMainAndFlush(args) {
+    try {
+        Module.callMain(args);
+    } finally {
+        flushStdioBuffers();
+    }
+}
+
 runCode = function() {
     syncUrlToState();
     if (selectedEngine() === 'jit') {
@@ -272,7 +300,7 @@ runCode = function() {
         return;
     }
     if (syncMemFsFromState()) {
-        Module.callMain(['main.das']);
+        callMainAndFlush(['main.das']);
         return;
     }
     runScript(code.getValue());
@@ -293,7 +321,7 @@ runTests = function() {
         FS.writeFile('main.das', code.getValue());
     }
     syncUrlToState();
-    Module.callMain(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
+    callMainAndFlush(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
 }
 
 // Minimal wasi_snapshot_preview1 shim — daslang STANDALONE_WASM output only
@@ -468,7 +496,7 @@ runScript = function(text,onComplete)
 
 
     FS.writeFile('main.das',text);
-    Module.callMain(['main.das']);
+    callMainAndFlush(['main.das']);
 
 
 
