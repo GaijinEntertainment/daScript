@@ -479,9 +479,25 @@ namespace das
         return hash;
     }
 
+    // Save/clear/restore the lazy findAlias cache bits (PR #2849) so they don't
+    // enter the lookup/semantic hash. The bits reflect runtime cache state, not
+    // type identity; two compiles of the same source can leave them differently
+    // set depending on findAlias lifecycle, and we don't want that to leak.
+    static __forceinline uint32_t flagsWithoutAliasCache(const TypeDecl * td) {
+        TypeDecl * mut = const_cast<TypeDecl*>(td);
+        const bool savedV = mut->aliasCacheValid;
+        const bool savedH = mut->aliasCacheHasAlias;
+        mut->aliasCacheValid = false;
+        mut->aliasCacheHasAlias = false;
+        const uint32_t result = mut->flags;
+        mut->aliasCacheValid = savedV;
+        mut->aliasCacheHasAlias = savedH;
+        return result;
+    }
+
     void TypeDecl::getLookupHash(uint64_t & hash) const {
         hash = hashmix(hash, baseType);
-        hash = hashmix(hash, flags);
+        hash = hashmix(hash, flagsWithoutAliasCache(this));
         for ( auto d : dim ) {
             hash = hashmix(hash, d);
         }
@@ -554,7 +570,7 @@ namespace das
                 wr << *(de);
             }
         }
-        hb.update(flags);
+        hb.update(flagsWithoutAliasCache(this));
         hb.updateString(wr.str());
         return hb.getHash();
     }
@@ -608,7 +624,7 @@ namespace das
                 wr << *(de);
             }
         }
-        hb.update(flags);
+        hb.update(flagsWithoutAliasCache(this));
         hb.updateString(wr.str());
         return hb.getHash();
     }
