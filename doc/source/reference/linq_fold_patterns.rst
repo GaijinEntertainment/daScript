@@ -213,9 +213,12 @@ identical — only the source iteration changes.
    * - Chain shape (decs source)
      - Splice arm
      - Notes
-   * - ``from_decs_template(type<T>)._where(P).count()``
+   * - ``from_decs_template(type<T>).count()`` / ``.long_count()`` (bare) or with leading ``._where(P)``
      - ``plan_decs_unroll`` → ``emit_decs_count_archsize``
-     - Sums archetype sizes when ``where`` is absent; counter loop otherwise.
+     - Bare form sums ``arch.size`` across archetypes (no per-element work). The ``_where(P)`` variant runs a counter loop over the per-archetype walk.
+   * - ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)`` (bare chain, no where/select)
+     - ``plan_decs_unroll`` → ``emit_decs_accumulator``
+     - Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap), making both the ``arch.size`` shortcut and the 2-arg ``count(P)`` accumulator path reachable on bare chains.
    * - ``from_decs_template(...)._select(F).sum()`` / ``.average()`` / ``.min()`` / ``.max()`` / ``.aggregate(...)``
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
      - Per-archetype accumulator; pruner keeps only the components read by ``F``.
@@ -329,6 +332,9 @@ Zip patterns
    * - ``zip(a, b, c)._select(F).<terminator>``
      - ``plan_zip``
      - Three-source zip; same loop shape with three reads per iteration.
+   * - ``zip(a, b, sel).<terminator>`` (3-arg, with selector lambda)
+     - ``plan_zip`` (pre-lowered)
+     - Theme 1 (audit 7a). The 3-arg form ``zip(a, b, sel)`` is pre-lowered by ``plan_zip`` to ``zip(a, b) |> _select(sel-as-tuple)`` before per-arm matching, so the standard zip+select fusion fires — the natural ``zip(xs, ys, $(x, y) => x * y) |> sum()`` dot-product idiom splices instead of cascading.
    * - ``zip(a, b)._where(P)._select(F).<terminator>``
      - ``plan_zip`` (chain ops)
      - ``where`` / ``select`` / ``take`` / ``skip`` / ``take_while`` / ``skip_while`` between zip and the terminator are all fused.
