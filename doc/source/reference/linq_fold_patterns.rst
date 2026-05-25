@@ -73,6 +73,32 @@ what would otherwise be many lookalike chains:
   ``_order_by(K).reverse().reverse()`` collapses to ``_order_by(K)`` in
   two passes.
 
+- ``_select(f) |> _select(g)`` (N consecutive) → ``_select(g(f(_)))``.
+  Applied by ``collapse_chained_selects``, called from
+  ``plan_zip``, ``plan_distinct``, ``plan_decs_distinct``,
+  ``plan_reverse``, ``plan_decs_reverse``, ``plan_decs_join``, and
+  defensively from ``plan_order_family`` / ``plan_decs_order_family``
+  (which don't currently accept any leading ``_select`` but would
+  inherit collapse if they ever did). Mirrors how chained ``_where``
+  already compose via ``&&``. Composition takes the INNER lambda's
+  structure (preserves param type), renames its bound param to a
+  fresh ``qn("cs", at)`` name to avoid ``apply_template`` recursive
+  substitution when both lambdas share the boost-side ``_`` desugar,
+  then overwrites its body with outer's body where outer's param is
+  substituted by the renamed-inner body. Chain backlink rewired so
+  subsequent planner passes see the shortened AST.
+  Gated on ``!has_sideeffects(innerBody)`` — collapsing would shift
+  evaluation count when outer references its param zero or many times
+  (cascade always evaluates inner once per element). Chains with
+  ``%`` / ``/`` / user-call inner cascade to tier-2 (output remains
+  correct). Also bails (cascades) when either selector is not a
+  peelable single-arg, single-return ``ExprMakeBlock`` lambda —
+  multi-statement projection bodies, captured/non-trivial lambda
+  shapes, and function-pointer arguments all skip collapse.
+  ``plan_loop_or_count``, ``plan_group_by_core``, and ``plan_decs_unroll``
+  already handle chained selects natively via their ``intermediateBinds`` /
+  chain-info machinery and don't need the pre-pass.
+
 Source-side entry points
 ========================
 
@@ -336,6 +362,13 @@ Common cases that fall back:
   with a non-bucket-reducing ``_select``.
 - **Materialization-only chains** that the standard linq surface
   already lowers efficiently — e.g. ``to_table()`` on a finite array.
+- **Chained ``_select(f) |> _select(g)`` with an impure inner**
+  (``_ % N``, ``_ / N``, user-call inner that the typer can't prove
+  pure). The ``collapse_chained_selects`` pre-pass is gated on
+  ``!has_sideeffects(innerBody)`` because collapsing would shift
+  evaluation count when outer references its param zero or many times.
+  Pure inner (``_._field``, ``_ + K``, ``_ * K``, etc.) collapses
+  transparently and the downstream planner sees a single ``_select``.
 
 When a chain falls back, behavior is identical to writing the same
 chain without ``_fold`` — correct, but not splice-fused.

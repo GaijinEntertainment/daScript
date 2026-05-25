@@ -46,9 +46,13 @@ Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `test
 
 - **C1 + C5** (`plan_order_family` + `plan_decs_order_family` distinct/distinct_by gate): both `_distinct_by(K1) |> _order_by(K2) |> take(N) |> to_array()` (C1) and `_order_by(K1) |> distinct() |> take(N) |> to_array()` (C5) now splice end-to-end across array and decs sources. Both planners' walk loop gained a `distinct` / `distinct_by` recognizer that captures the distinct key without bailing; the bounded-heap path declares a `var dset : table<typedecl(...)>` above the source loop and wraps per-element push by `if (!key_exists(dset, dkey)) { dset |> insert(dkey); HEAP_UPDATE }`. **Single source pass, no full distinct materialization** (vs the tier-2 cascade's `distinct_by_to_array` → `order_by_inplace` → `take_inplace` chain that materializes the entire distinct set before sorting). Position of `distinct` in the chain (before vs after `_order_by`) has no bearing on emission — the set just gates the same heap update; the bounded-heap path treats source-walk order as opaque. v1 constraints: inline-able order key (mirrors `plan_order_family`'s existing bounded-heap gate); first/first_or_default + distinct deferred (streaming-min path not extended); composes with WHERE (filter before distinct gate) and terminal `_select` (project ≤N heap survivors at return). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das` (1497 → 1515).
 
+**Theme 7 (chained `_select` collapse) — landed 2026-05-24**:
+
+- **7c + plan_distinct + plan_reverse + plan_decs_distinct + plan_decs_reverse + plan_decs_join** (new `collapse_chained_selects` pre-pass): consecutive `_select(f) |> _select(g)` calls in a linq chain are now collapsed into a single `_select(g(f(_)))` by mutating the `calls` array immediately after `flatten_linq` (mirrors Theme 5's `normalize_order_reverse` calling convention). Composition takes the INNER lambda's structure (preserves param type), renames its bound param to a fresh `qn("cs", at)` name to avoid collision with outer's `_` (the default boost-side `_select(F)` desugar uses `_` for both inner and outer; without renaming, `apply_template` would recursively re-substitute and compound `._N` accessors), then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink (`calls[i+1]._0.arguments[0]`) is rewired so the inner select is dropped from the AST too — subsequent planner passes see the same shortened chain. Gated on `!has_sideeffects(innerBody)` because collapsing shifts evaluation count when outer references its param zero or many times (cascade always evaluates inner once per element); pure inner is safe regardless of outer's param-use count. Wired into 8 planners (`plan_order_family`, `plan_reverse`, `plan_distinct`, `plan_decs_order_family`, `plan_decs_reverse`, `plan_decs_distinct`, `plan_decs_join`, `plan_zip`) — `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively via their `intermediateBinds` / chain-info machinery and don't need the pre-pass. Direct unlocks: chain 7c (zip + N selects + terminator), chained-select-before-distinct, chained-select-before-reverse, chained-select-before-decs-join (composes with Theme 1's trailing _select extension). Two planners that DON'T benefit (the pre-pass is a defensive no-op): `plan_order_family` / `plan_decs_order_family` — they don't accept ANY `_select` in their grammar (`[where_*] order_* [take|first|first_or_default]?` + Theme 1's terminal `_select` is a separate substitution). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme7_chained_select.das` (1515 → 1539). Impure-inner anti-test verifies the cascade fallback still produces correct output.
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Themes 6, 7, 8 — see "Cross-cutting findings" section.
+- Themes 6, 8 — see "Cross-cutting findings" section.
 
 
 The audit catalogs **silent fall-off** in `daslib/linq_fold.das`: chains where a
@@ -1100,9 +1104,21 @@ finalize(pass_1);
 return <- pass_2;
 ```
 
-**Classification**: FALLS-OFF — default cascade (3 buffer allocations + 2 finalize calls).
+**Generated (post-Theme 7)**:
+```das
+return <- invoke($(srcA : array<int> const; srcB : array<int> const) : array<int> {
+    var buf : array<int>
+    for (itA, itB in srcA, srcB) {
+        let it : tuple<int;int> = tuple(itA, itB)
+        push_clone(buf, it._0 * 2)
+    }
+    return <- buf
+}, a, b)
+```
 
-**Conclusion**: Two `_select`s in a row bail at line 5486. Collapse N consecutive `_select`s into a single projection via repeated `peel_lambda_rename_var` + body composition. Same shape unblocks plan_loop_or_count.
+**Classification (post-Theme 7)**: SPLICE-FIRES — `collapse_chained_selects` pre-pass folds the two adjacent `_select`s into a single composed projection `(it._0 * 2)`; `plan_zip`'s accumulator lane then emits the parallel for-loop directly into the output buffer with no `__::linq\`select_to_array\`` / `__::linq\`select\`` intermediate calls.
+
+**Conclusion**: chained-select collapse landed 2026-05-24 (Theme 7). Mirrors how chained `_where` already compose via `&&`. Gated on `!has_sideeffects(innerBody)` — chains with `%` / `/` / user-call inner cascade to tier-2 (output remains correct). The same pre-pass runs in 7 other planners that bail on chained `_select` (plan_distinct, plan_reverse, plan_decs_*, plan_decs_join); plan_loop_or_count / plan_group_by_core / plan_decs_unroll already handle chained selects natively.
 
 ### 7d — Baseline: `zip` + `_select` + `sum`
 
@@ -1392,9 +1408,13 @@ Whenever a `plan_decs_*` arm bails, the `from_decs_template` bridge degenerates 
 
 Fix: in `FromDecsMacro` (or at the `_fold` dispatch point), emit a diagnostic (`compile_warning` style) when the bridge survives without any decs-side splice arm claiming it. Doesn't fix the underlying chain but tells the user where the perf cliff is.
 
-### Theme 7 — Chained `_select` collapse
+### Theme 7 — Chained `_select` collapse — LANDED 2026-05-24
 
-Recurs in: **chain 5 (5b), chain 7 (7c)**. N consecutive `_select` projections should collapse into a single projection via repeated `peel_lambda_rename_var` + body composition — symmetric with how N consecutive `_where` already compose via `&&`. Same mechanism unblocks both plan_loop_or_count and plan_zip.
+Recurred in: **chain 7 (7c)** (the audit primary target) plus the equivalent chained-select-before-arm-op shape on `plan_distinct`, `plan_reverse`, `plan_decs_*`, and `plan_decs_join`. `collapse_chained_selects` mutates the `calls` array in place after `flatten_linq`, replacing N consecutive `_select` calls with a single composed `_select(... g(f(_)))` — symmetric with how N consecutive `_where` already compose via `&&`. Composition takes the inner lambda's structure (preserves param TYPE), renames its bound param to a fresh `qn("cs", at)` name to avoid `apply_template` recursive substitution when both lambdas share the boost-side `_` desugar, then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink rewired so subsequent planner passes see the shortened AST.
+
+Wired into 8 planners (the 7 listed above + `plan_zip`). Gated on `!has_sideeffects(innerBody)` — pure inner is safe regardless of outer's param-use count; impure inner cascades to preserve evaluation-count semantics. Chain 5 (5b) — `_select(...) + skip(N) + _select(...)` — is NOT addressed since the two selects aren't adjacent; that's a separate "select↔skip swap" optimization out of Theme 7 scope (op-reordering with predicate-preservation proof).
+
+The two `plan_*order_family` planners gain nothing from the pre-pass because they don't accept ANY leading `_select` in their grammar; the call is a defensive no-op there (if their grammar ever extends, the collapse is already wired). `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively and don't need the pre-pass.
 
 ### Theme 8 — Specialized fusion arms (low priority)
 

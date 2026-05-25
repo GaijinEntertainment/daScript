@@ -208,6 +208,72 @@ def private normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?
     }
 }
 
+// Theme 7: collapse consecutive `_select(f) |> _select(g)` calls into a single `_select(g(f(_)))`. Symmetric to how N consecutive `_where` compose via `&&`. Mutates `calls` in place by replacing the OUTER select's lambda with a composed lambda (built by cloning the INNER lambda structure so param TYPE is preserved, then renaming its param to a fresh name and overwriting the body with the composed expression) and erasing the inner entry. Gated on purity of the inner projection — for impure inner, collapsing would shift evaluation count (outer may reference its param zero or many times); leaving the chain unchanged preserves cascade semantics. Closes audit 7c (chained selects on plan_zip) and unblocks chained selects on plan_distinct / plan_order_family / plan_reverse / plan_decs_* / plan_decs_join.
+[macro_function]
+def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+    // Match on LinqCall.name == "select" — this name is shared between `select` and `select_to_array` in the `linqCalls` registry (both denote the same projection semantic, just different input shapes: array vs iterator). The chain backlink rewire below may change the outer call's input shape (e.g. outer was `select` reading from inner's array<T>; after collapse it reads directly from an iter<T> source). That would normally require rebinding outer.func to `select_to_array`, BUT every downstream planner that consumes this `calls` array builds its emission from scratch using cll._1.name + cll._0.arguments[1] (the lambda) — none of them re-evaluate cll._0.func or instantiate a call to the original `select`/`select_to_array` function. The fold_linq_default fallback derives the actual call name (`select_to_array` vs `select`) at emission time from `top._type.isIterator`, not from cll._0.func. So the variant mismatch on the modified ExprCall is latent and never observed.
+    var i = 0
+    while (i + 1 < length(calls)) {
+        if (calls[i]._1.name != "select" || calls[i + 1]._1.name != "select") {
+            i ++
+            continue
+        }
+        var innerLam = calls[i]._0.arguments[1]
+        var outerLam = calls[i + 1]._0.arguments[1]
+        if (innerLam == null || outerLam == null
+                || !(innerLam is ExprMakeBlock) || !(outerLam is ExprMakeBlock)) {
+            i ++
+            continue
+        }
+        var innerMblk = innerLam as ExprMakeBlock
+        var innerBlk = innerMblk._block as ExprBlock
+        var outerMblk = outerLam as ExprMakeBlock
+        var outerBlk = outerMblk._block as ExprBlock
+        if (innerBlk == null || outerBlk == null
+                || innerBlk.arguments |> length != 1 || outerBlk.arguments |> length != 1
+                || innerBlk.list |> length != 1 || outerBlk.list |> length != 1
+                || !(innerBlk.list[0] is ExprReturn) || !(outerBlk.list[0] is ExprReturn)) {
+            i ++
+            continue
+        }
+        var innerRet = innerBlk.list[0] as ExprReturn
+        var outerRet = outerBlk.list[0] as ExprReturn
+        if (innerRet.subexpr == null || outerRet.subexpr == null) {
+            i ++
+            continue
+        }
+        if (has_sideeffects(innerRet.subexpr)) {
+            i ++
+            continue
+        }
+        // Rename inner's param to a fresh name BEFORE composition. apply_template recursively walks substituted content — if outer's param name matches a binder name inside innerBody (both selects often share `_` from boost-side desugaring), substitution loops. Renaming inner's `_` to a unique name guarantees no collision when substituting outer's `_` with renamedInnerBody.
+        let freshName = qn("cs", innerLam.at)
+        var renamedInnerBody = peel_lambda_rename_var(innerLam, freshName)
+        if (renamedInnerBody == null) {
+            i ++
+            continue
+        }
+        // Build new lambda: clone innerLam (preserves param TYPE), rename its bound param to freshName, then overwrite its body with composedBody (outer's body with outer's param substituted by renamedInnerBody).
+        var newLam = clone_expression(innerLam)
+        var newMblk = newLam as ExprMakeBlock
+        var newBlk = newMblk._block as ExprBlock
+        if (newBlk == null || newBlk.list |> length != 1 || !(newBlk.list[0] is ExprReturn)) {
+            i ++
+            continue
+        }
+        var newRet = newBlk.list[0] as ExprReturn
+        newBlk.arguments[0].name := freshName
+        var rules : Template
+        rules |> replaceVariable(string(outerBlk.arguments[0].name), renamedInnerBody)
+        newRet.subexpr = apply_template(rules, outerRet.subexpr.at, outerRet.subexpr)
+        calls[i + 1]._0.arguments[1] = newLam
+        // Rewire the chain backlink so the inner select is dropped from the AST too. Without this, a subsequent planner pass would re-flatten the original outer→inner→source chain and re-collapse — non-idempotent (substitution of outer's already-renamed param into inner's body would compound `._0` accessors).
+        calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
+        calls |> erase(i)
+        // Don't advance `i` — the merged outer might still chain with another `_select` just before it.
+    }
+}
+
 [macro_function]
 def private flatten_linq(var expr : Expression?)  {
     var top = expr
@@ -1279,6 +1345,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     normalize_order_reverse(calls)
+    collapse_chained_selects(calls)
     top = peel_each(top)
     var whereCond : Expression?
     var orderName : string
@@ -1994,6 +2061,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     normalize_order_reverse(calls)
+    collapse_chained_selects(calls)
     top = peel_each(top)
     var terminatorName : string  = ""
     var terminatorCall : ExprCall?
@@ -2227,6 +2295,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
 def private plan_distinct(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
+    collapse_chained_selects(calls)
     top = peel_each(top)
     var terminatorName : string  = ""
     var countPred : Expression?
@@ -5092,6 +5161,7 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
     normalize_order_reverse(calls)
+    collapse_chained_selects(calls)
     let at = calls[0]._0.at
     let tupName = qn("decs_tup", at)
     let bufName = qn("decs_buf", at)
@@ -5475,6 +5545,7 @@ def private plan_decs_reverse(var expr : Expression?) : Expression? {
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
     normalize_order_reverse(calls)
+    collapse_chained_selects(calls)
     var terminatorName : string = ""
     var terminatorCall : ExprCall?
     {
@@ -5765,6 +5836,7 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     var bridge = extract_decs_bridge(top)
     if (bridge == null || empty(calls) || expr._type == null) return null
+    collapse_chained_selects(calls)
     var terminatorName : string = ""
     var countPred : Expression?
     {
@@ -6021,6 +6093,7 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
     // Hashed equi-join over two from_decs_template eager bridges. Walks the smaller side (srcb in the source order — the user writes the smaller side as srcb) into a `table<KEY; array<TUPB>>`, then walks the larger side (srca) and probes via `table.get`. Matches array-side `join_impl` algorithm (linq.das:1674) but inlines keya/keyb/result lambdas so per-pair invoke overhead vanishes. For v1: only the `[join, count]` and `[join, <implicit to_array>]` shapes; interleaved where/select bails to tier-2. Runtime-value or non-primitive keys: keya/keyb's block return type is used directly as the table key type — primitive equi-keys (int, string) are the common case and the `_join` macro's equi-shape constraint keeps the key expression on one side of `==`.
     var (top, calls) = flatten_linq(expr)
     if (expr._type == null) return null
+    collapse_chained_selects(calls)
     // Terminator: count (1-arg) or implicit to_array. Anything else cascades.
     var terminatorName : string = ""
     {
@@ -6211,6 +6284,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
     // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
     var (top, calls) = flatten_linq(expr)
     if (empty(calls) || calls[0]._1.name != "zip") return null
+    collapse_chained_selects(calls)
     var zipCall = calls[0]._0
     let zipArgCount = zipCall.arguments |> length
     // 3-arg zip(a, b, sel): pre-lower the selector into `projection` (peeled with it._0/_1 binds).
