@@ -34,9 +34,13 @@ Coverage extension: 1415 → 1437 linq tests (12 new tests in `tests/linq/test_l
 
 Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `tests/linq/test_linq_fold_theme45_quick_wins.das`); the existing `test_unroll5c_select_distinct_count_pred_parity` + `_long_count_pred_parity` parity tests in `test_linq_from_decs.das` now exercise the splice path instead of bailing.
 
+**Theme 3 Phase 1 (cross-arm composition for C3) — landed 2026-05-24**:
+
+- **C3** (`plan_decs_group_by` with new `isDecsJoin` adapter mode): the "killer demo" composition `from_decs_template(A) |> _join(from_decs_template(B), ...) |> _group_by(K) |> _select(reducer) |> [count|to_array]` now splices end-to-end. `plan_decs_group_by` recognizes a trailing `join` upstream of `group_by_lazy` and switches to a new `GroupBySourceAdapter` mode (`isDecsJoin = true`) that emits hashB-collect + srcA-probe + per-pair result-lam bind as the per-element source loop; that bind feeds `plan_group_by_core`'s existing `tab?[uk] ?? dummy` bucket update directly. **Single pass, zero intermediate allocations** (vs the tier-2 baseline's 3: dealers-array → join-array → group-map → output-array). `plan_group_by_core` itself is untouched — the abstraction held. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING (trailing `_where` post-aggregate) deferred to v2. Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` (1463 → 1483).
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Theme 3 — cross-arm composition (5 of 6 composition probes; HIGHEST impact, LARGE effort).
+- Theme 3 Phase 2-3 — C1 (`_distinct_by + _order_by + take`), C2 (`_group_by + _select + _order_by`), C5 (`_order_by + distinct + take`). Should reuse what generalizes from the C3 adapter pattern.
 - Themes 6, 7, 8 — see "Cross-cutting findings" section.
 
 
@@ -1280,9 +1284,9 @@ return <- _fold(_join(decsCars, decsDealers, on=..., into=(Region=r.region, CarN
                 |> to_array())
 ```
 
-**Classification**: FALLS-OFF — `plan_decs_join` bails at 5284 (trailing chain ops); `plan_decs_group_by` requires a decs source on top, not a `_join` invoke; default cascade builds dealer-array → join-array → group-map → select-array. Three intermediate allocations.
+**Classification (post-Theme 3 Phase 1)**: SPLICE-FIRES — `plan_decs_group_by` recognizes the trailing `join` upstream of `group_by_lazy` and switches to an `isDecsJoin` `GroupBySourceAdapter` mode (Theme 3 Phase 1 landed 2026-05-24). Emission is a single zero-arg `invoke` containing: `var inscope djoin_tab : table<...>` + `var djoin_dummy : ...` + `var djoin_jhash : table<KEY; array<TUPB>>` + `for_each_archetype(B) { ... djoin_jhash[keyb(jtb)] |> push_clone(jtb) }` (hash collect) + `for_each_archetype(A) { ... get(djoin_jhash, keya(jta), $(jarr) { for (jtb in jarr) { let djoin_jres = result_lam(jta, jtb); ... addr-compare tab update }})}` (probe + per-pair bucket update). No `__::linq\`join_impl\``, no `__::linq\`group_by_lazy_to_array\``, no intermediate `array<...>` allocations.
 
-**Conclusion**: This is the "killer demo" composition. The structural fix is to refactor `plan_decs_join` so its emission integrates with `plan_decs_group_by`'s bucket-fill — instead of `push_clone(buf, result_lam(...))` in the probe loop, emit `bucket[keyExpr] |> push_clone(...)` directly. Largest single architectural change suggested by the audit.
+**Conclusion**: The "killer demo" composition. The structural fix turned out smaller than the audit predicted: `plan_group_by_core` is **untouched** because its output emission is source-shape-agnostic (loops over `kv pairs in values(tab)` regardless of how the tab was populated). The cross-arm cooperation lives entirely in a new `adapter_emit_source_loop` branch + `GroupBySourceAdapter` field extension + `plan_decs_group_by` recognizer extension. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING on the join+group_by chain defers to v2. The same adapter pattern is the candidate vehicle for C1 / C2 / C5 (Theme 3 Phase 2-3).
 
 ### C4 — Zip + reverse + to_array
 

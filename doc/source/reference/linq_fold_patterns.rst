@@ -226,6 +226,9 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
      - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
      - Decs mirror of the array-side post-aggregate HAVING. Same predicate-on-output-tuple semantics.
+   * - ``from_decs_template(A)._join(from_decs_template(B), ka, kb, result)._group_by(K)._select(reduce).to_array()`` / ``.count()``
+     - ``plan_decs_group_by`` (``isDecsJoin`` adapter; cross-arm — see *Decs-decs equi-join*)
+     - Theme 3 Phase 1 cross-arm composition. ``plan_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
      - Hoists ``skippingName`` state across archetypes.
@@ -259,6 +262,18 @@ primitive (``int*`` / ``uint*`` / ``float`` / ``double`` / ``bool`` /
    * - ``from_decs_template(A) |> _join(...) |> _where(P) |> count() / to_array()``
      - ``plan_decs_join`` (trailing ``_where``)
      - Bind join result, evaluate predicate, gate ``count++`` / ``push_clone``. Composes with the trailing ``_select`` form (filter then project, single bind per pair).
+   * - ``from_decs_template(A) |> _join(...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
+     - ``plan_decs_group_by`` (``isDecsJoin`` adapter, Theme 3 C3)
+     - Cross-arm composition. ``plan_decs_group_by`` recognizes a trailing
+       ``join`` upstream of ``group_by_lazy`` and builds an adapter that
+       emits hashB-collect + srcA-probe + per-pair result-lam bind as the
+       per-element source loop; that bind feeds
+       ``plan_group_by_core``'s ``tab?[uk] ?? dummy`` bucket update
+       directly. Single pass, no intermediate ``join`` array. v1
+       constraints: ``count`` / ``to_array`` terminator only;
+       primitive equi-key (same guard as ``plan_decs_join``); no segments
+       between ``join`` and ``group_by_lazy``; HAVING (trailing ``_where``
+       after the reducer ``_select``) defers to v2.
 
 Zip patterns
 ============
