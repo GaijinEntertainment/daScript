@@ -26,6 +26,9 @@ def run_m3f(b : B?; n : int) {
     b |> run("m3f_array_fold/{n}", n) {
         let s = _fold(zip(xs, ys, $(x : int; y : int) => int64(x) * int64(y)).sum())
         b |> accept(s)
+        if (s == 0l) {
+            b->failNow()
+        }
     }
 }
 

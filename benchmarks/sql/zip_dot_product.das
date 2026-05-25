@@ -27,6 +27,9 @@ def run_m3f(b : B?; n : int) {
     b |> run("m3f_array_fold/{n}", n) {
         let s = _fold(zip(xs, ys)._select(int64(_._0) * int64(_._1)).sum())
         b |> accept(s)
+        if (s == 0l) {
+            b->failNow()
+        }
     }
 }
 
@@ -35,6 +38,9 @@ def run_m4(b : B?; n : int) {
     b |> run("m4_decs_fold/{n}", n) {
         let s = _fold(from_decs_template(type<DecsCar>)._select(int64(_.price) * int64(_.year)).sum())
         b |> accept(s)
+        if (s == 0l) {
+            b->failNow()
+        }
     }
 }
 

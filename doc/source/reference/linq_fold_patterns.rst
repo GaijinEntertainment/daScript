@@ -213,12 +213,12 @@ identical — only the source iteration changes.
    * - Chain shape (decs source)
      - Splice arm
      - Notes
-   * - ``from_decs_template(type<T>).count()`` / ``.long_count()`` (bare) or with leading ``._where(P)``
+   * - ``from_decs_template(type<T>).count()`` (bare, no chain ops, no predicate)
      - ``plan_decs_unroll`` → ``emit_decs_count_archsize``
-     - Bare form sums ``arch.size`` across archetypes (no per-element work). The ``_where(P)`` variant runs a counter loop over the per-archetype walk.
-   * - ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)`` (bare chain, no where/select)
+     - Sums ``arch.size`` across archetypes; skips the per-entity walk entirely. Returns ``int`` — the ``+=`` site truncates past INT_MAX, so chain ``long_count()`` instead (different splice arm — see next row) when an int64-safe total is required.
+   * - ``from_decs_template(type<T>).long_count()`` (bare); ``from_decs_template(type<T>)._where(P).count()`` / ``.long_count()``; ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)``
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
-     - Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap), making both the ``arch.size`` shortcut and the 2-arg ``count(P)`` accumulator path reachable on bare chains.
+     - Counter loop over the per-archetype walk. The bare ``long_count()`` shape does NOT use the ``arch.size`` shortcut above — that emitter returns ``int`` only. The ``count(P)`` / ``long_count(P)`` forms reach this arm via the Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap).
    * - ``from_decs_template(...)._select(F).sum()`` / ``.average()`` / ``.min()`` / ``.max()`` / ``.aggregate(...)``
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
      - Per-archetype accumulator; pruner keeps only the components read by ``F``.
