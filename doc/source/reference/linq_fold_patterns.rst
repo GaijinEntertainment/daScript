@@ -139,9 +139,9 @@ Array-source patterns
    * - ``._order_by(K).take(N).to_array()``
      - ``plan_order_family`` (bounded-heap)
      - ``spliced_push_heap`` fill + replace, ``spliced_pop_heap`` on replace, ``order_inplace`` at end. Buffer of size N.
-   * - ``._distinct_by(K1)._order_by(K2).take(N).to_array()`` / ``._order_by(K2)._distinct().take(N).to_array()`` (mirror order also accepted)
+   * - ``._distinct_by(K1)._order_by(K2).take(N).to_array()`` / ``._order_by(K2).distinct().take(N).to_array()`` (plain ``distinct()`` mirror order accepted)
      - ``plan_order_family`` (bounded-heap + set-gate)
-     - Theme 3 Phase 3 (audit C1/C5). The bounded-heap path gains a leading or middle ``distinct[_by]`` recognizer; per-element push/pop is gated by a set-insert on the distinct key (or whole element for plain ``distinct``). Single source pass, no full distinct materialization. Position of ``distinct`` in the chain (before vs after ``_order_by``) has no bearing on emission — the set just gates the same heap update. Inline-able order key required (cascades otherwise). Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project ≤N heap survivors at return).
+     - Theme 3 Phase 3 (audit C1/C5). The bounded-heap path gains a leading or middle ``distinct[_by]`` recognizer; per-element push/pop is gated by a set-insert on the distinct key (or whole element for plain ``distinct``). Single source pass, no full distinct materialization. Position of ``distinct`` in the chain (before vs after ``_order_by``) has no bearing on emission for the safe shapes — the set just gates the same heap update. **Bails** (cascades) on ``_order_by(K2).distinct_by(K1)`` because cascade semantics ("min-K2 per K1" — first K1 occurrence in sort order) cannot be honored by a source-walk set-gate, which would keep an arbitrary K1 representative; on ``distinct[_by]`` without ``take`` (would be silently dropped); and on ``take(N).distinct[_by]()`` (would dedup pre-take instead of post-take). Inline-able order key required (cascades otherwise). Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project ≤N heap survivors at return).
    * - ``._order_by(K).take(N)._select(F).to_array()`` / ``.first()._select(F)`` / ``.first_or_default()._select(F)``
      - ``plan_order_family`` (terminal ``_select``)
      - Bounded-heap / streaming-min holds the raw element; projection ``F`` runs ≤K times at return. Closes the natural "take top-K then project" idiom.
@@ -208,9 +208,9 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._order_by(K).take(N).to_array()``
      - ``plan_decs_order_family`` (bounded-heap)
      - Same heap pattern as the array variant; buffer size N.
-   * - ``from_decs_template(...)._distinct_by(K1)._order_by(K2).take(N).to_array()`` / ``._order_by(K2)._distinct().take(N).to_array()`` (mirror order also accepted)
+   * - ``from_decs_template(...)._distinct_by(K1)._order_by(K2).take(N).to_array()`` / ``._order_by(K2).distinct().take(N).to_array()`` (plain ``distinct()`` mirror order accepted)
      - ``plan_decs_order_family`` (bounded-heap + set-gate)
-     - Decs mirror of the array-side ``plan_order_family`` distinct extension (Theme 3 Phase 3, audit C1/C5). The decs hoisted-buffer bounded-heap path gains the same set-gate inside the per-archetype loop body.
+     - Decs mirror of the array-side ``plan_order_family`` distinct extension (Theme 3 Phase 3, audit C1/C5). The decs hoisted-buffer bounded-heap path gains the same set-gate inside the per-archetype loop body. Same bail conditions as the array variant: ``_order_by(K2).distinct_by(K1)``, ``distinct[_by]`` without ``take``, and ``take(N).distinct[_by]()`` all cascade.
    * - ``from_decs_template(...)._order_by(K).take(N)._select(F).to_array()``
      - ``plan_decs_order_family`` (terminal ``_select``)
      - Decs mirror of ``plan_order_family``'s terminal ``_select`` — heap holds raw element, projection runs ≤K times at return.

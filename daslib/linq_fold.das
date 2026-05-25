@@ -1307,8 +1307,10 @@ def private plan_order_family(var expr : Expression?) : Expression? {
                 whereCond = qmacro($e(whereCond) && $e(pred))
             }
         } elif (name == "distinct" || name == "distinct_by") {
-            // Accept both C1 (distinct[_by] BEFORE order_by) and C5 (distinct[_by] AFTER order_by). The bounded-heap path needs no positional info — the set just gates pushes regardless of source-walk order.
-            if (distinctName != "" || firstName != "" || selectLam != null) return null
+            // Bail on the shapes the set-gated bounded-heap can't honor: already-claimed distinct/first/select; `take.distinct` (cascade is take-then-dedup, splice would dedup-then-take); `order_by(K2).distinct_by(K1)` (cascade picks min-K2-per-K1 in sort order, splice would keep an arbitrary K1 representative). Plain `distinct()` after `order_by` IS safe — whole-tuple equality is position-invariant.
+            if (distinctName != "" || firstName != "" || selectLam != null
+                    || takeExpr != null
+                    || (name == "distinct_by" && hasOrder)) return null
             distinctName = name
             if (name == "distinct_by") {
                 let argCount = cll._0.arguments |> length
@@ -1351,7 +1353,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasOrder) return null
+    // Distinct gate is implemented only in the bounded-heap path (requires `take`). For non-take chains the splice would silently drop dedup — bail to cascade.
+    if (!hasOrder || (distinctName != "" && takeExpr == null)) return null
     let hasKey = orderName == "order_by" || orderName == "order_by_descending"
     let needIterWrap = expr._type.isIterator
     let topNName = order_top_n_call_name(orderName)
@@ -1485,11 +1488,11 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         if (distinctName != "") {
             if (distinctName == "distinct_by") {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
                 }
             } else {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
                 }
             }
         }
@@ -5113,8 +5116,10 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
         } elif (name == "distinct" || name == "distinct_by") {
-            // Accept both C1 (distinct[_by] BEFORE order_by) and C5 (distinct[_by] AFTER order_by). Position has no bearing on the bounded-heap emission — the set just gates pushes.
-            if (distinctName != "" || firstName != "" || selectLam != null) return null
+            // Decs mirror of plan_order_family's bail logic. Same shapes the set-gated bounded-heap can't honor: already-claimed distinct/first/select; `take.distinct`; `order_by(K2).distinct_by(K1)`. Plain `distinct()` after order_by stays a splice (whole-tuple equality is position-invariant).
+            if (distinctName != "" || firstName != "" || selectLam != null
+                    || takeExpr != null
+                    || (name == "distinct_by" && hasOrder)) return null
             distinctName = name
             if (name == "distinct_by") {
                 let argCount = cll._0.arguments |> length
@@ -5156,7 +5161,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasOrder) return null
+    // Distinct gate is implemented only in the bounded-heap path. Without take we'd silently drop dedup — bail to cascade.
+    if (!hasOrder || (distinctName != "" && takeExpr == null)) return null
     let hasKey = orderName == "order_by" || orderName == "order_by_descending"
     let topNName = order_top_n_call_name(orderName)
     let inplaceName = "{orderName}_inplace"
@@ -5265,11 +5271,11 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
         if (distinctName != "") {
             if (distinctName == "distinct_by") {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(elemType)>)))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(elemType)>)))>
                 }
             } else {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(default<$t(elemType)>))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(elemType)>))>
                 }
             }
         }
