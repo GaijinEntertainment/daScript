@@ -28,11 +28,11 @@ def test_t7c_zip_two_selects_to_array(t : T?) {
     t |> run("7c: each(a) |> zip(each(b)) |> _select(_._0) |> _select(_ * 2) |> to_array — audit primary target") @(tt : T?) {
         let a <- [1, 2, 3, 4]
         let b <- [10, 20, 30, 40]
-        let r <- unsafe(_fold(each(a)
+        let r <- _fold(each(a)
             |> zip(each(b))
             |> _select(_._0)
             |> _select(_ * 2)
-            |> to_array()))
+            |> to_array())
         tt |> equal(length(r), 4)
         tt |> equal(r[0], 2)
         tt |> equal(r[1], 4)
@@ -48,12 +48,12 @@ def test_t7c_zip_three_selects_count(t : T?) {
     t |> run("7c N=3: zip + _select(_._0) + _select(_ + 1) + _select(_ * 10) + count — runs of three adjacent selects fold left-to-right") @(tt : T?) {
         let a <- [1, 2, 3]
         let b <- [10, 20, 30]
-        let n = unsafe(_fold(each(a)
+        let n = _fold(each(a)
             |> zip(each(b))
             |> _select(_._0)
             |> _select(_ + 1)
             |> _select(_ * 10)
-            |> count()))
+            |> count())
         tt |> equal(n, 3)
     }
 }
@@ -65,11 +65,11 @@ def test_t7c_parity_vs_cascade(t : T?) {
     t |> run("7c parity: chained-select splice output equals handwritten cascade element-wise") @(tt : T?) {
         let a <- [for (i in range(20)); i * 3]
         let b <- [for (i in range(20)); 100 - i]
-        let spliced <- unsafe(_fold(each(a)
+        let spliced <- _fold(each(a)
             |> zip(each(b))
             |> _select(_._0)
             |> _select(_ + 7)
-            |> to_array()))
+            |> to_array())
         // Handwritten cascade: just compute (a[i] + 7) element-wise.
         let cascade <- [for (x in a); x + 7]
         tt |> equal(length(spliced), length(cascade))
@@ -101,11 +101,11 @@ def test_t7c_distinct_two_selects(t : T?) {
 def test_t7c_reverse_two_selects(t : T?) {
     t |> run("plan_reverse: each + _select(_ + 1) + _select(_ * 10) + reverse + to_array — chained selects collapse before reverse") @(tt : T?) {
         let a <- [1, 2, 3]
-        let r <- unsafe(_fold(each(a)
+        let r <- _fold(each(a)
             |> _select(_ + 1)
             |> _select(_ * 10)
             |> reverse()
-            |> to_array()))
+            |> to_array())
         // Composed: x => (x + 1) * 10. Values: 20, 30, 40. Reversed: 40, 30, 20.
         tt |> equal(length(r), 3)
         tt |> equal(r[0], 40)
@@ -133,15 +133,13 @@ def populate_t7_decs() {
 def test_t7c_decs_distinct_two_selects(t : T?) {
     t |> run("plan_decs_distinct: from_decs_template + _select(_.grp) + _select(_ + 1) + distinct + count — chained selects collapse on decs distinct lane") @(tt : T?) {
         populate_t7_decs()
-        unsafe {
-            // 20 items, grp = i/4 ∈ {0,1,2,3,4}. Composed: grp + 1 ∈ {1,2,3,4,5}. Distinct = 5.
-            let n = _fold(from_decs_template(type<T7Item>)
-                |> _select(_.grp)
-                |> _select(_ + 1)
-                |> distinct
-                |> count())
-            tt |> equal(n, 5)
-        }
+        // 20 items, grp = i/4 ∈ {0,1,2,3,4}. Composed: grp + 1 ∈ {1,2,3,4,5}. Distinct = 5.
+        let n = _fold(from_decs_template(type<T7Item>)
+            |> _select(_.grp)
+            |> _select(_ + 1)
+            |> distinct
+            |> count())
+        tt |> equal(n, 5)
         restart()
     }
 }
@@ -152,18 +150,16 @@ def test_t7c_decs_distinct_two_selects(t : T?) {
 def test_t7c_decs_reverse_two_selects(t : T?) {
     t |> run("plan_decs_reverse: from_decs_template + _select(_.id) + _select(_ * 10) + reverse + to_array — chained selects collapse on decs reverse path") @(tt : T?) {
         populate_t7_decs()
-        unsafe {
-            // 20 items, id = 0..19. Composed: id * 10 ∈ {0,10,...,190}. Reversed: 190..0.
-            let r <- _fold(from_decs_template(type<T7Item>)
-                |> _select(_.id)
-                |> _select(_ * 10)
-                |> reverse()
-                |> to_array())
-            tt |> equal(length(r), 20)
-            tt |> equal(r[0], 190)
-            tt |> equal(r[1], 180)
-            tt |> equal(r[19], 0)
-        }
+        // 20 items, id = 0..19. Composed: id * 10 ∈ {0,10,...,190}. Reversed: 190..0.
+        let r <- _fold(from_decs_template(type<T7Item>)
+            |> _select(_.id)
+            |> _select(_ * 10)
+            |> reverse()
+            |> to_array())
+        tt |> equal(length(r), 20)
+        tt |> equal(r[0], 190)
+        tt |> equal(r[1], 180)
+        tt |> equal(r[19], 0)
         restart()
     }
 }

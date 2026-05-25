@@ -91,7 +91,10 @@ what would otherwise be many lookalike chains:
   evaluation count when outer references its param zero or many times
   (cascade always evaluates inner once per element). Chains with
   ``%`` / ``/`` / user-call inner cascade to tier-2 (output remains
-  correct).
+  correct). Also bails (cascades) when either selector is not a
+  peelable single-arg, single-return ``ExprMakeBlock`` lambda —
+  multi-statement projection bodies, captured/non-trivial lambda
+  shapes, and function-pointer arguments all skip collapse.
   ``plan_loop_or_count``, ``plan_group_by_core``, and ``plan_decs_unroll``
   already handle chained selects natively via their ``intermediateBinds`` /
   chain-info machinery and don't need the pre-pass.
