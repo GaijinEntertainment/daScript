@@ -1749,11 +1749,11 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     if (distinctName != "") {
         if (distinctName == "distinct_by") {
             stmts |> push <| qmacro_expr() {
-                var $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
             }
         } else {
             stmts |> push <| qmacro_expr() {
-                var $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
             }
         }
     }
@@ -2278,11 +2278,11 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             var dsetDecl : Expression?
             if (distinctName == "distinct_by") {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
                 }
             } else {
                 dsetDecl = qmacro_expr() {
-                    var $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
                 }
             }
             var returnExpr = buffer_return(bufName, needIterWrap)

@@ -203,7 +203,7 @@ Array-source patterns
      - Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
    * - ``each(arr).reverse()._distinct[_by](K).to_array()``
      - ``plan_reverse`` (backward index walk + set-gate)
-     - Theme 8 (audit 2a). Array source only. Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit to_array only; pre-reverse where_/select/take and non-array sources bail to cascade.
+     - Theme 8 (audit 2a). Array source only. Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` and non-array sources bail to cascade.
 
 Decs-source patterns
 ====================
