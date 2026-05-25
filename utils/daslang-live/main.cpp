@@ -169,6 +169,11 @@ static void auto_tick_agents() {
 // --- Compilation ---
 
 struct CompileResult {
+    // moduleGroup owns the non-builtin dep modules (deletes them on reset()).
+    // Program/Context hold raw Module* into it via library.modules and TypeInfo
+    // (vi->annotation_arguments → FieldDeclaration::annotation), so it must
+    // outlive program+ctx. Declared first → destroyed last.
+    unique_ptr<ModuleGroup> moduleGroup;
     ProgramPtr program;
     ContextPtr ctx;
     FileAccessPtr access;
@@ -177,6 +182,7 @@ struct CompileResult {
 
 static CompileResult compile_script(const string & fn) {
     CompileResult result;
+    result.moduleGroup = make_unique<ModuleGroup>();
     result.access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
 
     CodeOfPolicies policies;
@@ -190,8 +196,7 @@ static CompileResult compile_script(const string & fn) {
     policies.rtti = true;
     policies.track_allocations = trackAllocations;
 
-    ModuleGroup moduleGroup;
-    result.program = compileDaScript(fn, result.access, tout, moduleGroup, policies);
+    result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
     if (!result.program) {
         result.errors = "failed to compile " + fn;
         tout << "ERROR: " << result.errors << "\n";
