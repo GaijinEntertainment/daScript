@@ -7,3 +7,5 @@ Expression flags
 Expression print flags
 Base type of the constant expression (Type::tInt16)
 Value of the constant expression
+True when this constant resulted from implicit int-literal promotion
+True when int-literal promotion to float/double lost precision (round-trip check)

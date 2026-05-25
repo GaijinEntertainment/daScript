@@ -379,6 +379,17 @@ namespace das {
         auto fieldVariant = expr->makeType->findArgumentIndex(decl->name);
         if (fieldVariant != -1) {
             auto fieldType = expr->makeType->argTypes[fieldVariant];
+            {
+                bool rangeError = false;
+                if (auto promoted = tryPromoteConstInt(decl->value, fieldType, rangeError)) {
+                    reportAstChanged();
+                    decl->value = promoted;
+                    return Visitor::visitMakeVariantField(expr, index, decl, last);
+                }
+                if (rangeError) {
+                    return Visitor::visitMakeVariantField(expr, index, decl, last);
+                }
+            }
             if (!canCopyOrMoveType(fieldType, decl->value->type, TemporaryMatters::yes, decl->value,
                                    "can't initialize field " + decl->name, CompilationError::cant_copy, decl->value->at)) {
             } else if (decl->value->type->isTemp(true, false)) {
@@ -596,6 +607,17 @@ namespace das {
                     copyFieldType = new TypeDecl(*field->type);
                     copyFieldType->constant = true;
                 }
+                {
+                    bool rangeError = false;
+                    if (auto promoted = tryPromoteConstInt(decl->value, copyFieldType, rangeError)) {
+                        reportAstChanged();
+                        decl->value = promoted;
+                        return Visitor::visitMakeStructureField(expr, index, decl, last);
+                    }
+                    if (rangeError) {
+                        return Visitor::visitMakeStructureField(expr, index, decl, last);
+                    }
+                }
                 if (!canCopyOrMoveType(copyFieldType, decl->value->type, TemporaryMatters::yes, decl->value,
                                        "can't initialize field " + decl->name, CompilationError::cant_copy, decl->value->at)) {
                 } else if (decl->value->type->isTemp(true, false)) {
@@ -677,6 +699,17 @@ namespace das {
                 if (!fldt->isRef()) {
                     error("field is a property, not a value; " + decl->name, "", "",
                           decl->at, CompilationError::invalid_annotation_field);
+                }
+                {
+                    bool rangeError = false;
+                    if (auto promoted = tryPromoteConstInt(decl->value, fldt, rangeError)) {
+                        reportAstChanged();
+                        decl->value = promoted;
+                        return Visitor::visitMakeStructureField(expr, index, decl, last);
+                    }
+                    if (rangeError) {
+                        return Visitor::visitMakeStructureField(expr, index, decl, last);
+                    }
                 }
                 if (!canCopyOrMoveType(fldt, decl->value->type, TemporaryMatters::no, decl->value,
                                        "can't initialize field " + decl->name, CompilationError::cant_copy, decl->value->at)) {
@@ -1098,6 +1131,16 @@ namespace das {
                       init->at, CompilationError::exceeds_tuple_index);
                 return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
             }
+            {
+                bool rangeError = false;
+                if (auto promoted = tryPromoteConstInt(init, expr->recordType->argTypes[index], rangeError)) {
+                    reportAstChanged();
+                    return promoted;
+                }
+                if (rangeError) {
+                    return init;
+                }
+            }
             if (!canCopyOrMoveType(expr->recordType->argTypes[index], init->type, TemporaryMatters::no, init,
                                    "can't initialize tuple element " + to_string(index), CompilationError::cant_copy, init->at)) {
             }
@@ -1296,6 +1339,16 @@ namespace das {
         }
         if (!init->type || !expr->recordType) {
             return Visitor::visitMakeArrayIndex(expr, index, init, last);
+        }
+        {
+            bool rangeError = false;
+            if (auto promoted = tryPromoteConstInt(init, expr->recordType, rangeError)) {
+                reportAstChanged();
+                return promoted;
+            }
+            if (rangeError) {
+                return init;
+            }
         }
         if (!canCopyOrMoveType(expr->recordType, init->type, TemporaryMatters::no, init,
                                "can't initialize array element", CompilationError::cant_copy, init->at)) {

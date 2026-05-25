@@ -752,6 +752,8 @@ namespace das
         Type    baseType = Type::none;
         vec4f   value = v_zero();
         bool    foldedNonConst = false;
+        bool    promotedFromInt = false;
+        bool    inexactFloatPromotion = false;
       };
 #ifdef _MSC_VER
 #pragma warning(pop)

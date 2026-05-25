@@ -1493,7 +1493,7 @@ namespace das {
 
     void SerializeVisitor::serializeConst ( ExprConst * expr ) {
         serializeBase(expr);
-        ser << expr->baseType << expr->value << expr->foldedNonConst;
+        ser << expr->baseType << expr->value << expr->foldedNonConst << expr->promotedFromInt << expr->inexactFloatPromotion;
     }
 
     void SerializeVisitor::serializeMakeLocal ( ExprMakeLocal * expr ) {

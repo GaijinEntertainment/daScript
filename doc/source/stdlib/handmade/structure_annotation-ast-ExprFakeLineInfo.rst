@@ -7,3 +7,5 @@ Expression flags
 Expression print flags
 Base type of the constant expression (Type::fakeLineInfo)
 Pointer to the LineInfo, as void?
+True when this constant resulted from implicit int-literal promotion
+True when int-literal promotion to float/double lost precision (round-trip check)

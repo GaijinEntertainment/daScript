@@ -159,7 +159,7 @@ def is_valid_rule_code(code : string) : bool {
     var all_digits = true
     peek_data(digits) $(d) {
         for (c in d) {
-            if (int(c) < int('0') || int(c) > int('9')) {
+            if (int(c) < '0' || int(c) > '9') {
                 all_digits = false
             }
         }

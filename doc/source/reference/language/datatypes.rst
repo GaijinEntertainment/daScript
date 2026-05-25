@@ -114,15 +114,18 @@ Type Conversion and Casting
     single: Type Conversion
     single: Casting
 
-Daslang is a strongly typed language with **no implicit type conversions**.
-All numeric operations require operands of the same type — for example, ``int + float``
-is a compilation error.  You must convert explicitly:
+Daslang has **no implicit type conversions between values** — non-literal int and
+float operands always need explicit casts. For example, with two named variables,
+``int + float`` is a compilation error and you must convert explicitly:
 
 .. code-block:: das
 
     let i = 42
     let f = float(i) + 1.0     // explicit int -> float
     let i2 = i + int(1.0)      // explicit float -> int
+
+Bare integer literals are a narrow exception to this rule — see
+*Integer literal promotion* below.
 
 Explicit numeric casts
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -145,6 +148,77 @@ the target type name as a function:
     uint16(42)          // int -> uint16 (storage type)
 
 Float-to-integer conversion truncates toward zero (like C).
+
+Integer literal promotion
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A bare integer literal (``1``, ``-13``, ``0xFF``) is implicitly promoted to a
+matching numeric target type when the literal's value fits. This eliminates
+boilerplate ``float(...)`` / ``uint8(...)`` casts on small constants without
+opening the door to general implicit conversions.
+
+Where promotion applies
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Promotion runs wherever the compiler already knows the target type:
+
+.. code-block:: das
+
+    var a : float = 1                 // local var init
+    var g : uint8 = 250               // global var init   (module scope)
+    struct Foo { x : float = 7 }      // struct field decl init
+    var f = Foo(x = 3)                // struct ctor field init
+    var v = V(arm = 42)               // variant arm init
+    var b : float ; b = 1             // copy
+    var c : float ; c := 1            // clone
+    var d : float ; d += 1            // compound assignment
+    var e : float = a + 1             // binary operator (either side)
+    def fn() : uint8 { return 200 }   // return statement
+
+Function-call arguments and ``ExprMove`` (``<-``) are intentionally **not**
+promoted. ``foo(1)`` on a parameter typed ``float`` still needs ``foo(1.0f)``
+or ``foo(float(1))``.
+
+Accepted target types: ``int8`` / ``int16`` / ``int`` / ``int64``,
+``uint8`` / ``uint16`` / ``uint`` / ``uint64``,
+``bitfield8`` / ``bitfield16`` / ``bitfield`` / ``bitfield64``,
+``float``, ``double``. Out of scope: enum, pointer, string, struct.
+
+Range checks for integer/bitfield targets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For integer and bitfield targets, the literal is range-checked against the
+target's exact range. A value that doesn't fit raises a single
+``error[30515] exceeds_constant_range`` and **no** downstream type-mismatch
+error:
+
+.. code-block:: das
+
+    var d : uint8 = 256
+    // error[30515]: constant value 256 does not fit in uint8
+    //     expected range [0..255]
+
+    var d : int8 = -129               // out of range
+    var d : uint8 = -1                // negative literal, unsigned target
+
+Float and double — precision is a lint warning
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Promotion to ``float`` or ``double`` always succeeds at infer time, regardless
+of value. ``float`` can exactly represent every int in ``[-2^24, 2^24]``;
+above that range some ints round during the cast. The precision check is
+deferred to ``daslib/lint`` as **LINT011** so general code keeps compiling:
+
+.. code-block:: das
+
+    let exact   : float = 16777216    // 2^24      — exact, no warning
+    let inexact : float = 16777217    // 2^24 + 1  — LINT011 fires
+    let suppr   : float = 16777219    // nolint:LINT011
+
+``double`` can represent every int up to ``2^53``; since promotion sources
+top out at ``uint32`` (``2^32 - 1``), LINT011 never fires on ``double``
+targets — the check is wired symmetrically so future broader sources stay
+covered.
 
 Enumeration casts
 ^^^^^^^^^^^^^^^^^
@@ -195,9 +269,11 @@ There is no ``int(string)`` — use ``to_int`` instead.
 What is NOT allowed
 ^^^^^^^^^^^^^^^^^^^
 
-* **No implicit numeric promotion:** ``int + float`` is a compile error
+* **No implicit value-to-value numeric conversion:** with two named variables
+  ``i : int`` and ``f : float``, ``i + f`` is a compile error — wrap one side
+  with ``float(i)`` / ``int(f)``. Bare integer literals are the only
+  exception (see *Integer literal promotion* above).
 * **No bool(int):** use a comparison like ``x != 0`` instead
-* **No implicit int-to-float assignment:** ``var f : float = 42`` is a compile error; use ``float(42)``
 * **No int(string):** use ``to_int`` from the ``strings`` module
 
 --------
