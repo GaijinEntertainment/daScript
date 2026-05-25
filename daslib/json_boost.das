@@ -366,8 +366,30 @@ def JV(v : auto(VecT)) {
 
 [expect_any_vector_type(ent), template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT()) {
-    //! Parse a JSON value and return the corresponding vector value.
+    //! Parse a JSON value and return the corresponding vector value. Accepts both the object form ``{"x":1,"y":2}`` (what ``JV(v)`` emits) and the array form ``[1,2]`` (what ``sprint_json`` / ``debug_json_value`` emit for the same vector). Missing or short arrays fall back to ``defV`` field-by-field.
     if (v == null) return defV
+    if (v.value is _array) {
+        unsafe {
+            let arr & = v.value as _array
+            let n = length(arr)
+            static_if (typeinfo vector_dim(defV) == 2) {
+                return VecT(
+                    n > 0 ? (arr[0] ?? defV.x) : defV.x,
+                    n > 1 ? (arr[1] ?? defV.y) : defV.y)
+            } static_elif (typeinfo vector_dim(defV) == 3) {
+                return VecT(
+                    n > 0 ? (arr[0] ?? defV.x) : defV.x,
+                    n > 1 ? (arr[1] ?? defV.y) : defV.y,
+                    n > 2 ? (arr[2] ?? defV.z) : defV.z)
+            } static_elif (typeinfo vector_dim(defV) == 4) {
+                return VecT(
+                    n > 0 ? (arr[0] ?? defV.x) : defV.x,
+                    n > 1 ? (arr[1] ?? defV.y) : defV.y,
+                    n > 2 ? (arr[2] ?? defV.z) : defV.z,
+                    n > 3 ? (arr[3] ?? defV.w) : defV.w)
+            }
+        }
+    }
     assume vo = v
     static_if (typeinfo vector_dim(defV) == 2) {
         return VecT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y)
@@ -386,7 +408,9 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
     unsafe {
         let tab & = v.value as _object
         for (k, vv in keys(tab), values(tab)) {
-            move_to_ref(ret[k], _::from_JV(vv, type<VT -&>))
+            // VT can be scalar or struct/table — keep from_JV uniform; ?? has
+            // no overload for non-scalar VT.
+            move_to_ref(ret[k], _::from_JV(vv, type<VT -&>))  // nolint:STYLE020
         }
     }
     return <- ret
@@ -504,6 +528,7 @@ def JV(value : auto(TT)) : JsonValue? {
     //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(value)) {
         var arr : array<JsonValue?>
+        arr |> reserve(length(value))
         for (t in value) {
             arr |> push(JV(t))
         }

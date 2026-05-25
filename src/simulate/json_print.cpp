@@ -16,6 +16,7 @@ namespace das {
         bool unescape = false;
         bool embed = false;
         bool optional = false; // if true, we do not write zero values, only non-zero ones
+        bool inTableKey = false; // vec/range emit as array form here to fit inside the outer "..." quote
         vector<bool> ignoreNextFields;
         vector<bool> anyStructFields;
     // data structures
@@ -151,10 +152,18 @@ namespace das {
             ss << "{";
         }
         virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint64_t, bool ) override {
-            if ( ki->type!=Type::tString ) ss << "\"";
+            if ( ki->type!=Type::tString ) {
+                ss << "\"";
+                inTableKey = true;
+            }
         }
         virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint64_t, bool ) override {
-            if ( ki->type!=Type::tString ) ss << "\":"; else ss << ":";
+            if ( ki->type!=Type::tString ) {
+                ss << "\":";
+                inTableKey = false;
+            } else {
+                ss << ":";
+            }
         }
         virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint64_t, bool last ) override {
             if ( !last ) ss << ",";
@@ -234,31 +243,40 @@ namespace das {
             ss << int64_t(value);
         }
         virtual void Int2 ( int2 & value ) override {
-            ss << "[" << value.x << "," << value.y << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << "}";
         }
         virtual void Int3 ( int3 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << "}";
         }
         virtual void Int4 ( int4 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << ",\"w\":" << value.w << "}";
         }
         virtual void UInt2 ( uint2 & value ) override {
-            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
+            if ( inTableKey ) ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
+            else ss << "{\"x\":" << int64_t(value.x) << ",\"y\":" << int64_t(value.y) << "}";
         }
         virtual void UInt3 ( uint3 & value ) override {
-            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "]";
+            if ( inTableKey ) ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "]";
+            else ss << "{\"x\":" << int64_t(value.x) << ",\"y\":" << int64_t(value.y) << ",\"z\":" << int64_t(value.z) << "}";
         }
         virtual void UInt4 ( uint4 & value ) override {
-            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "," << int64_t(value.w) << "]";
+            if ( inTableKey ) ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "," << int64_t(value.w) << "]";
+            else ss << "{\"x\":" << int64_t(value.x) << ",\"y\":" << int64_t(value.y) << ",\"z\":" << int64_t(value.z) << ",\"w\":" << int64_t(value.w) << "}";
         }
         virtual void Float2 ( float2 & value ) override {
-            ss << "[" << value.x << "," << value.y << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << "}";
         }
         virtual void Float3 ( float3 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << "}";
         }
         virtual void Float4 ( float4 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
+            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
+            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << ",\"w\":" << value.w << "}";
         }
         virtual void Range ( range & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
