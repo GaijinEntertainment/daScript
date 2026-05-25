@@ -1,0 +1,47 @@
+options gen2
+options persistent_heap
+
+require _common public
+
+let TAKE_N = 1000
+let THRESHOLD = 500
+
+// take(N) |> _where(P) |> count — "first N elements, then keep matching" semantic
+// (Theme 2, audit 5c). Distinct from `_where(P) |> take(N)` which is "first N matching":
+// the take cap ticks unconditionally per element here, and _where gates only the
+// per-element contribution to the count. plan_loop_or_count's postTakeWhereCond gate
+// emits both behaviors in a single splice. SQL: no faithful translation — LIMIT in
+// SQL filters after WHERE, not before. Companion to take_count_filtered.das which
+// measures the _where-first form.
+
+def run_m3f(b : B?; n : int) {
+    let arr <- fixture_array(n)
+    b |> run("m3f_array_fold/{n}", n) {
+        let c = _fold(each(arr).take(TAKE_N)._where(_.price > THRESHOLD).count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+def run_m4(b : B?; n : int) {
+    fixture_decs(n)
+    b |> run("m4_decs_fold/{n}", n) {
+        let c = _fold(from_decs_template(type<DecsCar>).take(TAKE_N)._where(_.price > THRESHOLD).count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def take_where_count_m3f(b : B?) {
+    run_m3f(b, 100000)
+}
+
+[benchmark]
+def take_where_count_m4(b : B?) {
+    run_m4(b, 100000)
+}
