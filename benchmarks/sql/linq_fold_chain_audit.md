@@ -54,9 +54,15 @@ Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `test
 
 - **`LinqFold.visit`** (new diagnostic in [daslib/linq_fold.das](../../daslib/linq_fold.das)): after every tier-1 planner (all six `plan_decs_*` arms plus the array-side `plan_*` arms) returns null and right before `fold_linq_default` fires, `flatten_linq(call.arguments[0])` is destructured into `(top, calls)`; if `calls` is non-empty AND `extract_decs_bridge(top)` is non-null (the chain has a `from_decs_template` source AND actual chain ops that will cascade), emit a `*warning*` to the compiler log naming the call site and pointing at the patterns RST. Empty-calls case (bare `_fold(from_decs_template(...))`) is suppressed — there's no cascade, just the bridge's own materialization. When fired, the bridge is about to materialize a temp `res` array into the tier-2 array cascade — an extra allocation on top of whatever cascade follows. The warning makes that perf cliff visible at compile time instead of being silently absorbed. Suppress per file with `options _no_decs_perf_warn = true` (intended for tests that intentionally exercise cascade behavior as regression guards — e.g. `tests/linq/test_linq_from_decs.das` target_unroll5e_groupby_count_pred_fold, `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` C3-anti-*). Uses `to_compiler_log` (matches `daslib/defer.das` deprecation pattern) so the warning surfaces in default `daslang` output without requiring lint mode. Coverage: +2 tests in `tests/linq/test_linq_fold_theme6_decs_bridge_warn.das` (fires path) and `test_linq_fold_theme6_decs_bridge_warn_silenced.das` (suppression path); 1539 → 1541.
 
-Still open (queued for the next session per the cross-cutting findings below):
+**Theme 8 (specialized fusion arms — 2a, 3b, C4) — landed 2026-05-25**:
 
-- Theme 8 — see "Cross-cutting findings" section.
+- **2a** (`plan_reverse`): trailing `reverse + distinct[_by]` on array source — implicit to_array, no other chain ops. New emission walks source backward via index and gates push by a set-insert on the dedup key. Saves the cascade's `reverse_to_array` allocation AND the second `distinct_by_inplace` pass. v1 scope tight: array source (`isGoodArrayType || isArray`) required since non-array sources can't be backward-indexed, and pre-reverse where_/select/take all bail (keep cascade for those). LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`.
+- **3b** (`plan_order_family`): upstream `distinct[_by]` + `_order_by[_descending]` WITHOUT `take` on the to_array path. The bail `(distinctName != "" && takeExpr == null)` relaxes to allow when `firstName == ""` (first/first_or_default still cascades — streaming-min path has no dset hook). The where_+order fused-loop path generalizes: when `distinctName != ""`, declare `var order_dset : table<typedecl(...)>` and wrap pushExpr with the same set-gated `if (!key_exists(...))` block as the bounded-heap branch (Theme 3 Phase 3). Composes cleanly with WHERE (filter→distinct→sort) and Theme 1's terminal `_select` (project at return). Saves the cascade's `distinct_by_to_array` intermediate iterator setup.
+- **C4** (`plan_zip`): trailing `reverse` between zip's chain and the terminator — accepts on ARRAY/COUNTER/ACCUMULATOR lanes plus `any`/`all`/`contains` early-exit (reverse is identity for all of those). Bails on `first` / `first_or_default` (NOT identity under reverse). Constraint: reverse must be the last chain op (`i == intermediateEnd - 1`) — anything after would see the reversed stream and change semantics vs cascade. Array lane emits `_::reverse_inplace($i(bufName))` before the return; other lanes treat reverse as a no-op so the existing emission paths fire unchanged.
+
+Coverage extension: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 → 1557). All anti-tests verify out-of-scope shapes (2a-take, 3b-first, C4-first, C4-not-last) cascade correctly.
+
+**Audit fully closed.** All 8 themes shipped between 2026-05-24 and 2026-05-25.
 
 
 The audit catalogs **silent fall-off** in `daslib/linq_fold.das`: chains where a
@@ -336,9 +342,9 @@ return <- invoke($(var source : iterator<Event&>) : array<Event> {
 }, __::builtin`each(events))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_reverse` accepts trailing `distinct[_by]` on array source (implicit to_array, no other chain ops). Emission: backward index walk + `var rev_dset : table<...>` set-gate around the push. Single source pass; no `reverse_to_array` allocation, no second dedup walk.
 
-**Conclusion**: `distinct_by` after `reverse` is not in plan_reverse's vocabulary (line 1813 fall-through), and the call appears before any recognized terminator so plan_reverse cannot peel one. plan_distinct in turn doesn't model `reverse` in its prelude either (line 1999 fall-through). Result: full `reverse_to_array` allocation + `distinct_by_inplace`. Cheap user rewrite: `_distinct_by` is order-stable, so the user could write `_distinct_by(_.kind).reverse()` — but that's a behavior change (different element survives per kind). A real splice extension would need `plan_reverse` to recognize `reverse + distinct_by` and emit a single-pass walk that retains the LAST element per key, then reverses.
+**Conclusion**: Theme 8 landed 2026-05-25. LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`. v1 scope tight (array source only, no other chain ops) — non-array sources can't be backward-indexed and would yield no win over cascade; pre-reverse where_/select/take are bail-to-cascade for the same reason.
 
 ### 2b — Order then reverse (array)
 
@@ -516,9 +522,9 @@ return <- invoke($(var source : iterator<Row&>) : array<Row> {
 }, __::builtin`each(rows))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_order_family` accepts upstream `distinct[_by]` on the no-take to_array path (the existing `(distinctName != "" && takeExpr == null)` bail relaxes when `firstName == ""`). Emission: where_+order fused-loop path generalized — declares `var order_dset : table<typedecl(...)>` above the source loop, gates the per-element `push_clone` by set-insert on the dedup key, then sorts the buf in place. Single source pass.
 
-**Conclusion**: `_order_by` after `_distinct_by` is unrecognized in plan_distinct (line 1998 fall-through), and plan_order_family doesn't model `_distinct_by` as an upstream call (line 1284). Cascade materializes the distinct-by result, then in-place sorts. The two ops don't commute (distinct-then-sort ≠ sort-then-distinct), so no obvious user rewrite. Extension fix: plan_order_family could recognize an upstream `_distinct_by(keyFn)` and emit a fused walk that hash-tracks seen keys while feeding survivors into the bounded heap.
+**Conclusion**: Theme 8 landed 2026-05-25. Saves the cascade's `distinct_by_to_array` intermediate iterator setup. Composes with WHERE (filter before distinct gate) and Theme 1 terminal `_select` (project at return). first/first_or_default + distinct still cascades (streaming-min path has no dset hook — deferred).
 
 ### 3c — Distinct then predicated count (array)
 
@@ -1331,9 +1337,9 @@ __::linq`reverse_inplace(pass_0);
 return <- pass_0;
 ```
 
-**Classification**: FALLS-OFF — `plan_zip` lists `reverse` as unrecognized op (line 5528); `plan_reverse` doesn't recognize a 2-source zip head.
+**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_zip` accepts `reverse` as the last chain op between zip's chain and the terminator. Array lane emits `_::reverse_inplace($i(bufName))` before return. Counter / accumulator (sum/min/max/avg) / any/all/contains lanes treat reverse as a no-op (mathematical identity); first / first_or_default bails (NOT identity under reverse).
 
-**Conclusion**: Cheapest fall-off in absolute cost (1 buffer + 1 inplace), but trivial to absorb: zip's natural emission can be `for i in length downto 0` parallel `for` — 1-line change when `reverse` is the only intermediate. Bundle with the 7b TODO.
+**Conclusion**: Theme 8 landed 2026-05-25. Reverse must be the last chain op — anything after would see the reversed stream and change semantics vs cascade. Saves zip's `zip_to_array` iterator wrap on the array lane (modest INTERP win; identity-lane saves the buf alloc + reverse_inplace entirely).
 
 ### C5 — Order-by + distinct + take + to_array
 
@@ -1420,14 +1426,15 @@ Wired into 8 planners (the 7 listed above + `plan_zip`). Gated on `!has_sideeffe
 
 The two `plan_*order_family` planners gain nothing from the pre-pass because they don't accept ANY leading `_select` in their grammar; the call is a defensive no-op there (if their grammar ever extends, the collapse is already wired). `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively and don't need the pre-pass.
 
-### Theme 8 — Specialized fusion arms (low priority)
+### Theme 8 — Specialized fusion arms — LANDED 2026-05-25
 
-Recurs in: **chains 2, 3, C4**. Several "two specific arms could fuse" cases:
-- `reverse + distinct_by` (chain 2a) — single walk retaining LAST element per key.
-- `_distinct_by(keyFn) + _order_by(otherKey)` (chain 3b) — hash-track + bounded sort walk.
-- `zip + reverse` (C4) — emit `for i in length downto 0`.
+Three small self-contained splice arms, bundled as one PR since each is independent:
 
-Each is small and self-contained. Lower priority than themes 1-3 but cheap follow-ups when in the area.
+- **2a** (`plan_reverse`): `each(arr).reverse()._distinct_by(K).to_array()` — array source only. Single backward index walk over source, `table<K>` set-gates the push. Saves the cascade's `reverse_to_array` allocation AND the `distinct_by_inplace` second pass. v1 implicit-to_array only; pre-reverse where_/select/take all bail (cascade owns those).
+- **3b** (`plan_order_family`): `each(arr)._distinct[_by]_._order_by[_descending].to_array()` WITHOUT `take`. Generalizes the existing where_+order fused-loop path with a `var order_dset` declaration and set-gated `pushExpr` wrapper (mirroring Theme 3 Phase 3's bounded-heap distinct gate). Composes with WHERE and terminal `_select`. Saves `distinct_by_to_array` iterator setup. first/first_or_default + distinct still cascades (streaming-min path has no dset hook).
+- **C4** (`plan_zip`): trailing `reverse` as the last chain op between zip's chain and the terminator. Array lane emits `_::reverse_inplace(bufName)` before return; counter / accumulator (sum/min/max/avg) / any/all/contains lanes treat reverse as a no-op (mathematical identity); first / first_or_default bails (NOT identity).
+
+Coverage: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 → 1557) including parity tests vs handwritten cascades and anti-tests for each out-of-scope shape. **Audit fully closed** — all 8 themes shipped.
 
 ### Out-of-scope observations
 

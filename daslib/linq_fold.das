@@ -1420,8 +1420,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             return null
         }
     }
-    // Distinct gate is implemented only in the bounded-heap path (requires `take`). For non-take chains the splice would silently drop dedup — bail to cascade.
-    if (!hasOrder || (distinctName != "" && takeExpr == null)) return null
+    // Distinct gate is implemented in the bounded-heap path (requires `take`) and the fused-loop to_array path (Theme 8 — audit 3b). first[_or_default]+distinct without take still bails — streaming-min path has no dset hook.
+    if (!hasOrder || (distinctName != "" && takeExpr == null && firstName != "")) return null
     let hasKey = orderName == "order_by" || orderName == "order_by_descending"
     let needIterWrap = expr._type.isIterator
     let topNName = order_top_n_call_name(orderName)
@@ -1435,8 +1435,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     // Streaming-min / bounded-heap fast paths (mirror of plan_decs_order_family). When the key is inline-able, skip the materialize-all + min_by/top_n* dispatch in favor of a per-walk state (single best for first[_or_default], heap of size N for take). For first[_or_default]: avoids the per-element `invoke(keyLambda, x)` cost in min_by_impl (~28 ns/op win on 100K-row sort_first). For take(N): avoids materializing the full filtered set before top_n_by (~7-9 ns/op win on sort_take / select_where_order_take).
     let useBoundedHeap = takeExpr != null && inlineCmp != null && firstName == ""
     let useStreamingMin = firstName != "" && inlineCmp != null
-    // Terminal _select only splices on inline-cmp / where_+order paths; direct calls would re-emit the cascade.
-    if (selectLam != null && !useStreamingMin && !useBoundedHeap && whereCond == null) return null
+    // Terminal _select only splices on inline-cmp / where_+order / distinct+order paths; direct calls would re-emit the cascade.
+    if (selectLam != null && !useStreamingMin && !useBoundedHeap && whereCond == null && distinctName == "") return null
     if (useStreamingMin) {
         let bestName = qn("order_best", at)
         let seenName = qn("order_seen", at)
@@ -1632,7 +1632,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         }
         return finalize_invoke(emission, at)
     }
-    if (whereCond == null) {
+    if (whereCond == null && distinctName == "") {
         // No prefilter — direct call to daslib helper.
         var topExpr = clone_expression(top)
         topExpr.genFlags.alwaysSafe = true
@@ -1703,23 +1703,62 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         emission.force_generated(true)
         return emission
     }
-    // where_* + order_*[+take] — emit a single fused loop that prefilters into a fresh
+    // where_* + order_*[+take] OR distinct[_by] + order_* (Theme 8, audit 3b) — emit a single fused loop that filters into a fresh buf, then sorts in place.
     let srcName = qn("source", at)
     let bufName = qn("buf", at)
+    let dsetName = qn("order_dset", at)
+    let dkeyName = qn("order_dkey", at)
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var bufElemType = clone_type(orderElemType)
-    var loopBody = qmacro_expr() {
-        if ($e(whereCond)) {
-            $i(bufName) |> push_clone($i(itName))
+    var pushStmt : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(itName))
+    }
+    // Theme 8 (audit 3b): upstream distinct[_by] gates per-element push by set-insert on the distinct key. Single source pass, no full distinct materialization (vs cascade's distinct_by_to_array + order_by_inplace).
+    if (distinctName != "") {
+        var dkeyExpr : Expression?
+        if (distinctName == "distinct_by") {
+            dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
+            if (dkeyExpr == null) return null
+        } else {
+            dkeyExpr = qmacro($i(itName))
         }
+        pushStmt = qmacro_block() {
+            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                $i(dsetName) |> insert($i(dkeyName))
+                $e(pushStmt)
+            }
+        }
+    }
+    var loopBody : Expression?
+    if (whereCond != null) {
+        loopBody = qmacro_expr() {
+            if ($e(whereCond)) {
+                $e(pushStmt)
+            }
+        }
+    } else {
+        loopBody = pushStmt
     }
     var stmts : array<Expression?>
     stmts |> push <| qmacro_expr() {
         var $i(bufName) : array<$t(bufElemType)>
     }
-    if (type_has_length(top._type)) {
+    if (distinctName != "") {
+        if (distinctName == "distinct_by") {
+            stmts |> push <| qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+            }
+        } else {
+            stmts |> push <| qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+            }
+        }
+    }
+    if (type_has_length(top._type) && distinctName == "") {
+        // Don't pre-reserve when distinct gates the push — survivor count is unknown.
         stmts |> push <| qmacro_expr() {
             $i(bufName) |> reserve(length($i(srcName)))
         }
@@ -2081,6 +2120,9 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     var takeExpr : Expression?
     var terminalSelectLam : Expression?
     var terminalSelectElemType : TypeDeclPtr
+    // Theme 8 (audit 2a): trailing `distinct[_by]` after reverse. Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk. v1 limited to array source + implicit to_array terminator.
+    var distinctName : string
+    var distinctKey : Expression?
     let at = calls[0]._0.at
     let srcName = qn("source", at)
     let itName  = qn("it", at)
@@ -2089,6 +2131,10 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     let lastName = qn("last", at)
     let cntName = qn("cnt", at)
     let dBindName = qn("d", at)
+    let dkeyName = qn("rev_dkey", at)
+    let dsetName = qn("rev_dset", at)
+    let idxName = qn("rev_k", at)
+    let rlenName = qn("rev_len", at)
     var reverseCall : ExprCall?
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
@@ -2119,13 +2165,24 @@ def private plan_reverse(var expr : Expression?) : Expression? {
             var arg = cll._0.arguments[1]
             if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
             takeExpr = clone_expression(arg)
+        } elif (name == "distinct" || name == "distinct_by") {
+            // Theme 8 (audit 2a): trailing distinct[_by] after reverse, no other chain ops, implicit to_array terminator, array source. Walks source backward with set-gated push.
+            if (!hasReverse || distinctName != "" || i != length(calls) - 1) return null
+            distinctName = name
+            if (name == "distinct_by") {
+                if ((cll._0.arguments |> length) < 2) return null
+                distinctKey = clone_expression(cll._0.arguments[1])
+            }
         } else {
             return null
         }
     }
-    // count + terminal _select would drop projection side effects (count ≡ count after pure select). Defer.
+    // Bail conditions: no reverse; take+terminator (take only with implicit to_array); count+terminal-select (would drop side effects); Theme 8 (audit 2a) distinct path constrained to array source + implicit to_array + no other chain ops.
     if (!hasReverse || (takeExpr != null && terminatorName != "")
-            || (terminalSelectLam != null && terminatorName == "count")) return null
+            || (terminalSelectLam != null && terminatorName == "count")
+            || (distinctName != "" && (terminatorName != "" || takeExpr != null || projection != null
+                    || whereCond != null || terminalSelectLam != null
+                    || !(top._type.isGoodArrayType || top._type.isArray)))) return null
     var body : Expression?
     if (terminatorName == "count") {
         // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
@@ -2209,10 +2266,43 @@ def private plan_reverse(var expr : Expression?) : Expression? {
         if (terminalSelectLam != null) {
             projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
         }
-        let canBackwardIndex = (takeExpr != null && projection == null && whereCond == null
+        // Theme 8 (audit 2a): reverse + distinct[_by] + to_array on array source — single backward walk with set-gated push. Mirrors canBackwardIndex below but gates push by dedup key instead of indexing into the last takeN slots.
+        if (distinctName != "") {
+            var dkeyExpr : Expression?
+            if (distinctName == "distinct_by") {
+                dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
+                if (dkeyExpr == null) return null
+            } else {
+                dkeyExpr = qmacro($i(itName))
+            }
+            var dsetDecl : Expression?
+            if (distinctName == "distinct_by") {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                }
+            } else {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+                }
+            }
+            var returnExpr = buffer_return(bufName, needIterWrap)
+            body = qmacro_block() {
+                let $i(rlenName) = length($i(srcName))
+                var $i(bufName) : array<$t(bufElemType)>
+                $e(dsetDecl)
+                for ($i(idxName) in 0 .. $i(rlenName)) {
+                    let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
+                    let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+                    if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                        $i(dsetName) |> insert($i(dkeyName))
+                        $i(bufName) |> push_clone($i(itName))
+                    }
+                }
+                $e(returnExpr)
+            }
+        } elif (takeExpr != null && projection == null && whereCond == null
                 && terminalSelectLam == null
-                && (top._type.isGoodArrayType || top._type.isArray))
-        if (canBackwardIndex) {
+                && (top._type.isGoodArrayType || top._type.isArray)) {
             // R6: visit only the last takeN indices — skips full-source push + O(length) reverse_inplace.
             let lenName   = qn("rlen", at)
             let takeNName = qn("rtn", at)
@@ -6360,6 +6450,7 @@ def private plan_zip(var expr : Expression?) : Expression? {
     var seenSkipWhile = false
     var seenTakeWhile = false
     var seenTake = false
+    var seenReverse = false
     var allProjectionsPure = true
     // Pre-lower 3-arg zip(a,b,sel) → seeded projection (2-arg lambda replaced with it._0/_1).
     if (zipArgCount == 3) {
@@ -6440,11 +6531,17 @@ def private plan_zip(var expr : Expression?) : Expression? {
             if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
             takeExpr = clone_expression(takeArg)
             seenTake = true
+        } elif (opName == "reverse") {
+            // Theme 8 (audit C4): trailing reverse before terminator. Must be last chain op — anything after would see the reversed stream and change semantics vs cascade (which runs reverse_inplace after collecting). Lane check below bails on first/first_or_default (NOT identity under reverse).
+            if (seenReverse || i != intermediateEnd - 1) return null
+            seenReverse = true
         } else {
             // Any other intermediate op (group_by, distinct, order_*, second zip, etc.): bail to tier-2.
             return null
         }
     }
+    // Reverse is identity for count/long_count, sum/min/max/average, any/all/contains; for first/first_or_default it picks a different element — bail. For the array lane, emit reverse_inplace below.
+    if (seenReverse && (lastName == "first" || lastName == "first_or_default")) return null
     // Theme 4: count(p) / long_count(p). Kept SEPARATE from whereCond so the upstream `where_` chain still gates projection evaluation — eager `where(W).select(F).count(P)` runs W first, then F only on W-passes; merging counterPred into whereCond would lift the predicate ahead of projection and (worse) merge upstream where filters under the same gate as P, masking which one filters first. When select is present we bind projection to a per-element `vproj` local INSIDE the upstream-where guard and peel the predicate against that name. Without select, peel against itName.
     let vprojName = qn("vproj", at)
     let bindProjForCounter = counterPred != null && projection != null
@@ -6607,6 +6704,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
             return $i(accName)
         }
     } else {
+        // Theme 8 (audit C4): trailing reverse on the array lane → emit reverse_inplace before the return. Identity for accumulator/early-exit/counter lanes (handled by skipping the emit), so this only fires here.
+        if (seenReverse) {
+            bodyStmts |> push <| qmacro_expr() {
+                _::reverse_inplace($i(bufName))
+            }
+        }
         if (expr._type.isIterator) {
             bodyStmts |> push <| qmacro_expr() {
                 return <- $i(bufName).to_sequence_move()

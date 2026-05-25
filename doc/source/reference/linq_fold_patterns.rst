@@ -180,6 +180,9 @@ Array-source patterns
    * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count(P)`` / ``.long_count(P)``
      - ``plan_distinct`` (predicate counter)
      - Dedup table is built unconditionally so ``distinct_by`` semantics keep FIRST occurrence per key; a separate ``var acc`` increments only when ``P`` matches that first occurrence. Mirrors tier-2 ``distinct.count(P)`` semantics (distinct-then-filter, not filter-then-distinct).
+   * - ``._distinct[_by](K1)._order_by[_descending](K2).to_array()`` / ``._where(P)._distinct[_by](K1)._order_by(K2).to_array()``
+     - ``plan_order_family`` (fused-loop + set-gate)
+     - Theme 8 (audit 3b). The where_+order fused-loop path generalizes: when upstream ``distinct[_by]`` is present, declare ``var order_dset : table<...>`` and wrap the per-element ``push_clone`` with a set-gated ``if (!key_exists(...))`` block. Single source pass + in-place sort, no ``distinct_by_to_array`` intermediate iterator setup. Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project at return). **Bails** (cascades) on ``distinct[_by] + order_by + first[_or_default]`` (streaming-min path has no dset hook) and on chains where ``take(N)`` is present (use the bounded-heap path via Theme 3 Phase 3 instead).
    * - ``._group_by(K)._select(reduce).to_array()``
      - ``plan_group_by_core`` → ``emit_reducer_branches``
      - Per-key bucket reducer; single hash, one entry per group.
@@ -198,6 +201,9 @@ Array-source patterns
    * - ``.reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
      - ``plan_reverse`` (terminal ``_select``)
      - Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
+   * - ``each(arr).reverse()._distinct[_by](K).to_array()``
+     - ``plan_reverse`` (backward index walk + set-gate)
+     - Theme 8 (audit 2a). Array source only. Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` and non-array sources bail to cascade.
 
 Decs-source patterns
 ====================
@@ -344,6 +350,9 @@ Zip patterns
    * - ``zip(a, b)._select(F).count(P)`` / ``.long_count(P)``
      - ``plan_zip`` (counter with separate predicate gate)
      - The 2-arg ``count(P)`` / ``long_count(P)`` form is captured into a dedicated counter-predicate gate emitted around ``acc++`` *inside* the upstream where/select wrap, so eager ``where(W).select(F).count(P)`` ordering is preserved (W filters first, then F runs once per surviving element, then P decides whether to count). With ``_select``, the predicate peels against the projected value via a ``vproj`` bind. Length-shortcut is suppressed when ``P`` is present (the counter loop runs).
+   * - ``zip(a, b)[._select(F)|._where(P)|...].reverse().<terminator>``
+     - ``plan_zip`` (trailing ``reverse``)
+     - Theme 8 (audit C4). ``reverse`` accepted as the last chain op between zip's chain and the terminator. Array lane emits ``_::reverse_inplace($i(bufName))`` before return; counter / accumulator (sum/min/max/avg) / ``any`` / ``all`` / ``contains`` lanes treat reverse as a no-op (mathematical identity). **Bails** (cascades) on ``first`` / ``first_or_default`` (NOT identity under reverse) and when ``reverse`` is not the last chain op (anything after would see the reversed stream and change semantics vs cascade).
 
 What falls back
 ===============
