@@ -1290,18 +1290,32 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     var hasOrder = false
     var selectLam : Expression?
     var selectElemType : TypeDeclPtr
+    // Theme 3 Phase 3 (audit C1/C5): leading or middle `distinct` / `distinct_by` on an order+take chain. Bounded-heap path gates per-element push by set-insert on the distinct key — single source pass, no full materialization.
+    var distinctName : string
+    var distinctKey : Expression?
     let at = calls[0]._0.at
     let itName = qn("it", at)
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
         if (name == "where_") {
-            if (hasOrder) return null   // where-after-order not in scope
+            if (hasOrder || distinctName != "") return null   // where-after-order/distinct not in scope
             var pred = peel_lambda_rename_var(cll._0.arguments[1], itName)
             if (whereCond == null) {
                 whereCond = pred
             } else {
                 whereCond = qmacro($e(whereCond) && $e(pred))
+            }
+        } elif (name == "distinct" || name == "distinct_by") {
+            // Bail on the shapes the set-gated bounded-heap can't honor: already-claimed distinct/first/select; `take.distinct` (cascade is take-then-dedup, splice would dedup-then-take); `order_by(K2).distinct_by(K1)` (cascade picks min-K2-per-K1 in sort order, splice would keep an arbitrary K1 representative). Plain `distinct()` after `order_by` IS safe — whole-tuple equality is position-invariant.
+            if (distinctName != "" || firstName != "" || selectLam != null
+                    || takeExpr != null
+                    || (name == "distinct_by" && hasOrder)) return null
+            distinctName = name
+            if (name == "distinct_by") {
+                let argCount = cll._0.arguments |> length
+                if (argCount < 2) return null
+                distinctKey = clone_expression(cll._0.arguments[1])
             }
         } elif (name == "order" || name == "order_descending"
                 || name == "order_by" || name == "order_by_descending") {
@@ -1339,7 +1353,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasOrder) return null
+    // Distinct gate is implemented only in the bounded-heap path (requires `take`). For non-take chains the splice would silently drop dedup — bail to cascade.
+    if (!hasOrder || (distinctName != "" && takeExpr == null)) return null
     let hasKey = orderName == "order_by" || orderName == "order_by_descending"
     let needIterWrap = expr._type.isIterator
     let topNName = order_top_n_call_name(orderName)
@@ -1426,6 +1441,8 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         let takeNName = qn("order_take_n", at)
         let bhBufName = qn("order_buf", at)
         let srcName = qn("source", at)
+        let dsetName = qn("order_dset", at)
+        let dkeyName = qn("order_dkey", at)
         var srcParamType = invoke_src_param_type(top)
         var topExpr = clone_expression(top)
         topExpr.genFlags.alwaysSafe = true
@@ -1442,6 +1459,23 @@ def private plan_order_family(var expr : Expression?) : Expression? {
                 _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
             }
         }
+        // Theme 3 Phase 3 (audit C1/C5): leading or middle distinct[_by] gates per-element push by set-insert on the distinct key. Single source pass, no full distinct materialization.
+        if (distinctName != "") {
+            var dkeyExpr : Expression?
+            if (distinctName == "distinct_by") {
+                dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
+                if (dkeyExpr == null) return null
+            } else {
+                dkeyExpr = qmacro($i(itName))
+            }
+            perElement = qmacro_block() {
+                let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+                if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                    $i(dsetName) |> insert($i(dkeyName))
+                    $e(perElement)
+                }
+            }
+        }
         if (whereCond != null) {
             perElement = qmacro_expr() {
                 if ($e(whereCond)) {
@@ -1450,26 +1484,69 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
         // No `reserve(takeN)` on the bounded buf — matches the upstream top_n_by_with_cmp iterator-variant policy (linq.das:482-484). Caller may pass takeN >> actual source size, so pre-reserving N risks a large upfront allocation for no win.
+        var dsetDecl : Expression?
+        if (distinctName != "") {
+            if (distinctName == "distinct_by") {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                }
+            } else {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+                }
+            }
+        }
         var emission : Expression?
         if (selectLam != null) {
             // Terminal _select projects ≤K heap survivors at return (heap holds raw type for cmp).
             let outBufName = qn("order_proj_buf", at)
             let elemName = qn("order_proj_e", at)
             var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
+            if (distinctName != "") {
+                emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
+                    let $i(takeNName) = $e(takeExpr)
+                    var $i(bhBufName) : array<$t(bufElemType)>
+                    var $i(outBufName) : array<$t(selectElemType)>
+                    $e(dsetDecl)
+                    return <- $i(outBufName) if ($i(takeNName) <= 0)
+                    for ($i(itName) in $i(srcName)) {
+                        $e(perElement)
+                    }
+                    _::order_inplace($i(bhBufName), $e(inlineCmp))
+                    $i(outBufName) |> reserve(length($i(bhBufName)))
+                    for ($i(elemName) in $i(bhBufName)) {
+                        $i(outBufName) |> push_clone($e(projBody))
+                    }
+                    return <- $i(outBufName)
+                }, $e(topExpr)))
+            } else {
+                emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
+                    let $i(takeNName) = $e(takeExpr)
+                    var $i(bhBufName) : array<$t(bufElemType)>
+                    var $i(outBufName) : array<$t(selectElemType)>
+                    return <- $i(outBufName) if ($i(takeNName) <= 0)
+                    for ($i(itName) in $i(srcName)) {
+                        $e(perElement)
+                    }
+                    _::order_inplace($i(bhBufName), $e(inlineCmp))
+                    $i(outBufName) |> reserve(length($i(bhBufName)))
+                    for ($i(elemName) in $i(bhBufName)) {
+                        $i(outBufName) |> push_clone($e(projBody))
+                    }
+                    return <- $i(outBufName)
+                }, $e(topExpr)))
+            }
+        } elif (distinctName != "") {
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
                 let $i(takeNName) = $e(takeExpr)
                 var $i(bhBufName) : array<$t(bufElemType)>
-                var $i(outBufName) : array<$t(selectElemType)>
-                return <- $i(outBufName) if ($i(takeNName) <= 0)
+                $e(dsetDecl)
+                return <- $i(bhBufName) if ($i(takeNName) <= 0)
                 for ($i(itName) in $i(srcName)) {
                     $e(perElement)
                 }
                 _::order_inplace($i(bhBufName), $e(inlineCmp))
-                $i(outBufName) |> reserve(length($i(bhBufName)))
-                for ($i(elemName) in $i(bhBufName)) {
-                    $i(outBufName) |> push_clone($e(projBody))
-                }
-                return <- $i(outBufName)
+                return <- $i(bhBufName)
             }, $e(topExpr)))
         } else {
             emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
@@ -5027,14 +5104,28 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     var firstDefaultExpr : Expression?
     var selectLam : Expression?
     var selectElemType : TypeDeclPtr
+    // Theme 3 Phase 3 (audit C1/C5): leading or middle `distinct` / `distinct_by` on a decs order+take chain — bounded-heap path gates per-element push by set-insert.
+    var distinctName : string = ""
+    var distinctKey : Expression?
     for (i in 0 .. length(calls)) {
         var cll & = unsafe(calls[i])
         let name = cll._1.name
         if (name == "where_") {
-            if (hasOrder) return null
+            if (hasOrder || distinctName != "") return null
             var pred = peel_lambda_rename_var(cll._0.arguments[1], tupName)
             if (pred == null) return null
             whereCond = merge_where_cond(whereCond, pred)
+        } elif (name == "distinct" || name == "distinct_by") {
+            // Decs mirror of plan_order_family's bail logic. Same shapes the set-gated bounded-heap can't honor: already-claimed distinct/first/select; `take.distinct`; `order_by(K2).distinct_by(K1)`. Plain `distinct()` after order_by stays a splice (whole-tuple equality is position-invariant).
+            if (distinctName != "" || firstName != "" || selectLam != null
+                    || takeExpr != null
+                    || (name == "distinct_by" && hasOrder)) return null
+            distinctName = name
+            if (name == "distinct_by") {
+                let argCount = cll._0.arguments |> length
+                if (argCount < 2) return null
+                distinctKey = clone_expression(cll._0.arguments[1])
+            }
         } elif (name == "order" || name == "order_descending"
                 || name == "order_by" || name == "order_by_descending") {
             if (hasOrder) return null
@@ -5070,7 +5161,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             return null
         }
     }
-    if (!hasOrder) return null
+    // Distinct gate is implemented only in the bounded-heap path. Without take we'd silently drop dedup — bail to cascade.
+    if (!hasOrder || (distinctName != "" && takeExpr == null)) return null
     let hasKey = orderName == "order_by" || orderName == "order_by_descending"
     let topNName = order_top_n_call_name(orderName)
     let inplaceName = "{orderName}_inplace"
@@ -5134,6 +5226,8 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
     }
     if (useBoundedHeap) {
         let takeNName = qn("decs_take_n", at)
+        let dsetName = qn("decs_dset", at)
+        let dkeyName = qn("decs_dkey", at)
         // Direct less-test on the hot path: `less(KEY[decs_tup], KEY[buf[0]])` inlined, no block dispatch.
         var lessTest = make_inline_less_call(orderKey, orderName,
             qmacro($i(tupName)), qmacro($i(bufName)[0]), at)
@@ -5147,6 +5241,23 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
                 _::spliced_push_heap($i(bufName), $e(inlineCmp))
             }
         }
+        // Theme 3 Phase 3 (C1/C5 decs mirror): leading or middle distinct[_by] gates per-element push by set-insert on the distinct key.
+        if (distinctName != "") {
+            var dkeyExpr : Expression?
+            if (distinctName == "distinct_by") {
+                dkeyExpr = peel_lambda_rename_var(distinctKey, tupName)
+                if (dkeyExpr == null) return null
+            } else {
+                dkeyExpr = qmacro($i(tupName))
+            }
+            perElement = qmacro_block() {
+                let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+                if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                    $i(dsetName) |> insert($i(dkeyName))
+                    $e(perElement)
+                }
+            }
+        }
         if (whereCond != null) {
             perElement = qmacro_expr() {
                 if ($e(whereCond)) {
@@ -5155,8 +5266,21 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
             }
         }
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, perElement, at)
+        // Distinct-set declaration: keyed on the same `typedecl(_::unique_key(...))` idiom plan_distinct uses. Hoisted ABOVE for_each_archetype.
+        var dsetDecl : Expression?
+        if (distinctName != "") {
+            if (distinctName == "distinct_by") {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(elemType)>)))>
+                }
+            } else {
+                dsetDecl = qmacro_expr() {
+                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(elemType)>))>
+                }
+            }
+        }
         var bhStmts : array<Expression?>
-        bhStmts |> reserve(10)
+        bhStmts |> reserve(12)
         // No `reserve(takeN)` on the bounded buf — matches the policy in linq.das top_n_by_with_cmp iterator variant. Caller may pass takeN >> actual source size, and the decs cardinality is unknown ahead of the walk; pre-reserving N slots would risk a large upfront allocation for no win (fill phase grows geometrically to min(N, M) in O(log) reallocs anyway).
         if (selectLam != null) {
             // Terminal _select projects ≤K heap survivors at return (heap holds raw tuples).
@@ -5168,6 +5292,11 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
                 var $i(bufName) : array<$t(elemType)>
                 var $i(outBufName) : array<$t(selectElemType)>
                 return <- $i(outBufName) if ($i(takeNName) <= 0)
+            }
+            if (dsetDecl != null) {
+                bhStmts |> push(dsetDecl)
+            }
+            bhStmts |> push_from <| qmacro_block_to_array() {
                 for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                     $e(forExprNode)
                 })
@@ -5186,6 +5315,11 @@ def private plan_decs_order_family(var expr : Expression?) : Expression? {
                 let $i(takeNName) = $e(takeExpr)
                 var $i(bufName) : array<$t(elemType)>
                 return <- $i(bufName) if ($i(takeNName) <= 0)
+            }
+            if (dsetDecl != null) {
+                bhStmts |> push(dsetDecl)
+            }
+            bhStmts |> push_from <| qmacro_block_to_array() {
                 for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
                     $e(forExprNode)
                 })

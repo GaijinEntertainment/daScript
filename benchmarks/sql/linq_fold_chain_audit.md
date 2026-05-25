@@ -42,9 +42,12 @@ Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `test
 
 - **C2** (`plan_group_by_core` trailing `_order_by` extension): the canonical SQL `GROUP BY ... ORDER BY` shape `<source> |> _group_by(K) |> _select(reduce) |> _order_by(K2) |> to_array()` now splices end-to-end. Both `plan_group_by` and `plan_decs_group_by` pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, ...)` right after the bucket-fill — mutating the same buffer in place. **One pass + in-place sort** (vs the tier-2 cascade's three allocations: `group_by_lazy_to_array` → `select` → fresh-array sort). Three lanes share the same sort tail (array source, decs source via `isDecs`, decs-decs join via `isDecsJoin` — Theme 3 Phase 1 composes cleanly). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred; non-inline keys cascade. Composes with HAVING (`_select(reduce) |> _where(P) |> _order_by(K2)`). Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_c2_group_by_order_by.das` (1483 → 1497).
 
+**Theme 3 Phase 3 (cross-arm composition for C1 + C5) — landed 2026-05-24**:
+
+- **C1 + C5** (`plan_order_family` + `plan_decs_order_family` distinct/distinct_by gate): both `_distinct_by(K1) |> _order_by(K2) |> take(N) |> to_array()` (C1) and `_order_by(K1) |> distinct() |> take(N) |> to_array()` (C5) now splice end-to-end across array and decs sources. Both planners' walk loop gained a `distinct` / `distinct_by` recognizer that captures the distinct key without bailing; the bounded-heap path declares a `var dset : table<typedecl(...)>` above the source loop and wraps per-element push by `if (!key_exists(dset, dkey)) { dset |> insert(dkey); HEAP_UPDATE }`. **Single source pass, no full distinct materialization** (vs the tier-2 cascade's `distinct_by_to_array` → `order_by_inplace` → `take_inplace` chain that materializes the entire distinct set before sorting). Position of `distinct` in the chain (before vs after `_order_by`) has no bearing on emission — the set just gates the same heap update; the bounded-heap path treats source-walk order as opaque. v1 constraints: inline-able order key (mirrors `plan_order_family`'s existing bounded-heap gate); first/first_or_default + distinct deferred (streaming-min path not extended); composes with WHERE (filter before distinct gate) and terminal `_select` (project ≤N heap survivors at return). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das` (1497 → 1515).
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Theme 3 Phase 3 — C1 (`_distinct_by + _order_by + take`), C5 (`_order_by + distinct + take`). Likely reusable: C1/C5 are the same arm-pair (distinct ↔ order_family) in mirror order.
 - Themes 6, 7, 8 — see "Cross-cutting findings" section.
 
 
@@ -1246,9 +1249,9 @@ __::linq`take_inplace(pass_0, 10);
 return <- pass_0;
 ```
 
-**Classification**: FALLS-OFF — `plan_distinct` runs first (dispatch line 5712), sees non-distinct trailing op, returns null; `plan_order_family` runs second, sees `distinct_by` upstream, returns null. Tier-2 cascade.
+**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES — `plan_order_family` (and decs mirror `plan_decs_order_family`) gained a `distinct` / `distinct_by` recognizer in the walk loop; the bounded-heap path declares `var order_dset : table<typedecl(_::unique_key(invoke(distinctKey, default<elemType>)))>` above the source loop and wraps the per-element push by `let dkey = _::unique_key(KEY[it]); if (!order_dset |> key_exists(dkey)) { order_dset |> insert(dkey); HEAP_UPDATE }`. Emission shape: single zero-arg `invoke` containing `let order_take_n = N` + `var order_buf : array<T>` + `var order_dset : table<DKEY>` + `for (it in source) { let dkey = ...; if (!key_exists(dset, dkey)) { dset |> insert(dkey); /* push_heap if buf<N, else pop+replace+push */ } }` + `_::order_inplace(order_buf, cmp)` + `return <- order_buf`. No `__::linq\`distinct_by_to_array\``, `__::linq\`order_by_inplace\``, or `__::linq\`take_inplace\`` calls.
 
-**Conclusion**: Two splice arms exist but the planner picks neither because each insists on owning the whole chain. Fast shape would be bounded-heap of size 10 keyed on `(seen_users_set, _.ts)` — collect into heap during single source pass, gated by set-insert success. Cross-splice composition is the obvious gap.
+**Conclusion**: Bounded-heap-of-size-N gated by set-insert (Theme 3 Phase 3 landed 2026-05-24). Single source pass, no full distinct materialization. Same `plan_order_family` walk handles both array and (via `plan_decs_order_family` mirror) decs sources. v1 constraints: inline-able order key (existing bounded-heap gate); first/first_or_default + distinct deferred; composes with WHERE (filter before distinct gate) and terminal `_select` (project ≤N heap survivors at return). Mirror of C5 (same arm pair, distinct AFTER order_by) shares the same emission.
 
 ### C2 — Group-by + select + order-by + to_array
 
@@ -1321,9 +1324,9 @@ return <- pass_0;
 return <- _fold(each(items) |> _order_by(_.score) |> distinct() |> take(10) |> to_array())
 ```
 
-**Classification**: FALLS-OFF — `plan_order_family` doesn't recognize `distinct`; `plan_distinct` doesn't recognize `_order_by` upstream.
+**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES — same `plan_order_family` (and decs mirror `plan_decs_order_family`) walk-loop extension as C1. The recognizer accepts `distinct[_by]` either BEFORE `_order_by` (C1 position) or AFTER it (C5 position) — both feed the same set-gated bounded-heap emission. For bare `distinct()` the gate keys on the whole element (`let dkey = _::unique_key(it)`); for `distinct_by(K)` it peels `K[it]`. Theme 3 Phase 3 landed 2026-05-24.
 
-**Conclusion**: Identical reasoning to C1, operator-order swapped. Confirms the "two splice families never cooperate" pattern is symmetric — not a property of which arm runs first.
+**Conclusion**: Operator-order swap is a no-op for the emission — what matters is "set + heap together in one source pass", not the chain position. Confirms the original audit observation ("the pattern is symmetric — not a property of which arm runs first") and validates the unified recognizer design.
 
 ### C6 — Decs_join + post-join filter
 
