@@ -14,8 +14,13 @@ let TAKE_N = 5
 // Decs (m4) skipped: no duplicate-prone decs template in _common.das; the splice path
 // IS verified in tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das
 // (test_c5_decs_order_distinct_take_to_array). Follow-up TODO: add DecsBrand fixture.
-// SQL: SELECT DISTINCT brand FROM (... ORDER BY brand) LIMIT N — sqlite_linq's
-// `distinct() |> take(N)` shape rejects on `_sql`. By design — no follow-up TODO.
+// SQL: `_sql`'s `_order_by` requires a `_.Field` (column-ref) key, not bare `_`
+// (`error[50503]: _sql: _order_by: key must be `_.Field`, a `string` expression,
+// or a tuple of either; got: _`). This is independent of distinct/take ordering —
+// `distinct_take.das` shows `_sql` does lower `distinct() |> take(N)` when the
+// source has a named column. Bench operates on a synthesized bare-scalar
+// `array<int>`, so the SQL form has no `.Field` to project. By design — to add
+// a SQL lane we'd need a 1-column table fixture and lower `_order_by(_.col)`.
 
 def make_brands(n : int) : array<int> {
     var a : array<int>

@@ -7,8 +7,11 @@ require _common public
 // upstream of plan_distinct (Theme 7, audit 7c-family). The collapse_chained_selects
 // pre-pass folds the two pure projections into a single composed _select(g(f(_))) before
 // plan_distinct dispatches; the downstream splice sees one _select instead of two,
-// dropping a per-element bind+invoke. Pure inner gate satisfied (`_ + 1` has no
-// sideeffects per the macro_boost.das classifier).
+// dropping a per-element bind+invoke. Pure-inner gate fires on the INNER projection
+// (here `_.brand`, a field read with no sideeffects per the macro_boost.das classifier);
+// the outer `_ + 1` is irrelevant to the gate. The inner expression may be evaluated
+// zero or many times after collapse depending on how the outer references its param,
+// which is why purity of the inner is what makes the rewrite safe.
 // SQL: `_sql` rejects `distinct() |> count()` as non-translatable — it would lower
 // to `COUNT(DISTINCT ...)` over the computed projection but sqlite_linq's surface
 // doesn't currently emit that form. By design — no follow-up.

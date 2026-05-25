@@ -218,9 +218,13 @@ corresponding `.das` bench file; the bullets below quote that comment.
   `tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das`
   (`test_c5_decs_order_distinct_take_to_array`). Follow-up TODO
   2026-05-25: add a `DecsBrand` (or similar) fixture.
-- **`order_distinct_take` SQL** — sqlite_linq's `_order_by` followed by
-  bare `distinct()` (without a select projection) doesn't lower
-  cleanly. By design — no follow-up.
+- **`order_distinct_take` SQL** — `_sql`'s `_order_by` requires a
+  `_.Field` (column-ref) key, not bare `_`. Bench operates on a
+  synthesized `array<int>` (no named column to project), so the SQL
+  form has no `.Field` to pass. Independent of distinct/take ordering
+  — `distinct_take.das` proves `_sql` does lower `distinct() |> take(N)`
+  when the source has a named column. By design — adding a SQL lane
+  would need a 1-column table fixture and `_order_by(_.col)`.
 - **`take_count_filtered` SQL** — by design. In SQL, LIMIT after an
   aggregate has no effect (the aggregate collapses to one row), so the
   bound-then-count shape has no faithful SQL translation. No follow-up.

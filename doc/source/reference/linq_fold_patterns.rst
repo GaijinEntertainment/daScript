@@ -213,9 +213,9 @@ identical — only the source iteration changes.
    * - Chain shape (decs source)
      - Splice arm
      - Notes
-   * - ``from_decs_template(type<T>)._where(P).count()`` / ``from_decs_template(type<T>)._where(P).long_count()``
+   * - ``from_decs_template(type<T>).count()`` / ``.long_count()`` (bare) or with leading ``._where(P)``
      - ``plan_decs_unroll`` → ``emit_decs_count_archsize``
-     - Sums archetype sizes when ``where`` is absent; counter loop otherwise.
+     - Bare form sums ``arch.size`` across archetypes (no per-element work). The ``_where(P)`` variant runs a counter loop over the per-archetype walk.
    * - ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)`` (bare chain, no where/select)
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
      - Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap), making both the ``arch.size`` shortcut and the 2-arg ``count(P)`` accumulator path reachable on bare chains.
