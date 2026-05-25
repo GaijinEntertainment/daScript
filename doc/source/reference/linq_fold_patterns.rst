@@ -383,12 +383,19 @@ Decs-bridge fall-off diagnostic
 -------------------------------
 
 When a ``from_decs_template`` source survives ``_fold`` dispatch
-without any ``plan_decs_*`` arm claiming it, the bridge materializes
-into a temp ``res`` array before the tier-2 cascade runs on top — an
-EXTRA allocation beyond whatever cascade follows. ``LinqFold.visit``
-detects this case (``extract_decs_bridge`` returns non-null after all
-six ``plan_decs_*`` arms returned null) and emits a ``*warning*`` to
-the compiler log naming the call site::
+without any tier-1 planner (decs or array-side) claiming it, the
+bridge materializes into a temp ``res`` array before
+``fold_linq_default`` runs on top — an EXTRA allocation beyond
+whatever cascade follows. ``LinqFold.visit`` detects this case right
+before falling through to ``fold_linq_default``: it destructures
+``flatten_linq(call.arguments[0])`` into ``(top, calls)`` and fires
+only when ``calls`` is non-empty (a real cascade is about to run) and
+``extract_decs_bridge(top)`` is non-null (the source IS a
+``from_decs_template`` bridge). Bare
+``_fold(from_decs_template(...))`` with no chain ops is skipped —
+there's no cascade, just the bridge's own materialization. When
+fired, a ``*warning*`` goes to the compiler log naming the call
+site::
 
     user.das:42:8: *warning* `_fold`: from_decs_template source
     survived dispatch — no `plan_decs_*` arm claimed this chain, so
