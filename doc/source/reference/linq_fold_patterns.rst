@@ -160,6 +160,9 @@ Array-source patterns
    * - ``._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
      - ``plan_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
      - HAVING filter on the constructed post-aggregate tuple (predicate references ``_.AggField`` by name). Distinct from ``_having(P)`` and orthogonal — both can fire on the same chain.
+   * - ``._group_by(K)._select(reduce)._order_by(K2).to_array()`` / ``._order_by_descending(K2).to_array()``
+     - ``plan_group_by`` → ``plan_group_by_core`` (trailing ``order_by`` as ORDER BY)
+     - Theme 3 Phase 2 (audit C2). Inline-cmp ``sort(buf, ...)`` after the bucket-fill mutates the same output buffer in place — vs the tier-2 cascade's separate ``order_by_inplace`` over a fresh allocation. v1: ``_order_by(K2)`` / ``_order_by_descending(K2)`` with inline-able key only; non-inline keys (side-effects, multi-stmt body) cascade. Composes with HAVING / ``_having(P)``.
    * - ``.reverse().take(N).to_array()`` (with no ``where`` / ``select``)
      - ``plan_reverse`` (two-pass)
      - Sum archetype sizes, then walk tail-first with skip-counter and early-exit.
@@ -226,9 +229,12 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
      - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
      - Decs mirror of the array-side post-aggregate HAVING. Same predicate-on-output-tuple semantics.
+   * - ``from_decs_template(...)._group_by(K)._select(reduce)._order_by(K2).to_array()`` / ``._order_by_descending(K2).to_array()``
+     - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``order_by`` as ORDER BY)
+     - Decs mirror of the array-side ORDER BY splice (Theme 3 Phase 2 C2). Shares the same in-place inline-cmp sort tail; only the bucket-fill source differs.
    * - ``from_decs_template(A)._join(from_decs_template(B), ka, kb, result)._group_by(K)._select(reduce).to_array()`` / ``.count()``
      - ``plan_decs_group_by`` (``isDecsJoin`` adapter; cross-arm — see *Decs-decs equi-join*)
-     - Theme 3 Phase 1 cross-arm composition. ``plan_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array.
+     - Theme 3 Phase 1 cross-arm composition. ``plan_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array. Composes with the C2 trailing ``order_by`` extension above when applied to the join+group_by output.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
      - Hoists ``skippingName`` state across archetypes.
