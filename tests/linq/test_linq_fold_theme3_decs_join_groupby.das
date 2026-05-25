@@ -119,7 +119,9 @@ def test_c3c_to_array_named_tuple(t : T?) {
 // ── C3d: parity vs handwritten cascade ─────────────────────────────────────────
 
 def c3d_handwritten() : array<tuple<R : string; N : int>> {
-    // Manual cascade equivalent to the C3c chain. Used for byte-identical parity check below.
+    // Manual cascade equivalent to the C3c chain. The C3d test below compares per-bucket counts
+    // (length + dict-comprehension lookup), so bucket order does not need to match — only the
+    // per-key totals must agree between the spliced and handwritten paths.
     var hashB : table<int; array<tuple<region : string; name : string>>>
     query() $ [unused_argument(eid)] (eid : EntityId; dt3d_id : int; dt3d_region : string; dt3d_name : string) {
         hashB[dt3d_id] |> push_clone((region = dt3d_region, name = dt3d_name))

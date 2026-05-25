@@ -2954,7 +2954,7 @@ def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : 
         let tupAName  = qn("{adapter.namePrefix}jta", at)
         let tupBName  = qn("{adapter.namePrefix}jtb", at)
         let resName   = adapter.initialBindName
-        // Peel join lambdas against the synthesized iter-tuple bind names. Mirrors plan_decs_join (lines 5814-5816).
+        // Peel join lambdas against the synthesized iter-tuple bind names. Mirrors plan_decs_join's keya/keyb/result peel.
         var keyaBody   = peel_lambda_rename_var(adapter.decsJoinKeyaLam, tupAName)
         var keybBody   = peel_lambda_rename_var(adapter.decsJoinKeybLam, tupBName)
         var resultBody = peel_lambda_rename_2vars(adapter.decsJoinResultLam, tupAName, tupBName)
@@ -2962,7 +2962,7 @@ def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : 
         var tupBindA = build_decs_tup_bind(adapter.decsJoinBridgeA, tupAName, at)
         var tupBindB = build_decs_tup_bind(adapter.decsJoinBridgeB, tupBName, at)
         if (tupBindA == null || tupBindB == null) return null
-        // Hash collect — same shape as plan_decs_join's collect (lines 5822-5826).
+        // Hash collect — same shape as plan_decs_join's collect loop.
         var collectBody <- qmacro_block_to_array() {
             // nolint:PERF006 per-key bucket size unknown ahead of time
             $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
@@ -5895,15 +5895,7 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
     var keybLam = joinCall.arguments[3]
     if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
     let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
-    // Primitive-only key types — non-primitive keys would need `_::unique_key()` wrapping at probe/insert sites to match join_impl's hash semantics (daslib/linq.das:1678). Cascade everything else to tier-2 so join_impl handles them correctly.
-    if (keyType == null
-            || (keyType.baseType != Type.tInt && keyType.baseType != Type.tInt64
-                && keyType.baseType != Type.tUInt && keyType.baseType != Type.tUInt64
-                && keyType.baseType != Type.tInt8 && keyType.baseType != Type.tUInt8
-                && keyType.baseType != Type.tInt16 && keyType.baseType != Type.tUInt16
-                && keyType.baseType != Type.tString
-                && keyType.baseType != Type.tFloat && keyType.baseType != Type.tDouble
-                && keyType.baseType != Type.tBool)) return null
+    if (!is_primitive_join_key_type(keyType)) return null
     let at = joinCall.at
     let tupAName = qn("decs_tup_a", at)
     let tupBName = qn("decs_tup_b", at)
