@@ -502,7 +502,10 @@ namespace das
             {
                 lock_guard<recursive_mutex> guard(walkMutex);
                 if ( !ati ) {
-                    auto dimType = new TypeDecl(*vecType);
+                    // gc_local: scratch TypeDecl just to drive makeTypeInfo —
+                    // read once, never stored on the result. RAII unlinks from
+                    // the thread gc_root immediately and deletes at scope exit.
+                    gc_local<TypeDecl> dimType(new TypeDecl(*vecType));
                     dimType->ref = 0;
                     dimType->dim.push_back(1);
                     ati = helpA.makeTypeInfo(nullptr, dimType);
