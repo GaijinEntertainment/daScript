@@ -3027,6 +3027,8 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                var havingCall : ExprCall?;
                                var trailingWhereCall : ExprCall?;
                                terminatorName : string;
+                               orderName : string;
+                               var orderKey : Expression?;
                                exprIsIterator : bool;
                                at : LineInfo;
                                var adapter : GroupBySourceAdapter) : Expression? {
@@ -3372,6 +3374,14 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                 }
             }
         }
+        // Theme 3 Phase 2 C2: trailing `_order_by` / `_order_by_descending` on the output buffer — inline-cmp sort against the user's key. Skips the cascade's separate `order_by_inplace` call by mutating the same buf we just filled. Only inline-able keys (pure single-expression lambda, no sideeffects) splice; non-inline cascades.
+        if (orderName != "") {
+            var inlineCmp = try_make_inline_cmp(orderKey, orderName, bufElemType, at)
+            if (inlineCmp == null) return null
+            stmts |> push <| qmacro_expr() {
+                sort($i(bufName), $e(inlineCmp))
+            }
+        }
         stmts |> push(buffer_return(bufName, exprIsIterator))
     }
     return adapter_finalize_emission(adapter, stmts, retType, at)
@@ -3390,6 +3400,18 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         let lastName = calls.back()._1.name
         if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
             terminatorName = lastName
+            calls |> pop
+        }
+    }
+    // Optional: trailing `_order_by(KEY)` / `_order_by_descending(KEY)` on the output (Theme 3 Phase 2, closes audit C2). Only on the to_array lane — sort + count would be wasted work; for count we cascade so the predicate-less sort isn't silently elided either. Bare `_order` / `_order_descending` (no key) are not in scope for v1: the bucket output is typically a named tuple, and `<` on tuples is ill-defined.
+    var orderName : string = ""
+    var orderKey : Expression?
+    if (terminatorName == "" && !empty(calls)
+            && (calls.back()._1.name == "order_by" || calls.back()._1.name == "order_by_descending")) {
+        var orderCall = calls.back()._0
+        if ((orderCall.arguments |> length) >= 2) {
+            orderName = calls.back()._1.name
+            orderKey = clone_expression(orderCall.arguments[1])
             calls |> pop
         }
     }
@@ -3426,7 +3448,7 @@ def private plan_group_by(var expr : Expression?) : Expression? {
         arraySrcName := qn("source", at),
         decsBridge = null
     )
-    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, expr._type.isIterator, at, adapter)
+    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, orderName, orderKey, expr._type.isIterator, at, adapter)
 }
 
 // ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
@@ -4899,6 +4921,18 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
             calls |> pop
         }
     }
+    // Optional: trailing `_order_by(KEY)` / `_order_by_descending(KEY)` on the output (Theme 3 Phase 2 C2). Decs mirror of the array-side pop. Both the isDecs and isDecsJoin adapter modes share this — the sort fires on the same buf the to_array lane fills regardless of source shape.
+    var orderName : string = ""
+    var orderKey : Expression?
+    if (terminatorName == "" && !empty(calls)
+            && (calls.back()._1.name == "order_by" || calls.back()._1.name == "order_by_descending")) {
+        var orderCall = calls.back()._0
+        if ((orderCall.arguments |> length) >= 2) {
+            orderName = calls.back()._1.name
+            orderKey = clone_expression(orderCall.arguments[1])
+            calls |> pop
+        }
+    }
     // Optional: trailing _where AFTER _select(reducer) — SQL HAVING shape on post-aggregate tuple. Theme 2 (closes audit 4e). Decs mirror of the array-side pop.
     var trailingWhereCall : ExprCall?
     if (!empty(calls) && calls.back()._1.name == "where_") {
@@ -4969,7 +5003,7 @@ def private plan_decs_group_by(var expr : Expression?) : Expression? {
             decsBridge = bridge
         )
     }
-    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, expr._type.isIterator, at, adapter)
+    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, orderName, orderKey, expr._type.isIterator, at, adapter)
 }
 
 // ── decs order family splice (Slice 5d — buffer + order_inplace/top_n/min_by/max_by) ───────

@@ -38,9 +38,13 @@ Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `test
 
 - **C3** (`plan_decs_group_by` with new `isDecsJoin` adapter mode): the "killer demo" composition `from_decs_template(A) |> _join(from_decs_template(B), ...) |> _group_by(K) |> _select(reducer) |> [count|to_array]` now splices end-to-end. `plan_decs_group_by` recognizes a trailing `join` upstream of `group_by_lazy` and switches to a new `GroupBySourceAdapter` mode (`isDecsJoin = true`) that emits hashB-collect + srcA-probe + per-pair result-lam bind as the per-element source loop; that bind feeds `plan_group_by_core`'s existing `tab?[uk] ?? dummy` bucket update directly. **Single pass, zero intermediate allocations** (vs the tier-2 baseline's 3: dealers-array → join-array → group-map → output-array). `plan_group_by_core` itself is untouched — the abstraction held. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING (trailing `_where` post-aggregate) deferred to v2. Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` (1463 → 1483).
 
+**Theme 3 Phase 2 (cross-arm composition for C2) — landed 2026-05-24**:
+
+- **C2** (`plan_group_by_core` trailing `_order_by` extension): the canonical SQL `GROUP BY ... ORDER BY` shape `<source> |> _group_by(K) |> _select(reduce) |> _order_by(K2) |> to_array()` now splices end-to-end. Both `plan_group_by` and `plan_decs_group_by` pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, ...)` right after the bucket-fill — mutating the same buffer in place. **One pass + in-place sort** (vs the tier-2 cascade's three allocations: `group_by_lazy_to_array` → `select` → fresh-array sort). Three lanes share the same sort tail (array source, decs source via `isDecs`, decs-decs join via `isDecsJoin` — Theme 3 Phase 1 composes cleanly). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred; non-inline keys cascade. Composes with HAVING (`_select(reduce) |> _where(P) |> _order_by(K2)`). Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_c2_group_by_order_by.das` (1483 → 1497).
+
 Still open (queued for the next session per the cross-cutting findings below):
 
-- Theme 3 Phase 2-3 — C1 (`_distinct_by + _order_by + take`), C2 (`_group_by + _select + _order_by`), C5 (`_order_by + distinct + take`). Should reuse what generalizes from the C3 adapter pattern.
+- Theme 3 Phase 3 — C1 (`_distinct_by + _order_by + take`), C5 (`_order_by + distinct + take`). Likely reusable: C1/C5 are the same arm-pair (distinct ↔ order_family) in mirror order.
 - Themes 6, 7, 8 — see "Cross-cutting findings" section.
 
 
@@ -1268,9 +1272,9 @@ __::linq`order_by_inplace(pass_1, $(_) { return _.C; });
 return <- pass_1;
 ```
 
-**Classification**: FALLS-OFF — `plan_group_by` bails because trailing op is `_order_by`.
+**Classification (post-Theme 3 Phase 2)**: SPLICE-FIRES — both `plan_group_by` and `plan_decs_group_by` now pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, $(v1, v2) => _::less(v1.K, v2.K))` right after the bucket-fill (using the same `try_make_inline_cmp` helper as `plan_order_family`). Emission shape: single zero-arg `invoke` containing `var inscope tab : table<...>` + `var dummy : ...` + bucket-fill `for (it in source)` loop + `var buf : array<...>` + `buf |> reserve(length(tab))` + `for (kv in values(tab)) buf |> push_clone(...)` + `sort(buf, INLINE_CMP)` + `return <- buf` + `finally finalize(tab)`. No `__::linq\`group_by_lazy_to_array\``, `__::linq\`select\``, or `__::linq\`order_by_inplace\`` calls; sort is inlined.
 
-**Conclusion**: `plan_group_by_core` already builds the bucket map directly. Letting `_select` + `_order_by` consume the bucket inside the same emission would give 1 hashmap walk + 1 inplace sort but skip the intermediate `array<tuple<string;array<Item>>>` materialization. Cross-cuts with 7b/C1 observation.
+**Conclusion**: One pass + in-place sort over a single output buffer (Theme 3 Phase 2 landed 2026-05-24). The same `plan_group_by_core` to_array tail serves all three source shapes (array via `plan_group_by`, decs via `plan_decs_group_by`'s `isDecs` mode, decs-decs join via `isDecsJoin` mode — Theme 3 Phase 1 composes cleanly with this extension). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred since group_by output is typically a named tuple where `<` is ill-defined; non-inline keys cascade. Composes with HAVING.
 
 ### C3 — Decs join + select + group_by + select
 
