@@ -379,6 +379,32 @@ Common cases that fall back:
 When a chain falls back, behavior is identical to writing the same
 chain without ``_fold`` — correct, but not splice-fused.
 
+Decs-bridge fall-off diagnostic
+-------------------------------
+
+When a ``from_decs_template`` source survives ``_fold`` dispatch
+without any ``plan_decs_*`` arm claiming it, the bridge materializes
+into a temp ``res`` array before the tier-2 cascade runs on top — an
+EXTRA allocation beyond whatever cascade follows. ``LinqFold.visit``
+detects this case (``extract_decs_bridge`` returns non-null after all
+six ``plan_decs_*`` arms returned null) and emits a ``*warning*`` to
+the compiler log naming the call site::
+
+    user.das:42:8: *warning* `_fold`: from_decs_template source
+    survived dispatch — no `plan_decs_*` arm claimed this chain, so
+    the bridge materializes a temp `res` array and the tier-2 cascade
+    runs on the materialized buffer. Rewrite the chain to a
+    recognized decs shape (see
+    doc/source/reference/linq_fold_patterns.rst), or suppress with
+    `options _no_decs_perf_warn = true`.
+
+The fix is usually to reorder ops so the chain matches a row in the
+Decs section above (e.g. push ``_select`` past ``_skip_while`` /
+``_take_while`` since their predicates run on the source tuple, not
+the projected value). Suppress per file with ``options
+_no_decs_perf_warn = true`` for tests that intentionally exercise
+cascade behavior as regression guards.
+
 See also
 ========
 
