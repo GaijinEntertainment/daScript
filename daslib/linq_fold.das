@@ -6664,6 +6664,14 @@ class private LinqFold : AstCallMacro {
         if (res != null) return res
         res = plan_loop_or_count(call.arguments[0])
         if (res != null) return res
+        // Theme 6 — warn when a `from_decs_template` source survives every tier-1 planner with a non-empty chain
+        // (the bridge materializes a temp `res` array before the cascade). Suppress with `options _no_decs_perf_warn = true`.
+        if (!(prog._options |> find_arg("_no_decs_perf_warn") ?as tBool ?? false)) {
+            var (top, calls) = flatten_linq(call.arguments[0])
+            if (!empty(calls) && extract_decs_bridge(top) != null) {
+                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch — no `plan_decs_*` arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_decs_perf_warn = true`.\n")
+            }
+        }
         // Tier 2 — array-shape pipeline with `_inplace` reuse + explicit `delete`.
         res = fold_linq_default(call.arguments[0])
         if (res != null) return res

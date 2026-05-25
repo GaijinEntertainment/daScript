@@ -213,12 +213,12 @@ identical — only the source iteration changes.
    * - Chain shape (decs source)
      - Splice arm
      - Notes
-   * - ``from_decs_template(type<T>).count()`` / ``.long_count()`` (bare) or with leading ``._where(P)``
+   * - ``from_decs_template(type<T>).count()`` (bare, no chain ops, no predicate)
      - ``plan_decs_unroll`` → ``emit_decs_count_archsize``
-     - Bare form sums ``arch.size`` across archetypes (no per-element work). The ``_where(P)`` variant runs a counter loop over the per-archetype walk.
-   * - ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)`` (bare chain, no where/select)
+     - Sums ``arch.size`` across archetypes; skips the per-entity walk entirely. Returns ``int`` — the ``+=`` site truncates past INT_MAX, so chain ``long_count()`` instead (different splice arm — see next row) when an int64-safe total is required.
+   * - ``from_decs_template(type<T>).long_count()`` (bare); ``from_decs_template(type<T>)._where(P).count()`` / ``.long_count()``; ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)``
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
-     - Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap), making both the ``arch.size`` shortcut and the 2-arg ``count(P)`` accumulator path reachable on bare chains.
+     - Counter loop over the per-archetype walk. The bare ``long_count()`` shape does NOT use the ``arch.size`` shortcut above — that emitter returns ``int`` only. The ``count(P)`` / ``long_count(P)`` forms reach this arm via the Theme 4 root-cause fix to ``extract_decs_bridge``: ``forExpr.iteratorVariables`` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop, so previously bailed. The bridge now recovers iter names from ``mkTup.values`` (peeling the ``ExprRef2Value`` wrap).
    * - ``from_decs_template(...)._select(F).sum()`` / ``.average()`` / ``.min()`` / ``.max()`` / ``.aggregate(...)``
      - ``plan_decs_unroll`` → ``emit_decs_accumulator``
      - Per-archetype accumulator; pruner keeps only the components read by ``F``.
@@ -378,6 +378,39 @@ Common cases that fall back:
 
 When a chain falls back, behavior is identical to writing the same
 chain without ``_fold`` — correct, but not splice-fused.
+
+Decs-bridge fall-off diagnostic
+-------------------------------
+
+When a ``from_decs_template`` source survives ``_fold`` dispatch
+without any tier-1 planner (decs or array-side) claiming it, the
+bridge materializes into a temp ``res`` array before
+``fold_linq_default`` runs on top — an EXTRA allocation beyond
+whatever cascade follows. ``LinqFold.visit`` detects this case right
+before falling through to ``fold_linq_default``: it destructures
+``flatten_linq(call.arguments[0])`` into ``(top, calls)`` and fires
+only when ``calls`` is non-empty (a real cascade is about to run) and
+``extract_decs_bridge(top)`` is non-null (the source IS a
+``from_decs_template`` bridge). Bare
+``_fold(from_decs_template(...))`` with no chain ops is skipped —
+there's no cascade, just the bridge's own materialization. When
+fired, a ``*warning*`` goes to the compiler log naming the call
+site::
+
+    user.das:42:8: *warning* `_fold`: from_decs_template source
+    survived dispatch — no `plan_decs_*` arm claimed this chain, so
+    the bridge materializes a temp `res` array and the tier-2 cascade
+    runs on the materialized buffer. Rewrite the chain to a
+    recognized decs shape (see
+    doc/source/reference/linq_fold_patterns.rst), or suppress with
+    `options _no_decs_perf_warn = true`.
+
+The fix is usually to reorder ops so the chain matches a row in the
+Decs section above (e.g. push ``_select`` past ``_skip_while`` /
+``_take_while`` since their predicates run on the source tuple, not
+the projected value). Suppress per file with ``options
+_no_decs_perf_warn = true`` for tests that intentionally exercise
+cascade behavior as regression guards.
 
 See also
 ========

@@ -1,4 +1,5 @@
 options gen2
+options _no_decs_perf_warn = true  // contains C3-anti-* cascade-still-works regression guards
 
 require math
 require strings
