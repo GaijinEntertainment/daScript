@@ -213,7 +213,7 @@ identical — only the source iteration changes.
    * - Chain shape (decs source)
      - Splice arm
      - Notes
-   * - ``from_decs_template(type<T>)._where(P).count()`` / ``.long_count()``
+   * - ``from_decs_template(type<T>)._where(P).count()`` / ``from_decs_template(type<T>)._where(P).long_count()``
      - ``plan_decs_unroll`` → ``emit_decs_count_archsize``
      - Sums archetype sizes when ``where`` is absent; counter loop otherwise.
    * - ``from_decs_template(type<T>).count(P)`` / ``.long_count(P)`` (bare chain, no where/select)

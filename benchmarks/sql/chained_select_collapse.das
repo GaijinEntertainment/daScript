@@ -9,8 +9,9 @@ require _common public
 // plan_distinct dispatches; the downstream splice sees one _select instead of two,
 // dropping a per-element bind+invoke. Pure inner gate satisfied (`_ + 1` has no
 // sideeffects per the macro_boost.das classifier).
-// SQL: sqlite_linq's _distinct_by lowering rejects computed-projection keys
-// (`error[50503]: _distinct_by key must be <arg>.<field>`). By design — no follow-up.
+// SQL: `_sql` rejects `distinct() |> count()` as non-translatable — it would lower
+// to `COUNT(DISTINCT ...)` over the computed projection but sqlite_linq's surface
+// doesn't currently emit that form. By design — no follow-up.
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)

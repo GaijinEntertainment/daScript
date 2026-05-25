@@ -3,9 +3,11 @@ options persistent_heap
 
 require _common public
 
-let THRESHOLD = 50000
+let THRESHOLD = 50000l
 
-// zip(xs, ys) |> _select(_._0 * _._1) |> count(P) — count of zipped products satisfying P.
+// zip(xs, ys) |> _select(int64(_._0) * int64(_._1)) |> count(P) — count of zipped
+// products satisfying P. int64 cast avoids int32 overflow for n=100k (i*i wraps past
+// INT_MAX, producing negative products and unstable predicate counts).
 // SQL: no relational form (zip is not relational).
 // Array (m3f): plan_zip's 2-arg count(P) extension (Theme 4, plan_zip arm).
 // The predicate is captured into a dedicated counter-predicate gate around `acc++`
@@ -28,7 +30,7 @@ def run_m3f(b : B?; n : int) {
     let ys <- make_ints(n)
     b |> run("m3f_array_fold/{n}", n) {
         unsafe {
-            let c = _fold(each(xs) |> zip(each(ys)) |> _select(_._0 * _._1) |> count($(v) => v > THRESHOLD))
+            let c = _fold(each(xs) |> zip(each(ys)) |> _select(int64(_._0) * int64(_._1)) |> count($(v) => v > THRESHOLD))
             b |> accept(c)
             if (c == 0) {
                 b->failNow()

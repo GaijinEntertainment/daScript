@@ -53,7 +53,7 @@ before the timer resolution can measure them — they should be read as
 | `groupby_max` | 175.7 | 25.1 | 25.3 | 1.01× |
 | `groupby_min` | 174.7 | 25.1 | 25.4 | 1.01× |
 | `groupby_multi_reducer` | 192.6 | 33.1 | 32.7 | 0.99× |
-| `groupby_select_order_take` | 171.9 | 18.6 | 19.0 | 1.02× |
+| `groupby_select_order` | 171.1 | 18.8 | 18.7 | 0.99× |
 | `groupby_select_sum` | 207.4 | 36.9 | 36.4 | 0.99× |
 | `groupby_sum` | 173.3 | 18.8 | 19.0 | 1.01× |
 | `groupby_where_count` | 76.0 | 14.7 | 15.0 | 1.02× |
@@ -92,9 +92,9 @@ before the timer resolution can measure them — they should be read as
 | `take_where_count` | — | 0.10 | 34.6 | 346.00× |
 | `take_while_match` | 7.9 | 2.5 | 2.5 | 1.00× |
 | `to_array_filter` | 70.8 | 11.8 | 11.9 | 1.01× |
-| `zip_count_pred` | — | 10.7 | — | — |
-| `zip_dot_product` | — | 7.9 | 4.8 | 0.61× |
-| `zip_dot_product_3arg` | — | 7.8 | — | — |
+| `zip_count_pred` | — | 14.9 | — | — |
+| `zip_dot_product` | — | 12.6 | 10.3 | 0.82× |
+| `zip_dot_product_3arg` | — | 12.6 | — | — |
 
 ## JIT
 
@@ -127,7 +127,7 @@ before the timer resolution can measure them — they should be read as
 | `groupby_max` | 174.3 | 2.4 | 2.7 | 1.13× |
 | `groupby_min` | 175.3 | 2.4 | 2.7 | 1.13× |
 | `groupby_multi_reducer` | 188.8 | 2.7 | 3.0 | 1.11× |
-| `groupby_select_order_take` | 174.9 | 2.4 | 2.7 | 1.13× |
+| `groupby_select_order` | 171.5 | 2.4 | 2.7 | 1.13× |
 | `groupby_select_sum` | 200.7 | 3.2 | 3.7 | 1.16× |
 | `groupby_sum` | 172.2 | 2.4 | 2.7 | 1.13× |
 | `groupby_where_count` | 75.9 | 1.7 | 1.8 | 1.06× |
@@ -170,14 +170,15 @@ before the timer resolution can measure them — they should be read as
 | `zip_dot_product` | — | 0.50 | 0.50 | 1.00× |
 | `zip_dot_product_3arg` | — | 0.50 | — | — |
 
+
 ## Notes on missing lanes (the `—` cells)
 
 The reasons each cell is empty are also recorded as a comment in the
 corresponding `.das` bench file; the bullets below quote that comment.
 
-- **`chained_select_collapse` SQL** — sqlite_linq's `_distinct_by` rejects
-  computed-projection keys (`error[50503]: _distinct_by key must be
-  <arg>.<field>`). By design — no follow-up.
+- **`chained_select_collapse` SQL** — `_sql` rejects `distinct() |> count()`
+  as non-translatable. The equivalent SQL `COUNT(DISTINCT computed-expr)`
+  isn't currently emitted by sqlite_linq's surface. By design — no follow-up.
 - **`decs_count_bare_pred` SQL / Array** — covers a Theme 4 root-cause
   fix specific to the decs lane (bare `from_decs_template(...).count(P)`
   with no upstream where/select previously bailed because

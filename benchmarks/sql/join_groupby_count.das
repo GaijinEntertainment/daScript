@@ -3,7 +3,9 @@ options persistent_heap
 
 require _common public
 
-// _join(cars, dealers) |> _group_by(_.Brand) |> _select((Brand, N=count)) |> count — joined+grouped count.
+// _join(cars, dealers) |> _group_by(_.Brand) |> _select((Brand, N=_._1|>count)) — joined+grouped,
+// per-group counts returned as an array of (Brand, N) tuples (no terminal count;
+// the inner `count()` is the per-bucket reducer).
 // SQL: SELECT brand, COUNT(*) FROM Cars c JOIN Dealers d ON c.dealer_id = d.id GROUP BY brand.
 // sqlite_linq's `_group_by` after `_join` doesn't currently lower (key column is from
 // the joined projection, not a base table column). Follow-up TODO 2026-05-25.

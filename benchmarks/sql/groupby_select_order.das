@@ -60,16 +60,16 @@ def run_m4(b : B?; n : int) {
 }
 
 [benchmark]
-def groupby_select_order_take_m1(b : B?) {
+def groupby_select_order_m1(b : B?) {
     run_m1(b, 100000)
 }
 
 [benchmark]
-def groupby_select_order_take_m3f(b : B?) {
+def groupby_select_order_m3f(b : B?) {
     run_m3f(b, 100000)
 }
 
 [benchmark]
-def groupby_select_order_take_m4(b : B?) {
+def groupby_select_order_m4(b : B?) {
     run_m4(b, 100000)
 }
