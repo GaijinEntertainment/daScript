@@ -12,7 +12,7 @@ I have macros and I'm not afraid to use them.
 
 [IMGUI](https://github.com/ocornut/imgui) needs wrappers. But not just any begin/end wrappers. It needs playwright. Inspect. Invoke. Serialize. Other scary words. Also APNG recording. Narration. Mouse trails.
 
-I also think there was no documentation to speak of. Now there is. But I digress.
+I also think there was no documentation to speak of. [Now there is](https://borisbat.github.io/dasImgui/). But I digress.
 
 So I have my macros. I also have lambdas. I like `json_boost.das`. But what I really like is to have the right EDSL for the job. So I'm going to generate a lot of canonically clean code, and it will be amazing.
 
@@ -24,7 +24,7 @@ In the land of daslang thats unheard of. I've never seen anything which takes th
 
 C++ side of the compiler is something I'd love to profile more. Problem is that synthetic tests reflect nothing, and regular tests are too noisy on short intervals.
 
-So here I am with PerfVie, trying to see if I've missed anything during previous 99 optimization sessions. Turns out I did.
+So here I am with PerfView, trying to see if I've missed anything during previous 99 optimization sessions. Turns out I did.
 
 I am at 20 seconds, and your das compilation time just went down ~20%
 
