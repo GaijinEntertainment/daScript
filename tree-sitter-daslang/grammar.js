@@ -103,7 +103,7 @@ module.exports = grammar({
     [$.function_return_type, $.dim_type],
     [$.func_addr_expression, $.lambda_expression],
     [$.function_argument_list, $._variable_name],
-    [$.type_expression, $._type_macro_arg],
+    [$.type_expression, $.type_witness],
   ],
 
   rules: {
@@ -1400,6 +1400,7 @@ module.exports = grammar({
       $.variant_type,
       $.bitfield_type,
       $.typedecl_type,
+      $.type_witness,      // type<T> — type-witness form (e.g. `t : type<auto(T)>`)
       $.option_type,
       $._type_modifier,
       $.quote_type,        // $t(type) in macro quotes
@@ -1429,9 +1430,14 @@ module.exports = grammar({
     ),
 
     _type_macro_arg: $ => choice(
-      seq('type', '<', $._type, '>'),
+      $.type_witness,
       $._expression,
     ),
+
+    // type<T> as a TYPE (e.g. `t : type<auto(T)>` parameter, return type, struct field).
+    // Distinct node from type_expression (same shape, expression-context use only).
+    // Matches bison: type_declaration_no_options_no_dim → DAS_TYPE '<' type_declaration '>'.
+    type_witness: $ => seq('type', '<', field('type', $._type), '>'),
 
     auto_type: $ => prec.left(seq(
       'auto',
