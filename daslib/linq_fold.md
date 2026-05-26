@@ -235,6 +235,12 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `match_pattern(...)` | Walker function |
 | `plan_<X>_patterns` | Per-plan filtered subset (only during migration; deleted in PR D) |
 
+## Known regressions to address in follow-ups
+
+| # | Surface | Symptom | Severity | Owner PR |
+|---|---|---|---|---|
+| KR-1 | `plan_reverse` + `plan_distinct` pattern rows allow a single optional `where_` slot; pre-PR-A imperative `plan_*` accepted N consecutive `where_` calls and `&&`-merged via `merge_where_cond`. The decs mirror (`plan_decs_reverse`) still does this in its loop. | `..._where(p1)._where(p2).reverse()...` and `..._where(p1)._where(p2)._distinct()...` no longer splice; falls back to cascade. Correctness unchanged (cascade works); perf regression on these chains. | medium (uncommon — users typically write `_where(p1 && p2)` directly) | **PR B** — add a `collapse_chained_wheres` pre-pass mirroring `collapse_chained_selects` (~30 LOC); call from both stubs; add regression tests. Same kernel pattern, no walker/emit/pattern-row changes. |
+
 ## Risks
 
 1. **Pattern ordering hazard.** Pattern A's chain being a strict prefix of B's means A wins. Discipline: more-specific patterns declared first; add a lint pass that walks the table at module-init time and flags prefix conflicts.
