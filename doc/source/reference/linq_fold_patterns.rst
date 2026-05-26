@@ -44,11 +44,16 @@ The dispatch order in ``LinqFold.visit`` (``daslib/linq_fold.das``) is:
 9. ``plan_decs_unroll`` — generic decs walk
    (``where``/``select``/``skip``/``take`` + counter / accumulator /
    early-exit / walk lane).
-10. ``plan_zip`` — ``zip(a, b)`` source.
-11. ``plan_loop_or_count`` — generic array walk
+10. ``plan_decs_join`` — pattern-table stub walking ``plan_decs_join_patterns``
+    with a Decs adapter; pattern ``decs_join_general`` (emit fn ``emit_decs_join``)
+    hashed equi-join over two ``from_decs_template`` sources.
+11. ``plan_zip`` — pattern-table stub walking ``plan_zip_patterns``;
+    pattern ``zip_general`` (emit fn ``emit_zip``) 2-source lockstep zip
+    with fused chain ops + 4-lane terminator dispatch.
+12. ``plan_loop_or_count`` — generic array walk
     (``where``/``select``/``skip``/``take`` + counter / accumulator /
     early-exit terminator).
-12. ``fold_linq_default`` — fallback, no splice.
+13. ``fold_linq_default`` — fallback, no splice.
 
 The decs and array variants are interleaved (each decs plan runs
 before its array counterpart) because a chain starting with
@@ -79,8 +84,9 @@ what would otherwise be many lookalike chains:
 - ``_select(f) |> _select(g)`` (N consecutive) → ``_select(g(f(_)))``.
   Applied by ``collapse_chained_selects``, called from
   ``plan_zip``, ``plan_distinct``, ``plan_decs_distinct``,
-  ``plan_reverse``, ``plan_decs_reverse``, ``plan_decs_join``, and
-  defensively from ``plan_order_family`` / ``plan_decs_order_family``
+  ``plan_reverse``, ``plan_decs_reverse``, ``plan_decs_join`` (also
+  ``collapse_chained_wheres`` per PR D2), and defensively from
+  ``plan_order_family`` / ``plan_decs_order_family``
   (which don't currently accept any leading ``_select`` but would
   inherit collapse if they ever did). Mirrors how chained ``_where``
   already compose via ``&&``. Composition takes the INNER lambda's
@@ -116,7 +122,7 @@ Source-side entry points
      - ``peel_each``
      - Strips the ``each`` wrapper; subsequent chain plans see the raw ``array<T>`` source.
    * - ``zip(a, b)`` / ``zip(a, b, sel)``
-     - ``plan_zip``
+     - pattern ``zip_general`` (emit fn ``emit_zip``)
      - Two-source zip. The three-argument form ``zip(a, b, sel)`` is pre-lowered to ``zip(a, b) |> _select(sel-as-tuple)`` so the standard zip+select fusion fires (closes the dot-product idiom).
    * - ``from_decs_template(type<T>)``
      - ``plan_decs_unroll`` etc.
@@ -306,7 +312,7 @@ identical — only the source iteration changes.
      - Decs mirror of the array-side ORDER BY splice (Theme 3 Phase 2 C2). Shares the same in-place inline-cmp sort tail; only the bucket-fill source differs.
    * - ``from_decs_template(A)._join(from_decs_template(B), ka, kb, result)._group_by(K)._select(reduce).to_array()`` / ``.count()``
      - pattern ``group_by_decs`` with ``upstream_join`` slot (``isDecsJoin`` adapter; cross-arm — see *Decs-decs equi-join*)
-     - Theme 3 Phase 1 cross-arm composition. ``plan_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array. Composes with the C2 trailing ``order_by`` extension above when applied to the join+group_by output.
+     - Theme 3 Phase 1 cross-arm composition. ``emit_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array. Composes with the C2 trailing ``order_by`` extension above when applied to the join+group_by output.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
      - Hoists ``skippingName`` state across archetypes.
@@ -329,16 +335,16 @@ primitive (``int*`` / ``uint*`` / ``float`` / ``double`` / ``bool`` /
      - Splice arm
      - Notes
    * - ``from_decs_template(A) |> _join(from_decs_template(B), ka, kb, result) |> count()``
-     - ``plan_decs_join``
+     - pattern ``decs_join_general`` (emit fn ``emit_decs_join``)
      - Hash-fill + probe; ``count`` bumped by bucket length per hit. No per-pair invoke.
    * - ``from_decs_template(A) |> _join(...) |> to_array()``
-     - ``plan_decs_join``
+     - pattern ``decs_join_general`` (emit fn ``emit_decs_join``)
      - Hash-fill + probe; ``result`` lambda inlined at the push site (no per-pair invoke into ``join_impl``).
    * - ``from_decs_template(A) |> _join(...) |> _select(F) |> to_array()``
-     - ``plan_decs_join`` (terminal ``_select``)
+     - pattern ``decs_join_general`` (terminal ``_select``)
      - Single bind of the join result per matched pair, then projection.
    * - ``from_decs_template(A) |> _join(...) |> _where(P) |> count() / to_array()``
-     - ``plan_decs_join`` (trailing ``_where``)
+     - pattern ``decs_join_general`` (trailing ``_where``)
      - Bind join result, evaluate predicate, gate ``count++`` / ``push_clone``. Composes with the trailing ``_select`` form (filter then project, single bind per pair).
    * - ``from_decs_template(A) |> _join(...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
      - ``plan_decs_group_by`` (``isDecsJoin`` adapter, Theme 3 C3)
@@ -364,25 +370,25 @@ Zip patterns
      - Splice arm
      - Notes
    * - ``zip(a, b)._select(F).sum()`` / ``.count()`` / ``.average()``
-     - ``plan_zip``
+     - pattern ``zip_general`` (emit fn ``emit_zip``)
      - Fuses to a single index-loop over the shorter side.
    * - ``zip(a, b, c)._select(F).<terminator>``
-     - ``plan_zip``
+     - pattern ``zip_general`` (emit fn ``emit_zip``)
      - Three-source zip; same loop shape with three reads per iteration.
    * - ``zip(a, b, sel).<terminator>`` (3-arg, with selector lambda)
-     - ``plan_zip`` (pre-lowered)
+     - pattern ``zip_general`` (3-arg pre-lowered)
      - Theme 1 (audit 7a). The 3-arg form ``zip(a, b, sel)`` is pre-lowered by ``plan_zip`` to ``zip(a, b) |> _select(sel-as-tuple)`` before per-arm matching, so the standard zip+select fusion fires — the natural ``zip(xs, ys, $(x, y) => x * y) |> sum()`` dot-product idiom splices instead of cascading.
    * - ``zip(a, b)._where(P)._select(F).<terminator>``
-     - ``plan_zip`` (chain ops)
+     - pattern ``zip_general`` (chain ops via head c_chain + range slots)
      - ``where`` / ``select`` / ``take`` / ``skip`` / ``take_while`` / ``skip_while`` between zip and the terminator are all fused.
    * - ``zip(a, b).first()`` / ``.first_or_default()`` / ``.aggregate(...)``
-     - ``plan_zip`` (early-exit / accumulator)
+     - pattern ``zip_general`` (early-exit / accumulator lanes delegate to emit_early_exit_lane / emit_accumulator_lane)
      - Early-exit terminator on the zipped pair.
    * - ``zip(a, b)._select(F).count(P)`` / ``.long_count(P)``
-     - ``plan_zip`` (counter with separate predicate gate)
+     - pattern ``zip_general`` (counter with separate predicate gate)
      - The 2-arg ``count(P)`` / ``long_count(P)`` form is captured into a dedicated counter-predicate gate emitted around ``acc++`` *inside* the upstream where/select wrap, so eager ``where(W).select(F).count(P)`` ordering is preserved (W filters first, then F runs once per surviving element, then P decides whether to count). With ``_select``, the predicate peels against the projected value via a ``vproj`` bind. Length-shortcut is suppressed when ``P`` is present (the counter loop runs).
    * - ``zip(a, b)[._select(F)|._where(P)|...].reverse().<terminator>``
-     - ``plan_zip`` (trailing ``reverse``)
+     - pattern ``zip_general`` (trailing ``reverse`` slot)
      - Theme 8 (audit C4). ``reverse`` accepted as the last chain op between zip's chain and the terminator. Array lane emits ``_::reverse_inplace($i(bufName))`` before return; counter / accumulator (sum/min/max/avg) / ``any`` / ``all`` / ``contains`` lanes treat reverse as a no-op (mathematical identity). **Bails** (cascades) on ``first`` / ``first_or_default`` (NOT identity under reverse) and when ``reverse`` is not the last chain op (anything after would see the reversed stream and change semantics vs cascade).
 
 What falls back

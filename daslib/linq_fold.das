@@ -48,9 +48,26 @@ struct private LinqCall {
 // ===== Pattern-table refactor kernel =====
 // See daslib/linq_fold.md for masterplan.
 
+// Hashed equi-join payload — feeds the per-pair `let resBindName = result(tupA,tupB)` bind used by both GroupBy's decs-join arm and `emit_decs_join`. The 2 consumers differ on whether the per-pair loop is the right granularity (GroupBy: yes; emit_decs_join keeps a bucket-length fast path for count-no-where).
+struct private DecsJoinShape {
+    bridgeA, bridgeB : DecsBridgeShape?
+    keyaLam, keybLam, resultLam : Expression?
+    keyType, tupBType, resultType : TypeDeclPtr
+    resBindName : string
+}
+
+// 2-source lockstep zip payload — feeds `for (itA, itB in srcA, srcB) { body }` and the 2-source outer invoke.
+struct private ZipShape {
+    srcAExpr, srcBExpr : Expression?
+    srcAName, srcBName : string
+    srcAType, srcBType : TypeDeclPtr
+}
+
 variant private SourceAdapter {
-    Array : tuple<Expression?; string>                  // (top, srcName) — PR A
-    Decs  : tuple<DecsBridgeShape?; string>             // (bridge, tupName) — PR C
+    Array    : tuple<Expression?; string>               // (top, srcName) — PR A
+    Decs     : tuple<DecsBridgeShape?; string>          // (bridge, tupName) — PR C
+    DecsJoin : DecsJoinShape                            // PR D2
+    Zip      : ZipShape                                 // PR D2
 }
 
 variant SlotMatcher {
@@ -346,6 +363,38 @@ def private no_order_with_count(var c : Captures; var top : Expression?) : bool 
     return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
 }
 
+// Matches pre-PR-D2 plan_decs_join: trailing_select is only popped when terminator is NOT count
+// (count's emission ignores select entirely). Splicing `join+select+count` would silently drop
+// select's side effects — cascade to tier-2 instead.
+def private decs_join_no_select_with_count(var c : Captures; var top : Expression?) : bool {
+    return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
+}
+
+// Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
+def private zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("zip"))) return true
+    let n = c.single["zip"].arguments |> length
+    return n == 2 || n == 3
+}
+
+// skip_while/take_while peel against the zip tuple `it`; an upstream select rebinds the element type
+// so the while predicate would dangle. Matches pre-PR-D2 plan_zip chain-walk bail (lines 6494/6500).
+def private zip_no_while_after_select(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("skip_while")) && !(c.single |> key_exists("take_while"))) return true
+    for (call in c.many["head"]) {
+        if (call_norm_name(call) == "select") return false
+    }
+    return true
+}
+
+// Trailing reverse is identity for count/sum/min/max/average/any/all/contains but picks a different
+// element for first/first_or_default. Matches pre-PR-D2 plan_zip post-walk bail (line 6644).
+def private zip_reverse_compatible_with_term(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("trailing_reverse")) || !(c.single |> key_exists("term"))) return true
+    let name = c.single_name["term"]
+    return name != "first" && name != "first_or_default"
+}
+
 // Per-plan pattern tables — collapsed into splice_patterns in PR D.
 
 var private plan_reverse_patterns : array<SplicePattern>
@@ -353,6 +402,8 @@ var private plan_distinct_patterns : array<SplicePattern>
 var private plan_loop_or_count_patterns : array<SplicePattern>
 var private plan_order_family_patterns : array<SplicePattern>
 var private plan_group_by_patterns : array<SplicePattern>
+var private plan_decs_join_patterns : array<SplicePattern>
+var private plan_zip_patterns : array<SplicePattern>
 var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
 
 // ===== End of pattern-table kernel =====
@@ -1621,16 +1672,20 @@ def private finalize_emission_stmts(top : Expression?; srcName : string; at : Li
 // ===== SourceAdapter helpers (PR C) — used by emit fns to dispatch source-loop + invoke wrap per adapter. =====
 
 // The per-element bind name emit fns peel where/select/key/value lambdas against. Drives build_decs_inner_for_pruned's
-// pattern matching (it scans for `tupName.<field>` access), so the decs side MUST use `decs_tup`.
+// pattern matching, so the decs side MUST use `decs_tup`. DecsJoin carries the per-pair result-lam bind name in its payload.
 def private adapter_bind_name(adapter : SourceAdapter; at : LineInfo) : string {
-    if (adapter is Decs) return qn("decs_tup", at)
+    return (adapter as DecsJoin).resBindName if (adapter is DecsJoin)
+    return qn("decs_tup", at) if (adapter is Decs)
     return qn("it", at)
 }
 
 // Source element type for state-decl construction. Returns a fresh clone so callers can pass it to strip_const_ref / $t() without aliasing.
-// Array: top._type.firstType. Decs: bridge.elementType.
+// Array: top._type.firstType. Decs: bridge.elementType. DecsJoin: per-pair resultType from payload. Zip: defensive null
+// (plan_group_by_core never reaches Zip; emit_zip computes element type inline from zip's _type.firstType + select rebind).
 [macro_function]
 def private adapter_element_type(adapter : SourceAdapter) : TypeDeclPtr {
+    if (adapter is DecsJoin) return clone_type((adapter as DecsJoin).resultType)
+    if (adapter is Zip) return null
     if (adapter is Decs) {
         let bridge = (adapter as Decs)._0
         if (bridge == null) return null
@@ -1641,9 +1696,58 @@ def private adapter_element_type(adapter : SourceAdapter) : TypeDeclPtr {
     return clone_type(top._type.firstType)
 }
 
-// Per-element source loop. Array: `for(bindName in srcName) { body }`. Decs: `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`.
+// Per-element source loop. Array: `for(bindName in srcName) { body }`. Decs: `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`. DecsJoin (PR D2): hashB-collect + srcA-probe + per-pair result-lam bind (lifted from PR D1's GroupBy `adapter_emit_source_loop`; GroupBy is the only consumer — `emit_decs_join` keeps its own collect+probe inline to preserve the count-no-where bucket-length fast path). Zip (PR D2): plain `for (itA, itB in srcA, srcB) { body }` — the `let it = (itA, itB)` bind, when needed by chain ops, is prepended inside `body` by emit_zip (only emit_zip knows whether the body references `it`).
 [macro_function]
 def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
+    if (adapter is DecsJoin) {
+        // GroupBy's decs-join is the only consumer (emit_decs_join keeps its own inline collect+probe per D2-A).
+        let dj & = unsafe(adapter as DecsJoin)
+        let jhashName = qn("djoin_jhash", at)
+        let arrName   = qn("djoin_jarr", at)
+        let tupAName  = qn("djoin_jta", at)
+        let tupBName  = qn("djoin_jtb", at)
+        let resName   = dj.resBindName
+        var keyaBody   = peel_lambda_rename_var(dj.keyaLam, tupAName)
+        var keybBody   = peel_lambda_rename_var(dj.keybLam, tupBName)
+        var resultBody = peel_lambda_rename_2vars(dj.resultLam, tupAName, tupBName)
+        if (keyaBody == null || keybBody == null || resultBody == null) return null
+        var tupBindA = build_decs_tup_bind(dj.bridgeA, tupAName, at)
+        var tupBindB = build_decs_tup_bind(dj.bridgeB, tupBName, at)
+        if (tupBindA == null || tupBindB == null) return null
+        var collectBody <- qmacro_block_to_array() {
+            // nolint:PERF006 per-key bucket size unknown ahead of time
+            $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
+        }
+        var collectInner = build_decs_inner_for(dj.bridgeB, tupBindB, stmts_to_expr(collectBody), at)
+        var probeBody <- qmacro_block_to_array() {
+            get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(dj.tupBType)>) {
+                for ($i(tupBName) in $i(arrName)) {
+                    let $i(resName) : $t(dj.resultType) = $e(resultBody)
+                    $e(body)
+                }
+            })
+        }
+        var probeInner = build_decs_inner_for(dj.bridgeA, tupBindA, stmts_to_expr(probeBody), at)
+        return <- qmacro_block() {
+            var $i(jhashName) : table<$t(dj.keyType); array<$t(dj.tupBType)>>
+            for_each_archetype($e(dj.bridgeB.reqHashExpr), $e(dj.bridgeB.erqExpr), $($i(dj.bridgeB.archName) : Archetype) {
+                $e(collectInner)
+            })
+            for_each_archetype($e(dj.bridgeA.reqHashExpr), $e(dj.bridgeA.erqExpr), $($i(dj.bridgeA.archName) : Archetype) {
+                $e(probeInner)
+            })
+        }
+    }
+    if (adapter is Zip) {
+        let zip & = unsafe(adapter as Zip)
+        let srcAName = zip.srcAName
+        let srcBName = zip.srcBName
+        return <- qmacro_block() {
+            for (itA, itB in $i(srcAName), $i(srcBName)) {
+                $e(body)
+            }
+        }
+    }
     if (adapter is Decs) {
         let bridge = (adapter as Decs)._0
         let tupName = (adapter as Decs)._1
@@ -1664,13 +1768,37 @@ def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Express
     }
 }
 
-// Wrap stmts into the adapter's outer invoke. Array binds top as source-arg; Decs is zero-arg invoke (state hoisted into stmts).
-// retType non-null forces explicit annotation; null relies on compiler inference from return statements.
+// Wrap stmts into the adapter's outer invoke. Array binds top as source-arg; Decs / DecsJoin are zero-arg invokes (state
+// hoisted); Zip is a 2-source invoke (force_at + force_generated + can_shadow on both arg flags). retType null = infer.
 // wrapIter wraps the emission with .to_sequence_move() — caller drives via ctx.expr_is_iterator on array-returning emits.
 [macro_function]
 def private adapter_wrap_invoke(adapter : SourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
     var emission : Expression?
-    if (adapter is Decs) {
+    if (adapter is Zip) {
+        let zip & = unsafe(adapter as Zip)
+        let srcAName = zip.srcAName
+        let srcBName = zip.srcBName
+        if (retType != null) {
+            emission = qmacro(invoke($($i(srcAName) : $t(zip.srcAType), $i(srcBName) : $t(zip.srcBType)) : $t(retType) {
+                $b(stmts)
+            }, $e(zip.srcAExpr), $e(zip.srcBExpr)))
+        } else {
+            emission = qmacro(invoke($($i(srcAName) : $t(zip.srcAType), $i(srcBName) : $t(zip.srcBType)) {
+                $b(stmts)
+            }, $e(zip.srcAExpr), $e(zip.srcBExpr)))
+        }
+        emission.force_at(at)
+        emission.force_generated(true)
+        let blk = (emission as ExprInvoke).arguments[0] as ExprMakeBlock
+        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+        (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
+        if (wrapIter) {
+            emission = qmacro($e(emission).to_sequence_move())
+            emission.force_generated(true)
+        }
+        return emission
+    }
+    if (adapter is Decs || adapter is DecsJoin) {
         if (retType != null) {
             emission = qmacro(invoke($() : $t(retType) {
                 $b(stmts)
@@ -6155,49 +6283,46 @@ def private plan_decs_distinct(var expr : Expression?) : Expression? {
     return null
 }
 
-// ── decs join splice (Session 3 — hashed O(N+M) via collect-on-srcb + probe-on-srca) ───────
+// ── decs join splice (PR D2 — pattern-table stub through plan_decs_join_patterns) ───────
+
+[_macro]
+def private populate_plan_decs_join_patterns {
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_decs_join_patterns)) return
+    plan_decs_join_patterns |> emplace <| SplicePattern(
+        name = "decs_join_general",
+        chain <- [
+            Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
+            Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
+            Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
+            Slot(matcher = m_literal("count"),   cardinality = c_opt(), capture_name = "term", arity = 1)
+        ],
+        requires <- [@@ < RequiresPredicate > decs_source, @@ < RequiresPredicate > decs_join_no_select_with_count],
+        emit = @@ < EmitFn > emit_decs_join
+    )
+}
 
 [macro_function]
-def private plan_decs_join(var expr : Expression?) : Expression? {
-    // Hashed equi-join over two from_decs_template eager bridges. Walks the smaller side (srcb in the source order — the user writes the smaller side as srcb) into a `table<KEY; array<TUPB>>`, then walks the larger side (srca) and probes via `table.get`. Matches array-side `join_impl` algorithm (linq.das:1674) but inlines keya/keyb/result lambdas so per-pair invoke overhead vanishes. For v1: only the `[join, count]` and `[join, <implicit to_array>]` shapes; interleaved where/select bails to tier-2. Runtime-value or non-primitive keys: keya/keyb's block return type is used directly as the table key type — primitive equi-keys (int, string) are the common case and the `_join` macro's equi-shape constraint keeps the key expression on one side of `==`.
-    var (top, calls) = flatten_linq(expr)
-    if (expr._type == null) return null
-    collapse_chained_selects(calls)
-    // Terminator: count (1-arg) or implicit to_array. Anything else cascades.
-    var terminatorName : string = ""
-    {
-        let lastName = empty(calls) ? "" : calls.back()._1.name
-        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
-            terminatorName = lastName
-            calls |> pop
-        }
-    }
-    // Trailing _select composes with the join's result lambda: bind once, project once. Element type is derived later from expr._type.firstType (set by the user's downstream typer) — no need to record it here.
-    var selectLam : Expression?
-    if (terminatorName != "count" && !empty(calls) && calls.back()._1.name == "select") {
-        var selCall = calls.back()._0
-        selectLam = selCall.arguments[1]
-        if (selectLam == null || selCall._type == null || selCall._type.firstType == null) return null
-        calls |> pop
-    }
-    // Trailing _where (Theme 2 — closes audit 8a + C6). Predicate references join-result fields, so we bind the result once per pair and gate the push/incr. Comes BEFORE select in chain order, so pop AFTER select.
+def private emit_decs_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // PR D2-A: keep collect+probe inline (not via adapter_wrap_source_loop) to preserve the count-no-where bucket-length fast path.
+    var joinCall = c.single["join"]
     var whereLam : Expression?
-    if (!empty(calls) && calls.back()._1.name == "where_") {
-        var wCall = calls.back()._0
-        if (wCall.arguments |> length < 2) return null
-        whereLam = wCall.arguments[1]
+    if (c.single |> key_exists("trailing_where")) {
+        whereLam = joinCall != null && c.single["trailing_where"] != null ? c.single["trailing_where"].arguments[1] : null
         if (whereLam == null) return null
-        calls |> pop
     }
-    // Must end on a single `join` call now — interleaved where/select unsupported in v1.
-    if (empty(calls) || calls.back()._1.name != "join") return null
-    var joinCall = calls.back()._0
-    calls |> pop
-    // Iterator-typed context bails regardless of selectLam: the emission below returns `array<elemType>` and is not wrapped to iterator. (Currently user-unreachable when selectLam != null — `_select` after `_join` can't infer its result_selector without a downstream terminator — but kept for defensive splice hygiene.)
-    if (!empty(calls) || (terminatorName == "" && !expr._type.isGoodArrayType)) return null
+    var selectLam : Expression?
+    if (c.single |> key_exists("trailing_select")) {
+        var selCall = c.single["trailing_select"]
+        if (selCall == null || selCall._type == null || selCall._type.firstType == null) return null
+        selectLam = selCall.arguments[1]
+        if (selectLam == null) return null
+    }
+    let terminatorName = (c.single |> key_exists("term")) ? "count" : ""
+    // Iterator-typed implicit-to-array: emission returns array<elemType> uniformly; iterator sink would need a wrap that's not applied here. Cascade.
+    if (terminatorName == "" && ctx.expr_is_iterator) return null
     // Both sides must be from_decs_template eager bridges.
-    var bridgeA = extract_decs_bridge(top)
-    if (bridgeA == null || joinCall.arguments |> length != 5) return null
+    var bridgeA = (ctx.src as Decs)._0
+    if (bridgeA == null) return null
     var bridgeB = extract_decs_bridge(joinCall.arguments[1])
     if (bridgeB == null) return null
     // keya/keyb are LinqJoin-macro-synthesized: $($i(la_fresh) : iterTypeA) => keya_body — 1-arg single-return. Block return type IS the key type.
@@ -6206,7 +6331,6 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
     if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
     let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
     if (!is_primitive_join_key_type(keyType)) return null
-    let at = joinCall.at
     let tupAName = qn("decs_tup_a", at)
     let tupBName = qn("decs_tup_b", at)
     let hashName = qn("decs_hash", at)
@@ -6221,22 +6345,22 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
     var tupBindB = build_decs_tup_bind(bridgeB, tupBName, at)
     if (tupBindA == null || tupBindB == null) return null
     let tupBType = strip_const_ref(clone_type(bridgeB.elementType))
-    // Collect loop: hash all of srcb keyed by keyb(tupb).
     var collectBody <- qmacro_block_to_array() {
         // nolint:PERF006 per-key bucket size unknown ahead of time
         $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
     }
     var collectInner = build_decs_inner_for(bridgeB, tupBindB, stmts_to_expr(collectBody), at)
-    // Result builder branches on terminator.
     var probeStmts : array<Expression?>
     var preludeStmts : array<Expression?>
     var returnStmt : Expression?
+    var invokeRetType : TypeDeclPtr
     if (terminatorName == "count") {
+        invokeRetType = new TypeDecl(baseType = Type.tInt, at = at)
         preludeStmts |> push <| qmacro_expr() {
             var $i(cntName) : int = 0
         }
         if (whereLam == null) {
-            // Fast path: bucket-length sum.
+            // Fast path (PR D2-A guarantee): bucket-length sum at bucket granularity, never enters per-pair loop.
             probeStmts |> push <| qmacro_expr() {
                 $i(cntName) += length($i(arrName))
             }
@@ -6263,17 +6387,25 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
         }
     } else {
         var resultLam = joinCall.arguments[4]
-        if (resultLam == null) return null
+        if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
         var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
         if (resultBody == null) return null
-        let resultType = clone_type(expr._type.firstType)
+        // Buffer element type = after-select projection type when select is trailing, else result-lam return type.
+        var resultType : TypeDeclPtr
+        if (selectLam != null) {
+            let selCall = c.single["trailing_select"]
+            if (selCall == null || selCall._type == null || selCall._type.firstType == null) return null
+            resultType = clone_type(selCall._type.firstType)
+        } else {
+            resultType = clone_type(resultLam._type.firstType)
+        }
         if (resultType == null) return null
+        invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)
         preludeStmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(resultType)>
         }
         let needBind = selectLam != null || whereLam != null
         if (needBind) {
-            // Bind join result once per pair (side effects once), then optionally filter / project.
             let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
             let resBindName = qn("decs_jres", at)
             var pushExpr : Expression?
@@ -6312,14 +6444,13 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
             return <- $i(bufName)
         }
     }
-    // Probe loop: walk srca; on hash hit invoke probeStmts with the matched bucket bound as arrName. Block takes `var arr` so it matches table::get's mutating overload (we don't mutate, but the const overload is gated on a const Tab which a `var hash` local is not).
+    // Probe loop: walk srca; on hash hit invoke probeStmts with the matched bucket bound as arrName. Block takes `var arr` so it matches table::get's mutating overload.
     var probeWrapBody <- qmacro_block_to_array() {
         get($i(hashName), $e(keyaBody), $(var $i(arrName) : array<$t(tupBType)>) {
             $b(probeStmts)
         })
     }
     var probeInner = build_decs_inner_for(bridgeA, tupBindA, stmts_to_expr(probeWrapBody), at)
-    // Assemble outer zero-arg invoke.
     var allStmts : array<Expression?>
     allStmts |> push_from(preludeStmts)
     allStmts |> push <| qmacro_expr() {
@@ -6336,78 +6467,100 @@ def private plan_decs_join(var expr : Expression?) : Expression? {
         })
     }
     allStmts |> push(returnStmt)
-    var retType : TypeDeclPtr
-    if (terminatorName == "count") {
-        retType = new TypeDecl(baseType = Type.tInt, at = at)
-    } else {
-        retType = clone_type(expr._type)
-    }
-    var emission = qmacro(invoke($() : $t(retType) {
+    var emission = qmacro(invoke($() : $t(invokeRetType) {
         $b(allStmts)
     }))
     return finalize_decs_emission(emission, at, false)
 }
 
 [macro_function]
-def private plan_zip(var expr : Expression?) : Expression? {
-    // Phase 2 Z1/Z2/Z3 + accumulator/early-exit: 2-ary lockstep zip splice. Supports bare zip (array/iterator), no-pred count/long_count + accumulator (sum/min/max/average) + early-exit (first/first_or_default/any/all/contains) terminators, and fused where_/select/take/skip/take_while/skip_while chain ops between zip and terminator. Result-selector form (3-arg zip) and chained selects bail to tier-2 cascade.
+def private plan_decs_join(var expr : Expression?) : Expression? {
+    // PR D2 stub — walks plan_decs_join_patterns with Decs adapter; emit_decs_join keeps inline collect+probe per D2-A.
     var (top, calls) = flatten_linq(expr)
-    if (empty(calls) || calls[0]._1.name != "zip") return null
+    var bridgeA = extract_decs_bridge(top)
+    if (bridgeA == null || empty(calls) || expr._type == null) return null
     collapse_chained_selects(calls)
-    var zipCall = calls[0]._0
-    let zipArgCount = zipCall.arguments |> length
-    // 3-arg zip(a, b, sel): pre-lower the selector into `projection` (peeled with it._0/_1 binds).
-    if (zipArgCount != 2 && zipArgCount != 3) return null
-    // Identify recognized terminator. Counter: count/long_count. Accumulator: sum/min/max/average. Early-exit: first/first_or_default/any/all/contains. Anything else: treat as no-terminator (bare → ARRAY lane); unrecognized chain op bails inside the chain walk.
-    var lastName = ""
-    var intermediateEnd = length(calls)
-    var counterPred : Expression?
-    if (length(calls) > 1) {
-        let candidateName = calls.back()._1.name
-        let candidateCall = calls.back()._0
-        let candidateArgs = candidateCall.arguments |> length
-        if (candidateName == "count" || candidateName == "long_count") {
-            // No-pred form (1 arg = source) or 2-arg `count(src, pred)` / `long_count(src, pred)` (Theme 4). The 2-arg form is captured into counterPred and emitted as a dedicated inner gate around `acc++` after the upstream where/projection (see Theme 4 block ~6113 for why we DON'T merge into whereCond — it would break eager `where(W).select(F).count(P)` ordering when select has side effects).
-            if (candidateArgs != 1 && candidateArgs != 2) return null
-            if (candidateArgs == 2) {
-                if (candidateCall.arguments[1] == null) return null
-                counterPred = clone_expression(candidateCall.arguments[1])
-            }
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
-        } elif (candidateName == "sum" || candidateName == "min" || candidateName == "max" || candidateName == "average") {
-            // Accumulator: no-arg form only (1 arg = the source).
-            if (candidateArgs != 1) return null
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
-        } elif (candidateName == "first") {
-            if (candidateArgs != 1) return null
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
-        } elif (candidateName == "first_or_default" || candidateName == "contains") {
-            // first_or_default(d): 1 default arg. contains(v): 1 value arg.
-            if (candidateArgs != 2) return null
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
-        } elif (candidateName == "any") {
-            // any(): no pred. any(p): 1 predicate arg. Both forms recognized.
-            if (candidateArgs != 1 && candidateArgs != 2) return null
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
-        } elif (candidateName == "all") {
-            // all(p): must have predicate.
-            if (candidateArgs != 2) return null
-            lastName = candidateName
-            intermediateEnd = length(calls) - 1
+    collapse_chained_wheres(calls)
+    let at = calls[0]._0.at
+    let tupName = qn("decs_tup", at)
+    let exprIsIter = expr._type.isIterator
+    for (p in plan_decs_join_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var ctx = EmitCtx(top = top, src = SourceAdapter(Decs = (bridgeA, tupName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
         }
     }
-    let at = zipCall.at
+    return null
+}
+
+[_macro]
+def private populate_plan_zip_patterns {
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_zip_patterns)) return
+    plan_zip_patterns |> emplace <| SplicePattern(
+        name = "zip_general",
+        chain <- [
+            Slot(matcher = m_literal("zip"), cardinality = c_one(), capture_name = "zip"),
+            slot_chain_of(["where_", "select"], "head"),
+            Slot(matcher = m_literal("skip"),       cardinality = c_opt(), capture_name = "skip", arity = 2),
+            Slot(matcher = m_literal("skip_while"), cardinality = c_opt(), capture_name = "skip_while", arity = 2),
+            Slot(matcher = m_literal("take_while"), cardinality = c_opt(), capture_name = "take_while", arity = 2),
+            Slot(matcher = m_literal("take"),       cardinality = c_opt(), capture_name = "take", arity = 2),
+            Slot(matcher = m_literal("reverse"),    cardinality = c_opt(), capture_name = "trailing_reverse"),
+            Slot(matcher = m_alias("loop_terminator_family"), cardinality = c_opt(), capture_name = "term")
+        ],
+        requires <- [
+            @@ < RequiresPredicate > zip_arity_2_or_3,
+            @@ < RequiresPredicate > zip_no_while_after_select,
+            @@ < RequiresPredicate > zip_reverse_compatible_with_term,
+            @@ < RequiresPredicate > take_arg_is_int
+        ],
+        emit = @@ < EmitFn > emit_zip
+    )
+}
+
+[macro_function]
+def private emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // 2-source lockstep zip splice. Bare zip (array/iterator) + fused where_/select/take/skip/take_while/skip_while + count/long_count/sum/min/max/average/first/first_or_default/any/all/contains terminators. 3-arg zip(a,b,sel) pre-lowers the selector. Trailing reverse on array lane emits reverse_inplace (Theme 8 C4). Counter (count/long_count) and array lanes are built inline here; accumulator + early-exit lanes delegate to emit_accumulator_lane / emit_early_exit_lane (parallel-array form).
+    var zipCall = c.single["zip"]
+    let zipArgCount = zipCall.arguments |> length
+    // Terminator name + counter predicate (2-arg count/long_count).
+    var lastName = ""
+    var counterPred : Expression?
+    if (c.single |> key_exists("term")) {
+        var termCall = c.single["term"]
+        let candidateName = c.single_name["term"]
+        let candidateArgs = termCall.arguments |> length
+        if (candidateName == "count" || candidateName == "long_count") {
+            if (candidateArgs != 1 && candidateArgs != 2) return null
+            if (candidateArgs == 2) {
+                if (termCall.arguments[1] == null) return null
+                counterPred = clone_expression(termCall.arguments[1])
+            }
+            lastName = candidateName
+        } elif (candidateName == "sum" || candidateName == "min" || candidateName == "max" || candidateName == "average" || candidateName == "first") {
+            if (candidateArgs != 1) return null
+            lastName = candidateName
+        } elif (candidateName == "first_or_default" || candidateName == "contains") {
+            if (candidateArgs != 2) return null
+            lastName = candidateName
+        } elif (candidateName == "any") {
+            if (candidateArgs != 1 && candidateArgs != 2) return null
+            lastName = candidateName
+        } elif (candidateName == "all") {
+            if (candidateArgs != 2) return null
+            lastName = candidateName
+        } else {
+            // Recognized by loop_terminator_family alias but not by zip splice (e.g. last/single/element_at). Cascade.
+            return null
+        }
+    }
     let srcAName = qn("srcA", at)
     let srcBName = qn("srcB", at)
     let bufName  = qn("buf", at)
     let accName  = qn("acc", at)
     let names <- make_range_names(at)
-    // itName binds the tuple `(itA, itB)` at the top of the for-body; chain ops (where_/select/while-family) reference it by name.
     let itName = qn("it", at)
     var srcAExpr = peel_each(clone_expression(zipCall.arguments[0]))
     var srcBExpr = peel_each(clone_expression(zipCall.arguments[1]))
@@ -6416,7 +6569,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
     srcBExpr.genFlags.alwaysSafe = true
     var srcAType = invoke_src_param_type(srcAExpr)
     var srcBType = invoke_src_param_type(srcBExpr)
-    // elementType starts as the tuple-of-refs (zip's natural element) and is rebound by `select`.
     var elementType = clone_type(zipCall._type.firstType)
     var whereCond : Expression?
     var projection : Expression?
@@ -6425,13 +6577,8 @@ def private plan_zip(var expr : Expression?) : Expression? {
     var skipWhileCond : Expression?
     var takeWhileCond : Expression?
     var seenSelect = false
-    var seenSkip = false
-    var seenSkipWhile = false
-    var seenTakeWhile = false
-    var seenTake = false
-    var seenReverse = false
+    let seenReverse = c.single |> key_exists("trailing_reverse")
     var allProjectionsPure = true
-    // Pre-lower 3-arg zip(a,b,sel) → seeded projection (2-arg lambda replaced with it._0/_1).
     if (zipArgCount == 3) {
         var resultLam = zipCall.arguments[2]
         if (resultLam == null || !(resultLam is ExprMakeBlock)) return null
@@ -6454,14 +6601,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
             allProjectionsPure = false
         }
     }
-    // Z3 chain walk: fuse where_/select/take/skip/take_while/skip_while between zip and terminator. Predicates/projections receive the tuple element via peel_lambda_replace_var substitution with `(itA, itB)` — typer collapses `t._0/_1` to the raw iter vars.
-    for (i in 1 .. intermediateEnd) {
-        var cll & = unsafe(calls[i])
-        let opName = cll._1.name
+    // Head walk: where_/select left-to-right. After-select where is the same "chained-bind dedup" gap the imperative bailed on (line 6583).
+    for (call in c.many["head"]) {
+        let opName = call_norm_name(call)
         if (opName == "where_") {
-            // Canonical chain order: skip/take/while-family come after where_/select. After-select chained where: defer (would require chained-bind dedup, see Phase 3d for single-source analog).
-            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
-            var predicate : Expression? = peel_lambda_rename_var(cll._0.arguments[1], itName)
+            if (seenSelect) return null
+            var predicate : Expression? = peel_lambda_rename_var(call.arguments[1], itName)
             if (predicate == null) return null
             if (whereCond == null) {
                 whereCond = predicate
@@ -6469,59 +6614,43 @@ def private plan_zip(var expr : Expression?) : Expression? {
                 whereCond = qmacro($e(whereCond) && $e(predicate))
             }
         } elif (opName == "select") {
-            // Skip/take/while come after select; chained selects on zip stream defer (would mirror plan_loop_or_count `intermediateBinds`).
-            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake || seenSelect) return null
-            // Pull elementType from the projection block's return expression — the SELECT call's `_type.firstType` is a typedecl(result_selector(...)) formula that doesn't resolve when the chain is wrapped in _fold (call-macro context defers generic typedecl evaluation).
-            var projRet = peel_lambda_single_return(cll._0.arguments[1])
+            if (seenSelect) return null
+            // selectCall._type.firstType is a typedecl(result_selector(...)) formula that doesn't resolve in _fold context; pull from the projection block's return expression instead.
+            var projRet = peel_lambda_single_return(call.arguments[1])
             if (projRet == null || projRet._type == null) return null
-            var projElemType = clone_type(projRet._type)
-            // Strip both constness and ref-ness — `array<T const>` is unwritable, `array<T&>` is invalid as buffer element. Matches the canonical pattern used by plan_reverse/plan_distinct/etc.
-            projElemType = strip_const_ref(projElemType)
-            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
+            var projElemType = strip_const_ref(clone_type(projRet._type))
+            projection = peel_lambda_rename_var(call.arguments[1], itName)
             if (projection == null) return null
             elementType = projElemType
             seenSelect = true
             if (has_sideeffects(projection)) {
                 allProjectionsPure = false
             }
-        } elif (opName == "skip") {
-            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
-            var skipArg = cll._0.arguments[1]
-            if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
-            skipExpr = clone_expression(skipArg)
-            seenSkip = true
-        } elif (opName == "skip_while") {
-            if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
-            var swArg = cll._0.arguments[1]
-            if (swArg == null) return null
-            skipWhileCond = peel_lambda_rename_var(swArg, itName)
-            if (skipWhileCond == null) return null
-            seenSkipWhile = true
-        } elif (opName == "take_while") {
-            if (seenSelect || seenTakeWhile || seenTake) return null
-            var twArg = cll._0.arguments[1]
-            if (twArg == null) return null
-            takeWhileCond = peel_lambda_rename_var(twArg, itName)
-            if (takeWhileCond == null) return null
-            seenTakeWhile = true
-        } elif (opName == "take") {
-            if (seenTake) return null
-            var takeArg = cll._0.arguments[1]
-            if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
-            takeExpr = clone_expression(takeArg)
-            seenTake = true
-        } elif (opName == "reverse") {
-            // Theme 8 (audit C4): trailing reverse before terminator. Must be last chain op — anything after would see the reversed stream and change semantics vs cascade (which runs reverse_inplace after collecting). Lane check below bails on first/first_or_default (NOT identity under reverse).
-            if (seenReverse || i != intermediateEnd - 1) return null
-            seenReverse = true
-        } else {
-            // Any other intermediate op (group_by, distinct, order_*, second zip, etc.): bail to tier-2.
-            return null
         }
     }
-    // Reverse is identity for count/long_count, sum/min/max/average, any/all/contains; for first/first_or_default it picks a different element — bail. For the array lane, emit reverse_inplace below.
-    if (seenReverse && (lastName == "first" || lastName == "first_or_default")) return null
-    // Theme 4: count(p) / long_count(p). Kept SEPARATE from whereCond so the upstream `where_` chain still gates projection evaluation — eager `where(W).select(F).count(P)` runs W first, then F only on W-passes; merging counterPred into whereCond would lift the predicate ahead of projection and (worse) merge upstream where filters under the same gate as P, masking which one filters first. When select is present we bind projection to a per-element `vproj` local INSIDE the upstream-where guard and peel the predicate against that name. Without select, peel against itName.
+    // Range / while ops from c.single (positional slots already enforce canonical order: skip → skip_while → take_while → take).
+    if (c.single |> key_exists("skip")) {
+        var skipArg = c.single["skip"].arguments[1]
+        if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
+        skipExpr = clone_expression(skipArg)
+    }
+    if (c.single |> key_exists("skip_while")) {
+        var swArg = c.single["skip_while"].arguments[1]
+        if (swArg == null) return null
+        skipWhileCond = peel_lambda_rename_var(swArg, itName)
+        if (skipWhileCond == null) return null
+    }
+    if (c.single |> key_exists("take_while")) {
+        var twArg = c.single["take_while"].arguments[1]
+        if (twArg == null) return null
+        takeWhileCond = peel_lambda_rename_var(twArg, itName)
+        if (takeWhileCond == null) return null
+    }
+    if (c.single |> key_exists("take")) {
+        var takeArg = c.single["take"].arguments[1]
+        if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
+        takeExpr = clone_expression(takeArg)
+    }
     let vprojName = qn("vproj", at)
     let bindProjForCounter = counterPred != null && projection != null
     if (counterPred != null) {
@@ -6533,16 +6662,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
         if (counterPred == null) return null
     }
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
-    // counterPred has its own inner gate (emitted around acc++ below), so noChain stays true only when there is no count predicate either — otherwise the length-shortcut would skip the predicate.
     let noChain = whereCond == null && projection == null && noLimits && counterPred == null
     let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
     let isCounter = lastName == "count" || lastName == "long_count"
-    // Semantic guard: impure `select` projection AHEAD of a range op (skip/take/skip_while/take_while). The eager `select(proj)|>skip(K)` pipeline runs proj on every element; our spliced order (skip-then-push) would drop the side effects on skipped items. Bail to tier-2 which preserves eager semantics. Plan_loop_or_count has the analogous gap (see PR #2741 review thread #r3269663361); fixing both planners uniformly is a separate follow-up.
     if (seenSelect && !allProjectionsPure && !noLimits) return null
-    // Accumulator + early-exit lane dispatch: reuses the generalized emit_*_lane helpers (parallel-array form). preCondStmts threads `let it = (itA, itB)` so itName resolves inside the loop body when the where/projection/predicate/value references the tuple element. `long_count` is classified ACCUMULATOR but routes through the COUNTER path locally (existing length-shortcut + counter loop already cover it); `!isCounter` excludes it from this branch.
     let lane = classify_terminator(lastName)
     if (lane == LinqLane.ACCUMULATOR && !isCounter) {
-        // sum/min/max/average without projection: elementType is tuple<...>, accumulator op would not typecheck — bail to tier-2 (typer rejects anyway, but explicit bail keeps the error inside linq's normal cascade rather than the splice).
         if (projection == null) return null
         var preCondStmts : array<Expression?>
         preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
@@ -6561,18 +6686,26 @@ def private plan_zip(var expr : Expression?) : Expression? {
             let $i(itName) = (itA, itB)
         }
         var intermediateBinds : array<Expression?>
-        let terminatorCall = calls.back()._0
+        let terminatorCall = c.single["term"]
         var laneTops <- [srcAExpr, srcBExpr]
         let laneSrcs <- [srcAName, srcBName]
         return emit_early_exit_lane(lastName, laneTops, projection, whereCond, null,
             intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
-    // Length shortcut: count/long_count, no chain, both length-bearing → return min(lenA, lenB) without entering the loop.
+    // ZipShape feeds adapter_wrap_invoke; the for(itA,itB in srcA,srcB) is built locally because emit_zip prepends the optional `let it = (itA,itB)` bind based on needsItBind (D2-D — only emit_zip knows).
+    var zipShape = ZipShape(
+        srcAExpr = srcAExpr,
+        srcBExpr = srcBExpr,
+        srcAName := srcAName,
+        srcBName := srcBName,
+        srcAType = srcAType,
+        srcBType = srcBType
+    )
+    var adapter = SourceAdapter(Zip = zipShape)
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
         if (lastName == "count") {
-            // length returns int already; bare `length(...)` matches return type — no cast (PERF020).
             bodyStmts |> push <| qmacro_expr() {
                 return length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName))
             }
@@ -6581,12 +6714,10 @@ def private plan_zip(var expr : Expression?) : Expression? {
                 return int64(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
             }
         }
-        return finalize_zip_invoke(bodyStmts, srcAName, srcBName, srcAType, srcBType, srcAExpr, srcBExpr, at)
+        return adapter_wrap_invoke(adapter, bodyStmts, null, false, at)
     }
-    // Build per-element body inside the for-loop. wrap_with_ranges adds skip/take/while guards; wrap_with_condition wraps with `if (whereCond)`.
     var perStmts : array<Expression?>
     if (isCounter) {
-        // Counter lane body: inside the upstream-where wrap below. bindProjForCounter emits `let vproj = projection` so projection runs exactly once per where-passing element (eager `where.select.count(P)` semantics) and the count predicate references vproj. Without count(p), only the impure-select side-effect bind remains.
         if (bindProjForCounter) {
             perStmts |> push <| qmacro_expr() {
                 var $i(vprojName) = $e(projection)
@@ -6609,7 +6740,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
             }
         }
     } else {
-        // Array lane: push projection (if select fused), bound tuple `it` (when any chain op needs it), or raw `(itA, itB)` tuple (bare zip with no chain). needsItBind below decides whether `it` is bound.
         let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
         if (projection != null) {
             perStmts |> push <| qmacro_expr() {
@@ -6627,7 +6757,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
     }
     wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
     var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
-    // Bind `it = (itA, itB)` only when the emitted body actually reads it. Pure `select(...).count()` is the key opt-out: projection isn't evaluated in counter lane (no side effects to preserve), so the bind would be wasted and would also block the `_itA/_itB` underscore-iter-var fast path. bindProjForCounter forces projection eval (it reads itA/itB through F), so it needs the `it` bind too; no-select counterPred peels against itName, so it also needs the bind.
     let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure || bindProjForCounter)
     let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null || counterPred != null
     if (needsItBind) {
@@ -6639,7 +6768,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
         preStmts |> push(perBody)
         perBody = stmts_to_expr(preStmts)
     }
-    // Outer body assembly.
     var bodyStmts : array<Expression?>
     if (isCounter) {
         if (lastName == "count") {
@@ -6655,7 +6783,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
         bodyStmts |> push <| qmacro_expr() {
             var $i(bufName) : array<$t(elementType)>
         }
-        // Reserve: only when noChain (no filters/limits) and both sources length-bearing — otherwise size unknown or smaller than min(len).
         if (noChain && bothHaveLength) {
             bodyStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
@@ -6663,7 +6790,6 @@ def private plan_zip(var expr : Expression?) : Expression? {
         }
     }
     append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    // Underscore-prefix iter vars (LINT002) only when neither needsItBind nor identity-tuple push references them.
     let bodyReferencesIterVars = needsItBind || !isCounter
     if (isCounter && !bodyReferencesIterVars) {
         bodyStmts |> push <| qmacro_expr() {
@@ -6683,13 +6809,12 @@ def private plan_zip(var expr : Expression?) : Expression? {
             return $i(accName)
         }
     } else {
-        // Theme 8 (audit C4): trailing reverse on the array lane → emit reverse_inplace before the return. Identity for accumulator/early-exit/counter lanes (handled by skipping the emit), so this only fires here.
         if (seenReverse) {
             bodyStmts |> push <| qmacro_expr() {
                 _::reverse_inplace($i(bufName))
             }
         }
-        if (expr._type.isIterator) {
+        if (ctx.expr_is_iterator) {
             bodyStmts |> push <| qmacro_expr() {
                 return <- $i(bufName).to_sequence_move()
             }
@@ -6699,21 +6824,27 @@ def private plan_zip(var expr : Expression?) : Expression? {
             }
         }
     }
-    return finalize_zip_invoke(bodyStmts, srcAName, srcBName, srcAType, srcBType, srcAExpr, srcBExpr, at)
+    return adapter_wrap_invoke(adapter, bodyStmts, null, false, at)
 }
 
 [macro_function]
-def private finalize_zip_invoke(var bodyStmts : array<Expression?>; srcAName, srcBName : string; var srcAType, srcBType : TypeDeclPtr;
-                                var srcAExpr, srcBExpr : Expression?; at : LineInfo) : Expression? {
-    var res = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
-        $b(bodyStmts)
-    }, $e(srcAExpr), $e(srcBExpr)))
-    res.force_at(at)
-    res.force_generated(true)
-    let blk = (res as ExprInvoke).arguments[0] as ExprMakeBlock
-    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
-    (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
-    return res
+def private plan_zip(var expr : Expression?) : Expression? {
+    // PR D2 stub — walks plan_zip_patterns; emit_zip builds SourceAdapter::Zip and dispatches lanes inline.
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls) || expr._type == null) return null
+    collapse_chained_selects(calls)
+    collapse_chained_wheres(calls)
+    let at = calls[0]._0.at
+    let exprIsIter = expr._type.isIterator
+    for (p in plan_zip_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var ctx = EmitCtx(top = top, src = SourceAdapter(Array = (top, qn("source", at))), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
+        }
+    }
+    return null
 }
 
 [call_macro(name="_fold")]
