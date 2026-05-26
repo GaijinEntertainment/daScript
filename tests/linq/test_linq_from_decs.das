@@ -1986,8 +1986,8 @@ def test_unroll5d_order_by_take_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "order_by+take splice must NOT fall to tier-2 to_sequence (cascade ordering trap)")
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no eager-bridge wrapping)")
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "order family uses for_each_archetype (no early-exit needed)")
-        // Buffer hoisted ABOVE for_each_archetype so it survives the archetype walk.
-        t |> success(describe_count(body_expr, "decs_buf") >= 2, "decs_buf declared + populated")
+        // PR C: emit_bounded_heap (unified array+decs) uses `order_buf` instead of decs_buf. Buffer still hoisted above for_each_archetype.
+        t |> success(describe_count(body_expr, "order_buf") >= 2, "order_buf declared + populated")
         // Bounded-heap emit: spliced_push_heap appears twice (fill + replace), spliced_pop_heap once (replace). top_n_by is no longer used.
         t |> equal(describe_count(body_expr, "spliced_push_heap"), 2, "bounded-heap fill + replace each call spliced_push_heap")
         t |> equal(describe_count(body_expr, "spliced_pop_heap"), 1, "bounded-heap replace calls spliced_pop_heap once")
@@ -2011,8 +2011,9 @@ def test_unroll5d_order_by_first_splice_shape(t : T?) {
         // Streaming-min emit: best + seen state vars, no buffer + min_by/top_n.
         t |> equal(describe_count(body_expr, "min_by"), 0, "streaming-min path does NOT call min_by")
         t |> equal(describe_count(body_expr, "top_n_by"), 0, "streaming-min path does NOT call top_n_by")
-        t |> success(describe_count(body_expr, "decs_best") >= 2, "best state var declared + updated")
-        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen flag declared + updated")
+        // PR C: emit_streaming_min uses `order_best` / `order_seen` (unified array+decs naming).
+        t |> success(describe_count(body_expr, "order_best") >= 2, "order_best state var declared + updated")
+        t |> success(describe_count(body_expr, "order_seen") >= 2, "order_seen flag declared + updated")
         // Empty-source panic guard preserved.
         t |> equal(describe_count(body_expr, "sequence contains no elements"), 1, "panic-on-empty guard for first()")
     }
@@ -2273,8 +2274,9 @@ def test_unroll5c_select_distinct_count_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+count splice must NOT fall to tier-2 to_sequence")
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype (no _find — no take present)")
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "no take → no _find")
-        t |> equal(describe_count(body_expr, "decs_buf"), 0, "count terminator elides the buffer")
-        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen-table declared + queried")
+        // PR C: emit_hashtable_dedup (unified array+decs) uses `buf` / `seen` (drop the `decs_` prefix).
+        t |> equal(describe_count(body_expr, "`buf"), 0, "count terminator elides the buffer")
+        t |> success(describe_count(body_expr, "`seen") >= 2, "seen-table declared + queried")
         t |> equal(describe_count(body_expr, "key_exists"), 1, "single fresh-key check per element")
     }
 }
@@ -2293,9 +2295,10 @@ def test_unroll5c_select_distinct_take_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+take splice must NOT fall to tier-2 to_sequence")
         // take present → outer iteration switches to _find so take-cap can stop across archetypes.
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take present → for_each_archetype_find")
-        t |> success(describe_count(body_expr, "decs_buf") >= 2, "buffer needed for to_array terminator")
-        t |> success(describe_count(body_expr, "decs_seen") >= 2, "seen-table declared + queried")
-        t |> success(describe_count(body_expr, "decs_taken") >= 2, "taken counter declared + incremented")
+        // PR C: emit_hashtable_dedup (unified array+decs) uses `buf` / `seen` / `taken`.
+        t |> success(describe_count(body_expr, "`buf") >= 2, "buffer needed for to_array terminator")
+        t |> success(describe_count(body_expr, "`seen") >= 2, "seen-table declared + queried")
+        t |> success(describe_count(body_expr, "`taken") >= 2, "taken counter declared + incremented")
     }
 }
 
@@ -2331,8 +2334,9 @@ def test_unroll5c_select_distinct_sum_splice_shape(t : T?) {
         t |> success(r.matched, "qmatch must capture body")
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "distinct+sum splice must NOT fall to tier-2")
         t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "no take → plain for_each_archetype")
-        t |> equal(describe_count(body_expr, "decs_buf"), 0, "sum terminator elides the buffer")
-        t |> success(describe_count(body_expr, "decs_acc") >= 2, "accumulator declared + folded")
+        // PR C: emit_hashtable_dedup (unified array+decs) uses `buf` / `acc`.
+        t |> equal(describe_count(body_expr, "`buf"), 0, "sum terminator elides the buffer")
+        t |> success(describe_count(body_expr, "`acc") >= 2, "accumulator declared + folded")
     }
 }
 
