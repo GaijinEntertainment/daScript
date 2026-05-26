@@ -14,6 +14,7 @@ require daslib/safe_addr
 require daslib/math_boost
 require daslib/jobque_boost
 require math
+require strings
 
 // -- Shaders --
 
@@ -182,8 +183,21 @@ def add_sound_source(pos : float3; volume : float = 1.0) {
 
 // -- Main --
 
+// Parse --max-frames N from argv. Useful for headless repro and shutdown-leak debugging.
+def parse_max_frames {
+    var maxFrames = 0
+    let args <- get_command_line_arguments()
+    for (i in range(length(args))) {
+        if (args[i] == "--max-frames" && i + 1 < length(args)) {
+            maxFrames = to_int(args[i + 1])
+        }
+    }
+    return maxFrames
+}
+
 [export]
 def main {
+    let maxFrames = parse_max_frames()
     // GLFW init
     if (glfwInit() == 0) {
         panic("can't init glfw")
@@ -243,13 +257,20 @@ def main {
     // Load sound
     load_sound_data()
 
+    // Stats LockBox for per-second utilization + HRTF/simulated split readout.
+    // Lifecycle wraps the audio system: the audio thread releases its share-ref during
+    // audio_system_finalize (inside with_audio_system below), THEN this outer defer
+    // calls lock_box_remove to do the final delete. `release` alone never deletes.
+    var stats_box <- lock_box_create()
+    defer() {
+        unsafe(lock_box_remove(stats_box))
+    }
+
     // Audio system
     with_audio_system() {
         // Start with one source in front
         add_sound_source(float3(0.0, 0.0, -3.0))
 
-        // Stats LockBox for per-second utilization + HRTF/simulated split readout
-        var stats_box <- lock_box_create()
         set_audio_stats_box(stats_box)
 
         print("HRTF 3D Audio Demo\n")
@@ -263,9 +284,11 @@ def main {
         var m_was_pressed = false
         var b_was_pressed = false
         var since_stats_print = 0.0
+        var frameCount = 0
 
         eval_main_loop() {
-            if (glfwWindowShouldClose(window) != 0 || glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) return false
+            if (glfwWindowShouldClose(window) != 0 || glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS || (maxFrames > 0 && frameCount >= maxFrames)) return false
+            frameCount ++
             glfwPollEvents()
 
             // Delta time
@@ -322,10 +345,11 @@ def main {
             }
             b_was_pressed = b_pressed
 
-            // Per-second audio-system stats line
+            // Per-second audio-system stats line. `get` is read-only — keeps the box alive across reads.
+            // `grab` would consume the notification and break the periodic publish/poll loop.
             since_stats_print += dt
             if (since_stats_print >= 1.0) {
-                stats_box |> grab() $(var s : AudioSystemStats) {
+                stats_box |> get() $(s : AudioSystemStats#) {
                     print("audio: util={s.utilization_pct}%, hrtf={s.hrtf_count}/{s.total_3d} (budget={HRTF_BUDGETS[hrtf_budget_idx]})\n")
                 }
                 since_stats_print = 0.0

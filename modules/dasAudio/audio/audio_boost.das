@@ -846,7 +846,9 @@ def command_processor {
             }
             g_sid_2_channel |> clear()
             if (g_stats_box != null) {
-                g_stats_box |> notify_and_release
+                // stats box is a read-only long-lived publication target, not a one-shot;
+                // never `notify_and_release` (the caller's `get()` doesn't consume notifications).
+                g_stats_box |> release
                 g_stats_box = null
             }
             g_command_stream |> release
@@ -958,7 +960,7 @@ def command_processor {
         } elif (cmd is system_stats_box) {
             let sbox = cmd as system_stats_box
             if (g_stats_box != null) {
-                g_stats_box |> notify_and_release
+                g_stats_box |> release
                 g_stats_box = null
             }
             g_stats_box = unsafe(reinterpret<LockBox?>(sbox))
@@ -1442,10 +1444,10 @@ def public set_hrtf_budget(n : int) {
 
 def public set_audio_stats_box(var box : LockBox?) {
     //! Register a LockBox to receive periodic AudioSystemStats updates from the audio thread.
-    //! The audio thread writes one snapshot per ~1-second window; the caller can read on demand
-    //! via ``box |> grab() $(var s : AudioSystemStats) { ... }``. Pass null to clear.
+    //! The audio thread writes one snapshot per ~1-second window; the caller reads it on demand
+    //! via ``box |> get() $(var s : AudioSystemStats) { ... }`` (read-only — keeps the box alive
+    //! across multiple reads). Pass null to clear. Do NOT use ``grab()``: that's a one-shot consume.
     box |> add_ref
-    box |> append(1)
     box |> set() <| new AudioSystemStats(utilization_pct = 0.0, hrtf_count = 0, total_3d = 0)
     push_cmd(AudioCommand(system_stats_box = intptr(box)))
 }
