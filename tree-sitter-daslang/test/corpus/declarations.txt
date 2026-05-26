@@ -222,3 +222,109 @@ typedef MyInt = int;
   (typedef_declaration
     name: (identifier)
     type: (basic_type)))
+
+================================================================================
+Function with type-witness parameter (basic)
+================================================================================
+
+def parse_int(t : type<int>) {
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (type_witness
+          type: (basic_type))))
+    body: (block)))
+
+================================================================================
+Function with type-witness parameter (auto)
+================================================================================
+
+def get_type_id(t : type<auto(T)>) : int {
+  return -1;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (type_witness
+          type: (auto_type
+            (identifier)))))
+    (function_return_type
+      type: (basic_type))
+    body: (block
+      (return_statement
+        (unary_expression
+          (integer_literal))))))
+
+================================================================================
+Function with type-witness return type
+================================================================================
+
+def make_witness() : type<int> {
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    (function_return_type
+      type: (type_witness
+        type: (basic_type)))
+    body: (block)))
+
+================================================================================
+Struct field with type-witness type
+================================================================================
+
+struct Foo {
+  t : type<float>
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (structure_declaration
+    name: (identifier)
+    (structure_member
+      (structure_field
+        name: (identifier)
+        type: (type_witness
+          type: (basic_type))))))
+
+================================================================================
+Function with nested type-witness
+================================================================================
+
+def foo(t : type<array<int>>) {
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (type_witness
+          type: (array_type
+            (basic_type)))))
+    body: (block)))

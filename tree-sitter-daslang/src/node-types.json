@@ -490,6 +490,10 @@
         "named": true
       },
       {
+        "type": "type_witness",
+        "named": true
+      },
+      {
         "type": "typedecl_type",
         "named": true
       },
@@ -4057,10 +4061,26 @@
           "named": true
         },
         {
-          "type": "_type",
+          "type": "type_witness",
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "type_witness",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
