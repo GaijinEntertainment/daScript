@@ -243,7 +243,7 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 - **2026-05-25** — Bundle PR A foundation with first migrations (`plan_reverse`, `plan_distinct`) — foundation-only PR is grounded in nothing.
 - **2026-05-25** — Stop and align between phases; mid-flight redesign approved.
 - **2026-05-25** — Hard-cutover (no legacy imperative alongside the table).
-- **2026-05-25** — `Captures` as `table<string; tuple<ExprCall?; LinqCall?>>`; emit fns use `is` / `as` / `?as` to dig out call shape.
+- **2026-05-25** — `Captures` as `table<string; ExprCall?>`; emit fns reach the `LinqCall` registry record on demand via `linqCalls[call_norm_name(c)]` (avoids carrying the per-call pair in every capture entry). Initial sketch carried `tuple<ExprCall?; LinqCall?>` but it bought nothing — emit fns mostly read terminator/call arg shape from the `ExprCall`, and `call_norm_name` is the canonical way to derive the registry key anyway.
 - **2026-05-25** — `SourceAdapter` stub (Array-only) in PR A; widened in PR C.
 - **2026-05-25** — Per-plan stubs during migration; flat walk after PR D.
 - **2026-05-25** — `arity` lives on `Slot` (structural check), not requires-predicate.

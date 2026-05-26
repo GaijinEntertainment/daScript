@@ -2657,7 +2657,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
 // addresses of [macro_function] emit fns whose quote() bodies the LLVM JIT can't lower.
 [_macro]
 def private populate_plan_reverse_patterns {
-    if (!empty(plan_reverse_patterns)) return
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_reverse_patterns)) return
     // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
     plan_reverse_patterns |> emplace <| SplicePattern(
         name = "reverse_distinct_backward_walk",
@@ -2948,7 +2948,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
 
 [_macro]
 def private populate_plan_distinct_patterns {
-    if (!empty(plan_distinct_patterns)) return
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_distinct_patterns)) return
     // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
     plan_distinct_patterns |> emplace <| SplicePattern(
         name = "distinct_take",
