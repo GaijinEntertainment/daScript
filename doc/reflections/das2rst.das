@@ -593,7 +593,7 @@ def document_module_with_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Locked element binding helpers", mod, %regex~(_with_locked_.*)$%%)
     )
-    document("with_ macro: locked array/table element binding", mod, "with_boost.rst", groups)
+    document("``with_`` macro: locked array/table element binding", mod, "with_boost.rst", groups)
 }
 
 def document_module_if_not_null(root : string) {

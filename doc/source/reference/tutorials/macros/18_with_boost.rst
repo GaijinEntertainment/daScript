@@ -6,9 +6,9 @@
    single: Tutorial; Macros; array lock
    single: Tutorial; Macros; table lock
 
-================================================================
- Macro Tutorial 18: ``with_`` — locked binding of container slots
-================================================================
+==================================================================
+Macro Tutorial 18: ``with_`` — locked binding of container slots
+==================================================================
 
 ``daslib/with_boost`` adds a ``with_`` call-macro that solves a recurring
 ergonomics problem: rebinding a struct field across an array or table

@@ -12,6 +12,7 @@ and other compile-time utilities.
    generated/contracts.rst
    generated/apply.rst
    generated/defer.rst
+   generated/with_boost.rst
    generated/if_not_null.rst
    generated/is_local.rst
    generated/safe_addr.rst
