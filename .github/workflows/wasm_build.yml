@@ -131,7 +131,7 @@ jobs:
         rm -r -f cmake_temp
         mkdir cmake_temp
         cd cmake_temp
-        cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
+        cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_FLEX_BISON_DISABLED=ON -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
         ninja
 
     - name: "Test: hello world via Node.js"
@@ -189,5 +189,5 @@ jobs:
         set -eux
         cd web
         mkdir -p cmake_temp && cd cmake_temp
-        emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja ..
+        emcmake cmake -DCMAKE_BUILD_TYPE=Release -DDAS_FLEX_BISON_DISABLED=ON -G Ninja ..
         ninja run_wasm_examples
