@@ -498,7 +498,7 @@ def build_math_minmax(g_builder : LLVMOpaqueBuilder?; exprName : string; expr : 
         return null
     }
     var typ = LLVMFunctionType(argTypes[0], [ argTypes[0], argTypes[0]])
-    return LLVMBuildCall2(g_builder, typ, decl, args, string(exprName))
+    return LLVMBuildCall2(g_builder, typ, decl, args, exprName)
 }
 
 def intrinsic_math_minmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

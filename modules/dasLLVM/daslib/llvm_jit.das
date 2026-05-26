@@ -639,6 +639,14 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             set_private_linkage(ffunc)
         }
+        if (!isCmres) {
+            // Add zero/sign extension when necessary. Otherwise
+            // it may lead to hardly reproducible bugs on c++ side.
+            let ret_ext = need_z_or_s_ext(result)
+            if (ret_ext != null) {
+                LLVMAddAttributeAtIndex(ffunc, 0u, ret_ext)
+            }
+        }
         // setup parameter alignment
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(ffunc, ai)
@@ -1362,7 +1370,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def need_z_or_s_ext(_type : TypeDeclPtr) {
-        if (!_type.isRef && _type.sizeOf < 4 &&
+        if (!_type.isRef && !_type.isVoid && _type.sizeOf < 4 &&
             _type.baseType != Type.fakeContext && // incorrect size for fakeContext & fakeLineInfo
             _type.baseType != Type.fakeLineInfo) {
             if (_type.isSignedInteger) {
@@ -5751,7 +5759,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f_ptr(v4f : LLVMOpaqueValue?; ptr_type : LLVMOpaqueType?) : LLVMOpaqueValue? {
         var tres : LLVMOpaqueValue?
-        if (typeinfo sizeof(type<void?>) == 8) {
+        static_if (typeinfo sizeof(type<void?>) == 8) {
             var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(types.t_int64, 2u), "")
             var tbit = LLVMBuildExtractElement(g_builder, v2, types.ConstI32(0ul), "")
             tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "vec4f_to_ptr")
@@ -5885,7 +5893,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def cast_to_vec4f(etype : TypeDeclPtr; tsrc : LLVMOpaqueValue?) {
-        var vres = LLVMGetUndef(types.LLVMFloat4Type())
+        // Zero-fill (not undef) the unused lanes: a wrapped scalar return
+        // (lane 0 = value) is sometimes consumed as a full vec4f by a vector
+        // `icmp` (e.g. block-key comparison in order_by). undef sibling lanes
+        // become poison there and `-O3 -flto` propagates it into lane 0,
+        // corrupting the compare. Defined zero lanes are poison-free.
+        var vres = LLVMConstNull(types.LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
         if (etype.isRef) {
             tres = cast_ptr_to_vec4f(tsrc)
@@ -5933,7 +5946,7 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (etype.baseType == Type.anyArgument) {
             tres = tsrc
         } elif (etype.isFunction) {
-            assert(typeinfo sizeof(type<void?>) == 8)
+            static_assert(typeinfo sizeof(type<void?>) == 8)
             var vvec = LLVMGetUndef(LLVMVectorType(types.t_int64, 2u))
             var tbits = LLVMBuildExtractValue(g_builder, tsrc, 0u, "")
             tbits = LLVMBuildPtrToInt(g_builder, tbits, types.t_int64, "")
