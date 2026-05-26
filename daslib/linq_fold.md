@@ -44,53 +44,72 @@ Estimated savings: **~-1750 LOC** across the 4 PRs (~-25% of the file).
 
 Decs-side plans are near-mirrors of their array-side siblings modulo source-loop wrap. `GroupBySourceAdapter` (existing) is the proof-case: `plan_group_by_core` is fully source-agnostic, with the array-side and decs-side wrappers each ~60-100 LOC.
 
-## Grammar kernel (lives inline at top of linq_fold.das)
+## Grammar kernel (lives inline at top of linq_fold.das — PUBLIC for testability)
 
 ```das
-variant private SlotMatcher {
-    literal      : string;         // exact name match
-    one_of       : array<string>;  // any-of name set
-    alias        : string;         // named group looked up in alias_table
-}
-
-variant private SlotCardinality {
-    one          : void;           // required, exactly 1
-    optional     : void;           // 0 or 1
-}
-
-struct private Slot {
-    matcher      : SlotMatcher;
-    cardinality  : SlotCardinality;
-    capture_name : string = "";    // "" = don't capture
-    arity        : int = -1;       // -1 = any; positive = require N args on the matched call
-}
-
-typedef Captures = table<string; tuple<ExprCall?; LinqCall?>>
-typedef RequiresPredicate = function<(c : Captures; top : Expression?) : bool>
-typedef EmitFn = function<(c : Captures; top : Expression?; src : SourceAdapter; at : LineInfo) : Expression?>
-
-variant private SourceAdapter {
-    Array        : tuple<Expression?; string>;   // (top, srcName) — PR A scope
+variant SourceAdapter {
+    Array        : tuple<Expression?; string>   // (top, srcName) — PR A scope
     // PR C widens: Decs(DecsBridgeShape), DecsFind(DecsBridgeShape)
     // PR D widens: Zip(...), DecsJoin(...)
 }
 
-struct private SplicePattern {
-    name         : string;         // for debug / lint diagnostics
-    chain        : array<Slot>;
-    requires     : array<RequiresPredicate>;  // all must hold
-    emit         : EmitFn;
+variant SlotMatcher {
+    literal      : string                       // exact name match
+    one_of       : array<string>                // any-of name set
+    alias        : string                       // named group looked up in alias_table
 }
 
-var private splice_patterns : array<SplicePattern>   // tried in declaration order; first match wins
+variant SlotCardinality {
+    one          : void?                        // required, exactly 1
+    optional     : void?                        // 0 or 1
+}
+
+struct Slot {
+    matcher      : SlotMatcher
+    cardinality  : SlotCardinality
+    capture_name : string = ""                  // "" = don't capture
+    arity        : int = -1                     // -1 = any; positive = require N args
+}
+
+typedef Captures = table<string; ExprCall?>     // matched-call by name; LinqCall in linqCalls[call.name]
+
+variant MatchResult {
+    no_match : void?                            // daslang-idiomatic Option<Captures>
+    matched  : Captures
+}
+
+typedef RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
+
+// Fold-time context passed to every emit archetype. Carries the peeled source expression, source adapter,
+// and the outer `_fold(...)` expression's iterator-ness (drives `buffer_return` wrap).
+struct EmitCtx {
+    top              : Expression?              // peel_each'd; stubs pre-clone per invoke
+    src              : SourceAdapter
+    expr_is_iterator : bool
+}
+
+typedef EmitFn = function<(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression?>
+
+struct SplicePattern {
+    name     : string                           // for debug / lint diagnostics
+    chain    : array<Slot>
+    requires : array<RequiresPredicate>         // all must hold
+    emit     : EmitFn
+}
+
+var plan_reverse_patterns : array<SplicePattern>
+var plan_distinct_patterns : array<SplicePattern>
+var splice_patterns : array<SplicePattern>     // PR D: collapsed from per-plan tables; first match wins
 ```
+
+Predicates and emit archetypes are NAMED module-level `def` functions wrapped at use sites with `@@<RequiresPredicate>` / `@@<EmitFn>` (anonymous `@@(...)` lambdas produce `_localfunction_*` symbols that the LLVM JIT pass can't resolve — named functions take a stable address).
 
 ### Walker contract
 
 ```das
-def match_pattern(pattern : SplicePattern;
+def match_pattern(p : SplicePattern;
                   var calls : array<tuple<ExprCall?; LinqCall?>>;
-                  top : Expression?) : Captures?
+                  var top : Expression?) : MatchResult
 ```
 
 Walks `calls` left-to-right. For each slot:
@@ -98,11 +117,11 @@ Walks `calls` left-to-right. For each slot:
 - `one` — current call must match (name + arity if specified); both cursors advance.
 - `optional` — if current call matches, both cursors advance; otherwise the slot is skipped without consuming.
 
-After all slots, no unconsumed calls remain. If any of the above fails → null.
+After all slots, no unconsumed calls remain. If any of the above fails → `MatchResult(no_match = null)`.
 
-Then each `RequiresPredicate` in `pattern.requires` is evaluated against the populated `Captures`. All must return true. If any fails → null.
+Then each `RequiresPredicate` in `p.requires` is evaluated against the populated `Captures` and the peeled `top`. All must return true. If any fails → `MatchResult(no_match = null)`.
 
-Returns the populated `Captures` (keyed by `capture_name`, omitting slots with empty capture_name) on full success, null otherwise.
+Returns `MatchResult(matched <- captures)` on full success (move semantics — `Captures` is a table). Caller binds `var r <- match_pattern(...)` and reads via `if (r is matched) { let c & = r as matched; … }`.
 
 ### Alias table (named op-name groups)
 

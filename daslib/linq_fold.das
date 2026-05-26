@@ -77,7 +77,17 @@ variant MatchResult {
 }
 
 typedef RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
-typedef EmitFn = function<(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression?>
+
+// Fold-time context passed to every emit archetype. Carries the peeled source expression, source adapter, and the outer
+// `_fold(...)` expression's iterator-ness (drives `buffer_return` wrap so iterator-typed contexts wrap survivors with
+// `.to_sequence_move()`; array-typed contexts return the buffer directly).
+struct EmitCtx {
+    top              : Expression?         // peel_each'd; stubs pre-clone per invoke
+    src              : SourceAdapter
+    expr_is_iterator : bool
+}
+
+typedef EmitFn = function<(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression?>
 
 struct SplicePattern {
     name     : string                      // debug / lint diagnostics
@@ -216,21 +226,23 @@ def match_pattern(p : SplicePattern;
     return MatchResult(matched <- captures)
 }
 
-// Predicate library — module-level lambdas. Starts minimal; grows with use per masterplan.
+// Predicate library — named module-level functions (named so JIT can take their address; inline `@@(...)` lambdas
+// produce `_localfunction_*` symbols the JIT pass can't resolve). Pattern rows wrap each with `@@<RequiresPredicate>`.
+// Starts minimal; grows with use per masterplan.
 
-let array_source : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
+def array_source(var c : Captures; var top : Expression?) : bool {
     // top is already peel_each'd by the calling stub; verify it carries an array type (indexed iteration safe).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
-let take_arg_is_int : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
+def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
     if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
             && take.arguments[1]._type.baseType == Type.tInt)
 }
 
-let implicit_to_array : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
+def implicit_to_array(var c : Captures; var top : Expression?) : bool {
     return !(c |> key_exists("term"))
 }
 
@@ -2298,9 +2310,10 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
 // the prior imperative plan_reverse branches (see git history before PR A).
 
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
-[clone(top), macro_function]
-def emit_reverse_counter(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
     let cntName = qn("cnt", at)
     var whereCond : Expression?
@@ -2338,9 +2351,10 @@ def emit_reverse_counter(var c : Captures; var top : Expression?; src : SourceAd
 
 // Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
 // "first of reversed" = LAST surviving element; walk source, overwrite `last` on each match. No buffer.
-[clone(top), macro_function]
-def emit_reverse_walk_overwrite_scalar(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
     let foundName = qn("found", at)
     let lastName = qn("last", at)
@@ -2414,9 +2428,10 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var top : Expression?; 
 
 // R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).
 // Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
-[clone(top), macro_function]
-def emit_reverse_backward_index_walk(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     if (!(c |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
     var bufElemType = strip_const_ref(clone_type(top._type.firstType))
     let bufName = qn("buf", at)
@@ -2441,9 +2456,10 @@ def emit_reverse_backward_index_walk(var c : Captures; var top : Expression?; sr
 
 // R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
 // Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk.
-[clone(top), macro_function]
-def emit_reverse_backward_walk_dset_gate(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     if (!(c |> key_exists("dist"))) return null
     let distinctCall = c["dist"]
     let distinctName = call_norm_name(distinctCall)
@@ -2498,9 +2514,10 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var top : Expression?
 }
 
 // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
-[clone(top), macro_function]
-def emit_reverse_buffer_inplace(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
     let bufName = qn("buf", at)
     let outBufName = qn("rev_proj_buf", at)
@@ -2561,7 +2578,7 @@ def emit_reverse_buffer_inplace(var c : Captures; var top : Expression?; src : S
     }
     var body : Expression?
     if (terminalSelectLam != null) {
-        var returnExpr = buffer_return(outBufName, false)
+        var returnExpr = buffer_return(outBufName, ctx.expr_is_iterator)
         body = qmacro_block() {
             var $i(bufName) : array<$t(bufElemType)>
             $b(reserveStmts)
@@ -2578,7 +2595,7 @@ def emit_reverse_buffer_inplace(var c : Captures; var top : Expression?; src : S
             $e(returnExpr)
         }
     } else {
-        var returnExpr = buffer_return(bufName, false)
+        var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
         body = qmacro_block() {
             var $i(bufName) : array<$t(bufElemType)>
             $b(reserveStmts)
@@ -2604,11 +2621,14 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     collapse_chained_selects(calls)
     top = peel_each(top)
     let at = calls[0]._0.at
-    let src = SourceAdapter(Array = (top, qn("source", at)))
+    let exprIsIter = expr._type != null && expr._type.isIterator
+    let srcName = qn("source", at)
     for (p in plan_reverse_patterns) {
         var r <- match_pattern(p, calls, top)
         if (r is matched) {
-            var result = invoke(p.emit, r as matched, top, src, at)
+            var topClone = clone_expression(top)
+            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
             if (result != null) return result
         }
     }
@@ -2624,7 +2644,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist")
         ],
-        requires <- [ array_source, implicit_to_array],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > implicit_to_array],
         emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
     )
     // R6 — bare reverse + take + to_array, backward index walk
@@ -2634,7 +2654,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
             Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take")
         ],
-        requires <- [ array_source, take_arg_is_int, implicit_to_array],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > take_arg_is_int, @@ < RequiresPredicate > implicit_to_array],
         emit = @@ < EmitFn > emit_reverse_backward_index_walk
     )
     // Ra — reverse + count (reverse is identity for count)
@@ -2672,7 +2692,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("take"), cardinality = c_opt(), capture_name = "take"),
             Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "termsel")
         ],
-        requires <- [take_arg_is_int],
+        requires <- [@@ < RequiresPredicate > take_arg_is_int],
         emit = @@ < EmitFn > emit_reverse_buffer_inplace
     )
 }
@@ -2682,9 +2702,10 @@ def populate_plan_reverse_patterns() {
 
 // Hashtable dedup + per-fresh-key consume; terminator picks return wiring (count/long_count/sum/implicit to_array).
 // take(N) bounds outer loop with cross-iteration break for true O(N)-source streaming exit.
-[clone(top), macro_function]
-def emit_hashtable_dedup(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
-    let srcName = (src as Array)._1
+[macro_function]
+def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
     let bufName = qn("buf", at)
     let seenName = qn("seen", at)
@@ -2877,7 +2898,7 @@ def emit_hashtable_dedup(var c : Captures; var top : Expression?; src : SourceAd
             return $i(accName)
         }
     } else {
-        stmts |> push(buffer_return(bufName, false))   // PR A: array source; iterator-wrap handled in PR C
+        stmts |> push(buffer_return(bufName, ctx.expr_is_iterator))
     }
     return finalize_emission_stmts(top, srcName, at, stmts)
 }
@@ -2890,11 +2911,14 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     collapse_chained_selects(calls)
     top = peel_each(top)
     let at = calls[0]._0.at
-    let src = SourceAdapter(Array = (top, qn("source", at)))
+    let exprIsIter = expr._type != null && expr._type.isIterator
+    let srcName = qn("source", at)
     for (p in plan_distinct_patterns) {
         var r <- match_pattern(p, calls, top)
         if (r is matched) {
-            var result = invoke(p.emit, r as matched, top, src, at)
+            var topClone = clone_expression(top)
+            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
             if (result != null) return result
         }
     }
@@ -2913,7 +2937,7 @@ def populate_plan_distinct_patterns() {
             Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take"),
             Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
-        requires <- [take_arg_is_int],
+        requires <- [@@ < RequiresPredicate > take_arg_is_int],
         emit = @@ < EmitFn > emit_hashtable_dedup
     )
     // distinct_main — distinct[_by]; optional terminator (count / long_count / sum / implicit to_array)

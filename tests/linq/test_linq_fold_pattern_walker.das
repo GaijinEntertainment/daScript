@@ -113,7 +113,7 @@ def test_chain_prefix_of_alias_equality(t : T?) {
     }
 }
 
-def null_emit(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+def null_emit(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     return null
 }
 
