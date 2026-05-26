@@ -8,3 +8,5 @@ Expression print flags
 Base type of the constant expression (Type::tEnumeration, Type::tEnumeration8, Type::tEnumeration16, or Type::tEnumeration64)
 Enumeration type declaration
 Value of the constant expression
+True when this constant resulted from implicit int-literal promotion
+True when int-literal promotion to float/double lost precision (round-trip check)

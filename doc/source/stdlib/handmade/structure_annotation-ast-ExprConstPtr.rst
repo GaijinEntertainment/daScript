@@ -7,3 +7,5 @@ Expression flags
 Expression print flags
 Base type of the constant expression
 Pointer value. Typically this is 'null' constant, so the value is zero.
+True when this constant resulted from implicit int-literal promotion
+True when int-literal promotion to float/double lost precision (round-trip check)

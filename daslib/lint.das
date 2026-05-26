@@ -58,6 +58,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT008: both branches of ternary ``?:`` are equivalent
     //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
     //!   - LINT010: dead store — local variable written but value never read
+    //!   - LINT011: int literal promoted to float/double with precision loss
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -86,7 +87,7 @@ class LintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
     def lint_error(text : string; at : LineInfo) : void {
-        if (noLint || self->is_suppressed(text, at)) return
+        if (noLint || is_suppressed(text, at)) return
         if (compile_time_errors) {
             compiling_program() |> macro_error(at, text)
         } elif (collect_errors) {
@@ -120,7 +121,7 @@ class LintVisitor : AstVisitor {
             for (e in ds_entries) {
                 if (!e.skip && e.has_pending && e.pending_pure && e.pending_expr != null) {
                     let vname = "{e.v.name}"
-                    self->lint_error("LINT010: dead store of '{vname}': value written but never read before scope exit", e.pending_expr.at)
+                    lint_error("LINT010: dead store of '{vname}': value written but never read before scope exit", e.pending_expr.at)
                 }
             }
         }
@@ -155,7 +156,7 @@ class LintVisitor : AstVisitor {
         // Flag if a prior direct-child of THIS block already terminated control flow.
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
-            self->lint_error("LINT001: unreachable code", expr.at)
+            lint_error("LINT001: unreachable code", expr.at)
         }
         // Mark this block as terminated only when `expr` IS a direct-child terminator.
         // Tracking from preVisitExprReturn/preVisitExprCall(panic) was incorrect: it
@@ -182,7 +183,7 @@ class LintVisitor : AstVisitor {
             || expr.subexpr == null || expr.subexpr._type == null || expr.castType == null
             || expr.castType.isVoidPointer != expr.subexpr._type.isVoidPointer) return
         if (is_same_type(expr.castType, expr.subexpr._type, false, true, true, false)) {
-            self->lint_error("LINT005: redundant reinterpret cast; target type is the same as source type", expr.at)
+            lint_error("LINT005: redundant reinterpret cast; target type is the same as source type", expr.at)
         }
     }
 
@@ -199,39 +200,39 @@ class LintVisitor : AstVisitor {
         if (name |> starts_with("_")) {
             if (name |> ends_with("_")) return  // _foo_ - ignore too
             if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.access_flags.access_fold) {
-                self->lint_error("LINT004: variable '{v.name}' is used and should be named without underscore prefix", v.at)
+                lint_error("LINT004: variable '{v.name}' is used and should be named without underscore prefix", v.at)
                 return
             }
             return
         }
         if (v.isAccessUnused) {
-            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const() && !v.access_flags.access_fold) {
-            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects) && !v.access_flags.access_fold) {
-            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
         }
         if (!v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null)) {
             let sideEffects = (v.init != null && !v.init.flags.noSideEffects)
             if (!sideEffects) {
-                self->lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
+                lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
             } else {
-                self->lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
+                lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
             }
             return
         }
         if (can_make_const && v.flags.inScope) return // inscope variables can't be const — delete/finalize at scope exit requires mutability
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
-            self->lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
         if (can_make_const && v._type.baseType == Type.tPointer && !v._type.flags.constant && !(v.access_flags.access_ref || v.access_flags.access_pass) && v._type.canCloneFromConst) {
-            self->lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
     }
@@ -268,7 +269,7 @@ class LintVisitor : AstVisitor {
         if (noLint || genericDepth > 0) return
         let op = string(expr.op)
         if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
-            self->lint_error("LINT006: division by zero ({op})", expr.at)
+            lint_error("LINT006: division by zero ({op})", expr.at)
             return
         }
         let op_same_suspicious = (
@@ -281,7 +282,7 @@ class LintVisitor : AstVisitor {
             op == "-=" || op == "/=" || op == "%="
         )
         if (op_same_suspicious && expr_equal(expr.left, expr.right, false)) {
-            self->lint_error("LINT007: left and right operands of '{op}' are the same", expr.at)
+            lint_error("LINT007: left and right operands of '{op}' are the same", expr.at)
         }
     }
 
@@ -290,7 +291,7 @@ class LintVisitor : AstVisitor {
     def override preVisitExprOp3(expr : ExprOp3?) : void {
         if (noLint || genericDepth > 0) return
         if (expr_equal(expr.left, expr.right, false)) {
-            self->lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
+            lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
         }
     }
 
@@ -299,7 +300,7 @@ class LintVisitor : AstVisitor {
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
         if (noLint || genericDepth > 0) return
         if (expr.if_false != null && expr_equal(expr.if_true, expr.if_false, false)) {
-            self->lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
+            lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
         }
         branch_depth++
     }
@@ -370,7 +371,7 @@ class LintVisitor : AstVisitor {
         if (i < 0 || ds_entries[i].skip || branch_depth > 0) return
         if (ds_entries[i].has_pending && ds_entries[i].pending_pure && ds_entries[i].pending_expr != null) {
             let vname = "{ev.variable.name}"
-            self->lint_error("LINT010: dead store of '{vname}': overwritten without intervening read", ds_entries[i].pending_expr.at)
+            lint_error("LINT010: dead store of '{vname}': overwritten without intervening read", ds_entries[i].pending_expr.at)
         }
         ds_entries[i].has_pending = true
         ds_entries[i].pending_expr = store_expr
@@ -419,6 +420,20 @@ class LintVisitor : AstVisitor {
     // capture site is just a read for our purposes (clears pending), and
     // later writes that aren't read again ARE dead. By-ref captures and
     // addr-of are caught by the `write && !under_clone` check above.
+
+    // --- LINT011: int-literal-to-float precision loss ---
+    def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0 && expr.inexactFloatPromotion) {
+            lint_error("LINT011: int literal does not exactly represent as float", expr.at)
+        }
+        return <- expr
+    }
+    def override visitExprConstDouble(var expr : ExprConstDouble?) : ExpressionPtr {
+        if (!noLint && genericDepth == 0 && expr.inexactFloatPromotion) {
+            lint_error("LINT011: int literal does not exactly represent as double", expr.at)
+        }
+        return <- expr
+    }
 }
 
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {

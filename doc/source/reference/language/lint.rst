@@ -329,6 +329,42 @@ address-of (``addr(x)``), reference bindings (``var r & = x``), mutable-ref
 parameter passing (``foo(x)`` where ``foo`` takes ``var T&``), and capture-by-
 reference. Suppress structurally-needed dead inits with ``// nolint:LINT010``.
 
+LINT011 — int literal promoted with precision loss
+===================================================
+
+When a bare integer literal flows into a ``float`` or ``double`` target via
+the implicit promotion described in
+:ref:`type_conversions`, the cast can silently lose
+precision: ``float`` exactly represents every integer in ``[-2^24, 2^24]``,
+but above that range only every other integer (and at higher magnitudes,
+only every fourth, eighth, …) is representable. LINT011 flags promotions
+where the integer literal does not survive ``int → float → int`` round-trip
+at compile time. The check is decided at the promotion site, so the lint
+sees a single bit per ``ExprConstFloat`` / ``ExprConstDouble`` and never
+has to redo the math.
+
+``double`` covers integers up to ``2^53`` exactly, and the current promotion
+sources cap at ``uint32`` (``2^32 - 1``). LINT011 therefore never fires on
+``double`` targets today — the rule is wired symmetrically so future broader
+sources stay covered.
+
+.. code-block:: das
+
+    // Bad — float can't represent 2^24 + 1 exactly
+    let inexact : float = 16777217          // LINT011
+
+    // Good — 2^24 itself IS exactly representable
+    let exact : float = 16777216
+
+    // Suppress per call site
+    let intentional : float = 16777219      // nolint:LINT011
+
+    // double is fine for the current promotion sources
+    let big : double = 1000000000           // no warning
+
+Suppress with ``// nolint:LINT011`` on the offending line when the inexact
+value is intentional (a sentinel, a sampled constant, etc.).
+
 .. _perf_lint:
 
 -----------------

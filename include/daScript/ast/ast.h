@@ -749,9 +749,15 @@ namespace das
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
         virtual void dispatch ( Visitor & vis ) override;
+        // Copies ExprConst's own fields (value + per-constant flags) on top of Expression::clone.
+        // Concrete ExprConst subclasses must route through here, not Expression::clone directly,
+        // or per-constant metadata (foldedNonConst, promotedFromInt, inexactFloatPromotion) is lost.
+        ExpressionPtr clone ( ExpressionPtr expr ) const;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
         bool    foldedNonConst = false;
+        bool    promotedFromInt = false;
+        bool    inexactFloatPromotion = false;
       };
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -770,8 +776,7 @@ namespace das
         }
         virtual ExpressionPtr clone( ExpressionPtr expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
-            Expression::clone(cexpr);
-            cexpr->value = value;
+            ExprConst::clone(cexpr);
             return cexpr;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;

@@ -351,6 +351,7 @@ namespace das
     ,   exceeds_type                                                =   30512    // 2 site(s)
     ,   exceeds_type_alias                                          =   30513    // 1 site(s)
     ,   exceeds_typeinfo_sizeof                                     =   30514    // 1 site(s)
+    ,   exceeds_constant_range                                      =   30515    // 1 site(s)
 
 // ambiguous_*
 
