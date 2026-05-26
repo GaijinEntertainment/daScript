@@ -1918,9 +1918,7 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
 [lint_macro]
 class PerfLintMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        var disabled : table<string>
-        seed_default_disabled(disabled)
-        load_lint_config(disabled)
+        let disabled <- build_lint_macro_disabled(prog)
         perf_lint(prog, true, disabled)
         return true
     }

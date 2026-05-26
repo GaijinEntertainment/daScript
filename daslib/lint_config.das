@@ -26,11 +26,26 @@ module lint_config shared private
 require fio
 require daslib/json
 require daslib/toml
+require daslib/ast_boost
 
-//! Loads ``{get_das_root()}/.lint_config`` into ``disabled_codes``.
+//! Path override env var. When ``DAS_LINT_CONFIG_PATH`` is set, the macro
+//! cascade reads that path instead of ``{get_das_root()}/.lint_config`` —
+//! useful for tests that exercise the cascade against a fixture without
+//! touching the real repo file, and for CI runs that want to enforce a
+//! specific policy.
+def private resolved_config_path() : string {
+    if (has_env_variable("DAS_LINT_CONFIG_PATH")) {
+        let v = get_env_variable("DAS_LINT_CONFIG_PATH")
+        if (!empty(v)) return v
+    }
+    return "{get_das_root()}/.lint_config"
+}
+
+//! Loads the repo-level lint config (``{get_das_root()}/.lint_config`` by
+//! default; ``$DAS_LINT_CONFIG_PATH`` if set) into ``disabled_codes``.
 //! No-op when the file is missing or unreadable.
 def public load_lint_config(var disabled_codes : table<string>) : void {
-    load_lint_config_from_path("{get_das_root()}/.lint_config", disabled_codes)
+    load_lint_config_from_path(resolved_config_path(), disabled_codes)
 }
 
 //! Parser entry point. Reads ``path`` (TOML) and folds the ``[rules]``
@@ -74,4 +89,60 @@ def public seed_default_disabled(var disabled_codes : table<string>) : void {
     if (!key_exists(disabled_codes, "STYLE005")) {
         disabled_codes |> insert("STYLE005")
     }
+}
+
+// Process-wide cache of the parsed .lint_config split into "off" and "on"
+// directives. `[lint_macro]` apply() fires once per module in the require
+// chain — without caching the repo's `.lint_config` is re-read+parsed N
+// times per compilation. The file is repo policy and doesn't change
+// mid-compilation, so we parse once and reuse.
+var private _cache_off : table<string>
+var private _cache_on  : table<string>
+var private _cache_loaded = false
+
+def private ensure_cache_loaded() : void {
+    if (_cache_loaded) return
+    _cache_loaded = true
+    let body = fread(resolved_config_path())
+    if (empty(body)) return
+    var error : string
+    var root : JsonValue? = read_toml(body, error)
+    if (root == null || !(root.value is _object)) return
+    var root_obj & = unsafe(root.value as _object)   // nolint:LINT003 — table [] requires mutable binding
+    if (!key_exists(root_obj, "rules")) return
+    var rules_obj : JsonValue? = root_obj["rules"]
+    if (rules_obj == null || !(rules_obj.value is _object)) return
+    var rules & = unsafe(rules_obj.value as _object)   // nolint:LINT003 — iteration requires mutable view
+    for (code, val_jv in keys(rules), values(rules)) {
+        if (val_jv == null || !(val_jv.value is _bool)) continue
+        let enabled = val_jv.value as _bool
+        if (enabled) {
+            if (!key_exists(_cache_on, code)) _cache_on |> insert(code)
+        } else {
+            if (!key_exists(_cache_off, code)) _cache_off |> insert(code)
+        }
+    }
+}
+
+//! Macro-side helper: builds the ``disabled_codes`` table the three
+//! ``[lint_macro]`` apply() methods need. Honors the module-local
+//! ``options _enable_default_off_rules = true`` opt-in (skips the
+//! ``seed_default_disabled`` step so default-off rules fire for that
+//! module), then layers cached ``.lint_config`` on top so the repo policy
+//! can still override either direction. Single source so a future
+//! default-off PERF/LINT rule applies uniformly.
+def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
+    let force_default_off = prog._options |> find_arg("_enable_default_off_rules") ?as tBool ?? false
+    var disabled : table<string>
+    if (!force_default_off) {
+        seed_default_disabled(disabled)
+    }
+    ensure_cache_loaded()
+    for (code in keys(_cache_off)) {
+        if (!key_exists(disabled, code)) disabled |> insert(code)
+    }
+    for (code in keys(_cache_on)) {
+        if (key_exists(disabled, code)) disabled |> erase(code)
+    }
+    return <- disabled
 }

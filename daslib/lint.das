@@ -21,9 +21,7 @@ require daslib/lint_config
 class LintEverything : AstPassMacro {
     //! Pass macro that enables lint checking for modules.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        var disabled : table<string>
-        seed_default_disabled(disabled)
-        load_lint_config(disabled)
+        let disabled <- build_lint_macro_disabled(prog)
         paranoid(prog, true, disabled)
         return true
     }

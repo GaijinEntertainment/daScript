@@ -137,7 +137,7 @@ def test_array(t : T?) {
     t |> run("inline and multi-line arrays both work") @@(t : T?) {
         var v1 : JsonValue? = expect_ok(t, "inline", "xs = [1, 2, 3]\n")
         var v2 : JsonValue? = expect_ok(t, "multiline", "xs = [\n  1,\n  2,\n  3,\n]\n")
-        for (vv in [unsafe(reinterpret<JsonValue?>(v1)), unsafe(reinterpret<JsonValue?>(v2))]) {
+        for (vv in [v1, v2]) {
             var xs : JsonValue? = get_object_field(vv, "xs")
             if (xs != null && (xs.value is _array)) {
                 let arr & = unsafe(xs.value as _array)
@@ -451,5 +451,166 @@ def test_fail_duplicate_key(t : T?) {
 def test_fail_missing_equals(t : T?) {
     t |> run("key without = is rejected") @@(t : T?) {
         expect_fail(t, "no_equals", "key value\n")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TOML 1.0 closed-table semantics (F4/F5/F6)
+// ---------------------------------------------------------------------------
+
+def expect_fail_with(t : T?; what : string; input : string; needle : string) {
+    var err : string
+    var v : JsonValue? = read_toml(input, err)
+    if (v != null) {
+        t |> failure("{what}: expected parse failure but parsed OK")
+        return
+    }
+    if (find(err, needle) < 0) {
+        t |> failure("{what}: expected error to contain '{needle}', got '{err}'")
+    }
+}
+
+[test]
+def test_fail_section_after_dotted_implicit(t : T?) {
+    // F4: [a]\nb.c=1 implicitly creates 'a.b' via dotted key. [a.b] then tries
+    // to re-open that implicit table — invalid per TOML 1.0.
+    t |> run("[a.b] after `b.c = 1` under [a] is rejected") @@(t : T?) {
+        expect_fail_with(t, "implicit_then_header",
+            "[a]\nb.c = 1\n[a.b]\n",
+            "implicit")
+    }
+}
+
+[test]
+def test_ok_subtable_header_after_dotted(t : T?) {
+    // The complementary VALID case: a NEW sub-sub-table header is still OK after
+    // dotted-key creation of an intermediate.
+    t |> run("[a.b.d] after `b.c = 1` under [a] is accepted (new subtree)") @@(t : T?) {
+        var v : JsonValue? = expect_ok(t, "subsubtable",
+            "[a]\nb.c = 1\n[a.b.d]\nx = 2\n")
+        var a : JsonValue? = get_object_field(v, "a")
+        var b : JsonValue? = get_object_field(a, "b")
+        var c : JsonValue? = get_object_field(b, "c")
+        var d : JsonValue? = get_object_field(b, "d")
+        var x : JsonValue? = get_object_field(d, "x")
+        if (c != null && (c.value is _longint)) t |> equal(c.value as _longint, 1l)
+        if (x != null && (x.value is _longint)) t |> equal(x.value as _longint, 2l)
+    }
+}
+
+[test]
+def test_ok_parent_header_after_child(t : T?) {
+    // Opening a parent header after a child header is permitted (the parent
+    // was created via header walk, not dotted-key, so it remains openable).
+    t |> run("[a] after [a.b] is accepted (parent after child)") @@(t : T?) {
+        var v : JsonValue? = expect_ok(t, "parent_after_child",
+            "[a.b]\nx = 1\n[a]\ny = 2\n")
+        var a : JsonValue? = get_object_field(v, "a")
+        var b : JsonValue? = get_object_field(a, "b")
+        var x : JsonValue? = get_object_field(b, "x")
+        var y : JsonValue? = get_object_field(a, "y")
+        if (x != null && (x.value is _longint)) t |> equal(x.value as _longint, 1l)
+        if (y != null && (y.value is _longint)) t |> equal(y.value as _longint, 2l)
+    }
+}
+
+[test]
+def test_fail_dotted_key_extends_inline_table(t : T?) {
+    // F5: inline tables are immutable per TOML 1.0; once `a = { x = 1 }` is
+    // written, `a.y = 2` cannot extend it.
+    t |> run("`a = \{x=1\}` followed by `a.y = 2` is rejected (inline table closed)") @@(t : T?) {
+        expect_fail_with(t, "extend_inline_toplevel",
+            "a = \{ x = 1 \}\na.y = 2\n",
+            "inline")
+    }
+}
+
+[test]
+def test_fail_dotted_key_extends_inline_under_section(t : T?) {
+    // F5: same rule inside a section header.
+    t |> run("`a = \{x=1\}` then `a.y = 2` under [t] is rejected") @@(t : T?) {
+        expect_fail_with(t, "extend_inline_section",
+            "[t]\na = \{ x = 1 \}\na.y = 2\n",
+            "inline")
+    }
+}
+
+[test]
+def test_fail_section_header_into_inline_table(t : T?) {
+    // A [section] header cannot open a path under an inline-table value either.
+    t |> run("[a.sub] after `a = \{x=1\}` is rejected") @@(t : T?) {
+        expect_fail_with(t, "header_into_inline",
+            "a = \{ x = 1 \}\n[a.sub]\ny = 2\n",
+            "inline")
+    }
+}
+
+[test]
+def test_fail_inline_internal_dotted_extends_inline(t : T?) {
+    // F6: same rule applies WITHIN an inline-table literal — once a key is
+    // bound to an inline-table value, a later dotted key cannot extend it.
+    t |> run("inline `\{ p = \{x=1\}, p.y = 2 \}` is rejected") @@(t : T?) {
+        expect_fail_with(t, "inline_extends_inline",
+            "a = \{ p = \{ x = 1 \}, p.y = 2 \}\n",
+            "inline")
+    }
+}
+
+[test]
+def test_ok_inline_dotted_keys_share_implicit(t : T?) {
+    // The complementary VALID inline case: two dotted keys sharing an implicit
+    // intermediate (the spec allows this; only the inline-literal closure is
+    // tight).
+    t |> run("inline `\{ p.x = 1, p.y = 2 \}` is accepted (shared implicit `p`)") @@(t : T?) {
+        var v : JsonValue? = expect_ok(t, "inline_shared_implicit",
+            "a = \{ p.x = 1, p.y = 2 \}\n")
+        var a : JsonValue? = get_object_field(v, "a")
+        var p : JsonValue? = get_object_field(a, "p")
+        var x : JsonValue? = get_object_field(p, "x")
+        var y : JsonValue? = get_object_field(p, "y")
+        if (x != null && (x.value is _longint)) t |> equal(x.value as _longint, 1l)
+        if (y != null && (y.value is _longint)) t |> equal(y.value as _longint, 2l)
+    }
+}
+
+[test]
+def test_fail_plus_prefix_identifier(t : T?) {
+    // F13: `+foo = 1` previously emitted an empty `_bare` token because the
+    // rewind-to-bare path lands the cursor on the '+' (which is not a
+    // bare-key char) and `read_bare_key` consumes nothing. '+' is not a valid
+    // bare-key prefix per TOML ABNF, so the correct outcome is a parse error
+    // that mentions the stray sign.
+    t |> run("`+foo = 1` is rejected (stray '+', not empty bare key)") @@(t : T?) {
+        expect_fail_with(t, "plus_prefix_bare", "+foo = 1\n", "'+'")
+    }
+}
+
+[test]
+def test_fail_plus_inf_with_bare_tail(t : T?) {
+    // F13 cousin: `+infinity_count = 1` enters classify_number_or_datetime
+    // via the value-continuation gate, consumes '+inf', sees a bare-char
+    // continuation, then rewinds. Because the rewind lands on '+' the bare
+    // scan would be empty — must error instead.
+    t |> run("`+infinity_count = 1` is rejected (stray '+')") @@(t : T?) {
+        expect_fail_with(t, "plus_inf_bare_tail", "+infinity_count = 1\n", "'+'")
+    }
+}
+
+[test]
+def test_fail_date_followed_by_colon(t : T?) {
+    // F16: `2024-01-15:00` is a malformed datetime (missing the T/space
+    // separator). Surface a dedicated "expected 'T' or space" diagnostic
+    // rather than letting the parser hit ':' as an "unexpected character".
+    t |> run("`x = 2024-01-15:00` errors with a date-specific message") @@(t : T?) {
+        expect_fail_with(t, "date_colon", "x = 2024-01-15:00\n", "expected 'T' or space")
+    }
+}
+
+[test]
+def test_fail_time_trailing_colon(t : T?) {
+    // F16: `12:34:56:` is a malformed time (trailing colon). Surface a
+    // dedicated message anchored at the time value.
+    t |> run("`x = 12:34:56:` errors with a time-specific message") @@(t : T?) {
+        expect_fail_with(t, "time_trailing_colon", "x = 12:34:56:\n", "trailing ':'")
     }
 }

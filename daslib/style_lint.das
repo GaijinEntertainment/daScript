@@ -1807,18 +1807,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
 class StyleLintMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         let hygiene = prog._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-        // Module-local opt-in: 'options _enable_default_off_rules = true' skips
-        // the default-disabled seed (currently STYLE005) so the rules-off-by-
-        // default fire for this module unless .lint_config disables them again.
-        // The `.lint_config` load still runs afterward, so repo-level config can
-        // override on top. Used by rule-specific test fixtures whose `expect`
-        // assertions depend on default-off rules firing.
-        let force_default_off = prog._options |> find_arg("_enable_default_off_rules") ?as tBool ?? false
-        var disabled : table<string>
-        if (!force_default_off) {
-            seed_default_disabled(disabled)
-        }
-        load_lint_config(disabled)
+        let disabled <- build_lint_macro_disabled(prog)
         style_lint(prog, true, disabled, [comment_hygiene = hygiene])
         return true
     }

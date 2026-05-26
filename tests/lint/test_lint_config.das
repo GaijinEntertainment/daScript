@@ -2,11 +2,29 @@ options gen2
 
 require dastest/testing_boost
 require daslib/lint_config
+require daslib/fio
 require fio
 require strings
 
+// Per-process temp directory. Created on first call, removed by [finalize].
+// Avoids two problems:
+//   1. Earlier version wrote `_lint_config_fixture.toml` into the worktree's
+//      `tests/lint/` and never deleted it — left as untracked-modified state
+//      across runs.
+//   2. Parallel `dastest` invocations would race on that shared path. With
+//      a process-private temp dir each invocation is hermetic.
+var private _tmp_dir : string
+var private _tmp_dir_inited = false
+
 def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_lint_config_fixture.toml"
+    if (!_tmp_dir_inited) {
+        let r = create_temp_directory_result("lint_config_test")
+        if (r is value) {
+            _tmp_dir = unsafe(r.value)
+        }
+        _tmp_dir_inited = true
+    }
+    return path_join(_tmp_dir, "fixture.toml")
 }
 
 def write_fixture(content : string) {
@@ -14,6 +32,13 @@ def write_fixture(content : string) {
         if (f != null) {
             fwrite(f, content)
         }
+    }
+}
+
+[finalize]
+def cleanup_temp_dir {
+    if (_tmp_dir_inited && !empty(_tmp_dir)) {
+        rmdir_rec(_tmp_dir)
     }
 }
 
