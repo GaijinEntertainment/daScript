@@ -1673,6 +1673,7 @@ def private finalize_emission_stmts(top : Expression?; srcName : string; at : Li
 
 // The per-element bind name emit fns peel where/select/key/value lambdas against. Drives build_decs_inner_for_pruned's
 // pattern matching, so the decs side MUST use `decs_tup`. DecsJoin carries the per-pair result-lam bind name in its payload.
+[macro_function]
 def private adapter_bind_name(adapter : SourceAdapter; at : LineInfo) : string {
     return (adapter as DecsJoin).resBindName if (adapter is DecsJoin)
     return qn("decs_tup", at) if (adapter is Decs)
@@ -4156,88 +4157,6 @@ def private expr_uses_var(var e : Expression?; name : string) : bool {
 
 // ── group_by core (shared between array and decs sources) ──────────────────────
 
-// Source-loop adapter: dispatches the per-source-shape divergence (initial bind name + element type, per-element source loop emission, final invoke wrap). Used by plan_group_by_core to unify the ~350 LOC shared recognizer/splice machinery between plan_group_by (array source via for(it in src)) and plan_decs_group_by (decs bridge via for_each_archetype + inner multi-iter for + tupBind).
-struct private GroupBySourceAdapter {
-    // The bind name the upstream segment walk and reducer recognition see as "the element" (srcItName for array, tupName for decs — both alias the post-iterator-bind variable).
-    initialBindName : string
-    // The element type at that bind point (peel_each-derived from `top._type.firstType` for array, `bridge.elementType` for decs).
-    initialElemType : TypeDeclPtr
-    // Prefix for all hoisted names ("" for array → tab/dummy/k/uk/…; "decs_" for decs → decs_tab/decs_dummy/…). Lets the same core function generate distinct-but-recognizable names per source.
-    namePrefix      : string
-    // Discriminator for the three emit modes below (isDecsJoin > isDecs > array fallthrough).
-    isDecs          : bool
-    isDecsJoin      : bool
-    // Array side: the source expression bound by finalize_emission_stmts into srcName.
-    arrayTop        : Expression?
-    arraySrcName    : string
-    // Decs side: bridge metadata used by build_decs_tup_bind / build_decs_inner_for + the outer for_each_archetype call.
-    decsBridge      : DecsBridgeShape?
-    // Decs-join side (Theme 3 — audit probe C3): hashB collect + srcA probe + per-pair result-lam bind feeds plan_group_by_core's bucket update directly. initialBindName aliases the result-lam output (one bind per (a,b) pair).
-    decsJoinBridgeA    : DecsBridgeShape?
-    decsJoinBridgeB    : DecsBridgeShape?
-    decsJoinKeyaLam    : Expression?
-    decsJoinKeybLam    : Expression?
-    decsJoinResultLam  : Expression?
-    decsJoinKeyType    : TypeDeclPtr
-    decsJoinTupBType   : TypeDeclPtr
-    decsJoinResultType : TypeDeclPtr
-}
-
-// decs-join → Decs(null, …) is safe at finalize: adapter_wrap_invoke's Decs branch reads only the variant tag.
-[macro_function]
-def private to_source_adapter(adapter : GroupBySourceAdapter) : SourceAdapter {
-    return SourceAdapter(Decs = (adapter.decsBridge, adapter.initialBindName)) if (adapter.isDecs || adapter.isDecsJoin)
-    return SourceAdapter(Array = (adapter.arrayTop, adapter.arraySrcName))
-}
-
-[macro_function]
-def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
-    // decs-join (Theme 3 C3) hashes srcB, walks srcA, binds result-lam output once per pair — GroupBy-specific.
-    if (adapter.isDecsJoin) {
-        let jhashName = qn("{adapter.namePrefix}jhash", at)
-        let arrName   = qn("{adapter.namePrefix}jarr", at)
-        let tupAName  = qn("{adapter.namePrefix}jta", at)
-        let tupBName  = qn("{adapter.namePrefix}jtb", at)
-        let resName   = adapter.initialBindName
-        var keyaBody   = peel_lambda_rename_var(adapter.decsJoinKeyaLam, tupAName)
-        var keybBody   = peel_lambda_rename_var(adapter.decsJoinKeybLam, tupBName)
-        var resultBody = peel_lambda_rename_2vars(adapter.decsJoinResultLam, tupAName, tupBName)
-        if (keyaBody == null || keybBody == null || resultBody == null) return null
-        var tupBindA = build_decs_tup_bind(adapter.decsJoinBridgeA, tupAName, at)
-        var tupBindB = build_decs_tup_bind(adapter.decsJoinBridgeB, tupBName, at)
-        if (tupBindA == null || tupBindB == null) return null
-        var collectBody <- qmacro_block_to_array() {
-            // nolint:PERF006 per-key bucket size unknown ahead of time
-            $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
-        }
-        var collectInner = build_decs_inner_for(adapter.decsJoinBridgeB, tupBindB, stmts_to_expr(collectBody), at)
-        var probeBody <- qmacro_block_to_array() {
-            get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(adapter.decsJoinTupBType)>) {
-                for ($i(tupBName) in $i(arrName)) {
-                    let $i(resName) : $t(adapter.decsJoinResultType) = $e(resultBody)
-                    $e(body)
-                }
-            })
-        }
-        var probeInner = build_decs_inner_for(adapter.decsJoinBridgeA, tupBindA, stmts_to_expr(probeBody), at)
-        return qmacro_block() {
-            var $i(jhashName) : table<$t(adapter.decsJoinKeyType); array<$t(adapter.decsJoinTupBType)>>
-            for_each_archetype($e(adapter.decsJoinBridgeB.reqHashExpr), $e(adapter.decsJoinBridgeB.erqExpr), $($i(adapter.decsJoinBridgeB.archName) : Archetype) {
-                $e(collectInner)
-            })
-            for_each_archetype($e(adapter.decsJoinBridgeA.reqHashExpr), $e(adapter.decsJoinBridgeA.erqExpr), $($i(adapter.decsJoinBridgeA.archName) : Archetype) {
-                $e(probeInner)
-            })
-        }
-    }
-    return adapter_wrap_source_loop(to_source_adapter(adapter), body, at)
-}
-
-[macro_function]
-def private adapter_finalize_emission(adapter : GroupBySourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; at : LineInfo) : Expression? {
-    return adapter_wrap_invoke(to_source_adapter(adapter), stmts, retType, false, at)
-}
-
 [macro_function]
 def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                var keyBlock : Expression?;
@@ -4249,9 +4168,9 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                var orderKey : Expression?;
                                exprIsIterator : bool;
                                at : LineInfo;
-                               var adapter : GroupBySourceAdapter) : Expression? {
-    // Shared group_by splice machinery. Caller pops terminator/select/having/group_by_lazy + extracts keyBlock + sets up the source adapter; this function does the rest (upstream chain walk, reducer recognition, state-table hoisting, tab?[uk]??dummy splice, output emission, source-loop wrap, terminator emission, final invoke wrap).
-    let prefix = adapter.namePrefix
+                               var adapter : SourceAdapter) : Expression? {
+    // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join).
+    let prefix = (adapter is Array) ? "" : ((adapter is DecsJoin) ? "djoin_" : "decs_")
     let tabName    = qn("{prefix}tab", at)
     let kName      = qn("{prefix}k", at)
     let ukName     = qn("{prefix}uk", at)
@@ -4268,8 +4187,8 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     var currentBinds : array<Expression?>
     var currentWhere : Expression?
     var projection : Expression?
-    var lastBindName = adapter.initialBindName
-    var elemType = strip_const_ref(clone_type(adapter.initialElemType))
+    var lastBindName = adapter_bind_name(adapter, at)
+    var elemType = strip_const_ref(adapter_element_type(adapter))
     var totalBindCount = 0
     for (i in 0 .. (calls |> length)) {
         let opName = calls[i]._1.name
@@ -4451,7 +4370,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         idx --
     }
     // Adapter-specific source loop emission (for(it in src) for array, for_each_archetype + inner for for decs).
-    stmts |> push(adapter_emit_source_loop(adapter, body, at))
+    stmts |> push(adapter_wrap_source_loop(adapter, body, at))
     // Compute output tuple + bufElemType — needed by to_array always, and by count when trailingWherePred is present (predicate is bound against the constructed output).
     let needOutput = terminatorName != "count" || trailingWherePred != null
     var outputExpr : Expression?
@@ -4602,7 +4521,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         }
         stmts |> push(buffer_return(bufName, exprIsIterator))
     }
-    return adapter_finalize_emission(adapter, stmts, retType, at)
+    return adapter_wrap_invoke(adapter, stmts, retType, false, at)
 }
 
 // Shared array/decs/decs-join group_by emitter. Reconstructs head calls (mirrors emit_loop_or_count_lane_decs),
@@ -4640,7 +4559,7 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
         var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
         headCalls |> push((call, unsafe(addr(lc))))
     }
-    var adapter : GroupBySourceAdapter
+    var adapter : SourceAdapter
     if (ctx.src is Decs) {
         var bridge = (ctx.src as Decs)._0
         if (c.single |> key_exists("upstream_join")) {
@@ -4657,47 +4576,23 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
             if (!is_primitive_join_key_type(keyType)) return null
             var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
             var tupBType = strip_const_ref(clone_type(bridgeB.elementType))
-            adapter = GroupBySourceAdapter(
-                initialBindName := qn("djoin_jres", at),
-                initialElemType = strip_const_ref(clone_type(resultLam._type.firstType)),
-                namePrefix := "djoin_",
-                isDecs = false,
-                isDecsJoin = true,
-                arrayTop = null,
-                arraySrcName := "",
-                decsBridge = null,
-                decsJoinBridgeA = bridge,
-                decsJoinBridgeB = bridgeB,
-                decsJoinKeyaLam = keyaLam,
-                decsJoinKeybLam = keybLam,
-                decsJoinResultLam = resultLam,
-                decsJoinKeyType = keyType,
-                decsJoinTupBType = tupBType,
-                decsJoinResultType = resultType
-            )
+            adapter = SourceAdapter(DecsJoin = DecsJoinShape(
+                bridgeA = bridge,
+                bridgeB = bridgeB,
+                keyaLam = keyaLam,
+                keybLam = keybLam,
+                resultLam = resultLam,
+                keyType = keyType,
+                tupBType = tupBType,
+                resultType = resultType,
+                resBindName = qn("djoin_jres", at)))
         } else {
-            adapter = GroupBySourceAdapter(
-                initialBindName := qn("decs_tup", at),
-                initialElemType = strip_const_ref(clone_type(bridge.elementType)),
-                namePrefix := "decs_",
-                isDecs = true,
-                arrayTop = null,
-                arraySrcName := "",
-                decsBridge = bridge
-            )
+            adapter = SourceAdapter(Decs = (bridge, qn("decs_tup", at)))
         }
     } else {
         var top = (ctx.src as Array)._0
         if (top._type == null) return null
-        adapter = GroupBySourceAdapter(
-            initialBindName := qn("it", at),
-            initialElemType = strip_const_ref(clone_type(top._type.firstType)),
-            namePrefix := "",
-            isDecs = false,
-            arrayTop = top,
-            arraySrcName := qn("source", at),
-            decsBridge = null
-        )
+        adapter = SourceAdapter(Array = (top, qn("source", at)))
     }
     return plan_group_by_core(headCalls, keyBlock, groupProjCall, havingCall, trailingWhereCall,
         terminatorName, orderName, orderKey, ctx.expr_is_iterator, at, adapter)
