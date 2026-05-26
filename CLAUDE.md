@@ -178,6 +178,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
 - **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
 - **Braceless early-exit:** prefer `if (cond) return X` (or postfix `return X if (cond)`) over `if (cond) { return X }` — STYLE005 flags the braced single-terminator form as noise
+- **Panic is fatal, not an exception.** daslang has no C++/JS-style exception model. A `panic` (or failed `assert` / `verify`) means the program is broken — the only correct response is to print diagnostics and exit. `try/recover` exists to capture the message before exit so you can log it nicely, NOT to recover-and-continue. Do not write code that relies on continuing after `recover`; do not design APIs around panic-as-control-flow. Corollary: `{ body } finally { cleanup }` deliberately skips `cleanup` on panic (the cleanup can't run safely on a broken program); this is not a bug. Don't try to "fix" it; don't use `finally` for cleanup that needs to run on panic. If you need post-statements that run after a block in the normal path, just put them after the block — panic skips everything, and that's the design.
 
 ### Generic function dispatch
 
