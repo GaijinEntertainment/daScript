@@ -86,8 +86,9 @@ def das_to_cppString(t : Type) {
         if (Type.tLambda) { return "Lambda"; }
         if (Type.tTuple) { return "Tuple"; }
         if (Type.tVariant) { return "Variant"; }
-        if (_) { panic("Missed type {t}"); return ""; }
     }
+    panic("Missed type {t}")
+    return ""
 }
 
 def das_to_cppCTypeString(t : Type) {
@@ -141,8 +142,9 @@ def das_to_cppCTypeString(t : Type) {
         if (Type.tTuple) { return "tTuple"; }
         if (Type.tVariant) { return "tVariant"; }
         if (Type.tHandle) { return "tHandle"; }
-        if (_) { panic("Missed type {t}"); return ""; }
     }
+    panic("Missed type {t}")
+    return ""
 }
 
 
@@ -151,27 +153,15 @@ def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
     if (!empty(typeDecl.dim)) return false;
     if (typeDecl.isVectorType) return true;
     match (typeDecl.baseType) {
-        if (Type.tBool) { return true; }
-        if (Type.tInt8) { return true; }
-        if (Type.tUInt8) { return true; }
-        if (Type.tInt16) { return true; }
-        if (Type.tUInt16) { return true; }
-        if (Type.tInt64) { return true; }
-        if (Type.tUInt64) { return true; }
-        if (Type.tInt) { return true; }
-        if (Type.tUInt) { return true; }
-        if (Type.tFloat) { return true; }
-        if (Type.tDouble) { return true; }
-        if (Type.tEnumeration) { return true; }
-        if (Type.tEnumeration8) { return true; }
-        if (Type.tEnumeration16) { return true; }
-        if (Type.tEnumeration64) { return true; }
-        if (Type.tBitfield) { return true; }
-        if (Type.tBitfield8) { return true; }
-        if (Type.tBitfield16) { return true; }
-        if (Type.tBitfield64) { return true; }  // nolint:STYLE017 (match arm chain)
-        if (_) { return false; }
+        if (Type.tBool || Type.tInt8 || Type.tUInt8 || Type.tInt16 || Type.tUInt16 ||
+            Type.tInt64 || Type.tUInt64 || Type.tInt || Type.tUInt ||
+            Type.tFloat || Type.tDouble ||
+            Type.tEnumeration || Type.tEnumeration8 || Type.tEnumeration16 || Type.tEnumeration64 ||
+            Type.tBitfield || Type.tBitfield8 || Type.tBitfield16 || Type.tBitfield64) {
+            return true
+        }
     }
+    return false
 }
 
 
@@ -255,7 +245,7 @@ def aotSuffixNameEx(funcName : string; suffix : string) {
                     if ('.') { t_ch = "Dot"; }
                     if ('`') { t_ch = "Tick"; }
                     if (',') { t_ch = "Comma"; }
-                    if (_) {
+                    if (_) {   // nolint:STYLE010 — match macro expands wildcard to `if (true)`
                         let repr = build_string() $(ss) {
                             ss |> write_char(hex_char(ch >> 4))
                             ss |> write_char(hex_char(ch));
@@ -345,7 +335,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             if (cfg.cross_platform) {
                 write(writer, "AutoTuple<{types}>")
             } else {
-                write(writer, "TTuple<{int(typeDecl.tupleSize)},{types}>")
+                write(writer, "TTuple<{typeDecl.tupleSize},{types}>")
             }
         } elif (baseType == Type.tVariant) {
             let types = (each(typeDecl.argTypes)
@@ -355,7 +345,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             if (cfg.cross_platform) {
                 write(writer, "AutoVariant<{types}>");
             } else {
-                write(writer, "TVariant<{int(typeDecl.variantSize)},{int(typeDecl.variantAlign)},{types}>")
+                write(writer, "TVariant<{typeDecl.variantSize},{typeDecl.variantAlign},{types}>")
             }
         } elif (baseType == Type.tStructure) {
             if (typeDecl.structType != null) {
@@ -814,7 +804,7 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(string(info.name), fld,suffix)} \};\n");
+            write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, fld,suffix)} \};\n");
         }
 
         let fields = (each(range(info.count))
@@ -1885,7 +1875,7 @@ class public CppAot : AstVisitor {
                     if ("&") { op = "&&"; }
                     if ("|") { op = "||"; }
                     if ("^" || "^^") { op = "!="; }
-                    if (_) { op = that_op; }
+                    if (_) { op = that_op; }  // nolint:STYLE010 — match macro expands wildcard to `if (true)`
                 }
                 write(*ss, " {op} ");
             } else {
@@ -2382,8 +2372,24 @@ class public CppAot : AstVisitor {
         return c;
     }
 
-    def to_cpp_double(val : double) {
-        return "{val:.17e}";
+    def to_cpp_double(val : double) : string {
+        // Mirror the C++-side to_cpp_double (runtime_string.cpp:526): emit
+        // portable C++ tokens for non-finite and boundary doubles. Without
+        // this, daslang's '{val:.17e}' formatter prints bare 'inf' / 'nan',
+        // which either don't exist in C++ (inf) or resolve to '<cmath>'s
+        // 'double nan(const char*)' overload (nan) — both bake into the
+        // AOT-emitted code and break the C++ build. Bit-pattern tests
+        // (val != val for NaN, magnitude vs DBL_MAX for ±inf) avoid pulling
+        // in `require math`, which interferes with this file's `match`-based
+        // type-table helpers (control-flow inference cascade).
+        if (val == DBL_MIN) return "DBL_MIN"
+        if (val == -DBL_MIN) return "(-DBL_MIN)"
+        if (val == DBL_MAX) return "DBL_MAX"
+        if (val == -DBL_MAX) return "(-DBL_MAX)"
+        if (val != val) return "((double)NAN)"        // nolint:LINT007 — canonical IEEE-754 NaN test
+        if (val > DBL_MAX) return "((double)INFINITY)"
+        if (val < -DBL_MAX) return "((double)(-INFINITY))"
+        return "{val:.17e}"
     }
 
     def writeOutDouble(val : double) {
@@ -2644,7 +2650,7 @@ class public CppAot : AstVisitor {
                 if (1) { write(*ss, "y"); }
                 if (2) { write(*ss, "z"); }
                 if (3) { write(*ss, "w"); }
-                if (_) { write(*ss, "?"); }
+                if (_) { write(*ss, "?"); }  // nolint:STYLE010 — match macro expands wildcard to `if (true)`
             }
         }
         write(*ss, "*/");

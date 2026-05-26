@@ -4,13 +4,14 @@
 Data Formats
 ************
 
-JSON, XML, regular expressions, PEG parser generator, and reStructuredText processing.
+JSON, TOML, XML, regular expressions, PEG parser generator, and reStructuredText processing.
 
 .. toctree::
 
    generated/json.rst
    generated/json_boost.rst
    generated/jsonrpc.rst
+   generated/toml.rst
    generated/pugixml.rst
    generated/PUGIXML_boost.rst
    generated/regex.rst

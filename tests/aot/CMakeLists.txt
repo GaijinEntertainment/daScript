@@ -372,6 +372,7 @@ FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 # AOT for daslib test files
 SET(AOT_DASLIB_TEST_FILES
     tests/daslib/clargs_test.das
+    tests/daslib/test_toml.das
 )
 
 # AOT for lint test files

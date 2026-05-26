@@ -1157,6 +1157,22 @@ def document_module_lint(root : string) {
     document("Paranoid lint pass", mod, "lint.rst", groups)
 }
 
+def document_module_lint_config(root : string) {
+    var mod = find_module("lint_config")
+    var groups <- array<DocGroup>(
+        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|seed_default_disabled)$%%)
+    )
+    document("Repo-level lint configuration", mod, "lint_config.rst", groups)
+}
+
+def document_module_toml(root : string) {
+    var mod = find_module("toml")
+    var groups <- array<DocGroup>(
+        group_by_regex("Parsing", mod, %regex~(read_toml)$%%)
+    )
+    document("TOML 1.0 parser", mod, "toml.rst", groups)
+}
+
 def document_module_lint_everything(root : string) {
     var mod = find_module("lint_everything")
     var groups <- array<DocGroup>(
@@ -1676,6 +1692,8 @@ def main {
     document_module_linq_boost(root)
     document_module_linq_fold(root)
     document_module_lint(root)
+    document_module_lint_config(root)
+    document_module_toml(root)
     // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
     // document_module_live(root)                  // uses multiple_contexts
     document_module_lpipe(root)

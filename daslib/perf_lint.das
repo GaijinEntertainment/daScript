@@ -39,6 +39,7 @@ module perf_lint shared private
 
 require daslib/ast_boost
 require strings
+require daslib/lint_config
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -1869,7 +1870,16 @@ class PerfLintVisitor : AstVisitor {
 def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
     //! Runs the performance lint visitor on the compiled program.
     //! Returns the number of warnings found.
+    let empty_set : table<string>
+    return perf_lint(prog, compile_time_errors, empty_set)
+}
+
+def public perf_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_codes : table<string>) : int {
+    //! Filter-aware compile-time variant. ``disabled_codes`` suppresses
+    //! the listed rule IDs (e.g. "PERF007") alongside the usual
+    //! ``// nolint:CODE`` directives.
     var astVisitor = new PerfLintVisitor(compile_time_errors = compile_time_errors)
+    astVisitor.disabled_codes := disabled_codes
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(prog, astVisitorAdapter)
     }
@@ -1908,7 +1918,8 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
 [lint_macro]
 class PerfLintMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        perf_lint(prog, true)
+        let disabled <- build_lint_macro_disabled(prog)
+        perf_lint(prog, true, disabled)
         return true
     }
 }

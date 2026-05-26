@@ -39,6 +39,7 @@ module style_lint shared private
 
 require daslib/ast_boost
 require daslib/is_local
+require daslib/lint_config
 require strings
 
 // ---------------------------------------------------------------------------
@@ -378,7 +379,7 @@ class StyleLintVisitor : AstVisitor {
         if (col + 1u >= llen) return
         var is_arrow = false
         peek_data(lineTxt) $(data) {
-            is_arrow = int(data[col]) == int('-') && int(data[col + 1u]) == int('>')
+            is_arrow = int(data[col]) == '-' && int(data[col + 1u]) == '>'
         }
         if (!is_arrow) return
         let prefix = strip_right(slice(lineTxt, 0, col |> int))
@@ -389,7 +390,7 @@ class StyleLintVisitor : AstVisitor {
             var prev_ok = false
             peek_data(prefix) $(pd) {
                 let ch = int(pd[plen - 5])
-                prev_ok = !(is_alpha(ch) || is_number(ch) || ch == int('_'))
+                prev_ok = !(is_alpha(ch) || is_number(ch) || ch == '_')
             }
             if (!prev_ok) return
         }
@@ -1741,7 +1742,16 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hyg
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
     //! Pass ``comment_hygiene = true`` to enable STYLE014/STYLE015 checks.
+    let empty_set : table<string>
+    return style_lint(prog, compile_time_errors, empty_set, [comment_hygiene = comment_hygiene])
+}
+
+def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_codes : table<string>; comment_hygiene : bool = false) : int {
+    //! Filter-aware compile-time variant. ``disabled_codes`` suppresses
+    //! the listed rule IDs (e.g. "STYLE005") alongside the usual
+    //! ``// nolint:CODE`` directives.
     var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, comment_hygiene = comment_hygiene)
+    astVisitor.disabled_codes := disabled_codes
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
@@ -1797,7 +1807,8 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
 class StyleLintMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         let hygiene = prog._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-        style_lint(prog, true, [comment_hygiene = hygiene])
+        let disabled <- build_lint_macro_disabled(prog)
+        style_lint(prog, true, disabled, [comment_hygiene = hygiene])
         return true
     }
 }

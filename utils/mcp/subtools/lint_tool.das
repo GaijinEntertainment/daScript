@@ -8,6 +8,7 @@ require ../tools/common.das public
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
+require daslib/lint_config
 require daslib/ast_boost
 require strings
 
@@ -24,7 +25,8 @@ def has_expect_directive(file : string) : bool {
     return false
 }
 
-def lint_single(file : string; project : string = "") : string {
+def lint_single(file : string; project : string;
+                disabled_codes, enabled_codes : table<string>) : string {
     return "SKIP {file} (intentional compile errors via `expect`)" if (has_expect_directive(file))
     return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
@@ -32,15 +34,15 @@ def lint_single(file : string; project : string = "") : string {
             compile_warnings = "Compilation warnings:\n{issues}\n"
         }
         var all_issues : array<string>
-        var count = paranoid_collect(program, all_issues)
+        var count = paranoid_collect(program, all_issues, disabled_codes, enabled_codes)
         var perf_issues : array<string>
-        count += perf_lint_collect(program, perf_issues)
+        count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
         for (w in perf_issues) {
             all_issues |> push(w)
         }
         var style_issues : array<string>
         let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-        count += style_lint_collect(program, style_issues, hygiene)
+        count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
         for (w in style_issues) {
             all_issues |> push(w)
         }
@@ -66,7 +68,8 @@ struct LintFileResult {
 // Multi-file callers do this once up front so an invalid project surfaces
 // the focused error instead of N misleading FAIL lines (the per-file
 // FAIL path drops result.errors).
-def lint_file(file : string; project : string = "") : LintFileResult {
+def lint_file(file : string; project : string;
+              disabled_codes, enabled_codes : table<string>) : LintFileResult {
     var result = LintFileResult(file = file)
     var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
@@ -81,15 +84,15 @@ def lint_file(file : string; project : string = "") : LintFileResult {
                 if (!ok) {
                     result.failed = true
                 } else {
-                    result.count = paranoid_collect(program, result.errors)
+                    result.count = paranoid_collect(program, result.errors, disabled_codes, enabled_codes)
                     var perf_issues : array<string>
-                    result.count += perf_lint_collect(program, perf_issues)
+                    result.count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
                     for (w in perf_issues) {
                         result.errors |> push(w)
                     }
                     var style_issues : array<string>
                     let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-                    result.count += style_lint_collect(program, style_issues, hygiene)
+                    result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
@@ -106,7 +109,12 @@ def run_lint(file : string; project : string = "") : string {
     var files : array<string>
     parse_file_list(file, files)
     return make_tool_result("no files matched: {file}", true) if (empty(files))
-    return lint_single(files[0], project) if (length(files) == 1)
+    // Repo-level policy is invariant for the whole invocation — read .lint_config once.
+    var disabled_codes : table<string>
+    let enabled_codes : table<string>
+    seed_default_disabled(disabled_codes)
+    load_lint_config(disabled_codes)
+    return lint_single(files[0], project, disabled_codes, enabled_codes) if (length(files) == 1)
     var total_issues = 0
     var total_errors = 0
     var total_skipped = 0
@@ -117,7 +125,7 @@ def run_lint(file : string; project : string = "") : string {
                 w |> write("SKIP {f} (intentional compile errors via `expect`)\n")
                 continue
             }
-            let result = lint_file(f, project)
+            let result = lint_file(f, project, disabled_codes, enabled_codes)
             if (result.failed) {
                 total_errors++
                 w |> write("FAIL {f}\n")
