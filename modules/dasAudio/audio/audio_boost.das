@@ -1447,6 +1447,10 @@ def public set_audio_stats_box(var box : LockBox?) {
     //! The audio thread writes one snapshot per ~1-second window; the caller reads it on demand
     //! via ``box |> get() $(var s : AudioSystemStats) { ... }`` (read-only — keeps the box alive
     //! across multiple reads). Pass null to clear. Do NOT use ``grab()``: that's a one-shot consume.
+    if (box == null) {
+        push_cmd(AudioCommand(system_stats_box = 0ul))
+        return
+    }
     box |> add_ref
     box |> set() <| new AudioSystemStats(utilization_pct = 0.0, hrtf_count = 0, total_3d = 0)
     push_cmd(AudioCommand(system_stats_box = intptr(box)))
