@@ -964,6 +964,10 @@ def command_processor {
                 g_stats_box |> release
                 g_stats_box = null
             }
+            // Reset the rolling window so a re-registered box starts with a clean accumulator
+            // instead of inheriting partial data from the previous registration.
+            g_stats_window_time_ms = 0.0lf
+            g_stats_window_samples = 0ul
             g_stats_box = unsafe(reinterpret<LockBox?>(sbox))
         } elif (cmd is stop) {
             let scmd = cmd as stop
@@ -1045,8 +1049,7 @@ var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 
 // AudioSystemStats publication state (audio-context-side; main side holds the LockBox handle and read-grabs it).
 var g_stats_box : LockBox? = null
 var g_stats_window_time_ms = 0.0lf      // accumulated mixer wall time over the current window
-var g_stats_window_samples = 0ul        // accumulated audio frames over the current window
-var g_stats_window_count : int = 0      // mixer-callback count over the window; once >=N callbacks we publish + reset
+var g_stats_window_samples = 0ul        // accumulated audio frames over the current window (flush gate: realTimeMs >= 1000)
 var g_stats_recent_util_pct : float = 0.0
 var g_stats_3d_count : int = 0
 var g_stats_hrtf_count : int = 0
@@ -1097,14 +1100,12 @@ def private publish_audio_stats(dt_ms : double; frames : uint64) {
     return if (g_stats_box == null)
     g_stats_window_time_ms += dt_ms
     g_stats_window_samples += frames
-    g_stats_window_count ++
     let realTimeMs = double(g_stats_window_samples) * 1000.lf / double(MA_SAMPLE_RATE)
     if (realTimeMs < 1000.lf) return
     let util = g_stats_window_time_ms / realTimeMs * 100.lf
     g_stats_recent_util_pct = float(util)
     g_stats_window_time_ms = 0.0lf
     g_stats_window_samples = 0ul
-    g_stats_window_count = 0
     let snap = g_stats_recent_util_pct
     let hrtfCount = g_stats_hrtf_count
     let total3D = g_stats_3d_count
