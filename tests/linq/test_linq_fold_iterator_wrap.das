@@ -5,21 +5,39 @@ require daslib/linq_boost
 require daslib/linq_fold
 require dastest/testing_boost public
 
-// Regression — PR A pattern-table refactor lost the `buffer_return(..., expr._type.isIterator)` wiring on
-// every emit fn. All `buffer_return` calls now consult `ctx.expr_is_iterator`, sourced from the outer
-// `_fold(...)` expression's type at the stub. Without these wraps, iterator-typed contexts get an array
-// where the chain would have produced an iterator — type mismatch.
+// PR A R3c — Source × terminator matrix for buffer-emitting splice emit fns.
 //
-// `typeinfo typename(got)` is the load-bearing assertion — under the bug, the splice returns `array<int>`
-// instead of `iterator<int>`. Covers all five no-terminator emit paths:
-//   - emit_reverse_buffer_inplace        (catch-all R1-R4 — `reverse`)
-//   - emit_hashtable_dedup               (`distinct[_by]`, no take)
-//   - emit_reverse_backward_walk_dset_gate  (R-2a — array source, `reverse + distinct[_by]`)
-//   - emit_reverse_backward_index_walk      (R6 — array source, `reverse + take`)
+// For each chain shape that goes through a buffer-emitting emit fn, the splice must produce a result
+// whose static type matches the un-spliced chain. The full matrix is:
+//
+//                     │ no terminator (chain ends bare)  │ explicit `.to_array()` terminator
+//   ──────────────────┼──────────────────────────────────┼──────────────────────────────────
+//   iter source       │ iterator<T>                       │ array<T>
+//   (`.to_sequence()`)│                                   │
+//   array source      │ iterator<T>                       │ array<T>
+//   (`each(arr)`)     │                                   │
+//
+// The `iter source → iterator<T>` and `array source → iterator<T>` rows are the regression coverage
+// for R1/R2/R3 — `buffer_return(name, ctx.expr_is_iterator)`. The two array<T> corners protect against
+// future over-correction (always wrapping with `to_sequence_move`). `typeinfo typename(got)` is the
+// load-bearing assertion. Array-bound tests use `let got` (immutable, no consuming for-loop) and the
+// assertion strings reflect the resulting `array<int> const` binding type.
+//
+// Shapes covered per matrix:
+//   1. `reverse()` only             → emit_reverse_buffer_inplace (catch-all R1-R4)
+//   2. `distinct()` / `distinct_by` → emit_hashtable_dedup
+//   3. `reverse() + distinct()`     → emit_reverse_backward_walk_dset_gate (array path, R-2a)
+//                                  /  emit_hashtable_dedup (iter path)
+//   4. `reverse() + take(N)`        → emit_reverse_backward_index_walk (array path, R6)
+//                                  /  emit_reverse_buffer_inplace (iter path)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 1. reverse() — matrix
+// ═════════════════════════════════════════════════════════════════════════════
 
 [test]
-def test_iterwrap_reverse_no_terminator(t : T?) {
-    t |> run("reverse() with iterator source, no to_array — splice must return iterator<int>") @(tt : T?) {
+def test_matrix_reverse_iter_to_iter(t : T?) {
+    t |> run("reverse(): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([1, 2, 3, 4, 5].to_sequence() |> reverse())
         tt |> equal(typeinfo typename(got), "iterator<int>")
         var total = 0
@@ -31,8 +49,49 @@ def test_iterwrap_reverse_no_terminator(t : T?) {
 }
 
 [test]
-def test_iterwrap_distinct_no_terminator(t : T?) {
-    t |> run("distinct() with iterator source, no to_array — splice must return iterator<int>") @(tt : T?) {
+def test_matrix_reverse_iter_to_array(t : T?) {
+    t |> run("reverse(): iter src + to_array() → array<int> const") @(tt : T?) {
+        let got <- _fold([1, 2, 3, 4, 5].to_sequence() |> reverse() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 5)
+        tt |> equal(got[0], 5)
+        tt |> equal(got[4], 1)
+    }
+}
+
+[test]
+def test_matrix_reverse_array_to_iter(t : T?) {
+    t |> run("reverse(): array src, no to_array → iterator<int>") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5]
+        var got <- _fold(each(arr) |> reverse())
+        tt |> equal(typeinfo typename(got), "iterator<int>")
+        var total = 0
+        for (v in got) {
+            total += v
+        }
+        tt |> equal(total, 15)
+    }
+}
+
+[test]
+def test_matrix_reverse_array_to_array(t : T?) {
+    t |> run("reverse(): array src + to_array() → array<int> const") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5]
+        let got <- _fold(each(arr) |> reverse() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 5)
+        tt |> equal(got[0], 5)
+        tt |> equal(got[4], 1)
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 2. distinct() / distinct_by — matrix
+// ═════════════════════════════════════════════════════════════════════════════
+
+[test]
+def test_matrix_distinct_iter_to_iter(t : T?) {
+    t |> run("distinct(): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([1, 2, 1, 3, 2, 3, 1].to_sequence() |> distinct())
         tt |> equal(typeinfo typename(got), "iterator<int>")
         var seen : array<int>
@@ -44,8 +103,41 @@ def test_iterwrap_distinct_no_terminator(t : T?) {
 }
 
 [test]
-def test_iterwrap_distinct_by_no_terminator(t : T?) {
-    t |> run("distinct_by(_) with iterator source, no to_array — splice must return iterator<int>") @(tt : T?) {
+def test_matrix_distinct_iter_to_array(t : T?) {
+    t |> run("distinct(): iter src + to_array() → array<int> const") @(tt : T?) {
+        let got <- _fold([1, 2, 1, 3, 2, 3, 1].to_sequence() |> distinct() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 3)
+    }
+}
+
+[test]
+def test_matrix_distinct_array_to_iter(t : T?) {
+    t |> run("distinct(): array src, no to_array → iterator<int>") @(tt : T?) {
+        let arr = [1, 2, 1, 3, 2, 3, 1]
+        var got <- _fold(each(arr) |> distinct())
+        tt |> equal(typeinfo typename(got), "iterator<int>")
+        var seen : array<int>
+        for (v in got) {
+            seen |> push(v)
+        }
+        tt |> equal(length(seen), 3)
+    }
+}
+
+[test]
+def test_matrix_distinct_array_to_array(t : T?) {
+    t |> run("distinct(): array src + to_array() → array<int> const") @(tt : T?) {
+        let arr = [1, 2, 1, 3, 2, 3, 1]
+        let got <- _fold(each(arr) |> distinct() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 3)
+    }
+}
+
+[test]
+def test_matrix_distinct_by_iter_to_iter(t : T?) {
+    t |> run("distinct_by(_): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([10, 21, 32, 11, 23, 30, 13].to_sequence()._distinct_by(_ % 10))
         tt |> equal(typeinfo typename(got), "iterator<int>")
         var count = 0
@@ -56,11 +148,40 @@ def test_iterwrap_distinct_by_no_terminator(t : T?) {
     }
 }
 
-// ─── R-2a / R6 — array-source paths through emit_reverse_backward_walk_dset_gate / emit_reverse_backward_index_walk ───
+// ═════════════════════════════════════════════════════════════════════════════
+// 3. reverse() + distinct() — matrix
+//   Array path goes through emit_reverse_backward_walk_dset_gate (R-2a, single backward walk).
+//   Iter path falls through to emit_hashtable_dedup with an upstream reverse iterator.
+// ═════════════════════════════════════════════════════════════════════════════
 
 [test]
-def test_iterwrap_reverse_distinct_array_source(t : T?) {
-    t |> run("each(arr) |> reverse() |> distinct() — array-source R-2a path returns iterator") @(tt : T?) {
+def test_matrix_reverse_distinct_iter_to_iter(t : T?) {
+    t |> run("reverse() + distinct(): iter src, no to_array → iterator<int>") @(tt : T?) {
+        var got <- _fold([3, 1, 2, 1, 3, 2].to_sequence() |> reverse() |> distinct())
+        tt |> equal(typeinfo typename(got), "iterator<int>")
+        var collected : array<int>
+        for (v in got) {
+            collected |> push(v)
+        }
+        // reverse → [2,3,1,2,1,3]; distinct first-seen → [2,3,1]
+        tt |> equal(length(collected), 3)
+        tt |> equal(collected[0], 2)
+    }
+}
+
+[test]
+def test_matrix_reverse_distinct_iter_to_array(t : T?) {
+    t |> run("reverse() + distinct(): iter src + to_array() → array<int> const") @(tt : T?) {
+        let got <- _fold([3, 1, 2, 1, 3, 2].to_sequence() |> reverse() |> distinct() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 3)
+        tt |> equal(got[0], 2)
+    }
+}
+
+[test]
+def test_matrix_reverse_distinct_array_to_iter(t : T?) {
+    t |> run("reverse() + distinct(): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [3, 1, 2, 1, 3, 2]
         var got <- _fold(each(arr) |> reverse() |> distinct())
         tt |> equal(typeinfo typename(got), "iterator<int>")
@@ -68,17 +189,57 @@ def test_iterwrap_reverse_distinct_array_source(t : T?) {
         for (v in got) {
             collected |> push(v)
         }
-        // reverse → [2,3,1,2,1,3]; distinct keeps first-seen → [2,3,1]
         tt |> equal(length(collected), 3)
         tt |> equal(collected[0], 2)
-        tt |> equal(collected[1], 3)
-        tt |> equal(collected[2], 1)
     }
 }
 
 [test]
-def test_iterwrap_reverse_take_array_source(t : T?) {
-    t |> run("each(arr) |> reverse() |> take(N) — array-source R6 path returns iterator") @(tt : T?) {
+def test_matrix_reverse_distinct_array_to_array(t : T?) {
+    t |> run("reverse() + distinct(): array src + to_array() → array<int> const") @(tt : T?) {
+        let arr = [3, 1, 2, 1, 3, 2]
+        let got <- _fold(each(arr) |> reverse() |> distinct() |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 3)
+        tt |> equal(got[0], 2)
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 4. reverse() + take(N) — matrix
+//   Array path goes through emit_reverse_backward_index_walk (R6, visits only last N indices).
+//   Iter path falls through to emit_reverse_buffer_inplace (full buffer + reverse_inplace + resize).
+// ═════════════════════════════════════════════════════════════════════════════
+
+[test]
+def test_matrix_reverse_take_iter_to_iter(t : T?) {
+    t |> run("reverse() + take(N): iter src, no to_array → iterator<int>") @(tt : T?) {
+        var got <- _fold([10, 20, 30, 40, 50].to_sequence() |> reverse() |> take(2))
+        tt |> equal(typeinfo typename(got), "iterator<int>")
+        var collected : array<int>
+        for (v in got) {
+            collected |> push(v)
+        }
+        tt |> equal(length(collected), 2)
+        tt |> equal(collected[0], 50)
+        tt |> equal(collected[1], 40)
+    }
+}
+
+[test]
+def test_matrix_reverse_take_iter_to_array(t : T?) {
+    t |> run("reverse() + take(N): iter src + to_array() → array<int> const") @(tt : T?) {
+        let got <- _fold([10, 20, 30, 40, 50].to_sequence() |> reverse() |> take(2) |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 2)
+        tt |> equal(got[0], 50)
+        tt |> equal(got[1], 40)
+    }
+}
+
+[test]
+def test_matrix_reverse_take_array_to_iter(t : T?) {
+    t |> run("reverse() + take(N): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [10, 20, 30, 40, 50]
         var got <- _fold(each(arr) |> reverse() |> take(2))
         tt |> equal(typeinfo typename(got), "iterator<int>")
@@ -86,9 +247,20 @@ def test_iterwrap_reverse_take_array_source(t : T?) {
         for (v in got) {
             collected |> push(v)
         }
-        // reverse → [50,40,30,20,10]; take(2) → [50, 40]
         tt |> equal(length(collected), 2)
         tt |> equal(collected[0], 50)
         tt |> equal(collected[1], 40)
+    }
+}
+
+[test]
+def test_matrix_reverse_take_array_to_array(t : T?) {
+    t |> run("reverse() + take(N): array src + to_array() → array<int> const") @(tt : T?) {
+        let arr = [10, 20, 30, 40, 50]
+        let got <- _fold(each(arr) |> reverse() |> take(2) |> to_array())
+        tt |> equal(typeinfo typename(got), "array<int> const")
+        tt |> equal(length(got), 2)
+        tt |> equal(got[0], 50)
+        tt |> equal(got[1], 40)
     }
 }
