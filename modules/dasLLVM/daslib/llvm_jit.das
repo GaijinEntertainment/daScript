@@ -639,6 +639,14 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             set_private_linkage(ffunc)
         }
+        if (!isCmres) {
+            // Add zero/sign extension when necessary. Otherwise
+            // it may lead to hardly reproducible bugs on c++ side.
+            let ret_ext = need_z_or_s_ext(result)
+            if (ret_ext != null) {
+                LLVMAddAttributeAtIndex(ffunc, 0u, ret_ext)
+            }
+        }
         // setup parameter alignment
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(ffunc, ai)
@@ -1362,7 +1370,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def need_z_or_s_ext(_type : TypeDeclPtr) {
-        if (!_type.isRef && _type.sizeOf < 4 &&
+        if (!_type.isRef && !_type.isVoid && _type.sizeOf < 4 &&
             _type.baseType != Type.fakeContext && // incorrect size for fakeContext & fakeLineInfo
             _type.baseType != Type.fakeLineInfo) {
             if (_type.isSignedInteger) {
@@ -5885,7 +5893,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def cast_to_vec4f(etype : TypeDeclPtr; tsrc : LLVMOpaqueValue?) {
-        var vres = LLVMGetUndef(types.LLVMFloat4Type())
+        // Zero-fill (not undef) the unused lanes: a wrapped scalar return
+        // (lane 0 = value) is sometimes consumed as a full vec4f by a vector
+        // `icmp` (e.g. block-key comparison in order_by). undef sibling lanes
+        // become poison there and `-O3 -flto` propagates it into lane 0,
+        // corrupting the compare. Defined zero lanes are poison-free.
+        var vres = LLVMConstNull(types.LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
         if (etype.isRef) {
             tres = cast_ptr_to_vec4f(tsrc)
