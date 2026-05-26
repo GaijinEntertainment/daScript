@@ -290,6 +290,11 @@ FILE(GLOB AOT_MACRO_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
 # by the actual test file.
 list(FILTER AOT_MACRO_BOOST_FILES EXCLUDE REGEX "/_")
 
+# AOT for with_boost test files
+FILE(GLOB AOT_WITH_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/with_boost/*.das")
+# Exclude failed_* expected-failure compile tests — they're not AOT-able.
+list(FILTER AOT_WITH_BOOST_FILES EXCLUDE REGEX "/failed_")
+
 # Macro_boost test module files (probe call_macro required transitively by tests)
 SET(AOT_MACRO_BOOST_MODULE_FILES
     tests/macro_boost/_has_sideeffects_probe.das
@@ -584,6 +589,10 @@ add_custom_target(test_aot_macro_boost)
 SET(MACRO_BOOST_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MACRO_BOOST_FILES}" MACRO_BOOST_AOT_GENERATED_SRC test_aot_macro_boost daslang)
 
+add_custom_target(test_aot_with_boost)
+SET(WITH_BOOST_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_WITH_BOOST_FILES}" WITH_BOOST_AOT_GENERATED_SRC test_aot_with_boost daslang)
+
 add_custom_target(test_aot_macro_boost_modules)
 SET(MACRO_BOOST_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_MACRO_BOOST_MODULE_FILES}" MACRO_BOOST_MODULES_AOT_GENERATED_SRC test_aot_macro_boost_modules daslang)
@@ -847,6 +856,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_linq test_aot_linq_modules
     test_aot_macro_call
     test_aot_macro_boost test_aot_macro_boost_modules
+    test_aot_with_boost
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
     test_aot_option

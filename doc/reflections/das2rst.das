@@ -26,6 +26,7 @@ require daslib/jobque_boost
 require daslib/apply_in_context
 require daslib/contracts
 require daslib/defer
+require daslib/with_boost
 require daslib/delegate
 require daslib/option
 require daslib/result
@@ -585,6 +586,14 @@ def document_module_defer(root : string) {
         group_by_regex("Stub", mod, %regex~(nada)$%%)
     )
     document("defer and defer_delete macros", mod, "defer.rst", groups)
+}
+
+def document_module_with_boost(root : string) {
+    var mod = find_module("with_boost")
+    var groups <- array<DocGroup>(
+        group_by_regex("Locked element binding helpers", mod, %regex~(_with_locked_.*)$%%)
+    )
+    document("with_ macro: locked array/table element binding", mod, "with_boost.rst", groups)
 }
 
 def document_module_if_not_null(root : string) {
@@ -1644,6 +1653,7 @@ def main {
     document_module_decs_boost(root)
     document_module_decs_state(root)
     document_module_defer(root)
+    document_module_with_boost(root)
     document_module_delegate(root)
     document_module_dynamic_cast_rtti(root)
     document_module_enum_trait(root)

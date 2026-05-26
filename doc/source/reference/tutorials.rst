@@ -204,6 +204,7 @@ Run any tutorial from the project root::
    tutorials/macros/15_type_macro.rst
    tutorials/macros/16_template_type_macro.rst
    tutorials/macros/17_qmacro.rst
+   tutorials/macros/18_with_boost.rst
 
 .. _tutorials_dashv:
 
