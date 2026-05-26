@@ -5,53 +5,17 @@ require daslib/linq_fold
 require dastest/testing_boost public
 
 // PR A — pattern-table refactor: walker + prefix-conflict lint tests.
-// Per-archetype emit tests are covered end-to-end by the existing test_linq_fold_*.das suite (each user chain
-// exercises the emit fns through `_fold`). This file tests the kernel directly: walker semantics and table integrity.
-
-// ─── Walker — synthetic patterns + synthetic call lists ───
 //
-// Walker requires real ExprCall/LinqCall pairs in the calls array. Building those at runtime is impractical
-// for a unit test (the macro pipeline owns ExprCall construction). The lint/integrity tests below use the
-// already-populated per-plan pattern tables, which is enough to validate the table machinery.
-
-[test]
-def test_plan_reverse_table_reachable(t : T?) {
-    t |> run("plan_reverse_patterns: every pattern is reachable (no strict prefix shadowing)") @(tt : T?) {
-        tt |> equal(check_pattern_table_reachable("plan_reverse_patterns", plan_reverse_patterns), true)
-    }
-}
-
-[test]
-def test_plan_distinct_table_reachable(t : T?) {
-    t |> run("plan_distinct_patterns: every pattern is reachable (no strict prefix shadowing)") @(tt : T?) {
-        tt |> equal(check_pattern_table_reachable("plan_distinct_patterns", plan_distinct_patterns), true)
-    }
-}
-
-[test]
-def test_plan_reverse_table_populated(t : T?) {
-    t |> run("plan_reverse_patterns: populated with the 5 PR A rows in expected order") @(tt : T?) {
-        tt |> equal(length(plan_reverse_patterns), 5)
-        tt |> equal(plan_reverse_patterns[0].name, "reverse_distinct_backward_walk")
-        tt |> equal(plan_reverse_patterns[1].name, "reverse_take_backward_index")
-        tt |> equal(plan_reverse_patterns[2].name, "reverse_counter")
-        tt |> equal(plan_reverse_patterns[3].name, "reverse_walk_overwrite")
-        tt |> equal(plan_reverse_patterns[4].name, "reverse_buffer_inplace")
-    }
-}
-
-[test]
-def test_plan_distinct_table_populated(t : T?) {
-    t |> run("plan_distinct_patterns: populated with the 2 PR A rows in expected order") @(tt : T?) {
-        tt |> equal(length(plan_distinct_patterns), 2)
-        tt |> equal(plan_distinct_patterns[0].name, "distinct_take")
-        tt |> equal(plan_distinct_patterns[1].name, "distinct_main")
-    }
-}
+// The per-plan pattern tables (`plan_reverse_patterns`, `plan_distinct_patterns`) are populated by
+// `[_macro]` functions at MACRO time, not at runtime — the function pointers in the rows reference
+// `[macro_function]` emit fns whose bodies the LLVM JIT can't lower (quote() nodes). So at runtime
+// these tables read as empty; the lint helpers below are exercised on synthetic tables instead.
+// End-to-end pattern selection is covered by the existing test_linq_fold_*.das suite (each user
+// chain exercises the emit fns through `_fold`).
 
 [test]
 def test_alias_table_resolves(t : T?) {
-    t |> run("alias_table: PR A aliases populated") @(tt : T?) {
+    t |> run("alias_table: PR A aliases populated (runtime-initialized via literal)") @(tt : T?) {
         tt |> equal(alias_table |> key_exists("distinct_family"), true)
         tt |> equal(alias_table |> key_exists("first_family"), true)
         tt |> equal(alias_table |> key_exists("count_family"), true)

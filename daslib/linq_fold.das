@@ -2615,7 +2615,7 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
     return finalize_emission_stmts(top, srcName, at, bodyStmts)
 }
 
-// Stub — table-driven dispatch into plan_reverse_patterns. Populated by populate_plan_reverse_patterns [init].
+// Stub — table-driven dispatch into plan_reverse_patterns. Populated by populate_plan_reverse_patterns [_macro].
 [macro_function]
 def private plan_reverse(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
@@ -2638,8 +2638,11 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     return null
 }
 
-[init]
-def populate_plan_reverse_patterns() {
+// [_macro] runs at macro-compile time and stays off the JIT runtime graph — the rows carry @@<EmitFn>
+// addresses of [macro_function] emit fns whose quote() bodies the LLVM JIT can't lower.
+[_macro]
+def populate_plan_reverse_patterns {
+    if (!empty(plan_reverse_patterns)) return
     // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
     plan_reverse_patterns |> emplace <| SplicePattern(
         name = "reverse_distinct_backward_walk",
@@ -2928,8 +2931,9 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     return null
 }
 
-[init]
-def populate_plan_distinct_patterns() {
+[_macro]
+def populate_plan_distinct_patterns {
+    if (!empty(plan_distinct_patterns)) return
     // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
     plan_distinct_patterns |> emplace <| SplicePattern(
         name = "distinct_take",
