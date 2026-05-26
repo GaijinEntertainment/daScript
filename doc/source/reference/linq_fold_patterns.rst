@@ -212,6 +212,34 @@ Every array pattern above has a decs mirror that walks each archetype
 of ``T``'s template instead of iterating the array. The body shape is
 identical — only the source iteration changes.
 
+.. note::
+
+   As of PR C, the four ``plan_decs_*`` planners (``_reverse`` /
+   ``_distinct`` / ``_order_family`` / ``_unroll``) are thin pattern-table
+   stubs that reuse the same pattern rows as their array-side siblings
+   (``plan_reverse_patterns`` / ``plan_distinct_patterns`` /
+   ``plan_order_family_patterns`` / ``plan_loop_or_count_patterns``)
+   with a ``SourceAdapter::Decs`` adapter swap. The 7 array-side emit
+   archetypes consume the adapter (``adapter_bind_name`` selects
+   ``it`` vs ``decs_tup`` for lambda peeling; ``adapter_wrap_source_loop``
+   dispatches ``for (it in src)`` vs ``for_each_archetype + build_decs_inner_for_pruned``;
+   ``adapter_wrap_invoke`` dispatches the outer invoke wrap). For
+   ``plan_decs_unroll`` (which feeds ``emit_loop_or_count_lane``), the
+   Decs-arm dispatch (``emit_loop_or_count_lane_decs``) reconstructs a
+   calls array from captures and routes to the existing
+   ``emit_decs_*`` lane fns unchanged (state hoist above
+   ``for_each_archetype`` stays per-adapter; see masterplan D1).
+
+   Two decs-specific fast paths preserved: ``emit_decs_count_archsize``
+   (bare ``count()``) and ``emit_decs_reverse_skip_into_tail``
+   (``reverse |> take(N) |> to_array``). Row 4 of
+   ``plan_order_family_patterns`` (``buffer_helper_dispatch``) is gated
+   to Array adapter via ``array_source`` — decs cascades to Row 3
+   (``fused_prefilter``) which materializes the buffer, matching the
+   imperative decs behavior. ``reverse |> distinct[_by]`` on decs
+   sources cascades to tier-2 (no decs equivalent of the array
+   backward-walk dset gate; deferred per masterplan D6).
+
 .. list-table::
    :header-rows: 1
    :widths: 35 25 40
