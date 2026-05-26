@@ -101,6 +101,7 @@ namespace das {
         void pushVarStack();
         void popVarStack();
         void error(const string &err, const string &extra, const string &fixme, const LineInfo &at, CompilationError cerr = CompilationError::unspecified) const;
+        void checkEmptyName(const string &name, const char *nodeKind, const LineInfo &at);
         void reportAstChanged();
         virtual void reportFolding() override;
         string describeType(const TypeDeclPtr &decl) const;
@@ -414,8 +415,10 @@ namespace das {
 
         LineInfo makeConstAt(ExprField *expr) const;
 
+        virtual void preVisit(ExprField *expr) override;
         virtual ExpressionPtr visit(ExprField *expr) override;
         void collectMissingOperators(const string &opN, MatchingFunctions &mf, bool identicalName);
+        virtual void preVisit(ExprSafeField *expr) override;
         virtual ExpressionPtr visit(ExprSafeField *expr) override;
         // tag
         virtual void preVisit(ExprTag *expr) override;

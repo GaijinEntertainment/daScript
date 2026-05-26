@@ -510,6 +510,12 @@ namespace das {
     void InferTypes::preVisit(ExprMakeStruct *expr) {
         callDepth ++;
         Visitor::preVisit(expr);
+        for (auto & ms : expr->structs) {
+            if (!ms) continue;
+            for (auto & mfd : *ms) {
+                if (mfd) checkEmptyName(mfd->name, "field initializer", mfd->at);
+            }
+        }
         if (expr->makeType && expr->makeType->isExprType()) {
             return;
         }

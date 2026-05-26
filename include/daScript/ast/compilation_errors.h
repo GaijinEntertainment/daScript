@@ -294,6 +294,7 @@ namespace das
     ,   invalid_with_type                                           =   30293    // 1 site(s)
     ,   invalid_yield                                               =   30294    // 1 site(s)
     ,   invalid_yield_in_block                                      =   30295    // 1 site(s)
+    ,   invalid_empty_name                                          =   30296    // AST node with empty name; usually a macro emission bug
 
 // missing_*
 
