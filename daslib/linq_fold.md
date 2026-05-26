@@ -127,34 +127,39 @@ Returns `MatchResult(matched <- captures)` on full success (move semantics — `
 
 ### Alias table (named op-name groups)
 
+The snippet below is the projected end-state at PR D. **PR A only populates the subset its rows need**; the rest land as their planners migrate. The authoritative live list is the `alias_table` literal in [daslib/linq_fold.das](linq_fold.das) — `distinct_family`, `first_family`, `count_family`, `distinct_terminator_family` are populated today.
+
 ```das
+// projected end-state at PR D
 var alias_table : table<string; array<string>> <- {
-    "order_family"          => ["order", "order_descending", "order_by", "order_by_descending"],
-    "distinct_family"       => ["distinct", "distinct_by"],
-    "first_family"          => ["first", "first_or_default"],
-    "count_family"          => ["count", "long_count"],
-    "accum_family"          => ["sum", "min", "max", "average"],
-    "range_op_family"       => ["skip", "skip_while", "take_while", "take"],
-    "any_terminator_family" => [/* full union — built incrementally */]
+    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending"],  // PR B
+    "distinct_family"            => ["distinct", "distinct_by"],                                       // PR A ✓
+    "first_family"               => ["first", "first_or_default"],                                     // PR A ✓
+    "count_family"               => ["count", "long_count"],                                           // PR A ✓
+    "accum_family"               => ["sum", "min", "max", "average"],                                  // PR B
+    "range_op_family"            => ["skip", "skip_while", "take_while", "take"],                      // PR B
+    "distinct_terminator_family" => ["count", "long_count", "sum"]                                     // PR A ✓ — narrow to terminators emit_hashtable_dedup actually handles
 }
 ```
 
 ### Predicate library
 
-Module-level named `RequiresPredicate` constants for reuse across patterns:
+Module-level named `RequiresPredicate` constants for reuse across patterns. As with `alias_table`, this table shows the projected end-state — see [daslib/linq_fold.das](linq_fold.das) for what's actually defined today (PR A: `array_source`, `take_arg_is_int`, `no_terminator`).
 
-| Name | Meaning |
-|---|---|
-| `array_source` | `peel_each(top)` succeeds |
-| `array_random_access` | `array_source && top._type.isGoodArrayType` |
-| `decs_source` | `extract_decs_bridge(top) != null` |
-| `inline_cmp_available(cap_name)` | `try_make_inline_cmp` succeeds on captured order op |
-| `take_arg_is_int(cap_name)` | captured take's 2nd arg `_type.baseType == Type.tInt` |
-| `arity_eq(cap, n)` / `arity_ge(cap, n)` | structural checks on captured calls |
-| `no_terminator` | no terminator captured (final optional slot empty); return shape decided by `ctx.expr_is_iterator` in the emit fn |
-| `is_primitive_key(cap, argIdx)` | `is_primitive_join_key_type` on captured arg |
+| Name | Status | Meaning |
+|---|---|---|
+| `array_source` | PR A ✓ | `top._type.isGoodArrayType \|\| top._type.isArray` (after `peel_each`) |
+| `array_random_access` | planned | `array_source && top._type.isGoodArrayType` |
+| `decs_source` | planned | `extract_decs_bridge(top) != null` |
+| `inline_cmp_available(cap_name)` | planned (factory) | `try_make_inline_cmp` succeeds on captured order op |
+| `take_arg_is_int` | PR A ✓ | captured `take`'s 2nd arg `_type.baseType == Type.tInt`; vacuous if no `take` slot |
+| `arity_eq(cap, n)` / `arity_ge(cap, n)` | planned (factory) | structural checks on captured calls |
+| `no_terminator` | PR A ✓ | no terminator captured (final optional slot empty); return shape decided by `ctx.expr_is_iterator` in the emit fn |
+| `is_primitive_key(cap, argIdx)` | planned (factory) | `is_primitive_join_key_type` on captured arg |
 
-Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific checks. **Rule of thumb:** promote to named predicate on second use.
+PR A's `take_arg_is_int` is hard-wired to the `"take"` capture key (not a factory) because every PR A consumer uses that name. Promote to a `make_arity_eq(cap, n)` / `make_arg_type_is(cap, idx, type)` factory shape on second use, per the masterplan rule of thumb.
+
+Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific checks. **Rule of thumb:** promote to named predicate (or factory) on second use.
 
 ## Migration phases
 

@@ -174,10 +174,11 @@ def private call_norm_name(call : ExprCall?) : string {
 }
 
 var alias_table : table<string; array<string>> <- {
-    "distinct_family"       => ["distinct", "distinct_by"],
-    "first_family"          => ["first", "first_or_default"],
-    "count_family"          => ["count", "long_count"],
-    "any_terminator_family" => ["count", "long_count", "sum", "first", "first_or_default"]
+    "distinct_family"            => ["distinct", "distinct_by"],
+    "first_family"               => ["first", "first_or_default"],
+    "count_family"               => ["count", "long_count"],
+    // Narrow to the terminators emit_hashtable_dedup actually handles — first[_or_default] would be over-matched then cascade.
+    "distinct_terminator_family" => ["count", "long_count", "sum"]
 }
 
 // Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
@@ -2961,7 +2962,7 @@ def private populate_plan_distinct_patterns {
             Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist"),
             Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take"),
-            Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
+            Slot(matcher = m_alias("distinct_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
         requires <- [@@ < RequiresPredicate > take_arg_is_int],
         emit = @@ < EmitFn > emit_hashtable_dedup
@@ -2973,7 +2974,7 @@ def private populate_plan_distinct_patterns {
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
             Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist"),
-            Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
+            Slot(matcher = m_alias("distinct_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
         requires <- array<RequiresPredicate>(),
         emit = @@ < EmitFn > emit_hashtable_dedup

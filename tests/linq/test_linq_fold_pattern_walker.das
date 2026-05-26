@@ -19,9 +19,10 @@ def test_alias_table_resolves(t : T?) {
         tt |> equal(alias_table |> key_exists("distinct_family"), true)
         tt |> equal(alias_table |> key_exists("first_family"), true)
         tt |> equal(alias_table |> key_exists("count_family"), true)
-        tt |> equal(alias_table |> key_exists("any_terminator_family"), true)
+        tt |> equal(alias_table |> key_exists("distinct_terminator_family"), true)
         tt |> equal(length(alias_table["distinct_family"]), 2)
         tt |> equal(length(alias_table["first_family"]), 2)
+        tt |> equal(length(alias_table["distinct_terminator_family"]), 3)   // count / long_count / sum — see linq_fold.das alias_table
     }
 }
 
