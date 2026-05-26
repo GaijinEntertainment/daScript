@@ -351,6 +351,9 @@ namespace das {
     }
     void InferTypes::preVisit(ExprMakeVariant *expr) {
         Visitor::preVisit(expr);
+        for (auto & mfd : expr->variants) {
+            if (mfd) checkEmptyName(mfd->name, "variant initializer", mfd->at);
+        }
         if (expr->makeType && expr->makeType->isExprType()) {
             return;
         }

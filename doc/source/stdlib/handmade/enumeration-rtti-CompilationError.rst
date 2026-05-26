@@ -90,6 +90,7 @@ Invalid debug argument count.
 Invalid debug comment type.
 Invalid delete size type.
 Invalid delete super self type.
+AST node has an empty name where one is required (e.g. a macro emitted an ExprVar with `name := ""`, or a struct field declaration without a name).
 Invalid enumeration.
 Invalid enumeration name.
 Invalid enumerator.

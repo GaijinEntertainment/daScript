@@ -415,10 +415,8 @@ namespace das {
 
         LineInfo makeConstAt(ExprField *expr) const;
 
-        virtual void preVisit(ExprField *expr) override;
         virtual ExpressionPtr visit(ExprField *expr) override;
         void collectMissingOperators(const string &opN, MatchingFunctions &mf, bool identicalName);
-        virtual void preVisit(ExprSafeField *expr) override;
         virtual ExpressionPtr visit(ExprSafeField *expr) override;
         // tag
         virtual void preVisit(ExprTag *expr) override;

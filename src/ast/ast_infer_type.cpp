@@ -3735,10 +3735,6 @@ namespace das {
         expr->type = new TypeDecl(Type::tBool);
         return Visitor::visit(expr);
     }
-    void InferTypes::preVisit(ExprField *expr) {
-        Visitor::preVisit(expr);
-        checkEmptyName(expr->name, "field access", expr->at);
-    }
     ExpressionPtr InferTypes::visit(ExprField *expr) {
         if (expr->value->rtti_isVar() && !expr->value->type) { // if its a var expression, but it did not infer
             auto var = static_cast<ExprVar *>(expr->value);
@@ -3856,6 +3852,11 @@ namespace das {
         }
         if (!expr->value->type || expr->value->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
+        if (expr->name.empty()) {
+            error("syntax error, expecting field after '.'", "", "",
+                  expr->at, CompilationError::invalid_field_syntax);
+            return Visitor::visit(expr);
+        }
         if (!expr->underClone) {
             if (auto getProp = promoteToProperty(expr, nullptr)) {
                 reportAstChanged();
@@ -4026,10 +4027,6 @@ namespace das {
         }
         propagateTempType(expr->value->type, expr->type); // a#.foo = foo#
         return Visitor::visit(expr);
-    }
-    void InferTypes::preVisit(ExprSafeField *expr) {
-        Visitor::preVisit(expr);
-        checkEmptyName(expr->name, "safe field access", expr->at);
     }
     ExpressionPtr InferTypes::visit(ExprSafeField *expr) {
         if (!expr->value->type || expr->value->type->isAliasOrExpr())

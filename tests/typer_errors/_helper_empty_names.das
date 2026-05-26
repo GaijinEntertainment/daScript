@@ -16,12 +16,20 @@ require daslib/templates_boost
 // empty-name cascades into `30838: can't locate variable ''`); the
 // corresponding `failed_*.das` test declares both codes in `expect`.
 //
-// Coverage gaps (no fixture; validator still active in the typer for these):
-//   * ExprNamedCall — needs `new MakeStruct()` which has no daslang binding.
-//   * MakeFieldDecl — same MakeStruct dependency.
-//   * Enumeration   — `add_enumeration` is not bound into daslang.
-//   * EnumEntry     — addable via `add_enumeration_entry` but requires
-//                     locating an existing Enumeration in `compiling_module()`.
+// Validator scope notes:
+//   * ExprField + ExprSafeField — NOT covered by `invalid_empty_name`.
+//     They keep their dedicated `invalid_field_syntax` (30153) check in
+//     `visit(ExprField)` / `visit(ExprSafeField)`, with the parser-oriented
+//     "syntax error, expecting field after '.'" message that's accurate
+//     for the common `expr.` (dangling-dot) source case.
+//   * ExprNamedCall + MakeFieldDecl — fixture blocked because
+//     `new MakeStruct()` has no daslang binding. The validator still fires
+//     on these node kinds at typer time regardless of how they were built.
+//   * Enumeration — `add_enumeration` is not bound into daslang.
+//   * EnumEntry — addable via `add_enumeration_entry` but requires
+//                 locating an existing Enumeration in `compiling_module()`.
+//   * MakeFieldDecl inside ExprMakeVariant — validator covers the path
+//     (per-variant walk in `preVisit(ExprMakeVariant)`), no fixture here.
 
 // ===== Expression-level fixtures (call_macro) =====
 
@@ -36,22 +44,6 @@ class private MakeEmptyVarRef : AstCallMacro {
 class private MakeEmptyCall : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
         return new ExprCall(at = call.at, name := "")
-    }
-}
-
-[call_macro(name = "make_empty_field")]
-class private MakeEmptyField : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
-        return new ExprField(at = call.at, name := "",
-                             value <- new ExprConstInt(at = call.at, value = 0))
-    }
-}
-
-[call_macro(name = "make_empty_safe_field")]
-class private MakeEmptySafeField : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
-        return new ExprSafeField(at = call.at, name := "",
-                                 value <- new ExprConstInt(at = call.at, value = 0))
     }
 }
 
