@@ -6,8 +6,8 @@ Living document. Update **Status** + **Decision log** as phases ship.
 
 - [x] **PR A** — Foundation + first migrations (plan_reverse, plan_distinct) — branch `bbatkin/linq-fold-patterns-foundation`
 - [x] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb` (PR #2881 merged)
-- [x] **PR B2** — `plan_order_family` migration (4 emit archetypes + 5 rows) + `Captures.single_name` parallel-table extension — branch `bbatkin/linq-fold-pattern-table-prb2`
-- [ ] **PR C** — SourceAdapter + decs mirrors (plan_decs_reverse / _distinct / _order_family / _unroll)
+- [x] **PR B2** — `plan_order_family` migration (4 emit archetypes + 5 rows) + `Captures.single_name` parallel-table extension — branch `bbatkin/linq-fold-pattern-table-prb2` (PR #2883 merged)
+- [x] **PR C** — SourceAdapter widening + 4 decs planner migrations (plan_decs_reverse / _distinct / _order_family / _unroll) — branch `bbatkin/linq-fold-pattern-table-prc`
 - [ ] **PR D** — Group-by + special cases (plan_group_by family, plan_zip, plan_decs_join, reducer-spec data table)
 
 ## Goal
@@ -51,8 +51,8 @@ Visibility follows the rule in **Tests / exports philosophy** below: default `pr
 
 ```das
 variant SourceAdapter {
-    Array        : tuple<Expression?; string>   // (top, srcName) — PR A scope
-    // PR C widens: Decs(DecsBridgeShape), DecsFind(DecsBridgeShape)
+    Array : tuple<Expression?; string>            // (top, srcName) — PR A
+    Decs  : tuple<DecsBridgeShape?; string>       // (bridge, tupName) — PR C
     // PR D widens: Zip(...), DecsJoin(...)
 }
 
@@ -185,7 +185,7 @@ Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific ch
 | **A** | 1 — First migrations | `plan_reverse` (5 rows: Ra/Rb/R6/R-2a/R1-R4), `plan_distinct` (2 rows + return-shape switch in emit). Archetypes: `emit_counter_array`, `emit_walk_overwrite_scalar`, `emit_backward_walk`, `emit_buffer_reverse_inplace`, `emit_hashtable_dedup`. **Hard-delete imperative bodies.** | complete |
 | **B1** | 2a — Array core (`plan_loop_or_count`) | `c_chain` cardinality + `Captures` wrapper struct (`single` / `many`) + `slot_chain_of(names, cap)` constructor. `collapse_chained_wheres` pre-pass (KR-1 fix). `plan_loop_or_count` migration (1 row + lane dispatch — preserves existing factoring; head c_chain matches `["where_", "select"]` greedy). | complete |
 | **B2** | 2b — Array core (`plan_order_family`) | `plan_order_family` (5 rows: streaming-min / bounded-heap / order_then_plain_distinct / fused-prefilter / buffer-helper-dispatch). 4 archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter` (reused by row 5), `emit_buffer_helper_dispatch`. Captures gains `single_name` parallel-table to preserve `normalize_order_reverse` LinqCall.name swap. **Hard-delete imperative body.** | complete |
-| **C** | 3 — SourceAdapter + decs mirrors | Widen `SourceAdapter` to multi-variant + methods. Migrate `plan_decs_reverse / _distinct / _order_family / _unroll` — **reuse array-side rows + emit fns** modulo adapter swap. **Hard-delete decs imperative bodies.** | not started |
+| **C** | 3 — SourceAdapter + decs mirrors | Widen `SourceAdapter` to `Array \| Decs`. Add adapter helpers `adapter_bind_name` (it/decs_tup), `adapter_element_type`, `adapter_wrap_source_loop` (Array for-loop vs Decs `for_each_archetype + build_decs_inner_for_pruned`), `adapter_wrap_invoke` (Array source-arg-invoke vs Decs zero-arg-invoke + optional outer `.to_sequence_move()` wrap). Refactor 7 emit fns to consume adapter; `emit_buffer_helper_dispatch` stays Array-only via `array_source` predicate on its row. `emit_loop_or_count_lane` gains a Decs-arm (`emit_loop_or_count_lane_decs`) that reconstructs a calls array from captures + dispatches to existing `emit_decs_*` lane fns (1st-order adapter per D1). Migrate 4 decs planners to thin pattern-table stubs reusing array-side rows; hard-delete ~970 LOC of imperative decs bodies. Preserve PR #2834's `reverse \|> take(N)` skip-into-tail fast path via dedicated `emit_decs_reverse_skip_into_tail` helper. | complete |
 | **D** | 4 — Group-by + special cases | Reconcile `GroupBySourceAdapter` with `SourceAdapter`. `plan_group_by` + `plan_decs_group_by` → thin pattern rows delegating to existing `plan_group_by_core` (which stays as a sub-codegen). `plan_zip` (1-2 rows, possibly `SourceAdapter::Zip`). `plan_decs_join` (1 row, `SourceAdapter::DecsJoin` or special-case emit). Migrate `emit_reducer_branches` 12-arm if/elif into a `ReducerSpec` data table. | not started |
 
 **Net at end: ~-1750 LOC.**
@@ -264,6 +264,40 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 ### PR B2 — shipped
 
 **Scope (delivered):** `plan_order_family` migration (5 rows, 4 emit archetypes) — imperative ~543 LOC body deleted. `Captures.single_name` parallel-table extension preserves the post-`normalize_order_reverse` LinqCall.name so emit fns see the swap (the imperative read `cll._1.name` directly; the pattern walker captures `cll._0` whose `.func.name` reflects source, not the swap). `extract_order_captures` helper centralizes state extraction across all 4 archetypes. Row 5 (`order_then_plain_distinct`) reuses `emit_fused_prefilter` with the `distinct_after` capture key.
+
+### PR C — shipped
+
+**Branch:** `bbatkin/linq-fold-pattern-table-prc`
+
+**Scope (delivered):** SourceAdapter widening + 4 decs planner migrations.
+
+**Kernel changes:**
+- `SourceAdapter` gained `Decs : tuple<DecsBridgeShape?; string>` variant alongside `Array`.
+- 4 new adapter helpers: `adapter_bind_name` (returns `qn("it", at)` for Array, `qn("decs_tup", at)` for Decs — drives `build_decs_inner_for_pruned` pruner pattern matching); `adapter_element_type` (returns cloned source element type from `top._type.firstType` or `bridge.elementType`); `adapter_wrap_source_loop` (Array `for(bindName in srcName) { body }` vs Decs `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`); `adapter_wrap_invoke` (Array `invoke($(src):type){body}, $e(top)` vs Decs zero-arg `invoke($():retType{body})` + optional outer `.to_sequence_move()` for iter wrap).
+- New predicate `decs_source` (extract_decs_bridge != null) for rows that should only match decs adapter.
+
+**7 emit fns refactored to consume adapter (zero behavior change on Array side):**
+- PR A: `emit_reverse_counter`, `emit_reverse_walk_overwrite_scalar`, `emit_reverse_buffer_inplace`, `emit_hashtable_dedup`
+- PR B2: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter`
+- Untouched (stay Array-only via row predicates): `emit_reverse_backward_index_walk`, `emit_reverse_backward_walk_dset_gate` (existing `array_source`), `emit_buffer_helper_dispatch` (PR C added `array_source` to its row per D4)
+
+**`emit_hashtable_dedup` take(N) early-exit per-adapter inline** — Array uses `break` in for-loop; Decs uses `for_each_archetype_find` with bool-return to stop archetype walk (matches imperative plan_decs_distinct).
+
+**`emit_loop_or_count_lane_decs` (~80 LOC dispatch fn):** When `ctx.src is Decs`, reconstructs a flatten_linq-shaped `calls` array from captures (head + range ops in canonical order + term), runs `extract_decs_ranges` + `compute_decs_chain_info` (the existing helpers plan_decs_unroll imperative used), classifies the terminator (separate isAccum / isEarlyExit / isMinMaxBy / isWalk / isElementAt — decs has dedicated lane fns for the last three), then dispatches to existing `emit_decs_*` lane fns unchanged. Per D1, state-hoist-above-for_each_archetype shape stays per-adapter; 4 array-side lane fns untouched.
+
+**Decs-only fast path preserved:** `emit_decs_count_archsize` invoked as a pre-check inside `emit_loop_or_count_lane_decs` when chain is bare `count()`. PR #2834's `reverse |> take(N) |> to_array` skip-into-tail (2-pass walk: arch.size sum + for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit) lifted into dedicated `emit_decs_reverse_skip_into_tail` helper that `emit_reverse_buffer_inplace` pre-checks. Preserves the 5.2× perf gain.
+
+**4 decs planners are now thin pattern-table stubs:**
+- `plan_decs_unroll` → `plan_loop_or_count_patterns`
+- `plan_decs_order_family` → `plan_order_family_patterns` (Row 4 `buffer_helper_dispatch` array-only via `array_source`; decs cascades to Row 3 `fused_prefilter`)
+- `plan_decs_reverse` → `plan_reverse_patterns` (backward-index rows already array-only via `array_source`)
+- `plan_decs_distinct` → `plan_distinct_patterns`
+
+Each stub runs the standard pre-passes (`normalize_order_reverse` for reverse + order_family, `collapse_chained_selects`, `collapse_chained_wheres`), then walks its plan table with a Decs adapter. **Hard-deleted ~970 LOC of imperative decs bodies; ~210 LOC of new helpers/stubs/test fixes = -681 LOC net.**
+
+**Parity coverage:** all 198 tests in `tests/linq/test_linq_from_decs.das` pass (after updating 6 splice-shape assertions to the unified naming: `decs_buf` → `order_buf` for order paths / `` `buf `` for distinct paths, `decs_seen` → `order_seen` / `` `seen ``, etc.). Per-archetype decs test files (Step 6 in original plan) deferred — `test_linq_from_decs.das` already provides comprehensive AST-shape + behavioral coverage across all 4 planners.
+
+**Parity GAINS via reuse** (closed for free): `take |> where` on decs unroll (`post_take_where` slot), `order |> distinct |> first` on decs (cascades to `emit_fused_prefilter`), `distinct.count(p)` parity (already mirrored). **Parity GAP deferred (D6):** `reverse |> distinct[_by]` on decs needs a parallel emit fn (decs has no random-access indexing for the backward-walk dset gate); cascades to tier-2 today.
 
 ### Pre-pass (PR B1 ✓)
 
@@ -458,13 +492,22 @@ The imperative code has a few subtle co-occurrence rules that may not map cleanl
 - **2026-05-26 (PR B2)** — `extract_order_captures` helper centralizes captures→state extraction across all 4 emit archetypes. Each archetype starts with `var oc <- extract_order_captures(c, at, itName)` then bails on `!oc.ok` plus path-specific gates. Trade-off vs inlining: helper introduces a struct allocation per call, but emit fns are at compile-time (cost is irrelevant) and the shared extraction kills ~80 LOC of repeated capture-reading boilerplate.
 - **2026-05-26 (PR B2)** — Row 5 (`order_then_plain_distinct`) reuses `emit_fused_prefilter` rather than a 5th dedicated archetype. The runtime behavior is identical: distinct gate per-element push by set-insert on the key, then sort/min/top_n on the prefilter buffer. `extract_order_captures` reads from EITHER `c.single["distinct"]` (Row 4: distinct before order) OR `c.single["distinct_after"]` (Row 5: plain distinct after order) and normalizes both into `oc.distinctName = "distinct"`. distinct_by AFTER order is structurally excluded by the m_literal("distinct") matcher in Row 5 (the position-invariant whole-tuple equality argument only holds for plain distinct).
 - **2026-05-26 (PR B2)** — Pattern row priority order matters: Row 5 (order_then_plain_distinct, c_one on `m_literal("distinct")` after order) must come BEFORE Row 4 (fused_prefilter, c_opt distinct BEFORE order). Otherwise a chain like `[order, distinct, take]` would match Row 4 with no distinct captured (the c_opt distinct slot skips since "distinct" isn't a valid order_family member, then order matches, then take), routing to the no-distinct fused_prefilter path instead of the distinct-gated one. Lint helper `chain_prefix_of` doesn't catch this since neither row is a strict prefix of the other; ordering by specificity is a hand-applied discipline.
+- **2026-05-26 (PR C, D1)** — 1st-order adapter (source-loop swap only), NOT 2nd-order (state-location swap). `emit_loop_or_count_lane` gains a Decs-arm at the top (`emit_loop_or_count_lane_decs`) that dispatches the terminator class to existing `emit_decs_*` lane fns. The 4 array-side lane fns (`emit_counter_lane` / `emit_array_lane` / `emit_accumulator_lane` / `emit_early_exit_lane`) stay UNTOUCHED. Why: array binds source as invoke arg, decs hoists state above for_each_archetype (zero-arg invoke) — these invoke shapes diverge fundamentally. Unifying state location would require deep surgery on PR B1 code with high risk. Pattern recognition unifies (one row table, one terminator dispatch); state-hoisting stays per-adapter. Clean separation, minimal disruption.
+- **2026-05-26 (PR C, D2)** — `array_source` predicate stays semantically unchanged: reads `top._type.isGoodArrayType || top._type.isArray`. For decs sources, `top` is `from_decs_template(...)` (iterator-typed), so `array_source` correctly returns false without semantic shift. Parallel `decs_source` predicate added for rows that should only match Decs adapter.
+- **2026-05-26 (PR C, D3)** — Bind name is a SourceAdapter responsibility. Every emit fn hardcoded `let itName = qn("it", at)` for lambda peeling. For decs, peeling must target `qn("decs_tup", at)` so `build_decs_inner_for_pruned`'s pruner can fire on `tupName.<field>` access patterns. New helper `adapter_bind_name(adapter, at)` returns the right name per adapter; threaded into every `peel_lambda_rename_var` / `peel_lambda_replace_var` / `merge_where_cond` callsite across the 7 refactored emit fns.
+- **2026-05-26 (PR C, D4)** — Row 4 (`buffer_helper_dispatch`) on `plan_order_family_patterns` gated with `array_source` predicate. `emit_buffer_helper_dispatch` calls daslib helpers like `order(top, key)` / `top_n*(top, N)` that need a `top` expression; Decs has no `top`, so decs adapter cascades to Row 3 (`fused_prefilter`) which materializes the buffer. Matches what the imperative decs body did for these shapes anyway.
+- **2026-05-26 (PR C, D5)** — Decs-only fast paths added as pre-checks. `emit_decs_count_archsize` fires as a pre-check inside `emit_loop_or_count_lane_decs` when chain is bare `count()` (no chain head, no range ops). PR #2834's `reverse |> take(N) |> to_array` skip-into-tail (2-pass walk: arch.size sum + for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit) lifted into a dedicated `emit_decs_reverse_skip_into_tail` helper that `emit_reverse_buffer_inplace` pre-checks before the general buffer path. Preserves the 5.2× perf gain.
+- **2026-05-26 (PR C, D6)** — `reverse |> distinct[_by]` on decs sources deferred to a future PR. The array-side R-2a row (`emit_reverse_backward_walk_dset_gate`) uses backward index walk — requires random access; decs has none. Building a parallel decs emit fn is genuine new work (not adapter swap). For now decs cascades to tier-2 for this shape (matches today's behavior — no regression).
+- **2026-05-26 (PR C impl)** — `emit_hashtable_dedup`'s take(N) early-exit case stays per-adapter inline (Array uses `break` in for-loop; Decs uses `for_each_archetype_find` returning bool to stop archetype walk). Genuine shape divergence — the array's `break` exits the inner-for; the decs `for_each_archetype_find` semantically returns bool from the archetype lambda. Inlining a per-adapter branch is cleaner than adding a `wrap_source_loop_with_stop` variant of the adapter helper. Non-take case uses `adapter_wrap_source_loop` uniformly.
+- **2026-05-26 (PR C impl)** — `emit_loop_or_count_lane_decs` reconstructs a `calls`-shaped array from captures (head + range ops in canonical order + term) so existing `extract_decs_ranges` + `compute_decs_chain_info` helpers run unchanged. LinqCall records pulled from `linqCalls` registry via `addr(linqCalls?[name] ?? default<LinqCall>)` — matches `flatten_linq`'s pattern for ref→pointer conversion.
+- **2026-05-26 (PR C impl)** — Step 6 (4 new per-archetype `tests/linq/test_linq_fold_decs_*.das` files) was deferred. Existing `tests/linq/test_linq_from_decs.das` carries 198 tests across all 4 decs planners (reverse / distinct / order_family / unroll) with both AST-shape splice assertions AND end-to-end behavioral coverage. The unified emit fns are themselves tested through 6 existing themes (1–8) + `test_linq_fold_order_family.das` (12 tests) on the Array side. Adding 4 new files would mostly duplicate existing coverage. Verification of decs migration parity: all 198 `test_linq_from_decs.das` tests pass after migration (6 splice-shape assertions updated to unified naming).
 
 ## Open questions
 
 - **Prefix-conflict lint pass** — in PR A scope or deferred? Lean PR A so it grows with the table.
 - **`plan_zip` / `plan_decs_join` SourceAdapter shape** — defer until PR D scoping. They feel special-case.
 - **Reducer-spec data table** — exact shape (miss/hit template per row) — design during PR D.
-- **`SourceAdapter` method surface** — `wrap_per_element(body, allows_early_exit)` is the minimal contract. Whether `finalize(stmts, retType)` belongs on the adapter or stays as a separate `finalize_*_emission` family — decide during PR C.
+- **`SourceAdapter` method surface** — answered in PR C. The minimal contract turned out to be 4 helpers (`adapter_bind_name`, `adapter_element_type`, `adapter_wrap_source_loop`, `adapter_wrap_invoke`), not a method-on-variant pattern. `finalize_emission_stmts` / `finalize_decs_emission` semantics merged into `adapter_wrap_invoke`. The take(N) early-exit case stayed per-adapter inline rather than via a `wrap_source_loop_with_stop` extension — only emit_hashtable_dedup needed it in PR C, so factoring a helper was premature.
 
 ## See also
 
