@@ -80,14 +80,19 @@ def main {
     print("section 4: dst[0] = {dst[0].f1}, {dst[0].f2}\n")
 
     // ──────────────────────────────────────────────────────────────────
-    // Section 5 — Return-value form (single-arg only)
+    // Section 5 — Workhorse element types (int, float, ...)
     // ──────────────────────────────────────────────────────────────────
+    //
+    // The block-arg is bound by reference, so `_ = X` (or named `x = X`)
+    // mutates the underlying slot. The macro relies on the helper's
+    // `block<(var x : TT&) : void>` signature to drive daslang's
+    // inference; no special-case in the macro itself.
 
-    let f1Val = with_(arr[0]) {
-        _.f1 = 42
-        return _.f1
+    var ints = [1, 2, 3]
+    with_(ints[1]) {
+        _ = 222
     }
-    print("section 5: returned = {f1Val}, arr[0].f1 = {arr[0].f1}\n")
+    print("section 5: ints = {ints}\n")
 
     // ──────────────────────────────────────────────────────────────────
     // Section 6 — Tables

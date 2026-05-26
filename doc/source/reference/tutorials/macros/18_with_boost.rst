@@ -81,26 +81,30 @@ are positional (no ``=``-named args; the macro reads them in order):
        d.f2 = s.f2 + 2
    }
 
-Arities 1, 2, and 3 are supported in this phase. Multi-arg + a
-``return`` from the body is refused (use the single-arg form for
-value-returning bodies); arity ≥ 4 is also refused.
+Arities 1, 2, and 3 are supported in this phase; arity ≥ 4 is refused.
 
 
-Section 3 — Return-value form (single-arg only)
-================================================
+Section 3 — Workhorse element types (int, float, ...)
+======================================================
 
-When the block has a ``return X`` statement, the value propagates out
-of the ``with_`` expression:
+The block-arg is bound by reference, so workhorse-element containers
+work the same as struct-element ones — mutation through ``_ = X`` (or
+the named ``x = X``) propagates back to the underlying slot:
 
 .. code-block:: das
 
-   let f1Val = with_(arr[0]) {
-       _.f1 = 42
-       return _.f1
+   var ints = [1, 2, 3]
+   with_(ints[1]) {
+       _ = 222
    }
-   // f1Val == 42, arr[0].f1 == 42
+   // ints == [1, 222, 3]
 
-This works only for the single-arg form; multi-arg + return is refused.
+This relies entirely on the helper's
+``block<(var x : TT&) : void>`` signature driving daslang's
+inference; the macro emits the block param as a parser-shaped
+``auto -const removeConstant=true`` and daslang resolves ``TT`` from
+the container, then binds ``x`` (or ``_``) as ``int&`` (or whichever
+workhorse type the element happens to be).
 
 
 Section 4 — Tables
@@ -154,15 +158,13 @@ Section 6 — Refused container shapes
   built-in ``with``. ``with_`` is the *array/table specialist*; ``with``
   remains the right tool for locals.
 
-* **Workhorse-element containers** (``array<int>``, ``array<float>``,
-  ``table<K; int>``, …) are refused because the block-param binding
-  would be by-value and the body's mutation wouldn't propagate. Use
-  ``arr[i] = value`` directly — that's a single line and as clear.
-
 * **More than one table-keyed arg** is refused per the rehash hazard
   noted above.
 
-* **Multi-arg + ``return``** is refused (single-arg only for value-returning bodies).
+* **Bodies that ``return`` a value** are refused at typecheck time —
+  the helper sigs declare ``: void`` block returns. ``with_`` is for
+  in-place mutation; compute values via a local: ``var v : T;
+  with_(arr[0]) { v = _.f }``.
 
 * **Arity > 3** is refused.
 
@@ -182,7 +184,7 @@ Expected output::
    section 2: arr[0] = 99, 100
    section 3: arr[1].f1 = 555
    section 4: dst[0] = 11, 22
-   section 5: returned = 42, arr[0].f1 = 42
+   section 5: ints = [ 1, 222, 3]
    section 6: tab[k].f1 = 777
    section 7: push during with_ body was caught (lock fired)
 

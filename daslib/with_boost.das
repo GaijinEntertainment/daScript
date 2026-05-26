@@ -20,8 +20,9 @@ module with_boost shared private
 //!   use built-in ``with`` for those.
 //! * At most one table-keyed arg per call (any second table arg refused —
 //!   rehash on insert invalidates earlier pinned entries).
-//! * Multi-arg + ``return`` from the body is refused in this phase; use the
-//!   single-arg form for value-returning bodies.
+//! * Block bodies are void (no ``return`` value); ``with_`` is for in-place
+//!   mutation, not value-extraction. To compute a value, write to a
+//!   local: ``var v : T; with_(arr[0]) { v = _.f }``.
 //! * Bodies that ``panic`` leak the lock until issue #2532 lands; matches
 //!   existing daslib behaviour (``daslib/array_boost::array_view`` etc.).
 
@@ -38,25 +39,16 @@ require daslib/macro_boost
 
 def public _with_locked_arr1_v(
                                var a : array<auto(TT)>; idx : int;
-                               b : block<(var x : TT) : void>) {
+                               b : block<(var x : TT&) : void>) {
     __builtin_array_lock_mutable(a)
     invoke(b, a[idx])
 } finally {
     __builtin_array_unlock_mutable(a)
 }
 
-def public _with_locked_arr1_r(
-                               var a : array<auto(TT)>; idx : int;
-                               b : block<(var x : TT)>) {
-    __builtin_array_lock_mutable(a)
-    return invoke(b, a[idx])
-} finally {
-    __builtin_array_unlock_mutable(a)
-}
-
 def public _with_locked_tab1_v(
                                var t : table<auto(KT); auto(VT)>; key : KT;
-                               b : block<(var x : VT) : void>) {
+                               b : block<(var x : VT&) : void>) {
     // Resolve the element ref BEFORE locking — t[key] would otherwise hit
     // the insert path inside a locked table and panic. The lock then pins
     // the table (no rehash) for the duration of the body, keeping `elem`
@@ -71,22 +63,10 @@ def public _with_locked_tab1_v(
     __builtin_table_unlock_mutable(t)
 }
 
-def public _with_locked_tab1_r(
-                               var t : table<auto(KT); auto(VT)>; key : KT;
-                               b : block<(var x : VT)>) {
-    unsafe {
-        var elem & = t[key]
-        __builtin_table_lock_mutable(t)
-        return invoke(b, elem)
-    }
-} finally {
-    __builtin_table_unlock_mutable(t)
-}
-
 def public _with_locked_arr2_v(
                                var a1 : array<auto(T1)>; var a2 : array<auto(T2)>;
                                i1 : int; i2 : int;
-                               b : block<(var x : T1; var y : T2) : void>) {
+                               b : block<(var x : T1&; var y : T2&) : void>) {
     __builtin_array_lock_mutable(a1)
     __builtin_array_lock_mutable(a2)
     invoke(b, a1[i1], a2[i2])
@@ -98,7 +78,7 @@ def public _with_locked_arr2_v(
 def public _with_locked_arr3_v(
                                var a1 : array<auto(T1)>; var a2 : array<auto(T2)>; var a3 : array<auto(T3)>;
                                i1 : int; i2 : int; i3 : int;
-                               b : block<(var x : T1; var y : T2; var z : T3) : void>) {
+                               b : block<(var x : T1&; var y : T2&; var z : T3&) : void>) {
     __builtin_array_lock_mutable(a1)
     __builtin_array_lock_mutable(a2)
     __builtin_array_lock_mutable(a3)
@@ -113,18 +93,8 @@ def public _with_locked_arr3_v(
 // Call macro
 // ──────────────────────────────────────────────────────────────────────────────
 
-def private block_returns_value(blk : ExprBlock?) : bool {
-    for (st in blk.list) {
-        if (st is ExprReturn) {
-            let r = st as ExprReturn
-            return true if (r.subexpr != null)
-        }
-    }
-    return false
-}
-
-def private container_kind(atNode : ExprAt?; prog : ProgramPtr) : string {
-    // Returns "array", "table", or "" if unrecognized
+def private container_kind(atNode : ExprAt?) : string {
+    //! Returns "array", "table", or "" if neither.
     let subT = atNode.subexpr._type
     return "" if (subT == null)
     return "array" if (subT.baseType == Type.tArray)
@@ -152,20 +122,15 @@ class private WithMacro : AstCallMacro {
             "with_ container element type not inferred yet — got null _type on {describe(containerExpr)}")
         macro_verify(atNode.subexpr._type != null, prog, call.at,
             "with_ container type not inferred yet — null _type on subexpr {describe(atNode.subexpr)}")
-        let cKind = container_kind(atNode, prog)
+        let cKind = container_kind(atNode)
         macro_verify(cKind != "", prog, call.at,
             "with_ container must be array or table, got {describe(atNode.subexpr._type)}")
-        // Refuse workhorse-element containers: block-arg would be by-value
-        // (block<(var x : TT)> with TT = workhorse like `int`), so mutation
-        // wouldn't propagate. Direct `arr[i] = value` is the right tool.
-        macro_verify(!containerExpr._type.isWorkhorseType, prog, call.at,
-            "with_ on workhorse-element container is not supported (mutation would not propagate); use `arr[i] = value` directly")
-        // Block handling:
-        //   - User wrote 0 params → inject `_` of element type; needs rebuild.
-        //   - User wrote N params → pass the user's block through verbatim;
-        //     the helper's generic block sig + auto(TT) on the container arg
-        //     drives type inference. Rewriting the params (even just renaming)
-        //     loses information the typer needs.
+        // Block handling. Every block param goes out as `var name : auto`;
+        // the helper's `block<(var x : TT&) : void>` signature drives type
+        // inference. This keeps the macro emission minimal — daslang sees
+        // the same shape it would see if the user had hand-written the
+        // helper call and the typer infers `TT&` for every binding,
+        // workhorse or struct alike.
         let mblk = blockArg as ExprMakeBlock
         let userBlock = mblk._block as ExprBlock
         let userArgCount = length(userBlock.arguments)
@@ -174,15 +139,16 @@ class private WithMacro : AstCallMacro {
         if (userArgCount == 0) {
             macro_verify(containerCount == 1, prog, call.at,
                 "with_ multi-arg form requires explicit block params: $(a, b, ...)")
-            var pT = clone_type(call.arguments[0]._type)
+            // Match what the parser produces for `$(a)` (no type): a
+            // TypeDecl(autoinfer) with ref=false, removeConstant=true.
+            // null _type crashes Variable::clone; auto without
+            // removeConstant trips the typer's generic instantiation.
+            var pT = new TypeDecl(at = call.at, baseType = Type.autoinfer)
             pT.flags.ref = false
-            pT.flags.constant = false
+            pT.flags.removeConstant = true
             var injected = new Variable(at = call.at, name := "_", _type = pT)
-            let hasReturn = block_returns_value(userBlock)
             var newBlock = new ExprBlock(at = userBlock.at,
-                returnType = (hasReturn
-                    ? new TypeDecl(at = userBlock.at, baseType = Type.autoinfer)
-                    : new TypeDecl(at = userBlock.at, baseType = Type.tVoid)),
+                returnType = new TypeDecl(at = userBlock.at, baseType = Type.tVoid),
                 blockFlags = userBlock.blockFlags | ExprBlockFlags.isClosure)
             newBlock.arguments |> emplace_new(injected)
             for (st in userBlock.list) {
@@ -195,38 +161,24 @@ class private WithMacro : AstCallMacro {
                 "with_ block-param count must match container-arg count: {containerCount} containers, {userArgCount} block params")
             rewrittenBlock = clone_expression(mblk) as ExprMakeBlock
             rewrittenInner = rewrittenBlock._block as ExprBlock
-            // Strip const + force ref on each block param so `$(v)` (which
-            // defaults to let-style const) gets `var v : T&` shape that matches
-            // the helper's `block<(var x : TT) : void>`. Don't touch the
-            // existing param's _type if user spelled it explicitly.
+            // Reset each user-named param to what the parser produces for
+            // `$(a)` (autoinfer + ref=false + removeConstant=true) so the
+            // helper's `block<(var x : TT&) : void>` signature drives
+            // inference the same way a direct hand-written call does.
             for (i in range(containerCount)) {
                 var arg = rewrittenInner.arguments[i]
-                arg._type = clone_type(call.arguments[i]._type)
+                arg._type = new TypeDecl(at = arg.at, baseType = Type.autoinfer)
                 arg._type.flags.ref = false
-                arg._type.flags.constant = false
+                arg._type.flags.removeConstant = true
             }
         }
         // Single-arg dispatch
         if (containerCount == 1) {
-            let returnsValue = block_returns_value(rewrittenInner)
-            if (cKind == "array") {
-                if (returnsValue) {
-                    return <- qmacro(_with_locked_arr1_r($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock)))
-                } else {
-                    return <- qmacro(_with_locked_arr1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock)))
-                }
-            } elif (cKind == "table") {
-                if (returnsValue) {
-                    return <- qmacro(_with_locked_tab1_r($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock)))
-                } else {
-                    return <- qmacro(_with_locked_tab1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock)))
-                }
-            }
+            return <- qmacro(_with_locked_arr1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock))) if (cKind == "array")
+            return <- qmacro(_with_locked_tab1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock))) if (cKind == "table")
         }
-        // Multi-arg dispatch (containerCount == 2 or 3, void only)
-        macro_verify(!block_returns_value(rewrittenInner), prog, call.at,
-            "with_ with return value is single-arg only; rewrite as nested single-arg with_")
-        // Validate every additional arg is an array ExprAt (multi-table refused)
+        // Multi-arg dispatch (containerCount == 2 or 3): validate every arg
+        // is an array ExprAt (multi-table refused).
         for (i in range(containerCount)) {
             let ai = call.arguments[i]
             macro_verify(ai is ExprAt, prog, call.at,
@@ -234,7 +186,7 @@ class private WithMacro : AstCallMacro {
             let aiNode = ai as ExprAt
             macro_verify(aiNode.subexpr._type != null, prog, call.at,
                 "with_ arg #{i} container type not inferred yet")
-            let ki = container_kind(aiNode, prog)
+            let ki = container_kind(aiNode)
             macro_verify(ki == "array", prog, call.at,
                 "with_ multi-arg form: arg #{i} must be an array (got {ki}). Tables allowed only in single-arg form.")
         }
