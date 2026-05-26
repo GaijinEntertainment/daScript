@@ -216,8 +216,10 @@ Per-archetype unit tests: call emit fns directly with synthetic `Captures` + `So
 | `SplicePattern` | Per-row struct |
 | `Slot` | Chain slot |
 | `SlotMatcher`, `SlotCardinality` | Variant types |
-| `Captures` | `table<string; tuple<ExprCall?; LinqCall?>>` typedef |
-| `RequiresPredicate`, `EmitFn` | Function-typedef types |
+| `Captures` | `table<string; ExprCall?>` typedef (matched call by capture name; the `LinqCall` record is accessible separately via `linqCalls[call.name]`) |
+| `MatchResult` | Variant `no_match : void? \| matched : Captures` — walker return type |
+| `RequiresPredicate`, `EmitFn` | Function-typedef types — see kernel snippet for current signatures |
+| `EmitCtx` | Struct `{ top; src; expr_is_iterator }` passed to every emit archetype |
 | `SourceAdapter` | Source-loop abstraction variant |
 | `alias_table` | Named op-name groups |
 | `match_pattern(...)` | Walker function |

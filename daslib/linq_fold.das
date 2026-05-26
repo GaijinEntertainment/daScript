@@ -245,7 +245,7 @@ def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
     if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
-            && take.arguments[1]._type.baseType == Type.tInt)
+            && take.arguments[1]._type != null && take.arguments[1]._type.baseType == Type.tInt)
 }
 
 def implicit_to_array(var c : Captures; var top : Expression?) : bool {
@@ -2442,12 +2442,15 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
     var bufElemType = strip_const_ref(clone_type(top._type.firstType))
     let bufName = qn("buf", at)
     let lenName = qn("rlen", at)
+    let takeLimName = qn("rtakeLim", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
     var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
+    // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
     var body : Expression? = qmacro_block() {
         let $i(lenName) = length($i(srcName))
-        let $i(takeNName) = $e(c["take"].arguments[1]) <= 0 ? 0 : ($e(c["take"].arguments[1]) < $i(lenName) ? $e(c["take"].arguments[1]) : $i(lenName))
+        let $i(takeLimName) = $e(c["take"].arguments[1])
+        let $i(takeNName) = $i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < $i(lenName) ? $i(takeLimName) : $i(lenName))
         var $i(bufName) : array<$t(bufElemType)>
         $i(bufName) |> reserve($i(takeNName))
         for ($i(kName) in 0 .. $i(takeNName)) {
@@ -2578,8 +2581,11 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
     }
     var resizeStmts : array<Expression?>
     if (takeExpr != null) {
-        resizeStmts |> push <| qmacro_expr() {
-            $i(bufName) |> resize($e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < length($i(bufName)) ? $e(takeExpr) : length($i(bufName))))
+        // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
+        let takeLimName = qn("rev_takeLim", at)
+        resizeStmts |> push_from <| qmacro_block_to_array() {
+            let $i(takeLimName) = $e(takeExpr)
+            $i(bufName) |> resize($i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < length($i(bufName)) ? $i(takeLimName) : length($i(bufName))))
         }
     }
     var body : Expression?
