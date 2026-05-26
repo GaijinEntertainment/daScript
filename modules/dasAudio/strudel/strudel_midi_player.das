@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options persistent_heap
+options gc
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
@@ -553,7 +555,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         state.mixer_ready = true
     }
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     var i = length(state.voices) - 1
     while (i >= 0) {
         var voice = state.voices[i]
@@ -828,9 +830,9 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     let TARGET_CHUNKS = 4
     let LOW_WATERMARK = 2
     var tracks : array<MidiPlaybackState?>
-    var status_box <- unsafe(lock_box_create())
+    var status_box <- lock_box_create()
     set_status_update(sid, status_box)
-    var pcm_box <- unsafe(lock_box_create())
+    var pcm_box <- lock_box_create()
     // initialize reverb (convolution: 2s decay, 15kHz→1kHz lowpass sweep)
     g_reverb = new ConvolutionReverb
     conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)
@@ -862,7 +864,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
                     looping = tc.looping
                 ))
             } elif (cmd is remove_track) {
-                let name = string(cmd as remove_track)
+                let name = cmd as remove_track
                 var k = length(tracks) - 1
                 while (k >= 0) {
                     if (tracks[k].name == name) {
@@ -1024,7 +1026,7 @@ def public midi_init() {
         g_midi_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     }
     g_midi_cmd_stream = unsafe(stream_create())
-    g_midi_done_status = unsafe(job_status_create())
+    g_midi_done_status = job_status_create()
     g_midi_done_status |> append(1)                   // expect one notification on worker exit
     // @capture auto-bumps refcount for Stream and JobStatus — no manual add_ref needed
     let sid = g_midi_sid

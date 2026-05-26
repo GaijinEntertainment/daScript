@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options persistent_heap
+options gc
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
@@ -355,7 +357,7 @@ def private strudel_process_commands(cmd_fn : function<(cmd : string) : void>) :
         } elif (cmd is set_cps) {
             g_cps = cmd as set_cps
         } elif (cmd is user_cmd) {
-            let ucmd = string(cmd as user_cmd)
+            let ucmd = cmd as user_cmd
             invoke(cmd_fn, ucmd)
         }
     }
@@ -368,10 +370,10 @@ def public strudel_create_channel() {
     //! Create the PCM stream for main-thread playback. Call once after audio_system_create() and before strudel_tick.
     if (g_sid == 0ul) {
         g_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
-        g_tick_status_box = unsafe(lock_box_create())
+        g_tick_status_box = lock_box_create()
         g_tick_status_box |> add_ref()
         set_status_update(g_sid, g_tick_status_box)
-        g_tick_pcm_box = unsafe(lock_box_create())
+        g_tick_pcm_box = lock_box_create()
         // memory tracking baseline
         g_mem_heap_baseline = heap_bytes_allocated()
         g_mem_str_baseline = string_heap_bytes_allocated()
@@ -396,7 +398,7 @@ def public strudel_tick() {
     }
     let t0 = ref_time_ticks()
     let CHUNK_SEC = g_chunk_seconds
-    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    let chunkSamples = int(CHUNK_SEC * float(SAMPLE_RATE)) * 2
     // prepare master output
     g_master_pcm |> resize(chunkSamples)
     for (s in g_master_pcm) {
@@ -414,7 +416,7 @@ def public strudel_tick() {
             track.sched.lastQueryEnd = g_wall_time * g_cps
             track.sched.cps = g_cps
         }
-        tick(track.sched, track.pat, g_bank, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+        tick(track.sched, track.pat, g_bank, g_wall_time, CHUNK_SEC, g_look_ahead)
         // mix scheduler output into master with track gain
         if (!empty(track.sched.output) && track.gain > 0.001) {
             // copy to per-track PCM for visualizer access
@@ -435,9 +437,9 @@ def public strudel_tick() {
         // update fade envelope
         if (track.fade_speed > 0.0) {
             if (track.gain < track.target_gain) {
-                track.gain = min(track.gain + track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                track.gain = min(track.gain + track.fade_speed * CHUNK_SEC, track.target_gain)
             } elif (track.gain > track.target_gain) {
-                track.gain = max(track.gain - track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                track.gain = max(track.gain - track.fade_speed * CHUNK_SEC, track.target_gain)
             }
             if (abs(track.gain - track.target_gain) < 0.001) {
                 track.gain = track.target_gain
@@ -455,7 +457,7 @@ def public strudel_tick() {
     if (!empty(g_master_pcm)) {
         append_box_to_pcm(g_sid, g_tick_pcm_box, g_master_pcm)
     }
-    let chunkFrames = int(float(CHUNK_SEC) * float(SAMPLE_RATE))
+    let chunkFrames = int(CHUNK_SEC * float(SAMPLE_RATE))
     g_wall_samples += int64(chunkFrames)
     g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
@@ -481,7 +483,7 @@ def public strudel_tick_offline() {
     //! Renders into g_master_pcm and advances g_wall_time; call in a tight loop for offline WAV rendering.
     let t0 = ref_time_ticks()
     let CHUNK_SEC = g_chunk_seconds
-    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    let chunkSamples = int(CHUNK_SEC * float(SAMPLE_RATE)) * 2
     // prepare master output
     g_master_pcm |> resize(chunkSamples)
     for (s in g_master_pcm) {
@@ -499,7 +501,7 @@ def public strudel_tick_offline() {
             track.sched.lastQueryEnd = g_wall_time * g_cps
             track.sched.cps = g_cps
         }
-        tick(track.sched, track.pat, g_bank, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+        tick(track.sched, track.pat, g_bank, g_wall_time, CHUNK_SEC, g_look_ahead)
         // mix scheduler output into master with track gain
         if (!empty(track.sched.output) && track.gain > 0.001) {
             // copy to per-track PCM for visualizer access
@@ -520,9 +522,9 @@ def public strudel_tick_offline() {
         // update fade envelope
         if (track.fade_speed > 0.0) {
             if (track.gain < track.target_gain) {
-                track.gain = min(track.gain + track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                track.gain = min(track.gain + track.fade_speed * CHUNK_SEC, track.target_gain)
             } elif (track.gain > track.target_gain) {
-                track.gain = max(track.gain - track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                track.gain = max(track.gain - track.fade_speed * CHUNK_SEC, track.target_gain)
             }
             if (abs(track.gain - track.target_gain) < 0.001) {
                 track.gain = track.target_gain
@@ -536,7 +538,7 @@ def public strudel_tick_offline() {
             g_tracks[i] = null
         }
     }
-    let chunkFrames = int(float(CHUNK_SEC) * float(SAMPLE_RATE))
+    let chunkFrames = int(CHUNK_SEC * float(SAMPLE_RATE))
     g_wall_samples += int64(chunkFrames)
     g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
@@ -568,12 +570,12 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var total_time = 0.lf
     var total_samples = 0ul
     var max_chunk_usec = 0.0lf
-    var status_box <- unsafe(lock_box_create())
+    var status_box <- lock_box_create()
     set_status_update(g_sid, status_box)
-    var pcm_box <- unsafe(lock_box_create())
+    var pcm_box <- lock_box_create()
     var mixer : ma_volume_mixer
     ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
-    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    let chunkSamples = int(CHUNK_SEC * float(SAMPLE_RATE)) * 2
     var output : array<float>
     output |> resize(chunkSamples)
     // memory tracking
@@ -603,7 +605,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
                 track.sched.lastQueryEnd = g_wall_time * g_cps
                 track.sched.cps = g_cps
             }
-            tick(track.sched, track.pat, *g_bank_ptr, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+            tick(track.sched, track.pat, *g_bank_ptr, g_wall_time, CHUNK_SEC, g_look_ahead)
             // mix into output with track gain
             if (!empty(track.sched.output) && track.gain > 0.001) {
                 ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
@@ -620,9 +622,9 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             // update fade envelope
             if (track.fade_speed > 0.0) {
                 if (track.gain < track.target_gain) {
-                    track.gain = min(track.gain + track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                    track.gain = min(track.gain + track.fade_speed * CHUNK_SEC, track.target_gain)
                 } elif (track.gain > track.target_gain) {
-                    track.gain = max(track.gain - track.fade_speed * float(CHUNK_SEC), track.target_gain)
+                    track.gain = max(track.gain - track.fade_speed * CHUNK_SEC, track.target_gain)
                 }
                 if (abs(track.gain - track.target_gain) < 0.001) {
                     track.gain = track.target_gain
@@ -721,12 +723,12 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     g_cmd_fn = cmd_fn
     // create playback time lockbox
     if (g_playback_box == null) {
-        g_playback_box = unsafe(lock_box_create())
+        g_playback_box = lock_box_create()
     }
     // create command stream and done status (thread-exit signal, wait group of 1).
     // @capture auto-bumps refcount for Stream and JobStatus — no manual add_ref needed.
     g_cmd_stream = unsafe(stream_create())
-    g_done_status = unsafe(job_status_create())
+    g_done_status = job_status_create()
     g_done_status |> append(1)
     // create PCM stream on main thread (audio globals are initialized here)
     let thread_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)

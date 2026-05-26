@@ -197,6 +197,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_signals.das
         tests/strudel/test_synthesis.das
         tests/strudel/test_vowel.das
+        tests/audio/test_hrtf_budget.das
     )
 ENDIF()
 

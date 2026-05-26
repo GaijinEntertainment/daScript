@@ -299,6 +299,7 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
         return false;
     }
     g_mixer_context.reset(get_clone_context(&context,uint32_t(ContextCategory::audio_context)));
+    g_mixer_context->verySafeContext = false;
     g_mixer_function = mixer;
     g_mixer_env = daScriptEnvironment::getBound();
     if ( ma_device_start(&g_device) != MA_SUCCESS ) {
