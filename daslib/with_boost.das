@@ -24,8 +24,6 @@ module with_boost shared private
 //! * Block bodies are void (no ``return`` value); ``with_`` is for in-place
 //!   mutation. To compute a value, write to a local:
 //!   ``var v : T; with_(arr[0]) { v = _.f }``.
-//! * Temporary-typed (``Foo#``) containers are bound without a lock — a temp
-//!   is private to the surrounding expression so nothing else can mutate it.
 
 require daslib/ast
 require daslib/ast_boost
@@ -46,17 +44,18 @@ def private container_kind(atNode : ExprAt?) : string {
 }
 
 def private is_lvalue_chain(e : ExpressionPtr) : bool {
-    //! True if e is reachable through pointer-chasing field / index ops
-    //! from an ExprVar root — i.e. binding `var x & = e` is safe (after
+    //! True if e is reachable from an ExprVar root through ExprField
+    //! hops only — i.e. binding `var x & = e` is safe (after
     //! `unsafe(...)`) because e refers to addressable storage outside
-    //! this expression. Excludes array literals and call results whose
-    //! temp lifetime ends with the expression.
+    //! this expression AND the chain doesn't contain a nested container
+    //! that the macro can't lock. ExprAt / ExprSafeAt are deliberately
+    //! NOT followed: `outer[i].innerArr[j]` would lock only `innerArr`
+    //! while `outer` stayed mutable, leaving the inner ref vulnerable
+    //! to outer-array reallocation from inside the body.
     return false if (e == null)
     return true if (e is ExprVar)
     return is_lvalue_chain((e as ExprField).value) if (e is ExprField)
     return is_lvalue_chain((e as ExprSafeField).value) if (e is ExprSafeField)
-    return is_lvalue_chain((e as ExprAt).subexpr) if (e is ExprAt)
-    return is_lvalue_chain((e as ExprSafeAt).subexpr) if (e is ExprSafeAt)
     return false
 }
 
