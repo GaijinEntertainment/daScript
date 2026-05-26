@@ -199,9 +199,10 @@ class AudioChannel {
         if (MA_HRTF) {
             ma_hrtf_init(unsafe(addr(hrtf)), uint(MA_SAMPLE_RATE))
             ma_channel_converter_uninit(unsafe(addr(channel_converter)))
+            // HRTF always emits stereo, so the converter's input is 2ch regardless of source.channels
             var channel_converter_config <- ma_channel_converter_config_init(
                 ma_format.ma_format_f32,
-                uint(source.channels),
+                2u,
                 null,
                 uint(MA_CHANNELS),
                 null,
@@ -1058,8 +1059,9 @@ def make_decoder(filename : string; rate, channels : int) : ma_decoder? {
 // then pushed atomically as one Stream batch.
 var global_batch : array<array<uint8>>?
 
+[deprecated(message="use `batch(cb)` instead")]
 def public begin_batch() {
-    //! Begin batching audio commands. All commands until end_batch are sent atomically.
+    //! Deprecated. Use ``batch() { ... }`` instead.
     if (global_batch != null) {
         panic("nested batch")
     }
@@ -1067,16 +1069,14 @@ def public begin_batch() {
     global_batch = tempBatch
 }
 
+[deprecated(message="use `batch(cb)` instead")]
 def public end_batch() {
-    //! End batching and send all batched commands atomically. No-op if no batch is open.
+    //! Deprecated. Use ``batch() { ... }`` instead.
     if (global_batch == null) {
-        return
+        panic("no batch")
     }
     g_command_stream |> push_batch(*global_batch)
     unsafe {
-        for (it in *global_batch) {
-            delete it
-        }
         delete * global_batch
     }
     global_batch = null
@@ -1132,18 +1132,19 @@ def public play_3d_sound_from_file(filename : string; position : float3; attenua
     return useSid
 }
 
-def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid()) {
-    //! Create a PCM streaming channel. Feed it samples with append_to_pcm.
-    push_cmd(AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = sid, rate = rate, channels = channels)))
-    return sid
+def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = INVALID_SID) {
+    //! Create a PCM streaming channel. Feed it samples with append_to_pcm. If sid is INVALID_SID, a new SID is generated.
+    let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
+    push_cmd(AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = useSid, rate = rate, channels = channels)))
+    return useSid
 }
 
-def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int) {
-    //! Create a 3D PCM streaming channel. Feed it samples with append_to_pcm.
-    let sid = generate_sound_sid()
+def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int; sid : SID = INVALID_SID) {
+    //! Create a 3D PCM streaming channel. Feed it samples with append_to_pcm. If sid is INVALID_SID, a new SID is generated.
+    let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_pcm_stream_3d <-
-        AudioCommandAddPCMStream3D(sid = sid, rate = rate, channels = channels, position = position, attenuation = attenuation)))
-    return sid
+        AudioCommandAddPCMStream3D(sid = useSid, rate = rate, channels = channels, position = position, attenuation = attenuation)))
+    return useSid
 }
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>; sid : SID = INVALID_SID) {
