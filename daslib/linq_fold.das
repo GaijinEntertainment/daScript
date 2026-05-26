@@ -36,9 +36,7 @@ require daslib/macro_boost
 require strings
 
 // LinqCall — registry record describing an operator name (where_/select/distinct/...) and its fold disposition.
-// PUBLIC: appears in the signature of the public `match_pattern` walker via `array<tuple<ExprCall?; LinqCall?>>`,
-// so the doc generator needs to be able to cross-link it. The `linqCalls` table itself stays private.
-struct LinqCall {
+struct private LinqCall {
     name : string
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
@@ -50,7 +48,7 @@ struct LinqCall {
 // ===== Pattern-table refactor kernel =====
 // See daslib/linq_fold.md for masterplan.
 
-variant SourceAdapter {
+variant private SourceAdapter {
     Array : tuple<Expression?; string>     // (top, srcName) — PR C widens with Decs/DecsFind/Zip/DecsJoin
 }
 
@@ -74,12 +72,12 @@ struct Slot {
 
 typedef Captures = table<string; ExprCall?>     // matched-call by name; LinqCall record accessible via linqCalls[call.name] if ever needed
 
-variant MatchResult {
+variant private MatchResult {
     no_match : void?                       // daslang-idiomatic Option<Captures>
     matched  : Captures
 }
 
-typedef RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
+typedef private RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
 
 // Fold-time context passed to every emit archetype. Carries the peeled source expression, source adapter, and the outer
 // `_fold(...)` expression's iterator-ness (drives `buffer_return` wrap so iterator-typed contexts wrap survivors with
@@ -115,7 +113,7 @@ def c_opt() : SlotCardinality {
 
 // Prefix-conflict lint: pattern A shadows pattern B (B unreachable) when A's chain is a structural prefix of B's chain.
 // PR A scope: simple structural check (matcher + cardinality + arity equality, capture_name ignored). Doesn't catch all subsumption cases (e.g. opt slots interacting with required slots) — exhaustive subsumption deferred to a later PR.
-def slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
+def private slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
     if (a is literal && b is literal) return (a as literal) == (b as literal)
     if (a is alias && b is alias) return (a as alias) == (b as alias)
     if (a is one_of && b is one_of) {
@@ -130,7 +128,7 @@ def slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
     return false
 }
 
-def slots_structurally_match(a : Slot; b : Slot) : bool {
+def private slots_structurally_match(a : Slot; b : Slot) : bool {
     return (slot_matchers_equal(a.matcher, b.matcher)
         && (a.cardinality is one) == (b.cardinality is one)
         && a.arity == b.arity)
@@ -160,7 +158,7 @@ def check_pattern_table_reachable(name : string; patterns : array<SplicePattern>
 
 // Normalize an ExprCall's name through linqCalls (e.g. "distinct_by_to_array" → "distinct_by").
 // Walks func.fromGeneric chain — ExprCall.name itself is the mangled generic-instance name (`__::linq\`distinct_by\`<hash>`); the original user-facing name lives at the root of the fromGeneric chain.
-def call_norm_name(call : ExprCall?) : string {
+def private call_norm_name(call : ExprCall?) : string {
     var topFunc = call.func
     while (topFunc.fromGeneric != null) {
         topFunc = topFunc.fromGeneric
@@ -180,9 +178,9 @@ var alias_table : table<string; array<string>> <- {
 // Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
 // caller binds with `var r <- match_pattern(...)` and reads via `if (r is matched) { let c & = r as matched; ... }`.
 
-def match_pattern(p : SplicePattern;
-                  var calls : array<tuple<ExprCall?; LinqCall?>>;
-                  var top : Expression?) : MatchResult {
+def private match_pattern(p : SplicePattern;
+                          var calls : array<tuple<ExprCall?; LinqCall?>>;
+                          var top : Expression?) : MatchResult {
     var captures : Captures
     var slot_i = 0
     var call_i = 0
@@ -236,27 +234,29 @@ def match_pattern(p : SplicePattern;
 // produce `_localfunction_*` symbols the JIT pass can't resolve). Pattern rows wrap each with `@@<RequiresPredicate>`.
 // Starts minimal; grows with use per masterplan.
 
-def array_source(var c : Captures; var top : Expression?) : bool {
+def private array_source(var c : Captures; var top : Expression?) : bool {
     // top is already peel_each'd by the calling stub; verify it carries an array type (indexed iteration safe).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
-def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
+def private take_arg_is_int(var c : Captures; var top : Expression?) : bool {
     if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
             && take.arguments[1]._type != null && take.arguments[1]._type.baseType == Type.tInt)
 }
 
-def implicit_to_array(var c : Captures; var top : Expression?) : bool {
+// `no_terminator` — chain ends bare (no `count` / `sum` / `first[_or_default]` / `to_array` captured).
+// Return shape (array vs iterator) is decided by `ctx.expr_is_iterator` in the emit fn, not this predicate.
+def private no_terminator(var c : Captures; var top : Expression?) : bool {
     return !(c |> key_exists("term"))
 }
 
 // Per-plan pattern tables — collapsed into splice_patterns in PR D.
 
-var plan_reverse_patterns : array<SplicePattern>
-var plan_distinct_patterns : array<SplicePattern>
-var splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
+var private plan_reverse_patterns : array<SplicePattern>
+var private plan_distinct_patterns : array<SplicePattern>
+var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
 
 // ===== End of pattern-table kernel =====
 
@@ -2317,7 +2317,7 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
 
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
 [macro_function]
-def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
@@ -2358,7 +2358,7 @@ def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
 // Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
 // "first of reversed" = LAST surviving element; walk source, overwrite `last` on each match. No buffer.
 [macro_function]
-def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
@@ -2380,6 +2380,12 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
     if (!(c |> key_exists("term"))) return null
     let terminatorCall = c["term"]
     let terminatorName = call_norm_name(terminatorCall)
+    // Bail to cascade if upstream typing is incomplete — `lastType` reads `projection._type` / `top._type.firstType`, either can be null on partially-typed exprs.
+    if (projection != null) {
+        if (projection._type == null) return null
+    } else {
+        if (top._type == null || top._type.firstType == null) return null
+    }
     var lastType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
     var valueExpr : Expression?
     if (projection != null) {
@@ -2435,7 +2441,7 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
 // R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).
 // Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
 [macro_function]
-def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     if (!(c |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
@@ -2466,7 +2472,7 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
 // R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
 // Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk.
 [macro_function]
-def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     if (!(c |> key_exists("dist"))) return null
@@ -2524,7 +2530,7 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
 
 // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
 [macro_function]
-def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
@@ -2650,7 +2656,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
 // [_macro] runs at macro-compile time and stays off the JIT runtime graph — the rows carry @@<EmitFn>
 // addresses of [macro_function] emit fns whose quote() bodies the LLVM JIT can't lower.
 [_macro]
-def populate_plan_reverse_patterns {
+def private populate_plan_reverse_patterns {
     if (!empty(plan_reverse_patterns)) return
     // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
     plan_reverse_patterns |> emplace <| SplicePattern(
@@ -2659,7 +2665,7 @@ def populate_plan_reverse_patterns {
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist")
         ],
-        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > implicit_to_array],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > no_terminator],
         emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
     )
     // R6 — bare reverse + take + to_array, backward index walk
@@ -2669,7 +2675,7 @@ def populate_plan_reverse_patterns {
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
             Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take")
         ],
-        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > take_arg_is_int, @@ < RequiresPredicate > implicit_to_array],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > take_arg_is_int, @@ < RequiresPredicate > no_terminator],
         emit = @@ < EmitFn > emit_reverse_backward_index_walk
     )
     // Ra — reverse + count (reverse is identity for count)
@@ -2718,7 +2724,7 @@ def populate_plan_reverse_patterns {
 // Hashtable dedup + per-fresh-key consume; terminator picks return wiring (count/long_count/sum/implicit to_array).
 // take(N) bounds outer loop with cross-iteration break for true O(N)-source streaming exit.
 [macro_function]
-def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     let itName = qn("it", at)
@@ -2941,7 +2947,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
 }
 
 [_macro]
-def populate_plan_distinct_patterns {
+def private populate_plan_distinct_patterns {
     if (!empty(plan_distinct_patterns)) return
     // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
     plan_distinct_patterns |> emplace <| SplicePattern(

@@ -149,7 +149,7 @@ Module-level named `RequiresPredicate` constants for reuse across patterns:
 | `inline_cmp_available(cap_name)` | `try_make_inline_cmp` succeeds on captured order op |
 | `take_arg_is_int(cap_name)` | captured take's 2nd arg `_type.baseType == Type.tInt` |
 | `arity_eq(cap, n)` / `arity_ge(cap, n)` | structural checks on captured calls |
-| `implicit_to_array` | no terminator captured (final optional slot empty) |
+| `no_terminator` | no terminator captured (final optional slot empty); return shape decided by `ctx.expr_is_iterator` in the emit fn |
 | `is_primitive_key(cap, argIdx)` | `is_primitive_join_key_type` on captured arg |
 
 Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific checks. **Rule of thumb:** promote to named predicate on second use.
@@ -158,8 +158,8 @@ Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific ch
 
 | PR | Phase | Scope | Status |
 |---|---|---|---|
-| **A** | 0 — Foundation | Kernel types + walker + alias_table + predicate library + per-archetype unit tests. `splice_patterns` empty initially (safe state — all cascades unchanged). | not started |
-| **A** | 1 — First migrations | `plan_reverse` (5 rows: Ra/Rb/R6/R-2a/R1-R4), `plan_distinct` (2 rows + return-shape switch in emit). Archetypes: `emit_counter_array`, `emit_walk_overwrite_scalar`, `emit_backward_walk`, `emit_buffer_reverse_inplace`, `emit_hashtable_dedup`. **Hard-delete imperative bodies.** | not started |
+| **A** | 0 — Foundation | Kernel types + walker + alias_table + predicate library + per-archetype unit tests. `splice_patterns` empty initially (safe state — all cascades unchanged). | complete |
+| **A** | 1 — First migrations | `plan_reverse` (5 rows: Ra/Rb/R6/R-2a/R1-R4), `plan_distinct` (2 rows + return-shape switch in emit). Archetypes: `emit_counter_array`, `emit_walk_overwrite_scalar`, `emit_backward_walk`, `emit_buffer_reverse_inplace`, `emit_hashtable_dedup`. **Hard-delete imperative bodies.** | complete |
 | **B** | 2 — Array core | `plan_loop_or_count` (1 row + lane dispatch — preserves existing factoring), `plan_order_family` (3-4 rows: streaming-min / bounded-heap / fused-prefilter / buffer-helper-dispatch). Archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter`, `emit_buffer_helper_dispatch`, shared `emit_terminal_select_project`. **Hard-delete imperative bodies.** | not started |
 | **C** | 3 — SourceAdapter + decs mirrors | Widen `SourceAdapter` to multi-variant + methods. Migrate `plan_decs_reverse / _distinct / _order_family / _unroll` — **reuse array-side rows + emit fns** modulo adapter swap. **Hard-delete decs imperative bodies.** | not started |
 | **D** | 4 — Group-by + special cases | Reconcile `GroupBySourceAdapter` with `SourceAdapter`. `plan_group_by` + `plan_decs_group_by` → thin pattern rows delegating to existing `plan_group_by_core` (which stays as a sub-codegen). `plan_zip` (1-2 rows, possibly `SourceAdapter::Zip`). `plan_decs_join` (1 row, `SourceAdapter::DecsJoin` or special-case emit). Migrate `emit_reducer_branches` 12-arm if/elif into a `ReducerSpec` data table. | not started |
@@ -199,14 +199,17 @@ All shared helpers stay as building blocks for emit archetypes:
 
 ## Tests / exports philosophy
 
-Public surface (drop `private` annotations) for testability:
+Default private; promote ONLY what a synthetic-input test must name. PR A's actual public surface is narrow:
 
-- `match_pattern(...)` walker
-- Each `emit_*` archetype
-- `SourceAdapter` constructors + methods (once they exist in PR C)
-- `alias_table` (so tests can register synthetic patterns)
+- Slot construction: `Slot`, `SlotMatcher`, `SlotCardinality`, `m_literal`, `m_alias`, `c_one`, `c_opt`
+- Pattern row: `SplicePattern`
+- Typedefs used in test fn signatures: `Captures`, `EmitCtx`, `EmitFn`
+- Lint helpers tests assert on: `chain_prefix_of`, `check_pattern_table_reachable`
+- `alias_table` (so tests can read which aliases populated)
 
-Per-archetype unit tests: call emit fns directly with synthetic `Captures` + `SourceAdapter`, AST-dump-assert the resulting Expression. Avoids going through the full `_fold` macro pipeline. End-to-end behavioral tests stay in `tests/linq/test_linq_fold_*`.
+Everything else stays private: the walker (`match_pattern`), the per-plan tables, the predicate library, all `emit_*` archetypes, all populate fns, `SourceAdapter` / `MatchResult` / `RequiresPredicate` / `LinqCall`. They're only called inside this module — bare names compose without cross-module visibility.
+
+Per-archetype unit testing via direct calls is impractical anyway: emit fns are `[macro_function]` whose bodies contain `quote()` nodes the runtime can't lower (LLVM JIT bail). End-to-end behavioral tests carry the per-archetype coverage in `tests/linq/test_linq_fold_*` (each user chain exercises one or more archetypes through the splice).
 
 ## Naming (decided)
 
