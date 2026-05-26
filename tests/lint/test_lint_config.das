@@ -19,9 +19,12 @@ var private _tmp_dir_inited = false
 def fixture_path() : string {
     if (!_tmp_dir_inited) {
         let r = create_temp_directory_result("lint_config_test")
-        if (r is value) {
-            _tmp_dir = unsafe(r.value)
+        // Fail-fast: silently writing to "" would resolve to the current
+        // working directory and defeat the hermetic / parallel-safe goal.
+        if (!(r is value)) {
+            panic("could not create temp dir for lint_config test: {unsafe(r.error)}")
         }
+        _tmp_dir = unsafe(r.value)
         _tmp_dir_inited = true
     }
     return path_join(_tmp_dir, "fixture.toml")

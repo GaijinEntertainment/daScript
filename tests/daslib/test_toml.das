@@ -3,7 +3,15 @@ options gen2
 require dastest/testing_boost
 require daslib/toml
 require daslib/json
+require daslib/math_bits
 require strings
+
+// IEEE-754 bit-pattern constants, same as daslib/toml.das uses internally —
+// gives exact-equality assertions that no finite large double can satisfy.
+let private {
+    EXPECT_POS_INF = uint64_bits_to_double(0x7FF0000000000000ul)
+    EXPECT_NEG_INF = uint64_bits_to_double(0xFFF0000000000000ul)
+}
 
 def expect_ok(t : T?; what : string; input : string) : JsonValue? {
     var err : string
@@ -221,14 +229,14 @@ def test_inf_nan(t : T?) {
         var m : JsonValue? = get_object_field(v, "m")
         var n : JsonValue? = get_object_field(v, "n")
         if (p != null && (p.value is _number)) {
-            t |> success((p.value as _number) > 1.0e300lf)
+            t |> equal(p.value as _number, EXPECT_POS_INF)
         }
         if (m != null && (m.value is _number)) {
-            t |> success((m.value as _number) < -1.0e300lf)
+            t |> equal(m.value as _number, EXPECT_NEG_INF)
         }
         if (n != null && (n.value is _number)) {
             let nv = n.value as _number
-            t |> success(nv != nv)   // NaN != NaN
+            t |> success(nv != nv)   // NaN != NaN — only NaN survives this test
         }
     }
 }
@@ -318,8 +326,8 @@ def test_inf_nan_still_work_as_values(t : T?) {
         var p : JsonValue? = get_object_field(v, "p")
         var m : JsonValue? = get_object_field(v, "m")
         var q : JsonValue? = get_object_field(v, "q")
-        if (p != null && (p.value is _number)) t |> success((p.value as _number) > 1.0e300lf)
-        if (m != null && (m.value is _number)) t |> success((m.value as _number) < -1.0e300lf)
+        if (p != null && (p.value is _number)) t |> equal(p.value as _number, EXPECT_POS_INF)
+        if (m != null && (m.value is _number)) t |> equal(m.value as _number, EXPECT_NEG_INF)
         if (q != null && (q.value is _number)) {
             let nv = q.value as _number
             t |> success(nv != nv)
