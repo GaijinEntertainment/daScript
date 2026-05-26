@@ -49,7 +49,8 @@ struct private LinqCall {
 // See daslib/linq_fold.md for masterplan.
 
 variant private SourceAdapter {
-    Array : tuple<Expression?; string>     // (top, srcName) — PR C widens with Decs/DecsFind/Zip/DecsJoin
+    Array : tuple<Expression?; string>                  // (top, srcName) — PR A
+    Decs  : tuple<DecsBridgeShape?; string>             // (bridge, tupName) — PR C
 }
 
 variant SlotMatcher {
@@ -287,8 +288,13 @@ def private match_pattern(p : SplicePattern;
 // Starts minimal; grows with use per masterplan.
 
 def private array_source(var c : Captures; var top : Expression?) : bool {
-    // top is already peel_each'd by the calling stub; verify it carries an array type (indexed iteration safe).
+    // top is already peel_each'd by the calling stub; verify it carries an array type. Naturally false for decs sources (`from_decs_template(...)` is iterator-typed).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
+}
+
+def private decs_source(var c : Captures; var top : Expression?) : bool {
+    // For rows that should only match decs adapter (PR C). extract_decs_bridge is cheap shape check.
+    return extract_decs_bridge(top) != null
 }
 
 def private take_arg_is_int(var c : Captures; var top : Expression?) : bool {
@@ -1592,6 +1598,92 @@ def private finalize_emission_stmts(top : Expression?; srcName : string; at : Li
     return finalize_invoke(emission, at)
 }
 
+// ===== SourceAdapter helpers (PR C) — used by emit fns to dispatch source-loop + invoke wrap per adapter. =====
+
+// The per-element bind name emit fns peel where/select/key/value lambdas against. Drives build_decs_inner_for_pruned's
+// pattern matching (it scans for `tupName.<field>` access), so the decs side MUST use `decs_tup`.
+def private adapter_bind_name(adapter : SourceAdapter; at : LineInfo) : string {
+    if (adapter is Decs) return qn("decs_tup", at)
+    return qn("it", at)
+}
+
+// Source element type for state-decl construction. Returns a fresh clone so callers can pass it to strip_const_ref / $t() without aliasing.
+// Array: top._type.firstType. Decs: bridge.elementType.
+[macro_function]
+def private adapter_element_type(adapter : SourceAdapter) : TypeDeclPtr {
+    if (adapter is Decs) {
+        let bridge = (adapter as Decs)._0
+        if (bridge == null) return null
+        return clone_type(bridge.elementType)
+    }
+    let top = (adapter as Array)._0
+    if (top == null || top._type == null) return null
+    return clone_type(top._type.firstType)
+}
+
+// Per-element source loop. Array: `for(bindName in srcName) { body }`. Decs: `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`.
+[macro_function]
+def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
+    if (adapter is Decs) {
+        let bridge = (adapter as Decs)._0
+        let tupName = (adapter as Decs)._1
+        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
+        let archName = bridge.archName
+        return <- qmacro_expr() {
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(forExprNode)
+            })
+        }
+    }
+    let srcName = (adapter as Array)._1
+    let bindName = adapter_bind_name(adapter, at)
+    return <- qmacro_block() {
+        for ($i(bindName) in $i(srcName)) {
+            $e(body)
+        }
+    }
+}
+
+// Wrap stmts into the adapter's outer invoke. Array binds top as source-arg; Decs is zero-arg invoke (state hoisted into stmts).
+// retType non-null forces explicit annotation; null relies on compiler inference from return statements.
+// wrapIter wraps the emission with .to_sequence_move() — caller drives via ctx.expr_is_iterator on array-returning emits.
+[macro_function]
+def private adapter_wrap_invoke(adapter : SourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+    var emission : Expression?
+    if (adapter is Decs) {
+        if (retType != null) {
+            emission = qmacro(invoke($() : $t(retType) {
+                $b(stmts)
+            }))
+        } else {
+            emission = qmacro(invoke($() {
+                $b(stmts)
+            }))
+        }
+        return finalize_decs_emission(emission, at, wrapIter)
+    }
+    let top = (adapter as Array)._0
+    let srcName = (adapter as Array)._1
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    if (retType != null) {
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(retType) {
+            $b(stmts)
+        }, $e(topExpr)))
+    } else {
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
+            $b(stmts)
+        }, $e(topExpr)))
+    }
+    emission = finalize_invoke(emission, at)
+    if (wrapIter) {
+        emission = qmacro($e(emission).to_sequence_move())
+        emission.force_generated(true)
+    }
+    return emission
+}
+
 [macro_function]
 def private finalize_decs_emission(var emission : Expression?; at : LineInfo; wrapToIter : bool) : Expression? {
     emission.force_at(at)
@@ -1853,28 +1945,23 @@ def private extract_order_captures(var c : Captures; at : LineInfo; itName : str
 // emit_streaming_min — first[_or_default] with inline-cmp key. Per-walk single-best state, no buffer.
 [macro_function]
 def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    let itName = qn("it", at)
-    var oc <- extract_order_captures(c, at, itName)
+    let bindName = adapter_bind_name(ctx.src, at)
+    var oc <- extract_order_captures(c, at, bindName)
     // Distinct without take but with first bails — streaming-min has no dset hook (mirrors imperative final bail).
     if (!oc.ok || oc.firstName == "" || oc.distinctName != "") return null
     var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
     if (inlineCmp == null) return null
     let bestName = qn("order_best", at)
     let seenName = qn("order_seen", at)
-    let srcName = (ctx.src as Array)._1
-    var top = ctx.top
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
     var elemType = clone_type(oc.orderElemType)
     var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
-        qmacro($i(itName)), qmacro($i(bestName)), at)
+        qmacro($i(bindName)), qmacro($i(bestName)), at)
     var perElement : Expression? = qmacro_expr() {
         if (!$i(seenName)) {
-            $i(bestName) := $i(itName)
+            $i(bestName) := $i(bindName)
             $i(seenName) = true
         } elif ($e(lessTest)) {
-            $i(bestName) := $i(itName)
+            $i(bestName) := $i(bindName)
         }
     }
     if (oc.whereCond != null) {
@@ -1885,7 +1972,7 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
         }
     }
     let outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
-    var emission : Expression?
+    var stmts : array<Expression?>
     if (oc.firstName == "first") {
         var firstRetExpr : Expression?
         if (oc.selectLam != null) {
@@ -1893,15 +1980,15 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
         } else {
             firstRetExpr = qmacro($i(bestName))
         }
-        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
+        stmts |> push_from <| qmacro_block_to_array() {
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        }
+        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+        stmts |> push_from <| qmacro_block_to_array() {
             panic("sequence contains no elements") if (!$i(seenName))
             return $e(firstRetExpr)
-        }, $e(topExpr)))
+        }
     } else {
         let dBindName = qn("order_d", at)
         var bestRetExpr : Expression?
@@ -1913,47 +2000,42 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
             bestRetExpr = qmacro($i(bestName))
             dRetExpr = qmacro($i(dBindName))
         }
-        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
+        stmts |> push_from <| qmacro_block_to_array() {
             let $i(dBindName) = $e(oc.firstDefaultExpr)
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        }
+        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+        stmts |> push_from <| qmacro_block_to_array() {
             return $e(bestRetExpr) if ($i(seenName))
             return $e(dRetExpr)
-        }, $e(topExpr)))
+        }
     }
-    return finalize_invoke(emission, at)
+    return adapter_wrap_invoke(ctx.src, stmts, outElemType, false, at)
 }
 
 // emit_bounded_heap — take(N) with inline-cmp key. Heap of size N during walk; distinct gate variant + terminal _select.
 [macro_function]
 def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    let itName = qn("it", at)
-    var oc <- extract_order_captures(c, at, itName)
+    let bindName = adapter_bind_name(ctx.src, at)
+    var oc <- extract_order_captures(c, at, bindName)
     if (!oc.ok || oc.takeExpr == null || oc.firstName != "") return null
     var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
     if (inlineCmp == null) return null
     let takeNName = qn("order_take_n", at)
     let bhBufName = qn("order_buf", at)
-    let srcName = (ctx.src as Array)._1
     let dsetName = qn("order_dset", at)
     let dkeyName = qn("order_dkey", at)
-    var top = ctx.top
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
     var bufElemType = clone_type(oc.orderElemType)
     var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
-        qmacro($i(itName)), qmacro($i(bhBufName)[0]), at)
+        qmacro($i(bindName)), qmacro($i(bhBufName)[0]), at)
     var perElement : Expression? = qmacro_expr() {
         if (length($i(bhBufName)) < $i(takeNName)) {
-            $i(bhBufName) |> push_clone($i(itName))
+            $i(bhBufName) |> push_clone($i(bindName))
             _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
         } elif ($e(lessTest)) {
             _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
-            $i(bhBufName)[length($i(bhBufName)) - 1] := $i(itName)
+            $i(bhBufName)[length($i(bhBufName)) - 1] := $i(bindName)
             _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
         }
     }
@@ -1961,10 +2043,10 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
     if (oc.distinctName != "") {
         var dkeyExpr : Expression?
         if (oc.distinctName == "distinct_by") {
-            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, itName)
+            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, bindName)
             if (dkeyExpr == null) return null
         } else {
-            dkeyExpr = qmacro($i(itName))
+            dkeyExpr = qmacro($i(bindName))
         }
         perElement = qmacro_block() {
             let $i(dkeyName) = _::unique_key($e(dkeyExpr))
@@ -1981,85 +2063,53 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             }
         }
     }
-    var dsetDecl : Expression?
+    var stmts : array<Expression?>
+    stmts |> push_from <| qmacro_block_to_array() {
+        let $i(takeNName) = $e(oc.takeExpr)
+        var $i(bhBufName) : array<$t(bufElemType)>
+    }
     if (oc.distinctName != "") {
         if (oc.distinctName == "distinct_by") {
-            dsetDecl = qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(oc.distinctKey), default<$t(bufElemType)>)))>
             }
         } else {
-            dsetDecl = qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
             }
         }
     }
-    var emission : Expression?
+    var retType : TypeDeclPtr
     if (oc.selectLam != null) {
         let outBufName = qn("order_proj_buf", at)
         let elemName = qn("order_proj_e", at)
         var projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
-        if (oc.distinctName != "") {
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(oc.selectElemType)> {
-                let $i(takeNName) = $e(oc.takeExpr)
-                var $i(bhBufName) : array<$t(bufElemType)>
-                var $i(outBufName) : array<$t(oc.selectElemType)>
-                $e(dsetDecl)
-                return <- $i(outBufName) if ($i(takeNName) <= 0)
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                _::order_inplace($i(bhBufName), $e(inlineCmp))
-                $i(outBufName) |> reserve(length($i(bhBufName)))
-                for ($i(elemName) in $i(bhBufName)) {
-                    $i(outBufName) |> push_clone($e(projBody))
-                }
-                return <- $i(outBufName)
-            }, $e(topExpr)))
-        } else {
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(oc.selectElemType)> {
-                let $i(takeNName) = $e(oc.takeExpr)
-                var $i(bhBufName) : array<$t(bufElemType)>
-                var $i(outBufName) : array<$t(oc.selectElemType)>
-                return <- $i(outBufName) if ($i(takeNName) <= 0)
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                _::order_inplace($i(bhBufName), $e(inlineCmp))
-                $i(outBufName) |> reserve(length($i(bhBufName)))
-                for ($i(elemName) in $i(bhBufName)) {
-                    $i(outBufName) |> push_clone($e(projBody))
-                }
-                return <- $i(outBufName)
-            }, $e(topExpr)))
+        stmts |> push_from <| qmacro_block_to_array() {
+            var $i(outBufName) : array<$t(oc.selectElemType)>
+            return <- $i(outBufName) if ($i(takeNName) <= 0)
         }
-    } elif (oc.distinctName != "") {
-        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
-            let $i(takeNName) = $e(oc.takeExpr)
-            var $i(bhBufName) : array<$t(bufElemType)>
-            $e(dsetDecl)
-            return <- $i(bhBufName) if ($i(takeNName) <= 0)
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+        stmts |> push_from <| qmacro_block_to_array() {
             _::order_inplace($i(bhBufName), $e(inlineCmp))
-            return <- $i(bhBufName)
-        }, $e(topExpr)))
+            $i(outBufName) |> reserve(length($i(bhBufName)))
+            for ($i(elemName) in $i(bhBufName)) {
+                $i(outBufName) |> push_clone($e(projBody))
+            }
+            return <- $i(outBufName)
+        }
+        retType = clone_type(oc.selectElemType)
     } else {
-        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
-            let $i(takeNName) = $e(oc.takeExpr)
-            var $i(bhBufName) : array<$t(bufElemType)>
+        stmts |> push_from <| qmacro_block_to_array() {
             return <- $i(bhBufName) if ($i(takeNName) <= 0)
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        }
+        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+        stmts |> push_from <| qmacro_block_to_array() {
             _::order_inplace($i(bhBufName), $e(inlineCmp))
             return <- $i(bhBufName)
-        }, $e(topExpr)))
+        }
+        retType = clone_type(bufElemType)
     }
-    if (ctx.expr_is_iterator) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return finalize_invoke(emission, at)
+    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
 }
 
 // emit_buffer_helper_dispatch — no where, no distinct. Direct call to daslib helpers (order / top_n* / min_max).
@@ -2146,37 +2196,31 @@ def private emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at 
 // emit_fused_prefilter — where+order or distinct+order. Single fused loop: filter (and dset gate) into fresh buf, then sort/min/top_n on buf.
 [macro_function]
 def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    let itName = qn("it", at)
-    var oc <- extract_order_captures(c, at, itName)
+    let bindName = adapter_bind_name(ctx.src, at)
+    var oc <- extract_order_captures(c, at, bindName)
     // Fused-prefilter requires where OR distinct upstream (buffer_helper covers the bare case); distinct+first without take bails (no per-element min-state).
     if (!oc.ok
             || (oc.whereCond == null && oc.distinctName == "")
             || (oc.distinctName != "" && oc.takeExpr == null && oc.firstName != "")) return null
-    let srcName = (ctx.src as Array)._1
     let bufName = qn("buf", at)
     let dsetName = qn("order_dset", at)
     let dkeyName = qn("order_dkey", at)
-    var top = ctx.top
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
     var bufElemType = clone_type(oc.orderElemType)
     var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
     let topNName = order_top_n_call_name(oc.orderName)
     let inplaceName = "{oc.orderName}_inplace"
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
-    let needIterWrap = ctx.expr_is_iterator
     var pushStmt : Expression? = qmacro_expr() {
-        $i(bufName) |> push_clone($i(itName))
+        $i(bufName) |> push_clone($i(bindName))
     }
     // Theme 8 (audit 3b): distinct gate per-element push by set-insert on key. Single source pass, no full distinct materialization.
     if (oc.distinctName != "") {
         var dkeyExpr : Expression?
         if (oc.distinctName == "distinct_by") {
-            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, itName)
+            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, bindName)
             if (dkeyExpr == null) return null
         } else {
-            dkeyExpr = qmacro($i(itName))
+            dkeyExpr = qmacro($i(bindName))
         }
         pushStmt = qmacro_block() {
             let $i(dkeyName) = _::unique_key($e(dkeyExpr))
@@ -2211,16 +2255,17 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
             }
         }
     }
-    if (type_has_length(top._type) && oc.distinctName == "") {
-        stmts |> push <| qmacro_expr() {
-            $i(bufName) |> reserve(length($i(srcName)))
+    // Reserve hint: array source with no distinct gate has known length. Decs has no random-access length — skip.
+    if (ctx.src is Array && oc.distinctName == "") {
+        let top = (ctx.src as Array)._0
+        let srcName = (ctx.src as Array)._1
+        if (top != null && top._type != null && type_has_length(top._type)) {
+            stmts |> push <| qmacro_expr() {
+                $i(bufName) |> reserve(length($i(srcName)))
+            }
         }
     }
-    stmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            $e(loopBody)
-        }
-    }
+    stmts |> push <| adapter_wrap_source_loop(ctx.src, loopBody, at)
     let elemName = qn("order_proj_e", at)
     let outBufName = qn("order_proj_buf", at)
     var projBody : Expression?
@@ -2319,17 +2364,7 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
             }
         }
     }
-    var bodyBlock = new ExprBlock(at = at)
-    for (s in stmts) {
-        bodyBlock.list |> emplace(s)
-    }
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $e(bodyBlock);
-    }, $e(topExpr)))
-    if (needIterWrap) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return finalize_invoke(emission, at)
+    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
 }
 
 // ===== plan_loop_or_count migration (PR B) =====
@@ -2581,17 +2616,15 @@ def private populate_plan_loop_or_count_patterns {
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
 [macro_function]
 def private emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    var top = ctx.top
-    let srcName = (ctx.src as Array)._1
-    let itName = qn("it", at)
+    let bindName = adapter_bind_name(ctx.src, at)
     let cntName = qn("cnt", at)
     var whereCond : Expression?
     if (c.single |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], bindName)
     }
     var projection : Expression?
     if (c.single |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], bindName)
     }
     var perElement : Expression?
     if (projection != null && has_sideeffects(projection)) {
@@ -2606,56 +2639,60 @@ def private emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineI
         }
     }
     perElement = wrap_with_condition(perElement, whereCond)
-    var body : Expression? = qmacro_block() {
+    var stmts <- qmacro_block_to_array() {
         var $i(cntName) = 0
-        for ($i(itName) in $i(srcName)) {
-            $e(perElement)
-        }
+    }
+    stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+    stmts |> push_from <| qmacro_block_to_array() {
         return $i(cntName)
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    return adapter_wrap_invoke(ctx.src, stmts, null, false, at)
 }
 
 // Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
 // "first of reversed" = LAST surviving element; walk source, overwrite `last` on each match. No buffer.
 [macro_function]
 def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    var top = ctx.top
-    let srcName = (ctx.src as Array)._1
-    let itName = qn("it", at)
+    let bindName = adapter_bind_name(ctx.src, at)
     let foundName = qn("found", at)
     let lastName = qn("last", at)
     let dBindName = qn("d", at)
     var whereCond : Expression?
     if (c.single |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], bindName)
     }
     var projection : Expression?
     if (c.single |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], bindName)
     }
     var terminalSelectLam : Expression?
+    var terminalSelectElemType : TypeDeclPtr
     if (c.single |> key_exists("termsel")) {
         terminalSelectLam = c.single["termsel"].arguments[1]
+        if (terminalSelectLam == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) return null
+        terminalSelectElemType = clone_type(c.single["termsel"]._type.firstType)
     }
     if (!(c.single |> key_exists("term"))) return null
     let terminatorCall = c.single["term"]
     let terminatorName = call_norm_name(terminatorCall)
-    // Bail to cascade if upstream typing is incomplete — `lastType` reads `projection._type` / `top._type.firstType`, either can be null on partially-typed exprs.
+    // Bail to cascade if upstream typing is incomplete — `lastType` reads `projection._type` / source element type, either can be null on partially-typed exprs.
+    var lastType : TypeDeclPtr
     if (projection != null) {
         if (projection._type == null) return null
+        lastType = strip_const_ref(clone_type(projection._type))
     } else {
-        if (top._type == null || top._type.firstType == null) return null
+        var srcElemType = adapter_element_type(ctx.src)
+        if (srcElemType == null) return null
+        lastType = strip_const_ref(srcElemType)
     }
-    var lastType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
+    // outElemType drives the invoke retType; terminal _select projects the survivor at return so the lane returns post-select shape.
+    let outElemType = (terminalSelectLam != null) ? terminalSelectElemType : lastType
     var valueExpr : Expression?
     if (projection != null) {
         valueExpr = clone_expression(projection)
     } else {
         valueExpr = qmacro_expr() {
-            $i(itName)
+            $i(bindName)
         }
     }
     var matchBlock : Expression? = qmacro_block() {
@@ -2671,33 +2708,30 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
     }
     // first_or_default's user default is already at post-termsel type — re-projecting through `termsel` double-applies.
     var dRetExpr : Expression? = qmacro($i(dBindName))
-    var body : Expression?
+    var stmts : array<Expression?>
+    if (terminatorName == "first_or_default") {
+        stmts |> push_from <| qmacro_block_to_array() {
+            let $i(dBindName) = $e(terminatorCall.arguments[1])
+        }
+    }
+    stmts |> push_from <| qmacro_block_to_array() {
+        var $i(foundName) = false
+        var $i(lastName) : $t(lastType) = default<$t(lastType)>
+    }
+    stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
     if (terminatorName == "first") {
-        body = qmacro_block() {
-            var $i(foundName) = false
-            var $i(lastName) : $t(lastType) = default<$t(lastType)>
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        stmts |> push_from <| qmacro_block_to_array() {
             if (!$i(foundName)) {
                 panic("sequence contains no elements")
             }
             return $e(lastRetExpr)
         }
     } else {
-        body = qmacro_block() {
-            let $i(dBindName) = $e(terminatorCall.arguments[1])
-            var $i(foundName) = false
-            var $i(lastName) : $t(lastType) = default<$t(lastType)>
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
+        stmts |> push_from <| qmacro_block_to_array() {
             return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
         }
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    return adapter_wrap_invoke(ctx.src, stmts, outElemType, false, at)
 }
 
 // R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).
@@ -2793,19 +2827,17 @@ def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : Emi
 // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
 [macro_function]
 def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    var top = ctx.top
-    let srcName = (ctx.src as Array)._1
-    let itName = qn("it", at)
+    let bindName = adapter_bind_name(ctx.src, at)
     let bufName = qn("buf", at)
     let outBufName = qn("rev_proj_buf", at)
     let elemName = qn("rev_proj_e", at)
     var whereCond : Expression?
     if (c.single |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], bindName)
     }
     var projection : Expression?
     if (c.single |> key_exists("preproj")) {
-        projection = peel_lambda_rename_var(c.single["preproj"].arguments[1], itName)
+        projection = peel_lambda_rename_var(c.single["preproj"].arguments[1], bindName)
     }
     var takeExpr : Expression?
     if (c.single |> key_exists("take")) {
@@ -2818,13 +2850,15 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         if (terminalSelectLam == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) return null
         terminalSelectElemType = clone_type(c.single["termsel"]._type.firstType)
     }
-    if (top._type == null || top._type.firstType == null) return null
     // Buffer element type: post-select if a pre-reverse projection narrowed the element shape; otherwise source type.
     var bufElemType : TypeDeclPtr
     if (projection != null) {
+        if (projection._type == null) return null
         bufElemType = strip_const_ref(clone_type(projection._type))
     } else {
-        bufElemType = strip_const_ref(clone_type(top._type.firstType))
+        var srcElemType = adapter_element_type(ctx.src)
+        if (srcElemType == null) return null
+        bufElemType = strip_const_ref(srcElemType)
     }
     var projBody : Expression?
     if (terminalSelectLam != null) {
@@ -2837,14 +2871,19 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         }
     } else {
         pushExpr = qmacro_expr() {
-            $i(bufName) |> push_clone($i(itName))
+            $i(bufName) |> push_clone($i(bindName))
         }
     }
     pushExpr = wrap_with_condition(pushExpr, whereCond)
+    // Reserve hint: array source with no prefilter has known length. Decs has no random-access length — skip.
     var reserveStmts : array<Expression?>
-    if (type_has_length(top._type) && whereCond == null) {
-        reserveStmts |> push <| qmacro_expr() {
-            $i(bufName) |> reserve(length($i(srcName)))
+    if (ctx.src is Array && whereCond == null) {
+        let top = (ctx.src as Array)._0
+        let srcName = (ctx.src as Array)._1
+        if (top != null && top._type != null && type_has_length(top._type)) {
+            reserveStmts |> push <| qmacro_expr() {
+                $i(bufName) |> reserve(length($i(srcName)))
+            }
         }
     }
     var resizeStmts : array<Expression?>
@@ -2856,40 +2895,31 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
             $i(bufName) |> resize($i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < length($i(bufName)) ? $i(takeLimName) : length($i(bufName))))
         }
     }
-    var body : Expression?
+    var stmts : array<Expression?>
+    stmts |> push_from <| qmacro_block_to_array() {
+        var $i(bufName) : array<$t(bufElemType)>
+    }
+    stmts |> push_from(reserveStmts)
+    stmts |> push <| adapter_wrap_source_loop(ctx.src, pushExpr, at)
+    stmts |> push_from <| qmacro_block_to_array() {
+        _::reverse_inplace($i(bufName))
+    }
+    stmts |> push_from(resizeStmts)
     if (terminalSelectLam != null) {
-        var returnExpr = buffer_return(outBufName, ctx.expr_is_iterator)
-        body = qmacro_block() {
-            var $i(bufName) : array<$t(bufElemType)>
-            $b(reserveStmts)
-            for ($i(itName) in $i(srcName)) {
-                $e(pushExpr)
-            }
-            _::reverse_inplace($i(bufName))
-            $b(resizeStmts)
+        stmts |> push_from <| qmacro_block_to_array() {
             var $i(outBufName) : array<$t(terminalSelectElemType)>
             $i(outBufName) |> reserve(length($i(bufName)))
             for ($i(elemName) in $i(bufName)) {
                 $i(outBufName) |> push_clone($e(projBody))
             }
-            $e(returnExpr)
+            return <- $i(outBufName)
         }
     } else {
-        var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
-        body = qmacro_block() {
-            var $i(bufName) : array<$t(bufElemType)>
-            $b(reserveStmts)
-            for ($i(itName) in $i(srcName)) {
-                $e(pushExpr)
-            }
-            _::reverse_inplace($i(bufName))
-            $b(resizeStmts)
-            $e(returnExpr)
+        stmts |> push_from <| qmacro_block_to_array() {
+            return <- $i(bufName)
         }
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
 }
 
 // Stub — table-driven dispatch into plan_reverse_patterns. Populated by populate_plan_reverse_patterns [_macro].
@@ -2988,9 +3018,7 @@ def private populate_plan_reverse_patterns {
 // take(N) bounds outer loop with cross-iteration break for true O(N)-source streaming exit.
 [macro_function]
 def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    var top = ctx.top
-    let srcName = (ctx.src as Array)._1
-    let itName = qn("it", at)
+    let bindName = adapter_bind_name(ctx.src, at)
     let bufName = qn("buf", at)
     let seenName = qn("seen", at)
     let keyName = qn("k", at)
@@ -3000,11 +3028,11 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
     let pvName = qn("pv", at)
     var whereCond : Expression?
     if (c.single |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], bindName)
     }
     var projection : Expression?
     if (c.single |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], bindName)
     }
     if (!(c.single |> key_exists("dist"))) return null
     let distinctCall = c.single["dist"]
@@ -3035,8 +3063,16 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
             return null
         }
     }
-    if ((takeExpr != null && terminatorName != "") || top._type == null || top._type.firstType == null) return null
-    var elemType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
+    if (takeExpr != null && terminatorName != "") return null
+    var elemType : TypeDeclPtr
+    if (projection != null) {
+        if (projection._type == null) return null
+        elemType = strip_const_ref(clone_type(projection._type))
+    } else {
+        var srcElemType = adapter_element_type(ctx.src)
+        if (srcElemType == null) return null
+        elemType = strip_const_ref(srcElemType)
+    }
     var stmts : array<Expression?>
     if (isDistinctBy) {
         stmts |> push <| qmacro_expr() {
@@ -3085,7 +3121,7 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
         }
     } else {
         pushExpr = qmacro_expr() {
-            $i(itName)
+            $i(bindName)
         }
     }
     var keyExpr : Expression?
@@ -3142,20 +3178,35 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
     var perElement = stmts_to_expr(perMatchStmts)
     perElement = wrap_with_condition(perElement, whereCond)
     if (takeExpr != null) {
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                if ($i(takenName) >= $i(takeLimName)) {
-                    break
-                }
+        // take(N) early-exit shape diverges by adapter — Array uses break in for-loop; Decs uses for_each_archetype_find returning bool to stop the archetype walk (mirrors plan_decs_distinct imperative).
+        if (ctx.src is Decs) {
+            let bridge = (ctx.src as Decs)._0
+            let tupName = (ctx.src as Decs)._1
+            let archName = bridge.archName
+            var innerBody : Expression? = qmacro_block() {
+                break if ($i(takenName) >= $i(takeLimName))
                 $e(perElement)
+            }
+            var prunedFor = build_decs_inner_for_pruned(bridge, tupName, innerBody, at)
+            stmts |> push <| qmacro_expr() {
+                for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(prunedFor)
+                    return $i(takenName) >= $i(takeLimName)
+                })
+            }
+        } else {
+            let srcName = (ctx.src as Array)._1
+            stmts |> push <| qmacro_expr() {
+                for ($i(bindName) in $i(srcName)) {
+                    if ($i(takenName) >= $i(takeLimName)) {
+                        break
+                    }
+                    $e(perElement)
+                }
             }
         }
     } else {
-        stmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcName)) {
-                $e(perElement)
-            }
-        }
+        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
     }
     if (terminatorName == "count") {
         if (countPred != null) {
@@ -3182,9 +3233,12 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
             return $i(accName)
         }
     } else {
-        stmts |> push(buffer_return(bufName, ctx.expr_is_iterator))
+        stmts |> push_from <| qmacro_block_to_array() {
+            return <- $i(bufName)
+        }
     }
-    return finalize_emission_stmts(top, srcName, at, stmts)
+    let needIterWrap = ctx.expr_is_iterator && needBuffer
+    return adapter_wrap_invoke(ctx.src, stmts, null, needIterWrap, at)
 }
 
 // Stub — table-driven dispatch into plan_distinct_patterns.
