@@ -178,7 +178,20 @@ var alias_table : table<string; array<string>> <- {
     "first_family"               => ["first", "first_or_default"],
     "count_family"               => ["count", "long_count"],
     // Narrow to the terminators emit_hashtable_dedup actually handles — first[_or_default] would be over-matched then cascade.
-    "distinct_terminator_family" => ["count", "long_count", "sum"]
+    "distinct_terminator_family" => ["count", "long_count", "sum"],
+    // PR B additions:
+    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending"],
+    "range_op_family"            => ["skip", "skip_while", "take_while", "take"],
+    // accum_family: all reducing terminators routed via emit_accumulator_lane in plan_loop_or_count.
+    "accum_family"               => ["sum", "min", "max", "average", "aggregate",
+                                     "min_by", "max_by", "min_max", "min_max_by",
+                                     "min_max_average", "min_max_average_by", "long_count"],
+    "early_exit_family"          => ["any", "all", "contains", "first", "first_or_default"],
+    // loop_terminator_family: union used by plan_loop_or_count's single pattern row's optional terminator slot.
+    "loop_terminator_family"     => ["count", "long_count", "sum", "min", "max", "average", "aggregate",
+                                     "min_by", "max_by", "min_max", "min_max_by",
+                                     "min_max_average", "min_max_average_by",
+                                     "any", "all", "contains", "first", "first_or_default"]
 }
 
 // Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
@@ -256,6 +269,23 @@ def private take_arg_is_int(var c : Captures; var top : Expression?) : bool {
 // Return shape (array vs iterator) is decided by `ctx.expr_is_iterator` in the emit fn, not this predicate.
 def private no_terminator(var c : Captures; var top : Expression?) : bool {
     return !(c |> key_exists("term"))
+}
+
+// True only for `order_by[_descending]` with an inline-splice-able key lambda. `order` / `order_descending` route elsewhere.
+def private inline_cmp_available(var c : Captures; var top : Expression?) : bool {
+    if (!(c |> key_exists("order"))) return false
+    let orderCall = c["order"]
+    if (orderCall == null || orderCall._type == null || orderCall._type.firstType == null
+            || (orderCall.arguments |> length) < 2) return false
+    let orderName = call_norm_name(orderCall)
+    if (orderName != "order_by" && orderName != "order_by_descending") return false
+    return try_make_inline_cmp(orderCall.arguments[1], orderName, orderCall._type.firstType, orderCall.at) != null
+}
+
+// `has_where_or_distinct` — used by order_fused_prefilter row to distinguish from bare buffer_helper_dispatch.
+// At least one prefilter source must be present for the fused-loop path to make sense.
+def private has_where_or_distinct(var c : Captures; var top : Expression?) : bool {
+    return (c |> key_exists("where")) || (c |> key_exists("distinct"))
 }
 
 // Per-plan pattern tables — collapsed into splice_patterns in PR D.
@@ -493,6 +523,63 @@ def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall
         calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
         calls |> erase(i)
         // Don't advance `i` — the merged outer might still chain with another `_select` just before it.
+    }
+}
+
+[macro_function]
+def private collapse_chained_wheres(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+    // Mirror of collapse_chained_selects shape (find adjacent same-op pairs, rename to fresh param, rewire backlink, erase inner, stay at i) but composes via `pred1 && pred2` instead of function compose. Both predicates take the source element, so the composed body uses ONE fresh param shared by both halves. No has_sideeffects bail needed — composition doesn't duplicate either body (each runs at most once per element, same as the imperative chain with short-circuit `&&`).
+    var i = 0
+    while (i + 1 < length(calls)) {
+        if (calls[i]._1.name != "where_" || calls[i + 1]._1.name != "where_") {
+            i ++
+            continue
+        }
+        var innerLam = calls[i]._0.arguments[1]
+        var outerLam = calls[i + 1]._0.arguments[1]
+        if (innerLam == null || outerLam == null
+                || !(innerLam is ExprMakeBlock) || !(outerLam is ExprMakeBlock)) {
+            i ++
+            continue
+        }
+        var innerMblk = innerLam as ExprMakeBlock
+        var innerBlk = innerMblk._block as ExprBlock
+        var outerMblk = outerLam as ExprMakeBlock
+        var outerBlk = outerMblk._block as ExprBlock
+        if (innerBlk == null || outerBlk == null
+                || innerBlk.arguments |> length != 1 || outerBlk.arguments |> length != 1
+                || innerBlk.list |> length != 1 || outerBlk.list |> length != 1
+                || !(innerBlk.list[0] is ExprReturn) || !(outerBlk.list[0] is ExprReturn)) {
+            i ++
+            continue
+        }
+        var innerRet = innerBlk.list[0] as ExprReturn
+        var outerRet = outerBlk.list[0] as ExprReturn
+        if (innerRet.subexpr == null || outerRet.subexpr == null) {
+            i ++
+            continue
+        }
+        // Rename both predicate params to the same fresh name — composed body references one shared bind.
+        let freshName = qn("cw", innerLam.at)
+        var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
+        var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
+        if (innerBodyFresh == null || outerBodyFresh == null) {
+            i ++
+            continue
+        }
+        var newLam = clone_expression(innerLam)
+        var newMblk = newLam as ExprMakeBlock
+        var newBlk = newMblk._block as ExprBlock
+        if (newBlk == null || newBlk.list |> length != 1 || !(newBlk.list[0] is ExprReturn)) {
+            i ++
+            continue
+        }
+        var newRet = newBlk.list[0] as ExprReturn
+        newBlk.arguments[0].name := freshName
+        newRet.subexpr = merge_where_cond(innerBodyFresh, outerBodyFresh)
+        calls[i + 1]._0.arguments[1] = newLam
+        calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
+        calls |> erase(i)
     }
 }
 
@@ -2642,6 +2729,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     if (empty(calls)) return null
     normalize_order_reverse(calls)
     collapse_chained_selects(calls)
+    collapse_chained_wheres(calls)
     top = peel_each(top)
     let at = calls[0]._0.at
     let exprIsIter = expr._type != null && expr._type.isIterator
@@ -2935,6 +3023,7 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     collapse_chained_selects(calls)
+    collapse_chained_wheres(calls)
     top = peel_each(top)
     let at = calls[0]._0.at
     let exprIsIter = expr._type != null && expr._type.isIterator

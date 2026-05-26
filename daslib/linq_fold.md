@@ -5,7 +5,8 @@ Living document. Update **Status** + **Decision log** as phases ship.
 ## Status
 
 - [x] **PR A** — Foundation + first migrations (plan_reverse, plan_distinct) — branch `bbatkin/linq-fold-patterns-foundation`
-- [ ] **PR B** — Array core (plan_loop_or_count, plan_order_family)
+- [ ] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + PR B foundation (aliases / predicates) + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb`
+- [ ] **PR B2** — `plan_order_family` migration (5 emit archetypes + 5 rows) — deferred follow-up; foundation (aliases / predicates) lands in B1
 - [ ] **PR C** — SourceAdapter + decs mirrors (plan_decs_reverse / _distinct / _order_family / _unroll)
 - [ ] **PR D** — Group-by + special cases (plan_group_by family, plan_zip, plan_decs_join, reducer-spec data table)
 
@@ -235,11 +236,175 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `match_pattern(...)` | Walker function |
 | `plan_<X>_patterns` | Per-plan filtered subset (only during migration; deleted in PR D) |
 
+## PR B sketch (planning — refine during implementation)
+
+**Branch:** `bbatkin/linq-fold-pattern-table-prb` (TBD)
+
+**Scope:** KR-1 closure (`collapse_chained_wheres`) + `plan_loop_or_count` migration (1 row, 208 LOC source) + `plan_order_family` migration (4 rows, 543 LOC source).
+
+### New pre-pass
+
+- `collapse_chained_wheres(calls)` — mirrors `collapse_chained_selects` exactly modulo composition: clone inner where lambda, rename param to fresh name, build composed body via `merge_where_cond(innerBodyFresh, outerBodyFresh)` (which is `inner && outer`), rewire chain backlink, erase inner from `calls`. Gated on `!has_sideeffects(innerBody) && !has_sideeffects(outerBody)`. Called from `plan_reverse`, `plan_distinct`, `plan_loop_or_count`, `plan_order_family` stubs. **KR-1 fix; load-bearing for plan_loop_or_count row.**
+
+### New aliases for `alias_table`
+
+```das
+"order_family"           => ["order", "order_descending", "order_by", "order_by_descending"]
+"accum_family"           => ["sum", "min", "max", "average", "aggregate", "min_by", "max_by",
+                              "min_max", "min_max_by", "min_max_average", "min_max_average_by"]
+"early_exit_family"      => ["any", "all", "contains"]   // exact list per classify_terminator audit
+"range_op_family"        => ["skip", "skip_while", "take_while", "take"]
+"loop_terminator_family" => union of count_family + accum_family + early_exit_family
+```
+
+### New predicates
+
+- `inline_cmp_available(c, top)` — `try_make_inline_cmp(c["order"].arguments[1], call_norm_name(c["order"]), c["order"]._type.firstType, c["order"].at) != null`. Used by `order_streaming_min` + `order_bounded_heap` rows.
+- `has_where_or_distinct(c, top)` — `c |> key_exists("where") || c |> key_exists("distinct")`. Used by `order_fused_prefilter` row to distinguish from bare `buffer_helper_dispatch`.
+
+### Pattern rows
+
+**`plan_loop_or_count`** — 1 row, internal lane dispatch (mirrors `emit_hashtable_dedup` shape):
+
+```das
+SplicePattern(
+    name = "loop_or_count_general",
+    chain = [
+        Slot(m_literal("where_"),     c_opt(), "where"),         // post-collapse: 1 slot
+        Slot(m_literal("select"),     c_opt(), "select"),        // post-collapse: 1 slot
+        Slot(m_literal("skip"),       c_opt(), "skip"),
+        Slot(m_literal("skip_while"), c_opt(), "skip_while"),
+        Slot(m_literal("take_while"), c_opt(), "take_while"),
+        Slot(m_literal("take"),       c_opt(), "take"),
+        Slot(m_literal("where_"),     c_opt(), "post_take_where"),    // Theme 2 5c
+        Slot(m_alias("loop_terminator_family"), c_opt(), "term")
+    ],
+    requires = [],   // intrinsic — chain shape carries the constraints
+    emit = @@<EmitFn> emit_loop_or_count_lane)
+```
+
+`emit_loop_or_count_lane` — internally calls `classify_terminator(call_norm_name(c["term"]))` and dispatches to existing `emit_counter_lane` / `emit_array_lane` / `emit_accumulator_lane` / `emit_early_exit_lane`. Pre-dispatch fast paths: `emit_length_shortcut`, `emit_any_empty_shortcut`. Recognition state (intermediateBinds, projection chaining, where-after-select rebinding) lives inside the emit fn — moves verbatim from imperative `plan_loop_or_count`.
+
+**`plan_order_family`** — 4 rows, priority order 1 → 4:
+
+```das
+// Row 1 — streaming_min: inline-cmp + first[_or_default]
+SplicePattern(
+    name = "order_streaming_min",
+    chain = [
+        Slot(m_literal("where_"),       c_opt(), "where"),
+        Slot(m_alias("distinct_family"), c_opt(), "distinct"),
+        Slot(m_alias("order_family"),    c_one(), "order"),
+        Slot(m_alias("first_family"),    c_one(), "term"),
+        Slot(m_literal("select"),        c_opt(), "termsel"),
+    ],
+    requires = [@@<RequiresPredicate> inline_cmp_available],
+    emit = @@<EmitFn> emit_streaming_min)
+
+// Row 2 — bounded_heap: inline-cmp + take(N)
+SplicePattern(
+    name = "order_bounded_heap",
+    chain = [
+        Slot(m_literal("where_"),       c_opt(), "where"),
+        Slot(m_alias("distinct_family"), c_opt(), "distinct"),
+        Slot(m_alias("order_family"),    c_one(), "order"),
+        Slot(m_literal("take"),          c_one(), "take"),
+        Slot(m_literal("select"),        c_opt(), "termsel"),
+    ],
+    requires = [@@<RequiresPredicate> inline_cmp_available, @@<RequiresPredicate> take_arg_is_int],
+    emit = @@<EmitFn> emit_bounded_heap)
+
+// Row 3 — fused_prefilter: where or distinct present, no inline-cmp shortcut
+SplicePattern(
+    name = "order_fused_prefilter",
+    chain = [
+        Slot(m_literal("where_"),       c_opt(), "where"),
+        Slot(m_alias("distinct_family"), c_opt(), "distinct"),
+        Slot(m_alias("order_family"),    c_one(), "order"),
+        Slot(m_literal("take"),          c_opt(), "take"),
+        Slot(m_alias("first_family"),    c_opt(), "term"),
+        Slot(m_literal("select"),        c_opt(), "termsel"),
+    ],
+    requires = [@@<RequiresPredicate> has_where_or_distinct, @@<RequiresPredicate> take_arg_is_int],
+    emit = @@<EmitFn> emit_fused_prefilter)
+
+// Row 4 — buffer_helper_dispatch: bare order, direct call to daslib helpers
+SplicePattern(
+    name = "order_buffer_helper_dispatch",
+    chain = [
+        Slot(m_alias("order_family"), c_one(), "order"),
+        Slot(m_literal("take"),       c_opt(), "take"),
+        Slot(m_alias("first_family"), c_opt(), "term"),
+    ],
+    requires = [@@<RequiresPredicate> take_arg_is_int],
+    emit = @@<EmitFn> emit_buffer_helper_dispatch)
+
+// Row 5 — order_then_plain_distinct: `order + distinct (plain)` accepted by master imperative
+// (whole-tuple equality is position-invariant). distinct_by AFTER order_by would NOT be safe
+// (distinct_by picks an arbitrary K1 representative regardless of sort order). distinct is
+// literal "distinct" only (no alias) to forbid distinct_by here.
+SplicePattern(
+    name = "order_then_plain_distinct",
+    chain = [
+        Slot(m_alias("order_family"), c_one(), "order"),
+        Slot(m_literal("distinct"),   c_one(), "distinct_after"),
+        Slot(m_literal("take"),       c_opt(), "take"),
+        Slot(m_alias("first_family"), c_opt(), "term"),
+        Slot(m_literal("select"),     c_opt(), "termsel"),
+    ],
+    requires = [@@<RequiresPredicate> take_arg_is_int],
+    emit = @@<EmitFn> emit_fused_prefilter)   // reuses emit_fused_prefilter with distinct_after capture
+```
+
+### Emit archetypes
+
+| Name | Source lines | LOC | Notes |
+|---|---|---|---|
+| `emit_streaming_min` | 1662-1727 | ~65 | Single-best state, per-element less-test |
+| `emit_bounded_heap` | 1729-1855 | ~125 | Size-N heap during walk; distinct gate variant (Theme 3 Phase 3); terminal `_select` variant |
+| `emit_fused_prefilter` | 1928-2107 | ~180 | Walk into buffer with where/distinct gate; sort/min/top_n on buffer; terminal `_select` variant; internal dispatch on take/first/bare |
+| `emit_buffer_helper_dispatch` | 1857-1927 | ~70 | Direct call to `order` / `top_n*` / `min_max` helpers; 4 sub-paths |
+| `emit_loop_or_count_lane` | 2243-2317 + recognition state | ~150 | Single row with internal `classify_terminator` dispatch into 4 existing lane emit fns |
+| `emit_terminal_select_project` | NEW shared helper | ~30 | Used by `emit_bounded_heap` + `emit_fused_prefilter` for `outBuf` projection-from-`buf` |
+
+### Co-occurrence audit (to verify during implementation)
+
+The imperative code has a few subtle co-occurrence rules that may not map cleanly onto the pattern table:
+
+- **`order + distinct (plain)`**: imperative `plan_order_family` accepts `distinct` (not `distinct_by`) AFTER `order_by` because whole-tuple equality is position-invariant. **Decision (2026-05-26)**: add row 5 `order_then_plain_distinct` so PR B has byte-equivalent splice coverage to master. The row's `distinct_after` slot is `m_literal("distinct")` (not the alias), structurally forbidding `distinct_by`. Emit reuses `emit_fused_prefilter` with the new capture name.
+- **`select` mid-chain in plan_loop_or_count**: chained selects need `intermediateBinds` for side-effect ordering. Already handled by emit-fn-internal recognition; pattern row captures via single `select` slot post-collapse.
+- **`where` after `select` in plan_loop_or_count**: imperative does `peel_lambda_replace_var(predicate, projection)` to rebind the where pred to the projection result. Critical correctness — emit fn must replicate (the recognition state in `emit_loop_or_count_lane` covers this).
+
+### LOC budget
+
+| Component | Delta |
+|---|---|
+| New: `collapse_chained_wheres` | +30 |
+| New: 5 emit archetypes (lifted from imperative) | +610 |
+| New: shared `emit_terminal_select_project` | +30 |
+| New: 5 pattern rows | +60 |
+| New: 2 populate `[_macro]` fns | +30 |
+| New: 2 predicates + 5 aliases | +25 |
+| Delete: imperative `plan_loop_or_count` body | -208 |
+| Delete: imperative `plan_order_family` body | -543 |
+| New: stubs + KR-1 wiring | +30 |
+| New: tests (`collapse_chained_wheres` + per-archetype + regression) | +200 |
+| **Net** | **~+264 LOC** (refactor, code redistributed; tests dominate) |
+
+### Test plan (additions to existing per-archetype + walker integrity)
+
+- `test_linq_fold_collapse_chained_wheres.das` — N=2, N=3 chains; side-effect bail; on plan_reverse + plan_distinct + plan_loop_or_count + plan_order_family
+- `test_linq_fold_order_streaming_min.das` — inline-cmp + first / first_or_default; with/without where; with/without distinct; with terminal `_select`
+- `test_linq_fold_order_bounded_heap.das` — inline-cmp + take(N); distinct gate; terminal `_select`
+- `test_linq_fold_order_fused_prefilter.das` — where + order + take/first; distinct + order + take/first; terminal `_select`
+- `test_linq_fold_order_buffer_helper.das` — bare order; order + take; order + first
+- `test_linq_fold_loop_or_count_terminators.das` — all 4 lanes (counter / accumulator / early_exit / array); fast paths; range ops; chained wheres post-collapse
+
 ## Known regressions to address in follow-ups
 
 | # | Surface | Symptom | Severity | Owner PR |
 |---|---|---|---|---|
-| KR-1 | `plan_reverse` + `plan_distinct` pattern rows allow a single optional `where_` slot; pre-PR-A imperative `plan_*` accepted N consecutive `where_` calls and `&&`-merged via `merge_where_cond`. The decs mirror (`plan_decs_reverse`) still does this in its loop. | `..._where(p1)._where(p2).reverse()...` and `..._where(p1)._where(p2)._distinct()...` no longer splice; falls back to cascade. Correctness unchanged (cascade works); perf regression on these chains. | medium (uncommon — users typically write `_where(p1 && p2)` directly) | **PR B** — add a `collapse_chained_wheres` pre-pass mirroring `collapse_chained_selects` (~30 LOC); call from both stubs; add regression tests. Same kernel pattern, no walker/emit/pattern-row changes. |
+| KR-1 | `plan_reverse` + `plan_distinct` pattern rows allow a single optional `where_` slot; pre-PR-A imperative `plan_*` accepted N consecutive `where_` calls and `&&`-merged via `merge_where_cond`. The decs mirror (`plan_decs_reverse`) still does this in its loop. | `..._where(p1)._where(p2).reverse()...` and `..._where(p1)._where(p2)._distinct()...` no longer splice; falls back to cascade. Correctness unchanged (cascade works); perf regression on these chains. | medium (uncommon — users typically write `_where(p1 && p2)` directly) | **PR B — IN PROGRESS** (`collapse_chained_wheres` pre-pass mirroring `collapse_chained_selects`; ~30 LOC; called from `plan_reverse` / `plan_distinct` / `plan_loop_or_count` / `plan_order_family` stubs). |
 
 ## Risks
 
