@@ -1131,16 +1131,6 @@ namespace das {
                       init->at, CompilationError::exceeds_tuple_index);
                 return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
             }
-            {
-                bool rangeError = false;
-                if (auto promoted = tryPromoteConstInt(init, expr->recordType->argTypes[index], rangeError)) {
-                    reportAstChanged();
-                    return promoted;
-                }
-                if (rangeError) {
-                    return init;
-                }
-            }
             if (!canCopyOrMoveType(expr->recordType->argTypes[index], init->type, TemporaryMatters::no, init,
                                    "can't initialize tuple element " + to_string(index), CompilationError::cant_copy, init->at)) {
             }

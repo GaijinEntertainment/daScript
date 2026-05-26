@@ -126,6 +126,22 @@ def test_return_promotion(t : T?) {
 }
 
 [test]
+def test_array_element_promotion(t : T?) {
+    // first element fixes the element type, subsequent int literals
+    // flow through visitMakeArrayIndex's promotion path
+    let f <- [1.0f, 2, 3, 16777216]
+    t |> equal(f[0], 1.0f, "array elem 0 (float literal)")
+    t |> equal(f[1], 2.0f, "array elem 1 (int promoted)")
+    t |> equal(f[2], 3.0f, "array elem 2 (int promoted)")
+    t |> equal(f[3], 16777216.0f, "array elem 3 (int promoted at 2^24)")
+    let u <- [uint8(10), 0, 200, 255]
+    t |> equal(int(u[0]), 10, "uint8 array elem 0")
+    t |> equal(int(u[1]), 0, "uint8 array elem 1 (in-range int promoted)")
+    t |> equal(int(u[2]), 200, "uint8 array elem 2 (in-range int promoted)")
+    t |> equal(int(u[3]), 255, "uint8 array elem 3 (boundary int promoted)")
+}
+
+[test]
 def test_boundary_values(t : T?) {
     // exact boundary values that fit
     let i8_min : int8 = -128

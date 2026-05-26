@@ -1096,6 +1096,17 @@ namespace das {
         return expr;
     }
 
+    ExpressionPtr ExprConst::clone ( ExpressionPtr expr ) const {
+        Expression::clone(expr);
+        auto cexpr = static_cast<ExprConst *>(expr);
+        cexpr->baseType = baseType;
+        cexpr->value = value;
+        cexpr->foldedNonConst = foldedNonConst;
+        cexpr->promotedFromInt = promotedFromInt;
+        cexpr->inexactFloatPromotion = inexactFloatPromotion;
+        return expr;
+    }
+
     ExpressionPtr Expression::autoDereference ( ExpressionPtr expr ) {
         if ( expr->type && !expr->type->isAutoOrAlias() && expr->type->isRef() && !expr->type->isRefType() ) {
             auto ar2l = new ExprRef2Value();
@@ -1297,7 +1308,6 @@ namespace das {
         ExprConst::clone(cexpr);
         cexpr->enumType = enumType;
         cexpr->text = text;
-        cexpr->value = value;
         return cexpr;
     }
 
@@ -1314,8 +1324,7 @@ namespace das {
 
     ExpressionPtr ExprConstString::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprConstString>(expr);
-        Expression::clone(cexpr);
-        cexpr->value = value;
+        ExprConst::clone(cexpr);
         cexpr->text = text;
         return cexpr;
     }
