@@ -83,6 +83,8 @@ class private WithMacro : AstCallMacro {
             let aiNode = ai as ExprAt
             macro_verify(aiNode.subexpr._type != null, prog, call.at,
                 "with_ arg #{i} container type not inferred yet — got null _type on {describe(aiNode.subexpr)}")
+            macro_verify(ai._type != null, prog, call.at,
+                "with_ arg #{i} element type not inferred yet — got null _type on the ExprAt itself")
             let ki = container_kind(aiNode)
             macro_verify(ki != "", prog, call.at,
                 "with_ arg #{i} container must be array or table, got {describe(aiNode.subexpr._type)}")
@@ -123,6 +125,12 @@ class private WithMacro : AstCallMacro {
             for (st in userBlock.list) {
                 newBlock.list |> emplace_new(clone_expression(st))
             }
+            // Preserve any user-attached `finally { ... }` on the default-_ form
+            // so its semantics match the explicit-params path (which clones the
+            // whole block via clone_expression).
+            for (st in userBlock.finalList) {
+                newBlock.finalList |> emplace_new(clone_expression(st))
+            }
             rewrittenBlock = new ExprMakeBlock(at = call.at, _block = newBlock)
             rewrittenInner = newBlock
         } else {
@@ -130,6 +138,11 @@ class private WithMacro : AstCallMacro {
                 "with_ block-param count must match container-arg count: {containerCount} containers, {userArgCount} block params")
             rewrittenBlock = clone_expression(mblk) as ExprMakeBlock
             rewrittenInner = rewrittenBlock._block as ExprBlock
+            // Pin the block to `: void` so a stray `return value` in the user
+            // body is rejected by the typer. The userArgCount==0 branch
+            // already constructs newBlock with void returnType; we do the
+            // same here so behavior matches across both shapes.
+            rewrittenInner.returnType = new TypeDecl(at = userBlock.at, baseType = Type.tVoid)
             for (i in range(containerCount)) {
                 var arg = rewrittenInner.arguments[i]
                 arg._type = clone_type(call.arguments[i]._type)
@@ -163,7 +176,9 @@ class private WithMacro : AstCallMacro {
         for (i in range(containerCount)) {
             let ai = call.arguments[i] as ExprAt
             let ki = container_kind(ai)
-            let cName = "__with_c_{i}"
+            // Hygienic names — make_unique_private_name guarantees no
+            // collision with user-visible identifiers at this call site.
+            let cName = make_unique_private_name("__with_c_{i}", call.at)
             preStmts |> push <| qmacro_expr() {
                 var $i(cName) & = unsafe($e(ai.subexpr))
             }
@@ -176,7 +191,7 @@ class private WithMacro : AstCallMacro {
                 }
                 argRefs |> push <| qmacro($i(cName)[$e(ai.index)])
             } else {  // table
-                let trefName = "__with_tref_{i}"
+                let trefName = make_unique_private_name("__with_tref_{i}", call.at)
                 preStmts |> push <| qmacro_expr() {
                     var $i(trefName) & = unsafe($i(cName)[$e(ai.index)])
                 }
