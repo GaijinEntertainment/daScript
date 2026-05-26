@@ -35,7 +35,10 @@ require daslib/templates_boost
 require daslib/macro_boost
 require strings
 
-struct private LinqCall {
+// LinqCall — registry record describing an operator name (where_/select/distinct/...) and its fold disposition.
+// PUBLIC: appears in the signature of the public `match_pattern` walker via `array<tuple<ExprCall?; LinqCall?>>`,
+// so the doc generator needs to be able to cross-link it. The `linqCalls` table itself stays private.
+struct LinqCall {
     name : string
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
