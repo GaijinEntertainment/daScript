@@ -109,9 +109,11 @@ Section 4 — Tables
 ===================
 
 Tables work the same way; ``tab[key]`` upserts (creates a default entry
-if the key is missing). Only **one** table-keyed arg per call — any
-second insert into a table during the body would rehash and invalidate
-the pinned entry, so the macro refuses anything past the first:
+if the key is missing). Only **one** table-keyed arg per call — a 2nd
+upsert into the SAME table during the body would rehash and invalidate
+the first pinned entry. The macro can't prove two table-keyed args refer
+to distinct tables, so the rule is conservative: even
+``with_(tab1[k1], tab2[k2])`` (distinct tables) is refused:
 
 .. code-block:: das
 
@@ -132,7 +134,7 @@ the failure mode the typer was trying to prevent at compile time:
 
    var arr = [A(f1 = 1, f2 = 2)]
    with_(arr[0]) $(a) {
-       arr |> push(A(f1 = 1000, f2 = 2000))   // panics: "can't push into locked array"
+       arr |> push(A(f1 = 1000, f2 = 2000))   // panics — array is locked
    }
 
 daslang panic is fatal (not a C++/JS-style exception) — the program

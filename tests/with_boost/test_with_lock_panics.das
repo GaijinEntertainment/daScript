@@ -1,13 +1,19 @@
 options gen2
 options indenting = 4
+// Block-arg `$(a)` / `$(v)` etc. are present for syntax coverage but
+// the body only exercises the lock-vs-mutation path on the container,
+// not the bound element. Suppress unused-block-arg lint here.
+options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require daslib/with_boost
 
-//! When the with_ body panics, the lock leaks (daslang issue #2532).
-//! These tests deliberately don't try to ``delete`` the leaked-locked
-//! containers afterwards — that would compound the failure. We only
-//! verify the panic is caught at the with_ boundary.
+//! When the with_ body panics inside the macro's invoke target, the
+//! lock is intentionally not released (daslang panic is fatal — see
+//! CLAUDE.md "Panic is fatal, not an exception"). These tests
+//! deliberately don't try to ``delete`` the leaked-locked containers
+//! afterwards — that would compound the failure. We only verify the
+//! panic is caught at the with_ boundary via try/recover.
 
 struct A {
     f1 : int

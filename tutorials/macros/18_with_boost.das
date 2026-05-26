@@ -99,9 +99,11 @@ def main {
     // ──────────────────────────────────────────────────────────────────
     //
     // Tables work the same way; `tab[key]` upserts (creates a default
-    // entry if missing). At most ONE table-keyed arg per call (any
-    // second insert into the same table would rehash and invalidate
-    // the pinned entry).
+    // entry if missing). At most ONE table-keyed arg per call — the
+    // macro can't prove two table-keyed args refer to distinct tables,
+    // and a 2nd upsert into the SAME table would rehash and invalidate
+    // the first pinned entry. The rule is conservative across the board
+    // (no alias analysis), so `with_(tab1[k1], tab2[k2])` is also refused.
 
     var tab : table<string; A>
     tab |> insert("k", A(f1 = 11, f2 = 22))
