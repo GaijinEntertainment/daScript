@@ -44,7 +44,9 @@ Estimated savings: **~-1750 LOC** across the 4 PRs (~-25% of the file).
 
 Decs-side plans are near-mirrors of their array-side siblings modulo source-loop wrap. `GroupBySourceAdapter` (existing) is the proof-case: `plan_group_by_core` is fully source-agnostic, with the array-side and decs-side wrappers each ~60-100 LOC.
 
-## Grammar kernel (lives inline at top of linq_fold.das — PUBLIC for testability)
+## Grammar kernel (lives inline at top of linq_fold.das)
+
+Visibility follows the rule in **Tests / exports philosophy** below: default `private`, public only what walker tests must name (`Slot` / `SlotMatcher` / `SlotCardinality` + their `m_*`/`c_*` constructors, `SplicePattern`, `Captures` / `EmitCtx` / `EmitFn` typedefs, `chain_prefix_of`, `check_pattern_table_reachable`, `alias_table`). The snippet below omits the `private` keyword for readability; the implementation in `linq_fold.das` carries it on everything not in that public list.
 
 ```das
 variant SourceAdapter {

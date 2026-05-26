@@ -167,6 +167,35 @@ def test_reverse_pre_and_post_select_first(t : T?) {
     }
 }
 
+// Regression for the bug Copilot caught in R6: emit must NOT re-project the user's `first_or_default` default
+// through the post-reverse `_select(g)`. The default is already typed at the post-select element type, so
+// applying termsel(d) double-applies and miscomputes when the chain hits the empty branch.
+
+[test]
+def test_reverse_pre_and_post_select_first_or_default_nonempty(t : T?) {
+    t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — nonempty hits found branch") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // sequence non-empty: termsel(lastName) = (50)+1 = 51
+            let v = _fold(each(sounds)._where(_.rank > 0)._select(_.id * 10).reverse()._select(_ + 1).first_or_default(-99))
+            tt |> equal(v, 51)
+        }
+    }
+}
+
+[test]
+def test_reverse_pre_and_post_select_first_or_default_empty(t : T?) {
+    t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — empty seq returns RAW default, not termsel(default)") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // where filters everything out → empty sequence → default branch fires.
+            // If emit re-projects, result would be (-99)+1 = -98 (wrong). Must be -99.
+            let v = _fold(each(sounds)._where(_.rank > 9999)._select(_.id * 10).reverse()._select(_ + 1).first_or_default(-99))
+            tt |> equal(v, -99)
+        }
+    }
+}
+
 [test]
 def test_reverse_take_select_decs(t : T?) {
     t |> run("plan_decs_reverse: reverse + take + terminal _select") @(tt : T?) {

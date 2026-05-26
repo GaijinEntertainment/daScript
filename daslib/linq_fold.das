@@ -117,11 +117,16 @@ def private slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
     if (a is literal && b is literal) return (a as literal) == (b as literal)
     if (a is alias && b is alias) return (a as alias) == (b as alias)
     if (a is one_of && b is one_of) {
+        // `one_of` is set-membership — equality is order-insensitive (same length + every element in a is in b).
         let la & = unsafe(a as one_of)
         let lb & = unsafe(b as one_of)
         if (length(la) != length(lb)) return false
-        for (i in 0 .. length(la)) {
-            if (la[i] != lb[i]) return false
+        for (name in la) {
+            var found = false
+            for (other in lb) {
+                if (other == name) { found = true; break; }
+            }
+            if (!found) return false
         }
         return true
     }
@@ -2401,14 +2406,13 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
     }
     var perElement = wrap_with_condition(matchBlock, whereCond)
     var lastRetExpr : Expression?
-    var dRetExpr : Expression?
     if (terminalSelectLam != null) {
         lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
-        dRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(dBindName)))
     } else {
         lastRetExpr = qmacro($i(lastName))
-        dRetExpr = qmacro($i(dBindName))
     }
+    // first_or_default's user default is already at post-termsel type — re-projecting through `termsel` double-applies.
+    var dRetExpr : Expression? = qmacro($i(dBindName))
     var body : Expression?
     if (terminatorName == "first") {
         body = qmacro_block() {
