@@ -210,7 +210,10 @@ var alias_table : table<string; array<string>> <- {
                                      "min_max_average", "min_max_average_by",
                                      "any", "all", "contains", "first", "first_or_default",
                                      "last", "last_or_default", "single", "single_or_default",
-                                     "element_at", "element_at_or_default"]
+                                     "element_at", "element_at_or_default"],
+    // PR D1 — order-by-with-key (excludes bare `order` / `order_descending` which lack a key arg).
+    // Used by plan_group_by's trailing_order slot.
+    "order_by_family"            => ["order_by", "order_by_descending"]
 }
 
 // Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
@@ -327,12 +330,29 @@ def private has_where_or_distinct(var c : Captures; var top : Expression?) : boo
     return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 }
 
+// v1 limit (imperative line 6011): upstream `join` requires empty head + no having + no trailing_where.
+// Vacuous when no upstream_join captured.
+def private decs_join_invariants(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("upstream_join"))) return true
+    return ((c.many["head"] |> empty)
+            && !(c.single |> key_exists("having"))
+            && !(c.single |> key_exists("trailing_where")))
+}
+
+// plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
+// the order_by key lambda (and its side effects). Cascade to tier-2 instead. Matches the pre-PR-D1
+// imperative recognizer which only popped trailing order when no count terminator was present.
+def private no_order_with_count(var c : Captures; var top : Expression?) : bool {
+    return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
+}
+
 // Per-plan pattern tables — collapsed into splice_patterns in PR D.
 
 var private plan_reverse_patterns : array<SplicePattern>
 var private plan_distinct_patterns : array<SplicePattern>
 var private plan_loop_or_count_patterns : array<SplicePattern>
 var private plan_order_family_patterns : array<SplicePattern>
+var private plan_group_by_patterns : array<SplicePattern>
 var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
 
 // ===== End of pattern-table kernel =====
@@ -2079,7 +2099,6 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             }
         }
     }
-    var retType : TypeDeclPtr
     if (oc.selectLam != null) {
         let outBufName = qn("order_proj_buf", at)
         let elemName = qn("order_proj_e", at)
@@ -2097,7 +2116,6 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             }
             return <- $i(outBufName)
         }
-        retType = clone_type(oc.selectElemType)
     } else {
         stmts |> push_from <| qmacro_block_to_array() {
             return <- $i(bhBufName) if ($i(takeNName) <= 0)
@@ -2107,7 +2125,6 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             _::order_inplace($i(bhBufName), $e(inlineCmp))
             return <- $i(bhBufName)
         }
-        retType = clone_type(bufElemType)
     }
     return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
 }
@@ -3570,161 +3587,186 @@ def private mk_slot_ref(at : LineInfo; entryName : string; slot : int) : Express
     return ef
 }
 
+typedef private ReducerEmitterFn = function<(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?>>
+
+// "value strictly preferred over cmp" for min (val<cmp) / max (val>cmp); workhorse uses native `<`/`>`, else `_::less`.
 [macro_function]
-def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
-    // (missInit, hitUpdate); hitUpdate null for first* (subsequent same-key elements ignored).
-    var missInit : Expression?
-    var hitUpdate : Expression?
-    let nm = spec.name
-    if (nm == "length" || nm == "count") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        var l2 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) = 1
-        }
-        hitUpdate = qmacro_expr() {
-            $e(l2) ++
-        }
-    } elif (nm == "long_count") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        var l2 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) = 1l
-        }
-        hitUpdate = qmacro_expr() {
-            $e(l2) ++
-        }
-    } elif (nm == "sum") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        var l2 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) = $i(itName)
-        }
-        hitUpdate = qmacro_expr() {
-            $e(l2) += $i(itName)
-        }
-    } elif (nm == "sum_inner_select") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        var l2 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) = $e(spec.innerBody)
-        }
-        hitUpdate = qmacro_expr() {
-            $e(l2) += $e(spec.innerBody)
-        }
-    } elif (nm == "min" || nm == "max") {
-        let workhorse = spec.accType != null && spec.accType.isWorkhorseType
-        let isMin = nm == "min"
-        var lInit = mk_slot_ref(at, entryName, spec.slot)
-        var lCmp  = mk_slot_ref(at, entryName, spec.slot)
-        var lAsn  = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(lInit) := $i(itName)
-        }
-        if (workhorse && isMin) {
-            hitUpdate = qmacro_expr() {
-                if ($i(itName) < $e(lCmp)) {
-                    $e(lAsn) := $i(itName)
-                }
-            }
-        } elif (workhorse) {
-            hitUpdate = qmacro_expr() {
-                if ($i(itName) > $e(lCmp)) {
-                    $e(lAsn) := $i(itName)
-                }
-            }
-        } elif (isMin) {
-            hitUpdate = qmacro_expr() {
-                if (_::less($i(itName), $e(lCmp))) {
-                    $e(lAsn) := $i(itName)
-                }
-            }
-        } else {
-            hitUpdate = qmacro_expr() {
-                if (_::less($e(lCmp), $i(itName))) {
-                    $e(lAsn) := $i(itName)
-                }
-            }
-        }
-    } elif (nm == "min_inner_select" || nm == "max_inner_select") {
-        let workhorse = spec.accType != null && spec.accType.isWorkhorseType
-        let isMin = nm == "min_inner_select"
-        // Hit branch evaluates innerBody once into a temp — matches reference's single-eval-per-element.
-        let tmp = "`vis`{at.line}`{at.column}`{spec.slot}"
-        var lInit = mk_slot_ref(at, entryName, spec.slot)
-        var lCmp  = mk_slot_ref(at, entryName, spec.slot)
-        var lAsn  = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(lInit) := $e(spec.innerBody)
-        }
-        if (workhorse && isMin) {
-            hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(spec.innerBody)
-                if ($i(tmp) < $e(lCmp)) {
-                    $e(lAsn) := $i(tmp)
-                }
-            }
-        } elif (workhorse) {
-            hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(spec.innerBody)
-                if ($i(tmp) > $e(lCmp)) {
-                    $e(lAsn) := $i(tmp)
-                }
-            }
-        } elif (isMin) {
-            hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(spec.innerBody)
-                if (_::less($i(tmp), $e(lCmp))) {
-                    $e(lAsn) := $i(tmp)
-                }
-            }
-        } else {
-            hitUpdate = qmacro_block() {
-                let $i(tmp) = $e(spec.innerBody)
-                if (_::less($e(lCmp), $i(tmp))) {
-                    $e(lAsn) := $i(tmp)
-                }
-            }
-        }
-    } elif (nm == "first") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) := $i(itName)
-        }
-    } elif (nm == "first_inner_select") {
-        var l1 = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(l1) := $e(spec.innerBody)
-        }
-    } elif (nm == "average") {
-        // 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source-element cast to double once per side.
-        var lInit = mk_slot_ref(at, entryName, spec.slot)
-        var lSum  = mk_slot_ref(at, entryName, spec.slot)
-        var lCnt  = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_expr() {
-            $e(lInit) = (double($i(itName)), 1ul)
-        }
-        hitUpdate = qmacro_block() {
-            $e(lSum)._0 += double($i(itName))
-            $e(lCnt)._1 ++
-        }
-    } elif (nm == "average_inner_select") {
-        // Inner projection evaluated once into a temp — matches reference single-eval-per-element.
-        let tmp = "`vavg`{at.line}`{at.column}`{spec.slot}"
-        var lInit = mk_slot_ref(at, entryName, spec.slot)
-        var lSum  = mk_slot_ref(at, entryName, spec.slot)
-        var lCnt  = mk_slot_ref(at, entryName, spec.slot)
-        missInit = qmacro_block() {
-            let $i(tmp) = $e(spec.innerBody)
-            $e(lInit) = (double($i(tmp)), 1ul)
-        }
-        hitUpdate = qmacro_block() {
-            let $i(tmp) = $e(spec.innerBody)
-            $e(lSum)._0 += double($i(tmp))
-            $e(lCnt)._1 ++
+def private mk_strictly_preferred(workhorse, isMin : bool; var valExpr : Expression?; var cmpExpr : Expression?) : Expression? {
+    if (workhorse) {
+        return qmacro($e(valExpr) < $e(cmpExpr)) if (isMin)
+        return qmacro($e(valExpr) > $e(cmpExpr))
+    }
+    return qmacro(_::less($e(valExpr), $e(cmpExpr))) if (isMin)
+    return qmacro(_::less($e(cmpExpr), $e(valExpr)))
+}
+
+[macro_function]
+def private mk_reducer_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    var l2 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) = 1
+    }
+    let hitUpdate = qmacro_expr() {
+        $e(l2) ++
+    }
+    return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_long_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    var l2 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) = 1l
+    }
+    let hitUpdate = qmacro_expr() {
+        $e(l2) ++
+    }
+    return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_sum(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    var l2 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) = $i(itName)
+    }
+    let hitUpdate = qmacro_expr() {
+        $e(l2) += $i(itName)
+    }
+    return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_sum_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    var l2 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) = $e(spec.innerBody)
+    }
+    let hitUpdate = qmacro_expr() {
+        $e(l2) += $e(spec.innerBody)
+    }
+    return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_min_max(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    let workhorse = spec.accType != null && spec.accType.isWorkhorseType
+    let isMin = spec.name == "min"
+    var lInit = mk_slot_ref(at, entryName, spec.slot)
+    var lCmp  = mk_slot_ref(at, entryName, spec.slot)
+    var lAsn  = mk_slot_ref(at, entryName, spec.slot)
+    var predExpr = mk_strictly_preferred(workhorse, isMin, qmacro($i(itName)), lCmp)
+    let missInit = qmacro_expr() {
+        $e(lInit) := $i(itName)
+    }
+    let hitUpdate = qmacro_expr() {
+        if ($e(predExpr)) {
+            $e(lAsn) := $i(itName)
         }
     }
     return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_min_max_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    let workhorse = spec.accType != null && spec.accType.isWorkhorseType
+    let isMin = spec.name == "min_inner_select"
+    let tmp = "`vis`{at.line}`{at.column}`{spec.slot}"
+    var lInit = mk_slot_ref(at, entryName, spec.slot)
+    var lCmp  = mk_slot_ref(at, entryName, spec.slot)
+    var lAsn  = mk_slot_ref(at, entryName, spec.slot)
+    var predExpr = mk_strictly_preferred(workhorse, isMin, qmacro($i(tmp)), lCmp)
+    let missInit = qmacro_expr() {
+        $e(lInit) := $e(spec.innerBody)
+    }
+    let hitUpdate = qmacro_block() {
+        let $i(tmp) = $e(spec.innerBody)
+        if ($e(predExpr)) {
+            $e(lAsn) := $i(tmp)
+        }
+    }
+    return (missInit, hitUpdate)
+}
+
+[macro_function]
+def private mk_reducer_first(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) := $i(itName)
+    }
+    return (missInit, null)
+}
+
+[macro_function]
+def private mk_reducer_first_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(l1) := $e(spec.innerBody)
+    }
+    return (missInit, null)
+}
+
+// 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source cast to double once per side.
+[macro_function]
+def private mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    var lInit = mk_slot_ref(at, entryName, spec.slot)
+    var lSum  = mk_slot_ref(at, entryName, spec.slot)
+    var lCnt  = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_expr() {
+        $e(lInit) = (double($i(itName)), 1ul)
+    }
+    let hitUpdate = qmacro_block() {
+        $e(lSum)._0 += double($i(itName))
+        $e(lCnt)._1 ++
+    }
+    return (missInit, hitUpdate)
+}
+
+// Inner projection evaluated once into a temp per side — matches reference single-eval-per-element.
+[macro_function]
+def private mk_reducer_average_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    let tmp = "`vavg`{at.line}`{at.column}`{spec.slot}"
+    var lInit = mk_slot_ref(at, entryName, spec.slot)
+    var lSum  = mk_slot_ref(at, entryName, spec.slot)
+    var lCnt  = mk_slot_ref(at, entryName, spec.slot)
+    let missInit = qmacro_block() {
+        let $i(tmp) = $e(spec.innerBody)
+        $e(lInit) = (double($i(tmp)), 1ul)
+    }
+    let hitUpdate = qmacro_block() {
+        let $i(tmp) = $e(spec.innerBody)
+        $e(lSum)._0 += double($i(tmp))
+        $e(lCnt)._1 ++
+    }
+    return (missInit, hitUpdate)
+}
+
+var private reducer_emitters : table<string; ReducerEmitterFn> <- {
+    "length"               => @@ < ReducerEmitterFn > mk_reducer_count,
+    "count"                => @@ < ReducerEmitterFn > mk_reducer_count,
+    "long_count"           => @@ < ReducerEmitterFn > mk_reducer_long_count,
+    "sum"                  => @@ < ReducerEmitterFn > mk_reducer_sum,
+    "sum_inner_select"     => @@ < ReducerEmitterFn > mk_reducer_sum_inner,
+    "min"                  => @@ < ReducerEmitterFn > mk_reducer_min_max,
+    "max"                  => @@ < ReducerEmitterFn > mk_reducer_min_max,
+    "min_inner_select"     => @@ < ReducerEmitterFn > mk_reducer_min_max_inner,
+    "max_inner_select"     => @@ < ReducerEmitterFn > mk_reducer_min_max_inner,
+    "first"                => @@ < ReducerEmitterFn > mk_reducer_first,
+    "first_inner_select"   => @@ < ReducerEmitterFn > mk_reducer_first_inner,
+    "average"              => @@ < ReducerEmitterFn > mk_reducer_average,
+    "average_inner_select" => @@ < ReducerEmitterFn > mk_reducer_average_inner
+}
+
+[macro_function]
+def private emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // (missInit, hitUpdate); hitUpdate null for first* (subsequent same-key elements ignored).
+    let emitter = reducer_emitters?[spec.name] ?? default<ReducerEmitterFn>
+    return (null, null) if (emitter == null)
+    return invoke(emitter, spec, at, entryName, itName)
 }
 
 [macro_function]
@@ -4013,17 +4055,22 @@ struct private GroupBySourceAdapter {
     decsJoinResultType : TypeDeclPtr
 }
 
+// decs-join → Decs(null, …) is safe at finalize: adapter_wrap_invoke's Decs branch reads only the variant tag.
+[macro_function]
+def private to_source_adapter(adapter : GroupBySourceAdapter) : SourceAdapter {
+    return SourceAdapter(Decs = (adapter.decsBridge, adapter.initialBindName)) if (adapter.isDecs || adapter.isDecsJoin)
+    return SourceAdapter(Array = (adapter.arrayTop, adapter.arraySrcName))
+}
+
 [macro_function]
 def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
-    // Per-element source loop. Body has been segment-wrapped (inside-out where_/select) by the caller. Three modes: decs_join (Theme 3 C3) hashes srcB, walks srcA, binds result-lam output once per pair; decs walks via for_each_archetype + inner multi-iter for; array `for(it in src)`.
+    // decs-join (Theme 3 C3) hashes srcB, walks srcA, binds result-lam output once per pair — GroupBy-specific.
     if (adapter.isDecsJoin) {
-        // Names — derived from namePrefix to avoid collision with the regular `decs_*` set when both fire in adjacent siblings.
         let jhashName = qn("{adapter.namePrefix}jhash", at)
         let arrName   = qn("{adapter.namePrefix}jarr", at)
         let tupAName  = qn("{adapter.namePrefix}jta", at)
         let tupBName  = qn("{adapter.namePrefix}jtb", at)
         let resName   = adapter.initialBindName
-        // Peel join lambdas against the synthesized iter-tuple bind names. Mirrors plan_decs_join's keya/keyb/result peel.
         var keyaBody   = peel_lambda_rename_var(adapter.decsJoinKeyaLam, tupAName)
         var keybBody   = peel_lambda_rename_var(adapter.decsJoinKeybLam, tupBName)
         var resultBody = peel_lambda_rename_2vars(adapter.decsJoinResultLam, tupAName, tupBName)
@@ -4031,13 +4078,11 @@ def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : 
         var tupBindA = build_decs_tup_bind(adapter.decsJoinBridgeA, tupAName, at)
         var tupBindB = build_decs_tup_bind(adapter.decsJoinBridgeB, tupBName, at)
         if (tupBindA == null || tupBindB == null) return null
-        // Hash collect — same shape as plan_decs_join's collect loop.
         var collectBody <- qmacro_block_to_array() {
             // nolint:PERF006 per-key bucket size unknown ahead of time
             $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
         }
         var collectInner = build_decs_inner_for(adapter.decsJoinBridgeB, tupBindB, stmts_to_expr(collectBody), at)
-        // Probe — wraps the upstream body. Per-pair result-lam bind lives RIGHT BEFORE $e(body) so the segment walk + reducer table-update fire on each join pair.
         var probeBody <- qmacro_block_to_array() {
             get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(adapter.decsJoinTupBType)>) {
                 for ($i(tupBName) in $i(arrName)) {
@@ -4057,36 +4102,12 @@ def private adapter_emit_source_loop(adapter : GroupBySourceAdapter; var body : 
             })
         }
     }
-    if (adapter.isDecs) {
-        var forExprNode = build_decs_inner_for_pruned(adapter.decsBridge, adapter.initialBindName, body, at)
-        let archName = adapter.decsBridge.archName
-        return qmacro_expr() {
-            for_each_archetype($e(adapter.decsBridge.reqHashExpr), $e(adapter.decsBridge.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
-        }
-    }
-    let srcItName = adapter.initialBindName
-    let srcName = adapter.arraySrcName
-    return qmacro_block() {
-        for ($i(srcItName) in $i(srcName)) {
-            $e(body)
-        }
-    }
+    return adapter_wrap_source_loop(to_source_adapter(adapter), body, at)
 }
 
 [macro_function]
 def private adapter_finalize_emission(adapter : GroupBySourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; at : LineInfo) : Expression? {
-    // Wrap accumulated stmts into the emission invoke. Array side: bind source as param (finalize_emission_stmts handles peel + topExpr clone). Decs and decs-join: zero-arg invoke with explicit retType (bridges + hash + probe loops are already inline via for_each_archetype emitted by adapter_emit_source_loop).
-    if (adapter.isDecs || adapter.isDecsJoin) {
-        var emission = qmacro(invoke($() : $t(retType) {
-            $b(stmts)
-        }))
-        emission.force_at(at)
-        emission.force_generated(true)
-        return emission
-    }
-    return finalize_emission_stmts(adapter.arrayTop, adapter.arraySrcName, at, stmts)
+    return adapter_wrap_invoke(to_source_adapter(adapter), stmts, retType, false, at)
 }
 
 [macro_function]
@@ -4456,68 +4477,158 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     return adapter_finalize_emission(adapter, stmts, retType, at)
 }
 
+// Shared array/decs/decs-join group_by emitter. Reconstructs head calls (mirrors emit_loop_or_count_lane_decs),
+// builds GroupBySourceAdapter per source-shape, delegates to plan_group_by_core. Cascades on null bail.
+[macro_function]
+def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var gbCall = c.single["gb"]
+    var keyBlock = clone_expression(gbCall.arguments[1])
+    var groupProjCall = c.single["groupproj"]
+    var havingCall : ExprCall?
+    if (c.single |> key_exists("having")) {
+        havingCall = c.single["having"]
+    }
+    var trailingWhereCall : ExprCall?
+    if (c.single |> key_exists("trailing_where")) {
+        trailingWhereCall = c.single["trailing_where"]
+    }
+    var terminatorName = ""
+    if (c.single |> key_exists("term")) {
+        terminatorName = c.single_name["term"]
+    }
+    var orderName = ""
+    var orderKey : Expression?
+    if (c.single |> key_exists("trailing_order")) {
+        var orderCall = c.single["trailing_order"]
+        orderName = c.single_name["trailing_order"]
+        orderKey = clone_expression(orderCall.arguments[1])
+    }
+    // Reconstruct head calls (flatten_linq shape) from c.many["head"] so plan_group_by_core walks them unchanged.
+    var headCalls : array<tuple<ExprCall?; LinqCall?>>
+    headCalls |> reserve(length(c.many["head"]))
+    for (call in c.many["head"]) {
+        let nm = call_norm_name(call)
+        if (!(linqCalls |> key_exists(nm))) return null
+        var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
+        headCalls |> push((call, unsafe(addr(lc))))
+    }
+    var adapter : GroupBySourceAdapter
+    if (ctx.src is Decs) {
+        var bridge = (ctx.src as Decs)._0
+        if (c.single |> key_exists("upstream_join")) {
+            var joinCall = c.single["upstream_join"]
+            var bridgeB = extract_decs_bridge(joinCall.arguments[1])
+            if (bridgeB == null) return null
+            var keyaLam = joinCall.arguments[2]
+            var keybLam = joinCall.arguments[3]
+            var resultLam = joinCall.arguments[4]
+            if (keyaLam == null || keybLam == null || resultLam == null
+                    || keyaLam._type == null || resultLam._type == null
+                    || resultLam._type.firstType == null) return null
+            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+            if (!is_primitive_join_key_type(keyType)) return null
+            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            var tupBType = strip_const_ref(clone_type(bridgeB.elementType))
+            adapter = GroupBySourceAdapter(
+                initialBindName := qn("djoin_jres", at),
+                initialElemType = strip_const_ref(clone_type(resultLam._type.firstType)),
+                namePrefix := "djoin_",
+                isDecs = false,
+                isDecsJoin = true,
+                arrayTop = null,
+                arraySrcName := "",
+                decsBridge = null,
+                decsJoinBridgeA = bridge,
+                decsJoinBridgeB = bridgeB,
+                decsJoinKeyaLam = keyaLam,
+                decsJoinKeybLam = keybLam,
+                decsJoinResultLam = resultLam,
+                decsJoinKeyType = keyType,
+                decsJoinTupBType = tupBType,
+                decsJoinResultType = resultType
+            )
+        } else {
+            adapter = GroupBySourceAdapter(
+                initialBindName := qn("decs_tup", at),
+                initialElemType = strip_const_ref(clone_type(bridge.elementType)),
+                namePrefix := "decs_",
+                isDecs = true,
+                arrayTop = null,
+                arraySrcName := "",
+                decsBridge = bridge
+            )
+        }
+    } else {
+        var top = (ctx.src as Array)._0
+        if (top._type == null) return null
+        adapter = GroupBySourceAdapter(
+            initialBindName := qn("it", at),
+            initialElemType = strip_const_ref(clone_type(top._type.firstType)),
+            namePrefix := "",
+            isDecs = false,
+            arrayTop = top,
+            arraySrcName := qn("source", at),
+            decsBridge = null
+        )
+    }
+    return plan_group_by_core(headCalls, keyBlock, groupProjCall, havingCall, trailingWhereCall,
+        terminatorName, orderName, orderKey, ctx.expr_is_iterator, at, adapter)
+}
+
+[_macro]
+def private populate_plan_group_by_patterns {
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_group_by_patterns)) return
+    // Array-source group_by: head segments + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
+    plan_group_by_patterns |> emplace <| SplicePattern(
+        name = "group_by_array",
+        chain <- [
+            slot_chain_of(["where_", "select"], "head"),
+            Slot(matcher = m_literal("group_by_lazy"), cardinality = c_one(), capture_name = "gb", arity = 2),
+            Slot(matcher = m_literal("having_"),       cardinality = c_opt(), capture_name = "having"),
+            Slot(matcher = m_literal("select"),        cardinality = c_one(), capture_name = "groupproj"),
+            Slot(matcher = m_literal("where_"),        cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
+            Slot(matcher = m_alias("order_by_family"), cardinality = c_opt(), capture_name = "trailing_order", arity = 2),
+            Slot(matcher = m_literal("count"),         cardinality = c_opt(), capture_name = "term", arity = 1)
+        ],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > no_order_with_count],
+        emit = @@ < EmitFn > emit_group_by
+    )
+    // Decs-source: same shape + optional upstream `join` slot; v1 join-shape limits via decs_join_invariants.
+    plan_group_by_patterns |> emplace <| SplicePattern(
+        name = "group_by_decs",
+        chain <- [
+            slot_chain_of(["where_", "select"], "head"),
+            Slot(matcher = m_literal("join"),          cardinality = c_opt(), capture_name = "upstream_join", arity = 5),
+            Slot(matcher = m_literal("group_by_lazy"), cardinality = c_one(), capture_name = "gb", arity = 2),
+            Slot(matcher = m_literal("having_"),       cardinality = c_opt(), capture_name = "having"),
+            Slot(matcher = m_literal("select"),        cardinality = c_one(), capture_name = "groupproj"),
+            Slot(matcher = m_literal("where_"),        cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
+            Slot(matcher = m_alias("order_by_family"), cardinality = c_opt(), capture_name = "trailing_order", arity = 2),
+            Slot(matcher = m_literal("count"),         cardinality = c_opt(), capture_name = "term", arity = 1)
+        ],
+        requires <- [@@ < RequiresPredicate > decs_source, @@ < RequiresPredicate > decs_join_invariants, @@ < RequiresPredicate > no_order_with_count],
+        emit = @@ < EmitFn > emit_group_by
+    )
+}
+
 [macro_function]
 def private plan_group_by(var expr : Expression?) : Expression? {
-    // Array-source entry to plan_group_by_core. Recognizer + adapter setup; all splice machinery lives in the shared core.
+    // PR D1 stub — walks plan_group_by_patterns with Array adapter; emit_group_by delegates to plan_group_by_core.
     var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
+    if (empty(calls) || expr._type == null) return null
     top = peel_each(top)
-    if (expr._type == null) return null
-    // Pop count terminator from chain tail; bare select-after-group_by → ARRAY lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
-    var terminatorName : string  = ""
-    {
-        let lastName = calls.back()._1.name
-        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
-            terminatorName = lastName
-            calls |> pop
+    let at = calls[0]._0.at
+    let srcName = qn("source", at)
+    let exprIsIter = expr._type.isIterator
+    for (p in plan_group_by_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var ctx = EmitCtx(top = top, src = SourceAdapter(Array = (top, srcName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
         }
     }
-    // Optional: trailing `_order_by(KEY)` / `_order_by_descending(KEY)` on the output (Theme 3 Phase 2, closes audit C2). Only on the to_array lane — sort + count would be wasted work; for count we cascade so the predicate-less sort isn't silently elided either. Bare `_order` / `_order_descending` (no key) are not in scope for v1: the bucket output is typically a named tuple, and `<` on tuples is ill-defined.
-    var orderName : string = ""
-    var orderKey : Expression?
-    if (terminatorName == "" && !empty(calls)
-            && (calls.back()._1.name == "order_by" || calls.back()._1.name == "order_by_descending")) {
-        var orderCall = calls.back()._0
-        if ((orderCall.arguments |> length) >= 2) {
-            orderName = calls.back()._1.name
-            orderKey = clone_expression(orderCall.arguments[1])
-            calls |> pop
-        }
-    }
-    // Optional: trailing _where AFTER _select(reducer) — SQL HAVING shape, predicate on post-aggregate tuple. Theme 2 (closes audit 4a). Distinct from `having_` (which lives between group_by_lazy and select and can lift hidden reducer slots): trailing _where binds the constructed output tuple and gates the buf-emit loop.
-    var trailingWhereCall : ExprCall?
-    if (!empty(calls) && calls.back()._1.name == "where_") {
-        trailingWhereCall = calls.back()._0
-        if ((trailingWhereCall.arguments |> length) < 2) return null
-        calls |> pop
-    }
-    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
-    if (empty(calls) || calls.back()._1.name != "select") return null
-    var groupProjCall = calls.back()._0
-    calls |> pop
-    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten in plan_group_by_core against accumulator slots.
-    var havingCall : ExprCall?
-    if (!empty(calls) && calls.back()._1.name == "having_") {
-        havingCall = calls.back()._0
-        calls |> pop
-    }
-    // The call immediately before must be group_by_lazy with a key arg.
-    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
-    var groupByCall = calls.back()._0
-    calls |> pop
-    if ((groupByCall.arguments |> length) < 2) return null
-    var keyBlock = clone_expression(groupByCall.arguments[1])
-    let at = groupByCall.at
-    var adapter = GroupBySourceAdapter(
-        initialBindName := qn("it", at),
-        initialElemType = strip_const_ref(clone_type(top._type.firstType)),
-        namePrefix := "",
-        isDecs = false,
-        arrayTop = top,
-        arraySrcName := qn("source", at),
-        decsBridge = null
-    )
-    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, orderName, orderKey, expr._type.isIterator, at, adapter)
+    return null
 }
 
 // ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
@@ -5952,103 +6063,22 @@ def private is_primitive_join_key_type(keyType : TypeDeclPtr) : bool {
 
 [macro_function]
 def private plan_decs_group_by(var expr : Expression?) : Expression? {
-    // Decs-bridge entry to plan_group_by_core. Recognizer + extract_decs_bridge + adapter setup; all splice machinery lives in the shared core (decs adapter dispatches the outer for_each_archetype + inner multi-iter for + tupBind wrap). Theme 3 C3: when the upstream call is `join`, switches to the isDecsJoin adapter mode so plan_decs_join's hashB-collect + srcA-probe + per-pair result-lam bind feeds plan_group_by_core's bucket-update directly (one pass, no intermediate alloc).
+    // PR D1 stub — walks plan_group_by_patterns with Decs adapter; upstream_join slot captured per Theme 3 C3.
     var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
     var bridge = extract_decs_bridge(top)
-    if (bridge == null || expr._type == null) return null
-    // Pop count terminator; bare select-after-group_by → to_array lane. Only the 1-arg `count(src)` form — `count(src, predicate)` (a valid linq.das overload) must cascade so the predicate isn't silently dropped.
-    var terminatorName : string  = ""
-    {
-        let lastName = calls.back()._1.name
-        if (lastName == "count" && length(calls.back()._0.arguments) == 1) {
-            terminatorName = lastName
-            calls |> pop
+    if (bridge == null || empty(calls) || expr._type == null) return null
+    let at = calls[0]._0.at
+    let tupName = qn("decs_tup", at)
+    let exprIsIter = expr._type.isIterator
+    for (p in plan_group_by_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
         }
     }
-    // Optional: trailing `_order_by(KEY)` / `_order_by_descending(KEY)` on the output (Theme 3 Phase 2 C2). Decs mirror of the array-side pop. Both the isDecs and isDecsJoin adapter modes share this — the sort fires on the same buf the to_array lane fills regardless of source shape.
-    var orderName : string = ""
-    var orderKey : Expression?
-    if (terminatorName == "" && !empty(calls)
-            && (calls.back()._1.name == "order_by" || calls.back()._1.name == "order_by_descending")) {
-        var orderCall = calls.back()._0
-        if ((orderCall.arguments |> length) >= 2) {
-            orderName = calls.back()._1.name
-            orderKey = clone_expression(orderCall.arguments[1])
-            calls |> pop
-        }
-    }
-    // Optional: trailing _where AFTER _select(reducer) — SQL HAVING shape on post-aggregate tuple. Theme 2 (closes audit 4e). Decs mirror of the array-side pop.
-    var trailingWhereCall : ExprCall?
-    if (!empty(calls) && calls.back()._1.name == "where_") {
-        trailingWhereCall = calls.back()._0
-        if ((trailingWhereCall.arguments |> length) < 2) return null
-        calls |> pop
-    }
-    // Required tail: select(group_proj) — without it the chain yields raw buckets (no fusion).
-    if (empty(calls) || calls.back()._1.name != "select") return null
-    var groupProjCall = calls.back()._0
-    calls |> pop
-    // Optional: having_ between select and group_by_lazy (SQL HAVING shape) — rewritten in plan_group_by_core against accumulator slots.
-    var havingCall : ExprCall?
-    if (!empty(calls) && calls.back()._1.name == "having_") {
-        havingCall = calls.back()._0
-        calls |> pop
-    }
-    // The call immediately before must be group_by_lazy with a key arg.
-    if (empty(calls) || calls.back()._1.name != "group_by_lazy") return null
-    var groupByCall = calls.back()._0
-    calls |> pop
-    if ((groupByCall.arguments |> length) < 2) return null
-    var keyBlock = clone_expression(groupByCall.arguments[1])
-    let at = groupByCall.at
-    var adapter : GroupBySourceAdapter
-    // Theme 3 C3 — trailing `join` upstream of `group_by_lazy`. v1: empty calls after pop (no segments between join and group_by), HAVING blocks the path (Theme 2 trailing_where is post-aggregate; defer the join+HAVING shape to v2).
-    if (!empty(calls) && calls.back()._1.name == "join" && havingCall == null && trailingWhereCall == null) {
-        var joinCall = calls.back()._0
-        calls |> pop
-        if (!empty(calls) || (joinCall.arguments |> length) != 5) return null
-        var bridgeB = extract_decs_bridge(joinCall.arguments[1])
-        if (bridgeB == null) return null
-        var keyaLam = joinCall.arguments[2]
-        var keybLam = joinCall.arguments[3]
-        var resultLam = joinCall.arguments[4]
-        if (keyaLam == null || keybLam == null || resultLam == null
-                || keyaLam._type == null || resultLam._type == null || resultLam._type.firstType == null) return null
-        var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
-        if (!is_primitive_join_key_type(keyType)) return null
-        var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
-        var tupBType = strip_const_ref(clone_type(bridgeB.elementType))
-        adapter = GroupBySourceAdapter(
-            initialBindName := qn("djoin_jres", at),
-            initialElemType = strip_const_ref(clone_type(resultLam._type.firstType)),
-            namePrefix := "djoin_",
-            isDecs = false,
-            isDecsJoin = true,
-            arrayTop = null,
-            arraySrcName := "",
-            decsBridge = null,
-            decsJoinBridgeA = bridge,
-            decsJoinBridgeB = bridgeB,
-            decsJoinKeyaLam = keyaLam,
-            decsJoinKeybLam = keybLam,
-            decsJoinResultLam = resultLam,
-            decsJoinKeyType = keyType,
-            decsJoinTupBType = tupBType,
-            decsJoinResultType = resultType
-        )
-    } else {
-        adapter = GroupBySourceAdapter(
-            initialBindName := qn("decs_tup", at),
-            initialElemType = strip_const_ref(clone_type(bridge.elementType)),
-            namePrefix := "decs_",
-            isDecs = true,
-            arrayTop = null,
-            arraySrcName := "",
-            decsBridge = bridge
-        )
-    }
-    return plan_group_by_core(calls, keyBlock, groupProjCall, havingCall, trailingWhereCall, terminatorName, orderName, orderKey, expr._type.isIterator, at, adapter)
+    return null
 }
 
 // ── decs order family splice (PR C — pattern-table stub through plan_order_family_patterns) ───────

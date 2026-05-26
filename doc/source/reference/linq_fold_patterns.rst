@@ -35,9 +35,12 @@ The dispatch order in ``LinqFold.visit`` (``daslib/linq_fold.das``) is:
 4. ``plan_reverse`` — array source with ``reverse``.
 5. ``plan_decs_distinct`` — decs source with ``distinct``/``distinct_by``.
 6. ``plan_distinct`` — array source with ``distinct``/``distinct_by``.
-7. ``plan_decs_group_by`` — decs source with ``group_by`` (dispatches
-   to the shared ``plan_group_by_core``).
-8. ``plan_group_by`` — array source with ``group_by`` (same shared core).
+7. ``plan_decs_group_by`` — pattern-table stub walking ``plan_group_by_patterns``
+   with a Decs adapter; matched row's ``emit_group_by`` delegates to the shared
+   ``plan_group_by_core``. Pattern ``group_by_decs`` carries an optional
+   ``upstream_join`` slot (Theme 3 C3 decs-join shape).
+8. ``plan_group_by`` — pattern-table stub walking ``plan_group_by_patterns``
+   with an Array adapter; ``emit_group_by`` shared with the decs entry above.
 9. ``plan_decs_unroll`` — generic decs walk
    (``where``/``select``/``skip``/``take`` + counter / accumulator /
    early-exit / walk lane).
@@ -184,16 +187,16 @@ Array-source patterns
      - ``plan_order_family`` (fused-loop + set-gate)
      - Theme 8 (audit 3b). The where_+order fused-loop path generalizes: when upstream ``distinct[_by]`` is present, declare ``var order_dset : table<...>`` and wrap the per-element ``push_clone`` with a set-gated ``if (!key_exists(...))`` block. Single source pass + in-place sort, no ``distinct_by_to_array`` intermediate iterator setup. Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project at return). **Bails** (cascades) on ``distinct[_by] + order_by + first[_or_default]`` (streaming-min path has no dset hook) and on chains where ``take(N)`` is present (use the bounded-heap path via Theme 3 Phase 3 instead).
    * - ``._group_by(K)._select(reduce).to_array()``
-     - ``plan_group_by_core`` → ``emit_reducer_branches``
-     - Per-key bucket reducer; single hash, one entry per group.
+     - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core`` → ``reducer_emitters`` lookup)
+     - Per-key bucket reducer; single hash, one entry per group. PR D1: reducer dispatch is now a ``table<string; ReducerEmitterFn>`` lookup into named ``mk_reducer_*`` fns.
    * - ``._group_by(K)._having(P)._select(...).to_array()``
-     - ``plan_group_by`` → ``plan_group_by_core``
+     - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core``)
      - HAVING filter on the bucket reference (pre-aggregate); can lift hidden reducer slots referenced by ``P`` but absent from the select.
    * - ``._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
-     - ``plan_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
+     - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core``, trailing ``where`` as HAVING)
      - HAVING filter on the constructed post-aggregate tuple (predicate references ``_.AggField`` by name). Distinct from ``_having(P)`` and orthogonal — both can fire on the same chain.
    * - ``._group_by(K)._select(reduce)._order_by(K2).to_array()`` / ``._order_by_descending(K2).to_array()``
-     - ``plan_group_by`` → ``plan_group_by_core`` (trailing ``order_by`` as ORDER BY)
+     - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core``, trailing ``order_by`` as ORDER BY)
      - Theme 3 Phase 2 (audit C2). Inline-cmp ``sort(buf, ...)`` after the bucket-fill mutates the same output buffer in place — vs the tier-2 cascade's separate ``order_by_inplace`` over a fresh allocation. v1: ``_order_by(K2)`` / ``_order_by_descending(K2)`` with inline-able key only; non-inline keys (side-effects, multi-stmt body) cascade. Composes with HAVING / ``_having(P)``.
    * - ``.reverse().take(N).to_array()`` (with no ``where`` / ``select``)
      - ``plan_reverse`` (two-pass)
@@ -293,16 +296,16 @@ identical — only the source iteration changes.
      - ``plan_decs_reverse`` (terminal ``_select``)
      - Decs mirror of ``plan_reverse``'s terminal ``_select``. Skip-into-tail fast path is gated off when ``_select`` is present.
    * - ``from_decs_template(...)._group_by(K)._select(reduce).to_array()``
-     - ``plan_decs_group_by`` → ``plan_group_by_core``
+     - pattern ``group_by_decs`` (sub-codegen ``plan_group_by_core``)
      - Shared bucket-reducer with the array path; differs only in the per-element source.
    * - ``from_decs_template(...)._group_by(K)._select(reduce)._where(P).to_array()`` / ``.count()``
-     - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``where`` as HAVING)
+     - pattern ``group_by_decs`` (sub-codegen ``plan_group_by_core``, trailing ``where`` as HAVING)
      - Decs mirror of the array-side post-aggregate HAVING. Same predicate-on-output-tuple semantics.
    * - ``from_decs_template(...)._group_by(K)._select(reduce)._order_by(K2).to_array()`` / ``._order_by_descending(K2).to_array()``
-     - ``plan_decs_group_by`` → ``plan_group_by_core`` (trailing ``order_by`` as ORDER BY)
+     - pattern ``group_by_decs`` (sub-codegen ``plan_group_by_core``, trailing ``order_by`` as ORDER BY)
      - Decs mirror of the array-side ORDER BY splice (Theme 3 Phase 2 C2). Shares the same in-place inline-cmp sort tail; only the bucket-fill source differs.
    * - ``from_decs_template(A)._join(from_decs_template(B), ka, kb, result)._group_by(K)._select(reduce).to_array()`` / ``.count()``
-     - ``plan_decs_group_by`` (``isDecsJoin`` adapter; cross-arm — see *Decs-decs equi-join*)
+     - pattern ``group_by_decs`` with ``upstream_join`` slot (``isDecsJoin`` adapter; cross-arm — see *Decs-decs equi-join*)
      - Theme 3 Phase 1 cross-arm composition. ``plan_decs_join``'s hashB-collect + srcA-probe feeds ``plan_group_by_core``'s bucket update directly — one pass, no intermediate join array. Composes with the C2 trailing ``order_by`` extension above when applied to the join+group_by output.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
