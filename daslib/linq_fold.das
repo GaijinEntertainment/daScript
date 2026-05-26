@@ -44,6 +44,204 @@ struct private LinqCall {
     recursive : array<int>          // indices of arguments to apply fold_linq_default on
 }
 
+// ===== Pattern-table refactor kernel =====
+// See daslib/linq_fold.md for masterplan.
+
+variant SourceAdapter {
+    Array : tuple<Expression?; string>     // (top, srcName) — PR C widens with Decs/DecsFind/Zip/DecsJoin
+}
+
+variant SlotMatcher {
+    literal : string                       // exact name match
+    one_of  : array<string>                // any-of name set
+    alias   : string                       // looked up in alias_table
+}
+
+variant SlotCardinality {
+    one      : void?                       // required, exactly 1
+    optional : void?                       // 0 or 1
+}
+
+struct Slot {
+    matcher      : SlotMatcher
+    cardinality  : SlotCardinality
+    capture_name : string = ""             // "" = don't capture
+    arity        : int = -1                // -1 = any; positive = require N args on the matched call
+}
+
+typedef Captures = table<string; ExprCall?>     // matched-call by name; LinqCall record accessible via linqCalls[call.name] if ever needed
+
+variant MatchResult {
+    no_match : void?                       // daslang-idiomatic Option<Captures>
+    matched  : Captures
+}
+
+typedef RequiresPredicate = lambda<(var c : Captures; var top : Expression?) : bool>
+typedef EmitFn = lambda<(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression?>
+
+struct SplicePattern {
+    name     : string                      // debug / lint diagnostics
+    chain    : array<Slot>
+    requires : array<RequiresPredicate>
+    emit     : EmitFn
+}
+
+// Slot construction helpers (variant arms need named-field syntax; helpers keep pattern rows compact)
+def m_literal(s : string) : SlotMatcher {
+    return SlotMatcher(literal = s)
+}
+def m_alias(s : string) : SlotMatcher {
+    return SlotMatcher(alias = s)
+}
+def c_one() : SlotCardinality {
+    return SlotCardinality(one = null)
+}
+def c_opt() : SlotCardinality {
+    return SlotCardinality(optional = null)
+}
+
+// Prefix-conflict lint: pattern A shadows pattern B (B unreachable) when A's chain is a structural prefix of B's chain.
+// PR A scope: simple structural check (matcher + cardinality + arity equality, capture_name ignored). Doesn't catch all subsumption cases (e.g. opt slots interacting with required slots) — exhaustive subsumption deferred to a later PR.
+def slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
+    if (a is literal && b is literal) return (a as literal) == (b as literal)
+    if (a is alias && b is alias) return (a as alias) == (b as alias)
+    if (a is one_of && b is one_of) {
+        let la & = unsafe(a as one_of)
+        let lb & = unsafe(b as one_of)
+        if (length(la) != length(lb)) return false
+        for (i in 0 .. length(la)) {
+            if (la[i] != lb[i]) return false
+        }
+        return true
+    }
+    return false
+}
+
+def slots_structurally_match(a : Slot; b : Slot) : bool {
+    return (slot_matchers_equal(a.matcher, b.matcher)
+        && (a.cardinality is one) == (b.cardinality is one)
+        && a.arity == b.arity)
+}
+
+def chain_prefix_of(a : array<Slot>; b : array<Slot>) : bool {
+    if (length(a) > length(b)) return false
+    for (i in 0 .. length(a)) {
+        if (!slots_structurally_match(a[i], b[i])) return false
+    }
+    return true
+}
+
+// Walk a pattern table; return true iff every pattern is reachable (no earlier pattern is its strict prefix).
+// Silent — return value carries the verdict. Tests assert on the bool; future compile-time hook can add diagnostics.
+def check_pattern_table_reachable(name : string; patterns : array<SplicePattern>) : bool {
+    for (i in 0 .. length(patterns)) {
+        for (j in i + 1 .. length(patterns)) {
+            if (chain_prefix_of(patterns[i].chain, patterns[j].chain)) return false
+        }
+    }
+    return true
+}
+
+// Normalize an ExprCall's name through linqCalls (e.g. "distinct_by_to_array" → "distinct_by").
+// Walks func.fromGeneric chain — ExprCall.name itself is the mangled generic-instance name (`__::linq\`distinct_by\`<hash>`); the original user-facing name lives at the root of the fromGeneric chain.
+def call_norm_name(call : ExprCall?) : string {
+    var topFunc = call.func
+    while (topFunc.fromGeneric != null) {
+        topFunc = topFunc.fromGeneric
+    }
+    let raw = string(topFunc.name)
+    if (linqCalls |> key_exists(raw)) return linqCalls[raw].name
+    return raw
+}
+
+var alias_table : table<string; array<string>> <- {
+    "distinct_family"       => ["distinct", "distinct_by"],
+    "first_family"          => ["first", "first_or_default"],
+    "count_family"          => ["count", "long_count"],
+    "any_terminator_family" => ["count", "long_count", "sum", "first", "first_or_default"]
+}
+
+// Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
+// caller binds with `var r <- match_pattern(...)` and reads via `if (r is matched) { let c & = r as matched; ... }`.
+
+def match_pattern(p : SplicePattern;
+                  var calls : array<tuple<ExprCall?; LinqCall?>>;
+                  var top : Expression?) : MatchResult {
+    var captures : Captures
+    var slot_i = 0
+    var call_i = 0
+    while (slot_i < length(p.chain)) {
+        let slot & = unsafe(p.chain[slot_i])
+        var matched_here = false
+        if (call_i < length(calls)) {
+            let cur & = unsafe(calls[call_i])
+            let name = cur._1.name
+            var in_set = false
+            if (slot.matcher is literal) {
+                in_set = (slot.matcher as literal) == name
+            } elif (slot.matcher is one_of) {
+                for (n in slot.matcher as one_of) {
+                    if (n == name) { in_set = true; break; }
+                }
+            } elif (slot.matcher is alias) {
+                let key = slot.matcher as alias
+                if (alias_table |> key_exists(key)) {
+                    for (n in alias_table[key]) {
+                        if (n == name) { in_set = true; break; }
+                    }
+                } else {
+                    panic("match_pattern: unknown alias '{key}' in pattern '{p.name}'")
+                }
+            }
+            if (in_set && (slot.arity == -1 || length(cur._0.arguments) == slot.arity)) {
+                matched_here = true
+            }
+        }
+        if (matched_here) {
+            if (slot.capture_name != "") {
+                captures |> insert(slot.capture_name, calls[call_i]._0)
+            }
+            slot_i ++
+            call_i ++
+        } elif (slot.cardinality is one) {
+            return MatchResult(no_match = null)
+        } else {
+            slot_i ++
+        }
+    }
+    if (call_i < length(calls)) return MatchResult(no_match = null)
+    for (pred in p.requires) {
+        if (!invoke(pred, captures, top)) return MatchResult(no_match = null)
+    }
+    return MatchResult(matched <- captures)
+}
+
+// Predicate library — module-level lambdas. Starts minimal; grows with use per masterplan.
+
+var array_source : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+    // top is already peel_each'd by the calling stub; verify it carries an array type (indexed iteration safe).
+    return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
+}
+
+var take_arg_is_int : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+    if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
+    let take = c["take"]
+    return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
+            && take.arguments[1]._type.baseType == Type.tInt)
+}
+
+var implicit_to_array : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+    return !(c |> key_exists("term"))
+}
+
+// Per-plan pattern tables — collapsed into splice_patterns in PR D.
+
+var plan_reverse_patterns : array<SplicePattern>
+var plan_distinct_patterns : array<SplicePattern>
+var splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
+
+// ===== End of pattern-table kernel =====
+
 var private linqCalls = {
 // filtering data
     "where_" => LinqCall(name = "where_"),
@@ -2095,285 +2293,118 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     }
 }
 
-[macro_function]
-def private plan_reverse(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    normalize_order_reverse(calls)
-    collapse_chained_selects(calls)
-    top = peel_each(top)
-    var terminatorName : string  = ""
-    var terminatorCall : ExprCall?
-    {
-        let lastName = calls.back()._1.name
-        if (lastName == "count" || lastName == "first" || lastName == "first_or_default") {
-            terminatorName = lastName
-            terminatorCall = calls.back()._0
-            calls |> pop
+// ===== plan_reverse migration (PR A — pattern-table refactor) =====
+// 5 emit archetypes + 5 pattern rows + stub. Each archetype lifted verbatim from
+// the prior imperative plan_reverse branches (see git history before PR A).
+
+// Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
+[clone(top), macro_function]
+def emit_reverse_counter(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    let itName = qn("it", at)
+    let cntName = qn("cnt", at)
+    var whereCond : Expression?
+    if (c |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    }
+    var projection : Expression?
+    if (c |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    }
+    var perElement : Expression?
+    if (projection != null && has_sideeffects(projection)) {
+        let vfinalName = qn("vfinal", at)
+        perElement = qmacro_block() {
+            var $i(vfinalName) = $e(projection)
+            $i(cntName) ++
+        }
+    } else {
+        perElement = qmacro_expr() {
+            $i(cntName) ++
         }
     }
-    if (empty(calls)) return null
-    var whereCond : Expression?
-    var projection : Expression?
-    var hasReverse = false
-    var seenSelect = false
-    var takeExpr : Expression?
-    var terminalSelectLam : Expression?
-    var terminalSelectElemType : TypeDeclPtr
-    // Theme 8 (audit 2a): trailing `distinct[_by]` after reverse. Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk. v1 limited to array source + implicit to_array terminator.
-    var distinctName : string
-    var distinctKey : Expression?
-    let at = calls[0]._0.at
-    let srcName = qn("source", at)
-    let itName  = qn("it", at)
-    let bufName = qn("buf", at)
+    perElement = wrap_with_condition(perElement, whereCond)
+    var body : Expression? = qmacro_block() {
+        var $i(cntName) = 0
+        for ($i(itName) in $i(srcName)) {
+            $e(perElement)
+        }
+        return $i(cntName)
+    }
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push_block_list(body)
+    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+}
+
+// Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
+// "first of reversed" = LAST surviving element; walk source, overwrite `last` on each match. No buffer.
+[clone(top), macro_function]
+def emit_reverse_walk_overwrite_scalar(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    let itName = qn("it", at)
     let foundName = qn("found", at)
     let lastName = qn("last", at)
-    let cntName = qn("cnt", at)
     let dBindName = qn("d", at)
-    let dkeyName = qn("rev_dkey", at)
-    let dsetName = qn("rev_dset", at)
-    let idxName = qn("rev_k", at)
-    let rlenName = qn("rev_len", at)
-    var reverseCall : ExprCall?
-    for (i in 0 .. length(calls)) {
-        var cll & = unsafe(calls[i])
-        let name = cll._1.name
-        if (name == "where_") {
-            if (hasReverse || seenSelect) return null
-            whereCond = merge_where_cond(whereCond, peel_lambda_rename_var(cll._0.arguments[1], itName))
-        } elif (name == "select") {
-            if (!hasReverse && !seenSelect) {
-                // Pre-reverse select: existing path (buffer holds projected values).
-                seenSelect = true
-                projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
-            } elif (hasReverse && !seenSelect && terminalSelectLam == null && i == length(calls) - 1) {
-                // Terminal post-reverse select: project at return (R1-R4 buf or first scalar).
-                terminalSelectLam = cll._0.arguments[1]
-                if (terminalSelectLam == null
-                        || cll._0._type == null || cll._0._type.firstType == null) return null
-                terminalSelectElemType = clone_type(cll._0._type.firstType)
-            } else {
-                return null
-            }
-        } elif (name == "reverse") {
-            if (hasReverse) return null
-            hasReverse = true
-            reverseCall = cll._0
-        } elif (name == "take") {
-            if (!hasReverse || takeExpr != null) return null
-            var arg = cll._0.arguments[1]
-            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
-            takeExpr = clone_expression(arg)
-        } elif (name == "distinct" || name == "distinct_by") {
-            // Theme 8 (audit 2a): trailing distinct[_by] after reverse, no other chain ops, implicit to_array terminator, array source. Walks source backward with set-gated push.
-            if (!hasReverse || distinctName != "" || i != length(calls) - 1) return null
-            distinctName = name
-            if (name == "distinct_by") {
-                if ((cll._0.arguments |> length) < 2) return null
-                distinctKey = clone_expression(cll._0.arguments[1])
-            }
-        } else {
-            return null
+    var whereCond : Expression?
+    if (c |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    }
+    var projection : Expression?
+    if (c |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    }
+    var terminalSelectLam : Expression?
+    if (c |> key_exists("termsel")) {
+        terminalSelectLam = c["termsel"].arguments[1]
+    }
+    if (!(c |> key_exists("term"))) return null
+    let terminatorCall = c["term"]
+    let terminatorName = call_norm_name(terminatorCall)
+    var lastType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
+    var valueExpr : Expression?
+    if (projection != null) {
+        valueExpr = clone_expression(projection)
+    } else {
+        valueExpr = qmacro_expr() {
+            $i(itName)
         }
     }
-    // Bail conditions: no reverse; take+terminator (take only with implicit to_array); count+terminal-select (would drop side effects); Theme 8 (audit 2a) distinct path constrained to array source + implicit to_array + no other chain ops.
-    if (!hasReverse || (takeExpr != null && terminatorName != "")
-            || (terminalSelectLam != null && terminatorName == "count")
-            || (distinctName != "" && (terminatorName != "" || takeExpr != null || projection != null
-                    || whereCond != null || terminalSelectLam != null
-                    || !(top._type.isGoodArrayType || top._type.isArray)))) return null
+    var matchBlock : Expression? = qmacro_block() {
+        $i(lastName) := $e(valueExpr)
+        $i(foundName) = true
+    }
+    var perElement = wrap_with_condition(matchBlock, whereCond)
+    var lastRetExpr : Expression?
+    var dRetExpr : Expression?
+    if (terminalSelectLam != null) {
+        lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
+        dRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(dBindName)))
+    } else {
+        lastRetExpr = qmacro($i(lastName))
+        dRetExpr = qmacro($i(dBindName))
+    }
     var body : Expression?
-    if (terminatorName == "count") {
-        // Reverse is identity for count — counter loop, no buffer. Side-effecting projection still fires per match.
-        var perElement : Expression?
-        if (projection != null && has_sideeffects(projection)) {
-            let vfinalName = qn("vfinal", at)
-            perElement = qmacro_block() {
-                var $i(vfinalName) = $e(projection)
-                $i(cntName) ++
-            }
-        } else {
-            perElement = qmacro_expr() {
-                $i(cntName) ++
-            }
-        }
-        perElement = wrap_with_condition(perElement, whereCond)
+    if (terminatorName == "first") {
         body = qmacro_block() {
-            var $i(cntName) = 0
+            var $i(foundName) = false
+            var $i(lastName) : $t(lastType) = default<$t(lastType)>
             for ($i(itName) in $i(srcName)) {
                 $e(perElement)
             }
-            return $i(cntName)
-        }
-    } elif (terminatorName == "first" || terminatorName == "first_or_default") {
-        // "first of reversed" = LAST surviving element. Walk source, overwrite `last` on each match. No buffer.
-        var lastType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
-        var valueExpr : Expression?
-        if (projection != null) {
-            valueExpr = clone_expression(projection)
-        } else {
-            valueExpr = qmacro_expr() {
-                $i(itName)
+            if (!$i(foundName)) {
+                panic("sequence contains no elements")
             }
-        }
-        var matchBlock : Expression? = qmacro_block() {
-            $i(lastName) := $e(valueExpr)
-            $i(foundName) = true
-        }
-        var perElement = wrap_with_condition(matchBlock, whereCond)
-        // Terminal _select: `last` stays source-typed; project (and the default) at return.
-        var lastRetExpr : Expression?
-        var dRetExpr : Expression?
-        if (terminalSelectLam != null) {
-            lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
-            dRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(dBindName)))
-        } else {
-            lastRetExpr = qmacro($i(lastName))
-            dRetExpr = qmacro($i(dBindName))
-        }
-        if (terminatorName == "first") {
-            body = qmacro_block() {
-                var $i(foundName) = false
-                var $i(lastName) : $t(lastType) = default<$t(lastType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                if (!$i(foundName)) {
-                    panic("sequence contains no elements")
-                }
-                return $e(lastRetExpr)
-            }
-        } else {
-            body = qmacro_block() {
-                let $i(dBindName) = $e(terminatorCall.arguments[1])
-                var $i(foundName) = false
-                var $i(lastName) : $t(lastType) = default<$t(lastType)>
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
-            }
+            return $e(lastRetExpr)
         }
     } else {
-        // R1-R4 path: buffer + reverse_inplace + optional resize + return buffer.
-        let needIterWrap = expr._type.isIterator
-        var bufElemType = strip_const_ref(clone_type(reverseCall._type.firstType))
-        // Terminal _select projects buffer survivors at return (after resize trims to take(N)).
-        let outBufName = qn("rev_proj_buf", at)
-        let elemName = qn("rev_proj_e", at)
-        var projBody : Expression?
-        if (terminalSelectLam != null) {
-            projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
-        }
-        // Theme 8 (audit 2a): reverse + distinct[_by] + to_array on array source — single backward walk with set-gated push. Mirrors canBackwardIndex below but gates push by dedup key instead of indexing into the last takeN slots.
-        if (distinctName != "") {
-            var dkeyExpr : Expression?
-            if (distinctName == "distinct_by") {
-                dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
-                if (dkeyExpr == null) return null
-            } else {
-                dkeyExpr = qmacro($i(itName))
+        body = qmacro_block() {
+            let $i(dBindName) = $e(terminatorCall.arguments[1])
+            var $i(foundName) = false
+            var $i(lastName) : $t(lastType) = default<$t(lastType)>
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
             }
-            var dsetDecl : Expression?
-            if (distinctName == "distinct_by") {
-                dsetDecl = qmacro_expr() {
-                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
-                }
-            } else {
-                dsetDecl = qmacro_expr() {
-                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-                }
-            }
-            var returnExpr = buffer_return(bufName, needIterWrap)
-            body = qmacro_block() {
-                let $i(rlenName) = length($i(srcName))
-                var $i(bufName) : array<$t(bufElemType)>
-                $e(dsetDecl)
-                for ($i(idxName) in 0 .. $i(rlenName)) {
-                    let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
-                    let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-                    if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                        $i(dsetName) |> insert($i(dkeyName))
-                        $i(bufName) |> push_clone($i(itName))
-                    }
-                }
-                $e(returnExpr)
-            }
-        } elif (takeExpr != null && projection == null && whereCond == null
-                && terminalSelectLam == null
-                && (top._type.isGoodArrayType || top._type.isArray)) {
-            // R6: visit only the last takeN indices — skips full-source push + O(length) reverse_inplace.
-            let lenName   = qn("rlen", at)
-            let takeNName = qn("rtn", at)
-            let kName     = qn("rk", at)
-            var returnExpr = buffer_return(bufName, needIterWrap)
-            body = qmacro_block() {
-                let $i(lenName) = length($i(srcName))
-                let $i(takeNName) = $e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < $i(lenName) ? $e(takeExpr) : $i(lenName))
-                var $i(bufName) : array<$t(bufElemType)>
-                $i(bufName) |> reserve($i(takeNName))
-                for ($i(kName) in 0 .. $i(takeNName)) {
-                    $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
-                }
-                $e(returnExpr)
-            }
-        } else {
-            var pushExpr : Expression?
-            if (projection != null) {
-                pushExpr = qmacro_expr() {
-                    $i(bufName) |> push_clone($e(projection))
-                }
-            } else {
-                pushExpr = qmacro_expr() {
-                    $i(bufName) |> push_clone($i(itName))
-                }
-            }
-            pushExpr = wrap_with_condition(pushExpr, whereCond)
-            var reserveStmts : array<Expression?>
-            if (type_has_length(top._type) && whereCond == null) {
-                reserveStmts |> push <| qmacro_expr() {
-                    $i(bufName) |> reserve(length($i(srcName)))
-                }
-            }
-            var resizeStmts : array<Expression?>
-            if (takeExpr != null) {
-                // take(N) of reversed-buffer = last N of source reversed. Three clones since no math::min import.
-                resizeStmts |> push <| qmacro_expr() {
-                    $i(bufName) |> resize($e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < length($i(bufName)) ? $e(takeExpr) : length($i(bufName))))
-                }
-            }
-            if (terminalSelectLam != null) {
-                // Post-reverse projection: outBuf returned in place of bufName.
-                var returnExpr = buffer_return(outBufName, needIterWrap)
-                body = qmacro_block() {
-                    var $i(bufName) : array<$t(bufElemType)>
-                    $b(reserveStmts)
-                    for ($i(itName) in $i(srcName)) {
-                        $e(pushExpr)
-                    }
-                    _::reverse_inplace($i(bufName))
-                    $b(resizeStmts)
-                    var $i(outBufName) : array<$t(terminalSelectElemType)>
-                    $i(outBufName) |> reserve(length($i(bufName)))
-                    for ($i(elemName) in $i(bufName)) {
-                        $i(outBufName) |> push_clone($e(projBody))
-                    }
-                    $e(returnExpr)
-                }
-            } else {
-                var returnExpr = buffer_return(bufName, needIterWrap)
-                body = qmacro_block() {
-                    var $i(bufName) : array<$t(bufElemType)>
-                    $b(reserveStmts)
-                    for ($i(itName) in $i(srcName)) {
-                        $e(pushExpr)
-                    }
-                    _::reverse_inplace($i(bufName))
-                    $b(resizeStmts)
-                    $e(returnExpr)
-                }
-            }
+            return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
         }
     }
     var bodyStmts : array<Expression?>
@@ -2381,72 +2412,325 @@ def private plan_reverse(var expr : Expression?) : Expression? {
     return finalize_emission_stmts(top, srcName, at, bodyStmts)
 }
 
-[macro_function]
-def private plan_distinct(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    collapse_chained_selects(calls)
-    top = peel_each(top)
-    var terminatorName : string  = ""
-    var countPred : Expression?
-    {
-        let lastName = calls.back()._1.name
-        let lastArgs = calls.back()._0.arguments |> length
-        // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): dedup runs UNCONDITIONALLY (distinct_by keeps the FIRST occurrence per key); a separate `acc` counter increments only when the predicate matches that first occurrence. Wrapping dedup in `if(P)` would diverge from tier-2 when a later duplicate matches but the first didn't.
-        if ((lastName == "count" || lastName == "sum" || lastName == "long_count") && lastArgs == 1) {
-            terminatorName = lastName
-            calls |> pop
-        } elif ((lastName == "count" || lastName == "long_count") && lastArgs == 2) {
-            countPred = calls.back()._0.arguments[1]
-            if (countPred == null) return null
-            terminatorName = lastName
-            calls |> pop
+// R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).
+// Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
+[clone(top), macro_function]
+def emit_reverse_backward_index_walk(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    if (!(c |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
+    var bufElemType = strip_const_ref(clone_type(top._type.firstType))
+    let bufName = qn("buf", at)
+    let lenName = qn("rlen", at)
+    let takeNName = qn("rtn", at)
+    let kName = qn("rk", at)
+    var returnExpr = buffer_return(bufName, false)
+    var body : Expression? = qmacro_block() {
+        let $i(lenName) = length($i(srcName))
+        let $i(takeNName) = $e(c["take"].arguments[1]) <= 0 ? 0 : ($e(c["take"].arguments[1]) < $i(lenName) ? $e(c["take"].arguments[1]) : $i(lenName))
+        var $i(bufName) : array<$t(bufElemType)>
+        $i(bufName) |> reserve($i(takeNName))
+        for ($i(kName) in 0 .. $i(takeNName)) {
+            $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+        }
+        $e(returnExpr)
+    }
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push_block_list(body)
+    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+}
+
+// R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
+// Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk.
+[clone(top), macro_function]
+def emit_reverse_backward_walk_dset_gate(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    if (!(c |> key_exists("dist"))) return null
+    let distinctCall = c["dist"]
+    let distinctName = call_norm_name(distinctCall)
+    var distinctKey : Expression?
+    if (distinctName == "distinct_by") {
+        if ((distinctCall.arguments |> length) < 2) return null
+        distinctKey = clone_expression(distinctCall.arguments[1])
+    }
+    if (top._type == null || top._type.firstType == null) return null
+    var bufElemType = strip_const_ref(clone_type(top._type.firstType))
+    let itName = qn("it", at)
+    let bufName = qn("buf", at)
+    let dkeyName = qn("rev_dkey", at)
+    let dsetName = qn("rev_dset", at)
+    let idxName = qn("rev_k", at)
+    let rlenName = qn("rev_len", at)
+    var dkeyExpr : Expression?
+    if (distinctName == "distinct_by") {
+        dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
+        if (dkeyExpr == null) return null
+    } else {
+        dkeyExpr = qmacro($i(itName))
+    }
+    var dsetDecl : Expression?
+    if (distinctName == "distinct_by") {
+        dsetDecl = qmacro_expr() {
+            var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+        }
+    } else {
+        dsetDecl = qmacro_expr() {
+            var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
         }
     }
-    if (empty(calls)) return null
+    var returnExpr = buffer_return(bufName, false)
+    var body : Expression? = qmacro_block() {
+        let $i(rlenName) = length($i(srcName))
+        var $i(bufName) : array<$t(bufElemType)>
+        $e(dsetDecl)
+        for ($i(idxName) in 0 .. $i(rlenName)) {
+            let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
+            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                $i(dsetName) |> insert($i(dkeyName))
+                $i(bufName) |> push_clone($i(itName))
+            }
+        }
+        $e(returnExpr)
+    }
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push_block_list(body)
+    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+}
+
+// R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
+[clone(top), macro_function]
+def emit_reverse_buffer_inplace(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    let itName = qn("it", at)
+    let bufName = qn("buf", at)
+    let outBufName = qn("rev_proj_buf", at)
+    let elemName = qn("rev_proj_e", at)
     var whereCond : Expression?
+    if (c |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    }
     var projection : Expression?
-    var hasDistinct = false
-    var seenSelect = false
-    var isDistinctBy = false
-    var distinctKeyBlock : Expression?
+    if (c |> key_exists("preproj")) {
+        projection = peel_lambda_rename_var(c["preproj"].arguments[1], itName)
+    }
     var takeExpr : Expression?
+    if (c |> key_exists("take")) {
+        takeExpr = clone_expression(c["take"].arguments[1])
+    }
+    var terminalSelectLam : Expression?
+    var terminalSelectElemType : TypeDeclPtr
+    if (c |> key_exists("termsel")) {
+        terminalSelectLam = c["termsel"].arguments[1]
+        if (terminalSelectLam == null || c["termsel"]._type == null || c["termsel"]._type.firstType == null) return null
+        terminalSelectElemType = clone_type(c["termsel"]._type.firstType)
+    }
+    if (top._type == null || top._type.firstType == null) return null
+    // Buffer element type: post-select if a pre-reverse projection narrowed the element shape; otherwise source type.
+    var bufElemType : TypeDeclPtr
+    if (projection != null) {
+        bufElemType = strip_const_ref(clone_type(projection._type))
+    } else {
+        bufElemType = strip_const_ref(clone_type(top._type.firstType))
+    }
+    var projBody : Expression?
+    if (terminalSelectLam != null) {
+        projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
+    }
+    var pushExpr : Expression?
+    if (projection != null) {
+        pushExpr = qmacro_expr() {
+            $i(bufName) |> push_clone($e(projection))
+        }
+    } else {
+        pushExpr = qmacro_expr() {
+            $i(bufName) |> push_clone($i(itName))
+        }
+    }
+    pushExpr = wrap_with_condition(pushExpr, whereCond)
+    var reserveStmts : array<Expression?>
+    if (type_has_length(top._type) && whereCond == null) {
+        reserveStmts |> push <| qmacro_expr() {
+            $i(bufName) |> reserve(length($i(srcName)))
+        }
+    }
+    var resizeStmts : array<Expression?>
+    if (takeExpr != null) {
+        resizeStmts |> push <| qmacro_expr() {
+            $i(bufName) |> resize($e(takeExpr) <= 0 ? 0 : ($e(takeExpr) < length($i(bufName)) ? $e(takeExpr) : length($i(bufName))))
+        }
+    }
+    var body : Expression?
+    if (terminalSelectLam != null) {
+        var returnExpr = buffer_return(outBufName, false)
+        body = qmacro_block() {
+            var $i(bufName) : array<$t(bufElemType)>
+            $b(reserveStmts)
+            for ($i(itName) in $i(srcName)) {
+                $e(pushExpr)
+            }
+            _::reverse_inplace($i(bufName))
+            $b(resizeStmts)
+            var $i(outBufName) : array<$t(terminalSelectElemType)>
+            $i(outBufName) |> reserve(length($i(bufName)))
+            for ($i(elemName) in $i(bufName)) {
+                $i(outBufName) |> push_clone($e(projBody))
+            }
+            $e(returnExpr)
+        }
+    } else {
+        var returnExpr = buffer_return(bufName, false)
+        body = qmacro_block() {
+            var $i(bufName) : array<$t(bufElemType)>
+            $b(reserveStmts)
+            for ($i(itName) in $i(srcName)) {
+                $e(pushExpr)
+            }
+            _::reverse_inplace($i(bufName))
+            $b(resizeStmts)
+            $e(returnExpr)
+        }
+    }
+    var bodyStmts : array<Expression?>
+    bodyStmts |> push_block_list(body)
+    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+}
+
+// Stub — table-driven dispatch into plan_reverse_patterns. Populated by populate_plan_reverse_patterns [init].
+[macro_function]
+def private plan_reverse(var expr : Expression?) : Expression? {
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    normalize_order_reverse(calls)
+    collapse_chained_selects(calls)
+    top = peel_each(top)
     let at = calls[0]._0.at
-    let srcName = qn("source", at)
-    let itName  = qn("it", at)
+    let src = SourceAdapter(Array = (top, qn("source", at)))
+    for (p in plan_reverse_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var result = invoke(p.emit, r as matched, top, src, at)
+            if (result != null) return result
+        }
+    }
+    return null
+}
+
+[init]
+def populate_plan_reverse_patterns() {
+    // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
+    plan_reverse_patterns |> emplace <| SplicePattern(
+        name = "reverse_distinct_backward_walk",
+        chain <- [
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist")
+        ],
+        requires <- [ array_source, implicit_to_array],
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_backward_walk_dset_gate(c, top, src, at)
+    )
+    // R6 — bare reverse + take + to_array, backward index walk
+    plan_reverse_patterns |> emplace <| SplicePattern(
+        name = "reverse_take_backward_index",
+        chain <- [
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take")
+        ],
+        requires <- [ array_source, take_arg_is_int, implicit_to_array],
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_backward_index_walk(c, top, src, at)
+    )
+    // Ra — reverse + count (reverse is identity for count)
+    plan_reverse_patterns |> emplace <| SplicePattern(
+        name = "reverse_counter",
+        chain <- [
+            Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_literal("count"), cardinality = c_one(), capture_name = "term", arity = 1)
+        ],
+        requires <- array<RequiresPredicate>(),     // Ra works on iterator and array sources (for-loop body, no indexed access)
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_counter(c, top, src, at)
+    )
+    // Rb — reverse + first[_or_default], walk-and-overwrite-last scalar; optional terminal _select
+    plan_reverse_patterns |> emplace <| SplicePattern(
+        name = "reverse_walk_overwrite",
+        chain <- [
+            Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "termsel"),
+            Slot(matcher = m_alias("first_family"), cardinality = c_one(), capture_name = "term")
+        ],
+        requires <- array<RequiresPredicate>(),
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_walk_overwrite_scalar(c, top, src, at)
+    )
+    // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select
+    plan_reverse_patterns |> emplace <| SplicePattern(
+        name = "reverse_buffer_inplace",
+        chain <- [
+            Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "preproj"),
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_literal("take"), cardinality = c_opt(), capture_name = "take"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "termsel")
+        ],
+        requires <- [take_arg_is_int],
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_buffer_inplace(c, top, src, at)
+    )
+}
+
+// ===== plan_distinct migration (PR A — pattern-table refactor) =====
+// 1 emit archetype with internal terminator-shape dispatch + 2 pattern rows + stub.
+
+// Hashtable dedup + per-fresh-key consume; terminator picks return wiring (count/long_count/sum/implicit to_array).
+// take(N) bounds outer loop with cross-iteration break for true O(N)-source streaming exit.
+[clone(top), macro_function]
+def emit_hashtable_dedup(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    let srcName = (src as Array)._1
+    let itName = qn("it", at)
     let bufName = qn("buf", at)
     let seenName = qn("seen", at)
     let keyName = qn("k", at)
     let takenName = qn("taken", at)
     let accName = qn("acc", at)
-    for (i in 0 .. length(calls)) {
-        var cll & = unsafe(calls[i])
-        let name = cll._1.name
-        if (name == "where_") {
-            if (hasDistinct || seenSelect) return null
-            whereCond = merge_where_cond(whereCond, peel_lambda_rename_var(cll._0.arguments[1], itName))
-        } elif (name == "select") {
-            if (hasDistinct || seenSelect) return null
-            seenSelect = true
-            projection = peel_lambda_rename_var(cll._0.arguments[1], itName)
-        } elif (name == "distinct") {
-            if (hasDistinct) return null
-            hasDistinct = true
-        } elif (name == "distinct_by") {
-            if (hasDistinct) return null
-            hasDistinct = true
-            isDistinctBy = true
-            distinctKeyBlock = clone_expression(cll._0.arguments[1])
-        } elif (name == "take") {
-            if (!hasDistinct || takeExpr != null) return null
-            var arg = cll._0.arguments[1]
-            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
-            takeExpr = clone_expression(arg)
+    let takeLimName = qn("takeLim", at)
+    let pvName = qn("pv", at)
+    var whereCond : Expression?
+    if (c |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    }
+    var projection : Expression?
+    if (c |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    }
+    if (!(c |> key_exists("dist"))) return null
+    let distinctCall = c["dist"]
+    let isDistinctBy = call_norm_name(distinctCall) == "distinct_by"
+    var distinctKeyBlock : Expression?
+    if (isDistinctBy) {
+        if ((distinctCall.arguments |> length) < 2) return null
+        distinctKeyBlock = clone_expression(distinctCall.arguments[1])
+    }
+    var takeExpr : Expression?
+    if (c |> key_exists("take")) {
+        takeExpr = clone_expression(c["take"].arguments[1])
+    }
+    var terminatorName : string  = ""
+    var countPred : Expression?
+    if (c |> key_exists("term")) {
+        let terminatorCall = c["term"]
+        let termName = call_norm_name(terminatorCall)
+        let termArgs = terminatorCall.arguments |> length
+        // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): dedup runs UNCONDITIONALLY (distinct_by keeps the FIRST occurrence per key); a separate `acc` counter increments only when the predicate matches that first occurrence.
+        if ((termName == "count" || termName == "sum" || termName == "long_count") && termArgs == 1) {
+            terminatorName = termName
+        } elif ((termName == "count" || termName == "long_count") && termArgs == 2) {
+            if (terminatorCall.arguments[1] == null) return null
+            countPred = clone_expression(terminatorCall.arguments[1])
+            terminatorName = termName
         } else {
             return null
         }
     }
-    if (!hasDistinct || (takeExpr != null && terminatorName != "")) return null
+    if ((takeExpr != null && terminatorName != "") || top._type == null || top._type.firstType == null) return null
     var elemType = strip_const_ref(clone_type(projection != null ? projection._type : top._type.firstType))
     var stmts : array<Expression?>
     if (isDistinctBy) {
@@ -2478,16 +2762,12 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             var $i(accName) = 0l
         }
     }
-    // Bind take(N) limit once at outer scope so a side-effecting arg fires once, not on every fresh-key check.
-    let takeLimName = qn("takeLim", at)
     if (takeExpr != null) {
         stmts |> push_from <| qmacro_block_to_array() {
             let $i(takeLimName) = $e(takeExpr)
             var $i(takenName) = 0
         }
     }
-    // Bind side-effecting projection once per element; key + buffer/acc share the bind (matches original LINQ's one-eval per source elem).
-    let pvName = qn("pv", at)
     let bindProjection = projection != null && has_sideeffects(projection)
     var pushExpr : Expression?
     if (projection != null) {
@@ -2509,12 +2789,10 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     } else {
         keyExpr = clone_expression(pushExpr)
     }
-    // count(p) / long_count(p): peel against pushExpr so the predicate sees the post-projection element (`_select(_.brand)._distinct().count(b => b > 0)` → b binds to the projected brand, not the source tuple).
     if (countPred != null) {
         countPred = peel_lambda_replace_var(countPred, pushExpr)
         if (countPred == null) return null
     }
-    // Per-match consume: only inside the fresh-key branch; take-break is the outer-loop guard below.
     var consumeStmts : array<Expression?>
     if (takeExpr != null) {
         consumeStmts |> push <| qmacro_expr() {
@@ -2533,7 +2811,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             $i(accName) += $e(pushExpr)
         }
     }
-    // count(p) / long_count(p): dedup happens unconditionally so `distinct_by` semantics stay correct (FIRST occurrence per key); the predicate gates only the matched counter. Without this split the chain `distinct_by(k).count(p)` would diverge from tier-2 when a later duplicate matches p but the first one didn't.
     if (countPred != null && isCountTerminator) {
         consumeStmts |> push <| qmacro_expr() {
             if ($e(countPred)) {
@@ -2559,7 +2836,6 @@ def private plan_distinct(var expr : Expression?) : Expression? {
     perMatchStmts |> push(ifNew)
     var perElement = stmts_to_expr(perMatchStmts)
     perElement = wrap_with_condition(perElement, whereCond)
-    // Outer-loop take guard: top-of-loop break for true O(N)-source streaming exit (skips duplicates after Nth distinct).
     if (takeExpr != null) {
         stmts |> push <| qmacro_expr() {
             for ($i(itName) in $i(srcName)) {
@@ -2601,9 +2877,57 @@ def private plan_distinct(var expr : Expression?) : Expression? {
             return $i(accName)
         }
     } else {
-        stmts |> push(buffer_return(bufName, expr._type.isIterator))
+        stmts |> push(buffer_return(bufName, false))   // PR A: array source; iterator-wrap handled in PR C
     }
     return finalize_emission_stmts(top, srcName, at, stmts)
+}
+
+// Stub — table-driven dispatch into plan_distinct_patterns.
+[macro_function]
+def private plan_distinct(var expr : Expression?) : Expression? {
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    collapse_chained_selects(calls)
+    top = peel_each(top)
+    let at = calls[0]._0.at
+    let src = SourceAdapter(Array = (top, qn("source", at)))
+    for (p in plan_distinct_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var result = invoke(p.emit, r as matched, top, src, at)
+            if (result != null) return result
+        }
+    }
+    return null
+}
+
+[init]
+def populate_plan_distinct_patterns() {
+    // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
+    plan_distinct_patterns |> emplace <| SplicePattern(
+        name = "distinct_take",
+        chain <- [
+            Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist"),
+            Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take"),
+            Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
+        ],
+        requires <- [take_arg_is_int],
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_hashtable_dedup(c, top, src, at)
+    )
+    // distinct_main — distinct[_by]; optional terminator (count / long_count / sum / implicit to_array)
+    plan_distinct_patterns |> emplace <| SplicePattern(
+        name = "distinct_main",
+        chain <- [
+            Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "proj"),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist"),
+            Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
+        ],
+        requires <- array<RequiresPredicate>(),
+        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_hashtable_dedup(c, top, src, at)
+    )
 }
 
 // ── Group-by helpers ──────────────────────────────────────────────────
