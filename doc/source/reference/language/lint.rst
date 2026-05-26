@@ -78,6 +78,44 @@ Add a ``// nolint:CODE`` comment on the same line as the flagged expression::
 The suppression is exact: ``// nolint:PERF003`` only suppresses PERF003, not other
 rules. An optional explanation after the code is recommended but not required.
 
+---------------------------
+Repo-level ``.lint_config``
+---------------------------
+
+A ``.lint_config`` file at ``{get_das_root()}/.lint_config`` toggles
+individual rules repository-wide. The three lint pass-macros
+(``daslib/lint``, ``daslib/perf_lint``, ``daslib/style_lint``), the
+standalone runner (``utils/lint/main.das``), and the MCP ``lint`` tool
+all consult the same file.
+
+Format — one directive per line, ``#`` comments, blank lines, and
+malformed lines are silently skipped::
+
+    # Re-enable a default-off rule
+    STYLE005 on
+
+    # Disable a default-on rule
+    PERF007 off
+
+Defaults (applied before the file is read):
+
+- **STYLE005** is **off** by default. Add ``STYLE005 on`` to a repo's
+  ``.lint_config`` to opt back in.
+- All other rules are on by default.
+
+The file is optional. When missing or unreadable the defaults stand.
+
+CLI ``--enable`` on the standalone runner bypasses the defaults (the
+explicit whitelist wins), so ``daslang utils/lint/main.das -- --enable
+STYLE005 file.das`` always fires STYLE005 regardless of ``.lint_config``.
+
+The ``*_collect()`` APIs (``paranoid_collect``, ``perf_lint_collect``,
+``style_lint_collect``) do **not** read the file — callers pass
+``disabled_codes`` / ``enabled_codes`` tables explicitly. Tools that
+want to honor the repo policy should call
+``daslib/lint_config::seed_default_disabled`` and ``load_lint_config``
+before invoking the collect overload.
+
 ------------------
 Important notes
 ------------------

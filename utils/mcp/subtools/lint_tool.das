@@ -8,6 +8,7 @@ require ../tools/common.das public
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
+require daslib/lint_config
 require daslib/ast_boost
 require strings
 
@@ -31,16 +32,20 @@ def lint_single(file : string; project : string = "") : string {
         if (!empty(issues)) {
             compile_warnings = "Compilation warnings:\n{issues}\n"
         }
+        var disabled_codes : table<string>
+        let enabled_codes : table<string>
+        seed_default_disabled(disabled_codes)
+        load_lint_config(disabled_codes)
         var all_issues : array<string>
-        var count = paranoid_collect(program, all_issues)
+        var count = paranoid_collect(program, all_issues, disabled_codes, enabled_codes)
         var perf_issues : array<string>
-        count += perf_lint_collect(program, perf_issues)
+        count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
         for (w in perf_issues) {
             all_issues |> push(w)
         }
         var style_issues : array<string>
         let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-        count += style_lint_collect(program, style_issues, hygiene)
+        count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
         for (w in style_issues) {
             all_issues |> push(w)
         }
@@ -81,15 +86,19 @@ def lint_file(file : string; project : string = "") : LintFileResult {
                 if (!ok) {
                     result.failed = true
                 } else {
-                    result.count = paranoid_collect(program, result.errors)
+                    var disabled_codes : table<string>
+                    let enabled_codes : table<string>
+                    seed_default_disabled(disabled_codes)
+                    load_lint_config(disabled_codes)
+                    result.count = paranoid_collect(program, result.errors, disabled_codes, enabled_codes)
                     var perf_issues : array<string>
-                    result.count += perf_lint_collect(program, perf_issues)
+                    result.count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
                     for (w in perf_issues) {
                         result.errors |> push(w)
                     }
                     var style_issues : array<string>
                     let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-                    result.count += style_lint_collect(program, style_issues, hygiene)
+                    result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }

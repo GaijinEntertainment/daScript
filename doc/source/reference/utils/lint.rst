@@ -54,7 +54,22 @@ Flags
 - ``--paranoid-only`` --- run only the paranoid pass.
 - ``--perf-only`` --- run only the performance pass.
 - ``--style-only`` --- run only the style pass.
+- ``-d`` / ``--disable CODE[,CODE,...]`` --- disable specific rules.
+  Repeatable.
+- ``-e`` / ``--enable CODE[,CODE,...]`` --- whitelist: only the listed
+  rules run (still subject to ``--disable``). Enabling explicitly
+  bypasses repo-level defaults (see ``.lint_config`` below), so
+  ``--enable STYLE005`` always fires STYLE005.
 - ``-?`` / ``--help`` --- show usage and exit.
+
+Repo-level defaults
+===================
+
+The runner consults ``{get_das_root()}/.lint_config`` and the canonical
+default-off set on every invocation, layering them on top of the CLI
+flags. The same machinery runs in the auto-firing ``[lint_macro]`` pass
+and the MCP ``lint`` tool, so a single ``.lint_config`` controls all
+three entry points. See :ref:`lint` for the file format and defaults.
 
 Compile policies
 ================
