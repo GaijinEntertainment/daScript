@@ -61,6 +61,11 @@ def private is_lvalue_chain(e : ExpressionPtr) : bool {
 
 [call_macro(name="with_")]
 class private WithMacro : AstCallMacro {
+    //! Implements the ``with_`` call macro. Each container arg must be an
+    //! ``ExprAt`` (``arr[i]`` / ``tab[k]``); at most one table-keyed arg
+    //! per call. Emits a pre-bind / lock / invoke / unlock sequence inline
+    //! per container, with block-param types pinned to ``T &`` (element
+    //! ref) so workhorse and struct elements mutate uniformly.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
         macro_verify(length(call.arguments) >= 2, prog, call.at,
             "with_ needs at least one container arg plus a block")
