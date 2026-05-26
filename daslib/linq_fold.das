@@ -136,8 +136,11 @@ def slots_structurally_match(a : Slot; b : Slot) : bool {
         && a.arity == b.arity)
 }
 
+// Strict prefix: a must be SHORTER than b. Two patterns with identical chains but different `requires`
+// predicates are both legitimately reachable (the walker falls through to the second when the first's
+// requires fail), so equal-length is not a shadowing relation.
 def chain_prefix_of(a : array<Slot>; b : array<Slot>) : bool {
-    if (length(a) > length(b)) return false
+    if (length(a) >= length(b)) return false
     for (i in 0 .. length(a)) {
         if (!slots_structurally_match(a[i], b[i])) return false
     }
@@ -2441,7 +2444,7 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
     let lenName = qn("rlen", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
-    var returnExpr = buffer_return(bufName, false)
+    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
     var body : Expression? = qmacro_block() {
         let $i(lenName) = length($i(srcName))
         let $i(takeNName) = $e(c["take"].arguments[1]) <= 0 ? 0 : ($e(c["take"].arguments[1]) < $i(lenName) ? $e(c["take"].arguments[1]) : $i(lenName))
@@ -2496,7 +2499,7 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
             var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
         }
     }
-    var returnExpr = buffer_return(bufName, false)
+    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
     var body : Expression? = qmacro_block() {
         let $i(rlenName) = length($i(srcName))
         var $i(bufName) : array<$t(bufElemType)>
