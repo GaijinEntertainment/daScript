@@ -82,6 +82,70 @@ def null_emit(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? 
     return null
 }
 
+// ─── c_chain cardinality (PR B) — constructor + lint-helper structural tests ───
+// Semantic coverage of c_chain (empty / all-match / prefix-then-stop / arity gate) is end-to-end
+// via tests/linq/test_linq_fold_loop_or_count.das — the walker stays private and is exercised
+// through plan_loop_or_count's pattern table just like plan_reverse / plan_distinct in PR A.
+
+[test]
+def test_slot_chain_of_constructs_expected_shape(t : T?) {
+    t |> run("slot_chain_of: produces c_chain cardinality + one_of matcher + capture_name") @(tt : T?) {
+        let s = slot_chain_of(["where_", "select"], "head")
+        tt |> equal(s.cardinality is chain, true)
+        tt |> equal(s.cardinality is one, false)
+        tt |> equal(s.cardinality is optional, false)
+        tt |> equal(s.matcher is one_of, true)
+        let names & = unsafe(s.matcher as one_of)
+        tt |> equal(length(names), 2)
+        tt |> equal(names[0], "where_")
+        tt |> equal(names[1], "select")
+        tt |> equal(s.capture_name, "head")
+        tt |> equal(s.arity, -1)
+    }
+}
+
+[test]
+def test_slots_structurally_match_distinguishes_c_chain(t : T?) {
+    t |> run("slots_structurally_match: c_chain vs c_one vs c_opt at same matcher are distinct shapes") @(tt : T?) {
+        // c_chain ≢ c_one ≢ c_opt at the structural level — chain_prefix_of must reject mixed-cardinality matches.
+        var chainOnly : array<Slot> <- [slot_chain_of(["x"], "h")]
+        var oneOpt : array<Slot> <- [
+            Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_one(), capture_name = "h"),
+            Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_opt(), capture_name = "h")
+        ]
+        var chainPair : array<Slot> <- [
+            slot_chain_of(["x"], "h"),
+            Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_opt(), capture_name = "h")
+        ]
+        tt |> equal(chain_prefix_of(chainOnly, oneOpt), false)
+        tt |> equal(chain_prefix_of(chainOnly, chainPair), true)
+    }
+}
+
+[test]
+def test_check_pattern_table_reachable_accepts_c_chain(t : T?) {
+    t |> run("check_pattern_table_reachable: c_chain head + distinct trailers stay reachable (no shadow)") @(tt : T?) {
+        var patterns : array<SplicePattern>
+        patterns |> emplace <| SplicePattern(
+            name = "chain_then_take",
+            chain <- [
+                slot_chain_of(["where_", "select"], "head"),
+                Slot(matcher = m_literal("take"), cardinality = c_opt(), capture_name = "take")
+            ],
+            emit = @@<EmitFn> null_emit
+        )
+        patterns |> emplace <| SplicePattern(
+            name = "chain_then_count",
+            chain <- [
+                slot_chain_of(["where_", "select"], "head"),
+                Slot(matcher = m_literal("count"), cardinality = c_opt(), capture_name = "term")
+            ],
+            emit = @@<EmitFn> null_emit
+        )
+        tt |> equal(check_pattern_table_reachable("synthetic-c_chain-trailers", patterns), true)
+    }
+}
+
 [test]
 def test_check_pattern_table_reachable_catches_shadow(t : T?) {
     t |> run("check_pattern_table_reachable: returns false for a table with a strict-prefix shadow") @(tt : T?) {

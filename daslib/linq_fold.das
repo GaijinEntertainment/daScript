@@ -61,6 +61,7 @@ variant SlotMatcher {
 variant SlotCardinality {
     one      : void?                       // required, exactly 1
     optional : void?                       // 0 or 1
+    chain    : void?                       // 0 or more (greedy); captures as array<ExprCall?> via Captures.many
 }
 
 struct Slot {
@@ -70,7 +71,11 @@ struct Slot {
     arity        : int = -1                // -1 = any; positive = require N args on the matched call
 }
 
-typedef Captures = table<string; ExprCall?>     // matched-call by name; LinqCall record accessible via linqCalls[call.name] if ever needed
+// Captures bundle: `single` for c_one / c_opt slots; `many` for c_chain (a contiguous run of calls captured in chain order).
+struct Captures {
+    single : table<string; ExprCall?>
+    many   : table<string; array<ExprCall?>>
+}
 
 variant private MatchResult {
     no_match : void?                       // daslang-idiomatic Option<Captures>
@@ -110,6 +115,14 @@ def c_one() : SlotCardinality {
 def c_opt() : SlotCardinality {
     return SlotCardinality(optional = null)
 }
+def c_chain() : SlotCardinality {
+    return SlotCardinality(chain = null)
+}
+
+// Convenience: c_chain + m_one_of always pair (head shape "0+ contiguous calls whose name is in `names`, captured as `cap`"). `names` is consumed (moved into the slot matcher).
+def slot_chain_of(var names : array<string>; cap : string) : Slot {
+    return Slot(matcher = SlotMatcher(one_of <- names), cardinality = c_chain(), capture_name = cap)
+}
 
 // Prefix-conflict lint: pattern A shadows pattern B (B unreachable) when A's chain is a structural prefix of B's chain.
 // PR A scope: simple structural check (matcher + cardinality + arity equality, capture_name ignored). Doesn't catch all subsumption cases (e.g. opt slots interacting with required slots) — exhaustive subsumption deferred to a later PR.
@@ -135,7 +148,9 @@ def private slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
 
 def private slots_structurally_match(a : Slot; b : Slot) : bool {
     return (slot_matchers_equal(a.matcher, b.matcher)
-        && (a.cardinality is one) == (b.cardinality is one)
+        && (a.cardinality is one)      == (b.cardinality is one)
+        && (a.cardinality is optional) == (b.cardinality is optional)
+        && (a.cardinality is chain)    == (b.cardinality is chain)
         && a.arity == b.arity)
 }
 
@@ -191,11 +206,34 @@ var alias_table : table<string; array<string>> <- {
     "loop_terminator_family"     => ["count", "long_count", "sum", "min", "max", "average", "aggregate",
                                      "min_by", "max_by", "min_max", "min_max_by",
                                      "min_max_average", "min_max_average_by",
-                                     "any", "all", "contains", "first", "first_or_default"]
+                                     "any", "all", "contains", "first", "first_or_default",
+                                     "last", "last_or_default", "single", "single_or_default",
+                                     "element_at", "element_at_or_default"]
 }
 
 // Walker — see daslib/linq_fold.md Step 3 contract. Returns MatchResult by move;
 // caller binds with `var r <- match_pattern(...)` and reads via `if (r is matched) { let c & = r as matched; ... }`.
+
+def private slot_matches_call(slot : Slot; call : ExprCall?; name : string; pattern_name : string) : bool {
+    var in_set = false
+    if (slot.matcher is literal) {
+        in_set = (slot.matcher as literal) == name
+    } elif (slot.matcher is one_of) {
+        for (n in slot.matcher as one_of) {
+            if (n == name) { in_set = true; break; }
+        }
+    } elif (slot.matcher is alias) {
+        let key = slot.matcher as alias
+        if (alias_table |> key_exists(key)) {
+            for (n in alias_table[key]) {
+                if (n == name) { in_set = true; break; }
+            }
+        } else {
+            panic("match_pattern: unknown alias '{key}' in pattern '{pattern_name}'")
+        }
+    }
+    return in_set && (slot.arity == -1 || length(call.arguments) == slot.arity)
+}
 
 def private match_pattern(p : SplicePattern;
                           var calls : array<tuple<ExprCall?; LinqCall?>>;
@@ -205,34 +243,27 @@ def private match_pattern(p : SplicePattern;
     var call_i = 0
     while (slot_i < length(p.chain)) {
         let slot & = unsafe(p.chain[slot_i])
+        if (slot.cardinality is chain) {
+            // c_chain: greedy match-while-in-set. Always succeeds (0+); empty match still creates a Captures.many entry so emit fns can rely on the key existing.
+            var captured : array<ExprCall?>
+            while (call_i < length(calls) && slot_matches_call(slot, calls[call_i]._0, calls[call_i]._1.name, p.name)) {
+                captured |> push(calls[call_i]._0)
+                call_i ++
+            }
+            if (slot.capture_name != "") {
+                captures.many[slot.capture_name] <- captured
+            }
+            slot_i ++
+            continue
+        }
         var matched_here = false
         if (call_i < length(calls)) {
             let cur & = unsafe(calls[call_i])
-            let name = cur._1.name
-            var in_set = false
-            if (slot.matcher is literal) {
-                in_set = (slot.matcher as literal) == name
-            } elif (slot.matcher is one_of) {
-                for (n in slot.matcher as one_of) {
-                    if (n == name) { in_set = true; break; }
-                }
-            } elif (slot.matcher is alias) {
-                let key = slot.matcher as alias
-                if (alias_table |> key_exists(key)) {
-                    for (n in alias_table[key]) {
-                        if (n == name) { in_set = true; break; }
-                    }
-                } else {
-                    panic("match_pattern: unknown alias '{key}' in pattern '{p.name}'")
-                }
-            }
-            if (in_set && (slot.arity == -1 || length(cur._0.arguments) == slot.arity)) {
-                matched_here = true
-            }
+            matched_here = slot_matches_call(slot, cur._0, cur._1.name, p.name)
         }
         if (matched_here) {
             if (slot.capture_name != "") {
-                captures |> insert(slot.capture_name, calls[call_i]._0)
+                captures.single |> insert(slot.capture_name, calls[call_i]._0)
             }
             slot_i ++
             call_i ++
@@ -259,8 +290,8 @@ def private array_source(var c : Captures; var top : Expression?) : bool {
 }
 
 def private take_arg_is_int(var c : Captures; var top : Expression?) : bool {
-    if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
-    let take = c["take"]
+    if (!(c.single |> key_exists("take"))) return true   // vacuous: no take to constrain
+    let take = c.single["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
             && take.arguments[1]._type != null && take.arguments[1]._type.baseType == Type.tInt)
 }
@@ -268,13 +299,13 @@ def private take_arg_is_int(var c : Captures; var top : Expression?) : bool {
 // `no_terminator` — chain ends bare (no `count` / `sum` / `first[_or_default]` / `to_array` captured).
 // Return shape (array vs iterator) is decided by `ctx.expr_is_iterator` in the emit fn, not this predicate.
 def private no_terminator(var c : Captures; var top : Expression?) : bool {
-    return !(c |> key_exists("term"))
+    return !(c.single |> key_exists("term"))
 }
 
 // True only for `order_by[_descending]` with an inline-splice-able key lambda. `order` / `order_descending` route elsewhere.
 def private inline_cmp_available(var c : Captures; var top : Expression?) : bool {
-    if (!(c |> key_exists("order"))) return false
-    let orderCall = c["order"]
+    if (!(c.single |> key_exists("order"))) return false
+    let orderCall = c.single["order"]
     if (orderCall == null || orderCall._type == null || orderCall._type.firstType == null
             || (orderCall.arguments |> length) < 2) return false
     let orderName = call_norm_name(orderCall)
@@ -285,13 +316,14 @@ def private inline_cmp_available(var c : Captures; var top : Expression?) : bool
 // `has_where_or_distinct` — used by order_fused_prefilter row to distinguish from bare buffer_helper_dispatch.
 // At least one prefilter source must be present for the fused-loop path to make sense.
 def private has_where_or_distinct(var c : Captures; var top : Expression?) : bool {
-    return (c |> key_exists("where")) || (c |> key_exists("distinct"))
+    return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 }
 
 // Per-plan pattern tables — collapsed into splice_patterns in PR D.
 
 var private plan_reverse_patterns : array<SplicePattern>
 var private plan_distinct_patterns : array<SplicePattern>
+var private plan_loop_or_count_patterns : array<SplicePattern>
 var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
 
 // ===== End of pattern-table kernel =====
@@ -1016,12 +1048,11 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName : 
 }
 
 [clone(top), macro_function]
-def private emit_array_lane(var top : Expression?; var expr : Expression?; var loopBody : Expression?; var elementType : TypeDeclPtr;
+def private emit_array_lane(var top : Expression?; isIter : bool; var loopBody : Expression?; var elementType : TypeDeclPtr;
                             srcName, accName, itName : string; names : RangeStateNames;
                             var skipExpr, takeExpr, skipWhileCond : Expression?;
                             at : LineInfo) : Expression? {
     // Array lane: `[skip/take init]; var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
-    let isIter = expr._type.isIterator
     let sourceHasLength = type_has_length(top._type)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
@@ -2194,53 +2225,40 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     return finalize_invoke(emission, at)
 }
 
+// ===== plan_loop_or_count migration (PR B) =====
+// Single emit + single pattern row. c_chain captures where_/select head; canonical-order slots carry the rest.
+
 [macro_function]
-def private plan_loop_or_count(var expr : Expression?) : Expression? {
-    // Phase-2C loop planner. Recognizes chains of shape `[where_*][select*][skip?][take?]`
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    top = peel_each(top)
-    let lastName = calls.back()._1.name
-    let lane = classify_terminator(lastName)
-    // Marker: future PRs add BufferTopN / BufferDistinct / etc. for `is_buffer_required_op`
-    if (lane == LinqLane.UNKNOWN) return null
-    let counterLane = lane == LinqLane.COUNTER
-    let hasTerminator = lane != LinqLane.ARRAY
-    let intermediateCount = hasTerminator ? length(calls) - 1 : length(calls)
-    let at = calls[0]._0.at
-    let srcName = qn("source", at)
-    let itName  = qn("it", at)
+def private emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    var top = ctx.top
+    let srcName = (ctx.src as Array)._1
+    let itName = qn("it", at)
     let accName = qn("acc", at)
     let names <- make_range_names(at)
+    let hasTerminator = c.single |> key_exists("term")
+    var lastName : string
+    if (hasTerminator) {
+        lastName = call_norm_name(c.single["term"])
+    }
+    let lane = hasTerminator ? classify_terminator(lastName) : LinqLane.ARRAY
+    if (lane == LinqLane.UNKNOWN) return null
+    let counterLane = lane == LinqLane.COUNTER
+    if (top._type == null || top._type.firstType == null) return null
     var whereCond : Expression?
-    // postTakeWhereCond — Theme 2 5c: gates per-element contribution AFTER the take cap fires. Distinct from whereCond (which wraps the entire take/skip body); this preserves take.where semantics ("first N elements, then filter") that auto-rewriting can't reproduce.
     var postTakeWhereCond : Expression?
     var projection : Expression?
     var intermediateBinds : array<Expression?>
-    // preConditionStmts evaluate UNCONDITIONALLY per element, BEFORE the where filter —
     var preCondStmts : array<Expression?>
-    var skipExpr : Expression?
-    var takeExpr : Expression?
-    // skip_while / take_while: predicate-driven ranges. Both peel with itName (source elem); seenSelect bails to tier 2.
-    var skipWhileCond : Expression?
-    var takeWhileCond : Expression?
     var seenSelect = false
-    var seenSkip = false
-    var seenSkipWhile = false
-    var seenTakeWhile = false
-    var seenTake = false
     var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
     var lastBindName = itName
-    for (i in 0 .. intermediateCount) {
-        var cll & = unsafe(calls[i])
-        let opName = cll._1.name
+    for (call in c.many["head"]) {
+        let opName = call_norm_name(call)
         if (opName == "where_") {
-            // Theme 2 5c — `take(N)._where(p)` allowed (routed to postTakeWhereCond, gates contribution only); other prior range ops still bail; single post-take where in v1.
-            if (seenSkip || seenSkipWhile || seenTakeWhile || (seenTake && postTakeWhereCond != null)) return null
             var predicate : Expression?
             if (seenSelect) {
-                // Phase 3d / single-eval: where-after-select. Bind the current projection
+                // where-after-select: bind the running projection to a typed local so the
                 if (has_sideeffects(projection)) return null
                 if (lane != LinqLane.COUNTER) {
                     let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
@@ -2248,26 +2266,21 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                     preCondStmts |> push <| qmacro_expr() {
                         var $i(wbName) : $t(projType) := $e(projection)
                     }
-                    // Replace projection with a typed ExprVar so downstream typer passes
                     var pvar = new ExprVar(at = at, name := wbName)
                     pvar._type = clone_type(elementType)
                     pvar._type.flags.ref = true
                     projection = pvar
                 }
-                predicate = peel_lambda_replace_var(cll._0.arguments[1], projection)
+                predicate = peel_lambda_replace_var(call.arguments[1], projection)
             } else {
-                predicate = peel_lambda_rename_var(cll._0.arguments[1], itName)
+                predicate = peel_lambda_rename_var(call.arguments[1], itName)
             }
-            if (seenTake) {
-                postTakeWhereCond = predicate
-            } elif (whereCond == null) {
+            if (whereCond == null) {
                 whereCond = predicate
             } else {
                 whereCond = qmacro($e(whereCond) && $e(predicate))
             }
         } elif (opName == "select") {
-            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
-            // Chained selects: bind the previous projection to a fresh local now so the next
             if (projection != null) {
                 if (has_sideeffects(projection)) {
                     allProjectionsPure = false
@@ -2278,41 +2291,9 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 }
                 lastBindName = bindName
             }
-            projection = peel_lambda_rename_var(cll._0.arguments[1], lastBindName)
-            elementType = clone_type(cll._0._type.firstType)
+            projection = peel_lambda_rename_var(call.arguments[1], lastBindName)
+            elementType = clone_type(call._type.firstType)
             seenSelect = true
-        } elif (opName == "skip") {
-            // Canonical chain: at most one skip, before any skip_while/take_while/take.
-            if (seenSkip || seenSkipWhile || seenTakeWhile || seenTake) return null
-            var skipArg = cll._0.arguments[1]
-            if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
-            skipExpr = clone_expression(skipArg)
-            seenSkip = true
-        } elif (opName == "skip_while") {
-            // pred uses itName; seenSelect bails (chained-bind peel is a follow-up). Canonical: after skip, before take_while/take.
-            if (seenSelect || seenSkipWhile || seenTakeWhile || seenTake) return null
-            var swArg = cll._0.arguments[1]
-            if (swArg == null) return null
-            skipWhileCond = peel_lambda_rename_var(swArg, itName)
-            if (skipWhileCond == null) return null
-            seenSkipWhile = true
-        } elif (opName == "take_while") {
-            // take_while pred sees source element (itName). Same select-cascade rule as skip_while.
-            if (seenSelect || seenTakeWhile || seenTake) return null
-            var twArg = cll._0.arguments[1]
-            if (twArg == null) return null
-            takeWhileCond = peel_lambda_rename_var(twArg, itName)
-            if (takeWhileCond == null) return null
-            seenTakeWhile = true
-        } elif (opName == "take") {
-            if (seenTake) return null
-            var takeArg = cll._0.arguments[1]
-            if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
-            takeExpr = clone_expression(takeArg)
-            seenTake = true
-        } elif (is_buffer_required_op(opName)) {     // nolint:LINT009
-            // TODO Phase 2X: BufferTopN (order_by + take/skip), BufferDistinct (distinct/_by),
-            return null
         } else {
             return null
         }
@@ -2320,14 +2301,61 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
+    var skipExpr : Expression?
+    var skipWhileCond : Expression?
+    var takeWhileCond : Expression?
+    var takeExpr : Expression?
+    if (c.single |> key_exists("skip")) {
+        var skipArg = c.single["skip"].arguments[1]
+        if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
+        skipExpr = clone_expression(skipArg)
+    }
+    if (c.single |> key_exists("skip_while")) {
+        if (seenSelect) return null
+        var swArg = c.single["skip_while"].arguments[1]
+        if (swArg == null) return null
+        skipWhileCond = peel_lambda_rename_var(swArg, itName)
+        if (skipWhileCond == null) return null
+    }
+    if (c.single |> key_exists("take_while")) {
+        if (seenSelect) return null
+        var twArg = c.single["take_while"].arguments[1]
+        if (twArg == null) return null
+        takeWhileCond = peel_lambda_rename_var(twArg, itName)
+        if (takeWhileCond == null) return null
+    }
+    if (c.single |> key_exists("take")) {
+        var takeArg = c.single["take"].arguments[1]
+        if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return null
+        takeExpr = clone_expression(takeArg)
+    }
+    if (c.single |> key_exists("post_take_where")) {
+        var ptwArg = c.single["post_take_where"].arguments[1]
+        if (ptwArg == null) return null
+        if (seenSelect) {
+            if (has_sideeffects(projection)) return null
+            if (lane != LinqLane.COUNTER) {
+                let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
+                var projType = clone_type(elementType)
+                preCondStmts |> push <| qmacro_expr() {
+                    var $i(wbName) : $t(projType) := $e(projection)
+                }
+                var pvar = new ExprVar(at = at, name := wbName)
+                pvar._type = clone_type(elementType)
+                pvar._type.flags.ref = true
+                projection = pvar
+            }
+            postTakeWhereCond = peel_lambda_replace_var(ptwArg, projection)
+        } else {
+            postTakeWhereCond = peel_lambda_rename_var(ptwArg, itName)
+        }
+    }
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
-    // Count-shaped shortcut: when terminator is `count` (→ int) or `long_count` (→ int64),
     let isCountShaped = (lane == LinqLane.COUNTER
         || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
     if (isCountShaped && whereCond == null && allProjectionsPure && noLimits
             && type_has_length(top._type))
         return emit_length_shortcut(lastName, top, srcName, at)
-    // Ring 1: accumulator lane builds its own per-op loop body (typed accumulator, optional
     if (lane == LinqLane.ACCUMULATOR) {
         var laneTops : array<Expression?>
         laneTops |> push(top)
@@ -2337,9 +2365,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
-    // Ring 2: early-exit lane — `any` no-pred + no upstream work + no limits + length-bearing
     if (lane == LinqLane.EARLY_EXIT) {
-        let terminatorCall = calls.back()._0
+        let terminatorCall = c.single["term"]
         let isAnyNoPred = lastName == "any" && length(terminatorCall.arguments) == 1
         if (isAnyNoPred && whereCond == null && allProjectionsPure && noLimits
                 && type_has_length(top._type))
@@ -2352,10 +2379,8 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
-    // Build the per-element loop body for COUNTER / ARRAY. Both lanes follow the same shape:
     var loopBody : Expression?
     if (counterLane) {
-        // Counter lane must evaluate the projection (and any chained intermediates) per
         var stmts : array<Expression?>
         if (projection != null && has_sideeffects(projection)) {
             let finalBindName = qn("vfinal", at)
@@ -2363,7 +2388,6 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
                 var $i(finalBindName) = $e(projection)
             }
         }
-        // Theme 2 5c: when postTakeWhereCond is set, gate JUST the acc++ — the take cap still ticks unconditionally above.
         var incExpr = qmacro_expr() {
             $i(accName) ++
         }
@@ -2372,7 +2396,6 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     } else {
-        // Array lane. `push_clone` is the safe append everywhere: for workhorse types it's a
         var stmts : array<Expression?>
         var pushExpr : Expression?
         if (projection != null) {
@@ -2381,15 +2404,12 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
             }
         } elif (whereCond != null || postTakeWhereCond != null || skipExpr != null || takeExpr != null
                 || skipWhileCond != null || takeWhileCond != null) {
-            // Identity push: `it` aliases the source element. Reached when chain is bare
             pushExpr = qmacro_expr() {
                 $i(accName) |> push_clone($i(itName))
             }
         } else {
-            // identity chain — nothing to fuse; let the caller fall through.
             return null
         }
-        // Theme 2 5c: postTakeWhereCond gates JUST the push — same shape as counter lane.
         stmts |> push(wrap_with_condition(pushExpr, postTakeWhereCond))
         prepend_binds(stmts, intermediateBinds)
         wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
@@ -2399,9 +2419,52 @@ def private plan_loop_or_count(var expr : Expression?) : Expression? {
         return emit_counter_lane(top, srcName, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, loopBody, at)
     } else {
-        return emit_array_lane(top, expr, loopBody, elementType, srcName, accName, itName,
+        return emit_array_lane(top, ctx.expr_is_iterator, loopBody, elementType, srcName, accName, itName,
             names, skipExpr, takeExpr, skipWhileCond, at)
     }
+}
+
+// Stub — table-driven dispatch into plan_loop_or_count_patterns.
+[macro_function]
+def private plan_loop_or_count(var expr : Expression?) : Expression? {
+    var (top, calls) = flatten_linq(expr)
+    if (empty(calls)) return null
+    collapse_chained_selects(calls)
+    collapse_chained_wheres(calls)
+    top = peel_each(top)
+    let at = calls[0]._0.at
+    let exprIsIter = expr._type != null && expr._type.isIterator
+    let srcName = qn("source", at)
+    for (p in plan_loop_or_count_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var topClone = clone_expression(top)
+            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
+        }
+    }
+    return null
+}
+
+[_macro]
+def private populate_plan_loop_or_count_patterns {
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_loop_or_count_patterns)) return
+    // Single row — c_chain head matches the where_/select run (0+ contiguous calls), then canonical-order range ops, optional post-take where, optional terminator from loop_terminator_family.
+    plan_loop_or_count_patterns |> emplace <| SplicePattern(
+        name = "loop_or_count_general",
+        chain <- [
+            slot_chain_of(["where_", "select"], "head"),
+            Slot(matcher = m_literal("skip"),       cardinality = c_opt(), capture_name = "skip"),
+            Slot(matcher = m_literal("skip_while"), cardinality = c_opt(), capture_name = "skip_while"),
+            Slot(matcher = m_literal("take_while"), cardinality = c_opt(), capture_name = "take_while"),
+            Slot(matcher = m_literal("take"),       cardinality = c_opt(), capture_name = "take"),
+            Slot(matcher = m_literal("where_"),     cardinality = c_opt(), capture_name = "post_take_where"),
+            Slot(matcher = m_alias("loop_terminator_family"), cardinality = c_opt(), capture_name = "term")
+        ],
+        requires <- array<RequiresPredicate>(),
+        emit = @@<EmitFn> emit_loop_or_count_lane
+    )
 }
 
 // ===== plan_reverse migration (PR A — pattern-table refactor) =====
@@ -2416,12 +2479,12 @@ def private emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineI
     let itName = qn("it", at)
     let cntName = qn("cnt", at)
     var whereCond : Expression?
-    if (c |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    if (c.single |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
     }
     var projection : Expression?
-    if (c |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    if (c.single |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
     }
     var perElement : Expression?
     if (projection != null && has_sideeffects(projection)) {
@@ -2459,19 +2522,19 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
     let lastName = qn("last", at)
     let dBindName = qn("d", at)
     var whereCond : Expression?
-    if (c |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    if (c.single |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
     }
     var projection : Expression?
-    if (c |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    if (c.single |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
     }
     var terminalSelectLam : Expression?
-    if (c |> key_exists("termsel")) {
-        terminalSelectLam = c["termsel"].arguments[1]
+    if (c.single |> key_exists("termsel")) {
+        terminalSelectLam = c.single["termsel"].arguments[1]
     }
-    if (!(c |> key_exists("term"))) return null
-    let terminatorCall = c["term"]
+    if (!(c.single |> key_exists("term"))) return null
+    let terminatorCall = c.single["term"]
     let terminatorName = call_norm_name(terminatorCall)
     // Bail to cascade if upstream typing is incomplete — `lastType` reads `projection._type` / `top._type.firstType`, either can be null on partially-typed exprs.
     if (projection != null) {
@@ -2536,7 +2599,7 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
 def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
-    if (!(c |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
+    if (!(c.single |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
     var bufElemType = strip_const_ref(clone_type(top._type.firstType))
     let bufName = qn("buf", at)
     let lenName = qn("rlen", at)
@@ -2547,7 +2610,7 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
     // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
     var body : Expression? = qmacro_block() {
         let $i(lenName) = length($i(srcName))
-        let $i(takeLimName) = $e(c["take"].arguments[1])
+        let $i(takeLimName) = $e(c.single["take"].arguments[1])
         let $i(takeNName) = $i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < $i(lenName) ? $i(takeLimName) : $i(lenName))
         var $i(bufName) : array<$t(bufElemType)>
         $i(bufName) |> reserve($i(takeNName))
@@ -2567,8 +2630,8 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
 def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
-    if (!(c |> key_exists("dist"))) return null
-    let distinctCall = c["dist"]
+    if (!(c.single |> key_exists("dist"))) return null
+    let distinctCall = c.single["dist"]
     let distinctName = call_norm_name(distinctCall)
     var distinctKey : Expression?
     if (distinctName == "distinct_by") {
@@ -2630,23 +2693,23 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
     let outBufName = qn("rev_proj_buf", at)
     let elemName = qn("rev_proj_e", at)
     var whereCond : Expression?
-    if (c |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    if (c.single |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
     }
     var projection : Expression?
-    if (c |> key_exists("preproj")) {
-        projection = peel_lambda_rename_var(c["preproj"].arguments[1], itName)
+    if (c.single |> key_exists("preproj")) {
+        projection = peel_lambda_rename_var(c.single["preproj"].arguments[1], itName)
     }
     var takeExpr : Expression?
-    if (c |> key_exists("take")) {
-        takeExpr = clone_expression(c["take"].arguments[1])
+    if (c.single |> key_exists("take")) {
+        takeExpr = clone_expression(c.single["take"].arguments[1])
     }
     var terminalSelectLam : Expression?
     var terminalSelectElemType : TypeDeclPtr
-    if (c |> key_exists("termsel")) {
-        terminalSelectLam = c["termsel"].arguments[1]
-        if (terminalSelectLam == null || c["termsel"]._type == null || c["termsel"]._type.firstType == null) return null
-        terminalSelectElemType = clone_type(c["termsel"]._type.firstType)
+    if (c.single |> key_exists("termsel")) {
+        terminalSelectLam = c.single["termsel"].arguments[1]
+        if (terminalSelectLam == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) return null
+        terminalSelectElemType = clone_type(c.single["termsel"]._type.firstType)
     }
     if (top._type == null || top._type.firstType == null) return null
     // Buffer element type: post-select if a pre-reverse projection narrowed the element shape; otherwise source type.
@@ -2829,15 +2892,15 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
     let takeLimName = qn("takeLim", at)
     let pvName = qn("pv", at)
     var whereCond : Expression?
-    if (c |> key_exists("where")) {
-        whereCond = peel_lambda_rename_var(c["where"].arguments[1], itName)
+    if (c.single |> key_exists("where")) {
+        whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
     }
     var projection : Expression?
-    if (c |> key_exists("proj")) {
-        projection = peel_lambda_rename_var(c["proj"].arguments[1], itName)
+    if (c.single |> key_exists("proj")) {
+        projection = peel_lambda_rename_var(c.single["proj"].arguments[1], itName)
     }
-    if (!(c |> key_exists("dist"))) return null
-    let distinctCall = c["dist"]
+    if (!(c.single |> key_exists("dist"))) return null
+    let distinctCall = c.single["dist"]
     let isDistinctBy = call_norm_name(distinctCall) == "distinct_by"
     var distinctKeyBlock : Expression?
     if (isDistinctBy) {
@@ -2845,13 +2908,13 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
         distinctKeyBlock = clone_expression(distinctCall.arguments[1])
     }
     var takeExpr : Expression?
-    if (c |> key_exists("take")) {
-        takeExpr = clone_expression(c["take"].arguments[1])
+    if (c.single |> key_exists("take")) {
+        takeExpr = clone_expression(c.single["take"].arguments[1])
     }
     var terminatorName : string  = ""
     var countPred : Expression?
-    if (c |> key_exists("term")) {
-        let terminatorCall = c["term"]
+    if (c.single |> key_exists("term")) {
+        let terminatorCall = c.single["term"]
         let termName = call_norm_name(terminatorCall)
         let termArgs = terminatorCall.arguments |> length
         // `sum` has no selector overload that interacts cleanly with distinct buffering — keep 1-arg only. count/long_count(predicate) (Theme 4): dedup runs UNCONDITIONALLY (distinct_by keeps the FIRST occurrence per key); a separate `acc` counter increments only when the predicate matches that first occurrence.

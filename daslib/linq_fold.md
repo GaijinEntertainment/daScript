@@ -5,8 +5,8 @@ Living document. Update **Status** + **Decision log** as phases ship.
 ## Status
 
 - [x] **PR A** — Foundation + first migrations (plan_reverse, plan_distinct) — branch `bbatkin/linq-fold-patterns-foundation`
-- [ ] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + PR B foundation (aliases / predicates) + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb`
-- [ ] **PR B2** — `plan_order_family` migration (5 emit archetypes + 5 rows) — deferred follow-up; foundation (aliases / predicates) lands in B1
+- [x] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb`
+- [ ] **PR B2** — `plan_order_family` migration (5 emit archetypes + 5 rows) — deferred follow-up; foundation (aliases / predicates / c_chain) shipped in B1
 - [ ] **PR C** — SourceAdapter + decs mirrors (plan_decs_reverse / _distinct / _order_family / _unroll)
 - [ ] **PR D** — Group-by + special cases (plan_group_by family, plan_zip, plan_decs_join, reducer-spec data table)
 
@@ -65,6 +65,7 @@ variant SlotMatcher {
 variant SlotCardinality {
     one          : void?                        // required, exactly 1
     optional     : void?                        // 0 or 1
+    chain        : void?                        // 0 or more (greedy); captures as array<ExprCall?> via Captures.many — PR B1
 }
 
 struct Slot {
@@ -74,7 +75,11 @@ struct Slot {
     arity        : int = -1                     // -1 = any; positive = require N args
 }
 
-typedef Captures = table<string; ExprCall?>     // matched-call by name; LinqCall in linqCalls[call.name]
+// PR B1 — Captures is a wrapper struct: `single` for c_one/c_opt slots, `many` for c_chain slots.
+struct Captures {
+    single : table<string; ExprCall?>
+    many   : table<string; array<ExprCall?>>
+}
 
 variant MatchResult {
     no_match : void?                            // daslang-idiomatic Option<Captures>
@@ -102,6 +107,7 @@ struct SplicePattern {
 
 var plan_reverse_patterns : array<SplicePattern>
 var plan_distinct_patterns : array<SplicePattern>
+var plan_loop_or_count_patterns : array<SplicePattern>   // PR B1
 var splice_patterns : array<SplicePattern>     // PR D: collapsed from per-plan tables; first match wins
 ```
 
@@ -119,6 +125,7 @@ Walks `calls` left-to-right. For each slot:
 
 - `one` — current call must match (name + arity if specified); both cursors advance.
 - `optional` — if current call matches, both cursors advance; otherwise the slot is skipped without consuming.
+- `chain` (PR B1) — greedy match-while-in-set. Captured as `array<ExprCall?>` into `captures.many[capture_name]`. Always succeeds (0+); empty match still creates the `many` entry so emit fns can rely on `c.many |> key_exists("…")`. Pairs with `m_one_of` via the `slot_chain_of(names, cap)` convenience constructor.
 
 After all slots, no unconsumed calls remain. If any of the above fails → `MatchResult(no_match = null)`.
 
@@ -128,17 +135,21 @@ Returns `MatchResult(matched <- captures)` on full success (move semantics — `
 
 ### Alias table (named op-name groups)
 
-The snippet below is the projected end-state at PR D. **PR A only populates the subset its rows need**; the rest land as their planners migrate. The authoritative live list is the `alias_table` literal in [daslib/linq_fold.das](linq_fold.das) — `distinct_family`, `first_family`, `count_family`, `distinct_terminator_family` are populated today.
+The snippet below is the projected end-state at PR D. The authoritative live list is the `alias_table` literal in [daslib/linq_fold.das](linq_fold.das). Status reflects what's populated through PR B1.
 
 ```das
 // projected end-state at PR D
 var alias_table : table<string; array<string>> <- {
-    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending"],  // PR B
+    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending"],  // PR B1 ✓
     "distinct_family"            => ["distinct", "distinct_by"],                                       // PR A ✓
     "first_family"               => ["first", "first_or_default"],                                     // PR A ✓
     "count_family"               => ["count", "long_count"],                                           // PR A ✓
-    "accum_family"               => ["sum", "min", "max", "average"],                                  // PR B
-    "range_op_family"            => ["skip", "skip_while", "take_while", "take"],                      // PR B
+    "accum_family"               => ["sum", "min", "max", "average", "aggregate",                      // PR B1 ✓
+                                     "min_by", "max_by", "min_max", "min_max_by",
+                                     "min_max_average", "min_max_average_by", "long_count"],
+    "early_exit_family"          => ["any", "all", "contains", "first", "first_or_default"],           // PR B1 ✓
+    "range_op_family"            => ["skip", "skip_while", "take_while", "take"],                      // PR B1 ✓
+    "loop_terminator_family"     => union of count + accum + early_exit + last/single/element_at,      // PR B1 ✓ (loop_or_count terminator slot)
     "distinct_terminator_family" => ["count", "long_count", "sum"]                                     // PR A ✓ — narrow to terminators emit_hashtable_dedup actually handles
 }
 ```
@@ -152,7 +163,8 @@ Module-level named `RequiresPredicate` constants for reuse across patterns. As w
 | `array_source` | PR A ✓ | `top._type.isGoodArrayType \|\| top._type.isArray` (after `peel_each`) |
 | `array_random_access` | planned | `array_source && top._type.isGoodArrayType` |
 | `decs_source` | planned | `extract_decs_bridge(top) != null` |
-| `inline_cmp_available(cap_name)` | planned (factory) | `try_make_inline_cmp` succeeds on captured order op |
+| `inline_cmp_available` | PR B1 ✓ | `try_make_inline_cmp` succeeds on `c.single["order"]` (only `order_by[_descending]` with inline-splice-able key). Hard-wired to `"order"` capture key; promote to factory on second use |
+| `has_where_or_distinct` | PR B1 ✓ | `c.single \|> key_exists("where") \|\| c.single \|> key_exists("distinct")`. For `order_fused_prefilter` row to distinguish from bare `buffer_helper_dispatch` |
 | `take_arg_is_int` | PR A ✓ | captured `take`'s 2nd arg `_type.baseType == Type.tInt`; vacuous if no `take` slot |
 | `arity_eq(cap, n)` / `arity_ge(cap, n)` | planned (factory) | structural checks on captured calls |
 | `no_terminator` | PR A ✓ | no terminator captured (final optional slot empty); return shape decided by `ctx.expr_is_iterator` in the emit fn |
@@ -168,7 +180,8 @@ Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific ch
 |---|---|---|---|
 | **A** | 0 — Foundation | Kernel types + walker + alias_table + predicate library + per-archetype unit tests. `splice_patterns` empty initially (safe state — all cascades unchanged). | complete |
 | **A** | 1 — First migrations | `plan_reverse` (5 rows: Ra/Rb/R6/R-2a/R1-R4), `plan_distinct` (2 rows + return-shape switch in emit). Archetypes: `emit_counter_array`, `emit_walk_overwrite_scalar`, `emit_backward_walk`, `emit_buffer_reverse_inplace`, `emit_hashtable_dedup`. **Hard-delete imperative bodies.** | complete |
-| **B** | 2 — Array core | `plan_loop_or_count` (1 row + lane dispatch — preserves existing factoring), `plan_order_family` (3-4 rows: streaming-min / bounded-heap / fused-prefilter / buffer-helper-dispatch). Archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter`, `emit_buffer_helper_dispatch`, shared `emit_terminal_select_project`. **Hard-delete imperative bodies.** | not started |
+| **B1** | 2a — Array core (`plan_loop_or_count`) | `c_chain` cardinality + `Captures` wrapper struct (`single` / `many`) + `slot_chain_of(names, cap)` constructor. `collapse_chained_wheres` pre-pass (KR-1 fix). `plan_loop_or_count` migration (1 row + lane dispatch — preserves existing factoring; head c_chain matches `["where_", "select"]` greedy). | complete |
+| **B2** | 2b — Array core (`plan_order_family`) | `plan_order_family` (5 rows: streaming-min / bounded-heap / fused-prefilter / buffer-helper-dispatch / order_then_plain_distinct). Archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter`, `emit_buffer_helper_dispatch`, shared `emit_terminal_select_project`. **Hard-delete imperative body.** | not started |
 | **C** | 3 — SourceAdapter + decs mirrors | Widen `SourceAdapter` to multi-variant + methods. Migrate `plan_decs_reverse / _distinct / _order_family / _unroll` — **reuse array-side rows + emit fns** modulo adapter swap. **Hard-delete decs imperative bodies.** | not started |
 | **D** | 4 — Group-by + special cases | Reconcile `GroupBySourceAdapter` with `SourceAdapter`. `plan_group_by` + `plan_decs_group_by` → thin pattern rows delegating to existing `plan_group_by_core` (which stays as a sub-codegen). `plan_zip` (1-2 rows, possibly `SourceAdapter::Zip`). `plan_decs_join` (1 row, `SourceAdapter::DecsJoin` or special-case emit). Migrate `emit_reducer_branches` 12-arm if/elif into a `ReducerSpec` data table. | not started |
 
@@ -209,9 +222,9 @@ All shared helpers stay as building blocks for emit archetypes:
 
 Default private; promote ONLY what a synthetic-input test must name. PR A's actual public surface is narrow:
 
-- Slot construction: `Slot`, `SlotMatcher`, `SlotCardinality`, `m_literal`, `m_alias`, `c_one`, `c_opt`
+- Slot construction: `Slot`, `SlotMatcher`, `SlotCardinality`, `m_literal`, `m_alias`, `c_one`, `c_opt`, `c_chain`, `slot_chain_of`
 - Pattern row: `SplicePattern`
-- Typedefs used in test fn signatures: `Captures`, `EmitCtx`, `EmitFn`
+- Struct/typedefs used in test fn signatures: `Captures` (struct), `EmitCtx`, `EmitFn`
 - Lint helpers tests assert on: `chain_prefix_of`, `check_pattern_table_reachable`
 - `alias_table` (so tests can read which aliases populated)
 
@@ -227,8 +240,9 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `SplicePattern` | Per-row struct |
 | `Slot` | Chain slot |
 | `SlotMatcher`, `SlotCardinality` | Variant types |
-| `Captures` | `table<string; ExprCall?>` typedef (matched call by capture name; the `LinqCall` record is accessible separately via `linqCalls[call.name]`) |
+| `Captures` | Struct `{ single : table<string;ExprCall?>; many : table<string;array<ExprCall?>> }`. `single` for c_one/c_opt slots, `many` for c_chain slots. The `LinqCall` record is accessible separately via `linqCalls[call_norm_name(c)]` |
 | `MatchResult` | Variant `no_match : void? \| matched : Captures` — walker return type |
+| `c_chain` / `slot_chain_of(names, cap)` | Greedy run cardinality + (matcher = m_one_of(names), cardinality = c_chain()) convenience constructor — PR B1 |
 | `RequiresPredicate`, `EmitFn` | Function-typedef types — see kernel snippet for current signatures |
 | `EmitCtx` | Struct `{ top; src; expr_is_iterator }` passed to every emit archetype |
 | `SourceAdapter` | Source-loop abstraction variant |
@@ -236,56 +250,52 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `match_pattern(...)` | Walker function |
 | `plan_<X>_patterns` | Per-plan filtered subset (only during migration; deleted in PR D) |
 
-## PR B sketch (planning — refine during implementation)
+## PR B1 (shipped) + PR B2 (planned) sketch
 
-**Branch:** `bbatkin/linq-fold-pattern-table-prb` (TBD)
+### PR B1 — shipped
 
-**Scope:** KR-1 closure (`collapse_chained_wheres`) + `plan_loop_or_count` migration (1 row, 208 LOC source) + `plan_order_family` migration (4 rows, 543 LOC source).
+**Branch:** `bbatkin/linq-fold-pattern-table-prb`
 
-### New pre-pass
+**Scope (delivered):** KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct (`single` / `many`) + `slot_chain_of(names, cap)` constructor + `plan_loop_or_count` migration (1 row, replaces 210 LOC imperative). PR A's 6 emit fns + 5 predicates mechanically migrated to `c.single[…]` (~47 sites).
 
-- `collapse_chained_wheres(calls)` — mirrors `collapse_chained_selects` exactly modulo composition: clone inner where lambda, rename param to fresh name, build composed body via `merge_where_cond(innerBodyFresh, outerBodyFresh)` (which is `inner && outer`), rewire chain backlink, erase inner from `calls`. Gated on `!has_sideeffects(innerBody) && !has_sideeffects(outerBody)`. Called from `plan_reverse`, `plan_distinct`, `plan_loop_or_count`, `plan_order_family` stubs. **KR-1 fix; load-bearing for plan_loop_or_count row.**
+### PR B2 — planned
 
-### New aliases for `alias_table`
+**Scope:** `plan_order_family` migration (5 rows). All foundation (aliases / predicates / `c_chain`) shipped in B1; B2 is row + emit-archetype work only.
 
-```das
-"order_family"           => ["order", "order_descending", "order_by", "order_by_descending"]
-"accum_family"           => ["sum", "min", "max", "average", "aggregate", "min_by", "max_by",
-                              "min_max", "min_max_by", "min_max_average", "min_max_average_by"]
-"early_exit_family"      => ["any", "all", "contains"]   // exact list per classify_terminator audit
-"range_op_family"        => ["skip", "skip_while", "take_while", "take"]
-"loop_terminator_family" => union of count_family + accum_family + early_exit_family
-```
+### Pre-pass (PR B1 ✓)
 
-### New predicates
+- `collapse_chained_wheres(calls)` — mirrors `collapse_chained_selects` modulo composition: clone inner where lambda, rename param to fresh name, build composed body via `merge_where_cond(innerBodyFresh, outerBodyFresh)` (which is `inner && outer`), rewire chain backlink, erase inner from `calls`. **No `has_sideeffects` bail** — composition uses cloned ASTs and AND-merge preserves left-to-right evaluation order with short-circuit semantics identical to the imperative cascade. Called from `plan_reverse`, `plan_distinct`, `plan_loop_or_count` stubs. **KR-1 fix; load-bearing for plan_loop_or_count row.**
 
-- `inline_cmp_available(c, top)` — `try_make_inline_cmp(c["order"].arguments[1], call_norm_name(c["order"]), c["order"]._type.firstType, c["order"].at) != null`. Used by `order_streaming_min` + `order_bounded_heap` rows.
-- `has_where_or_distinct(c, top)` — `c |> key_exists("where") || c |> key_exists("distinct")`. Used by `order_fused_prefilter` row to distinguish from bare `buffer_helper_dispatch`.
+### Pattern row shipped (PR B1)
 
-### Pattern rows
-
-**`plan_loop_or_count`** — 1 row, internal lane dispatch (mirrors `emit_hashtable_dedup` shape):
+**`plan_loop_or_count`** — 1 row using the new `c_chain` cardinality for the head:
 
 ```das
 SplicePattern(
     name = "loop_or_count_general",
     chain = [
-        Slot(m_literal("where_"),     c_opt(), "where"),         // post-collapse: 1 slot
-        Slot(m_literal("select"),     c_opt(), "select"),        // post-collapse: 1 slot
+        slot_chain_of(["where_", "select"], "head"),                   // c_chain — 0+ contiguous where/select
         Slot(m_literal("skip"),       c_opt(), "skip"),
         Slot(m_literal("skip_while"), c_opt(), "skip_while"),
         Slot(m_literal("take_while"), c_opt(), "take_while"),
         Slot(m_literal("take"),       c_opt(), "take"),
-        Slot(m_literal("where_"),     c_opt(), "post_take_where"),    // Theme 2 5c
+        Slot(m_literal("where_"),     c_opt(), "post_take_where"),     // Theme 2 5c
         Slot(m_alias("loop_terminator_family"), c_opt(), "term")
     ],
     requires = [],   // intrinsic — chain shape carries the constraints
     emit = @@<EmitFn> emit_loop_or_count_lane)
 ```
 
-`emit_loop_or_count_lane` — internally calls `classify_terminator(call_norm_name(c["term"]))` and dispatches to existing `emit_counter_lane` / `emit_array_lane` / `emit_accumulator_lane` / `emit_early_exit_lane`. Pre-dispatch fast paths: `emit_length_shortcut`, `emit_any_empty_shortcut`. Recognition state (intermediateBinds, projection chaining, where-after-select rebinding) lives inside the emit fn — moves verbatim from imperative `plan_loop_or_count`.
+`emit_loop_or_count_lane` walks `c.many["head"]` left-to-right applying the same where_/select arms (AND-merge, chained-select rebinding, where-after-select projection-replace) the imperative loop did. Range ops + post-take-where + terminator come from `c.single[…]`. Pre-dispatch fast paths: `emit_length_shortcut`, `emit_any_empty_shortcut`. Lane dispatch: `classify_terminator(call_norm_name(c.single["term"]))` → `emit_counter_lane` / `emit_array_lane` / `emit_accumulator_lane` / `emit_early_exit_lane`. `emit_array_lane` refactored to take `isIter : bool` directly (was `expr : Expression?` just to read `.isIterator`) so the new emit fn can pass `ctx.expr_is_iterator` cleanly.
 
-**`plan_order_family`** — 4 rows, priority order 1 → 4:
+### Predicates added (PR B1 ✓)
+
+- `inline_cmp_available(c, top)` — `try_make_inline_cmp(c.single["order"].arguments[1], …)`. For PR B2's `order_streaming_min` + `order_bounded_heap` rows.
+- `has_where_or_distinct(c, top)` — `c.single |> key_exists("where") || c.single |> key_exists("distinct")`. For PR B2's `order_fused_prefilter` row.
+
+### PR B2 — planned rows
+
+**`plan_order_family`** — 5 rows, priority order 1 → 5:
 
 ```das
 // Row 1 — streaming_min: inline-cmp + first[_or_default]
@@ -404,7 +414,7 @@ The imperative code has a few subtle co-occurrence rules that may not map cleanl
 
 | # | Surface | Symptom | Severity | Owner PR |
 |---|---|---|---|---|
-| KR-1 | `plan_reverse` + `plan_distinct` pattern rows allow a single optional `where_` slot; pre-PR-A imperative `plan_*` accepted N consecutive `where_` calls and `&&`-merged via `merge_where_cond`. The decs mirror (`plan_decs_reverse`) still does this in its loop. | `..._where(p1)._where(p2).reverse()...` and `..._where(p1)._where(p2)._distinct()...` no longer splice; falls back to cascade. Correctness unchanged (cascade works); perf regression on these chains. | medium (uncommon — users typically write `_where(p1 && p2)` directly) | **PR B — IN PROGRESS** (`collapse_chained_wheres` pre-pass mirroring `collapse_chained_selects`; ~30 LOC; called from `plan_reverse` / `plan_distinct` / `plan_loop_or_count` / `plan_order_family` stubs). |
+| KR-1 | `plan_reverse` + `plan_distinct` pattern rows allow a single optional `where_` slot; pre-PR-A imperative `plan_*` accepted N consecutive `where_` calls and `&&`-merged via `merge_where_cond`. | `..._where(p1)._where(p2).reverse()...` and `..._where(p1)._where(p2)._distinct()...` no longer spliced; fell back to cascade. | medium | **CLOSED in PR B1** — `collapse_chained_wheres` pre-pass mirroring `collapse_chained_selects` (~50 LOC + 18 sub-runs). Called from `plan_reverse` / `plan_distinct` / `plan_loop_or_count` stubs; will be called from `plan_order_family` in PR B2. |
 
 ## Risks
 
@@ -434,6 +444,13 @@ The imperative code has a few subtle co-occurrence rules that may not map cleanl
 - **2026-05-25 (PR A impl)** — `take_arg_is_int` predicate is vacuously true when no `take` capture is present (so it's safe on patterns with optional take). Same pattern applies for any future capture-conditional predicate.
 - **2026-05-25 (PR A impl)** — PR A is a pure refactor (no arm add/extend/tighten). Per `[[feedback-living-linq-fold-patterns-rst]]` and `[[feedback-living-results-md]]`, RST and bench refresh are skipped — both are arm-shape-tracking docs, not implementation-tracking docs.
 - **2026-05-26 (PR A R3)** — Intentional extension over master in `plan_reverse`: chains with BOTH a pre-reverse `_select(f)` AND a post-reverse `_select(g)` now splice (R1-R4 + Rb patterns) where master's imperative code had a `!seenSelect` guard that bailed to cascade. The two selects compose cleanly — pre-projection feeds `pushExpr`, post-projection projects the reversed survivors at return. Strictly faster, semantics preserved. Covered by `test_reverse_pre_and_post_select_array` / `_first` in `test_linq_fold_terminal_select.das`.
+- **2026-05-26 (PR B1)** — Split PR B into B1 (KR-1 + `c_chain` + `plan_loop_or_count`) and B2 (`plan_order_family`). The c_chain cardinality is a kernel extension that's load-bearing for plan_loop_or_count's variable-shape head (`[where_*][select*]` interleaved); without it the row would explode into N positional optional slots and still not cover everything. Bundling kernel + first user of kernel in one PR keeps the kernel grounded.
+- **2026-05-26 (PR B1)** — `Captures` migrated from `typedef Captures = table<string; ExprCall?>` to `struct Captures { single : table<string;ExprCall?>; many : table<string;array<ExprCall?>> }`. Alternatives considered: (a) overload one table with sentinel encoding — ugly and type-unsafe; (b) store all captures as `array<ExprCall?>` and index `[0]` for c_one/c_opt — fixed-shape callsites pay an awkward bracket tax. The split struct is mechanical for emit fns (`c["x"]` → `c.single["x"]`, ~47 sites swept) and leaves room for future cardinality types (`c_repeat_n`, etc.) to land in their own table.
+- **2026-05-26 (PR B1)** — `c_chain` walker rule: empty match still creates an entry in `captures.many[name]` (empty array). Emit fns can rely on `c.many |> key_exists("…")` instead of branching on the array's length being > 0. Mirrors how `c_opt` slots that miss still leave `c.single |> key_exists` returning false — predictable existence semantics for emit-fn reads.
+- **2026-05-26 (PR B1)** — `slot_chain_of(names, cap)` convenience constructor takes `var names : array<string>` and moves it into the SlotMatcher via `<-`. `array<string>` is non-copyable; pass-by-value-and-copy would require an explicit clone. Move-consume is the more honest signature.
+- **2026-05-26 (PR B1)** — `collapse_chained_wheres` does NOT gate on `has_sideeffects` (whereas `collapse_chained_selects` does for one specific case). Reason: AND-composing two `where_` predicates preserves left-to-right short-circuit semantics — `inner(x) && outer(x)` evaluates `inner` first and short-circuits, identical to the imperative `if(inner) { if(outer) { … } }` cascade. Side effects in `inner` always fire (per element); side effects in `outer` fire only when `inner` returns true. Cascade and composition match exactly.
+- **2026-05-26 (PR B1)** — `loop_terminator_family` alias must include ALL terminators `classify_terminator` returns non-UNKNOWN for. First B1 cut missed `last`/`single`/`element_at` × `_or_default` (6 EARLY_EXIT terminators); matrix run caught it via `test_linq_fold_ast` "expected 1 for-loop, got 0" failures (terminator wasn't matching the alias → planner cascaded to tier-2 imperative which emits 2 loops). Single-line fix: extend the alias. Lesson: any new alias for a c_opt terminator slot needs an audit against `classify_terminator`'s domain.
+- **2026-05-26 (PR B1)** — `emit_array_lane` signature refactored: `var expr : Expression?` → `isIter : bool`. The only thing the original `expr` parameter was used for was reading `expr._type.isIterator`. The new `EmitCtx.expr_is_iterator` already carries that bool, so the refactor flows cleanly. Single callsite update (imperative caller computed `expr._type != null && expr._type.isIterator` inline before the call).
 
 ## Open questions
 
