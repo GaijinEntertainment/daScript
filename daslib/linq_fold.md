@@ -5,8 +5,8 @@ Living document. Update **Status** + **Decision log** as phases ship.
 ## Status
 
 - [x] **PR A** — Foundation + first migrations (plan_reverse, plan_distinct) — branch `bbatkin/linq-fold-patterns-foundation`
-- [x] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb`
-- [ ] **PR B2** — `plan_order_family` migration (5 emit archetypes + 5 rows) — deferred follow-up; foundation (aliases / predicates / c_chain) shipped in B1
+- [x] **PR B1** — KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct + `plan_loop_or_count` migration — branch `bbatkin/linq-fold-pattern-table-prb` (PR #2881 merged)
+- [x] **PR B2** — `plan_order_family` migration (4 emit archetypes + 5 rows) + `Captures.single_name` parallel-table extension — branch `bbatkin/linq-fold-pattern-table-prb2`
 - [ ] **PR C** — SourceAdapter + decs mirrors (plan_decs_reverse / _distinct / _order_family / _unroll)
 - [ ] **PR D** — Group-by + special cases (plan_group_by family, plan_zip, plan_decs_join, reducer-spec data table)
 
@@ -76,9 +76,12 @@ struct Slot {
 }
 
 // PR B1 — Captures is a wrapper struct: `single` for c_one/c_opt slots, `many` for c_chain slots.
+// PR B2 — `single_name` parallels `single`, stores the LinqCall.name at capture time. Load-bearing for
+// plan_order_family where `normalize_order_reverse` mutates LinqCall.name without rewriting ExprCall.func.
 struct Captures {
-    single : table<string; ExprCall?>
-    many   : table<string; array<ExprCall?>>
+    single      : table<string; ExprCall?>
+    single_name : table<string; string>
+    many        : table<string; array<ExprCall?>>
 }
 
 variant MatchResult {
@@ -181,7 +184,7 @@ Inline closures (`@@(c, top) => …`) acceptable for one-off pattern-specific ch
 | **A** | 0 — Foundation | Kernel types + walker + alias_table + predicate library + per-archetype unit tests. `splice_patterns` empty initially (safe state — all cascades unchanged). | complete |
 | **A** | 1 — First migrations | `plan_reverse` (5 rows: Ra/Rb/R6/R-2a/R1-R4), `plan_distinct` (2 rows + return-shape switch in emit). Archetypes: `emit_counter_array`, `emit_walk_overwrite_scalar`, `emit_backward_walk`, `emit_buffer_reverse_inplace`, `emit_hashtable_dedup`. **Hard-delete imperative bodies.** | complete |
 | **B1** | 2a — Array core (`plan_loop_or_count`) | `c_chain` cardinality + `Captures` wrapper struct (`single` / `many`) + `slot_chain_of(names, cap)` constructor. `collapse_chained_wheres` pre-pass (KR-1 fix). `plan_loop_or_count` migration (1 row + lane dispatch — preserves existing factoring; head c_chain matches `["where_", "select"]` greedy). | complete |
-| **B2** | 2b — Array core (`plan_order_family`) | `plan_order_family` (5 rows: streaming-min / bounded-heap / fused-prefilter / buffer-helper-dispatch / order_then_plain_distinct). Archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter`, `emit_buffer_helper_dispatch`, shared `emit_terminal_select_project`. **Hard-delete imperative body.** | not started |
+| **B2** | 2b — Array core (`plan_order_family`) | `plan_order_family` (5 rows: streaming-min / bounded-heap / order_then_plain_distinct / fused-prefilter / buffer-helper-dispatch). 4 archetypes: `emit_streaming_min`, `emit_bounded_heap`, `emit_fused_prefilter` (reused by row 5), `emit_buffer_helper_dispatch`. Captures gains `single_name` parallel-table to preserve `normalize_order_reverse` LinqCall.name swap. **Hard-delete imperative body.** | complete |
 | **C** | 3 — SourceAdapter + decs mirrors | Widen `SourceAdapter` to multi-variant + methods. Migrate `plan_decs_reverse / _distinct / _order_family / _unroll` — **reuse array-side rows + emit fns** modulo adapter swap. **Hard-delete decs imperative bodies.** | not started |
 | **D** | 4 — Group-by + special cases | Reconcile `GroupBySourceAdapter` with `SourceAdapter`. `plan_group_by` + `plan_decs_group_by` → thin pattern rows delegating to existing `plan_group_by_core` (which stays as a sub-codegen). `plan_zip` (1-2 rows, possibly `SourceAdapter::Zip`). `plan_decs_join` (1 row, `SourceAdapter::DecsJoin` or special-case emit). Migrate `emit_reducer_branches` 12-arm if/elif into a `ReducerSpec` data table. | not started |
 
@@ -240,7 +243,7 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `SplicePattern` | Per-row struct |
 | `Slot` | Chain slot |
 | `SlotMatcher`, `SlotCardinality` | Variant types |
-| `Captures` | Struct `{ single : table<string;ExprCall?>; many : table<string;array<ExprCall?>> }`. `single` for c_one/c_opt slots, `many` for c_chain slots. The `LinqCall` record is accessible separately via `linqCalls[call_norm_name(c)]` |
+| `Captures` | Struct `{ single : table<string;ExprCall?>; single_name : table<string;string>; many : table<string;array<ExprCall?>> }`. `single` for c_one/c_opt slots, `many` for c_chain slots. `single_name` (PR B2) parallels `single` and records the post-normalize LinqCall.name — load-bearing for plan_order_family where `normalize_order_reverse` swaps the LinqCall name without rewriting ExprCall.func. The `LinqCall` record itself is accessible separately via `linqCalls[c.single_name[…]]` |
 | `MatchResult` | Variant `no_match : void? \| matched : Captures` — walker return type |
 | `c_chain` / `slot_chain_of(names, cap)` | Greedy run cardinality + (matcher = m_one_of(names), cardinality = c_chain()) convenience constructor — PR B1 |
 | `RequiresPredicate`, `EmitFn` | Function-typedef types — see kernel snippet for current signatures |
@@ -258,9 +261,9 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 
 **Scope (delivered):** KR-1 closure (`collapse_chained_wheres`) + `c_chain` cardinality + `Captures` wrapper struct (`single` / `many`) + `slot_chain_of(names, cap)` constructor + `plan_loop_or_count` migration (1 row, replaces 210 LOC imperative). PR A's 6 emit fns + 5 predicates mechanically migrated to `c.single[…]` (~47 sites).
 
-### PR B2 — planned
+### PR B2 — shipped
 
-**Scope:** `plan_order_family` migration (5 rows). All foundation (aliases / predicates / `c_chain`) shipped in B1; B2 is row + emit-archetype work only.
+**Scope (delivered):** `plan_order_family` migration (5 rows, 4 emit archetypes) — imperative ~543 LOC body deleted. `Captures.single_name` parallel-table extension preserves the post-`normalize_order_reverse` LinqCall.name so emit fns see the swap (the imperative read `cll._1.name` directly; the pattern walker captures `cll._0` whose `.func.name` reflects source, not the swap). `extract_order_captures` helper centralizes state extraction across all 4 archetypes. Row 5 (`order_then_plain_distinct`) reuses `emit_fused_prefilter` with the `distinct_after` capture key.
 
 ### Pre-pass (PR B1 ✓)
 
@@ -293,9 +296,9 @@ SplicePattern(
 - `inline_cmp_available(c, top)` — `try_make_inline_cmp(c.single["order"].arguments[1], …)`. For PR B2's `order_streaming_min` + `order_bounded_heap` rows.
 - `has_where_or_distinct(c, top)` — `c.single |> key_exists("where") || c.single |> key_exists("distinct")`. For PR B2's `order_fused_prefilter` row.
 
-### PR B2 — planned rows
+### PR B2 — shipped rows
 
-**`plan_order_family`** — 5 rows, priority order 1 → 5:
+**`plan_order_family`** — 5 rows, priority order 1 → 5 (priority differs slightly from initial spec — Row 5 promoted ahead of fused_prefilter and buffer_helper since its `m_literal("distinct")` slot is the most specific discriminator):
 
 ```das
 // Row 1 — streaming_min: inline-cmp + first[_or_default]
@@ -451,6 +454,10 @@ The imperative code has a few subtle co-occurrence rules that may not map cleanl
 - **2026-05-26 (PR B1)** — `collapse_chained_wheres` does NOT gate on `has_sideeffects` (whereas `collapse_chained_selects` does for one specific case). Reason: AND-composing two `where_` predicates preserves left-to-right short-circuit semantics — `inner(x) && outer(x)` evaluates `inner` first and short-circuits, identical to the imperative `if(inner) { if(outer) { … } }` cascade. Side effects in `inner` always fire (per element); side effects in `outer` fire only when `inner` returns true. Cascade and composition match exactly.
 - **2026-05-26 (PR B1)** — `loop_terminator_family` alias must include ALL terminators `classify_terminator` returns non-UNKNOWN for. First B1 cut missed `last`/`single`/`element_at` × `_or_default` (6 EARLY_EXIT terminators); matrix run caught it via `test_linq_fold_ast` "expected 1 for-loop, got 0" failures (terminator wasn't matching the alias → planner cascaded to tier-2 imperative which emits 2 loops). Single-line fix: extend the alias. Lesson: any new alias for a c_opt terminator slot needs an audit against `classify_terminator`'s domain.
 - **2026-05-26 (PR B1)** — `emit_array_lane` signature refactored: `var expr : Expression?` → `isIter : bool`. The only thing the original `expr` parameter was used for was reading `expr._type.isIterator`. The new `EmitCtx.expr_is_iterator` already carries that bool, so the refactor flows cleanly. Single callsite update (imperative caller computed `expr._type != null && expr._type.isIterator` inline before the call).
+- **2026-05-26 (PR B2)** — `Captures.single_name` parallel-table added. Surfaced by a test failure during the plan_order_family migration: `_order_by(_).reverse().take(3).to_array()` returned ascending top-3 instead of descending top-3. Root cause: `normalize_order_reverse` swaps `calls[i]._1.name` (the LinqCall.name) but leaves `calls[i]._0.func` (the ExprCall function pointer) unchanged. The imperative loop read `cll._1.name` and saw the swap; the new pattern walker captures `cll._0` (ExprCall), and `call_norm_name(captured)` walks `func.fromGeneric` chain back to the user-facing source name — silently undoing the swap. Fix: walker writes both `single` (ExprCall) and `single_name` (LinqCall.name, captured at match time). Emit fns that care about post-normalize names (`extract_order_captures`, `inline_cmp_available`) read `c.single_name[key]`. Other planners (PR A reverse / distinct, PR B1 loop_or_count) can continue using `call_norm_name` since they don't run a name-swap pre-pass.
+- **2026-05-26 (PR B2)** — `extract_order_captures` helper centralizes captures→state extraction across all 4 emit archetypes. Each archetype starts with `var oc <- extract_order_captures(c, at, itName)` then bails on `!oc.ok` plus path-specific gates. Trade-off vs inlining: helper introduces a struct allocation per call, but emit fns are at compile-time (cost is irrelevant) and the shared extraction kills ~80 LOC of repeated capture-reading boilerplate.
+- **2026-05-26 (PR B2)** — Row 5 (`order_then_plain_distinct`) reuses `emit_fused_prefilter` rather than a 5th dedicated archetype. The runtime behavior is identical: distinct gate per-element push by set-insert on the key, then sort/min/top_n on the prefilter buffer. `extract_order_captures` reads from EITHER `c.single["distinct"]` (Row 4: distinct before order) OR `c.single["distinct_after"]` (Row 5: plain distinct after order) and normalizes both into `oc.distinctName = "distinct"`. distinct_by AFTER order is structurally excluded by the m_literal("distinct") matcher in Row 5 (the position-invariant whole-tuple equality argument only holds for plain distinct).
+- **2026-05-26 (PR B2)** — Pattern row priority order matters: Row 5 (order_then_plain_distinct, c_one on `m_literal("distinct")` after order) must come BEFORE Row 4 (fused_prefilter, c_opt distinct BEFORE order). Otherwise a chain like `[order, distinct, take]` would match Row 4 with no distinct captured (the c_opt distinct slot skips since "distinct" isn't a valid order_family member, then order matches, then take), routing to the no-distinct fused_prefilter path instead of the distinct-gated one. Lint helper `chain_prefix_of` doesn't catch this since neither row is a strict prefix of the other; ordering by specificity is a hand-applied discipline.
 
 ## Open questions
 

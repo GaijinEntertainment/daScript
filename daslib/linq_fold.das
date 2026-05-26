@@ -71,10 +71,11 @@ struct Slot {
     arity        : int = -1                // -1 = any; positive = require N args on the matched call
 }
 
-// Captures bundle: `single` for c_one / c_opt slots; `many` for c_chain (a contiguous run of calls captured in chain order).
+// Captures: `single` for c_one/c_opt (ExprCall), `single_name` parallel post-normalize LinqCall.name (load-bearing for plan_order_family normalize_order_reverse swap), `many` for c_chain.
 struct Captures {
-    single : table<string; ExprCall?>
-    many   : table<string; array<ExprCall?>>
+    single      : table<string; ExprCall?>
+    single_name : table<string; string>
+    many        : table<string; array<ExprCall?>>
 }
 
 variant private MatchResult {
@@ -264,6 +265,7 @@ def private match_pattern(p : SplicePattern;
         if (matched_here) {
             if (slot.capture_name != "") {
                 captures.single |> insert(slot.capture_name, calls[call_i]._0)
+                captures.single_name |> insert(slot.capture_name, calls[call_i]._1.name)
             }
             slot_i ++
             call_i ++
@@ -308,7 +310,7 @@ def private inline_cmp_available(var c : Captures; var top : Expression?) : bool
     let orderCall = c.single["order"]
     if (orderCall == null || orderCall._type == null || orderCall._type.firstType == null
             || (orderCall.arguments |> length) < 2) return false
-    let orderName = call_norm_name(orderCall)
+    let orderName = c.single_name["order"]    // post-normalize LinqCall.name; call_norm_name would lose the swap
     if (orderName != "order_by" && orderName != "order_by_descending") return false
     return try_make_inline_cmp(orderCall.arguments[1], orderName, orderCall._type.firstType, orderCall.at) != null
 }
@@ -324,6 +326,7 @@ def private has_where_or_distinct(var c : Captures; var top : Expression?) : boo
 var private plan_reverse_patterns : array<SplicePattern>
 var private plan_distinct_patterns : array<SplicePattern>
 var private plan_loop_or_count_patterns : array<SplicePattern>
+var private plan_order_family_patterns : array<SplicePattern>
 var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
 
 // ===== End of pattern-table kernel =====
@@ -1680,386 +1683,497 @@ def private make_inline_less_call(orderKey : Expression?; orderName : string;
     return qmacro(_::less($e(b1), $e(b2)))
 }
 
+
+// Stub — table-driven dispatch into plan_order_family_patterns.
 [macro_function]
 def private plan_order_family(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
     normalize_order_reverse(calls)
     collapse_chained_selects(calls)
+    collapse_chained_wheres(calls)
     top = peel_each(top)
-    var whereCond : Expression?
-    var orderName : string
-    var orderKey : Expression?
-    var orderElemType : TypeDeclPtr
-    var takeExpr : Expression?
-    var firstName : string
-    var firstDefaultExpr : Expression?
-    var hasOrder = false
-    var selectLam : Expression?
-    var selectElemType : TypeDeclPtr
-    // Theme 3 Phase 3 (audit C1/C5): leading or middle `distinct` / `distinct_by` on an order+take chain. Bounded-heap path gates per-element push by set-insert on the distinct key — single source pass, no full materialization.
-    var distinctName : string
-    var distinctKey : Expression?
     let at = calls[0]._0.at
-    let itName = qn("it", at)
-    for (i in 0 .. length(calls)) {
-        var cll & = unsafe(calls[i])
-        let name = cll._1.name
-        if (name == "where_") {
-            if (hasOrder || distinctName != "") return null   // where-after-order/distinct not in scope
-            var pred = peel_lambda_rename_var(cll._0.arguments[1], itName)
-            if (whereCond == null) {
-                whereCond = pred
-            } else {
-                whereCond = qmacro($e(whereCond) && $e(pred))
-            }
-        } elif (name == "distinct" || name == "distinct_by") {
-            // Bail on the shapes the set-gated bounded-heap can't honor: already-claimed distinct/first/select; `take.distinct` (cascade is take-then-dedup, splice would dedup-then-take); `order_by(K2).distinct_by(K1)` (cascade picks min-K2-per-K1 in sort order, splice would keep an arbitrary K1 representative). Plain `distinct()` after `order_by` IS safe — whole-tuple equality is position-invariant.
-            if (distinctName != "" || firstName != "" || selectLam != null
-                    || takeExpr != null
-                    || (name == "distinct_by" && hasOrder)) return null
-            distinctName = name
-            if (name == "distinct_by") {
-                let argCount = cll._0.arguments |> length
-                if (argCount < 2) return null
-                distinctKey = clone_expression(cll._0.arguments[1])
-            }
-        } elif (name == "order" || name == "order_descending"
-                || name == "order_by" || name == "order_by_descending") {
-            if (hasOrder) return null
-            // bail on `order(arr, cmp)` / `order_descending(arr, cmp)` — splice helpers (min/max/top_n) can't honor a user-supplied comparator and would silently drop it.
-            let argCount = cll._0.arguments |> length
-            if ((name == "order" || name == "order_descending") && argCount >= 2) return null
-            hasOrder = true
-            orderName = name
-            if (argCount >= 2) {
-                orderKey = clone_expression(cll._0.arguments[1])
-            }
-            orderElemType = clone_type(cll._0._type.firstType)
-        } elif (name == "take") {
-            if (!hasOrder || takeExpr != null || firstName != "") return null
-            var arg = cll._0.arguments[1]
-            if (arg == null || arg._type == null || arg._type.baseType != Type.tInt) return null
-            takeExpr = clone_expression(arg)
-        } elif (name == "first" || name == "first_or_default") {
-            // order + first → min/max (O(N) instead of sort + index). Must be terminal (no select after).
-            if (!hasOrder || takeExpr != null || firstName != "" || i != length(calls) - 1) return null
-            firstName = name
-            if (name == "first_or_default") {
-                if ((cll._0.arguments |> length) < 2) return null
-                firstDefaultExpr = clone_expression(cll._0.arguments[1])
-            }
-        } elif (name == "select") {
-            // Terminal _select after take/first: project at return, heap cmp stays on source type.
-            if (i != length(calls) - 1 || !hasOrder
-                    || cll._0._type == null || cll._0._type.firstType == null) return null
-            selectLam = cll._0.arguments[1]
-            if (selectLam == null) return null
-            selectElemType = clone_type(cll._0._type.firstType)
-        } else {
-            return null
-        }
-    }
-    // Distinct gate is implemented in the bounded-heap path (requires `take`) and the fused-loop to_array path (Theme 8 — audit 3b). first[_or_default]+distinct without take still bails — streaming-min path has no dset hook.
-    if (!hasOrder || (distinctName != "" && takeExpr == null && firstName != "")) return null
-    let hasKey = orderName == "order_by" || orderName == "order_by_descending"
-    let needIterWrap = expr._type.isIterator
-    let topNName = order_top_n_call_name(orderName)
-    let inplaceName = "{orderName}_inplace"
-    // Inline-key path: when the key is a pure single-expression lambda, splice the body
-    var inlineCmp : Expression?
-    if (hasKey) {
-        inlineCmp = try_make_inline_cmp(orderKey, orderName, orderElemType, at)
-    }
-    let minMaxName = order_min_call_name(orderName, hasKey)
-    // Streaming-min / bounded-heap fast paths (mirror of plan_decs_order_family). When the key is inline-able, skip the materialize-all + min_by/top_n* dispatch in favor of a per-walk state (single best for first[_or_default], heap of size N for take). For first[_or_default]: avoids the per-element `invoke(keyLambda, x)` cost in min_by_impl (~28 ns/op win on 100K-row sort_first). For take(N): avoids materializing the full filtered set before top_n_by (~7-9 ns/op win on sort_take / select_where_order_take).
-    let useBoundedHeap = takeExpr != null && inlineCmp != null && firstName == ""
-    let useStreamingMin = firstName != "" && inlineCmp != null
-    // Terminal _select only splices on inline-cmp / where_+order / distinct+order paths; direct calls would re-emit the cascade.
-    if (selectLam != null && !useStreamingMin && !useBoundedHeap && whereCond == null && distinctName == "") return null
-    if (useStreamingMin) {
-        let bestName = qn("order_best", at)
-        let seenName = qn("order_seen", at)
-        let srcName = qn("source", at)
-        var srcParamType = invoke_src_param_type(top)
-        var topExpr = clone_expression(top)
-        topExpr.genFlags.alwaysSafe = true
-        var elemType = clone_type(orderElemType)
-        var lessTest = make_inline_less_call(orderKey, orderName,
-            qmacro($i(itName)), qmacro($i(bestName)), at)
-        var perElement : Expression? = qmacro_expr() {
-            if (!$i(seenName)) {
-                $i(bestName) := $i(itName)
-                $i(seenName) = true
-            } elif ($e(lessTest)) {
-                $i(bestName) := $i(itName)
-            }
-        }
-        if (whereCond != null) {
-            perElement = qmacro_expr() {
-                if ($e(whereCond)) {
-                    $e(perElement)
-                }
-            }
-        }
-        var emission : Expression?
-        let outElemType = (selectLam != null) ? selectElemType : elemType
-        if (firstName == "first") {
-            var firstRetExpr : Expression?
-            if (selectLam != null) {
-                firstRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(bestName)))
-            } else {
-                firstRetExpr = qmacro($i(bestName))
-            }
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
-                var $i(bestName) = default<$t(elemType)>
-                var $i(seenName) = false
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                panic("sequence contains no elements") if (!$i(seenName))
-                return $e(firstRetExpr)
-            }, $e(topExpr)))
-        } else {
-            let dBindName = qn("order_d", at)
-            var bestRetExpr : Expression?
-            var dRetExpr : Expression?
-            if (selectLam != null) {
-                bestRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(bestName)))
-                dRetExpr = peel_lambda_replace_var(selectLam, qmacro($i(dBindName)))
-            } else {
-                bestRetExpr = qmacro($i(bestName))
-                dRetExpr = qmacro($i(dBindName))
-            }
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
-                let $i(dBindName) = $e(firstDefaultExpr)
-                var $i(bestName) = default<$t(elemType)>
-                var $i(seenName) = false
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                return $e(bestRetExpr) if ($i(seenName))
-                return $e(dRetExpr)
-            }, $e(topExpr)))
-        }
-        return finalize_invoke(emission, at)
-    }
-    if (useBoundedHeap) {
-        let takeNName = qn("order_take_n", at)
-        let bhBufName = qn("order_buf", at)
-        let srcName = qn("source", at)
-        let dsetName = qn("order_dset", at)
-        let dkeyName = qn("order_dkey", at)
-        var srcParamType = invoke_src_param_type(top)
-        var topExpr = clone_expression(top)
-        topExpr.genFlags.alwaysSafe = true
-        var bufElemType = clone_type(orderElemType)
-        var lessTest = make_inline_less_call(orderKey, orderName,
-            qmacro($i(itName)), qmacro($i(bhBufName)[0]), at)
-        var perElement : Expression? = qmacro_expr() {
-            if (length($i(bhBufName)) < $i(takeNName)) {
-                $i(bhBufName) |> push_clone($i(itName))
-                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
-            } elif ($e(lessTest)) {
-                _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
-                $i(bhBufName)[length($i(bhBufName)) - 1] := $i(itName)
-                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
-            }
-        }
-        // Theme 3 Phase 3 (audit C1/C5): leading or middle distinct[_by] gates per-element push by set-insert on the distinct key. Single source pass, no full distinct materialization.
-        if (distinctName != "") {
-            var dkeyExpr : Expression?
-            if (distinctName == "distinct_by") {
-                dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
-                if (dkeyExpr == null) return null
-            } else {
-                dkeyExpr = qmacro($i(itName))
-            }
-            perElement = qmacro_block() {
-                let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-                if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                    $i(dsetName) |> insert($i(dkeyName))
-                    $e(perElement)
-                }
-            }
-        }
-        if (whereCond != null) {
-            perElement = qmacro_expr() {
-                if ($e(whereCond)) {
-                    $e(perElement)
-                }
-            }
-        }
-        // No `reserve(takeN)` on the bounded buf — matches the upstream top_n_by_with_cmp iterator-variant policy (linq.das:482-484). Caller may pass takeN >> actual source size, so pre-reserving N risks a large upfront allocation for no win.
-        var dsetDecl : Expression?
-        if (distinctName != "") {
-            if (distinctName == "distinct_by") {
-                dsetDecl = qmacro_expr() {
-                    var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
-                }
-            } else {
-                dsetDecl = qmacro_expr() {
-                    var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-                }
-            }
-        }
-        var emission : Expression?
-        if (selectLam != null) {
-            // Terminal _select projects ≤K heap survivors at return (heap holds raw type for cmp).
-            let outBufName = qn("order_proj_buf", at)
-            let elemName = qn("order_proj_e", at)
-            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
-            if (distinctName != "") {
-                emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
-                    let $i(takeNName) = $e(takeExpr)
-                    var $i(bhBufName) : array<$t(bufElemType)>
-                    var $i(outBufName) : array<$t(selectElemType)>
-                    $e(dsetDecl)
-                    return <- $i(outBufName) if ($i(takeNName) <= 0)
-                    for ($i(itName) in $i(srcName)) {
-                        $e(perElement)
-                    }
-                    _::order_inplace($i(bhBufName), $e(inlineCmp))
-                    $i(outBufName) |> reserve(length($i(bhBufName)))
-                    for ($i(elemName) in $i(bhBufName)) {
-                        $i(outBufName) |> push_clone($e(projBody))
-                    }
-                    return <- $i(outBufName)
-                }, $e(topExpr)))
-            } else {
-                emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(selectElemType)> {
-                    let $i(takeNName) = $e(takeExpr)
-                    var $i(bhBufName) : array<$t(bufElemType)>
-                    var $i(outBufName) : array<$t(selectElemType)>
-                    return <- $i(outBufName) if ($i(takeNName) <= 0)
-                    for ($i(itName) in $i(srcName)) {
-                        $e(perElement)
-                    }
-                    _::order_inplace($i(bhBufName), $e(inlineCmp))
-                    $i(outBufName) |> reserve(length($i(bhBufName)))
-                    for ($i(elemName) in $i(bhBufName)) {
-                        $i(outBufName) |> push_clone($e(projBody))
-                    }
-                    return <- $i(outBufName)
-                }, $e(topExpr)))
-            }
-        } elif (distinctName != "") {
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
-                let $i(takeNName) = $e(takeExpr)
-                var $i(bhBufName) : array<$t(bufElemType)>
-                $e(dsetDecl)
-                return <- $i(bhBufName) if ($i(takeNName) <= 0)
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                _::order_inplace($i(bhBufName), $e(inlineCmp))
-                return <- $i(bhBufName)
-            }, $e(topExpr)))
-        } else {
-            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
-                let $i(takeNName) = $e(takeExpr)
-                var $i(bhBufName) : array<$t(bufElemType)>
-                return <- $i(bhBufName) if ($i(takeNName) <= 0)
-                for ($i(itName) in $i(srcName)) {
-                    $e(perElement)
-                }
-                _::order_inplace($i(bhBufName), $e(inlineCmp))
-                return <- $i(bhBufName)
-            }, $e(topExpr)))
-        }
-        if (needIterWrap) {
-            emission = qmacro($e(emission).to_sequence_move())
-        }
-        return finalize_invoke(emission, at)
-    }
-    if (whereCond == null && distinctName == "") {
-        // No prefilter — direct call to daslib helper.
-        var topExpr = clone_expression(top)
-        topExpr.genFlags.alwaysSafe = true
-        var emission : Expression?
-        if (firstName == "first") {
-            // order + first → preserve eager `first()` panic-on-empty. min/max return an uninitialized ref on empty, so wrap in an empty-guard for arrays (zero alloc, O(N) min scan), or use top_n*(_, 1, _) |> first() for iterators (n=1 bounded heap; first() panics on empty).
-            if (top._type.isGoodArrayType) {
-                var srcParamType = invoke_src_param_type(top)
-                let firstSrcName = qn("first_src", at)
-                var minMaxCall : Expression?
-                if (hasKey) {
-                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName), $e(orderKey)))
-                } else {
-                    minMaxCall = qmacro($c(minMaxName)($i(firstSrcName)))
-                }
-                emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
-                    panic("sequence contains no elements") if (empty($i(firstSrcName)))
-                    return $e(minMaxCall)
-                }, $e(topExpr)))
-                emission = finalize_invoke(emission, at)
-            } else {
-                var topNCall : Expression?
-                if (inlineCmp != null) {
-                    topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
-                } elif (hasKey) {
-                    topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
-                } else {
-                    topNCall = qmacro($c(topNName)($e(topExpr), 1))
-                }
-                emission = qmacro(_::first($e(topNCall)))
-            }
-        } elif (firstName == "first_or_default") {
-            // No min_by_or_default exists; route through top_n*(_, 1, _) which returns an array (empty or single-element), then first_or_default supplies the default.
-            var topNCall : Expression?
-            if (inlineCmp != null) {
-                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
-            } elif (hasKey) {
-                topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(orderKey)))
-            } else {
-                topNCall = qmacro($c(topNName)($e(topExpr), 1))
-            }
-            emission = qmacro(_::first_or_default($e(topNCall), $e(firstDefaultExpr)))
-        } elif (takeExpr == null) {
-            // Bare order family — emit the direct call. Same shape as plain LINQ, but via
-            if (inlineCmp != null) {
-                // Inlined comparator dispatches to the asc `order(src, block)` overload —
-                emission = qmacro(_::order($e(topExpr), $e(inlineCmp)))
-            } elif (hasKey) {
-                emission = qmacro($c(orderName)($e(topExpr), $e(orderKey)))
-            } else {
-                emission = qmacro($c(orderName)($e(topExpr)))
-            }
-        } else {
-            // order + take → top_n* dispatch.
-            if (inlineCmp != null) {
-                emission = qmacro(_::top_n_by_with_cmp($e(topExpr), $e(takeExpr), $e(inlineCmp)))
-            } elif (hasKey) {
-                emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr), $e(orderKey)))
-            } else {
-                emission = qmacro($c(topNName)($e(topExpr), $e(takeExpr)))
-            }
-        }
-        // Wrap with to_sequence_move only when emission is array-shaped: take dispatches to
-        let emissionIsArray = takeExpr != null || (firstName == "" && top._type.isGoodArrayType)
-        if (needIterWrap && emissionIsArray) {
-            emission = qmacro($e(emission).to_sequence_move())
-        }
-        emission.force_generated(true)
-        return emission
-    }
-    // where_* + order_*[+take] OR distinct[_by] + order_* (Theme 8, audit 3b) — emit a single fused loop that filters into a fresh buf, then sorts in place.
+    let exprIsIter = expr._type != null && expr._type.isIterator
     let srcName = qn("source", at)
-    let bufName = qn("buf", at)
-    let dsetName = qn("order_dset", at)
-    let dkeyName = qn("order_dkey", at)
+    for (p in plan_order_family_patterns) {
+        var r <- match_pattern(p, calls, top)
+        if (r is matched) {
+            var topClone = clone_expression(top)
+            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
+        }
+    }
+    return null
+}
+
+[_macro]
+def private populate_plan_order_family_patterns {
+    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_order_family_patterns)) return
+    // Row 1 — streaming_min: inline-cmp + first[_or_default]; no distinct (final imperative bail).
+    plan_order_family_patterns |> emplace <| SplicePattern(
+        name = "order_streaming_min",
+        chain <- [
+            Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
+            Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
+            Slot(matcher = m_alias("first_family"),    cardinality = c_one(), capture_name = "term"),
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "termsel")
+        ],
+        requires <- [@@ < RequiresPredicate > inline_cmp_available],
+        emit = @@ < EmitFn > emit_streaming_min
+    )
+    // Row 2 — bounded_heap: inline-cmp + take(N); distinct gate optional; no first.
+    plan_order_family_patterns |> emplace <| SplicePattern(
+        name = "order_bounded_heap",
+        chain <- [
+            Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
+            Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
+            Slot(matcher = m_literal("take"),          cardinality = c_one(), capture_name = "take"),
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "termsel")
+        ],
+        requires <- [@@ < RequiresPredicate > inline_cmp_available, @@ < RequiresPredicate > take_arg_is_int],
+        emit = @@ < EmitFn > emit_bounded_heap
+    )
+    // Row 3 — order_then_plain_distinct: plain distinct (NOT distinct_by — whole-tuple equality is position-invariant; distinct_by would pick an arbitrary K1 representative).
+    plan_order_family_patterns |> emplace <| SplicePattern(
+        name = "order_then_plain_distinct",
+        chain <- [
+            Slot(matcher = m_alias("order_family"), cardinality = c_one(), capture_name = "order"),
+            Slot(matcher = m_literal("distinct"),   cardinality = c_one(), capture_name = "distinct_after"),
+            Slot(matcher = m_literal("take"),       cardinality = c_opt(), capture_name = "take"),
+            Slot(matcher = m_alias("first_family"), cardinality = c_opt(), capture_name = "term"),
+            Slot(matcher = m_literal("select"),     cardinality = c_opt(), capture_name = "termsel")
+        ],
+        requires <- [@@ < RequiresPredicate > take_arg_is_int],
+        emit = @@ < EmitFn > emit_fused_prefilter
+    )
+    // Row 4 — fused_prefilter: where_ or distinct_family upstream + order_family; optional take/first/terminal_select.
+    plan_order_family_patterns |> emplace <| SplicePattern(
+        name = "order_fused_prefilter",
+        chain <- [
+            Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
+            Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
+            Slot(matcher = m_literal("take"),          cardinality = c_opt(), capture_name = "take"),
+            Slot(matcher = m_alias("first_family"),    cardinality = c_opt(), capture_name = "term"),
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "termsel")
+        ],
+        requires <- [@@ < RequiresPredicate > has_where_or_distinct, @@ < RequiresPredicate > take_arg_is_int],
+        emit = @@ < EmitFn > emit_fused_prefilter
+    )
+    // Row 5 — buffer_helper_dispatch: bare order_family + optional take/first; direct call to daslib helpers.
+    plan_order_family_patterns |> emplace <| SplicePattern(
+        name = "order_buffer_helper_dispatch",
+        chain <- [
+            Slot(matcher = m_alias("order_family"), cardinality = c_one(), capture_name = "order"),
+            Slot(matcher = m_literal("take"),       cardinality = c_opt(), capture_name = "take"),
+            Slot(matcher = m_alias("first_family"), cardinality = c_opt(), capture_name = "term")
+        ],
+        requires <- [@@ < RequiresPredicate > take_arg_is_int],
+        emit = @@ < EmitFn > emit_buffer_helper_dispatch
+    )
+}
+
+// ===== plan_order_family migration (PR B2) — 4 emit archetypes + 5 pattern rows. Capture keys: where / distinct / distinct_after / order / take / term / termsel. =====
+
+// Shared helper — every emit archetype starts with this state extraction.
+struct private OrderCaptures {
+    whereCond           : Expression?
+    distinctName        : string             // "" / "distinct" / "distinct_by"
+    distinctKey         : Expression?        // only when distinctName == "distinct_by"
+    orderName           : string             // mandatory; one of order / order_descending / order_by / order_by_descending
+    orderKey            : Expression?        // only when hasKey
+    orderElemType       : TypeDeclPtr
+    takeExpr            : Expression?
+    firstName           : string             // "" / "first" / "first_or_default"
+    firstDefaultExpr    : Expression?        // only for first_or_default
+    selectLam           : Expression?
+    selectElemType      : TypeDeclPtr
+    hasKey              : bool               // orderName == "order_by" or "order_by_descending"
+    ok                  : bool               // false on extraction failure (caller bails to cascade)
+}
+
+[macro_function]
+def private extract_order_captures(var c : Captures; at : LineInfo; itName : string) : OrderCaptures {
+    var oc : OrderCaptures
+    oc.ok = false
+    if (!(c.single |> key_exists("order"))) return oc
+    let orderCall = c.single["order"]
+    // single_name preserves the post-normalize_order_reverse LinqCall.name; call_norm_name reads the source ExprCall.func and would lose the swap.
+    oc.orderName = c.single_name["order"]
+    let argCount = orderCall.arguments |> length
+    // order(arr, cmp) / order_descending(arr, cmp): user-supplied comparator can't splice through min/max/top_n helpers.
+    if ((oc.orderName == "order" || oc.orderName == "order_descending") && argCount >= 2) return oc
+    oc.hasKey = oc.orderName == "order_by" || oc.orderName == "order_by_descending"
+    if (oc.hasKey && argCount >= 2) {
+        oc.orderKey = clone_expression(orderCall.arguments[1])
+    }
+    if (orderCall._type == null || orderCall._type.firstType == null) return oc
+    oc.orderElemType = clone_type(orderCall._type.firstType)
+    if (c.single |> key_exists("where")) {
+        oc.whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], itName)
+    }
+    // distinct BEFORE order (Row 4 fused_prefilter, Row 2 bounded_heap with dset gate) OR distinct AFTER order plain only (Row 5).
+    if (c.single |> key_exists("distinct")) {
+        let distinctCall = c.single["distinct"]
+        oc.distinctName = c.single_name["distinct"]
+        if (oc.distinctName == "distinct_by") {
+            if ((distinctCall.arguments |> length) < 2) return oc
+            oc.distinctKey = clone_expression(distinctCall.arguments[1])
+        }
+    } elif (c.single |> key_exists("distinct_after")) {
+        oc.distinctName = "distinct"   // Row 5 is m_literal("distinct"), distinct_by structurally excluded.
+    }
+    if (c.single |> key_exists("take")) {
+        let takeArg = c.single["take"].arguments[1]
+        if (takeArg == null || takeArg._type == null || takeArg._type.baseType != Type.tInt) return oc
+        oc.takeExpr = clone_expression(takeArg)
+    }
+    if (c.single |> key_exists("term")) {
+        let termCall = c.single["term"]
+        oc.firstName = c.single_name["term"]
+        if (oc.firstName == "first_or_default") {
+            if ((termCall.arguments |> length) < 2) return oc
+            oc.firstDefaultExpr = clone_expression(termCall.arguments[1])
+        }
+    }
+    if (c.single |> key_exists("termsel")) {
+        var termselCall = c.single["termsel"]
+        oc.selectLam = termselCall.arguments[1]
+        if (oc.selectLam == null || termselCall._type == null || termselCall._type.firstType == null) return oc
+        oc.selectElemType = clone_type(termselCall._type.firstType)
+    }
+    oc.ok = true
+    return oc
+}
+
+// emit_streaming_min — first[_or_default] with inline-cmp key. Per-walk single-best state, no buffer.
+[macro_function]
+def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    let itName = qn("it", at)
+    var oc <- extract_order_captures(c, at, itName)
+    // Distinct without take but with first bails — streaming-min has no dset hook (mirrors imperative final bail).
+    if (!oc.ok || oc.firstName == "" || oc.distinctName != "") return null
+    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    if (inlineCmp == null) return null
+    let bestName = qn("order_best", at)
+    let seenName = qn("order_seen", at)
+    let srcName = (ctx.src as Array)._1
+    var top = ctx.top
     var srcParamType = invoke_src_param_type(top)
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
-    var bufElemType = clone_type(orderElemType)
+    var elemType = clone_type(oc.orderElemType)
+    var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
+        qmacro($i(itName)), qmacro($i(bestName)), at)
+    var perElement : Expression? = qmacro_expr() {
+        if (!$i(seenName)) {
+            $i(bestName) := $i(itName)
+            $i(seenName) = true
+        } elif ($e(lessTest)) {
+            $i(bestName) := $i(itName)
+        }
+    }
+    if (oc.whereCond != null) {
+        perElement = qmacro_expr() {
+            if ($e(oc.whereCond)) {
+                $e(perElement)
+            }
+        }
+    }
+    let outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
+    var emission : Expression?
+    if (oc.firstName == "first") {
+        var firstRetExpr : Expression?
+        if (oc.selectLam != null) {
+            firstRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(bestName)))
+        } else {
+            firstRetExpr = qmacro($i(bestName))
+        }
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
+            var $i(bestName) = default<$t(elemType)>
+            var $i(seenName) = false
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
+            panic("sequence contains no elements") if (!$i(seenName))
+            return $e(firstRetExpr)
+        }, $e(topExpr)))
+    } else {
+        let dBindName = qn("order_d", at)
+        var bestRetExpr : Expression?
+        var dRetExpr : Expression?
+        if (oc.selectLam != null) {
+            bestRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(bestName)))
+            dRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
+        } else {
+            bestRetExpr = qmacro($i(bestName))
+            dRetExpr = qmacro($i(dBindName))
+        }
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : $t(outElemType) {
+            let $i(dBindName) = $e(oc.firstDefaultExpr)
+            var $i(bestName) = default<$t(elemType)>
+            var $i(seenName) = false
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
+            return $e(bestRetExpr) if ($i(seenName))
+            return $e(dRetExpr)
+        }, $e(topExpr)))
+    }
+    return finalize_invoke(emission, at)
+}
+
+// emit_bounded_heap — take(N) with inline-cmp key. Heap of size N during walk; distinct gate variant + terminal _select.
+[macro_function]
+def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    let itName = qn("it", at)
+    var oc <- extract_order_captures(c, at, itName)
+    if (!oc.ok || oc.takeExpr == null || oc.firstName != "") return null
+    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    if (inlineCmp == null) return null
+    let takeNName = qn("order_take_n", at)
+    let bhBufName = qn("order_buf", at)
+    let srcName = (ctx.src as Array)._1
+    let dsetName = qn("order_dset", at)
+    let dkeyName = qn("order_dkey", at)
+    var top = ctx.top
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var bufElemType = clone_type(oc.orderElemType)
+    var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
+        qmacro($i(itName)), qmacro($i(bhBufName)[0]), at)
+    var perElement : Expression? = qmacro_expr() {
+        if (length($i(bhBufName)) < $i(takeNName)) {
+            $i(bhBufName) |> push_clone($i(itName))
+            _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+        } elif ($e(lessTest)) {
+            _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
+            $i(bhBufName)[length($i(bhBufName)) - 1] := $i(itName)
+            _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+        }
+    }
+    // Theme 3 Phase 3: leading distinct[_by] gates per-element push by set-insert on the distinct key.
+    if (oc.distinctName != "") {
+        var dkeyExpr : Expression?
+        if (oc.distinctName == "distinct_by") {
+            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, itName)
+            if (dkeyExpr == null) return null
+        } else {
+            dkeyExpr = qmacro($i(itName))
+        }
+        perElement = qmacro_block() {
+            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                $i(dsetName) |> insert($i(dkeyName))
+                $e(perElement)
+            }
+        }
+    }
+    if (oc.whereCond != null) {
+        perElement = qmacro_expr() {
+            if ($e(oc.whereCond)) {
+                $e(perElement)
+            }
+        }
+    }
+    var dsetDecl : Expression?
+    if (oc.distinctName != "") {
+        if (oc.distinctName == "distinct_by") {
+            dsetDecl = qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(oc.distinctKey), default<$t(bufElemType)>)))>
+            }
+        } else {
+            dsetDecl = qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
+            }
+        }
+    }
+    var emission : Expression?
+    if (oc.selectLam != null) {
+        let outBufName = qn("order_proj_buf", at)
+        let elemName = qn("order_proj_e", at)
+        var projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
+        if (oc.distinctName != "") {
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(oc.selectElemType)> {
+                let $i(takeNName) = $e(oc.takeExpr)
+                var $i(bhBufName) : array<$t(bufElemType)>
+                var $i(outBufName) : array<$t(oc.selectElemType)>
+                $e(dsetDecl)
+                return <- $i(outBufName) if ($i(takeNName) <= 0)
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                _::order_inplace($i(bhBufName), $e(inlineCmp))
+                $i(outBufName) |> reserve(length($i(bhBufName)))
+                for ($i(elemName) in $i(bhBufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }, $e(topExpr)))
+        } else {
+            emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(oc.selectElemType)> {
+                let $i(takeNName) = $e(oc.takeExpr)
+                var $i(bhBufName) : array<$t(bufElemType)>
+                var $i(outBufName) : array<$t(oc.selectElemType)>
+                return <- $i(outBufName) if ($i(takeNName) <= 0)
+                for ($i(itName) in $i(srcName)) {
+                    $e(perElement)
+                }
+                _::order_inplace($i(bhBufName), $e(inlineCmp))
+                $i(outBufName) |> reserve(length($i(bhBufName)))
+                for ($i(elemName) in $i(bhBufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }, $e(topExpr)))
+        }
+    } elif (oc.distinctName != "") {
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
+            let $i(takeNName) = $e(oc.takeExpr)
+            var $i(bhBufName) : array<$t(bufElemType)>
+            $e(dsetDecl)
+            return <- $i(bhBufName) if ($i(takeNName) <= 0)
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
+            _::order_inplace($i(bhBufName), $e(inlineCmp))
+            return <- $i(bhBufName)
+        }, $e(topExpr)))
+    } else {
+        emission = qmacro(invoke($($i(srcName) : $t(srcParamType)) : array<$t(bufElemType)> {
+            let $i(takeNName) = $e(oc.takeExpr)
+            var $i(bhBufName) : array<$t(bufElemType)>
+            return <- $i(bhBufName) if ($i(takeNName) <= 0)
+            for ($i(itName) in $i(srcName)) {
+                $e(perElement)
+            }
+            _::order_inplace($i(bhBufName), $e(inlineCmp))
+            return <- $i(bhBufName)
+        }, $e(topExpr)))
+    }
+    if (ctx.expr_is_iterator) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    return finalize_invoke(emission, at)
+}
+
+// emit_buffer_helper_dispatch — no where, no distinct. Direct call to daslib helpers (order / top_n* / min_max).
+[macro_function]
+def private emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    let itName = qn("it", at)
+    var oc <- extract_order_captures(c, at, itName)
+    // Buffer-helper is the no-prefilter, no-terminal-_select path; anything richer routes to fused_prefilter or streaming/heap.
+    if (!oc.ok || oc.whereCond != null || oc.distinctName != "" || oc.selectLam != null) return null
+    var top = ctx.top
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    let topNName = order_top_n_call_name(oc.orderName)
+    let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
+    let needIterWrap = ctx.expr_is_iterator
+    var emission : Expression?
+    if (oc.firstName == "first") {
+        // order + first → preserve eager panic-on-empty. For arrays: min/max on length-guarded src. For iterators: top_n*(_, 1) |> first().
+        if (top._type.isGoodArrayType) {
+            var srcParamType = invoke_src_param_type(top)
+            let firstSrcName = qn("first_src", at)
+            var minMaxCall : Expression?
+            if (oc.hasKey) {
+                minMaxCall = qmacro($c(minMaxName)($i(firstSrcName), $e(oc.orderKey)))
+            } else {
+                minMaxCall = qmacro($c(minMaxName)($i(firstSrcName)))
+            }
+            emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
+                panic("sequence contains no elements") if (empty($i(firstSrcName)))
+                return $e(minMaxCall)
+            }, $e(topExpr)))
+            emission = finalize_invoke(emission, at)
+        } else {
+            var topNCall : Expression?
+            if (inlineCmp != null) {
+                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+            } elif (oc.hasKey) {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(oc.orderKey)))
+            } else {
+                topNCall = qmacro($c(topNName)($e(topExpr), 1))
+            }
+            emission = qmacro(_::first($e(topNCall)))
+        }
+    } elif (oc.firstName == "first_or_default") {
+        // No min_by_or_default; route through top_n*(_, 1) + first_or_default (returns array, then default if empty).
+        var topNCall : Expression?
+        if (inlineCmp != null) {
+            topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+        } elif (oc.hasKey) {
+            topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(oc.orderKey)))
+        } else {
+            topNCall = qmacro($c(topNName)($e(topExpr), 1))
+        }
+        emission = qmacro(_::first_or_default($e(topNCall), $e(oc.firstDefaultExpr)))
+    } elif (oc.takeExpr == null) {
+        // Bare order — direct call.
+        if (inlineCmp != null) {
+            emission = qmacro(_::order($e(topExpr), $e(inlineCmp)))
+        } elif (oc.hasKey) {
+            emission = qmacro($c(oc.orderName)($e(topExpr), $e(oc.orderKey)))
+        } else {
+            emission = qmacro($c(oc.orderName)($e(topExpr)))
+        }
+    } else {
+        // order + take → top_n*.
+        if (inlineCmp != null) {
+            emission = qmacro(_::top_n_by_with_cmp($e(topExpr), $e(oc.takeExpr), $e(inlineCmp)))
+        } elif (oc.hasKey) {
+            emission = qmacro($c(topNName)($e(topExpr), $e(oc.takeExpr), $e(oc.orderKey)))
+        } else {
+            emission = qmacro($c(topNName)($e(topExpr), $e(oc.takeExpr)))
+        }
+    }
+    // Wrap with to_sequence_move only when emission is array-shaped: take dispatches array; bare order/min on arrays returns array; min on iterator returns scalar (no wrap).
+    let emissionIsArray = oc.takeExpr != null || (oc.firstName == "" && top._type.isGoodArrayType)
+    if (needIterWrap && emissionIsArray) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    emission.force_generated(true)
+    return emission
+}
+
+// emit_fused_prefilter — where+order or distinct+order. Single fused loop: filter (and dset gate) into fresh buf, then sort/min/top_n on buf.
+[macro_function]
+def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    let itName = qn("it", at)
+    var oc <- extract_order_captures(c, at, itName)
+    // Fused-prefilter requires where OR distinct upstream (buffer_helper covers the bare case); distinct+first without take bails (no per-element min-state).
+    if (!oc.ok
+            || (oc.whereCond == null && oc.distinctName == "")
+            || (oc.distinctName != "" && oc.takeExpr == null && oc.firstName != "")) return null
+    let srcName = (ctx.src as Array)._1
+    let bufName = qn("buf", at)
+    let dsetName = qn("order_dset", at)
+    let dkeyName = qn("order_dkey", at)
+    var top = ctx.top
+    var srcParamType = invoke_src_param_type(top)
+    var topExpr = clone_expression(top)
+    topExpr.genFlags.alwaysSafe = true
+    var bufElemType = clone_type(oc.orderElemType)
+    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    let topNName = order_top_n_call_name(oc.orderName)
+    let inplaceName = "{oc.orderName}_inplace"
+    let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
+    let needIterWrap = ctx.expr_is_iterator
     var pushStmt : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(itName))
     }
-    // Theme 8 (audit 3b): upstream distinct[_by] gates per-element push by set-insert on the distinct key. Single source pass, no full distinct materialization (vs cascade's distinct_by_to_array + order_by_inplace).
-    if (distinctName != "") {
+    // Theme 8 (audit 3b): distinct gate per-element push by set-insert on key. Single source pass, no full distinct materialization.
+    if (oc.distinctName != "") {
         var dkeyExpr : Expression?
-        if (distinctName == "distinct_by") {
-            dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
+        if (oc.distinctName == "distinct_by") {
+            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, itName)
             if (dkeyExpr == null) return null
         } else {
             dkeyExpr = qmacro($i(itName))
@@ -2073,9 +2187,9 @@ def private plan_order_family(var expr : Expression?) : Expression? {
         }
     }
     var loopBody : Expression?
-    if (whereCond != null) {
+    if (oc.whereCond != null) {
         loopBody = qmacro_expr() {
-            if ($e(whereCond)) {
+            if ($e(oc.whereCond)) {
                 $e(pushStmt)
             }
         }
@@ -2086,10 +2200,10 @@ def private plan_order_family(var expr : Expression?) : Expression? {
     stmts |> push <| qmacro_expr() {
         var $i(bufName) : array<$t(bufElemType)>
     }
-    if (distinctName != "") {
-        if (distinctName == "distinct_by") {
+    if (oc.distinctName != "") {
+        if (oc.distinctName == "distinct_by") {
             stmts |> push <| qmacro_expr() {
-                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(oc.distinctKey), default<$t(bufElemType)>)))>
             }
         } else {
             stmts |> push <| qmacro_expr() {
@@ -2097,8 +2211,7 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
     }
-    if (type_has_length(top._type) && distinctName == "") {
-        // Don't pre-reserve when distinct gates the push — survivor count is unknown.
+    if (type_has_length(top._type) && oc.distinctName == "") {
         stmts |> push <| qmacro_expr() {
             $i(bufName) |> reserve(length($i(srcName)))
         }
@@ -2108,25 +2221,24 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             $e(loopBody)
         }
     }
-    // Terminal _select projects at return; buffer/scalar carries source type so cmp/sort sees raw.
     let elemName = qn("order_proj_e", at)
     let outBufName = qn("order_proj_buf", at)
     var projBody : Expression?
-    if (selectLam != null) {
-        projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+    if (oc.selectLam != null) {
+        projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
     }
-    if (firstName == "first") {
-        // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager `first()` semantics; min/max return uninitialized refs on empty.
+    if (oc.firstName == "first") {
+        // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager first(); min/max return uninitialized refs on empty.
         stmts |> push <| qmacro_expr() {
             panic("sequence contains no elements") if (empty($i(bufName)))
         }
         var minMaxCall : Expression?
-        if (hasKey) {
-            minMaxCall = qmacro($c(minMaxName)($i(bufName), $e(orderKey)))
+        if (oc.hasKey) {
+            minMaxCall = qmacro($c(minMaxName)($i(bufName), $e(oc.orderKey)))
         } else {
             minMaxCall = qmacro($c(minMaxName)($i(bufName)))
         }
-        if (selectLam != null) {
+        if (oc.selectLam != null) {
             stmts |> push_from <| qmacro_block_to_array() {
                 let $i(elemName) = $e(minMaxCall)
                 return $e(projBody)
@@ -2136,44 +2248,40 @@ def private plan_order_family(var expr : Expression?) : Expression? {
                 return $e(minMaxCall)
             }
         }
-    } elif (firstName == "first_or_default") {
-        // No min_by_or_default helper exists; route through top_n*(_, 1, _) + first_or_default for the empty-buf case.
+    } elif (oc.firstName == "first_or_default") {
         var topNCall : Expression?
         if (inlineCmp != null) {
             topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), 1, $e(inlineCmp)))
-        } elif (hasKey) {
-            topNCall = qmacro($c(topNName)($i(bufName), 1, $e(orderKey)))
+        } elif (oc.hasKey) {
+            topNCall = qmacro($c(topNName)($i(bufName), 1, $e(oc.orderKey)))
         } else {
             topNCall = qmacro($c(topNName)($i(bufName), 1))
         }
-        if (selectLam != null) {
-            // first_or_default + select: bind default once (side-effect order), project both branches.
+        if (oc.selectLam != null) {
             let dBindName = qn("order_d", at)
             stmts |> push_from <| qmacro_block_to_array() {
-                let $i(dBindName) = $e(firstDefaultExpr)
+                let $i(dBindName) = $e(oc.firstDefaultExpr)
                 let $i(elemName) = _::first_or_default($e(topNCall), $i(dBindName))
                 return $e(projBody)
             }
         } else {
             stmts |> push <| qmacro_expr() {
-                return _::first_or_default($e(topNCall), $e(firstDefaultExpr))
+                return _::first_or_default($e(topNCall), $e(oc.firstDefaultExpr))
             }
         }
-    } elif (takeExpr == null) {
-        // Sort the prefilter buffer in place and return it. order*_inplace is void
+    } elif (oc.takeExpr == null) {
         var sortCall : Expression?
         if (inlineCmp != null) {
-            // Asc `order_inplace(buf, block)` overload + embedded-flip cmp for descending.
             sortCall = qmacro(_::order_inplace($i(bufName), $e(inlineCmp)))
-        } elif (hasKey) {
-            sortCall = qmacro($c(inplaceName)($i(bufName), $e(orderKey)))
+        } elif (oc.hasKey) {
+            sortCall = qmacro($c(inplaceName)($i(bufName), $e(oc.orderKey)))
         } else {
             sortCall = qmacro($c(inplaceName)($i(bufName)))
         }
         stmts |> push(sortCall)
-        if (selectLam != null) {
+        if (oc.selectLam != null) {
             stmts |> push_from <| qmacro_block_to_array() {
-                var $i(outBufName) : array<$t(selectElemType)>
+                var $i(outBufName) : array<$t(oc.selectElemType)>
                 $i(outBufName) |> reserve(length($i(bufName)))
                 for ($i(elemName) in $i(bufName)) {
                     $i(outBufName) |> push_clone($e(projBody))
@@ -2186,20 +2294,19 @@ def private plan_order_family(var expr : Expression?) : Expression? {
             }
         }
     } else {
-        // top_n* on the prefilter buffer.
         var topNCall : Expression?
         if (inlineCmp != null) {
-            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), $e(takeExpr), $e(inlineCmp)))
-        } elif (hasKey) {
-            topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr), $e(orderKey)))
+            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), $e(oc.takeExpr), $e(inlineCmp)))
+        } elif (oc.hasKey) {
+            topNCall = qmacro($c(topNName)($i(bufName), $e(oc.takeExpr), $e(oc.orderKey)))
         } else {
-            topNCall = qmacro($c(topNName)($i(bufName), $e(takeExpr)))
+            topNCall = qmacro($c(topNName)($i(bufName), $e(oc.takeExpr)))
         }
-        if (selectLam != null) {
+        if (oc.selectLam != null) {
             let topResName = qn("order_top_res", at)
             stmts |> push_from <| qmacro_block_to_array() {
                 var $i(topResName) <- $e(topNCall)
-                var $i(outBufName) : array<$t(selectElemType)>
+                var $i(outBufName) : array<$t(oc.selectElemType)>
                 $i(outBufName) |> reserve(length($i(topResName)))
                 for ($i(elemName) in $i(topResName)) {
                     $i(outBufName) |> push_clone($e(projBody))
