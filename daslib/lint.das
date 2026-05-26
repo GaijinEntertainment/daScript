@@ -15,12 +15,16 @@ module lint shared private
 require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/lint_config
 
 [lint_macro]
 class LintEverything : AstPassMacro {
     //! Pass macro that enables lint checking for modules.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        paranoid(prog, true)
+        var disabled : table<string>
+        seed_default_disabled(disabled)
+        load_lint_config(disabled)
+        paranoid(prog, true, disabled)
         return true
     }
 }
@@ -438,7 +442,16 @@ class LintVisitor : AstVisitor {
 
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
     //! Runs the paranoid lint visitor on the program to check for common coding issues.
+    let empty_set : table<string>
+    paranoid(prog, compile_time_errors, empty_set)
+}
+
+def public paranoid(prog : ProgramPtr; compile_time_errors : bool; disabled_codes : table<string>) {
+    //! Filter-aware compile-time variant. ``disabled_codes`` suppresses
+    //! the listed rule IDs (e.g. "LINT003") alongside the usual
+    //! ``// nolint:CODE`` directives.
     var astVisitor = new LintVisitor(compile_time_errors = compile_time_errors)
+    astVisitor.disabled_codes := disabled_codes
     make_visitor(*astVisitor) $(adapter) {
         astVisitor.astVisitorAdapter = adapter
         visit(prog, astVisitor.astVisitorAdapter)

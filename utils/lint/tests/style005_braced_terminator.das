@@ -1,4 +1,7 @@
 options gen2
+// STYLE005 is default-off via daslib/lint_config; force it on so this fixture
+// can assert the 5 expected error sites below.
+options _enable_default_off_rules = true
 // STYLE005: braces around a single-statement early exit are noise
 //
 // Problem:

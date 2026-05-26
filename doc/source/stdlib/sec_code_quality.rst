@@ -9,6 +9,7 @@ Linting, code validation, refactoring tools, and source formatting.
 .. toctree::
 
    generated/lint.rst
+   generated/lint_config.rst
    generated/validate_code.rst
    generated/refactor.rst
    generated/consume.rst
