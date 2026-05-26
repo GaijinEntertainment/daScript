@@ -2463,7 +2463,7 @@ def private populate_plan_loop_or_count_patterns {
             Slot(matcher = m_alias("loop_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
         requires <- array<RequiresPredicate>(),
-        emit = @@<EmitFn> emit_loop_or_count_lane
+        emit = @@ < EmitFn > emit_loop_or_count_lane
     )
 }
 

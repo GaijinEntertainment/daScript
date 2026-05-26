@@ -132,7 +132,7 @@ def test_check_pattern_table_reachable_accepts_c_chain(t : T?) {
                 slot_chain_of(["where_", "select"], "head"),
                 Slot(matcher = m_literal("take"), cardinality = c_opt(), capture_name = "take")
             ],
-            emit = @@<EmitFn> null_emit
+            emit = @@ < EmitFn > null_emit
         )
         patterns |> emplace <| SplicePattern(
             name = "chain_then_count",
@@ -140,7 +140,7 @@ def test_check_pattern_table_reachable_accepts_c_chain(t : T?) {
                 slot_chain_of(["where_", "select"], "head"),
                 Slot(matcher = m_literal("count"), cardinality = c_opt(), capture_name = "term")
             ],
-            emit = @@<EmitFn> null_emit
+            emit = @@ < EmitFn > null_emit
         )
         tt |> equal(check_pattern_table_reachable("synthetic-c_chain-trailers", patterns), true)
     }
