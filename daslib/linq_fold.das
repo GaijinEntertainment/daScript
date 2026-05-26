@@ -76,8 +76,8 @@ variant MatchResult {
     matched  : Captures
 }
 
-typedef RequiresPredicate = lambda<(var c : Captures; var top : Expression?) : bool>
-typedef EmitFn = lambda<(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression?>
+typedef RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
+typedef EmitFn = function<(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression?>
 
 struct SplicePattern {
     name     : string                      // debug / lint diagnostics
@@ -218,19 +218,19 @@ def match_pattern(p : SplicePattern;
 
 // Predicate library — module-level lambdas. Starts minimal; grows with use per masterplan.
 
-var array_source : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+let array_source : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
     // top is already peel_each'd by the calling stub; verify it carries an array type (indexed iteration safe).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
-var take_arg_is_int : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+let take_arg_is_int : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
     if (!(c |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
             && take.arguments[1]._type.baseType == Type.tInt)
 }
 
-var implicit_to_array : RequiresPredicate = @(var c : Captures; var top : Expression?) : bool {
+let implicit_to_array : RequiresPredicate = @@(var c : Captures; var top : Expression?) : bool {
     return !(c |> key_exists("term"))
 }
 
@@ -2625,7 +2625,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist")
         ],
         requires <- [ array_source, implicit_to_array],
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_backward_walk_dset_gate(c, top, src, at)
+        emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
     )
     // R6 — bare reverse + take + to_array, backward index walk
     plan_reverse_patterns |> emplace <| SplicePattern(
@@ -2635,7 +2635,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take")
         ],
         requires <- [ array_source, take_arg_is_int, implicit_to_array],
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_backward_index_walk(c, top, src, at)
+        emit = @@ < EmitFn > emit_reverse_backward_index_walk
     )
     // Ra — reverse + count (reverse is identity for count)
     plan_reverse_patterns |> emplace <| SplicePattern(
@@ -2647,7 +2647,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("count"), cardinality = c_one(), capture_name = "term", arity = 1)
         ],
         requires <- array<RequiresPredicate>(),     // Ra works on iterator and array sources (for-loop body, no indexed access)
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_counter(c, top, src, at)
+        emit = @@ < EmitFn > emit_reverse_counter
     )
     // Rb — reverse + first[_or_default], walk-and-overwrite-last scalar; optional terminal _select
     plan_reverse_patterns |> emplace <| SplicePattern(
@@ -2660,7 +2660,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_alias("first_family"), cardinality = c_one(), capture_name = "term")
         ],
         requires <- array<RequiresPredicate>(),
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_walk_overwrite_scalar(c, top, src, at)
+        emit = @@ < EmitFn > emit_reverse_walk_overwrite_scalar
     )
     // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select
     plan_reverse_patterns |> emplace <| SplicePattern(
@@ -2673,7 +2673,7 @@ def populate_plan_reverse_patterns() {
             Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "termsel")
         ],
         requires <- [take_arg_is_int],
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_reverse_buffer_inplace(c, top, src, at)
+        emit = @@ < EmitFn > emit_reverse_buffer_inplace
     )
 }
 
@@ -2914,7 +2914,7 @@ def populate_plan_distinct_patterns() {
             Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
         requires <- [take_arg_is_int],
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_hashtable_dedup(c, top, src, at)
+        emit = @@ < EmitFn > emit_hashtable_dedup
     )
     // distinct_main — distinct[_by]; optional terminator (count / long_count / sum / implicit to_array)
     plan_distinct_patterns |> emplace <| SplicePattern(
@@ -2926,7 +2926,7 @@ def populate_plan_distinct_patterns() {
             Slot(matcher = m_alias("any_terminator_family"), cardinality = c_opt(), capture_name = "term")
         ],
         requires <- array<RequiresPredicate>(),
-        emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => emit_hashtable_dedup(c, top, src, at)
+        emit = @@ < EmitFn > emit_hashtable_dedup
     )
 }
 

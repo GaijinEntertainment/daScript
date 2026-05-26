@@ -113,6 +113,10 @@ def test_chain_prefix_of_alias_equality(t : T?) {
     }
 }
 
+def null_emit(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) : Expression? {
+    return null
+}
+
 [test]
 def test_check_pattern_table_reachable_catches_shadow(t : T?) {
     t |> run("check_pattern_table_reachable: returns false for a table with a strict-prefix shadow") @(tt : T?) {
@@ -122,7 +126,7 @@ def test_check_pattern_table_reachable_catches_shadow(t : T?) {
             chain <- [
                 Slot(matcher = m_literal("reverse"), cardinality = c_one())
             ],
-            emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => null
+            emit = @@ < EmitFn > null_emit
         )
         bad |> emplace <| SplicePattern(
             name = "long_shadowed",
@@ -130,7 +134,7 @@ def test_check_pattern_table_reachable_catches_shadow(t : T?) {
                 Slot(matcher = m_literal("reverse"), cardinality = c_one()),
                 Slot(matcher = m_literal("take"), cardinality = c_opt())
             ],
-            emit = @(var c : Captures; var top : Expression?; src : SourceAdapter; at : LineInfo) => null
+            emit = @@ < EmitFn > null_emit
         )
         tt |> equal(check_pattern_table_reachable("synthetic-shadowed", bad), false)
     }
