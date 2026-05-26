@@ -112,14 +112,20 @@ def main {
     print("section 6: tab[k].f1 = {kf1}\n")
 
     // ──────────────────────────────────────────────────────────────────
-    // Section 7 — Lock is real: push inside body panics
+    // Section 7 — Lock is real (would-panic example, commented out)
     // ──────────────────────────────────────────────────────────────────
+    //
+    // Trying to mutate the container from inside the body panics at
+    // runtime — the whole point of the lock. Daslang panic is fatal
+    // (not a C++/JS exception), so we don't demonstrate it live in a
+    // tutorial. The line below is what would panic:
+    //
+    //     with_(arr[0]) $(a) {
+    //         arr |> push(A(f1 = 1000, f2 = 2000))   // panic: array is locked
+    //     }
+    //
+    // See `tests/with_boost/test_with_lock_panics.das` for the
+    // full set of runtime-locked behaviours.
 
-    try {
-        with_(arr[0]) $(a) {
-            arr |> push(A(f1 = 1000, f2 = 2000))
-        }
-    } recover {
-        print("section 7: push during with_ body was caught (lock fired)\n")
-    }
+    print("section 7: see comment for the lock-panic shape\n")
 }

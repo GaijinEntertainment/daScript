@@ -81,7 +81,7 @@ are positional (no ``=``-named args; the macro reads them in order):
        d.f2 = s.f2 + 2
    }
 
-Arities 1, 2, and 3 are supported in this phase; arity ≥ 4 is refused.
+Any arity works — the macro emits the full lock / invoke / unlock sequence inline, with one lock per container, so a call like ``with_(a[0], b[1], c[2], d[3], e[4]) $(va, vb, vc, vd, ve) { ... }`` scales naturally. Mix arrays and tables freely, subject to the single-table-arg rule (next section).
 
 
 Section 3 — Workhorse element types (int, float, ...)
@@ -99,12 +99,10 @@ the named ``x = X``) propagates back to the underlying slot:
    }
    // ints == [1, 222, 3]
 
-This relies entirely on the helper's
-``block<(var x : TT&) : void>`` signature driving daslang's
-inference; the macro emits the block param as a parser-shaped
-``auto -const removeConstant=true`` and daslang resolves ``TT`` from
-the container, then binds ``x`` (or ``_``) as ``int&`` (or whichever
-workhorse type the element happens to be).
+The macro emits each block parameter pinned to the container's element
+type with the ref flag set, so daslang resolves the binding as ``int&``
+(or whichever workhorse type the element happens to be). No special-case
+in the macro for struct vs workhorse — the same pinning path covers both.
 
 
 Section 4 — Tables
@@ -132,20 +130,14 @@ the failure mode the typer was trying to prevent at compile time:
 
 .. code-block:: das
 
-   try {
-       with_(arr[0]) $(a) {
-           arr |> push(A(f1 = 1000, f2 = 2000))   // panics: "can't push into locked array"
-       }
-   } recover {
-       // ... clean recovery path
+   var arr = [A(f1 = 1, f2 = 2)]
+   with_(arr[0]) $(a) {
+       arr |> push(A(f1 = 1000, f2 = 2000))   // panics: "can't push into locked array"
    }
 
-.. note::
-
-   Bodies that ``panic`` leak the lock — the ``finally`` cleanup is
-   currently broken on panic (daslang issue #2532). This matches
-   existing daslib behaviour (``daslib/array_boost::array_view`` etc.)
-   and will be fixed once #2532 lands.
+daslang panic is fatal (not a C++/JS-style exception) — the program
+prints the diagnostic and exits. ``try/recover`` exists to capture the
+message before exit for nicer logging, NOT to recover-and-continue.
 
 
 Section 6 — Refused container shapes
@@ -154,19 +146,19 @@ Section 6 — Refused container shapes
 ``with_`` is intentionally narrow:
 
 * **Non-``ExprAt`` containers** (plain locals, struct fields on locals,
-  function-call results) are refused with a diagnostic pointing at
-  built-in ``with``. ``with_`` is the *array/table specialist*; ``with``
-  remains the right tool for locals.
+  function-call results, array literals) are refused. The macro needs
+  to ref-bind the container to a local, and only ExprVar-rooted
+  lvalue chains (variables, ``obj.field``, ``arr[i]``) have stable
+  addressable storage outside the expression. Use built-in ``with`` for
+  locals; for literal-or-call containers, hoist to a ``var`` first.
 
 * **More than one table-keyed arg** is refused per the rehash hazard
   noted above.
 
 * **Bodies that ``return`` a value** are refused at typecheck time —
-  the helper sigs declare ``: void`` block returns. ``with_`` is for
-  in-place mutation; compute values via a local: ``var v : T;
-  with_(arr[0]) { v = _.f }``.
-
-* **Arity > 3** is refused.
+  the synthesized invoke target declares a ``: void`` block return.
+  ``with_`` is for in-place mutation; compute values via a local:
+  ``var v : T; with_(arr[0]) { v = _.f }``.
 
 All refusals fire at macro-expansion time with the macro-error code
 ``50503`` and a message describing the failing arg.
@@ -186,7 +178,7 @@ Expected output::
    section 4: dst[0] = 11, 22
    section 5: ints = [ 1, 222, 3]
    section 6: tab[k].f1 = 777
-   section 7: push during with_ body was caught (lock fired)
+   section 7: see comment for the lock-panic shape
 
 
 .. seealso::
@@ -196,7 +188,6 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_macro_qmacro`
 
-   Standard library: ``daslib/with_boost.das`` — the macro and its
-   ``_with_locked_*`` helpers
+   Standard library: ``daslib/with_boost.das``
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation

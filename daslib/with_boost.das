@@ -7,87 +7,30 @@ options strict_smart_pointers
 
 module with_boost shared private
 
-//! ``with_`` macro: bind one or more array / table element references inside a block,
-//! with an automatic ``lock`` around the body so push/erase/resize/clear panic at
-//! runtime instead of silently dangling. The block-arg constness is inferred from
-//! the container; workhorse element types are bound by reference so the body can
-//! mutate them. See ``tutorials/macros/18_with_boost.das`` for usage examples.
+//! ``with_`` call macro: bind one or more array / table element references
+//! inside a block, with an automatic ``lock`` around the body so
+//! push/erase/resize/clear panic at runtime instead of silently dangling.
+//! The macro emits the full lock / invoke / unlock sequence inline — no
+//! helper functions — so any arity and any mix of array / table args works
+//! uniformly. See ``tutorials/macros/18_with_boost.das`` for examples.
 //!
 //! Restrictions:
 //!
 //! * Each container arg must be an ``ExprAt`` (``arr[i]`` / ``tab[k]``). Plain
 //!   locals, struct fields on locals, and function-call results are refused —
 //!   use built-in ``with`` for those.
-//! * At most one table-keyed arg per call (any second table arg refused —
-//!   rehash on insert invalidates earlier pinned entries).
+//! * At most one table-keyed arg per call (a second insert/erase would
+//!   rehash and invalidate the pinned entry).
 //! * Block bodies are void (no ``return`` value); ``with_`` is for in-place
-//!   mutation, not value-extraction. To compute a value, write to a
-//!   local: ``var v : T; with_(arr[0]) { v = _.f }``.
-//! * Bodies that ``panic`` leak the lock until issue #2532 lands; matches
-//!   existing daslib behaviour (``daslib/array_boost::array_view`` etc.).
+//!   mutation. To compute a value, write to a local:
+//!   ``var v : T; with_(arr[0]) { v = _.f }``.
+//! * Temporary-typed (``Foo#``) containers are bound without a lock — a temp
+//!   is private to the surrounding expression so nothing else can mutate it.
 
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Helper functions emitted by the macro. ``_mutable`` lock variants accept both
-// const and var containers (the C++ side ``const_cast``-s) so a single generic
-// overload covers every const mode.
-// ──────────────────────────────────────────────────────────────────────────────
-
-def public _with_locked_arr1_v(
-                               var a : array<auto(TT)>; idx : int;
-                               b : block<(var x : TT&) : void>) {
-    __builtin_array_lock_mutable(a)
-    invoke(b, a[idx])
-} finally {
-    __builtin_array_unlock_mutable(a)
-}
-
-def public _with_locked_tab1_v(
-                               var t : table<auto(KT); auto(VT)>; key : KT;
-                               b : block<(var x : VT&) : void>) {
-    // Resolve the element ref BEFORE locking — t[key] would otherwise hit
-    // the insert path inside a locked table and panic. The lock then pins
-    // the table (no rehash) for the duration of the body, keeping `elem`
-    // valid. `unsafe(...)` quiets the local-ref-to-non-local-expression
-    // safety check, which the lock makes a no-op.
-    unsafe {
-        var elem & = t[key]
-        __builtin_table_lock_mutable(t)
-        invoke(b, elem)
-    }
-} finally {
-    __builtin_table_unlock_mutable(t)
-}
-
-def public _with_locked_arr2_v(
-                               var a1 : array<auto(T1)>; var a2 : array<auto(T2)>;
-                               i1 : int; i2 : int;
-                               b : block<(var x : T1&; var y : T2&) : void>) {
-    __builtin_array_lock_mutable(a1)
-    __builtin_array_lock_mutable(a2)
-    invoke(b, a1[i1], a2[i2])
-} finally {
-    __builtin_array_unlock_mutable(a2)
-    __builtin_array_unlock_mutable(a1)
-}
-
-def public _with_locked_arr3_v(
-                               var a1 : array<auto(T1)>; var a2 : array<auto(T2)>; var a3 : array<auto(T3)>;
-                               i1 : int; i2 : int; i3 : int;
-                               b : block<(var x : T1&; var y : T2&; var z : T3&) : void>) {
-    __builtin_array_lock_mutable(a1)
-    __builtin_array_lock_mutable(a2)
-    __builtin_array_lock_mutable(a3)
-    invoke(b, a1[i1], a2[i2], a3[i3])
-} finally {
-    __builtin_array_unlock_mutable(a3)
-    __builtin_array_unlock_mutable(a2)
-    __builtin_array_unlock_mutable(a1)
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Call macro
@@ -102,6 +45,21 @@ def private container_kind(atNode : ExprAt?) : string {
     return ""
 }
 
+def private is_lvalue_chain(e : ExpressionPtr) : bool {
+    //! True if e is reachable through pointer-chasing field / index ops
+    //! from an ExprVar root — i.e. binding `var x & = e` is safe (after
+    //! `unsafe(...)`) because e refers to addressable storage outside
+    //! this expression. Excludes array literals and call results whose
+    //! temp lifetime ends with the expression.
+    return false if (e == null)
+    return true if (e is ExprVar)
+    return is_lvalue_chain((e as ExprField).value) if (e is ExprField)
+    return is_lvalue_chain((e as ExprSafeField).value) if (e is ExprSafeField)
+    return is_lvalue_chain((e as ExprAt).subexpr) if (e is ExprAt)
+    return is_lvalue_chain((e as ExprSafeAt).subexpr) if (e is ExprSafeAt)
+    return false
+}
+
 [call_macro(name="with_")]
 class private WithMacro : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
@@ -112,39 +70,46 @@ class private WithMacro : AstCallMacro {
         let blockArg = call.arguments[totalArgs - 1]
         macro_verify(blockArg is ExprMakeBlock, prog, call.at,
             "with_ last argument must be a block, got {describe(blockArg)}")
-        macro_verify(containerCount >= 1 && containerCount <= 3, prog, call.at,
-            "with_ supports 1..3 container args, got {containerCount}")
-        let containerExpr = call.arguments[0]
-        macro_verify(containerExpr is ExprAt, prog, call.at,
-            "with_ container arg must be `arr[i]` or `tab[k]` — use built-in `with` for locals; got {describe(containerExpr)}")
-        let atNode = containerExpr as ExprAt
-        macro_verify(containerExpr._type != null, prog, call.at,
-            "with_ container element type not inferred yet — got null _type on {describe(containerExpr)}")
-        macro_verify(atNode.subexpr._type != null, prog, call.at,
-            "with_ container type not inferred yet — null _type on subexpr {describe(atNode.subexpr)}")
-        let cKind = container_kind(atNode)
-        macro_verify(cKind != "", prog, call.at,
-            "with_ container must be array or table, got {describe(atNode.subexpr._type)}")
-        // Block handling. Every block param goes out as `var name : auto`;
-        // the helper's `block<(var x : TT&) : void>` signature drives type
-        // inference. This keeps the macro emission minimal — daslang sees
-        // the same shape it would see if the user had hand-written the
-        // helper call and the typer infers `TT&` for every binding,
-        // workhorse or struct alike.
+        // Validate every container arg + count tables in one pass.
+        var tableCount = 0
+        for (i in range(containerCount)) {
+            let ai = call.arguments[i]
+            macro_verify(ai is ExprAt, prog, call.at,
+                "with_ arg #{i} must be `arr[i]` or `tab[k]` — use built-in `with` for locals; got {describe(ai)}")
+            let aiNode = ai as ExprAt
+            macro_verify(aiNode.subexpr._type != null, prog, call.at,
+                "with_ arg #{i} container type not inferred yet — got null _type on {describe(aiNode.subexpr)}")
+            let ki = container_kind(aiNode)
+            macro_verify(ki != "", prog, call.at,
+                "with_ arg #{i} container must be array or table, got {describe(aiNode.subexpr._type)}")
+            macro_verify(is_lvalue_chain(aiNode.subexpr), prog, call.at,
+                "with_ arg #{i} container must be a named variable (or field/index chain rooted in one); array literals and function-call results have temp lifetime and can't be safely ref-bound. Got {describe(aiNode.subexpr)}")
+            if (ki == "table") {
+                tableCount ++
+            }
+        }
+        macro_verify(tableCount <= 1, prog, call.at,
+            "with_ allows at most one table-keyed arg per call (got {tableCount}); a 2nd table lookup could rehash and invalidate the first pinned entry")
+        // Build the rewritten block — every block param emerges as
+        // parser-shaped (autoinfer, ref=false, removeConstant=true) so
+        // daslang infers each name as `TT&` from the actual invoke arg
+        // type (TT struct or workhorse).
         let mblk = blockArg as ExprMakeBlock
         let userBlock = mblk._block as ExprBlock
         let userArgCount = length(userBlock.arguments)
         var rewrittenBlock : ExprMakeBlock?
         var rewrittenInner : ExprBlock?
+        // Per-param type: clone the container's element type (already a
+        // ref after typing of `arr[i]` / `tab[k]`), strip const, force ref.
+        // Inline ExprInvoke doesn't drive inference from arg → block-param,
+        // so the macro pins each param to the concrete element-ref type
+        // directly. Workhorse types pick up the explicit `&` here too.
         if (userArgCount == 0) {
             macro_verify(containerCount == 1, prog, call.at,
                 "with_ multi-arg form requires explicit block params: $(a, b, ...)")
-            // Match what the parser produces for `$(a)` (no type): a
-            // TypeDecl(autoinfer) with ref=false, removeConstant=true.
-            // null _type crashes Variable::clone; auto without
-            // removeConstant trips the typer's generic instantiation.
-            var pT = new TypeDecl(at = call.at, baseType = Type.autoinfer)
-            pT.flags.ref = false
+            var pT = clone_type(call.arguments[0]._type)
+            pT.flags.ref = true
+            pT.flags.constant = false
             pT.flags.removeConstant = true
             var injected = new Variable(at = call.at, name := "_", _type = pT)
             var newBlock = new ExprBlock(at = userBlock.at,
@@ -161,50 +126,92 @@ class private WithMacro : AstCallMacro {
                 "with_ block-param count must match container-arg count: {containerCount} containers, {userArgCount} block params")
             rewrittenBlock = clone_expression(mblk) as ExprMakeBlock
             rewrittenInner = rewrittenBlock._block as ExprBlock
-            // Reset each user-named param to what the parser produces for
-            // `$(a)` (autoinfer + ref=false + removeConstant=true) so the
-            // helper's `block<(var x : TT&) : void>` signature drives
-            // inference the same way a direct hand-written call does.
             for (i in range(containerCount)) {
                 var arg = rewrittenInner.arguments[i]
-                arg._type = new TypeDecl(at = arg.at, baseType = Type.autoinfer)
-                arg._type.flags.ref = false
+                arg._type = clone_type(call.arguments[i]._type)
+                arg._type.flags.ref = true
+                arg._type.flags.constant = false
                 arg._type.flags.removeConstant = true
             }
         }
-        // Single-arg dispatch
-        if (containerCount == 1) {
-            return <- qmacro(_with_locked_arr1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock))) if (cKind == "array")
-            return <- qmacro(_with_locked_tab1_v($e(atNode.subexpr), $e(atNode.index), $e(rewrittenBlock))) if (cKind == "table")
-        }
-        // Multi-arg dispatch (containerCount == 2 or 3): validate every arg
-        // is an array ExprAt (multi-table refused).
+        // ── Inline-emission ────────────────────────────────────────────
+        // For each container arg, pre-bind the subexpr to a local ref so
+        // every downstream lock / invoke / unlock references the SAME
+        // materialised value. Without this, splicing $e(subexpr) three
+        // times (lock + invoke + unlock) would re-evaluate the subexpr
+        // three times — fine for an ExprVar, fatal for a literal or call
+        // (three different temp arrays → unlock hits stale memory).
+        //
+        // Per-container emission:
+        //   var __c_<i> & = unsafe(<subexpr>)                    // always
+        //   __builtin_<kind>_lock_mutable(__c_<i>)               // owned/temp alike
+        //   for tables: var __tref_<i> & = unsafe(__c_<i>[<key>])
+        //   <invoke argref>: __c_<i>[<idx>]  or  __tref_<i>
+        //   __builtin_<kind>_unlock_mutable(__c_<i>)             // reversed at end
+        var preStmts : array<ExpressionPtr>
+        var lockStmts : array<ExpressionPtr>
+        var unlockStmts : array<ExpressionPtr>
+        var argRefs : array<ExpressionPtr>
+        preStmts |> reserve(containerCount * 2)
+        lockStmts |> reserve(containerCount)
+        unlockStmts |> reserve(containerCount)
+        argRefs |> reserve(containerCount)
         for (i in range(containerCount)) {
-            let ai = call.arguments[i]
-            macro_verify(ai is ExprAt, prog, call.at,
-                "with_ arg #{i} must be `arr[i]` (got {describe(ai)})")
-            let aiNode = ai as ExprAt
-            macro_verify(aiNode.subexpr._type != null, prog, call.at,
-                "with_ arg #{i} container type not inferred yet")
-            let ki = container_kind(aiNode)
-            macro_verify(ki == "array", prog, call.at,
-                "with_ multi-arg form: arg #{i} must be an array (got {ki}). Tables allowed only in single-arg form.")
+            let ai = call.arguments[i] as ExprAt
+            let ki = container_kind(ai)
+            let cName = "__with_c_{i}"
+            preStmts |> push <| qmacro_expr() {
+                var $i(cName) & = unsafe($e(ai.subexpr))
+            }
+            if (ki == "array") {
+                lockStmts |> push <| qmacro_expr() {
+                    __builtin_array_lock_mutable($i(cName))
+                }
+                unlockStmts |> push <| qmacro_expr() {
+                    __builtin_array_unlock_mutable($i(cName))
+                }
+                argRefs |> push <| qmacro($i(cName)[$e(ai.index)])
+            } else {  // table
+                let trefName = "__with_tref_{i}"
+                preStmts |> push <| qmacro_expr() {
+                    var $i(trefName) & = unsafe($i(cName)[$e(ai.index)])
+                }
+                lockStmts |> push <| qmacro_expr() {
+                    __builtin_table_lock_mutable($i(cName))
+                }
+                unlockStmts |> push <| qmacro_expr() {
+                    __builtin_table_unlock_mutable($i(cName))
+                }
+                argRefs |> push <| qmacro($i(trefName))
+            }
         }
-        if (containerCount == 2) {
-            let a0 = call.arguments[0] as ExprAt
-            let a1 = call.arguments[1] as ExprAt
-            return <- qmacro(_with_locked_arr2_v(
-                $e(a0.subexpr), $e(a1.subexpr),
-                $e(a0.index), $e(a1.index),
-                $e(rewrittenBlock)))
-        } else {  // containerCount == 3
-            let a0 = call.arguments[0] as ExprAt
-            let a1 = call.arguments[1] as ExprAt
-            let a2 = call.arguments[2] as ExprAt
-            return <- qmacro(_with_locked_arr3_v(
-                $e(a0.subexpr), $e(a1.subexpr), $e(a2.subexpr),
-                $e(a0.index), $e(a1.index), $e(a2.index),
-                $e(rewrittenBlock)))
+        // Reverse unlock order so cleanup mirrors acquisition.
+        let unlockN = length(unlockStmts)
+        var unlocksReversed <- [for (i in range(unlockN)); unlockStmts[unlockN - 1 - i]]
+        // Build the invoke statement via ExprInvoke (the dedicated AST node
+        // for lambda/block calls — ExprCall("invoke") doesn't unify the
+        // block's auto-typed params against the actual refs).
+        var invokeCall = new ExprInvoke(at = call.at, name := "invoke")
+        invokeCall.arguments |> emplace_new(rewrittenBlock)
+        for (r in argRefs) {
+            invokeCall.arguments |> emplace_new(r)
         }
+        // Assemble the block: pre-resolves, locks, invoke, then unlocks
+        // (reversed). No ``finally`` — daslang panic is fatal, not a C++
+        // exception; if the invoke panics the process is exiting anyway
+        // and skipped unlocks don't matter.
+        var blk = new ExprBlock(at = call.at,
+            returnType = new TypeDecl(at = call.at, baseType = Type.tVoid))
+        for (s in preStmts) {
+            blk.list |> emplace_new(s)
+        }
+        for (s in lockStmts) {
+            blk.list |> emplace_new(s)
+        }
+        blk.list |> emplace_new(invokeCall)
+        for (s in unlocksReversed) {
+            blk.list |> emplace_new(s)
+        }
+        return <- blk
     }
 }
