@@ -137,7 +137,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - Structs/arrays/tables always pass by reference — no `&` needed.
 - Only **workhorse types** (`int`, `float`, `bool`, `string`, …, `isWorkhorseType` on the C++ side) pass by value.
 - **AST pointers (gc_node) pass by value** — copying the pointer, no refcount, no allocation. `def foo(p : ExpressionPtr)` shares the node; `var p` lets you reassign locally; `var p : ExpressionPtr&` propagates reassignment back. For mutable field access, take the param as `var`.
-- **Lambdas pass by value (copy aliases the capture frame).** A `lambda<…>` is a fat pointer to a heap-allocated capture frame, so `=` copies the pointer (creates an alias) and pass-by-value is free. **`delete lam` requires `unsafe`** since other aliases may still be live — same rule as raw pointer / class `delete`. The rule cascades: `array<lambda<…>>`, structs with a lambda field, tuple/variant containing a lambda — all inherit the unsafe-delete requirement.
+- **Lambdas are copyable.** A `lambda<…>` is a fat pointer to a heap-allocated capture frame; `=` and pass-by-value copy the pointer (creates an alias), and `push`/array storage works without `push_clone`. **`delete lam` requires `unsafe`** since other aliases may still be live — same rule as raw pointer / class `delete`. The unsafe-delete rule cascades: `array<lambda<…>>`, structs with a lambda field, tuple/variant containing a lambda — all inherit the unsafe-delete requirement.
 - **Strings:** `var s : string` is a writable local copy (no propagation). `var s : string&` propagates. `:=` clones into current context's heap (required across contexts); plain `=` copies the pointer.
 - **Residual `smart_ptr` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) still use refcount semantics — variables holding them need `var inscope`. AST types do NOT — see below.
 
@@ -232,7 +232,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - `require foo public` — re-exports `foo` transitively
 - `[export] def main()` defaults to returning `void`, but you can declare it as `def main() : int { ... return rc }` when you need to surface a non-zero process exit code (e.g. CLI tools where callers — MCP wrappers, CI, parent shells — branch on exit). See `dastest/dastest.das` for the canonical pattern. Don't reach for `panic` just to force a non-zero exit; declare `: int` and `return rc` instead.
 - `push` copies (fails for non-copyable types), `emplace` moves (zeros source), `push_clone` clones (preserves source)
-- Non-copyable types (`array<T>`, `table<K;V>`, lambdas): use `:=`, `push_clone`, or `<-`
+- Non-copyable types (`array<T>`, `table<K;V>`): use `:=`, `push_clone`, or `<-`. (Lambdas are copyable — see above.)
 - Blocks cannot be stored/returned/captured — use lambdas or function pointers
 - Class methods: `def const`, `def abstract const`, `def static`; call syntax `obj.method()`, `obj->method()`, `obj |> method()`
 - **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.

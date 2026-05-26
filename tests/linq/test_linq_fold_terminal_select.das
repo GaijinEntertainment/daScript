@@ -128,6 +128,74 @@ def test_reverse_select_first_array(t : T?) {
     }
 }
 
+// PR A extension: chains with BOTH a pre-reverse `_select(f)` AND a post-reverse `_select(g)` were
+// previously rejected by the imperative plan_reverse (it had a `!seenSelect` guard before letting any
+// terminal _select fire). The new pattern-table forms (R1-R4 + Rb) accept the combined shape because
+// emit composes `pushExpr` from the pre-projection and the terminal-select pass from the post-projection;
+// there's no semantic conflict (it's plain function composition over the reversed survivors).
+
+[test]
+def test_reverse_pre_and_post_select_array(t : T?) {
+    t |> run("plan_reverse R1-R4: where + select(f) + reverse + take + select(g) — both selects compose") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // pre-select: id*10  → [10, 20, 30, 40, 50]
+            // reverse:           → [50, 40, 30, 20, 10]
+            // take 3:            → [50, 40, 30]
+            // post-select: +1    → [51, 41, 31]
+            let out <- _fold(each(sounds)._where(_.rank > 0)._select(_.id * 10).reverse().take(3)._select(_ + 1).to_array())
+            tt |> equal(length(out), 3)
+            tt |> equal(out[0], 51)
+            tt |> equal(out[1], 41)
+            tt |> equal(out[2], 31)
+        }
+    }
+}
+
+[test]
+def test_reverse_pre_and_post_select_first(t : T?) {
+    t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first — both selects compose") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // pre-select: id*10  → [10, 20, 30, 40, 50]
+            // reverse:           → [50, 40, 30, 20, 10]
+            // post-select: +1    → [51, 41, 31, 21, 11]
+            // first:             → 51
+            let v = _fold(each(sounds)._where(_.rank > 0)._select(_.id * 10).reverse()._select(_ + 1).first())
+            tt |> equal(v, 51)
+        }
+    }
+}
+
+// Regression for the bug Copilot caught in R6: emit must NOT re-project the user's `first_or_default` default
+// through the post-reverse `_select(g)`. The default is already typed at the post-select element type, so
+// applying termsel(d) double-applies and miscomputes when the chain hits the empty branch.
+
+[test]
+def test_reverse_pre_and_post_select_first_or_default_nonempty(t : T?) {
+    t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — nonempty hits found branch") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // sequence non-empty: termsel(lastName) = (50)+1 = 51
+            let v = _fold(each(sounds)._where(_.rank > 0)._select(_.id * 10).reverse()._select(_ + 1).first_or_default(-99))
+            tt |> equal(v, 51)
+        }
+    }
+}
+
+[test]
+def test_reverse_pre_and_post_select_first_or_default_empty(t : T?) {
+    t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — empty seq returns RAW default, not termsel(default)") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // where filters everything out → empty sequence → default branch fires.
+            // If emit re-projects, result would be (-99)+1 = -98 (wrong). Must be -99.
+            let v = _fold(each(sounds)._where(_.rank > 9999)._select(_.id * 10).reverse()._select(_ + 1).first_or_default(-99))
+            tt |> equal(v, -99)
+        }
+    }
+}
+
 [test]
 def test_reverse_take_select_decs(t : T?) {
     t |> run("plan_decs_reverse: reverse + take + terminal _select") @(tt : T?) {
