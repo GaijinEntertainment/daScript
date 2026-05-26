@@ -78,6 +78,16 @@ struct public AudioChannelStatus {
     //! Number of pending PCM chunks in the stream queue.
 }
 
+//! Snapshot of the audio system's recent CPU utilization and HRTF/simulated routing split, published to a caller-provided LockBox.
+struct public AudioSystemStats {
+    utilization_pct : float
+    //! Mixer CPU utilization over the last ~1 second, in percent (0..100+).
+    hrtf_count : int
+    //! Number of channels currently routed through HRTF.
+    total_3d : int
+    //! Total active is3D channels (denominator of the HRTF/simulated split).
+}
+
 //! Distance attenuation coefficients for 3D audio.
 //! Use the helper functions (inverse_distance_attenuation, linear_attenuation, etc.) to create instances.
 [safe_when_uninitialized]
@@ -149,14 +159,15 @@ class AudioChannel {
     paused : bool = false
     pause_fade : float = 1.0        // current fade level (0=silent, 1=full)
     pause_fade_target : float = 1.0 // 0=fading to pause, 1=fading to play
-    pause_fade_step : float = 1.0 / 96.0 // per-frame ramp speed; default ~2ms at 48kHz
+    pause_fade_step : float = 1.0 / (0.002 * float(MA_SAMPLE_RATE)) // ~2ms ramp at the configured sample rate
     ignoreGlobalVolume : bool = false  // if true, g_volume does not multiply this channel
     stop   : bool = false
     pitch  : float = 1.
     volume : float = 1.
     source : AudioSource?
     resampler : ma_resampler
-    channel_converter : ma_channel_converter
+    channel_converter : ma_channel_converter      // HRTF mode for is3D: 2 -> MA_CHANNELS. Non-3D: source.channels -> MA_CHANNELS
+    channel_converter_sim : ma_channel_converter  // simulated-3D mode: source.channels -> MA_CHANNELS (built in set3D, used when !is_hrtf)
     volume_mixer : ma_volume_mixer
     playback_position : uint64 = 0ul
     position3d : float3
@@ -164,6 +175,7 @@ class AudioChannel {
     doppler : float = 1.
     attenuation : Attenuation = default_attenuation()
     is3D : bool = false
+    is_hrtf : bool = true      // runtime per-channel mode; rewritten each frame by update_hrtf's budget
     setup3D : bool = true
     @do_not_delete status : LockBox? = null
     @do_not_delete reverb : I3DL2Reverb?
@@ -196,6 +208,16 @@ class AudioChannel {
     }
     def set3D {
         is3D = true
+        // simulated-3D converter: source.channels -> MA_CHANNELS (mono->stereo upmix for mono sources)
+        var sim_config <- ma_channel_converter_config_init(
+            ma_format.ma_format_f32,
+            uint(source.channels),
+            null,
+            uint(MA_CHANNELS),
+            null,
+            ma_channel_mix_mode.ma_channel_mix_mode_default
+        )
+        ma_channel_converter_init(unsafe(addr(sim_config)), unsafe(addr(channel_converter_sim)))
         if (MA_HRTF) {
             ma_hrtf_init(unsafe(addr(hrtf)), uint(MA_SAMPLE_RATE))
             ma_channel_converter_uninit(unsafe(addr(channel_converter)))
@@ -217,6 +239,9 @@ class AudioChannel {
         }
         ma_volume_mixer_uninit(unsafe(addr(volume_mixer)))
         ma_channel_converter_uninit(unsafe(addr(channel_converter)))
+        if (is3D) {
+            ma_channel_converter_uninit(unsafe(addr(channel_converter_sim)))
+        }
         ma_resampler_uninit(unsafe(addr(resampler)))
         if (status != null) {
             status |> notify_and_release
@@ -277,9 +302,9 @@ class AudioChannel {
             delete samples
             samples <- temp
         }
-        // hrtf
+        // hrtf — only when this channel is routed through HRTF (top-N by distance per update_hrtf budget)
         var nSoundChannels = source.channels
-        if (is3D && MA_HRTF) {
+        if (is3D && MA_HRTF && is_hrtf) {
             // void ma_hrtf_process_frames(ma_hrtf * hrtf, float * pOut, const float * pIn, ma_uint32 nChannels, ma_uint32 frameCount)
             var temp : array<float>
             temp |> resize(int(outputFrames) * 2)
@@ -314,10 +339,15 @@ class AudioChannel {
             delete samples
             samples <- temp
         }
-        // convert channels
+        // convert channels — for is3D channels, pick the converter sized to the upstream stage:
+        //   HRTF mode    -> samples are 2ch, use `channel_converter` (2 -> MA_CHANNELS)
+        //   simulated 3D -> samples are source.channels, use `channel_converter_sim` (handles the mono->stereo upmix)
         var channel_data : array<float>
         channel_data |> resize(data |> length)
-        ma_channel_converter_process_pcm_frames(unsafe(addr(channel_converter)),
+        let converter_to_use = (is3D && !is_hrtf
+            ? unsafe(addr(channel_converter_sim))
+            : unsafe(addr(channel_converter)))
+        ma_channel_converter_process_pcm_frames(converter_to_use,
             unsafe(addr(channel_data[0])),
             unsafe(addr(samples[0])),
             outputFrames)
@@ -588,33 +618,89 @@ var g_head_position : float3
 var g_head_direction : float3 = float3(0., 1., 0.)
 var g_head_velocity : float3
 
+//! HRTF routing budget — at most this many is3D channels (closest to head) run through HRTF each frame; the rest run simulated-3D (pan + attenuation).
+var g_hrtf_budget : int = 32
+
+//! Calibrated normalizer applied to simulated-3D channels so their perceived loudness matches HRTF channels at the same position. Measured once in initialize_mixer.
+var g_hrtf_frontal_gain : float = 1.0
+
+// Scratch array reused each update_hrtf frame to avoid per-frame allocation; tuple of (distance² to head, g_channels index).
+var g_hrtf_scratch : array<tuple<dist2 : float; idx : int>>
+
+def public hrtf_budget_classify(rank, budget : int; wasHrtf : bool) : bool {
+    //! Decide whether a 3D channel at the given closest-to-head ``rank`` should run HRTF or simulated 3D,
+    //! given the current ``budget`` and whether the channel was HRTF on the previous frame.
+    //! Applies a sticky-rank margin to prevent flapping when two channels swap rank between frames,
+    //! while clamping to 0 when budget is 0 so "all simulated" actually clears in-flight HRTF channels.
+    let stickyTop = budget > 0 ? budget + max(2, budget / 10) : 0
+    return wasHrtf ? rank < stickyTop : rank < budget
+}
+
 def update_hrtf(dt : float; nFrames : uint64) {
+    // Pass 1: rank 3D channels by distance² and assign is_hrtf with a sticky-margin rule.
+    // The sticky margin prevents thrashing when two channels swap rank near the budget boundary.
+    g_hrtf_scratch |> clear()
+    for (i in range(length(g_channels))) {
+        var ch = g_channels[i]
+        if (ch.is3D && !ch.stop) {
+            let delta = ch.position3d - g_head_position
+            g_hrtf_scratch |> push((dist2 = dot(delta, delta), idx = i))
+        }
+    }
+    g_hrtf_scratch |> sort() $(a, b) => a.dist2 < b.dist2
+    let total3D = length(g_hrtf_scratch)
+    let budget = g_hrtf_budget
+    var hrtfCount = 0
+    for (rank in range(total3D)) {
+        let chIdx = g_hrtf_scratch[rank].idx
+        var ch = g_channels[chIdx]
+        let wasHrtf = ch.is_hrtf
+        let newHrtf = hrtf_budget_classify(rank, budget, wasHrtf)
+        if (newHrtf != wasHrtf) {
+            // linear_pan=true for HRTF (input is stereo from HRTF, unity at center); =false for simulated (constant-power panning of mono)
+            ma_volume_mixer_set_linear_pan(unsafe(addr(ch.volume_mixer)), newHrtf)
+            ch.is_hrtf = newHrtf
+        }
+        if (newHrtf) {
+            hrtfCount ++
+        }
+    }
+    g_stats_hrtf_count = hrtfCount
+    g_stats_3d_count = total3D
+
+    // Pass 2: per-channel position/pan/volume — routing decision already made above.
     for (ch in g_channels) {
         if (ch.is3D && !ch.stop) {
             var rxy = ch.position3d.xy - g_head_position.xy
             rxy = float2(rxy.x * g_head_direction.x + rxy.y * g_head_direction.y,
                         -rxy.x * g_head_direction.y + rxy.y * g_head_direction.x)
             let nrxy = normalize(rxy)
-            static_if (MA_HRTF) {
-                let asimuth = atan2(nrxy.y, nrxy.x)
-                let elevation = atan2(ch.position3d.z - g_head_position.z, length(rxy))
-                let iasimuth = int(asimuth * 180. / PI)
-                let ielevation = int(elevation * 180. / PI)
-                ma_hrtf_set_direction(unsafe(addr(ch.hrtf)), iasimuth, ielevation)
+            if (ch.is_hrtf) {
+                static_if (MA_HRTF) {
+                    let asimuth = atan2(nrxy.y, nrxy.x)
+                    let elevation = atan2(ch.position3d.z - g_head_position.z, length(rxy))
+                    let iasimuth = int(asimuth * 180. / PI)
+                    let ielevation = int(elevation * 180. / PI)
+                    ma_hrtf_set_direction(unsafe(addr(ch.hrtf)), iasimuth, ielevation)
+                }
+                // HRTF carries spatial cues; keep the volume_mixer's pan centered
+                ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), 0.0)
             } else {
-                // panning
+                // simulated 3D — constant-power pan via the volume_mixer
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
             }
-            // volume attenuation — ramp over frame to avoid clicks
+            // volume attenuation — ramp over frame to avoid clicks. Simulated channels are scaled by the
+            // calibrated frontal-gain normalizer so they match HRTF channels at the same position.
             let distance = length(ch.position3d - g_head_position)
             let attn = compute_attenuation(ch.attenuation, distance)
             let g = ch.ignoreGlobalVolume ? 1.0 : g_volume
+            let modeGain = ch.is_hrtf ? 1.0 : g_hrtf_frontal_gain
+            let target = ch.volume * attn * g * modeGain
             if (ch.setup3D) {
-                ma_volume_mixer_set_linear_pan(unsafe(addr(ch.volume_mixer)), false)
-                ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn * g)
+                ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), target)
                 ch.setup3D = false
             } else {
-                ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), ch.volume * attn * g, nFrames)
+                ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), target, nFrames)
             }
             // doppler
             let vrel = g_head_velocity - ch.velocity3d
@@ -714,6 +800,8 @@ variant AudioCommand {
     global_pause            : bool
     global_volume           : float
     ignore_global_volume    : tuple<sid : SID; value : bool>
+    hrtf_budget             : int
+    system_stats_box        : uint64       //! opaque LockBox? (archive-safe)
 }
 
 var g_command_stream : Stream?
@@ -757,6 +845,10 @@ def command_processor {
                 delete g_channels
             }
             g_sid_2_channel |> clear()
+            if (g_stats_box != null) {
+                g_stats_box |> notify_and_release
+                g_stats_box = null
+            }
             g_command_stream |> release
         } elif (cmd is add_decoder) {
             assume dcmd = cmd as add_decoder
@@ -861,6 +953,15 @@ def command_processor {
                 let effective = ch.volume * (ch.ignoreGlobalVolume ? 1.0 : g_volume)
                 ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), effective)
             }
+        } elif (cmd is hrtf_budget) {
+            g_hrtf_budget = max(0, cmd as hrtf_budget)
+        } elif (cmd is system_stats_box) {
+            let sbox = cmd as system_stats_box
+            if (g_stats_box != null) {
+                g_stats_box |> notify_and_release
+                g_stats_box = null
+            }
+            g_stats_box = unsafe(reinterpret<LockBox?>(sbox))
         } elif (cmd is stop) {
             let scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
@@ -938,6 +1039,15 @@ var g_mix_buffer : array<float>
 var g_pause : bool = false
 var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 = mute)
 
+// AudioSystemStats publication state (audio-context-side; main side holds the LockBox handle and read-grabs it).
+var g_stats_box : LockBox? = null
+var g_stats_window_time_us = 0.0lf      // accumulated mixer wall time over the current window
+var g_stats_window_samples = 0ul        // accumulated audio frames over the current window
+var g_stats_window_count : int = 0      // mixer-callback count over the window; once >=N callbacks we publish + reset
+var g_stats_recent_util_pct : float = 0.0
+var g_stats_3d_count : int = 0
+var g_stats_hrtf_count : int = 0
+
 [export]
 def mixer(var data : array<float>#; channels, rate : int; dt : float) {
     let t0 = ref_time_ticks()
@@ -972,8 +1082,34 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
             uint64(output_samples))
         g_mix_buffer |> erase(0, output_samples * channels)
     }
-    g_mixer_total_time += double(get_time_usec(t0)) / 1000.lf
+    let dt_ms = double(get_time_usec(t0)) / 1000.lf
+    g_mixer_total_time += dt_ms
     g_mixer_total_samples += uint64(length(data) / channels)
+    publish_audio_stats(dt_ms, uint64(length(data) / channels))
+}
+
+// Accumulate per-callback time + samples into a 1-second rolling window. On window flush, compute
+// utilization (= mixer time / real time) and update the caller's stats LockBox so main thread can read it.
+def private publish_audio_stats(dt_ms : double; frames : uint64) {
+    return if (g_stats_box == null)
+    g_stats_window_time_us += dt_ms
+    g_stats_window_samples += frames
+    g_stats_window_count ++
+    let realTimeMs = double(g_stats_window_samples) * 1000.lf / double(MA_SAMPLE_RATE)
+    if (realTimeMs < 1000.lf) return
+    let util = g_stats_window_time_us / realTimeMs * 100.lf
+    g_stats_recent_util_pct = float(util)
+    g_stats_window_time_us = 0.0lf
+    g_stats_window_samples = 0ul
+    g_stats_window_count = 0
+    let snap = g_stats_recent_util_pct
+    let hrtfCount = g_stats_hrtf_count
+    let total3D = g_stats_3d_count
+    g_stats_box |> update() $(var s : AudioSystemStats#) {
+        s.utilization_pct = snap
+        s.hrtf_count = hrtfCount
+        s.total_3d = total3D
+    }
 }
 
 [init]
@@ -986,7 +1122,68 @@ def initialize_mixer {
             MA_LIMITER_RELEASE_TIME,
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
+        static_if (MA_HRTF) {
+            calibrate_hrtf_frontal_gain()
+        }
     }
+}
+
+// Measure the HRTF's broadband gain at azimuth=0, elevation=0 with a 1 kHz sine probe and
+// compute the loudness-matching normalizer for the simulated-3D path.
+//
+// Derivation (per-channel amplitude at the volume_mixer output, head-on source):
+//   * HRTF path:      linear pan, identity at pan=0  -> per-channel = HRIR_gain * input
+//   * Simulated path: constant-power pan, 1/sqrt(2)  -> per-channel = 0.707 * input * normalizer
+//   Equality at center =>  normalizer = HRIR_gain / 0.707 = HRIR_gain * sqrt(2)
+//
+// HRIR_gain is the sine-input amplitude ratio (≈ |H(1 kHz)|, the magnitude of the HRIR's transfer
+// function at the probe frequency). DC (a constant signal) is the worst probe because impulse-
+// response filters attenuate DC strongly; sine at ~1 kHz gives a representative broadband estimate.
+def private calibrate_hrtf_frontal_gain {
+    let probeFrames = 2048
+    let measureStart = 512    // skip the HRTF crossfade region; measure the steady-state tail
+    var probe_hrtf : ma_hrtf
+    ma_hrtf_init(unsafe(addr(probe_hrtf)), uint(MA_SAMPLE_RATE))
+    // Per hrtf.h: first set_direction triggers a 256-sample crossfade against the zero filter;
+    // the second call leaves needs_crossfade=0 so the steady-state output is a clean measurement.
+    ma_hrtf_set_direction(unsafe(addr(probe_hrtf)), 0, 0)
+    ma_hrtf_set_direction(unsafe(addr(probe_hrtf)), 0, 0)
+    var input : array<float>
+    input |> resize(probeFrames)
+    let probeFreq = 1000.0
+    let phaseStep = 2.0 * PI * probeFreq / float(MA_SAMPLE_RATE)
+    for (i in range(probeFrames)) {
+        input[i] = sin(phaseStep * float(i))
+    }
+    var output : array<float>
+    output |> resize(probeFrames * 2)
+    ma_hrtf_process_frames(unsafe(addr(probe_hrtf)),
+        unsafe(addr(output[0])),
+        unsafe(addr(input[0])),
+        1u,
+        uint(probeFrames))
+    // Per-channel RMS over the steady-state tail; the frontal source is symmetric so average L+R.
+    var sumSq = 0.0
+    let nSamples = probeFrames - measureStart
+    for (i in range(measureStart, probeFrames)) {
+        let l = output[i * 2]
+        let r = output[i * 2 + 1]
+        sumSq += l * l + r * r
+    }
+    let perChannelRms = sqrt(sumSq / float(2 * nSamples))
+    let inputRms = sqrt(0.5)                            // sine of amplitude 1.0
+    let hrirGain = perChannelRms / inputRms             // ≈ |H(1 kHz)| of the frontal HRIR
+    let normalizer = hrirGain * sqrt(2.0)               // compensates the -3 dB const-power center pan
+    if (normalizer > 0.25 && normalizer < 4.0) {
+        g_hrtf_frontal_gain = normalizer
+    } else {
+        to_log(LOG_WARNING, "HRTF calibration produced out-of-range normalizer={normalizer} (hrirGain={hrirGain}); using 1.414 fallback\n")
+        g_hrtf_frontal_gain = sqrt(2.0)
+    }
+    ma_hrtf_uninit(unsafe(addr(probe_hrtf)))
+    delete input
+    delete output
+    to_log(LOG_INFO, "HRTF frontal-gain calibration: perChannelRms={perChannelRms}, hrirGain={hrirGain}, normalizer={g_hrtf_frontal_gain}\n")
 }
         /*
         ma_limiter_init_linear(unsafe(addr(g_limiter)),
@@ -1234,6 +1431,23 @@ def public set_ignore_global_volume(sid : SID; value : bool) {
     //! Make a specific channel ignore the global master volume (used by editor preview so muting the
     //! game's master volume does not silence the asset preview).
     push_cmd(AudioCommand(ignore_global_volume = (sid = sid, value = value)))
+}
+
+def public set_hrtf_budget(n : int) {
+    //! Set the maximum number of 3D channels routed through HRTF each frame; the rest run simulated 3D
+    //! (constant-power pan + distance attenuation, no convolution). Use 0 for all-simulated, or a large
+    //! value (e.g. 999) for all-HRTF. Default is 32. The closest-to-head channels win the HRTF slots.
+    push_cmd(AudioCommand(hrtf_budget = n))
+}
+
+def public set_audio_stats_box(var box : LockBox?) {
+    //! Register a LockBox to receive periodic AudioSystemStats updates from the audio thread.
+    //! The audio thread writes one snapshot per ~1-second window; the caller can read on demand
+    //! via ``box |> grab() $(var s : AudioSystemStats) { ... }``. Pass null to clear.
+    box |> add_ref
+    box |> append(1)
+    box |> set() <| new AudioSystemStats(utilization_pct = 0.0, hrtf_count = 0, total_3d = 0)
+    push_cmd(AudioCommand(system_stats_box = intptr(box)))
 }
 
 def public stop(sid : SID; time : float = 0.0f) {
