@@ -108,12 +108,12 @@ def test_slot_chain_of_constructs_expected_shape(t : T?) {
 def test_slots_structurally_match_distinguishes_c_chain(t : T?) {
     t |> run("slots_structurally_match: c_chain vs c_one vs c_opt at same matcher are distinct shapes") @(tt : T?) {
         // c_chain ≢ c_one ≢ c_opt at the structural level — chain_prefix_of must reject mixed-cardinality matches.
-        var chainOnly : array<Slot> <- [slot_chain_of(["x"], "h")]
-        var oneOpt : array<Slot> <- [
+        let chainOnly : array<Slot> <- [slot_chain_of(["x"], "h")]
+        let oneOpt : array<Slot> <- [
             Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_one(), capture_name = "h"),
             Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_opt(), capture_name = "h")
         ]
-        var chainPair : array<Slot> <- [
+        let chainPair : array<Slot> <- [
             slot_chain_of(["x"], "h"),
             Slot(matcher = SlotMatcher(one_of <- ["x"]), cardinality = c_opt(), capture_name = "h")
         ]
