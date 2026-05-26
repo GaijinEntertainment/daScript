@@ -43,8 +43,8 @@ The single-arg form is a 1:1 replacement for the rejected pattern above:
 Section 1 — The single-arg form
 ================================
 
-Default-name ``_`` binding works for any struct-element array (workhorse
-types like ``int`` are refused — see Section 6):
+Default-name ``_`` binding works for both struct-element and
+workhorse-element arrays (workhorse coverage in Section 3):
 
 .. code-block:: das
 

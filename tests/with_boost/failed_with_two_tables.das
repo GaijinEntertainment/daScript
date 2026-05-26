@@ -14,7 +14,7 @@ struct A {
 def main {
     var t1 : table<string; A>
     var t2 : table<string; A>
-    with_(t1["k"], t2["q"]) $(var a : A; var b : A) {  // refuse: 2nd-arg is a table
+    with_(t1["k"], t2["q"]) $(var a : A; var b : A) {  // refuse: max one table-keyed arg per call
         print("{a.f1} {b.f1}")
     }
 }

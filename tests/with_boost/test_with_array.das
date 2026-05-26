@@ -70,17 +70,24 @@ def test_three_arg_array(t : T?) {
     delete c
 }
 
+struct Owner {
+    children : array<A>
+}
+
 [test]
 def test_field_chain_container(t : T?) {
-    //! Container is `obj.field[i]` — root is ExprField chain, still
-    //! resolves as `arr[i]` for macro purposes (the chain is the subexpr).
-    var arr <- [A(f1=5, f2=6), A(f1=7, f2=8)]
-    with_(arr[1]) $(elem) {
+    //! Container is `obj.field[i]` — subexpr is the ExprField
+    //! `obj.children`, an lvalue chain rooted in `obj` (ExprVar).
+    //! The lvalue-chain check passes and pre-bind works.
+    var obj : Owner
+    obj.children |> push(A(f1 = 5, f2 = 6))
+    obj.children |> push(A(f1 = 7, f2 = 8))
+    with_(obj.children[1]) $(elem) {
         elem.f1 = 555
     }
-    t |> equal(arr[1].f1, 555, "second-element mutation persists")
-    t |> equal(arr[0].f1, 5, "first element untouched")
-    delete arr
+    t |> equal(obj.children[1].f1, 555, "second-element mutation persists")
+    t |> equal(obj.children[0].f1, 5, "first element untouched")
+    delete obj.children
 }
 
 def helper_set_f1(var aRef : A&; v : int) {

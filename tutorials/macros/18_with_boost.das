@@ -10,9 +10,9 @@
 //   - Single-arg form with default `_` binding
 //   - Named binding via $(name) on the block
 //   - Multi-arg form (positional) for cross-container work
-//   - Return-value form for `let x = with_(...) { return ... }`
-//   - Container constraints: array-index / table-index ExprAt only,
-//     workhorse-element containers refused (use direct indexing)
+//   - Workhorse element types (int, float, ...) — bound by reference
+//   - Table containers (one table-keyed arg per call)
+//   - Runtime lock: mutation of the container inside the body panics
 //
 // Run: daslang.exe tutorials/macros/18_with_boost.das
 
