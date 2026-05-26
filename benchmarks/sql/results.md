@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-26 from `c8b8e6021` (PR D1 — group_by pattern-table stubs + reducer data table). Only group_by + join_groupby rows re-run; other rows from `2c18845d5` (post-Theme-7).
+Generated 2026-05-26 from `c8b8e6021` (PR D1 — group_by pattern-table stubs + reducer data table). Only group_by + join_groupby rows re-run; other rows from `2c18845d5` (post-Theme-7). **Pending refresh** for PR D2 (plan_zip + plan_decs_join migrations) — the affected lanes (`zip_*`, `join_*`, `join_groupby_*`) are pure pattern-table refactors and expected byte-identical, but a full INTERP+JIT rerun has not yet been done in this PR.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
 one bench family in `benchmarks/sql/`; columns are nanoseconds per
 logical operation. `—` marks an intentionally absent lane — see
