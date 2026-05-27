@@ -36,6 +36,9 @@ struct DastestArgs {
     @clarg_doc = "Number of threads to use in isolated mode; defaults to 2x the number of hardware threads when 0"
     isolated_mode_threads : int
 
+    @clarg_doc = "Stable worker index passed by parent dastest in isolated mode; tests read it from get_user_args() to derive per-worker ports/paths"
+    worker_index : int = 0
+
     @clarg_doc = "Run all benchmarks this number of times (useful for sample collection)"
     count : int = 1
 
