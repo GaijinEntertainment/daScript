@@ -390,6 +390,22 @@ def main() : int {
         // Without this, the post-`--` slice in the child loses --headless and any
         // playwright/harness that depends on it reverts to windowed mode.
         let headlessFlag = find_index(raw_args, "--headless") >= 0 ? " --headless" : ""
+        // Preserve EVERY pre-`--` arg (daslang flags + script path), not just
+        // raw_args[0..1]. With raw_args = [daslang, -load_module, <path>,
+        // dastest.das, --, ...], the old "raw_args[0] raw_args[1]" reconstruction
+        // produced "daslang -load_module" — losing the flag value, breaking
+        // local runs that point dastest at an external module via -load_module.
+        // Findex of `--` ≥ 0 always (dastest was invoked with `--` to receive
+        // its own args); fall back to all raw_args if not, matching the old
+        // 2-arg implicit assumption.
+        let dashdash = find_index(raw_args, "--")
+        let launchPrefix = build_string() $(var w) {
+            let n = dashdash > 0 ? dashdash : length(raw_args)
+            for (i in range(n)) {
+                if (i > 0) w |> write(" ")
+                w |> write(raw_args[i])
+            }
+        }
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
         with_channel(totalFiles) $(inputChannel) {
             with_channel(totalFiles) $(outputChannel) {
@@ -458,7 +474,7 @@ def main() : int {
                         let jitstr = jit_enabled() ? "-jit" : ""
                         let aotstr = is_in_aot() ? "-use-aot" : ""
                         let benchstr = ctx.bench_enabled ? "--bench" : ""
-                        let singleTest = "{raw_args[0]} {raw_args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}{headlessFlag}"
+                        let singleTest = "{launchPrefix} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}{headlessFlag}"
                         inputChannel |> push_clone(IsoInput(uri = clone_string(uri), cmd = clone_string(singleTest)))
                         inputChannel |> notify()
                     }
