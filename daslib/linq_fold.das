@@ -6487,6 +6487,8 @@ def private try_splice_patterns(var expr : Expression?) : Expression? {
             }
         }
     }
+    // Cascaded decs chains fall through to fold_linq_default rather than risk a decs-only row matching here (peel_each doesn't strip the eager-bridge ExprInvoke, so decs_source stays true) and emitting via Array adapter — see linq_fold_patterns.rst "How dispatch works".
+    if (bridge != null) return null
     top = peel_each(top)
     let srcName = qn("source", at)
     for (p in splice_patterns) {

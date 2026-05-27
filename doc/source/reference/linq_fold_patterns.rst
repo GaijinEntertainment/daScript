@@ -29,24 +29,27 @@ described below, and hands the result to ``try_splice_patterns`` in
 ``splice_patterns`` table (17 rows, one per arm listed in this
 document) twice:
 
-1. **Decs adapter pass.** Skipped unless
+1. **Decs adapter pass.** Runs only when
    ``extract_decs_bridge(top) != null`` (i.e. the source is
    ``from_decs_template(...)``). Each row's ``requires`` predicates
    gate the match; rows with an ``array_source`` predicate fail
    here and fall through. First emit that returns non-null wins.
-2. **Array adapter pass.** Runs with ``peel_each(top)``. Rows with
-   ``decs_source`` / ``decs_join_invariants`` predicates fail this
-   pass; the remaining rows match against the (now-peeled) top.
+2. **Array adapter pass.** Runs only when ``extract_decs_bridge(top)
+   == null``, i.e. the source is **not** a decs eager bridge. Top is
+   first ``peel_each``-unwrapped. Decs chains never reach this pass:
+   if the Decs pass above cascades on every row, control falls
+   through to ``fold_linq_default`` instead. (This is deliberate —
+   ``peel_each`` does not strip the eager-bridge ``ExprInvoke``, so
+   without this gate the ``decs_source`` predicate would still
+   succeed on a decs source in the Array pass and decs-only rows
+   could match and emit via ``SourceAdapter::Array``, silently
+   dropping adapter-specific captures like ``upstream_join``.)
 
 If neither pass emits, the Theme 6 perf-warn fires for
 ``from_decs_template`` chains (telling the user the bridge will
 materialize and tier-2 will run on the buffer), then control falls
 through to ``fold_linq_default`` (the iterator-materializing tier-2
 path) and finally to a raw passthrough.
-
-The "decs-first" rule is preserved at the dispatcher level rather
-than per-row, so a chain starting with ``from_decs_template(...)``
-always tries every decs-eligible arm before any array arm.
 
 .. note::
 
