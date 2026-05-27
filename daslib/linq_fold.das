@@ -856,34 +856,6 @@ def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? 
     return res
 }
 
-[macro_function]
-def private finalize_lane_emission(var topExprs : array<Expression?>; srcNames : array<string>;
-                                   var bodyStmts : array<Expression?>; at : LineInfo) : Expression? {
-    // Multi-source-aware invoke wrap used by emit_accumulator_lane / emit_early_exit_lane. 1-source clones top + derives param type + emits 1-arg invoke; 2-source (zip) does both sides + emits 2-arg invoke. Caller has already pushed the for-loop into bodyStmts.
-    let nSrcs = length(srcNames)
-    if (nSrcs != 1 && nSrcs != 2) panic("finalize_lane_emission: only 1- or 2-source supported (got {nSrcs}); higher-arity zip planners must extend this branch (or build the invoke wrap directly)")
-    if (length(topExprs) != nSrcs) panic("finalize_lane_emission: topExprs length {length(topExprs)} != srcNames length {nSrcs}")
-    if (nSrcs == 1) {
-        var topExpr = clone_expression(topExprs[0])
-        topExpr.genFlags.alwaysSafe = true
-        var srcParamType = invoke_src_param_type(topExprs[0])
-        var res = qmacro(invoke($($i(srcNames[0]) : $t(srcParamType)) {
-            $b(bodyStmts)
-        }, $e(topExpr)))
-        return finalize_invoke(res, at)
-    }
-    var topAExpr = clone_expression(topExprs[0])
-    topAExpr.genFlags.alwaysSafe = true
-    var topBExpr = clone_expression(topExprs[1])
-    topBExpr.genFlags.alwaysSafe = true
-    var srcAType = invoke_src_param_type(topExprs[0])
-    var srcBType = invoke_src_param_type(topExprs[1])
-    var res = qmacro(invoke($($i(srcNames[0]) : $t(srcAType), $i(srcNames[1]) : $t(srcBType)) {
-        $b(bodyStmts)
-    }, $e(topAExpr), $e(topBExpr)))
-    return finalize_invoke(res, at)
-}
-
 [clone(top), macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
     // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
@@ -1167,6 +1139,65 @@ def private emit_array_lane(var top : Expression?; isIter : bool; var loopBody :
     return finalize_invoke(res, at)
 }
 
+// ===== Emission-lane unification (Phase F — see linq_fold.md) =====
+
+// Single-pass terminator scaffold — see linq_fold.md "Phase F" for the canonical shape.
+struct private TerminatorSpec {
+    prologue          : array<Expression?>   // op-specific var decls (acc=0, found=false, etc.)
+    preCondStmts      : array<Expression?>   // unconditional binds INSIDE for-loop, OUTSIDE if-gate
+    intermediateBinds : array<Expression?>   // chain binds, INSIDE if-gate, BEFORE per-element work
+    whereCond         : Expression?           // null = no if-gate
+    postTakeWhereCond : Expression?           // gates per-element work AFTER take cap ticks (Theme 2 5c)
+    perElementStmts   : array<Expression?>   // the actual work
+    skipExpr          : Expression?           // range knobs — helpers are no-ops when all null
+    takeExpr          : Expression?
+    skipWhileCond     : Expression?
+    takeWhileCond     : Expression?
+    rangeNames        : RangeStateNames
+    tailStmts         : array<Expression?>   // post-loop; INCLUDES the return
+}
+
+[macro_function]
+def private emit_terminator_lane(var spec : TerminatorSpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
+    var perStmts <- spec.perElementStmts
+    prepend_binds(perStmts, spec.intermediateBinds)
+    if (spec.postTakeWhereCond != null) {
+        var gated = wrap_with_condition(stmts_to_expr(perStmts), spec.postTakeWhereCond)
+        perStmts |> clear
+        perStmts |> push(gated)
+    }
+    wrap_with_ranges(perStmts, spec.skipExpr, spec.takeExpr, spec.skipWhileCond, spec.takeWhileCond, spec.rangeNames)
+    var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perStmts), spec.whereCond), spec.preCondStmts)
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(spec.prologue) + length(spec.tailStmts) + 5)
+    append_ranges_prelude(bodyStmts, spec.skipExpr, spec.takeExpr, spec.skipWhileCond, spec.rangeNames)
+    bodyStmts |> push_from(spec.prologue)
+    bodyStmts |> push <| adapter_wrap_source_loop(adapter, loopBody, at)
+    bodyStmts |> push_from(spec.tailStmts)
+    return adapter_wrap_invoke(adapter, bodyStmts, null, false, at)
+}
+
+// Bridge for orchestrators that still take parallel (topExprs, srcNames) arrays. 1-source → Array;
+// 2-source → Zip (types derived via invoke_src_param_type, matches the prior inline-invoke shape).
+[macro_function]
+def private build_lane_adapter(var topExprs : array<Expression?>; srcNames : array<string>) : SourceAdapter {
+    let nSrcs = length(srcNames)
+    if (nSrcs != 1 && nSrcs != 2) panic("build_lane_adapter: only 1- or 2-source supported (got {nSrcs})")
+    if (length(topExprs) != nSrcs) panic("build_lane_adapter: topExprs length {length(topExprs)} != srcNames length {nSrcs}")
+    if (nSrcs == 1) {
+        return SourceAdapter(Array = (topExprs[0], srcNames[0]))
+    }
+    var zipShape = ZipShape(
+        srcAExpr = topExprs[0],
+        srcBExpr = topExprs[1],
+        srcAName := srcNames[0],
+        srcBName := srcNames[1],
+        srcAType = invoke_src_param_type(topExprs[0]),
+        srcBType = invoke_src_param_type(topExprs[1])
+    )
+    return SourceAdapter(Zip = zipShape)
+}
+
 [macro_function]
 def private emit_accumulator_lane(
                                   opName : string;
@@ -1209,17 +1240,17 @@ def private emit_accumulator_lane(
     let workhorse = ((projection != null && projection._type != null && projection._type.isWorkhorseType)
         || (projection == null && elementType != null && elementType.isWorkhorseType))
     let isDoubleAccType = accType != null && accType.baseType == Type.tDouble
-    var preludeStmts : array<Expression?>
-    var perMatchStmts : array<Expression?>
+    var prologue : array<Expression?>
+    var perElementStmts : array<Expression?>
     var returnExpr : Expression?
     if (opName == "long_count") {
-        preludeStmts <- qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             var $i(accName) : int64 = 0l
         }
         // Value is unused; mirror counter-lane discipline and bind only when projection has side effects (keeps the AST visit but discards the value).
         if (projection != null && has_sideeffects(projection)) {
             let finalBindName = qn("vfinal", at)
-            perMatchStmts |> push <| qmacro_expr() {
+            perElementStmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
         }
@@ -1227,7 +1258,7 @@ def private emit_accumulator_lane(
             $i(accName)
         }
     } elif (opName == "sum") {
-        preludeStmts <- qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             var $i(accName) : $t(accType) = default<$t(accType)>
         }
         returnExpr = qmacro_expr() {
@@ -1235,7 +1266,7 @@ def private emit_accumulator_lane(
         }
     } elif (opName == "average") {
         // Matches linq.das:1545 average(iterator) — always-double accumulator, uint64 counter, empty source returns 0.0lf instead of NaN.
-        preludeStmts <- qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             var $i(accName) : double = 0lf
             var $i(cntName) : uint64 = 0ul
         }
@@ -1243,7 +1274,7 @@ def private emit_accumulator_lane(
             $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
         }
     } elif (opName == "min" || opName == "max") {
-        preludeStmts <- qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             var $i(firstName) = true
             var $i(accName) : $t(accType)
         }
@@ -1253,39 +1284,25 @@ def private emit_accumulator_lane(
     } else {
         return null
     }
-    perMatchStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
-    prepend_binds(perMatchStmts, intermediateBinds)
-    // Theme 2 5c: post-take where wraps the per-match work (acc++ / += / cmp+update) BEFORE the take cap so the cap still ticks unconditionally per iteration.
-    if (postTakeWhereCond != null) {
-        var gated = wrap_with_condition(stmts_to_expr(perMatchStmts), postTakeWhereCond)
-        perMatchStmts |> clear
-        perMatchStmts |> push(gated)
-    }
-    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
-    var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
-    // Collect all body statements into one list so they share scope when spliced via $b.
-    var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(preludeStmts) + 4)
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    bodyStmts |> push_from(preludeStmts)
-    // For-loop emission: single-source uses one iter var (itName); 2-source (zip) uses literal `itA, itB` parallel iter vars (qmacro for-loop iter-var position doesn't accept $i(...) splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts so itName resolves inside the loop body.
-    if (length(srcNames) == 1) {
-        bodyStmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcNames[0])) {
-                $e(loopBody)
-            }
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for (itA, itB in $i(srcNames[0]), $i(srcNames[1])) {
-                $e(loopBody)
-            }
-        }
-    }
-    bodyStmts |> push <| qmacro_expr() {
+    perElementStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
         return $e(returnExpr)
     }
-    return finalize_lane_emission(topExprs, srcNames, bodyStmts, at)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        preCondStmts <- preCondStmts,
+        intermediateBinds <- intermediateBinds,
+        whereCond = whereCond,
+        postTakeWhereCond = postTakeWhereCond,
+        perElementStmts <- perElementStmts,
+        skipExpr = skipExpr,
+        takeExpr = takeExpr,
+        skipWhileCond = skipWhileCond,
+        takeWhileCond = takeWhileCond,
+        rangeNames = names,
+        tailStmts <- tailStmts
+    ), build_lane_adapter(topExprs, srcNames), at)
 }
 
 [macro_function]
@@ -1604,36 +1621,20 @@ def private emit_early_exit_lane(
     } else {
         return null
     }
-    prepend_binds(perMatchStmts, intermediateBinds)
-    // Theme 2 5c: post-take where wraps the per-match work BEFORE the take cap so the cap still ticks unconditionally per iteration.
-    if (postTakeWhereCond != null) {
-        var gated = wrap_with_condition(stmts_to_expr(perMatchStmts), postTakeWhereCond)
-        perMatchStmts |> clear
-        perMatchStmts |> push(gated)
-    }
-    wrap_with_ranges(perMatchStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
-    var loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(perMatchStmts), whereCond), preCondStmts)
-    // Single-$b body so all stmts (skip/take counters + prelude + for + tail) share scope
-    var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(preludeStmts) + length(tailStmts) + 3)
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    bodyStmts |> push_from(preludeStmts)
-    // For-loop emission: 1-source uses itName; 2-source (zip) uses literal `itA, itB` (qmacro for-iter-var position doesn't accept $i splice). Caller (plan_zip) threads `let it = (itA, itB)` via preCondStmts.
-    if (length(srcNames) == 1) {
-        bodyStmts |> push <| qmacro_expr() {
-            for ($i(itName) in $i(srcNames[0])) {
-                $e(loopBody)
-            }
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for (itA, itB in $i(srcNames[0]), $i(srcNames[1])) {
-                $e(loopBody)
-            }
-        }
-    }
-    bodyStmts |> push_from(tailStmts)
-    return finalize_lane_emission(topExprs, srcNames, bodyStmts, at)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- preludeStmts,
+        preCondStmts <- preCondStmts,
+        intermediateBinds <- intermediateBinds,
+        whereCond = whereCond,
+        postTakeWhereCond = postTakeWhereCond,
+        perElementStmts <- perMatchStmts,
+        skipExpr = skipExpr,
+        takeExpr = takeExpr,
+        skipWhileCond = skipWhileCond,
+        takeWhileCond = takeWhileCond,
+        rangeNames = names,
+        tailStmts <- tailStmts
+    ), build_lane_adapter(topExprs, srcNames), at)
 }
 
 [macro_function]
