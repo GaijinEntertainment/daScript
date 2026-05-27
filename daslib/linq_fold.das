@@ -563,13 +563,18 @@ def private normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?
     }
 }
 
-// Theme 7: collapse consecutive `_select(f) |> _select(g)` calls into a single `_select(g(f(_)))`. Symmetric to how N consecutive `_where` compose via `&&`. Mutates `calls` in place by replacing the OUTER select's lambda with a composed lambda (built by cloning the INNER lambda structure so param TYPE is preserved, then renaming its param to a fresh name and overwriting the body with the composed expression) and erasing the inner entry. Gated on purity of the inner projection — for impure inner, collapsing would shift evaluation count (outer may reference its param zero or many times); leaving the chain unchanged preserves cascade semantics. Closes audit 7c (chained selects on plan_zip) and unblocks chained selects on plan_distinct / plan_order_family / plan_reverse / plan_decs_* / plan_decs_join.
+typedef ComposeFn = function<(innerLam, outerLam : Expression?; freshName : string) : Expression?>
+
+// Adjacent same-op collapse scaffold: validates the pair, delegates body composition to composeBodies (null = bail),
+// then clones inner-lam to preserve param TYPE, rewires the chain backlink, erases inner. composeBodies's null bail
+// lets op-specific purity/peel checks short-circuit without duplicating the scaffold.
 [macro_function]
-def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
-    // Match on LinqCall.name == "select" — this name is shared between `select` and `select_to_array` in the `linqCalls` registry (both denote the same projection semantic, just different input shapes: array vs iterator). The chain backlink rewire below may change the outer call's input shape (e.g. outer was `select` reading from inner's array<T>; after collapse it reads directly from an iter<T> source). That would normally require rebinding outer.func to `select_to_array`, BUT every downstream planner that consumes this `calls` array builds its emission from scratch using cll._1.name + cll._0.arguments[1] (the lambda) — none of them re-evaluate cll._0.func or instantiate a call to the original `select`/`select_to_array` function. The fold_linq_default fallback derives the actual call name (`select_to_array` vs `select`) at emission time from `top._type.isIterator`, not from cll._0.func. So the variant mismatch on the modified ExprCall is latent and never observed.
+def private collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                    opName, freshNamePrefix : string;
+                                    composeBodies : ComposeFn) {
     var i = 0
     while (i + 1 < length(calls)) {
-        if (calls[i]._1.name != "select" || calls[i + 1]._1.name != "select") {
+        if (calls[i]._1.name != opName || calls[i + 1]._1.name != opName) {
             i ++
             continue
         }
@@ -597,18 +602,12 @@ def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall
             i ++
             continue
         }
-        if (has_sideeffects(innerRet.subexpr)) {
+        let freshName = qn(freshNamePrefix, innerLam.at)
+        var composed = invoke(composeBodies, innerLam, outerLam, freshName)
+        if (composed == null) {
             i ++
             continue
         }
-        // Rename inner's param to a fresh name BEFORE composition. apply_template recursively walks substituted content — if outer's param name matches a binder name inside innerBody (both selects often share `_` from boost-side desugaring), substitution loops. Renaming inner's `_` to a unique name guarantees no collision when substituting outer's `_` with renamedInnerBody.
-        let freshName = qn("cs", innerLam.at)
-        var renamedInnerBody = peel_lambda_rename_var(innerLam, freshName)
-        if (renamedInnerBody == null) {
-            i ++
-            continue
-        }
-        // Build new lambda: clone innerLam (preserves param TYPE), rename its bound param to freshName, then overwrite its body with composedBody (outer's body with outer's param substituted by renamedInnerBody).
         var newLam = clone_expression(innerLam)
         var newMblk = newLam as ExprMakeBlock
         var newBlk = newMblk._block as ExprBlock
@@ -618,72 +617,49 @@ def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall
         }
         var newRet = newBlk.list[0] as ExprReturn
         newBlk.arguments[0].name := freshName
-        var rules : Template
-        rules |> replaceVariable(string(outerBlk.arguments[0].name), renamedInnerBody)
-        newRet.subexpr = apply_template(rules, outerRet.subexpr.at, outerRet.subexpr)
+        newRet.subexpr = composed
         calls[i + 1]._0.arguments[1] = newLam
-        // Rewire the chain backlink so the inner select is dropped from the AST too. Without this, a subsequent planner pass would re-flatten the original outer→inner→source chain and re-collapse — non-idempotent (substitution of outer's already-renamed param into inner's body would compound `._0` accessors).
         calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
         calls |> erase(i)
-        // Don't advance `i` — the merged outer might still chain with another `_select` just before it.
     }
+}
+
+// Function-compose for collapse_chained_selects. Bails on impure inner (would shift evaluation count if outer
+// references its param zero or many times — preserve cascade semantics by leaving the chain alone).
+[macro_function]
+def private compose_select_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
+    var outerMblk = outerLam as ExprMakeBlock
+    var outerBlk = outerMblk._block as ExprBlock
+    var outerRet = outerBlk.list[0] as ExprReturn
+    var renamedInnerBody = peel_lambda_rename_var(innerLam, freshName)
+    if (renamedInnerBody == null || has_sideeffects(renamedInnerBody)) return null
+    var rules : Template
+    rules |> replaceVariable(string(outerBlk.arguments[0].name), renamedInnerBody)
+    return apply_template(rules, outerRet.subexpr.at, outerRet.subexpr)
+}
+
+// Theme 7: collapse `_select(f) |> _select(g)` into `_select(g(f(_)))`. Matches LinqCall.name == "select" which is
+// shared between `select` and `select_to_array` — downstream planners build emission from cll._1.name + the lambda,
+// never re-evaluate cll._0.func, so the latent ExprCall.func/input-shape mismatch is never observed.
+[macro_function]
+def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+    collapse_adjacent_calls(calls, "select", "cs", @@ < ComposeFn > compose_select_bodies)
+}
+
+// AND-composition for collapse_chained_wheres. Rename both predicate params to the same freshName so composed body
+// references one shared bind. No has_sideeffects bail needed — composition doesn't duplicate either body (each runs at
+// most once per element, same as the imperative chain with short-circuit `&&`).
+[macro_function]
+def private compose_where_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
+    var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
+    var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
+    if (innerBodyFresh == null || outerBodyFresh == null) return null
+    return merge_where_cond(innerBodyFresh, outerBodyFresh)
 }
 
 [macro_function]
 def private collapse_chained_wheres(var calls : array<tuple<ExprCall?; LinqCall?>>) {
-    // Mirror of collapse_chained_selects shape (find adjacent same-op pairs, rename to fresh param, rewire backlink, erase inner, stay at i) but composes via `pred1 && pred2` instead of function compose. Both predicates take the source element, so the composed body uses ONE fresh param shared by both halves. No has_sideeffects bail needed — composition doesn't duplicate either body (each runs at most once per element, same as the imperative chain with short-circuit `&&`).
-    var i = 0
-    while (i + 1 < length(calls)) {
-        if (calls[i]._1.name != "where_" || calls[i + 1]._1.name != "where_") {
-            i ++
-            continue
-        }
-        var innerLam = calls[i]._0.arguments[1]
-        var outerLam = calls[i + 1]._0.arguments[1]
-        if (innerLam == null || outerLam == null
-                || !(innerLam is ExprMakeBlock) || !(outerLam is ExprMakeBlock)) {
-            i ++
-            continue
-        }
-        var innerMblk = innerLam as ExprMakeBlock
-        var innerBlk = innerMblk._block as ExprBlock
-        var outerMblk = outerLam as ExprMakeBlock
-        var outerBlk = outerMblk._block as ExprBlock
-        if (innerBlk == null || outerBlk == null
-                || innerBlk.arguments |> length != 1 || outerBlk.arguments |> length != 1
-                || innerBlk.list |> length != 1 || outerBlk.list |> length != 1
-                || !(innerBlk.list[0] is ExprReturn) || !(outerBlk.list[0] is ExprReturn)) {
-            i ++
-            continue
-        }
-        var innerRet = innerBlk.list[0] as ExprReturn
-        var outerRet = outerBlk.list[0] as ExprReturn
-        if (innerRet.subexpr == null || outerRet.subexpr == null) {
-            i ++
-            continue
-        }
-        // Rename both predicate params to the same fresh name — composed body references one shared bind.
-        let freshName = qn("cw", innerLam.at)
-        var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
-        var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
-        if (innerBodyFresh == null || outerBodyFresh == null) {
-            i ++
-            continue
-        }
-        var newLam = clone_expression(innerLam)
-        var newMblk = newLam as ExprMakeBlock
-        var newBlk = newMblk._block as ExprBlock
-        if (newBlk == null || newBlk.list |> length != 1 || !(newBlk.list[0] is ExprReturn)) {
-            i ++
-            continue
-        }
-        var newRet = newBlk.list[0] as ExprReturn
-        newBlk.arguments[0].name := freshName
-        newRet.subexpr = merge_where_cond(innerBodyFresh, outerBodyFresh)
-        calls[i + 1]._0.arguments[1] = newLam
-        calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
-        calls |> erase(i)
-    }
+    collapse_adjacent_calls(calls, "where_", "cw", @@ < ComposeFn > compose_where_bodies)
 }
 
 [macro_function]
