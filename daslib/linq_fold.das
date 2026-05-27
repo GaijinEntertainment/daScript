@@ -1182,6 +1182,124 @@ def private emit_terminator_lane(var spec : TerminatorSpec; adapter : SourceAdap
     return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
 
+// ===== FoldArray lane (Phase F PR 4) — buf, optional distinct gate, source-loop, caller tail =====
+
+// Two kinds of distinct gate: NonKey gates on element identity; KeyLam peels a `distinct_by` key lambda.
+variant private DistinctGateKind {
+    NonKey : void?
+    KeyLam : Expression?
+}
+
+// Spec for the dset declaration + per-element key-insert gate. Caller-supplied dset/dkey names let
+// the same names flow through to tailStmts if needed (none of the current callers do, but keeping the
+// names caller-owned mirrors emit_terminator_lane's accName discipline).
+struct private DistinctGateSpec {
+    kind        : DistinctGateKind
+    bindName    : string         // source-element bind name; peel target for KeyLam, $i(bindName) gate-key for NonKey
+    bufElemType : TypeDeclPtr    // typedecl(_::unique_key(...)) parameter
+    dsetName    : string
+    dkeyName    : string
+}
+
+// Fold-into-array scaffold. Lane owns prologue/bufDecl/postBufDecl/dsetDecl/reserve/source-loop;
+// caller owns tailStmts. preCondStmts+whereCond composed like emit_terminator_lane; distinctGate
+// wraps perElementPush AFTER whereCond.
+struct private FoldArraySpec {
+    prologueStmts    : array<Expression?>   // BEFORE bufDecl — takeN bind, etc.
+    bufElemType      : TypeDeclPtr
+    bufName          : string
+    postBufDeclStmts : array<Expression?>   // AFTER bufDecl, BEFORE dsetDecl/reserve — e.g. early-return guards (bounded_heap)
+    reserveStmts     : array<Expression?>   // AFTER bufDecl (+dsetDecl), BEFORE source-loop — caller composes
+    preCondStmts    : array<Expression?>   // bound-vars INSIDE for-loop body, OUTSIDE if-gate
+    whereCond       : Expression?
+    distinctGate    : DistinctGateSpec?
+    perElementPush  : Expression?
+    tailStmts       : array<Expression?>   // post-loop; INCLUDES the return
+    outElemType     : TypeDeclPtr           // invoke retType; null = infer
+    wrapIter        : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
+}
+
+[macro_function]
+def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
+    // 1. Compose perElement: preCondStmts + (whereCond gate around perElementPush) + optional distinct gate
+    var perElement = prepend_precond(wrap_with_condition(spec.perElementPush, spec.whereCond), spec.preCondStmts)
+    if (spec.distinctGate != null) {
+        let dg = spec.distinctGate
+        var dkeyExpr : Expression?
+        if (dg.kind is KeyLam) {
+            dkeyExpr = peel_lambda_rename_var(dg.kind as KeyLam, dg.bindName)
+            if (dkeyExpr == null) return null
+        } else {
+            dkeyExpr = qmacro($i(dg.bindName))
+        }
+        let dkeyName = dg.dkeyName
+        let dsetName = dg.dsetName
+        perElement = qmacro_block() {
+            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
+            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
+                $i(dsetName) |> insert($i(dkeyName))
+                $e(perElement)
+            }
+        }
+    }
+    // 2. Assemble bodyStmts in order
+    var bodyStmts : array<Expression?>
+    bodyStmts |> reserve(length(spec.prologueStmts) + length(spec.postBufDeclStmts)
+                          + length(spec.reserveStmts) + length(spec.tailStmts) + 5)
+    bodyStmts |> push_from(spec.prologueStmts)
+    let bufName = spec.bufName
+    var bufElemType = spec.bufElemType
+    bodyStmts |> push <| qmacro_expr() {
+        var $i(bufName) : array<$t(bufElemType)>
+    }
+    bodyStmts |> push_from(spec.postBufDeclStmts)
+    if (spec.distinctGate != null) {
+        let dg = spec.distinctGate
+        let dsetName = dg.dsetName
+        var dgBufType = clone_type(dg.bufElemType)
+        if (dg.kind is KeyLam) {
+            var keyLam = clone_expression(dg.kind as KeyLam)  // nolint:PERF023 load-bearing const-strip: $e wants Expression?, dg.kind reads as const
+            bodyStmts |> push <| qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(keyLam), default<$t(dgBufType)>)))>
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(dgBufType)>))>
+            }
+        }
+    }
+    bodyStmts |> push_from(spec.reserveStmts)
+    bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
+    bodyStmts |> push_from(spec.tailStmts)
+    return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
+}
+
+// Terminal _select re-iteration helper. selectLam==null → [buffer_return(buf,isIter)]; non-null →
+// [var outBuf; reserve; for(elem in buf){outBuf|>push_clone(projBody)}; buffer_return(outBuf,isIter)].
+// FoldArray migrations splice this into their tailStmts.
+[macro_function]
+def private build_terminal_select_tail(bufName : string; selectLam : Expression?;
+                                       selectElemType : TypeDeclPtr; isIterator : bool;
+                                       at : LineInfo) : array<Expression?> {
+    var stmts : array<Expression?>
+    if (selectLam == null) {
+        stmts |> push(buffer_return(bufName, isIterator))
+        return <- stmts
+    }
+    let outBufName = qn("proj_buf", at)
+    let elemName   = qn("proj_e", at)
+    var projBody = peel_lambda_replace_var(selectLam, qmacro($i(elemName)))
+    stmts |> push_from <| qmacro_block_to_array() {
+        var $i(outBufName) : array<$t(selectElemType)>
+        $i(outBufName) |> reserve(length($i(bufName)))
+        for ($i(elemName) in $i(bufName)) {
+            $i(outBufName) |> push_clone($e(projBody))
+        }
+    }
+    stmts |> push(buffer_return(outBufName, isIterator))
+    return <- stmts
+}
+
 // Bridge for orchestrators that still take parallel (topExprs, srcNames) arrays. 1-source → Array;
 // 2-source → Zip (types derived via invoke_src_param_type, matches the prior inline-invoke shape).
 [macro_function]
