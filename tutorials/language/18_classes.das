@@ -171,6 +171,45 @@ def main {
     // You can also use the backtick syntax directly:
     //     Shape`Shape(self, "Circle")   // same as super("Circle")
 
+    // === super() must be called exactly once per path ===
+
+    // When the parent has a user-defined constructor, the lint requires
+    // every control-flow path through the derived ctor to call super(...)
+    // exactly once:
+    //
+    //   class Bad : Base {
+    //       def Bad(f : bool) {
+    //           if (f) {
+    //               super()       // ERROR: false branch has zero super() calls
+    //           }
+    //       }
+    //   }
+    //
+    //   class AlsoBad : Base {
+    //       def AlsoBad {
+    //           super()
+    //           super()           // ERROR: super() called more than once
+    //       }
+    //   }
+    //
+    // Both if/else branches calling super is fine — the lint sees min=max=1:
+    //   class OK : Shape {
+    //       def OK(big : bool) {
+    //           if (big) { super("Big") } else { super("Small") }
+    //       }
+    //   }
+
+    // === super.X() may not skip an intermediate with its own ctor ===
+
+    //   class A { def A { /* ... */ } }
+    //   class B : A { def B { super() } }     // B has its own ctor
+    //   class C : B {
+    //       def C { super.A() }               // ERROR: would skip B's invariants
+    //   }
+    //
+    // Empty intermediates (no user ctor) are still legal to skip — that's
+    // the SkipMid pattern in tests/language/super.das.
+
     // === Summary ===
 
     // - 'class' defines a type with virtual methods

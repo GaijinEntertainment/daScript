@@ -123,6 +123,224 @@ namespace das {
         return false;
     }
 
+    // CFG-aware super-call count. Each expression produces:
+    //   - fallsThrough/fallLo/fallHi: count along the path that reaches the end of expr
+    //   - hasExits/exitLo/exitHi: min/max super count over all early-exit (return) paths
+    //     terminating INSIDE expr. break/continue/goto don't escape the function so they
+    //     stop block iteration but don't add to function-level exits.
+    // For loops, inner exits (return) DO propagate; super inside a loop body collapses to
+    // {0, INT_MAX} unbounded since iteration count isn't statically known.
+    // Closures (ExprMakeBlock) are NOT descended into — a super() inside a defer/lambda
+    // is asynchronous and isn't the chain call we're enforcing.
+    static const int kSuperUnbounded = INT_MAX;
+    struct SuperCount {
+        bool    fallsThrough;
+        int     fallLo, fallHi;
+        bool    hasExits;
+        int     exitLo, exitHi;
+        static SuperCount onlyFall ( int lo, int hi ) { return {true, lo, hi, false, 0, 0}; }
+        static SuperCount onlyExit ( int lo, int hi ) { return {false, 0, 0, true, lo, hi}; }
+        static SuperCount dead     ()                  { return {false, 0, 0, false, 0, 0}; }
+    };
+    static int safeAdd ( int a, int b ) {
+        if ( a == kSuperUnbounded || b == kSuperUnbounded ) return kSuperUnbounded;
+        return a + b;
+    }
+    static int safeMax ( int a, int b ) {
+        if ( a == kSuperUnbounded || b == kSuperUnbounded ) return kSuperUnbounded;
+        return a > b ? a : b;
+    }
+    static void mergeExit ( SuperCount & out, int lo, int hi ) {
+        if ( !out.hasExits ) { out.hasExits = true; out.exitLo = lo; out.exitHi = hi; }
+        else { out.exitLo = (lo < out.exitLo) ? lo : out.exitLo; out.exitHi = safeMax(hi, out.exitHi); }
+    }
+    // CFG-agnostic scan: any matching super call anywhere in this subtree?
+    // Used at loop boundaries to defend against paths that countSuperCalls collapses
+    // via break/continue/goto (those terminate dead() and erase prefix super counts on
+    // the way out, so e.g. `if(x){ super(); break }` would otherwise look super-free).
+    // Closures are still skipped (super inside defer/lambda isn't the chain call).
+    bool subtreeHasSuperCall ( const ExpressionPtr & expr, const string & parentMangled ) {
+        if ( !expr ) return false;
+        if ( expr->rtti_isCall() ) {
+            auto call = static_cast<ExprCall*>(expr);
+            if ( call->name == parentMangled || call->name == ("_::" + parentMangled) ) return true;
+            if ( call->func && call->func->module && call->func->module->name == "$"
+                && call->func->name == "builtin_try_recover"
+                && call->arguments.size() >= 2
+                && call->arguments[0]->rtti_isMakeBlock() ) {
+                auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
+                return subtreeHasSuperCall(mb->block, parentMangled);
+            }
+            return false;
+        }
+        if ( expr->rtti_isBlock() ) {
+            for ( auto & be : static_cast<ExprBlock*>(expr)->list ) {
+                if ( subtreeHasSuperCall(be, parentMangled) ) return true;
+            }
+            return false;
+        }
+        if ( expr->rtti_isIfThenElse() ) {
+            auto ite = static_cast<ExprIfThenElse*>(expr);
+            return subtreeHasSuperCall(ite->if_true, parentMangled)
+                || subtreeHasSuperCall(ite->if_false, parentMangled);
+        }
+        if ( expr->rtti_isWith() )   return subtreeHasSuperCall(static_cast<ExprWith*>(expr)->body, parentMangled);
+        if ( expr->rtti_isUnsafe() ) return subtreeHasSuperCall(static_cast<ExprUnsafe*>(expr)->body, parentMangled);
+        if ( expr->rtti_isWhile() )  return subtreeHasSuperCall(static_cast<ExprWhile*>(expr)->body, parentMangled);
+        if ( expr->rtti_isFor() )    return subtreeHasSuperCall(static_cast<ExprFor*>(expr)->body, parentMangled);
+        if ( expr->__rtti && strcmp(expr->__rtti, "ExprTryCatch") == 0 ) {
+            // Mirror countSuperCalls: only the try block contributes to chain semantics.
+            // The recover block's super (if any) is irrelevant to the chain check.
+            auto tc = static_cast<ExprTryCatch*>(expr);
+            return subtreeHasSuperCall(tc->try_block, parentMangled);
+        }
+        return false;
+    }
+    SuperCount countSuperCalls ( const ExpressionPtr & expr, const string & parentMangled ) {
+        if ( !expr ) return SuperCount::onlyFall(0, 0);
+        if ( expr->rtti_isCall() ) {
+            auto call = static_cast<ExprCall*>(expr);
+            if ( call->name == parentMangled || call->name == ("_::" + parentMangled) ) {
+                return SuperCount::onlyFall(1, 1);
+            }
+            // JIT-mode rewrite of try/recover: ast_infer_type_op.cpp:1015 emits
+            // `builtin_try_recover(make_block(try), make_block(catch))` and the typer
+            // appends `context` + `at` (final arity = 4). Match the resolved function on
+            // its source module ($) to avoid colliding with any user shadow. Count super
+            // in the try block only; the recover block is fatal-panic-with-diagnostics,
+            // irrelevant to chain semantics (mirrors the direct ExprTryCatch handler below).
+            if ( call->func && call->func->module && call->func->module->name == "$"
+                && call->func->name == "builtin_try_recover"
+                && call->arguments.size() >= 2
+                && call->arguments[0]->rtti_isMakeBlock() ) {
+                auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
+                return countSuperCalls(mb->block, parentMangled);
+            }
+            return SuperCount::onlyFall(0, 0);
+        }
+        if ( expr->rtti_isReturn() ) {
+            // Early-exit at this point with the prefix accumulated so far; no super
+            // here, no fall-through. The caller (block walker) folds the prefix in.
+            return SuperCount::onlyExit(0, 0);
+        }
+        if ( expr->rtti_isBreak() || expr->rtti_isContinue() || expr->rtti_isGoto() ) {
+            // Don't escape the function — they stop block iteration (no fall-through) but
+            // contribute no function-level exit path.
+            return SuperCount::dead();
+        }
+        if ( expr->rtti_isBlock() ) {
+            auto blk = static_cast<ExprBlock*>(expr);
+            int prefix_lo = 0, prefix_hi = 0;
+            SuperCount out = SuperCount::onlyFall(0, 0); // exits accumulated as we go
+            out.hasExits = false;
+            bool fallenThrough = true;
+            for ( auto & be : blk->list ) {
+                auto sub = countSuperCalls(be, parentMangled);
+                if ( sub.hasExits ) {
+                    mergeExit(out, safeAdd(prefix_lo, sub.exitLo), safeAdd(prefix_hi, sub.exitHi));
+                }
+                if ( !sub.fallsThrough ) {
+                    fallenThrough = false;
+                    break;
+                }
+                prefix_lo = safeAdd(prefix_lo, sub.fallLo);
+                prefix_hi = safeAdd(prefix_hi, sub.fallHi);
+            }
+            out.fallsThrough = fallenThrough;
+            out.fallLo = prefix_lo;
+            out.fallHi = prefix_hi;
+            return out;
+        }
+        if ( expr->rtti_isIfThenElse() ) {
+            auto ite = static_cast<ExprIfThenElse*>(expr);
+            auto t = countSuperCalls(ite->if_true, parentMangled);
+            // Treat absent else as an empty fall-through branch with 0 super calls.
+            SuperCount e = ite->if_false ? countSuperCalls(ite->if_false, parentMangled)
+                                         : SuperCount::onlyFall(0, 0);
+            SuperCount out = SuperCount::dead();
+            if ( t.hasExits ) mergeExit(out, t.exitLo, t.exitHi);
+            if ( e.hasExits ) mergeExit(out, e.exitLo, e.exitHi);
+            if ( t.fallsThrough && e.fallsThrough ) {
+                out.fallsThrough = true;
+                out.fallLo = (t.fallLo < e.fallLo) ? t.fallLo : e.fallLo;
+                out.fallHi = safeMax(t.fallHi, e.fallHi);
+            } else if ( t.fallsThrough ) {
+                out.fallsThrough = true; out.fallLo = t.fallLo; out.fallHi = t.fallHi;
+            } else if ( e.fallsThrough ) {
+                out.fallsThrough = true; out.fallLo = e.fallLo; out.fallHi = e.fallHi;
+            }
+            return out;
+        }
+        if ( expr->rtti_isWith() ) {
+            auto wth = static_cast<ExprWith*>(expr);
+            return countSuperCalls(wth->body, parentMangled);
+        }
+        if ( expr->rtti_isUnsafe() ) {
+            auto us = static_cast<ExprUnsafe*>(expr);
+            return countSuperCalls(us->body, parentMangled);
+        }
+        if ( expr->rtti_isWhile() || expr->rtti_isFor() ) {
+            ExpressionPtr body = expr->rtti_isWhile()
+                ? static_cast<ExprWhile*>(expr)->body
+                : static_cast<ExprFor*>(expr)->body;
+            auto inner = countSuperCalls(body, parentMangled);
+            // Conservatively: loop iterates 0..N times. If body contains ANY super anywhere
+            // (including paths that terminate via break/continue, which countSuperCalls
+            // collapses to dead()), the loop's fall-through count is unbounded. Inner exits
+            // (return) still propagate as function-level exit paths.
+            SuperCount out = SuperCount::onlyFall(0, 0);
+            if ( subtreeHasSuperCall(body, parentMangled) ) {
+                out.fallLo = 0; out.fallHi = kSuperUnbounded;
+            }
+            if ( inner.hasExits ) mergeExit(out, inner.exitLo, inner.exitHi);
+            return out;
+        }
+        // try / recover: the try block is the normal-flow path — count super there.
+        // The recover block is for diagnostics-before-exit (daslang panic is fatal); a
+        // super call in recover never establishes invariants for a usable object, so skip
+        // it. ExprTryCatch has no rtti_is* — dispatch via __rtti.
+        if ( expr->__rtti && strcmp(expr->__rtti, "ExprTryCatch") == 0 ) {
+            auto tc = static_cast<ExprTryCatch*>(expr);
+            return countSuperCalls(tc->try_block, parentMangled);
+        }
+        return SuperCount::onlyFall(0, 0);
+    }
+    // Reduces a function-body SuperCount to {min, max} over ALL completed CFG paths
+    // (fall-through + every early-exit). The function-level lint compares this to {1, 1}.
+    struct SuperCountReduced { int lo; int hi; };
+    SuperCountReduced reduceSuperCount ( const SuperCount & c ) {
+        if ( !c.fallsThrough && !c.hasExits ) return {0, 0}; // dead body (panic-only)
+        if ( c.fallsThrough && !c.hasExits ) return {c.fallLo, c.fallHi};
+        if ( !c.fallsThrough && c.hasExits ) return {c.exitLo, c.exitHi};
+        int lo = (c.fallLo < c.exitLo) ? c.fallLo : c.exitLo;
+        int hi = safeMax(c.fallHi, c.exitHi);
+        return {lo, hi};
+    }
+
+    // True if `klass` has any non-generated user-defined ctor method (Klass`Klass).
+    // A class's ctor methods always live in the same module as the class itself
+    // (parser registers them together), so we jump straight to `klass->module` and
+    // look up by name hash via functionsByName / genericsByName. The `classParent ==
+    // klass` identity check defends against same-named classes in other modules
+    // bleeding in through generic instantiation (the in-tree corpus already has
+    // multiple `ContextStateAgent` classes).
+    bool parentHasUserCtor ( Program *, Structure * klass ) {
+        if ( !klass || !klass->module ) return false;
+        string ctorName = klass->name + "`" + klass->name;
+        uint64_t hName = hash64z(ctorName.c_str());
+        if ( auto kv = klass->module->functionsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == klass ) return true;
+            }
+        }
+        if ( auto kv = klass->module->genericsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == klass ) return true;
+            }
+        }
+        return false;
+    }
+
     bool needAvoidNullPtr ( const TypeDeclPtr & type, bool allowDim ) {
         if ( !type ) {
             return false;
@@ -208,7 +426,6 @@ namespace das {
         bool disableInit;
         bool noLocalClassMembers;
         bool noWritingToNameless;
-        bool alwaysCallSuper;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -223,7 +440,6 @@ namespace das {
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             noLocalClassMembers = prog->options.getBoolOption("no_local_class_members", prog->policies.no_local_class_members);
             noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
-            alwaysCallSuper = prog->options.getBoolOption("always_call_super", prog->policies.always_call_super);
         }
     public:
         void reportUnsafeTypeExpressions() {
@@ -609,12 +825,6 @@ namespace das {
                     verifyToTableMove(expr);
                 }
             }
-            if ( isClassCtor ) {
-                auto baseClass = func->classParent->parent;
-                if ( expr->func->name==(baseClass->name+"`"+baseClass->name) ) {
-                    anySuperCalls = true;
-                }
-            }
         }
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             Visitor::visit(expr);
@@ -810,8 +1020,6 @@ namespace das {
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override {
             return false;
         }
-        bool isClassCtor = false;
-        bool anySuperCalls = false;
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             func = fn;
@@ -849,17 +1057,28 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::cant_function);
             }
-            if ( alwaysCallSuper && fn->isClassMethod && fn->classParent && fn->classParent->parent && fn->name==(fn->classParent->name+"`"+fn->classParent->name)) {
-                isClassCtor = true; // detect class constructor, but only if we always call super
-            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
-            if ( isClassCtor && !anySuperCalls ) {
-                program->error("class constructor " + fn->name + " does not call super initializer", "",
-                    "", fn->at, CompilationError::missing_function_body);
+            // Derived class ctor: every CFG path must call super(...) exactly once,
+            // and only when the parent has a user-defined ctor to chain to.
+            if ( fn->isClassMethod && fn->classParent && fn->classParent->parent
+                && !fn->generated
+                && fn->name == fn->classParent->name + "`" + fn->classParent->name ) {
+                Structure * parent = fn->classParent->parent;
+                if ( parentHasUserCtor(program.get(), parent) ) {
+                    string parentMangled = parent->name + "`" + parent->name;
+                    auto count = reduceSuperCount(countSuperCalls(fn->body, parentMangled));
+                    if ( count.lo == 0 ) {
+                        program->error("class constructor " + fn->name + " does not call super(...) on every control-flow path",
+                            "", "call super(...) (or super." + parent->name + "(...)) exactly once per path",
+                            fn->at, CompilationError::missing_function_body);
+                    } else if ( count.hi != count.lo || count.hi > 1 ) {
+                        program->error("class constructor " + fn->name + " calls super(...) more than once on some path",
+                            "", "super(...) must be called exactly once per control-flow path",
+                            fn->at, CompilationError::missing_function_body);
+                    }
+                }
             }
-            anySuperCalls = false;
-            isClassCtor = false;
             func = nullptr;
             return Visitor::visit(fn);
         }
@@ -986,7 +1205,6 @@ namespace das {
     // lint
         "lint",                         Type::tBool,
         "no_writing_to_nameless",       Type::tBool,
-        "always_call_super",            Type::tBool,
     // memory
         "heap_size_limit",              Type::tInt,
         "string_heap_size_limit",       Type::tInt,

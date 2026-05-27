@@ -19,8 +19,7 @@ class ClangGen : CppGenBind {
             "-DCINDEX_EXPORTS"
         )
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
         init_enum_prefix()
         openAllFiles()
     }
@@ -70,15 +69,7 @@ class ClangGen : CppGenBind {
         return true
     }
     def override skip_file(fname : string) : bool {
-        if (fname |> ends_with("CXErrorCode.h")) {
-            return false
-        } elif (fname |> ends_with("CXString.h")) {
-            return false
-        } elif (fname |> ends_with("CXDiagnostic.h")) {
-            return false
-        } elif (fname |> ends_with("CXFile.h")) {
-            return false
-        } elif (fname |> ends_with("CXSourceLocation.h")) {
+        if (fname |> ends_with("CXErrorCode.h") || fname |> ends_with("CXString.h") || fname |> ends_with("CXDiagnostic.h") || fname |> ends_with("CXFile.h") || fname |> ends_with("CXSourceLocation.h")) {
             return false
         }
         return !fname |> ends_with(PARSE_FILE_NAME)

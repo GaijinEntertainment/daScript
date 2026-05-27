@@ -29,8 +29,7 @@ class BgfxGen : CppGenBind {
             "-I{get_full_file_name(inc_bx)}"
         )
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
         init_skip()
         openAllFiles()
     }
@@ -49,10 +48,7 @@ class BgfxGen : CppGenBind {
         }
     }
     def override skip_const(name : string) : bool {
-        if (name |> starts_with("GL_")) {
-            return true
-        }
-        return false
+        return name |> starts_with("GL_")
     }
     def override skip_struct(name : string) {
         return bgfx_skip_struct |> key_exists(name)

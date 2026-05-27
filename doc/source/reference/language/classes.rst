@@ -169,7 +169,17 @@ up the inheritance chain to the nearest ancestor that does:
 
 Walk-up matches by argument types, so overloaded ``super(args)`` calls pick the closest
 ancestor whose constructor or method accepts those arguments. If no ancestor matches, the
-call is rejected at compile time.
+call is rejected at compile time. The walk-up may only step past a class that has no
+user-defined constructor (or method, in the case of ``super.method()``); attempting to
+skip a class whose user constructor (or method) would otherwise establish invariants is
+rejected — call the immediate parent and let it chain via its own ``super()``.
+
+Every constructor in a derived class whose parent has a user-defined constructor must call
+``super(...)`` exactly once on every control-flow path. The lint is unconditional:
+
+* zero ``super(...)`` calls on any reachable path → error;
+* two or more ``super(...)`` calls on any path → error;
+* ``super(...)`` inside a loop body → error (call count is not bounded to one).
 
 Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
 parent's finalizer on the current object:
@@ -196,9 +206,6 @@ functions — see :ref:`Structs <structs>`.
 
 Base-class finalization is explicit, not automatic: a derived finalizer that omits
 ``delete super.self`` will not run any ancestor finalizer.
-
-The option ``always_call_super`` can be enabled to require ``super()`` in every constructor
-(see :ref:`Options <options>`).
 
 Alternatively, the parent's method can be called directly using the backtick syntax:
 
