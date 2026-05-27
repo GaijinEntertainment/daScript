@@ -3071,41 +3071,43 @@ def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : Emi
     let dsetName = qn("rev_dset", at)
     let idxName = qn("rev_k", at)
     let rlenName = qn("rev_len", at)
-    var dkeyExpr : Expression?
-    if (distinctName == "distinct_by") {
-        dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
-        if (dkeyExpr == null) return null
-    } else {
-        dkeyExpr = qmacro($i(itName))
-    }
-    var dsetDecl : Expression?
-    if (distinctName == "distinct_by") {
-        dsetDecl = qmacro_expr() {
-            var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
-        }
-    } else {
-        dsetDecl = qmacro_expr() {
-            var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-        }
-    }
-    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
-    var body : Expression? = qmacro_block() {
+    var dgKind : DistinctGateKind = (distinctName == "distinct_by"
+        ? DistinctGateKind(KeyLam = distinctKey)
+        : DistinctGateKind(NonKey = null))
+    var distinctGate = new DistinctGateSpec(
+        kind = dgKind, bindName = itName, bufElemType = bufElemType,
+        dsetName = dsetName, dkeyName = dkeyName
+    )
+    var prologueStmts : array<Expression?>
+    prologueStmts |> push <| qmacro_expr() {
         let $i(rlenName) = length($i(srcName))
-        var $i(bufName) : array<$t(bufElemType)>
-        $e(dsetDecl)
-        for ($i(idxName) in 0 .. $i(rlenName)) {
-            let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
-            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                $i(dsetName) |> insert($i(dkeyName))
-                $i(bufName) |> push_clone($i(itName))
-            }
-        }
-        $e(returnExpr)
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    var preCondStmts : array<Expression?>
+    preCondStmts |> push <| qmacro_expr() {
+        let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
+    }
+    var perElementPush : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(itName))
+    }
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    var spec = FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = bufElemType,
+        bufName = bufName,
+        preCondStmts <- preCondStmts,
+        distinctGate = distinctGate,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts
+    )
+    var composedPE = compose_fold_per_element(spec)
+    if (composedPE == null) return null
+    spec.customSourceLoop = qmacro_expr() {
+        for ($i(idxName) in 0 .. $i(rlenName)) {
+            $e(composedPE)
+        }
+    }
+    return emit_fold_array_lane(spec, ctx.src, at)
 }
 
 // Decs `reverse |> take(N) |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain.
