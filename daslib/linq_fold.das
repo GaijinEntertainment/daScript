@@ -1073,23 +1073,26 @@ def private build_accumulator_perelement_stmts(opName : string;
 def private emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                               var skipExpr, takeExpr, skipWhileCond : Expression?;
                               var loopBody : Expression?; at : LineInfo) : Expression? {
-    // Counter lane: `[skip/take init]; var acc = 0; for (it in src) { $loopBody }; return acc`
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var srcParamType = invoke_src_param_type(top)
-    var bodyStmts : array<Expression?>
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    bodyStmts |> push_from <| qmacro_block_to_array() {
+    // loopBody is caller-pre-wrapped (where/binds/post-take/in-loop ranges); spec only handles prelude+prologue+tail.
+    var prologue : array<Expression?>
+    append_ranges_prelude(prologue, skipExpr, takeExpr, skipWhileCond, names)
+    prologue |> push_from <| qmacro_block_to_array() {
         var $i(accName) = 0
-        for ($i(itName) in $i(srcName)) {
-            $e(loopBody)
-        }
+    }
+    var perElementStmts : array<Expression?>
+    perElementStmts |> push(loopBody)
+    var tailStmts <- qmacro_block_to_array() {
         return $i(accName)
     }
-    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(bodyStmts)
-    }, $e(topExpr)))
-    return finalize_invoke(res, at)
+    var laneTops : array<Expression?>
+    laneTops |> push(top)
+    var laneSrcs : array<string>
+    laneSrcs |> push(srcName)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        perElementStmts <- perElementStmts,
+        tailStmts <- tailStmts
+    ), build_lane_adapter(laneTops, laneSrcs), at)
 }
 
 [clone(top), macro_function]
@@ -1155,6 +1158,8 @@ struct private TerminatorSpec {
     takeWhileCond     : Expression?
     rangeNames        : RangeStateNames
     tailStmts         : array<Expression?>   // post-loop; INCLUDES the return
+    outElemType       : TypeDeclPtr           // invoke retType; null = infer
+    wrapIter          : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
 }
 
 [macro_function]
@@ -1174,7 +1179,7 @@ def private emit_terminator_lane(var spec : TerminatorSpec; adapter : SourceAdap
     bodyStmts |> push_from(spec.prologue)
     bodyStmts |> push <| adapter_wrap_source_loop(adapter, loopBody, at)
     bodyStmts |> push_from(spec.tailStmts)
-    return adapter_wrap_invoke(adapter, bodyStmts, null, false, at)
+    return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
 
 // Bridge for orchestrators that still take parallel (topExprs, srcNames) arrays. 1-source → Array;
@@ -2075,7 +2080,8 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
     var elemType = clone_type(oc.orderElemType)
     var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
         qmacro($i(bindName)), qmacro($i(bestName)), at)
-    var perElement : Expression? = qmacro_expr() {
+    var perElementStmts : array<Expression?>
+    perElementStmts |> push <| qmacro_expr() {
         if (!$i(seenName)) {
             $i(bestName) := $i(bindName)
             $i(seenName) = true
@@ -2083,15 +2089,9 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
             $i(bestName) := $i(bindName)
         }
     }
-    if (oc.whereCond != null) {
-        perElement = qmacro_expr() {
-            if ($e(oc.whereCond)) {
-                $e(perElement)
-            }
-        }
-    }
-    let outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
-    var stmts : array<Expression?>
+    var outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
+    var prologue : array<Expression?>
+    var tailStmts : array<Expression?>
     if (oc.firstName == "first") {
         var firstRetExpr : Expression?
         if (oc.selectLam != null) {
@@ -2099,12 +2099,11 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
         } else {
             firstRetExpr = qmacro($i(bestName))
         }
-        stmts |> push_from <| qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
-        stmts |> push_from <| qmacro_block_to_array() {
+        tailStmts <- qmacro_block_to_array() {
             panic("sequence contains no elements") if (!$i(seenName))
             return $e(firstRetExpr)
         }
@@ -2119,18 +2118,23 @@ def private emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInf
             bestRetExpr = qmacro($i(bestName))
             dRetExpr = qmacro($i(dBindName))
         }
-        stmts |> push_from <| qmacro_block_to_array() {
+        prologue <- qmacro_block_to_array() {
             let $i(dBindName) = $e(oc.firstDefaultExpr)
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
-        stmts |> push_from <| qmacro_block_to_array() {
+        tailStmts <- qmacro_block_to_array() {
             return $e(bestRetExpr) if ($i(seenName))
             return $e(dRetExpr)
         }
     }
-    return adapter_wrap_invoke(ctx.src, stmts, outElemType, false, at)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        whereCond = oc.whereCond,
+        perElementStmts <- perElementStmts,
+        tailStmts <- tailStmts,
+        outElemType = outElemType
+    ), ctx.src, at)
 }
 
 // emit_bounded_heap — take(N) with inline-cmp key. Heap of size N during walk; distinct gate variant + terminal _select.
@@ -2798,27 +2802,30 @@ def private emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineI
     if (c.single |> key_exists("proj")) {
         projection = peel_lambda_rename_var(c.single["proj"].arguments[1], bindName)
     }
-    var perElement : Expression?
+    var perElementStmts : array<Expression?>
     if (projection != null && has_sideeffects(projection)) {
         let vfinalName = qn("vfinal", at)
-        perElement = qmacro_block() {
+        perElementStmts |> push_from <| qmacro_block_to_array() {
             var $i(vfinalName) = $e(projection)
             $i(cntName) ++
         }
     } else {
-        perElement = qmacro_expr() {
+        perElementStmts |> push <| qmacro_expr() {
             $i(cntName) ++
         }
     }
-    perElement = wrap_with_condition(perElement, whereCond)
-    var stmts <- qmacro_block_to_array() {
+    var prologue <- qmacro_block_to_array() {
         var $i(cntName) = 0
     }
-    stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
-    stmts |> push_from <| qmacro_block_to_array() {
+    var tailStmts <- qmacro_block_to_array() {
         return $i(cntName)
     }
-    return adapter_wrap_invoke(ctx.src, stmts, null, false, at)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        whereCond = whereCond,
+        perElementStmts <- perElementStmts,
+        tailStmts <- tailStmts
+    ), ctx.src, at)
 }
 
 // Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
@@ -2858,7 +2865,7 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
         lastType = strip_const_ref(srcElemType)
     }
     // outElemType drives the invoke retType; terminal _select projects the survivor at return so the lane returns post-select shape.
-    let outElemType = (terminalSelectLam != null) ? terminalSelectElemType : lastType
+    var outElemType = (terminalSelectLam != null) ? terminalSelectElemType : lastType
     var valueExpr : Expression?
     if (projection != null) {
         valueExpr = clone_expression(projection)
@@ -2867,11 +2874,10 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
             $i(bindName)
         }
     }
-    var matchBlock : Expression? = qmacro_block() {
+    var perElementStmts <- qmacro_block_to_array() {
         $i(lastName) := $e(valueExpr)
         $i(foundName) = true
     }
-    var perElement = wrap_with_condition(matchBlock, whereCond)
     var lastRetExpr : Expression?
     if (terminalSelectLam != null) {
         lastRetExpr = peel_lambda_replace_var(terminalSelectLam, qmacro($i(lastName)))
@@ -2880,30 +2886,36 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
     }
     // first_or_default's user default is already at post-termsel type — re-projecting through `termsel` double-applies.
     var dRetExpr : Expression? = qmacro($i(dBindName))
-    var stmts : array<Expression?>
+    var prologue : array<Expression?>
     if (terminatorName == "first_or_default") {
-        stmts |> push_from <| qmacro_block_to_array() {
+        prologue |> push_from <| qmacro_block_to_array() {
             let $i(dBindName) = $e(terminatorCall.arguments[1])
         }
     }
-    stmts |> push_from <| qmacro_block_to_array() {
+    prologue |> push_from <| qmacro_block_to_array() {
         var $i(foundName) = false
         var $i(lastName) : $t(lastType) = default<$t(lastType)>
     }
-    stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
+    var tailStmts : array<Expression?>
     if (terminatorName == "first") {
-        stmts |> push_from <| qmacro_block_to_array() {
+        tailStmts <- qmacro_block_to_array() {
             if (!$i(foundName)) {
                 panic("sequence contains no elements")
             }
             return $e(lastRetExpr)
         }
     } else {
-        stmts |> push_from <| qmacro_block_to_array() {
+        tailStmts <- qmacro_block_to_array() {
             return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
         }
     }
-    return adapter_wrap_invoke(ctx.src, stmts, outElemType, false, at)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        whereCond = whereCond,
+        perElementStmts <- perElementStmts,
+        tailStmts <- tailStmts,
+        outElemType = outElemType
+    ), ctx.src, at)
 }
 
 // R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).

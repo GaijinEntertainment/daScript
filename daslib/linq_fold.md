@@ -21,6 +21,8 @@ Inventory: **19 of 22 leaf emit fns fit one of two clean shapes** — 11 Termina
 
 - [x] **PR F1** — Terminator lane + migrate the 2 array-side orchestrators (`emit_accumulator_lane` + `emit_early_exit_lane`). `TerminatorSpec` struct + `emit_terminator_lane` fn + `build_lane_adapter` helper. Orchestrators now build a `TerminatorSpec` (op-specific prologue + perElement + tail) and delegate scaffold to the lane fn. `finalize_lane_emission` orphaned + deleted (now via `adapter_wrap_invoke`). AST parity verified byte-identical on `test_linq_fold_loop_or_count.das` + `test_linq_aggregation.das`. Branch `bbatkin/linq-fold-emission-lanes-pr1`.
 
+- [x] **PR F2** — Migrate 4 array-side Terminator leaves: `emit_counter_lane`, `emit_reverse_counter`, `emit_streaming_min`, `emit_reverse_walk_overwrite_scalar`. Spec extended with `outElemType` + `wrapIter` slots (threaded to `adapter_wrap_invoke`); previous orchestrators continue to pass null/false by struct default. `emit_counter_lane` keeps signature (still called from `emit_loop_or_count_lane`) but body collapses to a thin `TerminatorSpec` builder + `build_lane_adapter` call; range PRELUDE state-decls move into spec.prologue (caller already wraps in-loop range checks). AST parity verified byte-identical on counter / reverse-counter / streaming-min / reverse-walk chains. 3 decs leaves (`emit_decs_min_max_by`, `emit_decs_element_at`, `emit_decs_walk_lane`) deferred to PR F3 since they need the WalkMode (`for_each_archetype_find`) decs-adapter extension that PR F3's orchestrator migration introduces. Branch `bbatkin/linq-fold-emission-lanes-pr2`.
+
 ## Goal
 
 Split `_fold` splice machinery into two layers:
