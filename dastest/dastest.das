@@ -103,9 +103,7 @@ def private collect_files(input_paths : array<string>; var files : array<string>
             let das_test_path = path |> fs::join_path(".das_test")
             let das_test_stat = stat(das_test_path)
             if (das_test_stat.is_reg) {
-                if (!collect_files_filtered(path, das_test_path, cache, files)) {
-                    return false
-                }
+                return false if (!collect_files_filtered(path, das_test_path, cache, files))
             } else {
                 if (!fs::scan_dir(path, cache, files, ".das")) {
                     log::error("Unable to scan given path '{path}'")
@@ -161,9 +159,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
             // are expected-failure compile tests anywhere in the tests tree;
             // they have nothing to serialize.
             let base = base_name(file)
-            if (base |> starts_with("cant_") || base |> starts_with("failed_") || base |> starts_with("invalid_")) {
-                continue
-            }
+            continue if (base |> starts_with("cant_") || base |> starts_with("failed_") || base |> starts_with("invalid_"))
             using() $(var mg : ModuleGroup) {
                 using() $(var cop : CodeOfPolicies) {
                     cop.aot_module = true
@@ -189,7 +185,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
         }
         fwrite(f, res.total)
         ast_serializer_get_data(ser) $(data) {
-            var sz = uint64(length(data))
+            let sz = uint64(length(data))
             fwrite(f, sz)
             fwrite(f, data)
         }
@@ -225,17 +221,15 @@ def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string
         log::info("Deserializing {count:d} programs from {in_file}")
         var ser = create_ast_deserializer(data)
         using() $(var mg : ModuleGroup) {
-            for (i in range(int(count))) {
-                deserialize_program(ser) <| $(ok, program, error) {
+            for (i in range(count)) {
+                deserialize_program(ser) $(ok, program, error) {
                     if (!ok) {
                         log::error("Deserialization failed at program {i}: {error}")
                         res.errors++
                         res.total++
                         return
                     }
-                    if (program._options |> find_arg("rtti") ?as tBool ?? false) {
-                        return
-                    }
+                    return if (program._options |> find_arg("rtti") ?as tBool ?? false)
                     simulate(program) $(sok, context, serrors) {
                         if (!sok) {
                             log::error("Failed to simulate program {i}\n{serrors}")
@@ -265,7 +259,7 @@ def main() : int {
     // Captured for isolated-mode subprocess invocation; raw_args[0] is the
     // daslang interpreter path and raw_args[1] is dastest.das.  Everything
     // else for this main() comes from the parsed test_args below.
-    var raw_args <- get_command_line_arguments()
+    let raw_args <- get_command_line_arguments()
 
     var parse_result <- parse_args(type<DastestArgs>)
     if (parse_result |> is_err) {
@@ -279,7 +273,7 @@ def main() : int {
         // `--run=X` forms because parse_args has already populated the field.
         let res = suite::test_file(test_args.run, SuiteCtx(test_args))
         // Send full report with per-test details for isolated mode JSON collection
-        var report = JsonTestReport(
+        let report = JsonTestReport(
             file = test_args.run,
             total = res.total,
             passed = res.passed,
@@ -326,9 +320,7 @@ def main() : int {
 
     var inputPaths := test_args.test_files
     var files : array<string>
-    if (!collect_files(inputPaths, files)) {
-        return 1
-    }
+    return 1 if (!collect_files(inputPaths, files))
     if (!empty(test_args.exclude_files)) {
         files |> erase_if() $(f) {
             let base = base_name(f)
@@ -378,7 +370,7 @@ def main() : int {
                 }
             } else {
                 log::red("FAIL {uri} {time_dt_hr(fileDt)}")
-                var reason = "{status.failed} failed, {status.errors} errors"
+                let reason = "{status.failed} failed, {status.errors} errors"
                 failedFiles |> push(FailedFile(uri = clone_string(uri), reason = clone_string(reason)))
             }
             if (timingOutliers > 0) {
@@ -474,10 +466,7 @@ def main() : int {
                     for (isoRes in each_clone(outputChannel, type<IsolatedResult>)) {
                         res += isoRes.status
                         for (tr in isoRes.tests) {
-                            var msgs : array<string>
-                            for (m in tr.messages) {
-                                msgs |> push(clone_string(m))
-                            }
+                            var msgs <- [for (m in tr.messages); clone_string(m)]
                             suite::test_results |> emplace(SuiteTestResult(
                                 name = clone_string(tr.name),
                                 passed = tr.passed,
@@ -505,8 +494,8 @@ def main() : int {
                             log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                             var reason = ""
                             if (isoRes.exitCode != 0 || !isoRes.parsedResult) {
-                                res.total += 1
-                                res.errors += 1
+                                res.total++
+                                res.errors++
                             }
                             if (isoRes.exitCode == popen_timed_out) {
                                 reason = "timed out after {testTimeout}s"
@@ -537,8 +526,8 @@ def main() : int {
 
 [export, pinvoke]
 def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float) {
-    res.errors += 1
-    res.total += 1
+    res.errors++
+    res.total++
     log::error("Test timed out after {timeout_sec}s")
     // timeout fires from a worker thread; fio::exit is the cross-thread
     // cancellation mechanism (bypasses shutdown dump — acceptable for this path).
@@ -570,20 +559,16 @@ def private print_timing_outliers() {
     let count = min(timingOutliers, n)
     let threshold = mean + 2.0lf * stddev
     // only print if there are actual outliers (top entry above threshold) or if few files
-    var meanStr = ""
-    meanStr = fmt(":.3f", mean / 1000000.0lf)
-    var stddevStr = ""
-    stddevStr = fmt(":.3f", stddev / 1000000.0lf)
-    var thresholdStr = ""
-    thresholdStr = fmt(":.3f", threshold / 1000000.0lf)
+    let meanStr = fmt(":.3f", mean / 1000000.0lf)
+    let stddevStr = fmt(":.3f", stddev / 1000000.0lf)
+    let thresholdStr = fmt(":.3f", threshold / 1000000.0lf)
     log::info("Timing: mean {meanStr}s, stddev {stddevStr}s, threshold {thresholdStr}s")
     log::info("Top {count} slowest files:")
     for (i in range(count)) {
         let dtSec = double(fileTimings[i].dt) / 1000000.0lf
         let marker = double(fileTimings[i].dt) > threshold ? " [outlier]" : ""
-        var dtStr = ""
-        dtStr = fmt(":.3f", dtSec)
-        var line = "  {dtStr}s  {fileTimings[i].uri}{marker}"
+        let dtStr = fmt(":.3f", dtSec)
+        let line = "  {dtStr}s  {fileTimings[i].uri}{marker}"
         log::info(line)
     }
 }
@@ -599,7 +584,7 @@ def finish_tests(res : SuiteResult; start_time : int64) : int {
     if (resCode == 0) {
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     } else {
-        if (length(failedFiles) > 0) {
+        if (!empty(failedFiles)) {
             log::red("\nFAILURES:")
             for (ff in failedFiles) {
                 log::red("  {ff.uri} — {ff.reason}")
@@ -609,7 +594,7 @@ def finish_tests(res : SuiteResult; start_time : int64) : int {
         log::red("FAILED! {time_dt_hr(totalDt)}")
     }
     if (!empty(jsonFilePath)) {
-        var report = JsonTestReport(
+        let report = JsonTestReport(
             file = jsonTestFile,
             total = res.total,
             passed = res.passed,
