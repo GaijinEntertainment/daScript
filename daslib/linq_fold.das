@@ -1155,8 +1155,8 @@ struct private DistinctGateSpec {
 }
 
 // Fold-into-array scaffold. Lane owns prologue/bufDecl/postBufDecl/dsetDecl/reserve/source-loop;
-// caller owns tailStmts. preCondStmts+whereCond composed like emit_terminator_lane; distinctGate
-// wraps perElementPush AFTER whereCond.
+// caller owns tailStmts. distinctGate wraps perElementPush INSIDE whereCond (gate evaluates only
+// for survivors — otherwise the dset records filtered-out rows and masks later same-key survivors).
 struct private FoldArraySpec {
     prologueStmts    : array<Expression?>   // BEFORE bufDecl — takeN bind, etc.
     bufElemType      : TypeDeclPtr
