@@ -6741,7 +6741,7 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
     LLVMPassBuilderOptionsSetInlinerThreshold(pbopts, int(inline_threshold))
     let pipeline = (size_level >= 2u ? "default<Oz>"
                   : (size_level == 1u ? "default<Os>"
-                                      : "default<O{opt_level}>"))
+                                      : "default<O{opt_level:d}>"))
     // use_host_cpu=true for JIT (artifact runs on this host); false for
     // exe emission so the IR pipeline's TTI cost model stays generic and
     // produces redistributable shapes (otherwise loop unroll / vectorize

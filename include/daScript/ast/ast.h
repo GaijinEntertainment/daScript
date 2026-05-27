@@ -1605,7 +1605,7 @@ namespace das
         bool jit_emit_prologue = false;          // Emit prologue for all functions and blocks
         string jit_output_path;                  // Folder to store compiled dll's. By default it'll be _das_root_/.jitted_scripts
         int32_t jit_opt_level = 3u;              // Opt level for LLVM to codegen and IR optimizations
-        int32_t jit_size_level = 3u;             // Opt level for LLVM for binary size
+        int32_t jit_size_level = 0u;             // Opt level for LLVM for binary size
         string jit_path_to_shared_lib;           // Path to libDaScript. Optional, we'll try to find it in _das_root_/lib/ if not provided.
         string jit_path_to_linker;               // Path to linker. Optional, we'll use clang-cl from LLVM on Windows and cc otherwise.
     // dll loading
