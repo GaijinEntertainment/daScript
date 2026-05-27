@@ -1161,8 +1161,8 @@ struct private FoldArraySpec {
     prologueStmts    : array<Expression?>   // BEFORE bufDecl — takeN bind, etc.
     bufElemType      : TypeDeclPtr
     bufName          : string
-    postBufDeclStmts : array<Expression?>   // AFTER bufDecl, BEFORE dsetDecl/reserve — e.g. early-return guards (bounded_heap)
-    reserveStmts     : array<Expression?>   // AFTER bufDecl (+dsetDecl), BEFORE source-loop — caller composes
+    postBufDeclStmts : array<Expression?>   // AFTER bufDecl + optional dsetDecl, BEFORE reserve — e.g. early-return guards (bounded_heap)
+    reserveStmts     : array<Expression?>   // AFTER postBufDecl, BEFORE source-loop — caller composes
     preCondStmts    : array<Expression?>   // bound-vars INSIDE for-loop body, OUTSIDE if-gate
     whereCond       : Expression?
     distinctGate    : DistinctGateSpec?
@@ -1174,8 +1174,7 @@ struct private FoldArraySpec {
 
 [macro_function]
 def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
-    // 1. Compose perElement: distinct gate wraps push (innermost), then whereCond wraps that
-    // (where filters BEFORE distinct so the dset only sees survivors), then preCondStmts prepended.
+    // Compose perElement: distinct gate (innermost) → whereCond (where filters BEFORE dset sees rows) → preCondStmts.
     var perElement = spec.perElementPush
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
@@ -1207,7 +1206,6 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
     bodyStmts |> push <| qmacro_expr() {
         var $i(bufName) : array<$t(bufElemType)>
     }
-    bodyStmts |> push_from(spec.postBufDeclStmts)
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
         let dsetName = dg.dsetName
@@ -1223,6 +1221,7 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
             }
         }
     }
+    bodyStmts |> push_from(spec.postBufDeclStmts)
     bodyStmts |> push_from(spec.reserveStmts)
     bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
     bodyStmts |> push_from(spec.tailStmts)
@@ -2226,7 +2225,7 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
     var bufElemType = clone_type(oc.orderElemType)
     var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
         qmacro($i(bindName)), qmacro($i(bhBufName)[0]), at)
-    var perElement : Expression? = qmacro_expr() {
+    var perElementPush : Expression? = qmacro_expr() {
         if (length($i(bhBufName)) < $i(takeNName)) {
             $i(bhBufName) |> push_clone($i(bindName))
             _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
@@ -2236,57 +2235,35 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
         }
     }
-    // Theme 3 Phase 3: leading distinct[_by] gates per-element push by set-insert on the distinct key.
+    var distinctGate : DistinctGateSpec?
     if (oc.distinctName != "") {
-        var dkeyExpr : Expression?
-        if (oc.distinctName == "distinct_by") {
-            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, bindName)
-            if (dkeyExpr == null) return null
-        } else {
-            dkeyExpr = qmacro($i(bindName))
-        }
-        perElement = qmacro_block() {
-            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                $i(dsetName) |> insert($i(dkeyName))
-                $e(perElement)
-            }
-        }
+        var dgKind : DistinctGateKind = (oc.distinctName == "distinct_by"
+            ? DistinctGateKind(KeyLam = oc.distinctKey)
+            : DistinctGateKind(NonKey = null))
+        distinctGate = new DistinctGateSpec(
+            kind = dgKind, bindName = bindName, bufElemType = bufElemType,
+            dsetName = dsetName, dkeyName = dkeyName
+        )
     }
-    if (oc.whereCond != null) {
-        perElement = qmacro_expr() {
-            if ($e(oc.whereCond)) {
-                $e(perElement)
-            }
-        }
-    }
-    var stmts : array<Expression?>
-    stmts |> push_from <| qmacro_block_to_array() {
+    var prologueStmts : array<Expression?>
+    prologueStmts |> push <| qmacro_expr() {
         let $i(takeNName) = $e(oc.takeExpr)
-        var $i(bhBufName) : array<$t(bufElemType)>
     }
-    if (oc.distinctName != "") {
-        if (oc.distinctName == "distinct_by") {
-            stmts |> push <| qmacro_expr() {
-                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(oc.distinctKey), default<$t(bufElemType)>)))>
-            }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-            }
-        }
+    // takeN<=0 early-return + outBuf decl land in postBufDeclStmts so they emit AFTER bufDecl + dsetDecl.
+    var postBufDeclStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
+        _::order_inplace($i(bhBufName), $e(inlineCmp))
     }
     if (oc.selectLam != null) {
         let outBufName = qn("order_proj_buf", at)
         let elemName = qn("order_proj_e", at)
         var projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
-        stmts |> push_from <| qmacro_block_to_array() {
+        postBufDeclStmts |> push_from <| qmacro_block_to_array() {
             var $i(outBufName) : array<$t(oc.selectElemType)>
             return <- $i(outBufName) if ($i(takeNName) <= 0)
         }
-        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
-        stmts |> push_from <| qmacro_block_to_array() {
-            _::order_inplace($i(bhBufName), $e(inlineCmp))
+        tailStmts |> push_from <| qmacro_block_to_array() {
             $i(outBufName) |> reserve(length($i(bhBufName)))
             for ($i(elemName) in $i(bhBufName)) {
                 $i(outBufName) |> push_clone($e(projBody))
@@ -2294,16 +2271,24 @@ def private emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo
             return <- $i(outBufName)
         }
     } else {
-        stmts |> push_from <| qmacro_block_to_array() {
+        postBufDeclStmts |> push <| qmacro_expr() {
             return <- $i(bhBufName) if ($i(takeNName) <= 0)
         }
-        stmts |> push <| adapter_wrap_source_loop(ctx.src, perElement, at)
-        stmts |> push_from <| qmacro_block_to_array() {
-            _::order_inplace($i(bhBufName), $e(inlineCmp))
+        tailStmts |> push <| qmacro_expr() {
             return <- $i(bhBufName)
         }
     }
-    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
+    return emit_fold_array_lane(FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = bufElemType,
+        bufName = bhBufName,
+        postBufDeclStmts <- postBufDeclStmts,
+        whereCond = oc.whereCond,
+        distinctGate = distinctGate,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts,
+        wrapIter = ctx.expr_is_iterator
+    ), ctx.src, at)
 }
 
 // emit_buffer_helper_dispatch — no where, no distinct. Direct call to daslib helpers (order / top_n* / min_max).
