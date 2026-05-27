@@ -21,13 +21,11 @@ let TAKE_N = 5
 // cost, not decs-walk vs array-walk. For a key-based dedup variant on decs that
 // avoids unique_key's string path entirely, see `distinct_by_count_m4` which dedups
 // on a workhorse key via `_distinct_by(_.brand)`.
-// SQL: `_sql`'s `_order_by` requires a `_.Field` (column-ref) key, not bare `_`
-// (`error[50503]: _sql: _order_by: key must be `_.Field`, a `string` expression,
-// or a tuple of either; got: _`). This is independent of distinct/take ordering —
-// `distinct_take.das` shows `_sql` does lower `distinct() |> take(N)` when the
-// source has a named column. Bench operates on a synthesized bare-scalar
-// `array<int>`, so the SQL form has no `.Field` to project. By design — to add
-// a SQL lane we'd need a 1-column table fixture and lower `_order_by(_.col)`.
+// SQL (m1) uses the `Brand` 1-column fixture (`_common.das`) — `_sql`'s
+// `_order_by` requires a `_.Field` (column-ref) key, not bare `_`, so the
+// chain wraps the single column in a named tuple via `_select((value=_.value))`
+// before sorting. Emits the clean `SELECT DISTINCT "value" FROM "Brands"
+// ORDER BY "value" ASC LIMIT ?` form (no subquery wrap).
 
 def make_brands(n : int) : array<int> {
     var a : array<int>
@@ -36,6 +34,19 @@ def make_brands(n : int) : array<int> {
         a[i] = i % BRAND_COUNT
     }
     return <- a
+}
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db_brands(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let rows <- _sql(db |> select_from(type<Brand>) |> _select((value = _.value)) |> distinct() |> _order_by(_.value) |> take(TAKE_N))
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
 }
 
 def run_m3f(b : B?; n : int) {
@@ -62,6 +73,11 @@ def run_m4(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def order_distinct_take_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]
