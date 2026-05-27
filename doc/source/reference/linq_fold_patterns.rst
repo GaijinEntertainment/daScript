@@ -327,6 +327,9 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._take_while(P).<...>`` / ``._skip_while(P).<...>``
      - ``plan_decs_unroll`` (predicate-driven ranges)
      - Hoists ``skippingName`` state across archetypes.
+   * - ``from_decs_template(...).take(N)._where(P).<terminator>`` (counter / accumulator / early-exit / array / walk)
+     - ``plan_decs_unroll`` (``postTakeWhereCond`` gate in ``emit_decs_terminator_lane``)
+     - Decs mirror of the array-side ``postTakeWhereCond`` gate (Theme 2 5c). Take cap ticks unconditionally per per-archetype element; the trailing ``where`` gates only the per-element contribution. Predicate peels against ``chainInfo.finalBind`` so it composes with leading ``_where`` / ``_select`` chains and skip / skip_while / take_while ranges. Lands uniformly across all 6 ``emit_decs_*`` paths because the gate wraps ``spec.perElement`` once in the shared lane.
 
 Decs-decs equi-join
 -------------------
