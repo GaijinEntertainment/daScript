@@ -5222,6 +5222,7 @@ struct private DecsTerminatorSpec {
     tailStmts    : array<Expression?>   // post-walk; INCLUDES the return — skipped for FindReturn/FindReturnNegated
     retType      : TypeDeclPtr
     dispatch     : DecsDispatch
+    wrapIter     : bool                  // emission wrapped with .to_sequence_move() — for array-returning shapes in iterator-typed contexts
 }
 
 [macro_function]
@@ -5279,9 +5280,7 @@ def private emit_decs_terminator_lane(
     var emission = qmacro(invoke($() : $t(spec.retType) {
         $b(bodyStmts)
     }))
-    emission.force_at(at)
-    emission.force_generated(true)
-    return emission
+    return finalize_decs_emission(emission, at, spec.wrapIter)
 }
 
 [macro_function]
