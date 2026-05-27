@@ -3167,8 +3167,6 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
 def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = adapter_bind_name(ctx.src, at)
     let bufName = qn("buf", at)
-    let outBufName = qn("rev_proj_buf", at)
-    let elemName = qn("rev_proj_e", at)
     var whereCond : Expression?
     if (c.single |> key_exists("where")) {
         whereCond = peel_lambda_rename_var(c.single["where"].arguments[1], bindName)
@@ -3205,21 +3203,16 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         if (srcElemType == null) return null
         bufElemType = strip_const_ref(srcElemType)
     }
-    var projBody : Expression?
-    if (terminalSelectLam != null) {
-        projBody = peel_lambda_replace_var(terminalSelectLam, qmacro($i(elemName)))
-    }
-    var pushExpr : Expression?
+    var perElementPush : Expression?
     if (projection != null) {
-        pushExpr = qmacro_expr() {
+        perElementPush = qmacro_expr() {
             $i(bufName) |> push_clone($e(projection))
         }
     } else {
-        pushExpr = qmacro_expr() {
+        perElementPush = qmacro_expr() {
             $i(bufName) |> push_clone($i(bindName))
         }
     }
-    pushExpr = wrap_with_condition(pushExpr, whereCond)
     // Reserve hint: array source with no prefilter has known length. Decs has no random-access length — skip.
     var reserveStmts : array<Expression?>
     if (ctx.src is Array && whereCond == null) {
@@ -3231,40 +3224,28 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
             }
         }
     }
-    var resizeStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
+        _::reverse_inplace($i(bufName))
+    }
     if (takeExpr != null) {
         // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
         let takeLimName = qn("rev_takeLim", at)
-        resizeStmts |> push_from <| qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             let $i(takeLimName) = $e(takeExpr)
             $i(bufName) |> resize($i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < length($i(bufName)) ? $i(takeLimName) : length($i(bufName))))
         }
     }
-    var stmts : array<Expression?>
-    stmts |> push_from <| qmacro_block_to_array() {
-        var $i(bufName) : array<$t(bufElemType)>
-    }
-    stmts |> push_from(reserveStmts)
-    stmts |> push <| adapter_wrap_source_loop(ctx.src, pushExpr, at)
-    stmts |> push_from <| qmacro_block_to_array() {
-        _::reverse_inplace($i(bufName))
-    }
-    stmts |> push_from(resizeStmts)
-    if (terminalSelectLam != null) {
-        stmts |> push_from <| qmacro_block_to_array() {
-            var $i(outBufName) : array<$t(terminalSelectElemType)>
-            $i(outBufName) |> reserve(length($i(bufName)))
-            for ($i(elemName) in $i(bufName)) {
-                $i(outBufName) |> push_clone($e(projBody))
-            }
-            return <- $i(outBufName)
-        }
-    } else {
-        stmts |> push_from <| qmacro_block_to_array() {
-            return <- $i(bufName)
-        }
-    }
-    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
+    tailStmts |> push_from <| build_terminal_select_tail(bufName, terminalSelectLam, terminalSelectElemType, ctx.expr_is_iterator, at)
+    return emit_fold_array_lane(FoldArraySpec(
+        bufElemType = bufElemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        whereCond = whereCond,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts,
+        wrapIter = false
+    ), ctx.src, at)
 }
 
 // [_macro] runs at macro-compile time and stays off the JIT runtime graph — the rows carry @@<EmitFn>
