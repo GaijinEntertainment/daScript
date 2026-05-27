@@ -171,6 +171,44 @@ def main {
     // You can also use the backtick syntax directly:
     //     Shape`Shape(self, "Circle")   // same as super("Circle")
 
+    // === Implicit super() chain — no ctor needed ===
+
+    // If the parent has a user-defined constructor that's callable with no
+    // arguments, the compiler synthesizes a default ctor for the derived
+    // class that chains super() automatically:
+    //
+    //   class Animal {
+    //       def Animal { print("Animal init\n") }   // 0-arg user ctor
+    //   }
+    //
+    //   class Pet : Animal {
+    //       name : string = "rex"
+    //   }
+    //
+    //   new Pet()    // prints "Animal init" — synth ctor calls super()
+    //
+    // The synth runs only when:
+    //   - the parent has a user-defined ctor (any signature)
+    //   - the derived class has NO ctor of its own (none at all)
+    //   - that parent ctor is 0-arg-callable (or all args have defaults)
+    //
+    // Defining ANY user ctor — even one that only takes arguments —
+    // SUPPRESSES the 0-arg synth. `new Pet()` then errors unless the user
+    // also declares `def Pet()`:
+    //
+    //   class Pet : Animal {
+    //       def Pet(name : string) { super(); this.name = name }
+    //   }
+    //   new Pet()             // ERROR: no matching ctor _::Pet()
+    //   new Pet("rex")        // OK
+    //
+    // If the parent has only ctors that require arguments, the derived class
+    // MUST declare its own ctor:
+    //
+    //   class A { def A(val : int) { /* ... */ } }
+    //   class B : A {}                  // ERROR: no 0-arg parent ctor to chain
+    //   class B : A { def B { super(0) } }   // OK
+
     // === super() must be called exactly once per path ===
 
     // When the parent has a user-defined constructor, the lint requires

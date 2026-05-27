@@ -181,6 +181,22 @@ Every constructor in a derived class whose parent has a user-defined constructor
 * two or more ``super(...)`` calls on any path → error;
 * ``super(...)`` inside a loop body → error (call count is not bounded to one).
 
+When the derived class has *no* constructor of its own and the parent has a user
+constructor callable with no arguments (or with all arguments default-initialized), the
+compiler synthesizes a default constructor for the derived class that chains ``super()``
+automatically — so ``new Derived()`` runs the parent's ctor body instead of silently
+skipping it. If the parent's user constructors all require arguments, the derived class
+must declare its own constructor; otherwise compilation fails with
+``missing_super_call``.
+
+Declaring *any* user constructor on a class — even one that only takes arguments —
+suppresses the synthesized 0-arg constructor entirely. ``new Class()`` then requires the
+user to also declare ``def Class()`` explicitly; otherwise lookup fails with
+``no matching function``. This matches the C++/Java/C# convention: a user-defined
+constructor opts out of the compiler-generated default. Pre-PR2 behavior auto-synthesized
+a 0-arg field-init ctor whenever the user omitted one, which silently bypassed any user
+ctor's invariants on ``new Class()`` — that bug is now an error.
+
 Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
 parent's finalizer on the current object:
 

@@ -19,7 +19,7 @@ class A {
 
 [export]
 def main {
-    var a = new A()
+    var a = new A("test")
     a.name = "boo"                  //  30503: can't access private field name of A? outside of member functions.
     let name = a?.name ?? "boo"     //  30503: can't access private field name of A? outside of member functions.
     a->func()                       //  30503: can't access private field func of A? outside of member functions.
