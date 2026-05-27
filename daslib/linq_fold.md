@@ -10,7 +10,8 @@ Living document. Update **Status** + **Decision log** as phases ship.
 - [x] **PR C** — SourceAdapter widening + 4 decs planner migrations (plan_decs_reverse / _distinct / _order_family / _unroll) — branch `bbatkin/linq-fold-pattern-table-prc`
 - [x] **PR D1** — Group-by migrations: `plan_group_by` + `plan_decs_group_by` → 2 pattern rows + 1 shared emit fn delegating to `plan_group_by_core` (unchanged sub-codegen). `emit_reducer_branches` 13-arm if/elif → `mk_reducer_*` data table. Partial GroupBy↔SourceAdapter reconciliation via `to_source_adapter()` projection. Branch `bbatkin/linq-fold-pattern-table-prd1`
 - [x] **PR D2** (partial) — `plan_zip` + `plan_decs_join` migrations; SourceAdapter widening to `Array | Decs | DecsJoin | Zip`; `plan_decs_join` thin stub gains `collapse_chained_wheres` pre-pass. Branch `bbatkin/linq-fold-pattern-table-prd2`
-- [x] **PR D3** — Full GroupBySourceAdapter melt (deferred from PR D2). Struct + 3 helpers (`to_source_adapter`, `adapter_emit_source_loop`, `adapter_finalize_emission`) deleted; `plan_group_by_core` takes `SourceAdapter` directly; `emit_group_by` builds `SourceAdapter` per source-shape. Branch `bbatkin/linq-fold-pattern-table-prd3`. The PR D2 C3 regression root cause turned out to be a one-character typo: `resBindName := qn(...)` in a named-arg struct constructor silently dropped the field (the `:=` move-assign syntax is invalid in named-arg constructor position — must be `=`); changing the operator fixed the test cleanly. Closes the masterplan refactor
+- [x] **PR D3** — Full GroupBySourceAdapter melt (deferred from PR D2). Struct + 3 helpers (`to_source_adapter`, `adapter_emit_source_loop`, `adapter_finalize_emission`) deleted; `plan_group_by_core` takes `SourceAdapter` directly; `emit_group_by` builds `SourceAdapter` per source-shape. Branch `bbatkin/linq-fold-pattern-table-prd3`. The PR D2 C3 regression root cause turned out to be a one-character typo: `resBindName := qn(...)` in a named-arg struct constructor silently dropped the field (the `:=` move-assign syntax is invalid in named-arg constructor position — must be `=`); changing the operator fixed the test cleanly. Closes the per-planner-stub migration.
+- [x] **PR E** — Final collapse: 7 per-plan tables → 1 `splice_patterns` (commit 1); 12 stub fns + 12-line LinqFold.visit cascade → 1 `try_splice_patterns` dispatcher (commit 2). Per-row predicates (`array_source` / `decs_source` / `decs_join_invariants`) handle adapter selection; dispatcher walks the table twice (Decs adapter if bridge present, then Array). Pre-passes run once at the top — safe because `normalize_order_reverse` / `collapse_chained_*` are no-ops on chains that don't trigger them. Branch `bbatkin/linq-fold-pattern-table-pre`. **Closes the masterplan refactor.**
 
 ## Goal
 
@@ -208,7 +209,7 @@ def private plan_reverse(var expr : Expression?) : Expression? {
 }
 ```
 
-After PR D, collapse all stubs + cascade into one flat walk over `splice_patterns` (no `owner_plan_id` filtering needed once all are rows).
+After PR D, collapse all stubs + cascade into one flat walk over `splice_patterns` (no `owner_plan_id` filtering needed once all are rows). **Shipped as PR E** via `try_splice_patterns` in `daslib/linq_fold.das`; the per-row `array_source` / `decs_source` predicates carry the adapter discrimination today.
 
 ## What we KEEP from today's code
 
@@ -255,7 +256,9 @@ Per-archetype unit testing via direct calls is impractical anyway: emit fns are 
 | `SourceAdapter` | Source-loop abstraction variant |
 | `alias_table` | Named op-name groups |
 | `match_pattern(...)` | Walker function |
-| `plan_<X>_patterns` | Per-plan filtered subset (only during migration; deleted in PR D) |
+| `plan_<X>_patterns` | Per-plan filtered subset (only during migration; deleted in PR E) |
+| `try_splice_patterns(...)` | Unified dispatcher (added in PR E) — walks `splice_patterns` twice (Decs adapter if bridge present, then Array) |
+| `register_<family>_rows()` | `[_macro]` helper that emplaces a family's rows into `splice_patterns` at compile time (PR E renamed from `populate_plan_<X>_patterns`) |
 
 ## PR B1 (shipped) + PR B2 (planned) sketch
 
@@ -346,6 +349,34 @@ Both planner bodies (~165 LOC across array + decs) hard-deleted; new code (rows 
 **`plan_zip` migration:** 1 pattern row `zip_general` (chain: zip c_one → head c_chain[where_,select] → skip c_opt arity=2 → skip_while c_opt arity=2 → take_while c_opt arity=2 → take c_opt arity=2 → trailing_reverse c_opt → term c_opt loop_terminator_family). 3 new predicates: `zip_arity_2_or_3`, `zip_no_while_after_select` (closes today's chain-walk bail when select precedes skip_while/take_while in head — peel-against-tuple would dangle), `zip_reverse_compatible_with_term` (reverse + first/first_or_default picks a different element — bail). Positional slot ordering structurally enforces canonical chain order; emit_zip's head walk bails on where-after-select (chained-bind dedup gap mirrored from imperative). Counter + array lanes built inline; accumulator + early-exit lanes continue delegating to `emit_accumulator_lane` / `emit_early_exit_lane` (parallel-array form — already reused). Length-shortcut + trailing reverse_inplace path go through `adapter_wrap_invoke(Zip, ...)`. `finalize_zip_invoke` helper deleted (folded into adapter_wrap_invoke Zip branch). Stub also gains `collapse_chained_wheres` pre-pass (unblocks multi-where parity). Hard-delete ~350 LOC imperative body; +10 LOC net.
 
 **Net delta:** ~+140 LOC (Commit 1 widening adds variants + helper branches; Commit 2 + 3 migrations are roughly LOC-neutral after deletes). Wins are uniformity + future extensibility, not LOC — same story as PR D1.
+
+### PR E — shipped
+
+**Branch:** `bbatkin/linq-fold-pattern-table-pre`
+
+**Scope (delivered):** Final collapse promised at [linq_fold.md:212](daslib/linq_fold.md#L212). 7 per-plan tables → 1 `splice_patterns`; 12 stub fns + 12-line `LinqFold.visit` cascade → 1 `try_splice_patterns` dispatcher.
+
+**Commit 1 — table consolidation:**
+- Delete the 7 `var private plan_<X>_patterns : array<SplicePattern>` declarations; keep `splice_patterns` (previously declared empty since PR A).
+- Rename `populate_plan_<X>_patterns` → `register_<X>_rows` (7 fns). Each is still `[_macro]` with the `is_compiling_macros_in_module("linq_fold")` guard, but the redundant `!empty(<table>)` per-table guard is dropped (would have conflicted on the shared table). The `is_compiling_macros_in_module` check is sufficient because [_macro] fns fire once per module-compile cycle.
+- Per-identifier `replace_all`: each `plan_<X>_patterns` → `splice_patterns` (var decls + emplace sites + stub for-loops + comments). 12 stubs still walk the merged table — same loop body, different identifier.
+- Order in `splice_patterns` = file order of populate fns: order_family (5 rows) → loop_or_count (1) → reverse (5) → distinct (2) → group_by (2) → decs_join (1) → zip (1) = 17 rows total.
+
+Cross-family shadow analysis: each family's chain shape contains an op the broader `loop_or_count_general` pattern cannot consume (reverse / distinct / group_by_lazy / zip / join), so its `c_chain` head captures 0 ops and the remaining unconsumed family-specific call triggers `no_match`. Order within `splice_patterns` doesn't change which row wins for any in-tree chain.
+
+**Commit 2 — dispatcher collapse:**
+- New `[macro_function] def private try_splice_patterns(var expr : Expression?) : Expression?`: flatten + pre-pass once, walk `splice_patterns` with Decs adapter (only if `extract_decs_bridge(top) != null`) then with Array adapter (after `peel_each(top)`).
+- Per-row predicates (`array_source` / `decs_source` / `decs_join_invariants`) cull rows that don't apply to the current adapter — no `target_adapter` field needed on `SplicePattern`. Both passes walk the same 17-row table top to bottom; first emit non-null wins.
+- Delete 12 plan_* stubs (~280 LOC); rewrite `LinqFold.visit` from 12-line cascade into one `try_splice_patterns` call (+ unchanged Theme 6 perf-warn / tier-2 / tier-3 fall-through).
+
+**Architectural decisions baked in:**
+- **Pre-passes always run.** Today only 4 stubs called `normalize_order_reverse`; 2 group_by stubs called nothing. The pre-passes are no-ops on chains without their target shapes, so unifying is safe. Group_by chains now pass through `collapse_chained_*` / `normalize_order_reverse` for the first time — confirmed semantically equivalent by full test pass.
+- **EmitCtx.top normalized.** Decs ctx always `top = null` (matched 5 of 6 decs stubs; the lone holdout `plan_decs_join` set `top = top` but `emit_decs_join` doesn't read it). Array ctx always `top = clone(top)` per match (matched 4 of 6 array stubs; `plan_group_by` + `plan_zip` previously passed raw `top` — the extra clone is observationally invisible).
+- **Behavior delta vs per-family-cascade today.** Today the cascade is `decs_<family> ALL ROWS → array_<family> ALL ROWS → next family`. PR E walks `Decs ALL FAMILIES → Array ALL FAMILIES`. The two diverge only if a chain matches both family A's row AND family B's row in different adapters — impossible in practice because chain shapes are family-disjoint post-`normalize_order_reverse`. Full test pass confirms zero observable difference.
+
+**Net delta:** −281 / +26 LOC across the two refactor commits (−255 net). Wins are uniformity, single-place-to-add-a-row, and inspectability — same headline as PRs D1/D2/D3.
+
+**Verification:** 1689/1689 in `tests/linq` pass; full daslang suite at 9809/9815 (same skip baseline as master, no new failures).
 
 ### Pre-pass (PR B1 ✓)
 

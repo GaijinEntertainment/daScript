@@ -395,16 +395,9 @@ def private zip_reverse_compatible_with_term(var c : Captures; var top : Express
     return name != "first" && name != "first_or_default"
 }
 
-// Per-plan pattern tables — collapsed into splice_patterns in PR D.
+// Master pattern table. Each register_*_rows below is `[_macro]` so it only runs while linq_fold itself is being macro-compiled; the per-family rows are appended in file declaration order on a fresh splice_patterns. First-match-wins per adapter pass (see LinqFold.visit cascade).
 
-var private plan_reverse_patterns : array<SplicePattern>
-var private plan_distinct_patterns : array<SplicePattern>
-var private plan_loop_or_count_patterns : array<SplicePattern>
-var private plan_order_family_patterns : array<SplicePattern>
-var private plan_group_by_patterns : array<SplicePattern>
-var private plan_decs_join_patterns : array<SplicePattern>
-var private plan_zip_patterns : array<SplicePattern>
-var private splice_patterns : array<SplicePattern>     // populated in PR D when per-plan tables collapse
+var private splice_patterns : array<SplicePattern>
 
 // ===== End of pattern-table kernel =====
 
@@ -1925,35 +1918,11 @@ def private make_inline_less_call(orderKey : Expression?; orderName : string;
 }
 
 
-// Stub — table-driven dispatch into plan_order_family_patterns.
-[macro_function]
-def private plan_order_family(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    normalize_order_reverse(calls)
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    top = peel_each(top)
-    let at = calls[0]._0.at
-    let exprIsIter = expr._type != null && expr._type.isIterator
-    let srcName = qn("source", at)
-    for (p in plan_order_family_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var topClone = clone_expression(top)
-            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 [_macro]
-def private populate_plan_order_family_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_order_family_patterns)) return
+def private register_order_family_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
     // Row 1 — streaming_min: inline-cmp + first[_or_default]; no distinct (final imperative bail).
-    plan_order_family_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "order_streaming_min",
         chain <- [
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
@@ -1966,7 +1935,7 @@ def private populate_plan_order_family_patterns {
         emit = @@ < EmitFn > emit_streaming_min
     )
     // Row 2 — bounded_heap: inline-cmp + take(N); distinct gate optional; no first.
-    plan_order_family_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "order_bounded_heap",
         chain <- [
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
@@ -1979,7 +1948,7 @@ def private populate_plan_order_family_patterns {
         emit = @@ < EmitFn > emit_bounded_heap
     )
     // Row 3 — order_then_plain_distinct: plain distinct (NOT distinct_by — whole-tuple equality is position-invariant; distinct_by would pick an arbitrary K1 representative).
-    plan_order_family_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "order_then_plain_distinct",
         chain <- [
             Slot(matcher = m_alias("order_family"), cardinality = c_one(), capture_name = "order"),
@@ -1992,7 +1961,7 @@ def private populate_plan_order_family_patterns {
         emit = @@ < EmitFn > emit_fused_prefilter
     )
     // Row 4 — fused_prefilter: where_ or distinct_family upstream + order_family; optional take/first/terminal_select.
-    plan_order_family_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "order_fused_prefilter",
         chain <- [
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
@@ -2006,7 +1975,7 @@ def private populate_plan_order_family_patterns {
         emit = @@ < EmitFn > emit_fused_prefilter
     )
     // Row 5 — buffer_helper_dispatch: bare order_family + optional take/first → direct daslib helper call (order/top_n*/min_max). array_source gates to Array only — Decs has no `top` expr, cascades to Row 4 (fused_prefilter).
-    plan_order_family_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "order_buffer_helper_dispatch",
         chain <- [
             Slot(matcher = m_alias("order_family"), cardinality = c_one(), capture_name = "order"),
@@ -2791,34 +2760,11 @@ def private emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : Li
     }
 }
 
-// Stub — table-driven dispatch into plan_loop_or_count_patterns.
-[macro_function]
-def private plan_loop_or_count(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    top = peel_each(top)
-    let at = calls[0]._0.at
-    let exprIsIter = expr._type != null && expr._type.isIterator
-    let srcName = qn("source", at)
-    for (p in plan_loop_or_count_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var topClone = clone_expression(top)
-            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 [_macro]
-def private populate_plan_loop_or_count_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_loop_or_count_patterns)) return
+def private register_loop_or_count_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
     // Single row — c_chain head matches the where_/select run (0+ contiguous calls), then canonical-order range ops, optional post-take where, optional terminator from loop_terminator_family.
-    plan_loop_or_count_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "loop_or_count_general",
         chain <- [
             slot_chain_of(["where_", "select"], "head"),
@@ -3213,37 +3159,13 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
     return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
 }
 
-// Stub — table-driven dispatch into plan_reverse_patterns. Populated by populate_plan_reverse_patterns [_macro].
-[macro_function]
-def private plan_reverse(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    normalize_order_reverse(calls)
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    top = peel_each(top)
-    let at = calls[0]._0.at
-    let exprIsIter = expr._type != null && expr._type.isIterator
-    let srcName = qn("source", at)
-    for (p in plan_reverse_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var topClone = clone_expression(top)
-            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 // [_macro] runs at macro-compile time and stays off the JIT runtime graph — the rows carry @@<EmitFn>
 // addresses of [macro_function] emit fns whose quote() bodies the LLVM JIT can't lower.
 [_macro]
-def private populate_plan_reverse_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_reverse_patterns)) return
+def private register_reverse_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
     // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
-    plan_reverse_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "reverse_distinct_backward_walk",
         chain <- [
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
@@ -3253,7 +3175,7 @@ def private populate_plan_reverse_patterns {
         emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
     )
     // R6 — bare reverse + take + to_array, backward index walk
-    plan_reverse_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "reverse_take_backward_index",
         chain <- [
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
@@ -3263,7 +3185,7 @@ def private populate_plan_reverse_patterns {
         emit = @@ < EmitFn > emit_reverse_backward_index_walk
     )
     // Ra — reverse + count (reverse is identity for count)
-    plan_reverse_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "reverse_counter",
         chain <- [
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
@@ -3275,7 +3197,7 @@ def private populate_plan_reverse_patterns {
         emit = @@ < EmitFn > emit_reverse_counter
     )
     // Rb — reverse + first[_or_default], walk-and-overwrite-last scalar; optional terminal _select
-    plan_reverse_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "reverse_walk_overwrite",
         chain <- [
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
@@ -3288,7 +3210,7 @@ def private populate_plan_reverse_patterns {
         emit = @@ < EmitFn > emit_reverse_walk_overwrite_scalar
     )
     // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select
-    plan_reverse_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "reverse_buffer_inplace",
         chain <- [
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
@@ -3532,34 +3454,11 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
     return adapter_wrap_invoke(ctx.src, stmts, null, needIterWrap, at)
 }
 
-// Stub — table-driven dispatch into plan_distinct_patterns.
-[macro_function]
-def private plan_distinct(var expr : Expression?) : Expression? {
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls)) return null
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    top = peel_each(top)
-    let at = calls[0]._0.at
-    let exprIsIter = expr._type != null && expr._type.isIterator
-    let srcName = qn("source", at)
-    for (p in plan_distinct_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var topClone = clone_expression(top)
-            var ctx = EmitCtx(top = topClone, src = SourceAdapter(Array = (topClone, srcName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 [_macro]
-def private populate_plan_distinct_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_distinct_patterns)) return
+def private register_distinct_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
     // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
-    plan_distinct_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "distinct_take",
         chain <- [
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
@@ -3572,7 +3471,7 @@ def private populate_plan_distinct_patterns {
         emit = @@ < EmitFn > emit_hashtable_dedup
     )
     // distinct_main — distinct[_by]; optional terminator (count / long_count / sum / implicit to_array)
-    plan_distinct_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "distinct_main",
         chain <- [
             Slot(matcher = m_literal("where_"), cardinality = c_opt(), capture_name = "where"),
@@ -4599,10 +4498,10 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
 }
 
 [_macro]
-def private populate_plan_group_by_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_group_by_patterns)) return
+def private register_group_by_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
     // Array-source group_by: head segments + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
-    plan_group_by_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "group_by_array",
         chain <- [
             slot_chain_of(["where_", "select"], "head"),
@@ -4617,7 +4516,7 @@ def private populate_plan_group_by_patterns {
         emit = @@ < EmitFn > emit_group_by
     )
     // Decs-source: same shape + optional upstream `join` slot; v1 join-shape limits via decs_join_invariants.
-    plan_group_by_patterns |> emplace <| SplicePattern(
+    splice_patterns |> emplace <| SplicePattern(
         name = "group_by_decs",
         chain <- [
             slot_chain_of(["where_", "select"], "head"),
@@ -4632,26 +4531,6 @@ def private populate_plan_group_by_patterns {
         requires <- [@@ < RequiresPredicate > decs_source, @@ < RequiresPredicate > decs_join_invariants, @@ < RequiresPredicate > no_order_with_count],
         emit = @@ < EmitFn > emit_group_by
     )
-}
-
-[macro_function]
-def private plan_group_by(var expr : Expression?) : Expression? {
-    // PR D1 stub — walks plan_group_by_patterns with Array adapter; emit_group_by delegates to plan_group_by_core.
-    var (top, calls) = flatten_linq(expr)
-    if (empty(calls) || expr._type == null) return null
-    top = peel_each(top)
-    let at = calls[0]._0.at
-    let srcName = qn("source", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_group_by_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = top, src = SourceAdapter(Array = (top, srcName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
 }
 
 // ── decs eager-bridge unroll (Approach Z — for_each_archetype + nested _fold) ───────
@@ -6047,28 +5926,6 @@ def private emit_decs_element_at(bridge : DecsBridgeShape?;
     return emission
 }
 
-[macro_function]
-def private plan_decs_unroll(var expr : Expression?) : Expression? {
-    // PR C stub — routes through plan_loop_or_count_patterns with Decs adapter. emit_loop_or_count_lane's Decs-arm (emit_loop_or_count_lane_decs) reconstructs a calls array from captures and dispatches to the existing emit_decs_* lane fns.
-    var (top, calls) = flatten_linq(expr)
-    var bridge = extract_decs_bridge(top)
-    if (bridge == null || empty(calls) || expr._type == null) return null
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_loop_or_count_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 // ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────
 
 [macro_function]
@@ -6084,106 +5941,12 @@ def private is_primitive_join_key_type(keyType : TypeDeclPtr) : bool {
             || keyType.baseType == Type.tBool))
 }
 
-[macro_function]
-def private plan_decs_group_by(var expr : Expression?) : Expression? {
-    // PR D1 stub — walks plan_group_by_patterns with Decs adapter; upstream_join slot captured per Theme 3 C3.
-    var (top, calls) = flatten_linq(expr)
-    var bridge = extract_decs_bridge(top)
-    if (bridge == null || empty(calls) || expr._type == null) return null
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_group_by_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
-// ── decs order family splice (PR C — pattern-table stub through plan_order_family_patterns) ───────
-
-[macro_function]
-def private plan_decs_order_family(var expr : Expression?) : Expression? {
-    // PR C stub — reuses plan_order_family_patterns with Decs adapter. Row 4 (buffer_helper_dispatch) gated by array_source so decs cascades to Row 3 (fused_prefilter) for the bare order / order+take / order+first cases — fused_prefilter materializes the buffer, which is what the imperative decs body did anyway.
-    var (top, calls) = flatten_linq(expr)
-    var bridge = extract_decs_bridge(top)
-    if (bridge == null || empty(calls) || expr._type == null) return null
-    normalize_order_reverse(calls)
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_order_family_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
-// ── decs reverse splice (PR C — pattern-table stub through plan_reverse_patterns) ───────
-
-[macro_function]
-def private plan_decs_reverse(var expr : Expression?) : Expression? {
-    // PR C stub — reuses plan_reverse_patterns with Decs adapter; backward-index rows skip via array_source. `reverse |> distinct[_by]` cascades (D6 deferred).
-    var (top, calls) = flatten_linq(expr)
-    var bridge = extract_decs_bridge(top)
-    if (bridge == null || empty(calls) || expr._type == null) return null
-    normalize_order_reverse(calls)
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_reverse_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
-// ── decs distinct splice (PR C — pattern-table stub through plan_distinct_patterns) ───────
-
-[macro_function]
-def private plan_decs_distinct(var expr : Expression?) : Expression? {
-    // PR C stub — reuses plan_distinct_patterns with Decs adapter; emit_hashtable_dedup carries the per-adapter take(N) branch (Decs uses for_each_archetype_find, Array uses for+break).
-    var (top, calls) = flatten_linq(expr)
-    var bridge = extract_decs_bridge(top)
-    if (bridge == null || empty(calls) || expr._type == null) return null
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_distinct_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = null, src = SourceAdapter(Decs = (bridge, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
-// ── decs join splice (PR D2 — pattern-table stub through plan_decs_join_patterns) ───────
+// ── decs join splice (PR D2 — pattern-table stub through splice_patterns) ───────
 
 [_macro]
-def private populate_plan_decs_join_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_decs_join_patterns)) return
-    plan_decs_join_patterns |> emplace <| SplicePattern(
+def private register_decs_join_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
+    splice_patterns |> emplace <| SplicePattern(
         name = "decs_join_general",
         chain <- [
             Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
@@ -6368,32 +6131,10 @@ def private emit_decs_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) :
     return finalize_decs_emission(emission, at, false)
 }
 
-[macro_function]
-def private plan_decs_join(var expr : Expression?) : Expression? {
-    // PR D2 stub — walks plan_decs_join_patterns with Decs adapter; emit_decs_join keeps inline collect+probe per D2-A.
-    var (top, calls) = flatten_linq(expr)
-    var bridgeA = extract_decs_bridge(top)
-    if (bridgeA == null || empty(calls) || expr._type == null) return null
-    collapse_chained_selects(calls)
-    collapse_chained_wheres(calls)
-    let at = calls[0]._0.at
-    let tupName = qn("decs_tup", at)
-    let exprIsIter = expr._type.isIterator
-    for (p in plan_decs_join_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
-            var ctx = EmitCtx(top = top, src = SourceAdapter(Decs = (bridgeA, tupName)), expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
-        }
-    }
-    return null
-}
-
 [_macro]
-def private populate_plan_zip_patterns {
-    if (!is_compiling_macros_in_module("linq_fold") || !empty(plan_zip_patterns)) return
-    plan_zip_patterns |> emplace <| SplicePattern(
+def private register_zip_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
+    splice_patterns |> emplace <| SplicePattern(
         name = "zip_general",
         chain <- [
             Slot(matcher = m_literal("zip"), cardinality = c_one(), capture_name = "zip"),
@@ -6723,18 +6464,40 @@ def private emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expre
 }
 
 [macro_function]
-def private plan_zip(var expr : Expression?) : Expression? {
-    // PR D2 stub — walks plan_zip_patterns; emit_zip builds SourceAdapter::Zip and dispatches lanes inline.
+def private try_splice_patterns(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (empty(calls) || expr._type == null) return null
+    normalize_order_reverse(calls)
     collapse_chained_selects(calls)
     collapse_chained_wheres(calls)
     let at = calls[0]._0.at
     let exprIsIter = expr._type.isIterator
-    for (p in plan_zip_patterns) {
+    // Decs adapter first when a from_decs_template bridge is present (Slice 5d cascade rule).
+    let bridge = extract_decs_bridge(top)
+    if (bridge != null) {
+        let tupName = qn("decs_tup", at)
+        for (p in splice_patterns) {
+            var r <- match_pattern(p, calls, top)
+            if (r is matched) {
+                var ctx = EmitCtx(top = null,
+                                  src = SourceAdapter(Decs = (bridge, tupName)),
+                                  expr_is_iterator = exprIsIter)
+                var result = invoke(p.emit, r as matched, ctx, at)
+                if (result != null) return result
+            }
+        }
+    }
+    // Cascaded decs chains fall through to fold_linq_default rather than risk a decs-only row matching here (peel_each doesn't strip the eager-bridge ExprInvoke, so decs_source stays true) and emitting via Array adapter — see linq_fold_patterns.rst "How dispatch works".
+    if (bridge != null) return null
+    top = peel_each(top)
+    let srcName = qn("source", at)
+    for (p in splice_patterns) {
         var r <- match_pattern(p, calls, top)
         if (r is matched) {
-            var ctx = EmitCtx(top = top, src = SourceAdapter(Array = (top, qn("source", at))), expr_is_iterator = exprIsIter)
+            var topClone = clone_expression(top)
+            var ctx = EmitCtx(top = topClone,
+                              src = SourceAdapter(Array = (topClone, srcName)),
+                              expr_is_iterator = exprIsIter)
             var result = invoke(p.emit, r as matched, ctx, at)
             if (result != null) return result
         }
@@ -6747,37 +6510,14 @@ class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        // Decs-bridge planners run BEFORE their array-side equivalents (Slice 5d cascade rule — decs planners have stricter guards; running them second lets the generic planner match on the eager-bridge invoke and silently emit the slow shape).
-        var res : Expression? = plan_decs_order_family(call.arguments[0])
+        var res = try_splice_patterns(call.arguments[0])
         if (res != null) return res
-        res = plan_order_family(call.arguments[0])
-        if (res != null) return res
-        res = plan_decs_reverse(call.arguments[0])
-        if (res != null) return res
-        res = plan_reverse(call.arguments[0])
-        if (res != null) return res
-        res = plan_decs_distinct(call.arguments[0])
-        if (res != null) return res
-        res = plan_distinct(call.arguments[0])
-        if (res != null) return res
-        res = plan_decs_group_by(call.arguments[0])
-        if (res != null) return res
-        res = plan_group_by(call.arguments[0])
-        if (res != null) return res
-        res = plan_decs_unroll(call.arguments[0])
-        if (res != null) return res
-        res = plan_decs_join(call.arguments[0])
-        if (res != null) return res
-        res = plan_zip(call.arguments[0])
-        if (res != null) return res
-        res = plan_loop_or_count(call.arguments[0])
-        if (res != null) return res
-        // Theme 6 — warn when a `from_decs_template` source survives every tier-1 planner with a non-empty chain
+        // Theme 6 — warn when a `from_decs_template` source survives every splice arm with a non-empty chain
         // (the bridge materializes a temp `res` array before the cascade). Suppress with `options _no_decs_perf_warn = true`.
         if (!(prog._options |> find_arg("_no_decs_perf_warn") ?as tBool ?? false)) {
             var (top, calls) = flatten_linq(call.arguments[0])
             if (!empty(calls) && extract_decs_bridge(top) != null) {
-                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch — no `plan_decs_*` arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_decs_perf_warn = true`.\n")
+                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch — no splice arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_decs_perf_warn = true`.\n")
             }
         }
         // Tier 2 — array-shape pipeline with `_inplace` reuse + explicit `delete`.

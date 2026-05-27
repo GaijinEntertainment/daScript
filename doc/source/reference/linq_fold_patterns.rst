@@ -22,45 +22,46 @@ How dispatch works
 ==================
 
 ``_fold`` walks the chain inside-out (terminator first), flattens the
-``ExprCall`` spine via ``flatten_linq``, and hands the whole thing to
-each ``plan_*`` function below in turn. Each ``plan_*`` either returns
-a specialized expression (the splice) or ``null`` (defer to the next).
-The first non-null wins.
+``ExprCall`` spine via ``flatten_linq``, normalizes adjacent
+where/select pairs and ``order |> reverse`` shapes via the pre-passes
+described below, and hands the result to ``try_splice_patterns`` in
+``daslib/linq_fold.das``. That dispatcher walks a single global
+``splice_patterns`` table (17 rows, one per arm listed in this
+document) twice:
 
-The dispatch order in ``LinqFold.visit`` (``daslib/linq_fold.das``) is:
+1. **Decs adapter pass.** Runs only when
+   ``extract_decs_bridge(top) != null`` (i.e. the source is
+   ``from_decs_template(...)``). Each row's ``requires`` predicates
+   gate the match; rows with an ``array_source`` predicate fail
+   here and fall through. First emit that returns non-null wins.
+2. **Array adapter pass.** Runs only when ``extract_decs_bridge(top)
+   == null``, i.e. the source is **not** a decs eager bridge. Top is
+   first ``peel_each``-unwrapped. Decs chains never reach this pass:
+   if the Decs pass above cascades on every row, control falls
+   through to ``fold_linq_default`` instead. (This is deliberate —
+   ``peel_each`` does not strip the eager-bridge ``ExprInvoke``, so
+   without this gate the ``decs_source`` predicate would still
+   succeed on a decs source in the Array pass and decs-only rows
+   could match and emit via ``SourceAdapter::Array``, silently
+   dropping adapter-specific captures like ``upstream_join``.)
 
-1. ``plan_decs_order_family`` — decs source with order family.
-2. ``plan_order_family`` — array source with order family.
-3. ``plan_decs_reverse`` — decs source with ``reverse``.
-4. ``plan_reverse`` — array source with ``reverse``.
-5. ``plan_decs_distinct`` — decs source with ``distinct``/``distinct_by``.
-6. ``plan_distinct`` — array source with ``distinct``/``distinct_by``.
-7. ``plan_decs_group_by`` — pattern-table stub walking ``plan_group_by_patterns``
-   with a Decs adapter; matched row's ``emit_group_by`` delegates to the shared
-   ``plan_group_by_core``. Pattern ``group_by_decs`` carries an optional
-   ``upstream_join`` slot (Theme 3 C3 decs-join shape).
-8. ``plan_group_by`` — pattern-table stub walking ``plan_group_by_patterns``
-   with an Array adapter; ``emit_group_by`` shared with the decs entry above.
-9. ``plan_decs_unroll`` — generic decs walk
-   (``where``/``select``/``skip``/``take`` + counter / accumulator /
-   early-exit / walk lane).
-10. ``plan_decs_join`` — pattern-table stub walking ``plan_decs_join_patterns``
-    with a Decs adapter; pattern ``decs_join_general`` (emit fn ``emit_decs_join``)
-    hashed equi-join over two ``from_decs_template`` sources.
-11. ``plan_zip`` — pattern-table stub walking ``plan_zip_patterns``;
-    pattern ``zip_general`` (emit fn ``emit_zip``) 2-source lockstep zip
-    with fused chain ops + 4-lane terminator dispatch.
-12. ``plan_loop_or_count`` — generic array walk
-    (``where``/``select``/``skip``/``take`` + counter / accumulator /
-    early-exit terminator).
-13. ``fold_linq_default`` — fallback, no splice.
+If neither pass emits, the Theme 6 perf-warn fires for
+``from_decs_template`` chains (telling the user the bridge will
+materialize and tier-2 will run on the buffer), then control falls
+through to ``fold_linq_default`` (the iterator-materializing tier-2
+path) and finally to a raw passthrough.
 
-The decs and array variants are interleaved (each decs plan runs
-before its array counterpart) because a chain starting with
-``from_decs_template(...)`` must hit the decs splice — falling through
-to the array plan would not match and would force the default. The
-generic decs walk (``plan_decs_unroll``) runs after the specialized
-decs plans so it doesn't shadow them.
+.. note::
+
+   Labels of the form ``plan_<X>`` (e.g. ``plan_distinct``,
+   ``plan_decs_reverse``) in the catalog below refer to the
+   pre-PR-E per-planner stubs that were collapsed into the unified
+   dispatcher. Each label now corresponds to a row (or pair of rows)
+   in ``splice_patterns`` whose ``requires`` predicates and ``emit``
+   function carry the same logic. The names are kept here because
+   they read more naturally than row names like
+   ``order_buffer_helper_dispatch`` — see ``daslib/linq_fold.das``
+   for the precise row each catalog entry maps to.
 
 Pre-dispatch normalizations
 ===========================

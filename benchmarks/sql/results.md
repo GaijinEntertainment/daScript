@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-26 from `0f88a64b6` (PR D3 — full GroupBySourceAdapter melt; closes the linq_fold pattern-table refactor masterplan). Full INTERP + JIT rerun across all 69 lanes; PRs D1/D2/D3 were pure refactors, so the matrix is expected within run-to-run noise of the prior `2c18845d5` baseline.
+Generated 2026-05-26 from `0f88a64b6` (PR D3 — full GroupBySourceAdapter melt). Matrix kept current through **PR E** (final pattern-table collapse: 7 per-plan tables → 1 ``splice_patterns``; 12 stub fns + cascade → ``try_splice_patterns``) — same emit fns, same row data, output AST byte-identical to PR D3, so no rerun was needed.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
 one bench family in `benchmarks/sql/`; columns are nanoseconds per
 logical operation. `—` marks an intentionally absent lane — see
