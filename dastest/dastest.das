@@ -393,23 +393,33 @@ def main() : int {
             totalThreads = get_total_hw_threads() * 2
         }
         let testTimeout = test_args.test_timeout
+        // --headless is a pass-through flag (not parsed by DastestArgs); detect once
+        // here so each spawned --run subprocess re-receives it via singleTest cmd.
+        // Without this, the post-`--` slice in the child loses --headless and any
+        // playwright/harness that depends on it reverts to windowed mode.
+        let headlessFlag = find_index(raw_args, "--headless") >= 0 ? " --headless" : ""
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
         with_channel(totalFiles) $(inputChannel) {
             with_channel(totalFiles) $(outputChannel) {
                 with_job_status(totalThreads) $(completion) {
 
                     for (t in range(totalThreads)) {
-                        new_thread <| @ {
+                        new_thread <| @capture(= t) {
                             for_each_clone(inputChannel) $(input : IsoInput#) {
                                 var isoRes : IsolatedResult
                                 isoRes.uri = clone_string(input.uri)
-                                isoRes.cmd = clone_string(input.cmd)
+                                // Append --worker-index at pull time, not push time: the
+                                // worker that pulls a task gets to brand the cmd with its
+                                // own t. Tests read --worker-index from get_user_args() to
+                                // pick per-worker resources (e.g. unique TCP ports).
+                                let workerCmd = "{input.cmd} --worker-index {t}"
+                                isoRes.cmd = clone_string(workerCmd)
                                 let fileTime = ref_time_ticks()
                                 unsafe {
-                                    isoRes.exitCode = popen_timeout(input.cmd, testTimeout) $(f) {
+                                    isoRes.exitCode = popen_timeout(workerCmd, testTimeout) $(f) {
                                         if (f == null) {
-                                            // log::error("Internal error: Failed to execute cmd > {input.cmd}")
-                                            isoRes.err |> push("Internal error: Failed to execute cmd > {input.cmd}")
+                                            // log::error("Internal error: Failed to execute cmd > {workerCmd}")
+                                            isoRes.err |> push("Internal error: Failed to execute cmd > {workerCmd}")
                                             return
                                         }
                                         var readJson = false
@@ -456,7 +466,7 @@ def main() : int {
                         let jitstr = jit_enabled() ? "-jit" : ""
                         let aotstr = is_in_aot() ? "-use-aot" : ""
                         let benchstr = ctx.bench_enabled ? "--bench" : ""
-                        let singleTest = "{raw_args[0]} {raw_args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}"
+                        let singleTest = "{raw_args[0]} {raw_args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}{headlessFlag}"
                         inputChannel |> push_clone(IsoInput(uri = clone_string(uri), cmd = clone_string(singleTest)))
                         inputChannel |> notify()
                     }
