@@ -796,6 +796,12 @@ def private type_has_length(t : TypeDecl?) : bool {
         || t.isArray || t.isRange)
 }
 
+def private type_has_long_length(t : TypeDecl?) : bool {
+    // Subset of type_has_length where long_length is C++-bound — array<T> and table<K;V> can exceed INT_MAX; int64(length(...)) would truncate before widening.
+    if (t == null) return false
+    return t.isGoodArrayType || t.isGoodTableType
+}
+
 enum private LinqLane {
     UNKNOWN
     ARRAY
@@ -858,11 +864,15 @@ def private finalize_invoke(var res : Expression?; at : LineInfo) : Expression? 
 
 [clone(top), macro_function]
 def private emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
-    // Count-shaped shortcut: emit `length(src)` (count, int) or `int64(length(src))` (long_count). length returns int, so the int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
+    // Count-shaped shortcut: emit `length(src)` (count), `long_length(src)` (long_count on array/table), or `int64(length(src))` (long_count on string/dim/range — length returns int, capped). The int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var res : Expression?
-    if (opName == "long_count") {
+    if (opName == "long_count" && type_has_long_length(top._type)) {
+        res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
+            return long_length($i(srcName))
+        }, $e(topExpr)))
+    } elif (opName == "long_count") {
         res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
             return int64(length($i(srcName)))
         }, $e(topExpr)))
@@ -3090,7 +3100,7 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
         }
         $e(tupBind)
         $i(bufName) |> push_clone($i(tupName))
-        if (int64(length($i(bufName))) >= $i(actualName)) {
+        if (long_length($i(bufName)) >= $i(actualName)) {
             break
         }
     }
@@ -3121,7 +3131,7 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
             var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
             $e(clonedForExpr)
             $i(seenName) += $i(archName).size
-            return int64(length($i(bufName))) >= $i(actualName)
+            return long_length($i(bufName)) >= $i(actualName)
         })
         _::reverse_inplace($i(bufName))
         return <- $i(bufName)
@@ -3494,7 +3504,7 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
             }
         } else {
             stmts |> push <| qmacro_expr() {
-                return int64(length($i(seenName)))
+                return long_length($i(seenName))
             }
         }
     } elif (isSumTerminator) {
@@ -6325,9 +6335,15 @@ def private emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expre
     var adapter = SourceAdapter(Zip = zipShape)
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
+        let bothLongLength = type_has_long_length(srcAExpr._type) && type_has_long_length(srcBExpr._type)
         if (lastName == "count") {
             bodyStmts |> push <| qmacro_expr() {
                 return length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName))
+            }
+        } elif (bothLongLength) {
+            // long_count on array/table pair: long_length avoids the int→int64 truncation if either source > INT_MAX.
+            bodyStmts |> push <| qmacro_expr() {
+                return long_length($i(srcAName)) < long_length($i(srcBName)) ? long_length($i(srcAName)) : long_length($i(srcBName))
             }
         } else {
             bodyStmts |> push <| qmacro_expr() {

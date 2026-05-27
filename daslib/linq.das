@@ -852,7 +852,7 @@ def long_count(var a : iterator<auto(TT)>) : int64 {
 
 def long_count(a : array<auto(TT)>) : int64 {
     //! Counts elements in an array, using a long integer
-    return int64(length(a))
+    return long_length(a)
 }
 
 def long_count(var a : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : int64 {
