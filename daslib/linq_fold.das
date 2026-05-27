@@ -1174,8 +1174,9 @@ struct private FoldArraySpec {
 
 [macro_function]
 def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
-    // 1. Compose perElement: preCondStmts + (whereCond gate around perElementPush) + optional distinct gate
-    var perElement = prepend_precond(wrap_with_condition(spec.perElementPush, spec.whereCond), spec.preCondStmts)
+    // 1. Compose perElement: distinct gate wraps push (innermost), then whereCond wraps that
+    // (where filters BEFORE distinct so the dset only sees survivors), then preCondStmts prepended.
+    var perElement = spec.perElementPush
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
         var dkeyExpr : Expression?
@@ -1195,6 +1196,7 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
             }
         }
     }
+    perElement = prepend_precond(wrap_with_condition(perElement, spec.whereCond), spec.preCondStmts)
     // 2. Assemble bodyStmts in order
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(spec.prologueStmts) + length(spec.postBufDeclStmts)
@@ -1227,16 +1229,17 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
     return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
 
-// Terminal _select re-iteration helper. selectLam==null → [buffer_return(buf,isIter)]; non-null →
-// [var outBuf; reserve; for(elem in buf){outBuf|>push_clone(projBody)}; buffer_return(outBuf,isIter)].
-// FoldArray migrations splice this into their tailStmts.
+// Terminal _select re-iteration helper. selectLam==null → [return <- buf]; non-null →
+// [var outBuf; reserve; for(elem in buf){outBuf|>push_clone(projBody)}; return <- outBuf].
+// Tail returns raw array; lane's wrapIter knob handles to_sequence_move at the outer invoke.
 [macro_function]
 def private build_terminal_select_tail(bufName : string; selectLam : Expression?;
-                                       selectElemType : TypeDeclPtr; isIterator : bool;
-                                       at : LineInfo) : array<Expression?> {
+                                       selectElemType : TypeDeclPtr; at : LineInfo) : array<Expression?> {
     var stmts : array<Expression?>
     if (selectLam == null) {
-        stmts |> push(buffer_return(bufName, isIterator))
+        stmts |> push <| qmacro_expr() {
+            return <- $i(bufName)
+        }
         return <- stmts
     }
     let outBufName = qn("proj_buf", at)
@@ -1248,8 +1251,8 @@ def private build_terminal_select_tail(bufName : string; selectLam : Expression?
         for ($i(elemName) in $i(bufName)) {
             $i(outBufName) |> push_clone($e(projBody))
         }
+        return <- $i(outBufName)
     }
-    stmts |> push(buffer_return(outBufName, isIterator))
     return <- stmts
 }
 
@@ -2401,71 +2404,41 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
     let topNName = order_top_n_call_name(oc.orderName)
     let inplaceName = "{oc.orderName}_inplace"
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
-    var pushStmt : Expression? = qmacro_expr() {
+    var perElementPush : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(bindName))
     }
-    // Theme 8 (audit 3b): distinct gate per-element push by set-insert on key. Single source pass, no full distinct materialization.
+    // Reserve only fires on array source with no distinct upstream (distinct gate makes length unknown ahead of time).
+    var distinctGate : DistinctGateSpec?
     if (oc.distinctName != "") {
-        var dkeyExpr : Expression?
-        if (oc.distinctName == "distinct_by") {
-            dkeyExpr = peel_lambda_rename_var(oc.distinctKey, bindName)
-            if (dkeyExpr == null) return null
-        } else {
-            dkeyExpr = qmacro($i(bindName))
-        }
-        pushStmt = qmacro_block() {
-            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                $i(dsetName) |> insert($i(dkeyName))
-                $e(pushStmt)
-            }
-        }
+        var dgKind : DistinctGateKind = (oc.distinctName == "distinct_by"
+            ? DistinctGateKind(KeyLam = oc.distinctKey)
+            : DistinctGateKind(NonKey = null))
+        distinctGate = new DistinctGateSpec(
+            kind = dgKind, bindName = bindName, bufElemType = bufElemType,
+            dsetName = dsetName, dkeyName = dkeyName
+        )
     }
-    var loopBody : Expression?
-    if (oc.whereCond != null) {
-        loopBody = qmacro_expr() {
-            if ($e(oc.whereCond)) {
-                $e(pushStmt)
-            }
-        }
-    } else {
-        loopBody = pushStmt
-    }
-    var stmts : array<Expression?>
-    stmts |> push <| qmacro_expr() {
-        var $i(bufName) : array<$t(bufElemType)>
-    }
-    if (oc.distinctName != "") {
-        if (oc.distinctName == "distinct_by") {
-            stmts |> push <| qmacro_expr() {
-                var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(oc.distinctKey), default<$t(bufElemType)>)))>
-            }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-            }
-        }
-    }
-    // Reserve hint: array source with no distinct gate has known length. Decs has no random-access length — skip.
+    var reserveStmts : array<Expression?>
     if (ctx.src is Array && oc.distinctName == "") {
         let top = (ctx.src as Array)._0
         let srcName = (ctx.src as Array)._1
         if (top != null && top._type != null && type_has_length(top._type)) {
-            stmts |> push <| qmacro_expr() {
+            reserveStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcName)))
             }
         }
     }
-    stmts |> push <| adapter_wrap_source_loop(ctx.src, loopBody, at)
+    // 4 tail arms hand-emitted: arms 1-2 bind single element (no re-iter), arm 4 wraps top_n result.
     let elemName = qn("order_proj_e", at)
     let outBufName = qn("order_proj_buf", at)
     var projBody : Expression?
     if (oc.selectLam != null) {
         projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
     }
+    var tailStmts : array<Expression?>
     if (oc.firstName == "first") {
         // where + order + first → min/max on prefilter buffer. Empty buf must panic to match eager first(); min/max return uninitialized refs on empty.
-        stmts |> push <| qmacro_expr() {
+        tailStmts |> push <| qmacro_expr() {
             panic("sequence contains no elements") if (empty($i(bufName)))
         }
         var minMaxCall : Expression?
@@ -2475,12 +2448,12 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
             minMaxCall = qmacro($c(minMaxName)($i(bufName)))
         }
         if (oc.selectLam != null) {
-            stmts |> push_from <| qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 let $i(elemName) = $e(minMaxCall)
                 return $e(projBody)
             }
         } else {
-            stmts |> push <| qmacro_expr() {
+            tailStmts |> push <| qmacro_expr() {
                 return $e(minMaxCall)
             }
         }
@@ -2495,13 +2468,13 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
         }
         if (oc.selectLam != null) {
             let dBindName = qn("order_d", at)
-            stmts |> push_from <| qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 let $i(dBindName) = $e(oc.firstDefaultExpr)
                 let $i(elemName) = _::first_or_default($e(topNCall), $i(dBindName))
                 return $e(projBody)
             }
         } else {
-            stmts |> push <| qmacro_expr() {
+            tailStmts |> push <| qmacro_expr() {
                 return _::first_or_default($e(topNCall), $e(oc.firstDefaultExpr))
             }
         }
@@ -2514,9 +2487,9 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
         } else {
             sortCall = qmacro($c(inplaceName)($i(bufName)))
         }
-        stmts |> push(sortCall)
+        tailStmts |> push(sortCall)
         if (oc.selectLam != null) {
-            stmts |> push_from <| qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 var $i(outBufName) : array<$t(oc.selectElemType)>
                 $i(outBufName) |> reserve(length($i(bufName)))
                 for ($i(elemName) in $i(bufName)) {
@@ -2525,7 +2498,7 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
                 return <- $i(outBufName)
             }
         } else {
-            stmts |> push <| qmacro_expr() {
+            tailStmts |> push <| qmacro_expr() {
                 return <- $i(bufName)
             }
         }
@@ -2540,7 +2513,7 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
         }
         if (oc.selectLam != null) {
             let topResName = qn("order_top_res", at)
-            stmts |> push_from <| qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 var $i(topResName) <- $e(topNCall)
                 var $i(outBufName) : array<$t(oc.selectElemType)>
                 $i(outBufName) |> reserve(length($i(topResName)))
@@ -2550,12 +2523,21 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
                 return <- $i(outBufName)
             }
         } else {
-            stmts |> push <| qmacro_expr() {
+            tailStmts |> push <| qmacro_expr() {
                 return <- $e(topNCall)
             }
         }
     }
-    return adapter_wrap_invoke(ctx.src, stmts, null, ctx.expr_is_iterator, at)
+    return emit_fold_array_lane(FoldArraySpec(
+        bufElemType = bufElemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        whereCond = oc.whereCond,
+        distinctGate = distinctGate,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts,
+        wrapIter = ctx.expr_is_iterator
+    ), ctx.src, at)
 }
 
 // ===== plan_loop_or_count migration (PR B) =====
@@ -3236,7 +3218,7 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
             $i(bufName) |> resize($i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < length($i(bufName)) ? $i(takeLimName) : length($i(bufName))))
         }
     }
-    tailStmts |> push_from <| build_terminal_select_tail(bufName, terminalSelectLam, terminalSelectElemType, ctx.expr_is_iterator, at)
+    tailStmts |> push_from <| build_terminal_select_tail(bufName, terminalSelectLam, terminalSelectElemType, at)
     return emit_fold_array_lane(FoldArraySpec(
         bufElemType = bufElemType,
         bufName = bufName,
@@ -3244,7 +3226,7 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         whereCond = whereCond,
         perElementPush = perElementPush,
         tailStmts <- tailStmts,
-        wrapIter = false
+        wrapIter = ctx.expr_is_iterator
     ), ctx.src, at)
 }
 
