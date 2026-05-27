@@ -553,6 +553,70 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
 
 // ===== Chain analysis (walk pipe-composed chain backwards) =====
 
+// nolint:STYLE015 Shared subquery-wrap: SQLite's bare-aggregate optimization — `SELECT *, MIN(pk) FROM t GROUP BY K` picks the row with the minimum pk per K, preserving all `*` columns at those values. Matches linq `_distinct_by`'s "first row per K" semantics when pk is monotonic with insertion order.
+[macro_function]
+def private build_distinct_by_inner_subquery(var q : SqlQuery&; pkField : string) : string {
+    let sqlK = field_to_column_name(q.rootType, q.distinctByCol)
+    let pkCol = field_to_column_name(q.rootType, pkField)
+    return "SELECT *, MIN(\"{pkCol}\") FROM \"{q.tableName}\" GROUP BY \"{sqlK}\""
+}
+
+// nolint:STYLE015 Reject any chain op between `_distinct_by(K)` and the aggregate terminator. v1 keeps the lowering simple by only supporting the direct shapes: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Other compositions (_where / _order_by / take / skip / etc.) deferred to chunk N+1.
+[macro_function]
+def private check_distinct_by_v1_gating(var q : SqlQuery&; linqName : string; allowSelectCol : bool;
+                                        prog : ProgramPtr; at : LineInfo) : bool {
+    if (!empty(q.whereSql) || q.seenJoin || q.seenSetOp
+            || q.seenGroupBy || q.seenHaving || q.seenTake || q.seenSkip
+            || q.seenOrderBy || q.seenDistinct) {
+        macro_error(prog, at, "_sql: chain operators between `_distinct_by` and `{linqName}` are not yet supported; restructure the chain so `_distinct_by` sits directly under the terminator")
+        q.hadError = true
+        return false
+    }
+    if (!allowSelectCol && !empty(q.selectCols)) {
+        macro_error(prog, at, "_sql: `_select` between `_distinct_by` and `{linqName}` is not yet supported")
+        q.hadError = true
+        return false
+    }
+    return true
+}
+
+[macro_function]
+def private finalize_distinct_by_count_wrap(var q : SqlQuery&; isLong : bool; predSql : string;
+                                            prog : ProgramPtr; at : LineInfo) {
+    let pkField = find_single_pk_field(q.rootType, prog, at)
+    if (empty(pkField)) {
+        q.hadError = true
+        return
+    }
+    q.innerSql := build_distinct_by_inner_subquery(q, pkField)
+    q.fromRowType = q.rootType
+    q.whereSql := predSql
+    q.aggregateExpr := "COUNT(*)"
+    let countBaseType = isLong ? Type.tInt64 : Type.tInt
+    q.aggregateType = new TypeDecl(at = at, baseType = countBaseType)
+    q.proj = ProjectionShape.Aggregate
+    q.matr = Materializer.One
+    q.seenTerminal = true
+}
+
+[macro_function]
+def private finalize_distinct_by_aggregate_wrap(var q : SqlQuery&; sqlOp : string; sqlCol : string;
+                                                var aggregateType : TypeDeclPtr;
+                                                prog : ProgramPtr; at : LineInfo) {
+    let pkField = find_single_pk_field(q.rootType, prog, at)
+    if (empty(pkField)) {
+        q.hadError = true
+        return
+    }
+    q.innerSql := build_distinct_by_inner_subquery(q, pkField)
+    q.fromRowType = q.rootType
+    q.aggregateExpr := "{sqlOp}(\"{sqlCol}\")"
+    q.aggregateType = aggregateType
+    q.proj = ProjectionShape.Aggregate
+    q.matr = Materializer.One
+    q.seenTerminal = true
+}
+
 [macro_function]
 def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
                                   linqName : string; sqlOp : string; promote_to_double : bool;
@@ -574,6 +638,18 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
     }
     let col = q.selectCols[0]
     let sqlCol = field_to_column_name(q.rootType, col)
+    // nolint:STYLE015 Bare-aggregate `_distinct_by(_.K) |> _select(_.F) |> {agg}()` wrap: same SQL as for count(P) but with SUM/MIN/MAX/AVG over the projected column and no outer WHERE.
+    if (!empty(q.distinctByCol)) {
+        if (!check_distinct_by_v1_gating(q, linqName, true, prog, at)) return true
+        var aggType : TypeDeclPtr
+        if (promote_to_double) {
+            aggType = new TypeDecl(at = at, baseType = Type.tDouble)
+        } else {
+            aggType = lookup_struct_field_type(q.rootType, col)
+        }
+        finalize_distinct_by_aggregate_wrap(q, sqlOp, sqlCol, aggType, prog, at)
+        return true
+    }
     q.aggregateExpr = "{sqlOp}(\"{sqlCol}\")"
     if (promote_to_double) {
         q.aggregateType = new TypeDecl(at = at, baseType = Type.tDouble)
@@ -646,10 +722,28 @@ def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
         q.hadError = true
         return true
     }
-    if (cCall.arguments |> length != 1) {
-        macro_error(prog, at, "_sql: `{linqName}(predicate)` is not yet supported — use `|> _where(predicate) |> {linqName}()` instead")
-        q.hadError = true
-        return true
+    // nolint:STYLE015 2-arg `count(P)` / `long_count(P)`: only supported when fronted by `_distinct_by(_.K)` — emits the SQLite bare-aggregate inner-subquery wrap (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).
+    if (cCall.arguments |> length == 2) {
+        var body = peel_lambda_single_return(cCall.arguments[1])
+        if (body == null) {
+            macro_error(prog, at, "_sql: `{linqName}(P)` predicate lambda has unexpected shape")
+            q.hadError = true
+            return true
+        }
+        // Pre-set Aggregate so analyze_chain's `select_from` bottom doesn't fill default columns
+        // into q.selectCols (mirrors the 1-arg branch below at line ~720).
+        q.proj = ProjectionShape.Aggregate
+        if (!analyze_chain(cCall.arguments[0], q, prog, at)) return true
+        if (empty(q.distinctByCol)) {
+            macro_error(prog, at, "_sql: `{linqName}(P)` is currently only supported when fronted by `_distinct_by(_.col)`; use `|> _where(P) |> {linqName}()` for the standalone form")
+            q.hadError = true
+            return true
+        }
+        if (!check_distinct_by_v1_gating(q, linqName, false, prog, at)) return true
+        let predSql = pred_to_sql(body, q, prog, at)
+        if (q.hadError) return true
+        finalize_distinct_by_count_wrap(q, isLong, predSql, prog, at)
+        return !q.hadError
     }
     q.matr = Materializer.One
     q.seenTerminal = true
