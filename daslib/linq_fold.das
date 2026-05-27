@@ -399,8 +399,6 @@ def private zip_reverse_compatible_with_term(var c : Captures; var top : Express
 
 var private splice_patterns : array<SplicePattern>
 
-// ===== End of pattern-table kernel =====
-
 var private linqCalls = {
 // filtering data
     "where_" => LinqCall(name = "where_"),
@@ -824,17 +822,6 @@ def private classify_terminator(name : string) : LinqLane {
             || name == "element_at" || name == "element_at_or_default"
             || name == "aggregate") return LinqLane.EARLY_EXIT
     return LinqLane.UNKNOWN
-}
-
-[macro_function]
-def private is_buffer_required_op(name : string) : bool {
-    // Defense-in-depth marker: dedicated planners catch these first in the cascade; this arm only fires on shapes they don't recognize.
-    return (name == "order_by" || name == "order" || name == "order_descending"
-        || name == "order_by_descending"
-        || name == "distinct" || name == "distinct_by"
-        || name == "reverse"
-        || name == "group_by" || name == "group_by_lazy"
-        || name == "join" || name == "left_join" || name == "group_join")
 }
 
 [macro_function]
@@ -2088,7 +2075,7 @@ def private register_order_family_rows {
     )
 }
 
-// ===== plan_order_family migration (PR B2) — 4 emit archetypes + 5 pattern rows. Capture keys: where / distinct / distinct_after / order / take / term / termsel. =====
+// ===== plan_order_family =====
 
 // Shared helper — every emit archetype starts with this state extraction.
 struct private OrderCaptures {
@@ -2547,12 +2534,9 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
     ), ctx.src, at)
 }
 
-// ===== plan_loop_or_count migration (PR B) =====
+// ===== plan_loop_or_count =====
 // Single emit + single pattern row. c_chain captures where_/select head; canonical-order slots carry the rest.
 
-// PR C Decs-arm: reconstructs a flatten_linq-shaped calls array from captures, runs extract_decs_ranges +
-// compute_decs_chain_info (the same helpers plan_decs_unroll imperative uses), then dispatches to the
-// existing emit_decs_* lane fns. State-hoist-above-for_each_archetype shape stays per-adapter (D1).
 [macro_function]
 def private emit_loop_or_count_lane_decs(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bridge = (ctx.src as Decs)._0
@@ -2869,9 +2853,7 @@ def private register_loop_or_count_rows {
     )
 }
 
-// ===== plan_reverse migration (PR A — pattern-table refactor) =====
-// 5 emit archetypes + 5 pattern rows + stub. Each archetype lifted verbatim from
-// the prior imperative plan_reverse branches (see git history before PR A).
+// ===== plan_reverse =====
 
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
 [macro_function]
