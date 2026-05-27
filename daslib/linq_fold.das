@@ -3015,22 +3015,38 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
     let takeLimName = qn("rtakeLim", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
-    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
+    var takeArg = c.single["take"].arguments[1]
     // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
-    var body : Expression? = qmacro_block() {
+    var prologueStmts <- qmacro_block_to_array() {
         let $i(lenName) = length($i(srcName))
-        let $i(takeLimName) = $e(c.single["take"].arguments[1])
+        let $i(takeLimName) = $e(takeArg)
         let $i(takeNName) = $i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < $i(lenName) ? $i(takeLimName) : $i(lenName))
-        var $i(bufName) : array<$t(bufElemType)>
-        $i(bufName) |> reserve($i(takeNName))
-        for ($i(kName) in 0 .. $i(takeNName)) {
-            $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
-        }
-        $e(returnExpr)
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    var reserveStmts : array<Expression?>
+    reserveStmts |> push <| qmacro_expr() {
+        $i(bufName) |> reserve($i(takeNName))
+    }
+    var perElementPush : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+    }
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    var spec = FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = bufElemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts
+    )
+    var composedPE = compose_fold_per_element(spec)
+    if (composedPE == null) return null
+    spec.customSourceLoop = qmacro_expr() {
+        for ($i(kName) in 0 .. $i(takeNName)) {
+            $e(composedPE)
+        }
+    }
+    return emit_fold_array_lane(spec, ctx.src, at)
 }
 
 // R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
