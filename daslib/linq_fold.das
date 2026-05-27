@@ -1739,17 +1739,6 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
     return t
 }
 
-[clone(top), macro_function]
-def private finalize_emission_stmts(top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(stmts)
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
-}
-
 // ===== SourceAdapter helpers (PR C) — used by emit fns to dispatch source-loop + invoke wrap per adapter. =====
 
 // The per-element bind name emit fns peel where/select/key/value lambdas against. Drives build_decs_inner_for_pruned's
