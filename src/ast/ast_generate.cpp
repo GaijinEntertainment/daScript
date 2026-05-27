@@ -292,7 +292,16 @@ namespace das {
         return del;
     }
 
-    // return [[t()]]
+    Structure * findChainCtorAncestor ( Structure * cls ) {
+        if ( !cls || !cls->isClass || !cls->parent ) return nullptr;
+        for ( auto * anc = cls->parent; anc; anc = anc->parent ) {
+            if ( anc->hasUserConstructor() ) return anc;
+        }
+        return nullptr;
+    }
+
+    // return [[t()]] -- or, for a class derived from a parent with a user ctor,
+    // emit the let-self / call Parent`Parent(self) / return self chain body.
     FunctionPtr makeConstructor ( Structure * str, bool isPrivate ) {
         auto fn = new Function();
         fn->generated = true;
@@ -308,21 +317,71 @@ namespace das {
         if ( str->macroInterface ) fn->macroFunction = true;
         auto block = new ExprBlock();
         block->at = str->at;
-        auto makeT = new ExprMakeStruct(str->at);
-        if ( str->isClass ) makeT->alwaysSafe = true;
-        makeT->useInitializer = false;
-        makeT->nativeClassInitializer = true;
-        for ( auto & f : str->fields ) {
-            if ( f.init ) {
-                makeT->useInitializer = true;
-                break;
+        // For a synth ctor of a class whose ancestor chain has a user ctor, emit a
+        // chain body that calls the deepest USER ctor directly -- but only when
+        // (a) the class itself has no user ctor (true implicit-default case)
+        // AND (b) the chain target has a 0-arg-callable user ctor we can reach.
+        // Otherwise fall through to the plain field-init body. The latter preserves
+        // the long-standing `new Class(field=val)` named-init idiom for classes
+        // with user ctors. The lint catches missing super in the user's own ctor,
+        // which is the only path that actually runs invariants.
+        Structure * chainTarget = nullptr;
+        if ( !str->hasUserConstructor() ) {
+            auto * cand = findChainCtorAncestor(str);
+            if ( cand && cand->hasUserDefaultConstructor() ) {
+                chainTarget = cand;
             }
         }
-        makeT->makeType = new TypeDecl(str);
-        makeT->structs.push_back(new MakeStruct());
-        auto returnDecl = new ExprReturn(str->at,makeT);
-        returnDecl->moveSemantics = true;
-        block->list.push_back(returnDecl);
+        if ( chainTarget ) {
+            // let self = [[Derived()]]
+            auto makeT = new ExprMakeStruct(str->at);
+            makeT->alwaysSafe = true;
+            makeT->useInitializer = true;
+            makeT->nativeClassInitializer = true;
+            makeT->makeType = new TypeDecl(str);
+            makeT->structs.push_back(new MakeStruct());
+            auto letS = new ExprLet();
+            letS->at = str->at;
+            letS->atInit = str->at;
+            letS->visibility = str->at;
+            letS->alwaysSafe = true;    // local class variable
+            auto argT = new TypeDecl(str);
+            argT->constant = false;
+            auto argV = new Variable();
+            argV->name = "self";
+            argV->type = argT;
+            argV->at = str->at;
+            argV->generated = true;
+            argV->capture_as_ref = true;
+            argV->init = makeT;
+            argV->init_via_move = true;
+            letS->variables.push_back(argV);
+            block->list.push_back(letS);
+            // call ChainTarget`ChainTarget(self) -- closest ancestor with user ctor
+            auto cll = new ExprCall(str->at, chainTarget->name + "`" + chainTarget->name);
+            cll->arguments.push_back(new ExprVar(str->at, "self"));
+            block->list.push_back(cll);
+            // return self
+            auto returnDecl = new ExprReturn(str->at, new ExprVar(str->at, "self"));
+            returnDecl->moveSemantics = true;
+            block->list.push_back(returnDecl);
+        } else {
+            auto makeT = new ExprMakeStruct(str->at);
+            if ( str->isClass ) makeT->alwaysSafe = true;
+            makeT->useInitializer = false;
+            makeT->nativeClassInitializer = true;
+            for ( auto & f : str->fields ) {
+                if ( f.init ) {
+                    makeT->useInitializer = true;
+                    break;
+                }
+            }
+            makeT->makeType = new TypeDecl(str);
+            makeT->structs.push_back(new MakeStruct());
+            auto returnDecl = new ExprReturn(str->at,makeT);
+            returnDecl->moveSemantics = true;
+            block->list.push_back(returnDecl);
+        }
         fn->body = block;
         verifyGenerated(fn->body);
         return fn;

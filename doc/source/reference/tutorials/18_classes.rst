@@ -75,6 +75,45 @@ bypassing virtual dispatch::
 The compiler rewrites ``super()`` to ``Parent`Constructor(self, ...)`` and
 ``super.method()`` to ``Parent`method(self, ...)``.
 
+Implicit ``super()`` chain — no constructor needed
+==================================================
+
+If the parent has a user-defined constructor that's callable with no
+arguments, the compiler synthesizes a default constructor for the derived
+class that chains ``super()`` automatically::
+
+  class Animal {
+      def Animal { print("Animal init\n") }   // 0-arg user ctor
+  }
+
+  class Pet : Animal {
+      name : string = "rex"
+  }
+
+  new Pet()    // prints "Animal init" — synth ctor calls super()
+
+The synthesis runs only when:
+
+- the parent has a user-defined constructor (any signature),
+- the derived class has **no** constructor of its own (none at all), and
+- the parent ctor is 0-arg-callable (no arguments, or all arguments have
+  defaults).
+
+If the derived class defines its own constructor — even one that only
+takes arguments — the auto-generated 0-arg ctor falls back to plain
+field-init (preserving the ``new Class(field=val)`` named-init idiom).
+The lint catches missing ``super(...)`` in user-defined ctors on every
+control-flow path, so the user-ctor path always runs the parent's
+invariants. ``new Class()`` (no args) on such a class continues to call
+the field-init synth — it does **not** run the user ctor.
+
+If the parent has only constructors that require arguments, the derived
+class must declare its own constructor::
+
+  class A { def A(val : int) { /* ... */ } }
+  class B : A {}                         // ERROR: no 0-arg parent ctor to chain
+  class B : A { def B { super(0) } }     // OK
+
 ``super(...)`` is required exactly once per path
 ================================================
 

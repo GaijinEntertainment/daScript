@@ -181,6 +181,22 @@ Every constructor in a derived class whose parent has a user-defined constructor
 * two or more ``super(...)`` calls on any path → error;
 * ``super(...)`` inside a loop body → error (call count is not bounded to one).
 
+When the derived class has *no* constructor of its own and the parent has a user
+constructor callable with no arguments (or with all arguments default-initialized), the
+compiler synthesizes a default constructor for the derived class that chains ``super()``
+automatically — so ``new Derived()`` runs the parent's ctor body instead of silently
+skipping it. If the parent's user constructors all require arguments, the derived class
+must declare its own constructor; otherwise compilation fails with
+``missing_super_call``.
+
+The synth chain only fires when the derived class has *no* user constructor. If the
+derived class defines any user constructor — even one that only takes arguments —
+the auto-generated 0-arg ctor falls back to plain field-init (preserving the existing
+``new Class(field=val)`` named-init idiom). The lint catches missing ``super(...)`` in
+user-defined ctors on every control-flow path, so the user-ctor path always runs the
+parent's invariants. ``new Class()`` (no args) on such a class continues to call the
+field-init synth — it does not run the user ctor.
+
 Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
 parent's finalizer on the current object:
 

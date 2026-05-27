@@ -320,6 +320,7 @@ namespace das
     ,   missing_result                                              =   30319    // 1 site(s)
     ,   missing_structure_field                                     =   30320    // 1 site(s)
     ,   missing_typeinfo_subexpression                              =   30321    // 4 site(s)
+    ,   missing_super_call                                          =   30322    // class ctor must call super(); or parent ctor missing default
 
 // mismatching_*
 

@@ -317,30 +317,6 @@ namespace das {
         return {lo, hi};
     }
 
-    // True if `klass` has any non-generated user-defined ctor method (Klass`Klass).
-    // A class's ctor methods always live in the same module as the class itself
-    // (parser registers them together), so we jump straight to `klass->module` and
-    // look up by name hash via functionsByName / genericsByName. The `classParent ==
-    // klass` identity check defends against same-named classes in other modules
-    // bleeding in through generic instantiation (the in-tree corpus already has
-    // multiple `ContextStateAgent` classes).
-    bool parentHasUserCtor ( Program *, Structure * klass ) {
-        if ( !klass || !klass->module ) return false;
-        string ctorName = klass->name + "`" + klass->name;
-        uint64_t hName = hash64z(ctorName.c_str());
-        if ( auto kv = klass->module->functionsByName.find(hName) ) {
-            for ( auto * fn : kv->second ) {
-                if ( !fn->generated && fn->classParent == klass ) return true;
-            }
-        }
-        if ( auto kv = klass->module->genericsByName.find(hName) ) {
-            for ( auto * fn : kv->second ) {
-                if ( !fn->generated && fn->classParent == klass ) return true;
-            }
-        }
-        return false;
-    }
-
     bool needAvoidNullPtr ( const TypeDeclPtr & type, bool allowDim ) {
         if ( !type ) {
             return false;
@@ -1060,17 +1036,19 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             // Derived class ctor: every CFG path must call super(...) exactly once,
-            // and only when the parent has a user-defined ctor to chain to.
+            // and only when ANY ancestor has a user-defined ctor to chain to. The
+            // walk-up matches super(...)'s own walk-up semantics — an empty
+            // intermediate (synth chain ctor) propagates the invariant requirement.
             if ( fn->isClassMethod && fn->classParent && fn->classParent->parent
                 && !fn->generated
                 && fn->name == fn->classParent->name + "`" + fn->classParent->name ) {
-                Structure * parent = fn->classParent->parent;
-                if ( parentHasUserCtor(program.get(), parent) ) {
-                    string parentMangled = parent->name + "`" + parent->name;
-                    auto count = reduceSuperCount(countSuperCalls(fn->body, parentMangled));
+                Structure * chainAncestor = findChainCtorAncestor(fn->classParent);
+                if ( chainAncestor ) {
+                    string chainMangled = chainAncestor->name + "`" + chainAncestor->name;
+                    auto count = reduceSuperCount(countSuperCalls(fn->body, chainMangled));
                     if ( count.lo == 0 ) {
                         program->error("class constructor " + fn->name + " does not call super(...) on every control-flow path",
-                            "", "call super(...) (or super." + parent->name + "(...)) exactly once per path",
+                            "", "call super(...) (or super." + chainAncestor->name + "(...)) exactly once per path",
                             fn->at, CompilationError::missing_function_body);
                     } else if ( count.hi != count.lo || count.hi > 1 ) {
                         program->error("class constructor " + fn->name + " calls super(...) more than once on some path",

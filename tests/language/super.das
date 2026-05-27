@@ -97,6 +97,35 @@ class TrySuper : Base {
     }
 }
 
+// Synthesized chain: ImplicitChain has no constructor; the compiler emits one that
+// chains super() → Base default ctor. new ImplicitChain() must run Base, setting x=10.
+class ImplicitChain : Base {
+    z : int = 999
+}
+
+// Two-level synth: both MidImplicit and LeafImplicit have no constructor. The compiler
+// must synthesize ctors for both, chaining MidImplicit → Base and LeafImplicit → MidImplicit.
+class MidImplicit : Base {
+    m : int = 50
+}
+
+class LeafImplicit : MidImplicit {
+    leaf : int = 70
+}
+
+// Synth respects parent ctor with default arg: BaseWithDefault has def BaseWithDefault(v : int = 99).
+// DerivedWithDefault has no ctor, must synth a chain that resolves to BaseWithDefault`BaseWithDefault(self).
+class BaseWithDefault {
+    bx : int = 0
+    def BaseWithDefault(v : int = 99) {
+        bx = v
+    }
+}
+
+class DerivedWithDefault : BaseWithDefault {
+    dx : int = 5
+}
+
 // Skip-level inheritance: SkipMid is empty (inherits Base's constructor and methods).
 // SkipLeaf calls super() / super.method() — both must walk past SkipMid up to Base.
 class SkipMid : Base {
@@ -244,6 +273,37 @@ def test_super(t : T?) {
         t |> equal(ts.x, 5)
         t |> equal(ts.z, 500)
         unsafe { delete ts; }
+    }
+    t |> run("synth default ctor chains super to Base") @(t : T?) {
+        unsafe {
+            // No def ImplicitChain(); the compiler synthesizes one that calls Base`Base(self).
+            let ic = ImplicitChain()
+            t |> equal(ic.x, 10)   // Base default ctor ran
+            t |> equal(ic.z, 999)
+        }
+        var icp = new ImplicitChain()
+        t |> equal(icp.x, 10)
+        t |> equal(icp.z, 999)
+        unsafe { delete icp; }
+    }
+    t |> run("synth default ctor chains through two levels") @(t : T?) {
+        unsafe {
+            // Neither MidImplicit nor LeafImplicit declare a ctor.
+            // LeafImplicit's synth chains → MidImplicit's synth → Base.
+            let li = LeafImplicit()
+            t |> equal(li.x, 10)    // Base ran
+            t |> equal(li.m, 50)
+            t |> equal(li.leaf, 70)
+        }
+    }
+    t |> run("synth chain resolves to parent ctor with default arg") @(t : T?) {
+        unsafe {
+            // BaseWithDefault has def BaseWithDefault(v : int = 99); synth chain
+            // must resolve to a 0-arg-callable signature.
+            let d = DerivedWithDefault()
+            t |> equal(d.bx, 99)    // default arg used
+            t |> equal(d.dx, 5)
+        }
     }
     t |> run("super before early return (both paths have super=1)") @(t : T?) {
         var e1 = new EarlyReturnSuper(true)

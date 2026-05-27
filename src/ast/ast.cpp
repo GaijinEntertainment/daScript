@@ -291,6 +291,57 @@ namespace das {
         return false;
     }
 
+    // True if this structure has any non-generated ctor method (Klass`Klass).
+    // Ctor methods always live in the same module as the class (parser registers
+    // them together), so we look up by name hash via functionsByName / genericsByName.
+    // The `classParent == this` identity check defends against same-named classes
+    // in other modules bleeding in through generic instantiation.
+    bool Structure::hasUserConstructor() const {
+        if ( !module ) return false;
+        string ctorName = name + "`" + name;
+        uint64_t hName = hash64z(ctorName.c_str());
+        if ( auto kv = module->functionsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == this ) return true;
+            }
+        }
+        if ( auto kv = module->genericsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == this ) return true;
+            }
+        }
+        return false;
+    }
+
+    // True if this structure has a non-generated 0-arg-callable ctor (no args, or
+    // all args default-initialized). Used by the synth-derived-ctor gate to verify
+    // the parent has a default constructor reachable as Parent`Parent(self).
+    bool Structure::hasUserDefaultConstructor() const {
+        if ( !module ) return false;
+        string ctorName = name + "`" + name;
+        uint64_t hName = hash64z(ctorName.c_str());
+        auto matches = [this]( Function * fn ) -> bool {
+            if ( fn->generated ) return false;
+            if ( fn->classParent != this ) return false;
+            // arg 0 is always 'self'; arg 1+ must be default-initialized
+            for ( size_t i=1; i<fn->arguments.size(); ++i ) {
+                if ( !fn->arguments[i]->init ) return false;
+            }
+            return true;
+        };
+        if ( auto kv = module->functionsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( matches(fn) ) return true;
+            }
+        }
+        if ( auto kv = module->genericsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( matches(fn) ) return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::canCopy(bool tempMatters) const {
         if ( circularGuard ) return true;
         circularGuard = true;

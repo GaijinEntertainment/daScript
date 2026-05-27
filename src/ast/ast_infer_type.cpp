@@ -401,11 +401,26 @@ namespace das {
     }
     StructurePtr InferTypes::visit(Structure *var) {
         if (!var->genCtor) {
-            if (var->hasAnyInitializers()) {
+            // For a class whose ancestor chain contains a user ctor, synthesize a
+            // default ctor that chains super() to the immediate parent -- otherwise
+            // the user ctor's invariants get silently skipped on new Derived().
+            // findChainCtorAncestor walks past empty intermediates so the chain
+            // reaches the deepest user ctor in one call. Skipped when `var` already
+            // has any user ctor: the user is responsible for chaining via super(...),
+            // and the lint enforces that on every path.
+            Structure * chainTargetAnc = var->hasUserConstructor() ? nullptr : findChainCtorAncestor(var);
+            bool parentNeedsChain = chainTargetAnc != nullptr;
+            bool missingParentDefault = parentNeedsChain && !chainTargetAnc->hasUserDefaultConstructor();
+            if (missingParentDefault) {
+                error("class " + var->name + " inherits from " + chainTargetAnc->name +
+                      " which has no default constructor; provide an explicit def " + var->name + "()", "", "",
+                      var->at, CompilationError::missing_super_call);
+            }
+            if (!missingParentDefault && (var->hasAnyInitializers() || parentNeedsChain)) {
                 if (tryMakeStructureCtor(var, var->privateStructure, false)) {
                     var->genCtor = true;
                 }
-            } else {
+            } else if (!missingParentDefault) {
                 getOrCreateDummy(thisModule);
             }
         }
