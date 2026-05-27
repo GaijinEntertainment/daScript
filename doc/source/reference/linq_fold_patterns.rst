@@ -249,6 +249,16 @@ identical — only the source iteration changes.
    sources cascades to tier-2 (no decs equivalent of the array
    backward-walk dset gate; deferred per masterplan D6).
 
+   As of PR D3, the ``GroupBySourceAdapter`` shim (a parallel adapter
+   used only by ``plan_group_by_core``) is gone — group_by's three
+   source shapes (``Array`` / ``Decs`` / ``DecsJoin``) all flow
+   through the same ``SourceAdapter`` variant as every other planner.
+   ``plan_group_by_core`` calls ``adapter_wrap_source_loop`` and
+   ``adapter_wrap_invoke`` directly. The decs-join branch of
+   ``adapter_wrap_source_loop`` carries the inline hash-collect +
+   probe + per-pair result-lam bind body shared with
+   ``emit_decs_join``.
+
 .. list-table::
    :header-rows: 1
    :widths: 35 25 40

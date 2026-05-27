@@ -4525,7 +4525,7 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
 }
 
 // Shared array/decs/decs-join group_by emitter. Reconstructs head calls (mirrors emit_loop_or_count_lane_decs),
-// builds GroupBySourceAdapter per source-shape, delegates to plan_group_by_core. Cascades on null bail.
+// builds SourceAdapter per source-shape (Array / Decs / DecsJoin), delegates to plan_group_by_core. Cascades on null bail.
 [macro_function]
 def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var gbCall = c.single["gb"]

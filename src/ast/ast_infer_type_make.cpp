@@ -351,6 +351,9 @@ namespace das {
     }
     void InferTypes::preVisit(ExprMakeVariant *expr) {
         Visitor::preVisit(expr);
+        for (auto & mfd : expr->variants) {
+            if (mfd) checkEmptyName(mfd->name, "variant initializer", mfd->at);
+        }
         if (expr->makeType && expr->makeType->isExprType()) {
             return;
         }
@@ -510,6 +513,12 @@ namespace das {
     void InferTypes::preVisit(ExprMakeStruct *expr) {
         callDepth ++;
         Visitor::preVisit(expr);
+        for (auto & ms : expr->structs) {
+            if (!ms) continue;
+            for (auto & mfd : *ms) {
+                if (mfd) checkEmptyName(mfd->name, "field initializer", mfd->at);
+            }
+        }
         if (expr->makeType && expr->makeType->isExprType()) {
             return;
         }

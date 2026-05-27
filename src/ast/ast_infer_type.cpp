@@ -144,6 +144,7 @@ namespace das {
     }
     void InferTypes::preVisitEnumerationValue(Enumeration *enu, const string &name, Expression *value, bool last) {
         Visitor::preVisitEnumerationValue(enu, name, value, last);
+        checkEmptyName(name, "enumeration entry", value ? value->at : enu->at);
         // Enum value initializers must fold to compile-time integer constants —
         // force-enable infer-time folding for this value's subtree visit even when
         // it was disabled (lint policies via no_infer_time_folding, or source-level
@@ -207,6 +208,7 @@ namespace das {
     }
     void InferTypes::preVisit(Enumeration *enu) {
         Visitor::preVisit(enu);
+        checkEmptyName(enu->name, "enumeration declaration", enu->at);
         lastEnuValue = nullptr;
     }
     EnumerationPtr InferTypes::visit(Enumeration *enu) {
@@ -219,6 +221,7 @@ namespace das {
     }
     void InferTypes::preVisit(Structure *that) {
         Visitor::preVisit(that);
+        checkEmptyName(that->name, "structure declaration", that->at);
         currentStructure = that;
         fieldOffset = 0;
         cppLayout = that->cppLayout;
@@ -230,6 +233,7 @@ namespace das {
     }
     void InferTypes::preVisitStructureField(Structure *that, Structure::FieldDeclaration &decl, bool last) {
         Visitor::preVisitStructureField(that, decl, last);
+        checkEmptyName(decl.name, "structure field", decl.at);
         that->fieldLookup[decl.name] = fieldIndex++;
         if (decl.type->isAuto() && !decl.init) {
             error("structure field type can't be inferred, it needs an initializer", "", "",
@@ -391,6 +395,7 @@ namespace das {
     }
     void InferTypes::preVisitGlobalLet(const VariablePtr &var) {
         Visitor::preVisitGlobalLet(var);
+        checkEmptyName(var->name, "global variable declaration", var->at);
         if (noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit()) {
             if (!hasSafeWhenUninitialized(var->annotation)) {
                 error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.", "", "",
@@ -581,6 +586,7 @@ namespace das {
     }
     void InferTypes::preVisit(Function *f) {
         Visitor::preVisit(f);
+        checkEmptyName(f->name, "function declaration", f->at);
         oneReturn = nullptr;
         returnCount = 0;
         canFoldResult = true;
@@ -604,6 +610,7 @@ namespace das {
     }
     void InferTypes::preVisitArgument(Function *fn, const VariablePtr &var, bool lastArg) {
         Visitor::preVisitArgument(fn, var, lastArg);
+        checkEmptyName(var->name, "function argument", var->at);
         if (var->type->isAlias()) {
             if (auto aT = inferAlias(var->type)) {
                 var->type = aT;
@@ -3382,6 +3389,7 @@ namespace das {
     }
     void InferTypes::preVisitBlockArgument(ExprBlock *block, const VariablePtr &var, bool lastArg) {
         Visitor::preVisitBlockArgument(block, var, lastArg);
+        checkEmptyName(var->name, "block argument", var->at);
         if (!var->can_shadow && !program->policies.allow_block_variable_shadowing) {
             if (func) {
                 for (auto &fna : func->arguments) {
@@ -4119,6 +4127,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprVar *expr) {
         Visitor::preVisit(expr);
+        checkEmptyName(expr->name, "variable reference", expr->at);
         expr->variable = nullptr;
         expr->local = false;
         expr->block = false;
@@ -4985,6 +4994,7 @@ namespace das {
     }
     void InferTypes::preVisitLet(ExprLet *expr, const VariablePtr &var, bool last) {
         Visitor::preVisitLet(expr, var, last);
+        checkEmptyName(var->name, "variable declaration", var->at);
         var->single_return_via_move = false;
         var->consumed = false;
         if (var->type && var->type->isExprType()) {
@@ -5390,6 +5400,7 @@ namespace das {
     void InferTypes::preVisit(ExprNamedCall *call) {
         callDepth++;
         Visitor::preVisit(call);
+        checkEmptyName(call->name, "named call", call->at);
         call->argumentsFailedToInfer = false;
         if (((call->arguments ? call->arguments->size() : 0) > DAS_MAX_FUNCTION_ARGUMENTS) || (call->nonNamedArguments.size() > DAS_MAX_FUNCTION_ARGUMENTS)) {
             error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS), "", "",
@@ -5522,6 +5533,7 @@ namespace das {
     void InferTypes::preVisit(ExprCall *call) {
         callDepth++;
         Visitor::preVisit(call);
+        checkEmptyName(call->name, "function call", call->at);
         call->argumentsFailedToInfer = false;
         if (call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) {
             error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS), "", "",

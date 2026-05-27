@@ -46,6 +46,12 @@ namespace das {
             program->error(err, extra, fixme, at, cerr);
         }
     }
+    void InferTypes::checkEmptyName(const string &name, const char *nodeKind, const LineInfo &at) {
+        if (!name.empty()) return;
+        string msg = string(nodeKind) + " has empty name";
+        error(msg, "", "this is usually caused by a macro emitting an AST node without a name (e.g. $i(\"\") or `field := value` in a named-arg ctor)",
+              at, CompilationError::invalid_empty_name);
+    }
     void InferTypes::reportAstChanged() {
         needRestart = true;
         if (func)
