@@ -157,6 +157,11 @@ struct private SqlQuery {
     limitBindExpr : ExpressionPtr
     offsetBindExpr : ExpressionPtr
     distinctFlag : bool
+    // nolint:STYLE014 Set to the key column when `_distinct_by(_.K)` appears as a wrapped chain op
+    // (i.e. NOT consumed by `peel_count_terminal`'s 1-arg fast path → `COUNT(DISTINCT K)`).
+    // Triggers the SQLite bare-aggregate inner-subquery wrap (`SELECT *, MIN(pk) FROM t GROUP BY K`)
+    // in `peel_count_terminal`'s 2-arg `count(P)` branch and `peel_column_aggregate` distinct path.
+    distinctByCol : string
     orderByCols : array<string>
     orderByInlineExprs : array<ExpressionPtr>
     groupByCols : array<string>
@@ -779,6 +784,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.limitBindExpr = null
     q.offsetBindExpr = null
     q.distinctFlag = false
+    q.distinctByCol := ""
     q.orderByCols |> clear
     q.orderByInlineExprs |> clear
     q.groupByCols |> clear
@@ -1431,6 +1437,23 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             q.distinctFlag = true
             q.seenDistinct = true
             return analyze_chain(dCall.arguments[0], q, prog, at)
+        }
+    }
+    // nolint:STYLE015 Stage op: `_distinct_by(_.K)` records the key for the bare-aggregate inner-subquery wrap that the outer aggregate terminator applies. Skipped by `peel_count_terminal`'s 1-arg fast path (`COUNT(DISTINCT K)`); reached only when `_distinct_by` is wrapped by other chain ops or the terminator is `count(P)` / `long_count(P)`.
+    {
+        var dbCall = match_call_in_linq(node, "distinct_by")
+        if (dbCall != null) {
+            let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
+            if (dr != 0) return dr > 0
+            if (!empty(q.distinctByCol)) {
+                macro_error(prog, at, "_sql: `_distinct_by` can appear at most once in the chain")
+                return false
+            }
+            var distinctSource : ExpressionPtr
+            let distinctField = try_peel_distinct_by_field(node, distinctSource, q, prog, at)
+            if (empty(distinctField)) return false        // try_peel_distinct_by_field emitted macro_error
+            q.distinctByCol = distinctField
+            return analyze_chain(distinctSource, q, prog, at)
         }
     }
     // Peel take(prev, n) — sets LIMIT n; bind emitted after WHERE so placeholder index lines up.
@@ -3699,6 +3722,36 @@ def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string
 [macro_function]
 def private field_to_column_name(rootT : TypeDeclPtr; fieldName : string) : string {
     return find_field_annotation_string(rootT, fieldName, "sql_column", fieldName)
+}
+
+[macro_function]
+def private find_single_pk_field(rootT : TypeDeclPtr; prog : ProgramPtr; at : LineInfo) : string {
+    if (rootT == null || rootT.structType == null) {
+        macro_error(prog, at, "_sql: bare-aggregate `_distinct_by` wrap requires a single `@sql_primary_key` field on the source table; rootType not a struct")
+        return ""
+    }
+    var found : string
+    for (field in rootT.structType.fields) {
+        var hasPk = false
+        for (annDecl in field.annotation) {
+            if (annDecl.name == "sql_primary_key") {
+                hasPk = true
+                break
+            }
+        }
+        if (hasPk) {
+            if (!empty(found)) {
+                macro_error(prog, at, "_sql: bare-aggregate `_distinct_by` wrap requires exactly one `@sql_primary_key` field; got multiple (`{found}`, `{field.name}`) — composite primary keys not supported in this lowering")
+                return ""
+            }
+            found = string(field.name)
+        }
+    }
+    if (empty(found)) {
+        macro_error(prog, at, "_sql: bare-aggregate `_distinct_by` wrap requires a single `@sql_primary_key` field on the source table; none found")
+        return ""
+    }
+    return found
 }
 
 [macro_function]
