@@ -94,8 +94,7 @@ class LlvmGen : CppGenBind {
         let pfn = "cb_dasLLVM.h"
         let pfp = "{get_das_root()}/modules/dasLLVM/src/"
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
 //        init_enum_prefix()
         openAllFiles()
     }
@@ -137,7 +136,7 @@ class LlvmGen : CppGenBind {
 
 class LlvmGenDinamic : DasGenBind {
     def LlvmGenDinamic(pfn, pfp : string; args : array<string>) {
-        init_args(pfn, pfp, args)
+        super(pfn, pfp, args)
     }
     def override skip_const(name : string) : bool {
         return name == "true" || name == "false"

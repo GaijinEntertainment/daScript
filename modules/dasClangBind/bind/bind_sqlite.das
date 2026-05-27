@@ -32,8 +32,7 @@ class SqliteGen : CppGenBind {
             "-DCINDEX_EXPORTS"
         )
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
 //        init_enum_prefix()
         openAllFiles()
         for (h in sqlite_c_headers) {
@@ -55,10 +54,7 @@ class SqliteGen : CppGenBind {
     }
     def override skip_file(fname : string) : bool {
         let ufname = to_upper(fname)
-        if (!any <| [iterator for(h in sqlite_c_headers); ufname |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in sqlite_c_headers); ufname |> ends_with(h)]
     }
     def override skip_alias(var c : CXCursor) {
         let tdn = string(clang_getCursorDisplayName(c))
@@ -68,36 +64,21 @@ class SqliteGen : CppGenBind {
             return true
         }
         let aliasf = to_upper(clang_getCursorLocationFileName(c))
-        if (!any <| [iterator for(h in sqlite_c_headers); aliasf |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in sqlite_c_headers); aliasf |> ends_with(h)]
     }
     def override skip_enum(ns_en, en : string) {
         return false
     }
     def override skip_struct(sn : string) {
-        if (sn |> starts_with("__crt")) {
-            return true
-        }
-        return false
+        return sn |> starts_with("__crt")
     }
     def override skip_function(var c : CXCursor) : bool {
         let fname = string(clang_getCursorSpelling(c))
-        if (fname == "sqlite3_mutex_held" || fname == "sqlite3_mutex_notheld") {
-            return true
-        }
-        if (fname |> starts_with("sqlite3_win32_set_directory")) {
+        if (fname == "sqlite3_mutex_held" || fname == "sqlite3_mutex_notheld" || fname |> starts_with("sqlite3_win32_set_directory")) {
             return true
         }
         let funf = to_upper(clang_getCursorLocationFileName(c))
-        if (!any <| [iterator for(h in sqlite_c_headers); funf |> ends_with(h)]) {
-            return true
-        }
-        if (skip_anyFunction(c, false)) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in sqlite_c_headers); funf |> ends_with(h)] || skip_anyFunction(c, false)
     }
 }
 

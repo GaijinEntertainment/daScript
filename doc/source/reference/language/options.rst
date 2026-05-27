@@ -92,10 +92,6 @@ Lint Control
      - bool
      - true
      - Disallows writing to nameless (intermediate) variables on the stack.
-   * - ``always_call_super``
-     - bool
-     - false
-     - Requires ``super()`` to be called in every class constructor.
    * - ``no_unused_function_arguments``
      - bool
      - false

@@ -13,6 +13,32 @@ namespace das {
     // in ast_handle of all places, due to reporting fields
     void reportTrait(const TypeDeclPtr &type, const string &prefix, const callable<void(const TypeDeclPtr &, const string &)> &report);
 
+    // True if `klass` has any non-generated user-defined function with the given name (mangled
+    // as `Klass`methodName`). For methodName == klass->name, this detects user ctors; for any
+    // other name, it detects user methods. Used at super(...) / super.method() walk-up sites to
+    // reject silent skip of an intermediate class's user-defined invariants.
+    // The class's ctors/methods live in the same module as the class itself (parser registers
+    // them together), so we look up by name hash on `klass->module->functionsByName` /
+    // `genericsByName` instead of scanning the entire library. The `classParent == klass`
+    // identity check defends against same-named classes in other modules bleeding in via
+    // generic instantiation (the in-tree corpus already has multiple `ContextStateAgent`).
+    static bool classHasUserNamedFunction(Program *, Structure * klass, const string & methodName) {
+        if (!klass || !klass->module) return false;
+        string funcName = klass->name + "`" + methodName;
+        uint64_t hName = hash64z(funcName.c_str());
+        if (auto kv = klass->module->functionsByName.find(hName)) {
+            for (auto * fn : kv->second) {
+                if (!fn->generated && fn->classParent == klass) return true;
+            }
+        }
+        if (auto kv = klass->module->genericsByName.find(hName)) {
+            for (auto * fn : kv->second) {
+                if (!fn->generated && fn->classParent == klass) return true;
+            }
+        }
+        return false;
+    }
+
     CaptureLambda::CaptureLambda(bool cm) : inClassMethod(cm) {}
     void CaptureLambda::preVisit(ExprVar *expr) {
         if (!expr->type) { // trying to capture non-inferred section
@@ -1490,6 +1516,25 @@ namespace das {
                                     return Visitor::visit(expr);
                                 }
                             }
+                            // super.<AncestorClassName>() is the legacy form for invoking that
+                            // ancestor's constructor. Allow only when the named class is the
+                            // immediate parent or reachable through an unbroken chain of empty
+                            // intermediates (no user ctors). Skipping a class with a user ctor
+                            // would silently bypass its invariants.
+                            for (Structure * anc = baseClass->parent; anc; anc = anc->parent) {
+                                if (anc->name == eField->name) {
+                                    for (Structure * mid = baseClass; mid != anc; mid = mid->parent) {
+                                        if (classHasUserNamedFunction(program, mid, mid->name)) {
+                                            error("call to super." + eField->name + " in " + func->name
+                                                    + " cannot skip " + mid->name
+                                                    + " which has its own constructor — call super." + mid->name + "(...) instead",
+                                                  "", "", expr->at, CompilationError::invalid_super_call);
+                                            return Visitor::visit(expr);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
                             vector<TypeDeclPtr> argTypes;
                             auto selfType = new TypeDecl(Type::tStructure);
                             selfType->structType = func->classParent;
@@ -1513,6 +1558,16 @@ namespace das {
                                     error("too many candidates for super call " + callName,
                                     verbose ? program->describeCandidates(fnCandidates) : "", "",
                                         expr->at, CompilationError::ambiguous_super_call);
+                                    return Visitor::visit(expr);
+                                }
+                                // No matching method here. Before walking past, check: does this
+                                // baseClass have a user-defined method with the same name (different
+                                // sig)? If yes, we'd silently skip its definition — reject.
+                                if (classHasUserNamedFunction(program, baseClass, eField->name)) {
+                                    error("call to super." + eField->name + " in " + func->name
+                                            + " cannot skip " + baseClass->name + " which defines its own "
+                                            + eField->name + " — adjust args to match " + baseClass->name + "'s overload",
+                                          "", "", expr->at, CompilationError::invalid_super_call);
                                     return Visitor::visit(expr);
                                 }
                                 baseClass = baseClass->parent;
@@ -5577,6 +5632,9 @@ namespace das {
         // Walks up the inheritance chain looking for a parent class constructor that matches the
         // argument types; this lets `super(...)` call the closest ancestor's constructor when an
         // intermediate class doesn't define its own (mirrors super.method() / delete super.self).
+        // The walk-up may only step past a class with NO user ctor — silently skipping a class
+        // whose user ctor establishes invariants is rejected (use the right `super(args)` shape
+        // to call the immediate parent).
         if (func && func->isClassMethod && func->classParent && expr->name == "super") {
             if (auto baseClass = func->classParent->parent) {
                 vector<TypeDeclPtr> argumentTypes;
@@ -5599,6 +5657,14 @@ namespace das {
                         error("too many candidates for super constructor " + candidateName,
                               verbose ? program->describeCandidates(matching) : "", "",
                               expr->at, CompilationError::ambiguous_super_constructor);
+                        return Visitor::visit(expr);
+                    }
+                    // No matching ctor here. Before walking past, check: does this baseClass
+                    // have ANY user-defined ctor? If yes, we'd silently skip its invariants — reject.
+                    if (classHasUserNamedFunction(program, baseClass, baseClass->name)) {
+                        error("call to super in " + func->name + " cannot skip " + baseClass->name
+                                + " which has its own constructor — adjust super(...) args to match " + baseClass->name,
+                              "", "", expr->at, CompilationError::invalid_super_call);
                         return Visitor::visit(expr);
                     }
                     baseClass = baseClass->parent;

@@ -8,7 +8,7 @@ require daslib/fio
 class OpenGLBind : DasGenBind {
     def OpenGLBind(pfn, pfp : string) {
         let args <- array<string>("-DGL_GLEXT_PROTOTYPES")
-        init_args(pfn, pfp, args)
+        super(pfn, pfp, args)
         init_defaults()
     }
     def init_defaults {
@@ -19,10 +19,7 @@ class OpenGLBind : DasGenBind {
         }
     }
     def override skip_const(name : string) : bool {
-        if (name == "true" || name == "false") {
-            return true
-        }
-        return false
+        return name == "true" || name == "false"
     }
     def override functionArgumentRules : TypeRules {
         return (
@@ -47,10 +44,10 @@ class OpenGLBind : DasGenBind {
 [export]
 def main {
     let output_name = "{get_das_root()}/modules/dasOpenGL/opengl/opengl_func.das"
-    fopen(output_name, "wb") <| $(fdf) {
+    fopen(output_name, "wb") $(fdf) {
         fprint(fdf, "require dasbind public\n\n")
         let output_const_name = "{get_das_root()}/modules/dasOpenGL/opengl/opengl_const.das"
-        fopen(output_const_name, "wb") <| $(dcf) {
+        fopen(output_const_name, "wb") $(dcf) {
             let pfn = "glcorearb.h"
             let pfp = "{get_das_root()}/modules/dasOpenGL/opengl/OpenGL/"
             var glbind = new OpenGLBind(pfn, pfp)

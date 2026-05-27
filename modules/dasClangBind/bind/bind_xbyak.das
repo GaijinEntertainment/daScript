@@ -25,8 +25,7 @@ class XbyakGen : CppGenBind {
             "-I{get_full_file_name(pfp)}"
         )
         func_per_chunk = 100
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
         init_skip()
         openAllFiles()
     }

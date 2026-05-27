@@ -35,8 +35,7 @@ class QuirrelGen : CppGenBind {
             "-DCINDEX_EXPORTS"
         )
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
 //        init_enum_prefix()
         openAllFiles()
         for (h in quirrel_c_headers) {
@@ -58,10 +57,7 @@ class QuirrelGen : CppGenBind {
     }
     def override skip_file(fname : string) : bool {
         let ufname = to_upper(fname)
-        if (!any <| [iterator for(h in quirrel_c_headers); ufname |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in quirrel_c_headers); ufname |> ends_with(h)]
     }
     def override skip_alias(var c : CXCursor) {
         let aliasn = string(clang_getCursorSpelling(c))
@@ -69,19 +65,13 @@ class QuirrelGen : CppGenBind {
             return true
         }
         let aliasf = to_upper(clang_getCursorLocationFileName(c))
-        if (!any <| [iterator for(h in quirrel_c_headers); aliasf |> ends_with(h)]) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in quirrel_c_headers); aliasf |> ends_with(h)]
     }
     def override skip_enum(ns_en, en : string) {
         return false
     }
     def override skip_struct(sn : string) {
-        if (sn |> starts_with("__crt")) {
-            return true
-        }
-        return false
+        return sn |> starts_with("__crt")
     }
     def override skip_function(var c : CXCursor) : bool {
     /*
@@ -91,13 +81,7 @@ class QuirrelGen : CppGenBind {
             return true
     */
         let funf = to_upper(clang_getCursorLocationFileName(c))
-        if (!any <| [iterator for(h in quirrel_c_headers); funf |> ends_with(h)]) {
-            return true
-        }
-        if (skip_anyFunction(c, false)) {
-            return true
-        }
-        return false
+        return !any <| [iterator for(h in quirrel_c_headers); funf |> ends_with(h)] || skip_anyFunction(c, false)
     }
 }
 

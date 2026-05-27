@@ -31,8 +31,7 @@ class SFMLGen : CppGenBind {
             "-I{get_full_file_name(isfml)}"
         )
         func_per_chunk = 100
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
         init_skip()
         openAllFiles()
     }
@@ -84,10 +83,7 @@ class SFMLGen : CppGenBind {
         return false
     }
     def override skip_struct(name : string) {
-        if (name == "HWND__") {
-            return true
-        }
-        return false
+        return name == "HWND__"
     }
 }
 

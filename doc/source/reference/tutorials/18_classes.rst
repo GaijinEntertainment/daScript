@@ -75,6 +75,67 @@ bypassing virtual dispatch::
 The compiler rewrites ``super()`` to ``Parent`Constructor(self, ...)`` and
 ``super.method()`` to ``Parent`method(self, ...)``.
 
+``super(...)`` is required exactly once per path
+================================================
+
+Every constructor in a derived class whose parent has a user-defined constructor
+must call ``super(...)`` exactly once on every control-flow path. The lint catches:
+
+::
+
+  class Bad : Base {
+      def Bad(f : bool) {
+          if (f) {
+              super()   // ERROR: false branch has zero super() calls
+          }
+      }
+  }
+
+  class AlsoBad : Base {
+      def AlsoBad {
+          super()
+          super()       // ERROR: super() called more than once
+      }
+  }
+
+A call to ``super(...)`` inside a loop is also rejected — the count is not
+bounded to one. To branch on arguments, both branches must call ``super(...)``::
+
+  class OK : Shape {
+      def OK(big : bool) {
+          if (big) {
+              super("Big")
+          } else {
+              super("Small")
+          }
+      }
+  }
+
+``super.X()`` cannot skip an intermediate
+=========================================
+
+``super.X()`` (whether ``X`` is a method or the name of an ancestor class) may
+walk past only intermediate classes that have **no** user-defined constructor or
+matching method. Skipping a class whose user code would otherwise establish
+invariants is rejected. Empty intermediates are still legal::
+
+  class A {
+      def A { /* ... */ }
+  }
+
+  class B : A {
+      def B { super() }     // B has its own ctor
+  }
+
+  class C : B {
+      def C {
+          super.A()         // ERROR: would silently skip B's invariants
+      }
+  }
+
+If you really want only ``A``'s setup, name the immediate parent:
+``super.B()`` (or ``super()``) and let ``B``'s constructor chain to ``A`` itself.
+
 Creating instances
 ==================
 
