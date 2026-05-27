@@ -36,12 +36,20 @@ helper), all five of these cells can flip in the same change.
 | [`distinct_by_order_to_array`](distinct_by_order_to_array.das) | `_distinct_by(_.dealer_id) \|> _order_by(_.price) \|> to_array` | Same as above without `LIMIT N` |
 | [`groupby_first`](groupby_first.das) | `_group_by(_.brand) \|> _select(g => g.first())` | `SELECT ... FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id) AS rn FROM Cars) WHERE rn = 1` |
 | [`reverse_distinct_by`](reverse_distinct_by.das) | `each(arr) \|> reverse() \|> _distinct_by(_.brand) \|> to_array` ("last per group") | `SELECT ... FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id DESC) AS rn FROM Cars) WHERE rn = 1` |
-| [`order_distinct_take`](order_distinct_take.das) | `_order_by(_) \|> distinct() \|> take(N) \|> to_array` on bare scalar | Independent of window functions — see "Other deferred lowerings" below |
 
 **Original TODO dates** (carried in `results.md` Notes before this doc):
 `distinct_by_order_take` 2026-05-25, `groupby_first` 2026-05-23. The new
 2026-05-27 entries (`reverse_distinct_by`, `distinct_by_order_to_array`)
 inherit the same blocker.
+
+**Closed in PR #2906** (sqlite_linq `_distinct_by` as chain operator + first-row aggregates, 2026-05-27):
+- `order_distinct_take` — closed by 1-column `Brand` table fixture (not window functions).
+- `distinct_count_pred` — closed by the SQLite bare-aggregate wrap
+  (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).
+  The original gaps doc misidentified the lowering as `COUNT(*) FILTER (WHERE P)`
+  over `SELECT DISTINCT K` — incorrect because `SELECT DISTINCT K` only projects
+  K and P can't reference other columns. The bare-aggregate form preserves all
+  `SELECT *` columns at the min-PK row, matching linq `_distinct_by` semantics.
 
 ---
 
@@ -58,16 +66,6 @@ base-table column. The lowering would need to either emit the `JOIN` as a
 subquery and `GROUP BY` over the subquery's column, or surface the
 projection-column → SQL-fragment mapping into `_group_by`'s key-extractor
 logic. Originally TODO'd 2026-05-25.
-
-### `COUNT(*) FILTER (WHERE ...)` — 2-arg `count(P)` after `_distinct_by`
-
-Bench: [`distinct_count_pred`](distinct_count_pred.das).
-
-`_distinct_by(K) |> count(P)` would lower as
-`SELECT COUNT(*) FILTER (WHERE P) FROM (SELECT DISTINCT K FROM ...)`. The
-`FILTER (WHERE ...)` clause is SQLite-supported (>= 3.30) but
-`sqlite_linq` doesn't currently emit it. By design today, but a real
-surface candidate.
 
 ### `COUNT(DISTINCT computed-expr)`
 
@@ -109,18 +107,6 @@ In SQL:
 these can be addressed independently, but in practice the bench cells will
 likely stay `—` because the chain shape is unusual in SQL idiom (it's a
 fold-fold idiom).
-
-### `order_distinct_take` — bare key on synthesized scalar
-
-Bench: [`order_distinct_take`](order_distinct_take.das).
-
-`_sql`'s `_order_by` requires a `_.Field` (column-ref) key, not bare `_`.
-The bench operates on a synthesized `array<int>` with no named column, so
-the SQL form has no `.Field` to project. Independent of window functions
-— `distinct_take` proves `_sql` does lower
-`distinct() |> take(N)` when the source has a named column. Adding the
-SQL lane would need a 1-column table fixture and `_order_by(_.col)`.
-Cosmetic gap; low priority.
 
 ---
 

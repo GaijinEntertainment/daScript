@@ -144,6 +144,24 @@ def public fixture_decs_brands(n : int) {
     }
 }
 
+// SQL-side mirror of DecsBrand / make_brands. n rows of `value = i % BRAND_COUNT`
+// gives dense duplicates so the SQL DISTINCT lane has meaningful work to do.
+[sql_table(name = "Brands")]
+struct public Brand {
+    @sql_primary_key id : int
+    value : int
+}
+
+def public fixture_db_brands(db : SqlRunner; n : int) {
+    db |> create_table(type<Brand>)
+    var brands : array<Brand>
+    brands |> resize(n)
+    for (i in range(n)) {
+        brands[i] = Brand(id = i + 1, value = i % BRAND_COUNT)
+    }
+    db |> insert(brands)
+}
+
 // Same fixture as fixture_decs, but returns the eid of the n/2-th entity for indexed-lookup benches.
 // The decs O(1) lookup path keys on EntityId (not the Car.id column), so the bench needs an actual eid
 // captured at creation time. fixture_decs has no return so call sites can't reuse it for this.

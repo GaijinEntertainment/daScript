@@ -5430,6 +5430,81 @@ The `_sql` translator side stays unchanged — `text_match` on an
 query string to SQLite verbatim. The full-grammar in-memory matcher
 just removes the panic when those same chains run without `_sql`.
 
+## Shipped — chunk N: `_distinct_by` as chain operator + first-row aggregates (branch `bbatkin/sqlite-linq-distinct-by-aggregates`)
+
+### Surface in this PR
+
+`_distinct_by(_.K)` is now a first-class chain operator (previously
+recognized only inside `peel_count_terminal`'s `try_peel_distinct_by_field`
+helper). When followed by an aggregate terminator, lowers to a SQLite
+bare-aggregate subquery:
+
+- `_distinct_by(_.K) |> _count(P)` / `_long_count(P)`
+  → `SELECT COUNT(*) FROM (SELECT *, MIN("pk") FROM "table" GROUP BY "K") WHERE <P>`
+- `_distinct_by(_.K) |> _select(_.F) |> sum()` / `min()` / `max()` / `average()`
+  → `SELECT <AGG>("F") FROM (SELECT *, MIN("pk") FROM "table" GROUP BY "K")`
+
+Existing fast path preserved: `_distinct_by(_.K) |> count()` (no predicate)
+continues to emit `COUNT(DISTINCT "K")` — single SELECT, no subquery wrap.
+
+User idiom inside `_sql(...)` for the predicate form is the linq_boost
+`_count(_.field > X)` / `_long_count(_.field > X)` shorthand (parallel
+to `_where(_.field > X)`). The explicit `count($(c) => c.field > X)`
+lambda form fails type inference because `_sql`'s macro boundary blocks
+the typer from binding `c` through unexpanded chain operators.
+
+### Why the bare-aggregate trick
+
+SQLite documents that `SELECT *, MIN(<col>) FROM table GROUP BY K` returns
+non-aggregate columns from the row with the minimum `<col>` per group
+(the "bare aggregate" optimization). With `<col>` set to the table's
+`@sql_primary_key`, "row with min PK per K" = "first row by source order"
+when the PK is monotonic with insertion (the common case). This matches
+linq's `_distinct_by` "first row per key" semantics without window
+functions.
+
+### Constraints (v1)
+
+- Source must have exactly one `@sql_primary_key` field (composite PKs reject).
+- `_distinct_by` appears at most once in the chain.
+- `_distinct_by` must apply to a single source table (no `_join` upstream).
+- No other chain ops between `_distinct_by` and the terminator (other than
+  the optional `_select(_.F)` for column aggregates) — `_where` / `_order_by` /
+  `take` / `skip` etc. in between cleanly reject with macro_error.
+
+### Tests
+
+`tests/dasSQLITE/test_32_distinct.das` — 8 new tests (3 → 11 total)
+covering each new chain shape + emit-shape assertions + runtime correctness
+on a fixture with duplicate names and monotonic PKs.
+
+Rejection paths (no-pk / composite-pk / double `_distinct_by` / chain ops
+between distinct_by and terminator) wired via explicit macro_error calls in
+`sqlite_linq.das` but NOT added as `failed_*.das` probes — the linq
+generic-instantiation cascade after `_sql` returns null is brittle to
+maintain (couples to internal linq.das line numbers). Code-review covers
+the rejection sites.
+
+### Benches
+
+`benchmarks/sql/distinct_count_pred.das` — `m1` row now populated
+(uses the new `_count(_.year > THRESHOLD)` shorthand inside `_sql`).
+`benchmarks/sql/order_distinct_take.das` — `m1` row now populated via
+new 1-column `Brand` table fixture in `_common.das`.
+`benchmarks/sql/results.md` refreshed. `sqlite_linq_gaps.md` updated to
+note both gaps closed.
+
+### Deferred to chunk N+1
+
+- MAX(pk) variant for `each |> reverse |> _distinct_by(K) |> ...` ("last per K"
+  semantics — corresponds to bench `reverse_distinct_by`'s SQL gap).
+- Composition with other chain ops between `_distinct_by` and the
+  terminator: `_where(P) |> _distinct_by(K) |> ...` (where-then-distinct
+  vs. distinct-then-where semantic split), `_distinct_by(K) |> _order_by` /
+  `take` / `skip` (each needs explicit composition logic in `build_sql_string`).
+- Composite-PK support (would need a tuple-key MIN like `MIN(pk1, pk2)` or
+  a synthetic row-id projection).
+
 ## Plan (to be written after all tutorials are reviewed)
 
 _TBD — this section is filled in once we have notes from every tutorial._

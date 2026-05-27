@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-27 from `39ab7624f` + 3 new Theme 8 benches. Three previously-uncovered splice arms from the Theme 8 fusion PR (#2875) now have benches: `reverse_distinct_by` (audit 2a, array-only), `distinct_by_order_to_array` (audit 3b, array + decs), `zip_reverse_to_array` (audit C4, zip array lane). All three splice on the first INTERP run (per-op cost in expected range, 1 alloc/op for the result buffer). SQL holes that won't get a bench under current sqlite_linq surface are now catalogued in [`sqlite_linq_gaps.md`](sqlite_linq_gaps.md) — by-design exclusions, deferred window-function lowerings, and zip's lack of relational form, each cross-referenced to the bench file that surfaces it.
+Generated 2026-05-27 from PR `bbatkin/sqlite-linq-distinct-by-aggregates` (sqlite_linq `_distinct_by` as chain operator + first-row aggregates). Two SQL `—` cells now populated: `order_distinct_take` m1 = 139.2 INTERP / 138.2 JIT via a new 1-column `Brand` table fixture (named-tuple projection lets `_sql` lower to clean `SELECT DISTINCT "value" FROM "Brands" ORDER BY "value" ASC LIMIT ?`); `distinct_count_pred` m1 = 253.1 INTERP / 252.8 JIT via the new bare-aggregate `_distinct_by(K) |> _count(P)` wrap (lowers to `SELECT COUNT(*) FROM (SELECT *, MIN("id") FROM "Cars" GROUP BY "brand") WHERE "year" > ?`). The remaining SQL `—` cells stay catalogued in [`sqlite_linq_gaps.md`](sqlite_linq_gaps.md). Other drift is bench-suite ordering noise: `distinct_by_order_take` m4 INTERP 23.4 → 30.9 (+32%), `groupby_select_order` m4 INTERP 18.7 → 24.2 (+29%), `select_where_order_take` m3f/m4 INTERP ±6-8% — same long-running pattern as prior PRs; sub-nanosecond JIT cells drift at measurement floor.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
 one bench family in `benchmarks/sql/`; columns are nanoseconds per
 logical operation. `—` marks an intentionally absent lane — see
@@ -38,10 +38,10 @@ before the timer resolution can measure them — they should be read as
 | `count_aggregate` | 30.0 | 4.2 | 4.1 | 0.98× |
 | `decs_count_bare_pred` | — | — | 4.2 | — |
 | `distinct_by_count` | 41.8 | 15.8 | 15.8 | 1.00× |
-| `distinct_by_order_take` | — | 21.8 | 23.4 | 1.07× |
+| `distinct_by_order_take` | — | 21.8 | 30.9 | 1.42× |
 | `distinct_by_order_to_array` | — | 22.0 | 24.0 | 1.09× |
 | `distinct_count` | 41.7 | 16.0 | 15.9 | 0.99× |
-| `distinct_count_pred` | — | 16.2 | 16.2 | 1.00× |
+| `distinct_count_pred` | 253.1 | 15.9 | 16.0 | 1.01× |
 | `distinct_take` | 0.00 | 0.00 | 0.00 | — |
 | `element_at_match` | 0.00 | 0.00 | 0.00 | — |
 | `first_match` | 0.00 | 0.00 | 0.00 | — |
@@ -55,7 +55,7 @@ before the timer resolution can measure them — they should be read as
 | `groupby_max` | 174.2 | 25.0 | 25.6 | 1.02× |
 | `groupby_min` | 176.3 | 25.0 | 25.2 | 1.01× |
 | `groupby_multi_reducer` | 190.1 | 32.5 | 33.0 | 1.02× |
-| `groupby_select_order` | 169.9 | 18.6 | 18.7 | 1.01× |
+| `groupby_select_order` | 171.4 | 18.6 | 24.2 | 1.30× |
 | `groupby_select_sum` | 200.9 | 36.5 | 35.9 | 0.98× |
 | `groupby_sum` | 172.6 | 18.8 | 18.8 | 1.00× |
 | `groupby_where_count` | 75.9 | 14.5 | 15.0 | 1.03× |
@@ -70,7 +70,7 @@ before the timer resolution can measure them — they should be read as
 | `long_count_aggregate` | 30.0 | 4.2 | 4.1 | 0.98× |
 | `max_aggregate` | 31.4 | 6.0 | 6.9 | 1.15× |
 | `min_aggregate` | 31.5 | 6.2 | 6.9 | 1.11× |
-| `order_distinct_take` | — | 15.9 | 95.0 | 5.97× |
+| `order_distinct_take` | 139.2 | 15.8 | 95.5 | 6.04× |
 | `order_reverse_normalized` | 38.6 | 16.3 | 20.0 | 1.23× |
 | `order_take_desc` | 38.5 | 16.2 | 19.9 | 1.23× |
 | `reverse_distinct_by` | — | 21.5 | — | — |
@@ -79,7 +79,7 @@ before the timer resolution can measure them — they should be read as
 | `select_count` | 0.10 | 0.00 | 2.2 | — |
 | `select_where` | 195.7 | 11.3 | 19.9 | 1.76× |
 | `select_where_count` | 33.3 | 5.2 | 7.5 | 1.44× |
-| `select_where_order_take` | 37.1 | 13.3 | 15.9 | 1.20× |
+| `select_where_order_take` | 37.0 | 12.3 | 14.9 | 1.21× |
 | `select_where_sum` | 37.3 | 7.6 | 7.6 | 1.00× |
 | `single_match` | 0.00 | 2.9 | 5.5 | 1.90× |
 | `skip_take` | 0.50 | 0.10 | 0.20 | 2.00× |
@@ -118,7 +118,7 @@ before the timer resolution can measure them — they should be read as
 | `distinct_by_order_take` | — | 2.7 | 3.2 | 1.19× |
 | `distinct_by_order_to_array` | — | 2.7 | 3.3 | 1.22× |
 | `distinct_count` | 41.5 | 2.1 | 2.1 | 1.00× |
-| `distinct_count_pred` | — | 2.1 | 2.3 | 1.10× |
+| `distinct_count_pred` | 252.8 | 2.1 | 2.3 | 1.10× |
 | `distinct_take` | 0.00 | 0.00 | 0.00 | — |
 | `element_at_match` | 0.00 | 0.00 | 0.00 | — |
 | `first_match` | 0.00 | 0.00 | 0.00 | — |
@@ -147,7 +147,7 @@ before the timer resolution can measure them — they should be read as
 | `long_count_aggregate` | 29.9 | 0.40 | 0.60 | 1.50× |
 | `max_aggregate` | 31.3 | 0.60 | 0.50 | 0.83× |
 | `min_aggregate` | 31.2 | 0.60 | 0.50 | 0.83× |
-| `order_distinct_take` | — | 2.1 | 74.8 | 35.62× |
+| `order_distinct_take` | 138.2 | 2.1 | 74.9 | 35.67× |
 | `order_reverse_normalized` | 38.3 | 0.70 | 1.3 | 1.86× |
 | `order_take_desc` | 38.4 | 0.70 | 1.3 | 1.86× |
 | `reverse_distinct_by` | — | 2.6 | — | — |
@@ -205,9 +205,6 @@ and which gaps could land in a single PR — see
 - **`distinct_by_order_to_array` SQL** — same window-function blocker as
   `distinct_by_order_take`, drop the `LIMIT N`. See
   `sqlite_linq_gaps.md` "Window-function lowerings".
-- **`distinct_count_pred` SQL** — sqlite_linq's `_distinct_by` + 2-arg
-  `count(P)` shape isn't surfaced through `_sql` (would lower as
-  `COUNT(*) FILTER WHERE ...`, not currently emitted). By design.
 - **`groupby_first` SQL** — no direct SQL aggregator for "first
   source-order row per group". Window functions (`ROW_NUMBER() OVER
   (PARTITION BY brand ORDER BY id)` + outer `WHERE rn=1`) would be the
@@ -233,8 +230,8 @@ and which gaps could land in a single PR — see
   is array-only (`array_source` predicate in
   `daslib/linq_fold.das:3221`) because backward-index walk has no
   archetype analog.
-- **`order_distinct_take` Decs vs Array ratio** — m4 (95.0 INTERP /
-  74.8 JIT) vs m3f (15.9 INTERP / 2.1 JIT) is NOT apples-to-apples.
+- **`order_distinct_take` Decs vs Array ratio** — m4 (95.5 INTERP /
+  74.9 JIT) vs m3f (15.8 INTERP / 2.1 JIT) is NOT apples-to-apples.
   `unique_key` (`daslib/linq.das:614`) short-circuits to a direct
   return for workhorse types and falls back to `"{a}"` string
   interpolation for everything else. Array m3f operates on
@@ -245,13 +242,6 @@ and which gaps could land in a single PR — see
   key-based dedup variant on decs that avoids `unique_key`'s string
   path see `distinct_by_count` (`_distinct_by(_.brand)` over decs,
   m4 = 15.8 INTERP / 2.1 JIT = parity with the array fast path).
-- **`order_distinct_take` SQL** — `_sql`'s `_order_by` requires a
-  `_.Field` (column-ref) key, not bare `_`. Bench operates on a
-  synthesized `array<int>` (no named column to project), so the SQL
-  form has no `.Field` to pass. Independent of distinct/take ordering
-  — `distinct_take.das` proves `_sql` does lower `distinct() |> take(N)`
-  when the source has a named column. By design — adding a SQL lane
-  would need a 1-column table fixture and `_order_by(_.col)`.
 - **`take_count_filtered` SQL** — by design. In SQL, LIMIT after an
   aggregate has no effect (the aggregate collapses to one row), so the
   bound-then-count shape has no faithful SQL translation. No follow-up.
