@@ -3607,10 +3607,8 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let stride = expr.makeType.stride
         if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
-            let total = expr.values |> length
-            let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
-            LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
+            LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(stride), align)
         }
         setE(expr, mks_ptr)
     }
