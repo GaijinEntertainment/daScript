@@ -189,13 +189,13 @@ skipping it. If the parent's user constructors all require arguments, the derive
 must declare its own constructor; otherwise compilation fails with
 ``missing_super_call``.
 
-Declaring *any* user constructor on a class — even one that only takes arguments —
-suppresses the synthesized 0-arg constructor entirely. ``new Class()`` then requires the
-user to also declare ``def Class()`` explicitly; otherwise lookup fails with
-``no matching function``. This matches the C++/Java/C# convention: a user-defined
-constructor opts out of the compiler-generated default. Pre-PR2 behavior auto-synthesized
-a 0-arg field-init ctor whenever the user omitted one, which silently bypassed any user
-ctor's invariants on ``new Class()`` — that bug is now an error.
+The synth chain only fires when the derived class has *no* user constructor. If the
+derived class defines any user constructor — even one that only takes arguments —
+the auto-generated 0-arg ctor falls back to plain field-init (preserving the existing
+``new Class(field=val)`` named-init idiom). The lint catches missing ``super(...)`` in
+user-defined ctors on every control-flow path, so the user-ctor path always runs the
+parent's invariants. ``new Class()`` (no args) on such a class continues to call the
+field-init synth — it does not run the user ctor.
 
 Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
 parent's finalizer on the current object:

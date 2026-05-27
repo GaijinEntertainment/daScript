@@ -735,15 +735,6 @@ namespace das {
         return result;
     }
     bool InferTypes::tryMakeStructureCtor(Structure *var, bool isPrivate, bool fromGeneric) {
-        // For classes, defining ANY user ctor (even args-only) suppresses the 0-arg
-        // synth. The pre-PR2 behavior auto-synthesized a 0-arg ctor whenever no 0-arg
-        // user ctor existed, which silently bypassed user invariants for `new Class()`
-        // when only an args-taking user ctor was defined. Matches C++/Java/C# semantics
-        // -- if the user wants `new Class()`, they must write `def Class()` explicitly.
-        // Structs keep the old behavior (no inheritance, no super to bypass).
-        if (var->isClass && var->hasUserConstructor()) {
-            return false;
-        }
         if (!hasDefaultUserConstructor(var->name)) {
             auto ctor = makeConstructor(var, isPrivate);
             if (fromGeneric) {

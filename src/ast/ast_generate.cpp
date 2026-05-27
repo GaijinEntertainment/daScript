@@ -317,11 +317,21 @@ namespace das {
         if ( str->macroInterface ) fn->macroFunction = true;
         auto block = new ExprBlock();
         block->at = str->at;
-        // For synth ctors of derived classes whose ancestor chain has a user ctor,
-        // emit a chain body that calls the deepest USER ctor directly. The synth
-        // walks past intermediate synth-ctored classes since those have no user
-        // code -- only the user ctor's invariants need running.
-        Structure * chainTarget = findChainCtorAncestor(str);
+        // For a synth ctor of a class whose ancestor chain has a user ctor, emit a
+        // chain body that calls the deepest USER ctor directly -- but only when
+        // (a) the class itself has no user ctor (true implicit-default case)
+        // AND (b) the chain target has a 0-arg-callable user ctor we can reach.
+        // Otherwise fall through to the plain field-init body. The latter preserves
+        // the long-standing `new Class(field=val)` named-init idiom for classes
+        // with user ctors. The lint catches missing super in the user's own ctor,
+        // which is the only path that actually runs invariants.
+        Structure * chainTarget = nullptr;
+        if ( !str->hasUserConstructor() ) {
+            auto * cand = findChainCtorAncestor(str);
+            if ( cand && cand->hasUserDefaultConstructor() ) {
+                chainTarget = cand;
+            }
+        }
         if ( chainTarget ) {
             // let self = [[Derived()]]
             auto makeT = new ExprMakeStruct(str->at);

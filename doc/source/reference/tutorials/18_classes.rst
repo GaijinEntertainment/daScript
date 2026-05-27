@@ -99,15 +99,13 @@ The synthesis runs only when:
 - the parent ctor is 0-arg-callable (no arguments, or all arguments have
   defaults).
 
-Defining **any** user constructor — even one that only takes arguments —
-suppresses the 0-arg synthesis. ``new Derived()`` then fails to resolve
-unless the user also declares ``def Derived()``::
-
-  class Pet : Animal {
-      def Pet(name : string) { super(); this.name = name }
-  }
-  new Pet()             // ERROR: no matching ctor _::Pet()
-  new Pet("rex")        // OK
+If the derived class defines its own constructor — even one that only
+takes arguments — the auto-generated 0-arg ctor falls back to plain
+field-init (preserving the ``new Class(field=val)`` named-init idiom).
+The lint catches missing ``super(...)`` in user-defined ctors on every
+control-flow path, so the user-ctor path always runs the parent's
+invariants. ``new Class()`` (no args) on such a class continues to call
+the field-init synth — it does **not** run the user ctor.
 
 If the parent has only constructors that require arguments, the derived
 class must declare its own constructor::

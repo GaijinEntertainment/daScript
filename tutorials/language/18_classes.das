@@ -192,15 +192,13 @@ def main {
     //   - the derived class has NO ctor of its own (none at all)
     //   - that parent ctor is 0-arg-callable (or all args have defaults)
     //
-    // Defining ANY user ctor — even one that only takes arguments —
-    // SUPPRESSES the 0-arg synth. `new Pet()` then errors unless the user
-    // also declares `def Pet()`:
-    //
-    //   class Pet : Animal {
-    //       def Pet(name : string) { super(); this.name = name }
-    //   }
-    //   new Pet()             // ERROR: no matching ctor _::Pet()
-    //   new Pet("rex")        // OK
+    // If the derived class defines any user ctor — even one that only takes
+    // args — the auto-generated 0-arg ctor falls back to plain field-init
+    // (preserving the `new Class(field=val)` named-init idiom). The lint
+    // catches missing super(...) in user-defined ctors on every CFG path, so
+    // the user-ctor path always runs the parent's invariants. `new Class()`
+    // (no args) on such a class still calls the field-init synth — it does
+    // NOT run the user ctor.
     //
     // If the parent has only ctors that require arguments, the derived class
     // MUST declare its own ctor:
