@@ -255,3 +255,113 @@ def test_take_zero_where(t : T?) {
         }
     }
 }
+
+// ── plan_loop_or_count take.where — DECS arm (closes 5c on decs, mirrors array above) ─
+
+// Mirrors make_act_items() via DecsItem (category="T" ⇔ active=true, price=score). 8 rows:
+// [T:10, F:20, T:30, F:40, T:50, F:60, T:70, T:80].
+def populate_decs_act_items() {
+    let cats   = ["T", "F", "T", "F", "T", "F", "T", "T"]
+    let prices = [ 10,  20,  30,  40,  50,  60,  70,  80]
+    create_entities(8) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsItem(category = cats[i], price = prices[i]))
+    }
+}
+
+[test]
+def test_take_where_count_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs take(N)._where(p).count() (counter lane, probe 5c)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            let r1 = _fold(from_decs_template(type<DecsItem>).take(5)._where(_.category == "T").count())
+            tt |> equal(r1, 3)
+            let r2 = _fold(from_decs_template(type<DecsItem>)._where(_.category == "T").take(5).count())
+            tt |> equal(r2, 5)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_take_where_sum_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs take(N)._where(p).sum() (accumulator lane)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            let s = _fold(from_decs_template(type<DecsItem>)._select(_.price).take(5)._where(_ > 0).sum())
+            tt |> equal(s, 150)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_take_where_first_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs take(N)._where(p).first_or_default() (early-exit lane)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            let f = _fold(from_decs_template(type<DecsItem>).take(3)._where(_.category == "T").first_or_default((category = "", price = -1)))
+            tt |> equal(f.price, 10)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_take_where_to_array_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs take(N)._where(p).to_array() (array lane)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            let arr <- _fold(from_decs_template(type<DecsItem>).take(5)._where(_.category == "T").to_array())
+            tt |> equal(length(arr), 3)
+            tt |> equal(arr[0].price, 10)
+            tt |> equal(arr[2].price, 50)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_head_where_take_post_where_count_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs _where(P1)._take(N)._where(P2).count() (head + gate fire together)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            // _where(price > 15) drops [10] → [20,30,40,50,60,70,80]. take(4) → [20,30,40,50]. _where("T") → [30,50]. count=2.
+            let r = _fold(from_decs_template(type<DecsItem>)._where(_.price > 15).take(4)._where(_.category == "T").count())
+            tt |> equal(r, 2)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_select_take_post_where_count_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs _select(f).take(N)._where(p).count() (gate peels against finalBind)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            // _select(price) → [10..80]. take(5) → [10,20,30,40,50]. _where(>25) → [30,40,50]. count=3.
+            let r = _fold(from_decs_template(type<DecsItem>)._select(_.price).take(5)._where(_ > 25).count())
+            tt |> equal(r, 3)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_skip_take_post_where_count_decs(t : T?) {
+    t |> run("plan_loop_or_count: decs skip(M).take(N)._where(p).count() (skip + post-take gate)") @(tt : T?) {
+        restart()
+        populate_decs_act_items()
+        unsafe {
+            // skip(2) → [30,40,50,60,70,80]. take(4) → [30,40,50,60]. _where("T") → [30,50]. count=2.
+            let r = _fold(from_decs_template(type<DecsItem>).skip(2).take(4)._where(_.category == "T").count())
+            tt |> equal(r, 2)
+        }
+        restart()
+    }
+}

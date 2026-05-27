@@ -2506,8 +2506,6 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
 def private emit_loop_or_count_lane_decs(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bridge = (ctx.src as Decs)._0
     let tupName = (ctx.src as Decs)._1
-    // post_take_where (Theme 2 5c on Array) has no decs lane fn yet; cascade so the chain doesn't silently lose the predicate.
-    if (c.single |> key_exists("post_take_where")) return null
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
     var termName : string
@@ -2545,10 +2543,16 @@ def private emit_loop_or_count_lane_decs(var c : Captures; var ctx : EmitCtx; at
         calls |> push((termCall, unsafe(addr(lc))))
     }
     let intermediateEnd = hasTerm ? length(calls) - 1 : length(calls)
-    let rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
+    var rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
     if (rangeInfo == null) return null
     let chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
     if (chainInfo == null) return null
+    if (c.single |> key_exists("post_take_where")) {
+        var ptwArg = c.single["post_take_where"].arguments[1]
+        if (ptwArg == null) return null
+        rangeInfo.postTakeWhereCond = peel_lambda_rename_var(ptwArg, chainInfo.finalBind)
+        if (rangeInfo.postTakeWhereCond == null) return null
+    }
     // Terminator classification mirrors plan_decs_unroll imperative (linq_fold.das:5781-5791); differs from classify_terminator's 4-lane split because decs has dedicated min_max_by / walk / element_at emit fns with hoisted state.
     let isAccum = (termName == "count" || termName == "long_count" || termName == "sum"
         || termName == "min" || termName == "max" || termName == "average")
@@ -5036,11 +5040,12 @@ def private wrap_decs_chain(var action : Expression?;
 }
 
 struct private DecsRangeInfo {
-    skipExpr      : Expression?
-    takeExpr      : Expression?
-    skipWhileCond : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
-    takeWhileCond : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
-    chainEnd      : int
+    skipExpr          : Expression?
+    takeExpr          : Expression?
+    skipWhileCond     : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
+    takeWhileCond     : Expression?    // Slice 5b: predicate peeled against tupName (source tuple)
+    postTakeWhereCond : Expression?    // gates per-element work AFTER take cap ticks; peeled against chainInfo.finalBind (mirrors array-side postTakeWhereCond, Theme 2 5c)
+    chainEnd          : int
 }
 
 struct private DecsRangeStateNames {
@@ -5268,7 +5273,12 @@ def private emit_decs_terminator_lane(
     let tupName = qn("decs_tup", at)
     let names <- make_decs_range_names(at)
     let archName = bridge.archName
-    var perElement = wrap_inner_for_with_decs_ranges(spec.perElement, rangeInfo, names)
+    var ptwCond : Expression?
+    if (rangeInfo.postTakeWhereCond != null) {
+        ptwCond = clone_expression(rangeInfo.postTakeWhereCond)
+    }
+    var gatedPerElement = wrap_with_condition(spec.perElement, ptwCond)
+    var perElement = wrap_inner_for_with_decs_ranges(gatedPerElement, rangeInfo, names)
     var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
     if (body == null) return null
     var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
