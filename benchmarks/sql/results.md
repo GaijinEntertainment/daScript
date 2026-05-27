@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-27 from `ee2f1fe77` (PR F4.3 — `order_distinct_take` decs lane via DecsBrand fixture). Matrix refreshed for the new m4 cell: `_order_by(K) |> distinct() |> take(N) |> to_array` on a decs source now reports honest cost via a duplicate-prone single-int template. The m4 cell lands at 95.0 ns/op INTERP / 74.8 JIT vs m3f at 15.9 / 2.1 — the ratio is NOT apples-to-apples (see `order_distinct_take` note below). Other drift is bench-suite ordering noise: `sort_first` m4 INTERP drifted +28% on the F4.2 baseline, now drifts back -22% on this run (long-running pattern on this lane); `select_where_order_take` ±6-8% INTERP noise; sub-nanosecond JIT drifts at measurement floor.
+Generated 2026-05-27 from `39ab7624f` + 3 new Theme 8 benches. Three previously-uncovered splice arms from the Theme 8 fusion PR (#2875) now have benches: `reverse_distinct_by` (audit 2a, array-only), `distinct_by_order_to_array` (audit 3b, array + decs), `zip_reverse_to_array` (audit C4, zip array lane). All three splice on the first INTERP run (per-op cost in expected range, 1 alloc/op for the result buffer). SQL holes that won't get a bench under current sqlite_linq surface are now catalogued in [`sqlite_linq_gaps.md`](sqlite_linq_gaps.md) — by-design exclusions, deferred window-function lowerings, and zip's lack of relational form, each cross-referenced to the bench file that surfaces it.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
 one bench family in `benchmarks/sql/`; columns are nanoseconds per
 logical operation. `—` marks an intentionally absent lane — see
@@ -39,6 +39,7 @@ before the timer resolution can measure them — they should be read as
 | `decs_count_bare_pred` | — | — | 4.2 | — |
 | `distinct_by_count` | 41.8 | 15.8 | 15.8 | 1.00× |
 | `distinct_by_order_take` | — | 21.8 | 23.4 | 1.07× |
+| `distinct_by_order_to_array` | — | 22.0 | 24.0 | 1.09× |
 | `distinct_count` | 41.7 | 16.0 | 15.9 | 0.99× |
 | `distinct_count_pred` | — | 16.2 | 16.2 | 1.00× |
 | `distinct_take` | 0.00 | 0.00 | 0.00 | — |
@@ -72,6 +73,7 @@ before the timer resolution can measure them — they should be read as
 | `order_distinct_take` | — | 15.9 | 95.0 | 5.97× |
 | `order_reverse_normalized` | 38.6 | 16.3 | 20.0 | 1.23× |
 | `order_take_desc` | 38.5 | 16.2 | 19.9 | 1.23× |
+| `reverse_distinct_by` | — | 21.5 | — | — |
 | `reverse_take` | 0.10 | 0.00 | 10.2 | — |
 | `reverse_take_select` | 0.00 | 34.3 | 48.4 | 1.41× |
 | `select_count` | 0.10 | 0.00 | 2.2 | — |
@@ -96,6 +98,7 @@ before the timer resolution can measure them — they should be read as
 | `zip_count_pred` | — | 15.1 | — | — |
 | `zip_dot_product` | — | 12.7 | 10.7 | 0.84× |
 | `zip_dot_product_3arg` | — | 12.8 | — | — |
+| `zip_reverse_to_array` | — | 31.1 | — | — |
 
 ## JIT
 
@@ -113,6 +116,7 @@ before the timer resolution can measure them — they should be read as
 | `decs_count_bare_pred` | — | — | 0.60 | — |
 | `distinct_by_count` | 41.4 | 2.1 | 2.1 | 1.00× |
 | `distinct_by_order_take` | — | 2.7 | 3.2 | 1.19× |
+| `distinct_by_order_to_array` | — | 2.7 | 3.3 | 1.22× |
 | `distinct_count` | 41.5 | 2.1 | 2.1 | 1.00× |
 | `distinct_count_pred` | — | 2.1 | 2.3 | 1.10× |
 | `distinct_take` | 0.00 | 0.00 | 0.00 | — |
@@ -146,6 +150,7 @@ before the timer resolution can measure them — they should be read as
 | `order_distinct_take` | — | 2.1 | 74.8 | 35.62× |
 | `order_reverse_normalized` | 38.3 | 0.70 | 1.3 | 1.86× |
 | `order_take_desc` | 38.4 | 0.70 | 1.3 | 1.86× |
+| `reverse_distinct_by` | — | 2.6 | — | — |
 | `reverse_take` | 0.00 | 0.00 | 1.1 | — |
 | `reverse_take_select` | 0.00 | 8.5 | 10.5 | 1.24× |
 | `select_count` | 0.10 | 0.00 | 0.00 | — |
@@ -170,12 +175,17 @@ before the timer resolution can measure them — they should be read as
 | `zip_count_pred` | — | 0.70 | — | — |
 | `zip_dot_product` | — | 0.50 | 0.50 | 1.00× |
 | `zip_dot_product_3arg` | — | 0.50 | — | — |
+| `zip_reverse_to_array` | — | 4.5 | — | — |
 
 
 ## Notes on missing lanes (the `—` cells)
 
 The reasons each cell is empty are also recorded as a comment in the
 corresponding `.das` bench file; the bullets below quote that comment.
+For deeper detail on SQL cells — what query each would lower to,
+whether the gap is window-function / surface-limitation / by-design,
+and which gaps could land in a single PR — see
+[`sqlite_linq_gaps.md`](sqlite_linq_gaps.md).
 
 - **`chained_select_collapse` SQL** — `_sql` rejects `distinct() |> count()`
   as non-translatable. The equivalent SQL `COUNT(DISTINCT computed-expr)`
@@ -190,7 +200,11 @@ corresponding `.das` bench file; the bullets below quote that comment.
   per dealer, sort by price, take N" needs window functions
   (`ROW_NUMBER() OVER (PARTITION BY dealer_id ORDER BY price)` + outer
   `WHERE rn=1` + `LIMIT N`); sqlite_linq does not currently lower window
-  functions. Follow-up TODO 2026-05-25.
+  functions. Follow-up TODO 2026-05-25 — see `sqlite_linq_gaps.md`
+  "Window-function lowerings".
+- **`distinct_by_order_to_array` SQL** — same window-function blocker as
+  `distinct_by_order_take`, drop the `LIMIT N`. See
+  `sqlite_linq_gaps.md` "Window-function lowerings".
 - **`distinct_count_pred` SQL** — sqlite_linq's `_distinct_by` + 2-arg
   `count(P)` shape isn't surfaced through `_sql` (would lower as
   `COUNT(*) FILTER WHERE ...`, not currently emitted). By design.
@@ -212,6 +226,13 @@ corresponding `.das` bench file; the bullets below quote that comment.
   bare `_` (only the `into` lambda's parameter names are valid
   receivers; computed projections would need to be inlined into the
   `into` lambda). By design — sqlite_linq surface limitation.
+- **`reverse_distinct_by` SQL / Decs** — SQL: same window-function
+  blocker as `distinct_by_order_take`, with descending key
+  (`ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id DESC) WHERE rn=1`
+  picks "last-per-group"); see `sqlite_linq_gaps.md`. Decs: splice arm
+  is array-only (`array_source` predicate in
+  `daslib/linq_fold.das:3221`) because backward-index walk has no
+  archetype analog.
 - **`order_distinct_take` Decs vs Array ratio** — m4 (95.0 INTERP /
   74.8 JIT) vs m3f (15.9 INTERP / 2.1 JIT) is NOT apples-to-apples.
   `unique_key` (`daslib/linq.das:614`) short-circuits to a direct
@@ -250,6 +271,11 @@ corresponding `.das` bench file; the bullets below quote that comment.
   This row exercises the 3-arg `zip(a, b, sel)` pre-lowering (Theme 1,
   audit 7a); a companion to `zip_dot_product` with the explicit 2-arg
   + `_select` form. By design, no follow-up.
+- **`zip_reverse_to_array` SQL / Decs** — same `zip-not-relational`
+  reason as `zip_count_pred`. This row exercises the Theme 8 audit C4
+  splice — trailing `reverse()` on the zip array lane emits
+  `_::reverse_inplace` after the zip lockstep buffer fill. By design,
+  no follow-up.
 
 ## How to re-run
 
