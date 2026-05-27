@@ -1180,11 +1180,13 @@ struct private FoldArraySpec {
     tailStmts       : array<Expression?>   // post-loop; INCLUDES the return
     outElemType     : TypeDeclPtr           // invoke retType; null = infer
     wrapIter        : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
+    customSourceLoop : Expression?          // if non-null, replaces adapter_wrap_source_loop at the source-loop step; caller pre-composes via compose_fold_per_element and wraps in its own outer-loop shape
 }
 
+// Compose perElement = distinct gate (innermost) → whereCond → preCondStmts.
+// Exposed so customSourceLoop callers wrap the exact body the lane would have wrapped, in their own outer-loop shape.
 [macro_function]
-def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
-    // Compose perElement: distinct gate (innermost) → whereCond (where filters BEFORE dset sees rows) → preCondStmts.
+def private compose_fold_per_element(var spec : FoldArraySpec) : Expression? {
     var perElement = spec.perElementPush
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
@@ -1205,8 +1207,12 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
             }
         }
     }
-    perElement = prepend_precond(wrap_with_condition(perElement, spec.whereCond), spec.preCondStmts)
-    // 2. Assemble bodyStmts in order
+    return prepend_precond(wrap_with_condition(perElement, spec.whereCond), spec.preCondStmts)
+}
+
+[macro_function]
+def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
+    // Assemble bodyStmts: prologue → bufDecl → dsetDecl → postBufDecl → reserve → source-loop → tail.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(spec.prologueStmts) + length(spec.postBufDeclStmts)
                           + length(spec.reserveStmts) + length(spec.tailStmts) + 5)
@@ -1233,7 +1239,13 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
     }
     bodyStmts |> push_from(spec.postBufDeclStmts)
     bodyStmts |> push_from(spec.reserveStmts)
-    bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
+    if (spec.customSourceLoop != null) {
+        bodyStmts |> push <| spec.customSourceLoop
+    } else {
+        var perElement = compose_fold_per_element(spec)
+        if (perElement == null) return null
+        bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
+    }
     bodyStmts |> push_from(spec.tailStmts)
     return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
