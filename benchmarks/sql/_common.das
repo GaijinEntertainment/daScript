@@ -129,6 +129,21 @@ def public fixture_decs_cars_and_dealers(n : int) {
     }
 }
 
+// Duplicate-prone single-field template for decs distinct/order benches.
+// Populated with `i % BRAND_COUNT` so n=100k has dense duplicates per value,
+// matching the array-side `make_brands(n)` helper in order_distinct_take.das.
+[decs_template(prefix = "brand_")]
+struct public DecsBrand {
+    value : int
+}
+
+def public fixture_decs_brands(n : int) {
+    restart()
+    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsBrand(value = i % BRAND_COUNT))
+    }
+}
+
 // Same fixture as fixture_decs, but returns the eid of the n/2-th entity for indexed-lookup benches.
 // The decs O(1) lookup path keys on EntityId (not the Car.id column), so the bench needs an actual eid
 // captured at creation time. fixture_decs has no return so call sites can't reuse it for this.
