@@ -399,8 +399,6 @@ def private zip_reverse_compatible_with_term(var c : Captures; var top : Express
 
 var private splice_patterns : array<SplicePattern>
 
-// ===== End of pattern-table kernel =====
-
 var private linqCalls = {
 // filtering data
     "where_" => LinqCall(name = "where_"),
@@ -565,13 +563,18 @@ def private normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?
     }
 }
 
-// Theme 7: collapse consecutive `_select(f) |> _select(g)` calls into a single `_select(g(f(_)))`. Symmetric to how N consecutive `_where` compose via `&&`. Mutates `calls` in place by replacing the OUTER select's lambda with a composed lambda (built by cloning the INNER lambda structure so param TYPE is preserved, then renaming its param to a fresh name and overwriting the body with the composed expression) and erasing the inner entry. Gated on purity of the inner projection — for impure inner, collapsing would shift evaluation count (outer may reference its param zero or many times); leaving the chain unchanged preserves cascade semantics. Closes audit 7c (chained selects on plan_zip) and unblocks chained selects on plan_distinct / plan_order_family / plan_reverse / plan_decs_* / plan_decs_join.
+typedef ComposeFn = function<(innerLam, outerLam : Expression?; freshName : string) : Expression?>
+
+// Adjacent same-op collapse scaffold: validates the pair, delegates body composition to composeBodies (null = bail),
+// then clones inner-lam to preserve param TYPE, rewires the chain backlink, erases inner. composeBodies's null bail
+// lets op-specific purity/peel checks short-circuit without duplicating the scaffold.
 [macro_function]
-def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
-    // Match on LinqCall.name == "select" — this name is shared between `select` and `select_to_array` in the `linqCalls` registry (both denote the same projection semantic, just different input shapes: array vs iterator). The chain backlink rewire below may change the outer call's input shape (e.g. outer was `select` reading from inner's array<T>; after collapse it reads directly from an iter<T> source). That would normally require rebinding outer.func to `select_to_array`, BUT every downstream planner that consumes this `calls` array builds its emission from scratch using cll._1.name + cll._0.arguments[1] (the lambda) — none of them re-evaluate cll._0.func or instantiate a call to the original `select`/`select_to_array` function. The fold_linq_default fallback derives the actual call name (`select_to_array` vs `select`) at emission time from `top._type.isIterator`, not from cll._0.func. So the variant mismatch on the modified ExprCall is latent and never observed.
+def private collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                    opName, freshNamePrefix : string;
+                                    composeBodies : ComposeFn) {
     var i = 0
     while (i + 1 < length(calls)) {
-        if (calls[i]._1.name != "select" || calls[i + 1]._1.name != "select") {
+        if (calls[i]._1.name != opName || calls[i + 1]._1.name != opName) {
             i ++
             continue
         }
@@ -599,18 +602,12 @@ def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall
             i ++
             continue
         }
-        if (has_sideeffects(innerRet.subexpr)) {
+        let freshName = qn(freshNamePrefix, innerLam.at)
+        var composed = invoke(composeBodies, innerLam, outerLam, freshName)
+        if (composed == null) {
             i ++
             continue
         }
-        // Rename inner's param to a fresh name BEFORE composition. apply_template recursively walks substituted content — if outer's param name matches a binder name inside innerBody (both selects often share `_` from boost-side desugaring), substitution loops. Renaming inner's `_` to a unique name guarantees no collision when substituting outer's `_` with renamedInnerBody.
-        let freshName = qn("cs", innerLam.at)
-        var renamedInnerBody = peel_lambda_rename_var(innerLam, freshName)
-        if (renamedInnerBody == null) {
-            i ++
-            continue
-        }
-        // Build new lambda: clone innerLam (preserves param TYPE), rename its bound param to freshName, then overwrite its body with composedBody (outer's body with outer's param substituted by renamedInnerBody).
         var newLam = clone_expression(innerLam)
         var newMblk = newLam as ExprMakeBlock
         var newBlk = newMblk._block as ExprBlock
@@ -620,72 +617,49 @@ def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall
         }
         var newRet = newBlk.list[0] as ExprReturn
         newBlk.arguments[0].name := freshName
-        var rules : Template
-        rules |> replaceVariable(string(outerBlk.arguments[0].name), renamedInnerBody)
-        newRet.subexpr = apply_template(rules, outerRet.subexpr.at, outerRet.subexpr)
+        newRet.subexpr = composed
         calls[i + 1]._0.arguments[1] = newLam
-        // Rewire the chain backlink so the inner select is dropped from the AST too. Without this, a subsequent planner pass would re-flatten the original outer→inner→source chain and re-collapse — non-idempotent (substitution of outer's already-renamed param into inner's body would compound `._0` accessors).
         calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
         calls |> erase(i)
-        // Don't advance `i` — the merged outer might still chain with another `_select` just before it.
     }
+}
+
+// Function-compose for collapse_chained_selects. Bails on impure inner (would shift evaluation count if outer
+// references its param zero or many times — preserve cascade semantics by leaving the chain alone).
+[macro_function]
+def private compose_select_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
+    var outerMblk = outerLam as ExprMakeBlock
+    var outerBlk = outerMblk._block as ExprBlock
+    var outerRet = outerBlk.list[0] as ExprReturn
+    var renamedInnerBody = peel_lambda_rename_var(innerLam, freshName)
+    if (renamedInnerBody == null || has_sideeffects(renamedInnerBody)) return null
+    var rules : Template
+    rules |> replaceVariable(string(outerBlk.arguments[0].name), renamedInnerBody)
+    return apply_template(rules, outerRet.subexpr.at, outerRet.subexpr)
+}
+
+// Theme 7: collapse `_select(f) |> _select(g)` into `_select(g(f(_)))`. Matches LinqCall.name == "select" which is
+// shared between `select` and `select_to_array` — downstream planners build emission from cll._1.name + the lambda,
+// never re-evaluate cll._0.func, so the latent ExprCall.func/input-shape mismatch is never observed.
+[macro_function]
+def private collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+    collapse_adjacent_calls(calls, "select", "cs", @@ < ComposeFn > compose_select_bodies)
+}
+
+// AND-composition for collapse_chained_wheres. Rename both predicate params to the same freshName so composed body
+// references one shared bind. No has_sideeffects bail needed — composition doesn't duplicate either body (each runs at
+// most once per element, same as the imperative chain with short-circuit `&&`).
+[macro_function]
+def private compose_where_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
+    var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
+    var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
+    if (innerBodyFresh == null || outerBodyFresh == null) return null
+    return merge_where_cond(innerBodyFresh, outerBodyFresh)
 }
 
 [macro_function]
 def private collapse_chained_wheres(var calls : array<tuple<ExprCall?; LinqCall?>>) {
-    // Mirror of collapse_chained_selects shape (find adjacent same-op pairs, rename to fresh param, rewire backlink, erase inner, stay at i) but composes via `pred1 && pred2` instead of function compose. Both predicates take the source element, so the composed body uses ONE fresh param shared by both halves. No has_sideeffects bail needed — composition doesn't duplicate either body (each runs at most once per element, same as the imperative chain with short-circuit `&&`).
-    var i = 0
-    while (i + 1 < length(calls)) {
-        if (calls[i]._1.name != "where_" || calls[i + 1]._1.name != "where_") {
-            i ++
-            continue
-        }
-        var innerLam = calls[i]._0.arguments[1]
-        var outerLam = calls[i + 1]._0.arguments[1]
-        if (innerLam == null || outerLam == null
-                || !(innerLam is ExprMakeBlock) || !(outerLam is ExprMakeBlock)) {
-            i ++
-            continue
-        }
-        var innerMblk = innerLam as ExprMakeBlock
-        var innerBlk = innerMblk._block as ExprBlock
-        var outerMblk = outerLam as ExprMakeBlock
-        var outerBlk = outerMblk._block as ExprBlock
-        if (innerBlk == null || outerBlk == null
-                || innerBlk.arguments |> length != 1 || outerBlk.arguments |> length != 1
-                || innerBlk.list |> length != 1 || outerBlk.list |> length != 1
-                || !(innerBlk.list[0] is ExprReturn) || !(outerBlk.list[0] is ExprReturn)) {
-            i ++
-            continue
-        }
-        var innerRet = innerBlk.list[0] as ExprReturn
-        var outerRet = outerBlk.list[0] as ExprReturn
-        if (innerRet.subexpr == null || outerRet.subexpr == null) {
-            i ++
-            continue
-        }
-        // Rename both predicate params to the same fresh name — composed body references one shared bind.
-        let freshName = qn("cw", innerLam.at)
-        var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
-        var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
-        if (innerBodyFresh == null || outerBodyFresh == null) {
-            i ++
-            continue
-        }
-        var newLam = clone_expression(innerLam)
-        var newMblk = newLam as ExprMakeBlock
-        var newBlk = newMblk._block as ExprBlock
-        if (newBlk == null || newBlk.list |> length != 1 || !(newBlk.list[0] is ExprReturn)) {
-            i ++
-            continue
-        }
-        var newRet = newBlk.list[0] as ExprReturn
-        newBlk.arguments[0].name := freshName
-        newRet.subexpr = merge_where_cond(innerBodyFresh, outerBodyFresh)
-        calls[i + 1]._0.arguments[1] = newLam
-        calls[i + 1]._0.arguments[0] = calls[i]._0.arguments[0]
-        calls |> erase(i)
-    }
+    collapse_adjacent_calls(calls, "where_", "cw", @@ < ComposeFn > compose_where_bodies)
 }
 
 [macro_function]
@@ -824,17 +798,6 @@ def private classify_terminator(name : string) : LinqLane {
             || name == "element_at" || name == "element_at_or_default"
             || name == "aggregate") return LinqLane.EARLY_EXIT
     return LinqLane.UNKNOWN
-}
-
-[macro_function]
-def private is_buffer_required_op(name : string) : bool {
-    // Defense-in-depth marker: dedicated planners catch these first in the cascade; this arm only fires on shapes they don't recognize.
-    return (name == "order_by" || name == "order" || name == "order_descending"
-        || name == "order_by_descending"
-        || name == "distinct" || name == "distinct_by"
-        || name == "reverse"
-        || name == "group_by" || name == "group_by_lazy"
-        || name == "join" || name == "left_join" || name == "group_join")
 }
 
 [macro_function]
@@ -1180,11 +1143,13 @@ struct private FoldArraySpec {
     tailStmts       : array<Expression?>   // post-loop; INCLUDES the return
     outElemType     : TypeDeclPtr           // invoke retType; null = infer
     wrapIter        : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
+    customSourceLoop : Expression?          // if non-null, replaces adapter_wrap_source_loop at the source-loop step; caller pre-composes via compose_fold_per_element and wraps in its own outer-loop shape
 }
 
+// Compose perElement = distinct gate (innermost) → whereCond → preCondStmts.
+// Exposed so customSourceLoop callers wrap the exact body the lane would have wrapped, in their own outer-loop shape.
 [macro_function]
-def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
-    // Compose perElement: distinct gate (innermost) → whereCond (where filters BEFORE dset sees rows) → preCondStmts.
+def private compose_fold_per_element(var spec : FoldArraySpec) : Expression? {
     var perElement = spec.perElementPush
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
@@ -1205,8 +1170,12 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
             }
         }
     }
-    perElement = prepend_precond(wrap_with_condition(perElement, spec.whereCond), spec.preCondStmts)
-    // 2. Assemble bodyStmts in order
+    return prepend_precond(wrap_with_condition(perElement, spec.whereCond), spec.preCondStmts)
+}
+
+[macro_function]
+def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapter; at : LineInfo) : Expression? {
+    // Assemble bodyStmts: prologue → bufDecl → dsetDecl → postBufDecl → reserve → source-loop → tail.
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(spec.prologueStmts) + length(spec.postBufDeclStmts)
                           + length(spec.reserveStmts) + length(spec.tailStmts) + 5)
@@ -1233,7 +1202,13 @@ def private emit_fold_array_lane(var spec : FoldArraySpec; adapter : SourceAdapt
     }
     bodyStmts |> push_from(spec.postBufDeclStmts)
     bodyStmts |> push_from(spec.reserveStmts)
-    bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
+    if (spec.customSourceLoop != null) {
+        bodyStmts |> push <| spec.customSourceLoop
+    } else {
+        var perElement = compose_fold_per_element(spec)
+        if (perElement == null) return null
+        bodyStmts |> push <| adapter_wrap_source_loop(adapter, perElement, at)
+    }
     bodyStmts |> push_from(spec.tailStmts)
     return adapter_wrap_invoke(adapter, bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
@@ -1740,17 +1715,6 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
     return t
 }
 
-[clone(top), macro_function]
-def private finalize_emission_stmts(top : Expression?; srcName : string; at : LineInfo; var stmts : array<Expression?>) : Expression? {
-    var srcParamType = invoke_src_param_type(top)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var emission : Expression? = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(stmts)
-    }, $e(topExpr)))
-    return finalize_invoke(emission, at)
-}
-
 // ===== SourceAdapter helpers (PR C) — used by emit fns to dispatch source-loop + invoke wrap per adapter. =====
 
 // The per-element bind name emit fns peel where/select/key/value lambdas against. Drives build_decs_inner_for_pruned's
@@ -2076,7 +2040,7 @@ def private register_order_family_rows {
     )
 }
 
-// ===== plan_order_family migration (PR B2) — 4 emit archetypes + 5 pattern rows. Capture keys: where / distinct / distinct_after / order / take / term / termsel. =====
+// ===== plan_order_family =====
 
 // Shared helper — every emit archetype starts with this state extraction.
 struct private OrderCaptures {
@@ -2535,12 +2499,9 @@ def private emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineI
     ), ctx.src, at)
 }
 
-// ===== plan_loop_or_count migration (PR B) =====
+// ===== plan_loop_or_count =====
 // Single emit + single pattern row. c_chain captures where_/select head; canonical-order slots carry the rest.
 
-// PR C Decs-arm: reconstructs a flatten_linq-shaped calls array from captures, runs extract_decs_ranges +
-// compute_decs_chain_info (the same helpers plan_decs_unroll imperative uses), then dispatches to the
-// existing emit_decs_* lane fns. State-hoist-above-for_each_archetype shape stays per-adapter (D1).
 [macro_function]
 def private emit_loop_or_count_lane_decs(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bridge = (ctx.src as Decs)._0
@@ -2857,9 +2818,7 @@ def private register_loop_or_count_rows {
     )
 }
 
-// ===== plan_reverse migration (PR A — pattern-table refactor) =====
-// 5 emit archetypes + 5 pattern rows + stub. Each archetype lifted verbatim from
-// the prior imperative plan_reverse branches (see git history before PR A).
+// ===== plan_reverse =====
 
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
 [macro_function]
@@ -3003,22 +2962,38 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
     let takeLimName = qn("rtakeLim", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
-    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
+    var takeArg = c.single["take"].arguments[1]
     // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
-    var body : Expression? = qmacro_block() {
+    var prologueStmts <- qmacro_block_to_array() {
         let $i(lenName) = length($i(srcName))
-        let $i(takeLimName) = $e(c.single["take"].arguments[1])
+        let $i(takeLimName) = $e(takeArg)
         let $i(takeNName) = $i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < $i(lenName) ? $i(takeLimName) : $i(lenName))
-        var $i(bufName) : array<$t(bufElemType)>
-        $i(bufName) |> reserve($i(takeNName))
-        for ($i(kName) in 0 .. $i(takeNName)) {
-            $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
-        }
-        $e(returnExpr)
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    var reserveStmts : array<Expression?>
+    reserveStmts |> push <| qmacro_expr() {
+        $i(bufName) |> reserve($i(takeNName))
+    }
+    var perElementPush : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+    }
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    var spec = FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = bufElemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts
+    )
+    var composedPE = compose_fold_per_element(spec)
+    if (composedPE == null) return null
+    spec.customSourceLoop = qmacro_expr() {
+        for ($i(kName) in 0 .. $i(takeNName)) {
+            $e(composedPE)
+        }
+    }
+    return emit_fold_array_lane(spec, ctx.src, at)
 }
 
 // R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
@@ -3043,41 +3018,43 @@ def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : Emi
     let dsetName = qn("rev_dset", at)
     let idxName = qn("rev_k", at)
     let rlenName = qn("rev_len", at)
-    var dkeyExpr : Expression?
-    if (distinctName == "distinct_by") {
-        dkeyExpr = peel_lambda_rename_var(distinctKey, itName)
-        if (dkeyExpr == null) return null
-    } else {
-        dkeyExpr = qmacro($i(itName))
-    }
-    var dsetDecl : Expression?
-    if (distinctName == "distinct_by") {
-        dsetDecl = qmacro_expr() {
-            var inscope $i(dsetName) : table<typedecl(_::unique_key(invoke($e(distinctKey), default<$t(bufElemType)>)))>
-        }
-    } else {
-        dsetDecl = qmacro_expr() {
-            var inscope $i(dsetName) : table<typedecl(_::unique_key(default<$t(bufElemType)>))>
-        }
-    }
-    var returnExpr = buffer_return(bufName, ctx.expr_is_iterator)
-    var body : Expression? = qmacro_block() {
+    var dgKind : DistinctGateKind = (distinctName == "distinct_by"
+        ? DistinctGateKind(KeyLam = distinctKey)
+        : DistinctGateKind(NonKey = null))
+    var distinctGate = new DistinctGateSpec(
+        kind = dgKind, bindName = itName, bufElemType = bufElemType,
+        dsetName = dsetName, dkeyName = dkeyName
+    )
+    var prologueStmts : array<Expression?>
+    prologueStmts |> push <| qmacro_expr() {
         let $i(rlenName) = length($i(srcName))
-        var $i(bufName) : array<$t(bufElemType)>
-        $e(dsetDecl)
-        for ($i(idxName) in 0 .. $i(rlenName)) {
-            let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
-            let $i(dkeyName) = _::unique_key($e(dkeyExpr))
-            if (!$i(dsetName) |> key_exists($i(dkeyName))) {
-                $i(dsetName) |> insert($i(dkeyName))
-                $i(bufName) |> push_clone($i(itName))
-            }
-        }
-        $e(returnExpr)
     }
-    var bodyStmts : array<Expression?>
-    bodyStmts |> push_block_list(body)
-    return finalize_emission_stmts(top, srcName, at, bodyStmts)
+    var preCondStmts : array<Expression?>
+    preCondStmts |> push <| qmacro_expr() {
+        let $i(itName) = $i(srcName)[$i(rlenName) - 1 - $i(idxName)]
+    }
+    var perElementPush : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(itName))
+    }
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    var spec = FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = bufElemType,
+        bufName = bufName,
+        preCondStmts <- preCondStmts,
+        distinctGate = distinctGate,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts
+    )
+    var composedPE = compose_fold_per_element(spec)
+    if (composedPE == null) return null
+    spec.customSourceLoop = qmacro_expr() {
+        for ($i(idxName) in 0 .. $i(rlenName)) {
+            $e(composedPE)
+        }
+    }
+    return emit_fold_array_lane(spec, ctx.src, at)
 }
 
 // Decs `reverse |> take(N) |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain.
