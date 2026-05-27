@@ -93,7 +93,8 @@ def private collect_files_filtered(path, das_test_path : string; var cache : tab
 
 def private collect_files(input_paths : array<string>; var files : array<string>) : bool {
     var inscope cache : table<string; void?>
-    for (path in input_paths) {
+    for (raw in input_paths) {
+        let path = replace(raw, "_dasroot_", get_das_root())
         if (path |> ends_with(".das")) {
             if (!cache |> key_exists(path)) {
                 cache |> insert(path, null)

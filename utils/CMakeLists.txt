@@ -27,6 +27,7 @@ set(DAS_UTILS
     daspkg
     detect-dupe
     hygiene
+    jit
 )
 
 if(NOT DAS_SQLITE_DISABLED)
@@ -37,9 +38,12 @@ if(NOT DAS_HV_DISABLED)
     list(APPEND DAS_UTILS mcp)
 endif()
 
-# Collect daslib and LLVM daslib sources as dependencies.
+# Collect daslib and LLVM daslib sources as dependencies. jit is a compiler-
+# driver: edits anywhere under modules/dasLLVM/ (llvm_exe.das, llvm_jit_cli.das,
+# llvm_jit_run.das, bindings/*.das) must trigger a jit.exe rebuild. Use a
+# recursive glob so subdirs are covered.
 file(GLOB DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/daslib/*.das)
-file(GLOB DASLLVM_DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/daslib/*.das)
+file(GLOB_RECURSE DASLLVM_DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/*.das)
 
 # daslang -exe appends `.exe` to the output path.
 # On multi-config generators (MSVC), place next to daslang in bin/<Config>/.
@@ -53,10 +57,19 @@ endif()
 foreach(util ${DAS_UTILS})
     set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util}/main.das)
 
+    # The jit util is a compiler-driver: its standalone exe recompiles arbitrary
+    # daslang at runtime, so it must register every builtin native module at
+    # startup (otherwise targets requiring math/fio/dasbind/... fail to resolve).
+    set(_util_extra_args "")
+    if(util STREQUAL "jit")
+        set(_util_extra_args --jit-register-all-modules)
+    endif()
+
     add_custom_command(
         OUTPUT  ${UTIL_BIN_DIR}/${util}.exe
         COMMAND daslang -exe -output ${UTIL_BIN_DIR}/${util} ${UTIL_MAIN}
-                $<$<BOOL:${DAS_JIT_LINKER_STRING}>:-->
+                $<$<OR:$<BOOL:${DAS_JIT_LINKER_STRING}>,$<BOOL:${_util_extra_args}>>:-->
+                ${_util_extra_args}
                 ${DAS_JIT_LINKER_STRING}
         DEPENDS ${UTIL_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -85,6 +98,18 @@ foreach(util ${DAS_UTILS})
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
 add_dependencies(all_utils_exe dastest_exe)
+
+# Prewarm the JIT dll cache for the whole test tree, except the gc folder (which
+# dastest also excludes under -jit — it uses runtime quote/qmacro the JIT can't
+# lower). Reuses the jit_exe target built by the foreach above (bin/jit.exe, built
+# with --jit-register-all-modules). Run explicitly:
+#   ninja jit_cache_all_tests
+add_custom_target(jit_cache_all_tests
+    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude stbimage --exclude live_host --exclude audio --exclude strudel --exclude ast_match
+    DEPENDS jit_exe
+    WORKING_DIRECTORY ${UTIL_BIN_DIR}
+    COMMENT "JIT-compiling tests/ into the .jitted_scripts cache"
+)
 
 SET(DAS_UTILS_TO_TEST
     dascov

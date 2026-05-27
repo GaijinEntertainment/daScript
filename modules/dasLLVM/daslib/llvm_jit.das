@@ -6721,6 +6721,15 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
     ]
     ctor_dtor |> add_ctor_dtor_function(types)
 
+    reset_codegen_accumulators()
+}
+
+// Clears the per-codegen-run accumulators (filenames / varinfo / handle typeinfo).
+// Normally drained at the tail of generate_global_ctors_dtors; also called from
+// the JIT failure path (reset_jit_globals_after_failure) so a file that panics
+// mid-codegen doesn't leave stale fileinfo entries that crash the next file's
+// ctor generation with assert(variable != null).
+def public reset_codegen_accumulators() {
     active_filenames = table<string>()
     annotation_varinfo_list |> clear()
     handle_typeinfo_pending |> clear()

@@ -215,7 +215,7 @@ namespace das {
 
     class Module_FIO : public Module {
     public:
-        Module_FIO() : Module("fio") {
+        Module_FIO() : Module("fio_core") {
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             return ModuleAotType::cpp;
