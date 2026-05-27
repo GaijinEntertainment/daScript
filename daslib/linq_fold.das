@@ -1095,53 +1095,6 @@ def private emit_counter_lane(var top : Expression?; srcName, accName, itName : 
     ), build_lane_adapter(laneTops, laneSrcs), at)
 }
 
-[clone(top), macro_function]
-def private emit_array_lane(var top : Expression?; isIter : bool; var loopBody : Expression?; var elementType : TypeDeclPtr;
-                            srcName, accName, itName : string; names : RangeStateNames;
-                            var skipExpr, takeExpr, skipWhileCond : Expression?;
-                            at : LineInfo) : Expression? {
-    // Array lane: `[skip/take init]; var acc : array<T>; [reserve]; for (it in src) { $loopBody }; return <- acc`
-    let sourceHasLength = type_has_length(top._type)
-    var topExpr = clone_expression(top)
-    topExpr.genFlags.alwaysSafe = true
-    var srcParamType = invoke_src_param_type(top)
-    var bodyStmts : array<Expression?>
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    bodyStmts |> push <| qmacro_expr() {
-        var $i(accName) : array<$t(elementType)>
-    }
-    if (sourceHasLength && !isIter) {
-        if (takeExpr != null) {
-            // Inline `min` so the emission doesn't depend on `require math` at the call site.
-            bodyStmts |> push <| qmacro_expr() {
-                $i(accName) |> reserve($e(takeExpr) < length($i(srcName)) ? $e(takeExpr) : length($i(srcName)))
-            }
-        } else {
-            bodyStmts |> push <| qmacro_expr() {
-                $i(accName) |> reserve(length($i(srcName)))
-            }
-        }
-    }
-    bodyStmts |> push <| qmacro_expr() {
-        for ($i(itName) in $i(srcName)) {
-            $e(loopBody)
-        }
-    }
-    if (isIter) {
-        bodyStmts |> push <| qmacro_expr() {
-            return <- $i(accName).to_sequence_move()
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            return <- $i(accName)
-        }
-    }
-    var res = qmacro(invoke($($i(srcName) : $t(srcParamType)) {
-        $b(bodyStmts)
-    }, $e(topExpr)))
-    return finalize_invoke(res, at)
-}
-
 // ===== Emission-lane unification (Phase F — see linq_fold.md) =====
 
 // Single-pass terminator scaffold — see linq_fold.md "Phase F" for the canonical shape.
@@ -2855,6 +2808,7 @@ def private emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : Li
         wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
     } else {
+        // Range-prelude in prologueStmts so the lane emits it BEFORE bufDecl — matches the emit_array_lane shape.
         var stmts : array<Expression?>
         var pushExpr : Expression?
         if (projection != null) {
@@ -2872,15 +2826,38 @@ def private emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : Li
         stmts |> push(wrap_with_condition(pushExpr, postTakeWhereCond))
         prepend_binds(stmts, intermediateBinds)
         wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
-        loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
+        var perElementPush = stmts_to_expr(stmts)
+        var prologueStmts : array<Expression?>
+        append_ranges_prelude(prologueStmts, skipExpr, takeExpr, skipWhileCond, names)
+        var reserveStmts : array<Expression?>
+        let sourceHasLength = type_has_length(top._type)
+        if (sourceHasLength && !ctx.expr_is_iterator) {
+            if (takeExpr != null) {
+                reserveStmts |> push <| qmacro_expr() {
+                    $i(accName) |> reserve($e(takeExpr) < length($i(srcName)) ? $e(takeExpr) : length($i(srcName)))
+                }
+            } else {
+                reserveStmts |> push <| qmacro_expr() {
+                    $i(accName) |> reserve(length($i(srcName)))
+                }
+            }
+        }
+        var tailStmts : array<Expression?>
+        tailStmts |> push(buffer_return(accName, ctx.expr_is_iterator))
+        return emit_fold_array_lane(FoldArraySpec(
+            prologueStmts <- prologueStmts,
+            bufElemType = elementType,
+            bufName = accName,
+            reserveStmts <- reserveStmts,
+            preCondStmts <- preCondStmts,
+            whereCond = whereCond,
+            perElementPush = perElementPush,
+            tailStmts <- tailStmts,
+            wrapIter = false
+        ), SourceAdapter(Array = (top, srcName)), at)
     }
-    if (counterLane) {
-        return emit_counter_lane(top, srcName, accName, itName, names,
-            skipExpr, takeExpr, skipWhileCond, loopBody, at)
-    } else {
-        return emit_array_lane(top, ctx.expr_is_iterator, loopBody, elementType, srcName, accName, itName,
-            names, skipExpr, takeExpr, skipWhileCond, at)
-    }
+    return emit_counter_lane(top, srcName, accName, itName, names,
+        skipExpr, takeExpr, skipWhileCond, loopBody, at)
 }
 
 [_macro]
