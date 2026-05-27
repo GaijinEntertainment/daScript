@@ -42,7 +42,7 @@ helper), all five of these cells can flip in the same change.
 2026-05-27 entries (`reverse_distinct_by`, `distinct_by_order_to_array`)
 inherit the same blocker.
 
-**Closed in PR #XXXX** (sqlite_linq `_distinct_by` as chain operator + first-row aggregates, 2026-05-27):
+**Closed in PR #2906** (sqlite_linq `_distinct_by` as chain operator + first-row aggregates, 2026-05-27):
 - `order_distinct_take` — closed by 1-column `Brand` table fixture (not window functions).
 - `distinct_count_pred` — closed by the SQLite bare-aggregate wrap
   (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).

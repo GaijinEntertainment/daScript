@@ -561,19 +561,19 @@ def private build_distinct_by_inner_subquery(var q : SqlQuery&; pkField : string
     return "SELECT *, MIN(\"{pkCol}\") FROM \"{q.tableName}\" GROUP BY \"{sqlK}\""
 }
 
-// nolint:STYLE015 Reject any chain op between `_distinct_by(K)` and the aggregate terminator. v1 keeps the lowering simple by only supporting the direct shapes: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Other compositions (_where / _order_by / take / skip / etc.) deferred to chunk N+1.
+// nolint:STYLE015 v1 only supports `_distinct_by` applied directly to a single `select_from` source, with no other chain operators anywhere in the chain. Supported terminators: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Compositions with `_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct` are deferred to chunk N+1.
 [macro_function]
 def private check_distinct_by_v1_gating(var q : SqlQuery&; linqName : string; allowSelectCol : bool;
                                         prog : ProgramPtr; at : LineInfo) : bool {
     if (!empty(q.whereSql) || q.seenJoin || q.seenSetOp
             || q.seenGroupBy || q.seenHaving || q.seenTake || q.seenSkip
             || q.seenOrderBy || q.seenDistinct) {
-        macro_error(prog, at, "_sql: chain operators between `_distinct_by` and `{linqName}` are not yet supported; restructure the chain so `_distinct_by` sits directly under the terminator")
+        macro_error(prog, at, "_sql: `_distinct_by(K) |> {linqName}(...)` v1 requires `_distinct_by` applied directly to a single `select_from` source — other chain operators (`_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct`) are not yet supported in the same chain")
         q.hadError = true
         return false
     }
     if (!allowSelectCol && !empty(q.selectCols)) {
-        macro_error(prog, at, "_sql: `_select` between `_distinct_by` and `{linqName}` is not yet supported")
+        macro_error(prog, at, "_sql: `_distinct_by(K) |> {linqName}(P)` v1 does not support `_select` in the chain; remove `_select`, or use `_distinct_by(K) |> _select(F) |> \{sum,min,max,average\}()` for the column-aggregate shape")
         q.hadError = true
         return false
     }
@@ -730,8 +730,7 @@ def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
             q.hadError = true
             return true
         }
-        // Pre-set Aggregate so analyze_chain's `select_from` bottom doesn't fill default columns
-        // into q.selectCols (mirrors the 1-arg branch below at line ~720).
+        // Pre-set Aggregate so analyze_chain's `select_from` bottom doesn't fill q.selectCols (mirrors the 1-arg branch below).
         q.proj = ProjectionShape.Aggregate
         if (!analyze_chain(cCall.arguments[0], q, prog, at)) return true
         if (empty(q.distinctByCol)) {
