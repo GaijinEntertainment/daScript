@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-27 from `00b942332` (PR F4.2 — splice `take(N) |> _where(P) |> term()` on decs lane). Matrix refreshed for the decs-side post-take-where gate in `emit_decs_terminator_lane`. The `take_where_count` m4 cell drops from 35.4 → 0.1 ns/op INTERP (354× → 1×) and 10.4 → 0.0 ns/op JIT — splice now fires uniformly across all 6 emit_decs_* paths (accumulator/early_exit/walk/to_array/min_max_by/element_at). Apparent drift in `sort_first` m4 INTERP (+22%) verified as bench-suite ordering noise (isolated re-run matches F4.1 baseline); small JIT drifts are sub-nanosecond measurement noise.
+Generated 2026-05-27 from `00b942332` (PR F4.2 — splice `take(N) |> _where(P) |> term()` on decs lane). Matrix refreshed for the decs-side post-take-where gate in `emit_decs_terminator_lane`. The `take_where_count` m4 cell drops from 35.4 → 0.1 ns/op INTERP (354× → 1×) and 10.4 → 0.0 ns/op JIT — splice now fires uniformly across all 6 emit_decs_* paths (accumulator/early_exit/walk/to_array/min_max_by/element_at). Apparent drift in `sort_first` m4 INTERP (13.4 → 17.1, +28%) verified as bench-suite ordering noise (isolated re-run matches F4.1 baseline at 13.4); small JIT drifts are sub-nanosecond measurement noise.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
 one bench family in `benchmarks/sql/`; columns are nanoseconds per
 logical operation. `—` marks an intentionally absent lane — see

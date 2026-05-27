@@ -289,8 +289,11 @@ def test_take_where_sum_decs(t : T?) {
         restart()
         populate_decs_act_items()
         unsafe {
-            let s = _fold(from_decs_template(type<DecsItem>)._select(_.price).take(5)._where(_ > 0).sum())
-            tt |> equal(s, 150)
+            // _select(price) → [10..80]. take(5) → [10,20,30,40,50]. _where(>25) → [30,40,50]. sum=120.
+            // Threshold chosen above the first taken element so the gate actually filters — `_ > 0` would
+            // pass all 5 and let a bypassed gate vacuously match the expected sum.
+            let s = _fold(from_decs_template(type<DecsItem>)._select(_.price).take(5)._where(_ > 25).sum())
+            tt |> equal(s, 120)
         }
         restart()
     }

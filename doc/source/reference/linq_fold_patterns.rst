@@ -329,7 +329,11 @@ identical — only the source iteration changes.
      - Hoists ``skippingName`` state across archetypes.
    * - ``from_decs_template(...).take(N)._where(P).<terminator>`` (counter / accumulator / early-exit / array / walk)
      - ``plan_decs_unroll`` (``postTakeWhereCond`` gate in ``emit_decs_terminator_lane``)
-     - Decs mirror of the array-side ``postTakeWhereCond`` gate (Theme 2 5c). Take cap ticks unconditionally per per-archetype element; the trailing ``where`` gates only the per-element contribution. Predicate peels against ``chainInfo.finalBind`` so it composes with leading ``_where`` / ``_select`` chains and skip / skip_while / take_while ranges. Lands uniformly across all 6 ``emit_decs_*`` paths because the gate wraps ``spec.perElement`` once in the shared lane.
+     - Decs mirror of the array-side ``postTakeWhereCond`` gate (Theme 2 5c). Take cap ticks unconditionally per element of the per-archetype walk; the trailing ``where`` gates only the per-element contribution. Predicate peels against ``chainInfo.finalBind`` so it composes with leading ``_where`` / ``_select`` chains and skip / skip_while / take_while ranges. Lands uniformly across all 6 ``emit_decs_*`` paths because the gate wraps ``spec.perElement`` once in the shared lane.
+
+.. note::
+
+   Several decs rows above (including this one) label the splice arm as ``plan_decs_unroll`` even though, post-PR-C, dispatch flows through the shared ``plan_loop_or_count`` pattern row (``emit_loop_or_count_lane`` → ``emit_loop_or_count_lane_decs`` → ``emit_decs_*``). The ``plan_decs_unroll`` label is retained for table-row consistency across the pre- and post-unification decs entries.
 
 Decs-decs equi-join
 -------------------
