@@ -5652,52 +5652,33 @@ def private emit_decs_to_array(bridge : DecsBridgeShape?;
                                var calls : array<tuple<ExprCall?; LinqCall?>>;
                                intermediateEnd : int;
                                at : LineInfo) : Expression? {
-    // Slice 3c/4 to_array: hoist `var buf` above outer for_each_archetype; per-element push_clone of post-chain value at chainInfo.finalBind. Slice 5a adds take/skip ranges via rangeInfo.
-    let tupName = qn("decs_tup", at)
+    // Slice 3c/4 to_array: shape is a thin DecsTerminatorSpec — prelude declares the buf, per-element push_clones the post-chain value at chainInfo.finalBind, tail moves it out. take/take_while → Find dispatch (else Each).
     let bufName = qn("decs_buf", at)
-    let names <- make_decs_range_names(at)
-    let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
+    var preludeStmts : array<Expression?>
+    preludeStmts |> push <| qmacro_expr() {
+        var $i(bufName) : array<$t(elemType)>
+    }
+    let finalBind = chainInfo.finalBind
     var perElement : Expression? = qmacro_expr() {
         $i(bufName) |> push_clone($i(finalBind))
     }
-    // Range guards (take-cap + skip + takeC++) wrap perElement BEFORE chain so where_ predicate fires first — ranges apply to the POST-filter stream (mirrors array-side wrap_with_condition(wrap_with_ranges(...))).
-    perElement = wrap_inner_for_with_decs_ranges(perElement, rangeInfo, names)
-    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
-    if (body == null) return null
-    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
-    let archName = bridge.archName
-    var rangeStmts <- decs_range_prelude(rangeInfo, names)
-    var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(rangeStmts) + 3)
-    bodyStmts |> push <| qmacro_expr() {
-        var $i(bufName) : array<$t(elemType)>
-    }
-    bodyStmts |> push_from(rangeStmts)
-    if (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null) {
-        // Slice 5b: take_while also produces inner `return true` on its first-false (terminates iteration globally), so it needs the bool-lambda archetype-find dispatch too.
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
-        }
-    }
-    bodyStmts |> push <| qmacro_expr() {
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
         return <- $i(bufName)
     }
-    var emission = qmacro(invoke($() : array<$t(elemType)> {
-        $b(bodyStmts)
-    }))
-    emission.force_at(at)
-    emission.force_generated(true)
-    return emission
+    var retType = new TypeDecl(baseType = Type.tArray)
+    retType.firstType = clone_type(elemType)
+    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? DecsDispatch(Find = null)
+        : DecsDispatch(Each = null))
+    return emit_decs_terminator_lane(DecsTerminatorSpec(
+        preludeStmts <- preludeStmts,
+        perElement = perElement,
+        tailStmts <- tailStmts,
+        retType = retType,
+        dispatch = dispatch
+    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
 }
 
 [macro_function]
