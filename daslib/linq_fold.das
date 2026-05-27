@@ -5423,7 +5423,7 @@ def private emit_decs_early_exit(bridge : DecsBridgeShape?;
     var dispatch : DecsDispatch = DecsDispatch(Find = null)
     var retType : TypeDeclPtr
     if (opName == "first" || opName == "first_or_default") {
-        retType = clone_type(elemType)
+        retType = elemType
         preludeStmts |> push_from <| qmacro_block_to_array() {
             var $i(foundName) = false
             var $i(resultName) : $t(elemType)
@@ -5680,7 +5680,7 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
     var retType : TypeDeclPtr
     var earlyExitFind = false
     if (opName == "last" || opName == "last_or_default") {
-        retType = clone_type(elemType)
+        retType = elemType
         let foundName = qn("decs_found", at)
         let bindName = qn("decs_lst", at)
         preludeStmts |> push_from <| qmacro_block_to_array() {
@@ -5708,7 +5708,7 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
             }
         }
     } elif (opName == "single") {
-        retType = clone_type(elemType)
+        retType = elemType
         let foundName = qn("decs_found", at)
         let bindName = qn("decs_sng", at)
         preludeStmts |> push_from <| qmacro_block_to_array() {
@@ -5726,7 +5726,7 @@ def private emit_decs_walk_lane(bridge : DecsBridgeShape?;
             return <- $i(bindName)
         }
     } elif (opName == "single_or_default") {
-        retType = clone_type(elemType)
+        retType = elemType
         let foundName = qn("decs_found", at)
         let stopName = qn("decs_stop", at)
         let bindName = qn("decs_sng", at)
