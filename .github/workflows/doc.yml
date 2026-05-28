@@ -59,6 +59,15 @@ jobs:
           exit 1
         fi
 
+    - name: "Check for Uncategorized sections"
+      run: |
+        set -eux
+        if grep -rl '^Uncategorized$' doc/source/stdlib/generated/; then
+          echo "ERROR: Found Uncategorized sections in generated docs."
+          echo "Add the function(s) to a group_by_regex() in doc/reflections/das2rst.das."
+          exit 1
+        fi
+
     - name: "Check for new untracked RST files"
       run: |
         set -eux
