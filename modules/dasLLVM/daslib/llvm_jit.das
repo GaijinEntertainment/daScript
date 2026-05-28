@@ -3607,10 +3607,8 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let stride = expr.makeType.stride
         if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
-            let total = expr.values |> length
-            let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
-            LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
+            LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(stride), align)
         }
         setE(expr, mks_ptr)
     }
@@ -4318,12 +4316,13 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprErase
-    def build_table_erase(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+    def build_table_erase(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
             types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at)
         )
         var (fun_ptr, typ) = get_table_erase(g_builder, g_mod, ttype, types)
         let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
@@ -4348,7 +4347,7 @@ class public LlvmJitVisitor : AstVisitor {
             var uvt = get_underlying_value_type(subExprT.firstType)
             keyType = uvt.baseType
         }
-        var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
         setE(expr, res)
         return expr
     }
@@ -6722,6 +6721,15 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
     ]
     ctor_dtor |> add_ctor_dtor_function(types)
 
+    reset_codegen_accumulators()
+}
+
+// Clears the per-codegen-run accumulators (filenames / varinfo / handle typeinfo).
+// Normally drained at the tail of generate_global_ctors_dtors; also called from
+// the JIT failure path (reset_jit_globals_after_failure) so a file that panics
+// mid-codegen doesn't leave stale fileinfo entries that crash the next file's
+// ctor generation with assert(variable != null).
+def public reset_codegen_accumulators() {
     active_filenames = table<string>()
     annotation_varinfo_list |> clear()
     handle_typeinfo_pending |> clear()
@@ -6742,7 +6750,7 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
     LLVMPassBuilderOptionsSetInlinerThreshold(pbopts, int(inline_threshold))
     let pipeline = (size_level >= 2u ? "default<Oz>"
                   : (size_level == 1u ? "default<Os>"
-                                      : "default<O{opt_level}>"))
+                                      : "default<O{opt_level:d}>"))
     // use_host_cpu=true for JIT (artifact runs on this host); false for
     // exe emission so the IR pipeline's TTI cost model stays generic and
     // produces redistributable shapes (otherwise loop unroll / vectorize

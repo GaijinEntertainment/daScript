@@ -754,7 +754,7 @@ namespace das
         // Copies ExprConst's own fields (value + per-constant flags) on top of Expression::clone.
         // Concrete ExprConst subclasses must route through here, not Expression::clone directly,
         // or per-constant metadata (foldedNonConst, promotedFromInt, inexactFloatPromotion) is lost.
-        ExpressionPtr clone ( ExpressionPtr expr ) const;
+        ExpressionPtr clone ( ExpressionPtr expr ) const override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
         bool    foldedNonConst = false;
@@ -1164,7 +1164,7 @@ namespace das
         }
         bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
-        static Module * requireEx ( const string & name, bool allowPromoted );
+        static Module * requireEx ( const string & name, bool allowPromoted, const string & expectedFileName = string() );
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );
@@ -1605,7 +1605,7 @@ namespace das
         bool jit_emit_prologue = false;          // Emit prologue for all functions and blocks
         string jit_output_path;                  // Folder to store compiled dll's. By default it'll be _das_root_/.jitted_scripts
         int32_t jit_opt_level = 3u;              // Opt level for LLVM to codegen and IR optimizations
-        int32_t jit_size_level = 3u;             // Opt level for LLVM for binary size
+        int32_t jit_size_level = 0u;             // Opt level for LLVM for binary size
         string jit_path_to_shared_lib;           // Path to libDaScript. Optional, we'll try to find it in _das_root_/lib/ if not provided.
         string jit_path_to_linker;               // Path to linker. Optional, we'll use clang-cl from LLVM on Windows and cc otherwise.
     // dll loading

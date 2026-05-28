@@ -1710,7 +1710,7 @@ def test_cmd_release_pure_daslang(t : T?) {
 def test_cmd_release_native_dep(t : T?) {
     var dasSQLITE_present = false
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        if (string(das_name) == "sqlite") {
+        if (das_name == "sqlite") {
             dasSQLITE_present = true
         }
     }
@@ -1806,11 +1806,11 @@ def test_cmd_release_no_false_positive_shared(t : T?) {
     var dasSQLITE_present = false
     var other_pkg_dir = ""
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        if (string(das_name) == "sqlite") {
+        if (das_name == "sqlite") {
             dasSQLITE_present = true
         } elif (empty(other_pkg_dir)) {
             // First non-sqlite registered module: extract package dir name.
-            let g = to_generic_path(string(path))
+            let g = to_generic_path(path)
             let idx = rfind(g, "/modules/")
             if (idx >= 0) {
                 let after = slice(g, idx + length("/modules/"))
@@ -1874,7 +1874,7 @@ def test_cmd_release_no_false_positive_das(t : T?) {
             fwrite(f, "options gen2\nmodule helper shared public\n\ndef public greet(name : string) : string \{\n    return \"hello, \{name\}\"\n\}\n")
         }
         fopen("{tmp_root}/main.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire fio\nrequire helper\n\n[export]\ndef main() \{\n    print(\"\{greet(\"world\")\}\\n\")\n\}\n")
+            fwrite(f, "options gen2\nrequire daslib/fio\nrequire helper\n\n[export]\ndef main() \{\n    print(\"\{greet(\"world\")\}\\n\")\n\}\n")
         }
         fopen("{tmp_root}/.das_package", "wb") $(f) {
             fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fpdas\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
@@ -1981,7 +1981,7 @@ def test_cmd_release_portable_on_macos(t : T?) {
     }
     var dasGlfw_present = false
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        if (string(das_name) == "glfw") {
+        if (das_name == "glfw") {
             dasGlfw_present = true
         }
     }

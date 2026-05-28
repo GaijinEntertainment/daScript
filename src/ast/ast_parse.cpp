@@ -303,16 +303,16 @@ namespace das {
                     }
                     return false;
                 }
-                auto module = Module::requireEx(mod, allowPromoted); // try native with that name
+                auto info = access->getModuleInfo(mod, fileName);
+                auto module = Module::requireEx(mod, allowPromoted, info.fileName);
                 if ( !module ) {
-                    auto info = access->getModuleInfo(mod, fileName);
                     if ( !info.moduleName.empty() ) {
                         mod = info.moduleName;
                         if ( log ) {
                             *log << string(tab,'\t') << " resolved as " << mod << "\n";
                         }
                     }
-                    module = Module::requireEx(mod, allowPromoted); // try native with that name AGAIN (promoted?)
+                    module = Module::requireEx(mod, allowPromoted, info.fileName); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
                         auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
                             return reqM.moduleName == mod;

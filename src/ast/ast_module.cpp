@@ -151,8 +151,18 @@ namespace das {
 
     atomic<int> g_envTotal(0);
 
+    static void daslang_atexit_audit() {
+        int n = g_envTotal.load();
+        if ( n != 0 ) {
+            fprintf(stderr, "[daslang atexit] FATAL: g_envTotal=%d at exit (Initialize/Shutdown not balanced)\n", n);
+            _Exit(1);
+        }
+    }
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
+        static bool atexit_registered = (atexit(daslang_atexit_audit), true);
+        (void)atexit_registered;
         g_envTotal ++;
 
         if (daScriptEnvironment::getBound()->modules == nullptr) {
@@ -287,11 +297,18 @@ namespace das {
         return nullptr;
     }
 
-    Module * Module::requireEx ( const string & name, bool allowPromoted ) {
+    Module * Module::requireEx ( const string & name, bool allowPromoted, const string & expectedFileName ) {
         if ( !daScriptEnvironment::getBound() ) return nullptr;
         for ( auto m = daScriptEnvironment::getBound()->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
+                    // We key by module name only.
+                    // If someone required daslib/fio earlier (fio is shared),
+                    // and now we write require fio it will be found, although
+                    // it's an error.
+                    if ( m->promoted && !expectedFileName.empty() && m->fileName != expectedFileName ) {
+                        continue;
+                    }
                     return m;
                 }
             }

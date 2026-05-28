@@ -86,7 +86,7 @@ class CollectExternVisitor : AstVisitor {
     def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
                              _builder : LLVMBuilderRef,
                              _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
-                             uids : UidNodes?) {
+                             uids : UidNodes?; register_all : bool) {
         any_unimplemented = false
         needs_whole_lib = false
         uid := uids
@@ -110,13 +110,32 @@ class CollectExternVisitor : AstVisitor {
             env_fn = LLVMAddFunctionWithType(g_mod, "das_ensure_environment", env_type)
         }
         LLVMBuildCall2(init_builder, env_type, env_fn, array<LLVMValueRef>(), "")
-        // Always register Module_BuiltIn ($) and Module_Strings (strings)
-        var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
-        LLVMBuildCall2(init_builder, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
-        registered_modules["$"] = true
-        var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
-        LLVMBuildCall2(init_builder, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
-        registered_modules["strings"] = true
+        // Optionally register ALL builtin native modules (math, fio, dasbind, ...)
+        // so a self-contained compiler-driver exe can recompile arbitrary daslang
+        // at runtime. Referencing this symbol also force-links those modules in.
+        // register_builtin_modules() covers exactly the set below, so mark them as
+        // already-registered to suppress the per-module emission (otherwise each
+        // would be registered twice -> "Module '...' already created").
+        if (register_all) {
+            var reg_all = LLVMGetNamedFunction(g_mod, "jit_register_all_builtin_modules")
+            if (reg_all == null) {
+                reg_all = LLVMAddFunctionWithType(g_mod, "jit_register_all_builtin_modules", env_type)
+            }
+            LLVMBuildCall2(init_builder, env_type, reg_all, array<LLVMValueRef>(), "")
+            for (m in fixed_array("$", "math", "strings", "rtti_core", "ast_core", "jit",
+                                  "debugapi", "network_core", "uriparser", "jobque",
+                                  "fio_core", "dasbind")) {
+                registered_modules[m] = true
+            }
+        } else {
+            // Always register Module_BuiltIn ($) and Module_Strings (strings)
+            var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
+            LLVMBuildCall2(init_builder, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
+            registered_modules["$"] = true
+            var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
+            LLVMBuildCall2(init_builder, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
+            registered_modules["strings"] = true
+        }
 
         // void * get_jit_table_{at,find,erase} ( int32_t baseType, Context * context, LineInfoArg * at )
         reg_extern_tab_type = LLVMFunctionType(types.LLVMVoidPtrType(),
@@ -490,8 +509,8 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
-                               prog : Program?) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
-    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids)
+                               prog : Program?; register_all_modules : bool = false) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
+    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
@@ -563,7 +582,10 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     }
     if (!empty(extern_resolver.registered_modules) || !empty(used_modules)) {
         let init_done_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
-        var jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
+        var jit_init_done = LLVMGetNamedFunction(g_mod, "jit_initialize_modules_done")
+        if (jit_init_done == null) {
+            jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
+        }
         LLVMBuildCall2(ib, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
     }
     LLVMBuildRetVoid(ib)
@@ -740,7 +762,8 @@ def private write_release_deps(prog : Program?) {
 // all compiled functions, runs init scripts, then calls the program entry point.
 def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
-                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
+                       register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
 
     let builder = LLVMCreateBuilder()
     defer() {
@@ -772,6 +795,18 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     if (strict && has_no_jit) {
         to_log(LOG_ERROR, "Cannot build standalone exe: some functions are no_jit in strict mode\n")
         return (fn = null, link_whole_lib = false)
+    }
+
+    // --jit-register-all-modules: compiler-driver exes (e.g. utils/jit) may
+    // recompile targets that require UnitTest at runtime. It's a dynamic module
+    // the -exe target itself doesn't reference, so neither used_modules nor
+    // extern_modules picks it up. Force the registration only in main()'s
+    // dynamic-module loop (below) — NOT via used_modules, otherwise
+    // initialize_modules() emits a second jit_register_dynamic_module_resolve
+    // call → "Module 'UnitTest' already created" at runtime.
+    var force_dynamic_modules : table<string; bool>
+    if (register_all_modules) {
+        force_dynamic_modules["UnitTest"] = true
     }
 
     var start_fn_name = ""
@@ -822,6 +857,17 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     let das_ensure_env_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
     var das_ensure_env = LLVMAddFunctionWithType(g_mod, "das_ensure_environment", das_ensure_env_type)
     LLVMBuildCall2(builder, das_ensure_env_type, das_ensure_env, array<LLVMValueRef>(), "")
+    // Dynamic modules (e.g. UnitTest) may declare addBuiltinDependency on math
+    // during ctor, so the math/strings/... bundle must exist before any dynamic
+    // module loads. Emit jit_register_all_builtin_modules here; the duplicate
+    // call from initialize_modules() is a no-op via Module::require guards.
+    if (register_all_modules) {
+        var reg_all_main = LLVMGetNamedFunction(g_mod, "jit_register_all_builtin_modules")
+        if (reg_all_main == null) {
+            reg_all_main = LLVMAddFunctionWithType(g_mod, "jit_register_all_builtin_modules", das_ensure_env_type)
+        }
+        LLVMBuildCall2(builder, das_ensure_env_type, reg_all_main, array<LLVMValueRef>(), "")
+    }
     var has_cpp_modules = false
     for (mod_name in keys(used_modules)) {
         if (key_exists(dynamic_modules, mod_name)) continue
@@ -850,7 +896,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        if (key_exists(used_modules, das_name)) {
+        if (key_exists(used_modules, das_name) || key_exists(force_dynamic_modules, das_name)) {
             has_cpp_modules = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
             let rel = compute_modules_relative_suffix(path)
@@ -879,13 +925,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         let src_str = get_string_constant_ptr(builder, src_path)
         let dst_str = get_string_constant_ptr(builder, dst_path)
         LLVMBuildCall2(builder, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, dst_str), "")
-    }
-
-    // Finalize module initialization after all static/dynamic modules are registered
-    if (has_cpp_modules) {
-        let init_done_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        var jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
-        LLVMBuildCall2(builder, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
     }
 
     // Call initialize_modules() — built by CollectExternVisitor during collect_external_functions
@@ -962,7 +1001,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         init_glob_type = pair._1
     }
 
-    let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog)
+    let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
     if (strict && any_unimplemented) {
         to_log(LOG_ERROR, "Some of the nodes above are unimplemented!\n")
         return (fn = null, link_whole_lib = false)
@@ -974,6 +1013,13 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             needs_whole_lib = true
             break
         }
+    }
+    // jit_register_all_builtin_modules lives in libDaScriptDyn_runtime but calls
+    // register_builtin_modules which only exists in libDaScriptDyn (compiler lib).
+    // Without the compiler lib, the standalone exe link fails with
+    //   "undefined reference to `das::register_builtin_modules()`".
+    if (register_all_modules) {
+        needs_whole_lib = true
     }
 
     // When linking whole compiler lib, register fusion engine (needed by simulate).

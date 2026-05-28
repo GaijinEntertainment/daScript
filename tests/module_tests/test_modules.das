@@ -154,6 +154,18 @@ def test_module_conflict(t : T?) {
     }
 }
 
+// Dual of test_module_promoted_path_match — same on-disk shared module
+// required via different path expressions (`./foo.das` vs `../foo.das`) from
+// different files must DEDUP to the same Module after resolver normalization,
+// not over-reject and fail with "already created".
+[test]
+def test_module_promoted_path_dedup(t : T?) {
+    let base = "{get_das_root()}/tests/module_tests/_modules/promoted_path_dedup"
+    t |> run("different path expressions for the same shared module must dedup") @(t : T?) {
+        t |> success(run_module_test(base, "main.das", false))
+    }
+}
+
 // File-path require tests — exercises ./, ../, %/ resolution in default
 // (no-project) mode. main.das requires the same helpers.das module via four
 // different paths and must dedup them; main_missing.das has a require to a
