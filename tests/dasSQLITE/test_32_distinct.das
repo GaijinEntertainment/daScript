@@ -318,3 +318,53 @@ def test_reverse_distinct_by_composes_with_order_by(t : T?) {
         "SELECT \"Id\", \"Name\", \"Price\" FROM (SELECT *, MAX(\"Id\") FROM \"Cars\" GROUP BY \"Name\") AS \"t0\" ORDER BY \"Price\" ASC",
         "MAX(pk) composes with outer ORDER BY same as MIN(pk)")
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// `_group_by(K) |> _select((K=_._0, F=_._1 |> first()))` — single-key
+// group + tuple projection of (group key, first row per group). Lowers via
+// the same bare-aggregate inner subquery as `_distinct_by(K)` passthrough,
+// expanding the row entry to all source columns in the outer SELECT and
+// reconstructing the struct via `ExprMakeStruct` in the row builder.
+// ──────────────────────────────────────────────────────────────────────────
+
+[test]
+def test_groupby_first_emits_bare_aggregate_with_expanded_row(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>)
+                          |> _group_by(_.Name)
+                          |> _select((Brand = _._0, FirstCar = _._1 |> first())))
+    t |> equal(sql,
+        "SELECT \"Name\", \"Id\", \"Name\", \"Price\" FROM (SELECT *, MIN(\"Id\") FROM \"Cars\" GROUP BY \"Name\") AS \"t0\"",
+        "_group_by(K) |> _select((K=_._0, R=_._1|>first())) wraps source in bare-aggregate subquery and expands the row entry to all source columns")
+}
+
+[test]
+def test_groupby_first_returns_key_plus_first_row_per_group(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture_with_dupes(db)
+        let groups <- _sql(db |> select_from(type<Car>)
+                              |> _group_by(_.Name)
+                              |> _select((Brand = _._0, FirstCar = _._1 |> first())))
+        t |> equal(length(groups), 3, "3 distinct Names → 3 groups")
+        var firstIdByBrand <- {for (g in groups); g.Brand => g.FirstCar.Id}
+        t |> equal(firstIdByBrand["BMW"], 1, "first BMW has Id=1")
+        t |> equal(firstIdByBrand["Audi"], 2, "first Audi has Id=2")
+        t |> equal(firstIdByBrand["Tesla"], 4, "first Tesla has Id=4")
+    }
+}
+
+[test]
+def test_groupby_first_row_fields_populated(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture_with_dupes(db)
+        let groups <- _sql(db |> select_from(type<Car>)
+                              |> _group_by(_.Name)
+                              |> _select((Brand = _._0, FirstCar = _._1 |> first())))
+        for (g in groups) {
+            // Each FirstCar must have all 3 source fields populated correctly.
+            t |> equal(g.Brand, g.FirstCar.Name, "Brand key matches FirstCar.Name (consistency)")
+            t |> equal(g.FirstCar.Id > 0, true, "FirstCar.Id is non-zero — row builder populated it from column 1")
+            t |> equal(g.FirstCar.Price > 0, true, "FirstCar.Price is non-zero — row builder populated it from column 3")
+        }
+    }
+}
