@@ -51,48 +51,46 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin15, darwin26, windows]
+        target: [linux_arm]  # debug-only: full matrix is [linux, linux_arm, darwin15, darwin26, windows]
         architecture: [32, 64, arm64]
         cmake_preset: [ Debug, Release ]
         sanitizers: [none]
 
         include:
-          - target: linux
-            release_target: linux
-            release_arch: x86_64
-            runner: ubuntu-latest-fat
-            archive_ext: tar.gz
-            sanitizers: none
+          # debug-only: non-linux_arm includes commented out to focus matrix
+          # - target: linux
+          #   release_target: linux
+          #   release_arch: x86_64
+          #   runner: ubuntu-latest-fat
+          #   archive_ext: tar.gz
+          #   sanitizers: none
 
-          # Sanitizer matrix — Linux + Release + full tests (dastest + test_aot
-          # + ctest). Release keeps walltime in budget; the previous Debug+ASAN
-          # was prohibitive for production CI. See issue #2530.
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest-fat
-            cmake_preset: Release
-            sanitizers: asan
-            build_name: linux_asan
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: linux
+          #   architecture: 64
+          #   runner: ubuntu-latest-fat
+          #   cmake_preset: Release
+          #   sanitizers: asan
+          #   build_name: linux_asan
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest-fat
-            cmake_preset: Release
-            sanitizers: tsan
-            build_name: linux_tsan
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: linux
+          #   architecture: 64
+          #   runner: ubuntu-latest-fat
+          #   cmake_preset: Release
+          #   sanitizers: tsan
+          #   build_name: linux_tsan
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest-fat
-            cmake_preset: Release
-            sanitizers: ubsan
-            build_name: linux_ubsan
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: linux
+          #   architecture: 64
+          #   runner: ubuntu-latest-fat
+          #   cmake_preset: Release
+          #   sanitizers: ubsan
+          #   build_name: linux_ubsan
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
           - target: linux_arm
             release_target: linux
@@ -100,69 +98,68 @@ jobs:
             runner: ubuntu-24.04-arm-fat
             archive_ext: tar.gz
 
-          - target: darwin15
-            architecture: arm64
-            release_target: darwin15
-            release_arch: arm64
-            runner: macos-15-xlarge # Apple Silicon arm64, M2
-            architecture_string: arm64
-            archive_ext: tar.gz
+          # - target: darwin15
+          #   architecture: arm64
+          #   release_target: darwin15
+          #   release_arch: arm64
+          #   runner: macos-15-xlarge
+          #   architecture_string: arm64
+          #   archive_ext: tar.gz
 
-          - target: darwin26
-            release_target: darwin26
-            release_arch: arm64
-            runner: macos-26-xlarge # Apple Silicon arm64, M2
-            architecture_string: arm64
-            archive_ext: tar.gz
+          # - target: darwin26
+          #   release_target: darwin26
+          #   release_arch: arm64
+          #   runner: macos-26-xlarge
+          #   architecture_string: arm64
+          #   archive_ext: tar.gz
 
-          - target: windows
-            runner: windows-latest-fat
-            archive_ext: zip
+          # - target: windows
+          #   runner: windows-latest-fat
+          #   archive_ext: zip
 
-          - target: windows
-            build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+          # - target: windows
+          #   build_system: cmake
+          #   cmake_generator: Visual Studio 17 2022
 
-          - target: darwin15
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: darwin15
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: darwin26
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: darwin26
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: linux
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: linux
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
           - target: linux_arm
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: windows
-            release_target: windows
-            release_arch: x86
-            architecture: 32
-            architecture_string: Win32
+          # - target: windows
+          #   release_target: windows
+          #   release_arch: x86
+          #   architecture: 32
+          #   architecture_string: Win32
 
-          - target: windows
-            release_target: windows
-            release_arch: x86_64
-            architecture: 64
-            architecture_string: x64
+          # - target: windows
+          #   release_target: windows
+          #   release_arch: x86_64
+          #   architecture: 64
+          #   architecture_string: x64
 
-          # RelWithDebInfo only on Windows x64
-          - target: windows
-            architecture: 64
-            cmake_preset: RelWithDebInfo
-            sanitizers: none
-            runner: windows-latest-fat
-            archive_ext: zip
-            build_system: cmake
-            cmake_generator: Visual Studio 17 2022
-            release_target: windows
-            release_arch: x86_64
-            architecture_string: x64
+          # - target: windows
+          #   architecture: 64
+          #   cmake_preset: RelWithDebInfo
+          #   sanitizers: none
+          #   runner: windows-latest-fat
+          #   archive_ext: zip
+          #   build_system: cmake
+          #   cmake_generator: Visual Studio 17 2022
+          #   release_target: windows
+          #   release_arch: x86_64
+          #   architecture_string: x64
 
         exclude:
           # macOS Intel (darwin15 x86_64) prebuilt LLVM.dll isn't shipped by
@@ -304,6 +301,7 @@ jobs:
             esac
             ;;
         esac
+
     - name: "Test"
       run: |
         set -eux
@@ -359,13 +357,7 @@ jobs:
             ;;
            linux_arm64)
             cd bin
-            # Skip JIT tests on the Debug cmake preset — LLVM ARM64 SelectionDAG
-            # hangs reproducibly mid-suite under Debug (different test each run,
-            # ~20 min in). Tracked separately. Release of the same matrix still
-            # runs JIT — keep --failures-only off there so PASS lines print and
-            # name the test running just before the hang if it reoccurs (see
-            # RC2 release run #25572466058).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
            *)
@@ -374,6 +366,14 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac
+
+    - name: "Debug SSH on test failure"
+      if: failure()
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true
+        detached: false
+
     - name: "Small C++ Tests"
       run: |
         set -eux
@@ -415,15 +415,8 @@ jobs:
   ###########################################################
   bundle_smoke:
   ###########################################################
-  # Catches release-bundle install-rule regressions at PR time on the
-  # platform that produces 95% of such bugs (Linux x86_64). Mirrors the
-  # release.yml linux64 build path: same module flags via ci/release_modules.txt,
-  # same install layout (cmake --install --prefix ./daslang_bundle), same
-  # ci/smoke_test_bundle.sh that release.yml runs. Full-matrix smoke is
-  # still gated at release-cut time in release.yml.
-  ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    if: false  # debug-only: bundle_smoke disabled while investigating linux_arm crash
     runs-on: ubuntu-latest-fat
     steps:
     - name: "SCM Checkout"
@@ -487,7 +480,7 @@ jobs:
   # next to daslang.exe so the .shared_module dlopen resolves at runtime.
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    if: false  # debug-only: mingw disabled while investigating linux_arm crash
     runs-on: windows-latest-fat
     defaults:
       run:

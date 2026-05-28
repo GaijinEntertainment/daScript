@@ -1,19 +1,7 @@
 name: Build doc
 
-# Run only on tags and release publish
 on:
-  release:
-    types: prereleased
-  push:
-    paths:
-      - 'doc/**'
-      - 'daslib/**'
-      - 'src/builtin/**'
-  pull_request:
-    paths:
-      - 'doc/**'
-      - 'daslib/**'
-      - 'src/builtin/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

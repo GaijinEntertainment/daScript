@@ -15,6 +15,7 @@ on:
   workflow_dispatch:
   release:
     types: [prereleased]
+  pull_request:
 defaults:
   run:
     shell: bash
@@ -49,16 +50,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin15, darwin26, windows]
+        target: [linux_arm]  # debug-only: full matrix is [linux, linux_arm, darwin15, darwin26, windows]
         architecture: [32, 64, arm64]
         cmake_preset: [ Release ]
 
         include:
-          - target: linux
-            release_target: linux
-            release_arch: x86_64
-            runner: ubuntu-latest-fat
-            archive_ext: tar.gz
+          # debug-only: non-linux_arm includes commented out
+          # - target: linux
+          #   release_target: linux
+          #   release_arch: x86_64
+          #   runner: ubuntu-latest-fat
+          #   archive_ext: tar.gz
 
           - target: linux_arm
             release_target: linux
@@ -66,49 +68,49 @@ jobs:
             runner: ubuntu-24.04-arm-fat
             archive_ext: tar.gz
 
-          - target: darwin26
-            release_target: darwin26
-            release_arch: arm64
-            runner: macos-26-xlarge # Apple Silicon arm64
-            architecture_string: arm64
-            archive_ext: tar.gz
+          # - target: darwin26
+          #   release_target: darwin26
+          #   release_arch: arm64
+          #   runner: macos-26-xlarge
+          #   architecture_string: arm64
+          #   archive_ext: tar.gz
 
-          - target: darwin15
-            release_target: darwin15
-            release_arch: x86_64
-            runner: macos-15-large # Intel x86_64
-            architecture_string: x86_64
-            archive_ext: tar.gz
+          # - target: darwin15
+          #   release_target: darwin15
+          #   release_arch: x86_64
+          #   runner: macos-15-large
+          #   architecture_string: x86_64
+          #   archive_ext: tar.gz
 
-          - target: windows
-            runner: windows-latest-fat
-            archive_ext: zip
+          # - target: windows
+          #   runner: windows-latest-fat
+          #   archive_ext: zip
 
-          - target: windows
-            build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+          # - target: windows
+          #   build_system: cmake
+          #   cmake_generator: Visual Studio 17 2022
 
-          - target: darwin15
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: darwin15
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: darwin26
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: darwin26
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
-          - target: linux
-            build_system: cmake
-            cmake_generator: Ninja
+          # - target: linux
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
           - target: linux_arm
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: windows
-            release_target: windows
-            release_arch: x86_64
-            architecture: 64
-            architecture_string: x64
+          # - target: windows
+          #   release_target: windows
+          #   release_arch: x86_64
+          #   architecture: 64
+          #   architecture_string: x64
 
         exclude:
           - target: darwin15
@@ -262,6 +264,13 @@ jobs:
             EXEC=""
           fi
           ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --test "$TEST_PATH"
+
+      - name: "Debug SSH on failure"
+        if: failure()
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: false
 
       - name: "Install binaries"
         if: matrix.cmake_preset == 'Release'

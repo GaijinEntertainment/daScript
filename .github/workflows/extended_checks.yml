@@ -1,9 +1,6 @@
 name: extended checks
 
 on:
-  push:
-    branches: [master]
-  pull_request:
   workflow_dispatch:
 defaults:
   run:
