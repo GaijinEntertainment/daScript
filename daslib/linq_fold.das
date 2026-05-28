@@ -359,8 +359,7 @@ def private has_where_or_distinct(var c : Captures; var top : Expression?) : boo
     return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 }
 
-// v1 limit (imperative line 6011): upstream `join` requires empty head + no having + no trailing_where.
-// Vacuous when no upstream_join captured.
+// v1 limit (imperative line 6011): upstream `join` requires empty head + no having + no trailing_where. Vacuous when no upstream_join captured.
 def private decs_join_invariants(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("upstream_join"))) return true
     return ((c.many["head"] |> empty)
@@ -368,17 +367,19 @@ def private decs_join_invariants(var c : Captures; var top : Expression?) : bool
             && !(c.single |> key_exists("trailing_where")))
 }
 
-// Array mirror — same v1 constraints + srcb must be array/iterator (not a decs bridge).
-def private array_join_invariants(var c : Captures; var top : Expression?) : bool {
-    if (!(c.single |> key_exists("upstream_join"))) return true
-    if (!((c.many["head"] |> empty)
-            && !(c.single |> key_exists("having"))
-            && !(c.single |> key_exists("trailing_where")))) return false
-    let jc = c.single["upstream_join"]
+// arguments[1] of a `join(...)` call (the srcb position) must be a value the splice can iterate via plain `for` — array / good-array / iterator. Vacuous when <captureName> not present. Asymmetric "array `_join` decs-bridge" shapes cascade to tier-2.
+def private srcb_is_array_shaped(var c : Captures; captureName : string) : bool {
+    if (!(c.single |> key_exists(captureName))) return true
+    let jc = c.single[captureName]
     if (jc == null || (jc.arguments |> length) < 2) return false
     let srcb = jc.arguments[1]
     if (srcb == null || srcb._type == null) return false
     return srcb._type.isGoodArrayType || srcb._type.isArray || srcb._type.isIterator
+}
+
+// Array mirror of decs_join_invariants — strict superset (same v1 shape limits + srcb-shape on the upstream join).
+def private array_join_invariants(var c : Captures; var top : Expression?) : bool {
+    return decs_join_invariants(c, top) && srcb_is_array_shaped(c, "upstream_join")
 }
 
 // plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
@@ -395,15 +396,9 @@ def private decs_join_no_select_with_count(var c : Captures; var top : Expressio
     return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
 }
 
-// Array-side join splice guard: srcb must be an array/iterator type the splice can iterate via plain `for`.
-// Asymmetric "array `_join` decs-bridge" shape cascades to tier-2 — caller must rewrite explicitly.
+// Array-side join splice guard — same srcb-shape check as on the upstream-join slot of array_join_invariants, but applied to the `join` capture.
 def private array_join_srcb_is_array(var c : Captures; var top : Expression?) : bool {
-    if (!(c.single |> key_exists("join"))) return true
-    let jc = c.single["join"]
-    if (jc == null || (jc.arguments |> length) < 2) return false
-    let srcb = jc.arguments[1]
-    if (srcb == null || srcb._type == null) return false
-    return srcb._type.isGoodArrayType || srcb._type.isArray || srcb._type.isIterator
+    return srcb_is_array_shaped(c, "join")
 }
 
 // Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
