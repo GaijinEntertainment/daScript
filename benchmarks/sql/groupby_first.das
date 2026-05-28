@@ -2,13 +2,33 @@ options gen2
 options persistent_heap
 
 require _common public
+require daslib/sql
+require sqlite/sqlite_boost
+require sqlite/sqlite_linq
 
-// _group_by(_.brand) |> _select((Brand=key, FirstCar=first source elem per group)).
-// SQL equivalent would need a window function (`ROW_NUMBER() OVER (PARTITION BY brand
-// ORDER BY id)` + outer WHERE rn=1); sqlite_linq does not currently lower window
-// functions. [Follow-up TODO 2026-05-23: window-function lowering in sqlite_linq.]
-// Array vs Decs is the headline comparison. Splice (PR-A2) emits miss-branch-only
-// loop (no hit update).
+// `_group_by(_.brand) |> _select((Brand=key, FirstCar=first source elem per group))` —
+// for each brand, pair the key with the row that arrived first (by source/PK order).
+// SQL (m1) — Arm C: tuple-projection over bare-aggregate inner subquery.
+// `SELECT "brand", "id", "name", "price", "brand", "year", "dealer_id"
+//   FROM (SELECT *, MIN(pk) FROM Cars GROUP BY brand) AS t0`.
+// See sqlite_linq.das::is_first_of_group_call + build_row_make_struct.
+// Array/Decs (m3f/m4) splice through plan_group_by_core's miss-branch-only loop (PR-A2).
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let groups <- _sql(db |> select_from(type<Car>)
+                                  |> _group_by(_.brand)
+                                  |> _select((Brand = _._0,
+                                              FirstCar = _._1 |> first())))
+            b |> accept(groups)
+            if (empty(groups)) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -38,6 +58,11 @@ def run_m4(b : B?; n : int) {
             b->failNow()
         }
     }
+}
+
+[benchmark]
+def groupby_first_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]

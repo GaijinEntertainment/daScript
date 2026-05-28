@@ -97,6 +97,79 @@ For the no-predicate form ``_distinct_by(_.K) |> count()`` /
 ``COUNT(DISTINCT "K")`` (no subquery wrap); see
 :ref:`tutorial_sql_aggregates`.
 
+Distinct + composition (row passthrough)
+========================================
+
+``_distinct_by(_.K)`` followed by a row-returning terminator
+(implicit ``to_array``) wraps the source in the same bare-aggregate
+subquery, then composes with trailing ``_order_by(_.S)`` /
+``take(N)`` / ``skip(N)`` via the outer ``SELECT``:
+
+.. code-block:: das
+
+    // Cheapest first-encountered Car per Name, top 2
+    let rows <- _sql(db |> select_from(type<Car>)
+                        |> _distinct_by(_.Name)
+                        |> _order_by(_.Price)
+                        |> take(2))
+    // SELECT "Id", "Name", "Price"
+    //   FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Name") AS "t0"
+    //   ORDER BY "Price" ASC LIMIT ?
+
+``_where`` / ``_join`` / ``_group_by`` / ``_having`` / set ops /
+additional ``distinct`` between ``_distinct_by(K)`` and the row
+terminator are rejected in v1 (each requires explicit composition
+logic and may have semantic ambiguity).
+
+Reverse + distinct_by (last per group)
+======================================
+
+``reverse() |> _distinct_by(_.K)`` flips the bare-aggregate from
+``MIN(pk)`` to ``MAX(pk)`` — picks the **last** row per K by source/PK
+order (mirrors linq's ``each(arr).reverse()._distinct_by(K)``
+"last per group" splice):
+
+.. code-block:: das
+
+    let lasts <- _sql(db |> select_from(type<Car>)
+                         |> reverse()
+                         |> _distinct_by(_.Name))
+    // SELECT "Id", "Name", "Price"
+    //   FROM (SELECT *, MAX("Id") FROM "Cars" GROUP BY "Name") AS "t0"
+
+``reverse()`` in ``_sql`` is only legal when wrapped by ``_distinct_by`` —
+SQL has no inherent row ordering to reverse. Bare
+``reverse() |> to_array`` rejects with a fixit pointing to
+``_order_by_descending(...)`` for sort reversal.
+
+**Order divergence caveat**: the SQL bare-aggregate returns rows in
+engine-defined order (typically group-key insertion order), while
+linq returns reverse-source-order. Add an explicit
+``_order_by(...)`` for deterministic ordering.
+
+Group-by + first row per group
+==============================
+
+``_group_by(_.K) |> _select((K=_._0, R=_._1 |> first()))`` projects
+each group's key alongside the first row of that group. Lowers via
+the same bare-aggregate subquery; the row entry expands inline to
+all source columns:
+
+.. code-block:: das
+
+    let groups <- _sql(db |> select_from(type<Car>)
+                          |> _group_by(_.Name)
+                          |> _select((Brand    = _._0,
+                                      FirstCar = _._1 |> first())))
+    // SELECT "Name", "Id", "Name", "Price"
+    //   FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Name") AS "t0"
+    // Output type: array<(Brand:string, FirstCar:Car)>
+
+v1 supports single-key groups only. Mixing ``_._1 |> first()`` with
+column aggregates (``length`` / ``sum`` / ``min`` / ``max`` /
+``average``) in the same projection is rejected — use separate
+``_sql`` calls.
+
 For ``UNION`` / ``INTERSECT`` / ``EXCEPT`` see :ref:`tutorial_sql_set_ops`.
 
 .. seealso::

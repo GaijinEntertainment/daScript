@@ -101,6 +101,44 @@ def main() {
                                      |> _count(_.Price > 150))
         to_log(LOG_INFO, "  emitted SQL: {sql_first}\n")
 
+        // ── Distinct + composition (row passthrough) ─────────────────────
+        // `_distinct_by(K) |> _order_by(S) [|> take(N)]` wraps the source in
+        // the same bare-aggregate subquery; outer SELECT applies ORDER BY +
+        // LIMIT. Closes the "Window-function lowerings" group of
+        // sqlite_linq_gaps.md without needing window functions.
+        let cheapest_first <- _sql(db |> select_from(type<Car>)
+                                      |> _distinct_by(_.Name)
+                                      |> _order_by(_.Price)
+                                      |> take(2))
+        to_log(LOG_INFO, "Cheapest 2 first-per-Name: {length(cheapest_first)} rows\n")
+        for (r in cheapest_first) {
+            to_log(LOG_INFO, "  Id={r.Id} Name={r.Name} Price={r.Price}\n")
+        }
+
+        // ── reverse() + _distinct_by — LAST per group via MAX(pk) ────────
+        // The bare-aggregate flips MIN(pk) → MAX(pk). reverse() in `_sql`
+        // is only legal when wrapped by _distinct_by (SQL has no inherent
+        // row ordering to reverse).
+        let lasts <- _sql(db |> select_from(type<Car>)
+                             |> reverse()
+                             |> _distinct_by(_.Name))
+        to_log(LOG_INFO, "LAST per Name ({length(lasts)} rows):\n")
+        for (r in lasts) {
+            to_log(LOG_INFO, "  Id={r.Id} Name={r.Name} Price={r.Price}\n")
+        }
+
+        // ── _group_by + first row per group — tuple projection ───────────
+        // `_._1 |> first()` projects the first row of the group (by source
+        // PK). Output type is a named tuple of (key, full source row).
+        let groups <- _sql(db |> select_from(type<Car>)
+                              |> _group_by(_.Name)
+                              |> _select((Brand = _._0,
+                                          FirstCar = _._1 |> first())))
+        to_log(LOG_INFO, "Brand + first car per Name ({length(groups)} groups):\n")
+        for (g in groups) {
+            to_log(LOG_INFO, "  Brand={g.Brand}  FirstCar.Id={g.FirstCar.Id} Price={g.FirstCar.Price}\n")
+        }
+
         // ── Set operations (UNION / INTERSECT / EXCEPT) — deferred ───────
         // The chain analyzer is single-source today: every SELECT comes
         // from one `select_from(type<T>)`. Set ops bring in a second

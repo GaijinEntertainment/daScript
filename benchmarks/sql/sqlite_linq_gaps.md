@@ -18,38 +18,36 @@ gap is documented inline.
 
 ---
 
-## Window-function lowerings
+## ~~Window-function lowerings~~ — group fully closed
 
-All of these chains pick "one row per group" or "the row matching
-`min/max/first ...` per group", which in SQL canonically uses
-`ROW_NUMBER() OVER (PARTITION BY k ORDER BY ...)` filtered by `rn = 1` (or
-`LIMIT 1`). Sometimes wrapped in a derived table. None of these forms are
-emitted by today's `sqlite_linq` surface.
+Originally catalogued 4 cells as needing `ROW_NUMBER() OVER (PARTITION BY K ORDER BY S)`.
+Plan-mode probing established that all 4 lower cleanly via SQLite's bare-aggregate
+optimization + composition (no window functions needed) — closed in two PRs.
 
-If one PR opens window-function lowering in `sqlite_linq` (e.g. a new
-`_partition_by` / `_row_number` surface, or an internal `_window_first`
-helper), all five of these cells can flip in the same change.
-
-| Bench | Chain | What SQL would lower |
-|---|---|---|
-| [`distinct_by_order_take`](distinct_by_order_take.das) | `_distinct_by(_.dealer_id) \|> _order_by(_.price) \|> take(N) \|> to_array` | `SELECT ... FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY dealer_id ORDER BY price) AS rn FROM Cars) WHERE rn = 1 LIMIT N` |
-| [`distinct_by_order_to_array`](distinct_by_order_to_array.das) | `_distinct_by(_.dealer_id) \|> _order_by(_.price) \|> to_array` | Same as above without `LIMIT N` |
-| [`groupby_first`](groupby_first.das) | `_group_by(_.brand) \|> _select(g => g.first())` | `SELECT ... FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id) AS rn FROM Cars) WHERE rn = 1` |
-| [`reverse_distinct_by`](reverse_distinct_by.das) | `each(arr) \|> reverse() \|> _distinct_by(_.brand) \|> to_array` ("last per group") | `SELECT ... FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id DESC) AS rn FROM Cars) WHERE rn = 1` |
-
-**Original TODO dates** (carried in `results.md` Notes before this doc):
-`distinct_by_order_take` 2026-05-25, `groupby_first` 2026-05-23. The new
-2026-05-27 entries (`reverse_distinct_by`, `distinct_by_order_to_array`)
-inherit the same blocker.
-
-**Closed in PR #2906** (sqlite_linq `_distinct_by` as chain operator + first-row aggregates, 2026-05-27):
-- `order_distinct_take` — closed by 1-column `Brand` table fixture (not window functions).
+**Closed in PR #2906** (chunk N — bare-aggregate foundation):
+- `order_distinct_take` — closed by 1-column `Brand` table fixture (bench-only).
 - `distinct_count_pred` — closed by the SQLite bare-aggregate wrap
   (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).
   The original gaps doc misidentified the lowering as `COUNT(*) FILTER (WHERE P)`
   over `SELECT DISTINCT K` — incorrect because `SELECT DISTINCT K` only projects
   K and P can't reference other columns. The bare-aggregate form preserves all
   `SELECT *` columns at the min-PK row, matching linq `_distinct_by` semantics.
+
+**Closed in PR #2909** (chunk N+1 — composition + MAX(pk) + group-by-first):
+- `distinct_by_order_take` — bare-aggregate + outer `ORDER BY` + `LIMIT` (no window function needed).
+  `SELECT … FROM (SELECT *, MIN(pk) FROM Cars GROUP BY dealer_id) AS t0 ORDER BY price LIMIT N`.
+- `distinct_by_order_to_array` — same without `LIMIT`.
+- `reverse_distinct_by` — MAX(pk) variant of the bare-aggregate.
+  `SELECT … FROM (SELECT *, MAX(pk) FROM Cars GROUP BY brand) AS t0`. New chain op
+  `reverse()` recognized in `_sql` (only legal immediately above `_distinct_by`).
+- `groupby_first` — tuple projection over bare-aggregate. `_._1 |> first()` recognized
+  in grouped projections; outer SELECT lists key + expanded source columns; row builder
+  reconstructs the source struct via `ExprMakeStruct` with offset reads.
+
+Real window functions (`ROW_NUMBER`, `RANK`, `LAG`, etc.) remain unimplemented in
+`sqlite_linq` — no current bench needs them. Future bench shapes like
+`_distinct_by_min_by(K, S)` ("min-S row per K", not first-by-source-order) would
+require them.
 
 ---
 
