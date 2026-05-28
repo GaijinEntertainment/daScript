@@ -118,9 +118,13 @@ def test_reverse_take_select_array(t : T?) {
 
 // PR after #2915: bare `reverse + take + _select` (no where, no pre-select) on an array source
 // is the symmetric m3f mirror of #2915's decs skip-into-tail termsel extension. R6 backward-index
-// walk now accepts an optional trailing `_select(F)` slot, so the K push_clones carry the projection
-// directly (single buffer typed as projection element). Previously this shape fell through to R1-R4's
-// catch-all, which walked ALL N entries + reversed + resized + projected.
+// walk now accepts an optional trailing `_select(F)` slot: the loop pushes K raw source elements
+// into a srcElem-typed scratch buffer (`for k in 0..K: buf |> push_clone(src[len-1-k])`), then
+// `build_terminal_select_tail` performs a post-loop projection pass into a separate projElem-typed
+// output buffer. Two-buffer/two-pass mirrors the decs sibling + R1-R4 catch-all discipline (all
+// source reads complete before any projection-side-effect runs). Cost vs the catch-all: K raw
+// push_clones into the scratch buf instead of N; the post-loop projection K push_clones is shared
+// with the catch-all. Previously this shape fell through to R1-R4 which walked ALL N entries.
 
 [test]
 def test_reverse_take_select_array_bare(t : T?) {

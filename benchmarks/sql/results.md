@@ -292,10 +292,15 @@ forcing fall-through to the expensive full-buffer-then-reverse-then-
 resize-then-project path that did N push_clones with string clones for
 N=100K to keep just K=10). The symmetric m3f side was closed in the
 follow-up by extending the array-side R6 backward-index walk to accept
-a trailing `_select(F)` slot — K push_clones now carry the projection
-directly into a single buffer typed as the projection element. Both
-m3f and m4 are now sub-resolution per-op (10 push_clones amortized over
-chunk_size=100K rounds to 0.0 ns/op in INTERP and JIT).
+a trailing `_select(F)` slot: K raw source elements push_clone into a
+srcElem-typed scratch buffer during the backward loop, then a post-loop
+`build_terminal_select_tail` projection pass fills a separate projElem-
+typed output buffer (K projection push_clones). Two-buffer/two-pass
+mirrors the decs sibling and R1-R4 catch-all discipline (all source
+reads complete before any projection runs — impure `_select` semantics
+match across the three paths). Both m3f and m4 are now sub-resolution
+per-op (the 2K push_clones for K=10 amortize over chunk_size=100K and
+round to 0.0 ns/op in INTERP and JIT).
 
 ## How to re-run
 
