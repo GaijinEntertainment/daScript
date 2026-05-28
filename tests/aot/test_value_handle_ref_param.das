@@ -1,6 +1,5 @@
 options gen2
 require dastest/testing_boost public
-require fio
 
 //! Regression: a writable reference parameter of a value-annotation handle
 //! (ManagedValueAnnotation<T>, e.g. ``clock`` / ``das::Time``, or ECS

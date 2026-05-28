@@ -1164,7 +1164,7 @@ namespace das
         }
         bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
-        static Module * requireEx ( const string & name, bool allowPromoted );
+        static Module * requireEx ( const string & name, bool allowPromoted, const string & expectedFileName = string() );
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );

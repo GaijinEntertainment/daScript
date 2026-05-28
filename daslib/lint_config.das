@@ -23,7 +23,7 @@ module lint_config shared private
 //! If the file is missing, unreadable, or fails to parse the call is a
 //! no-op — built-in defaults stand.
 
-require fio
+require daslib/fio
 require daslib/json
 require daslib/toml
 require daslib/ast_boost

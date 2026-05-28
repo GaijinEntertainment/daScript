@@ -3,7 +3,6 @@ options gen2
 require dastest/testing_boost
 require daslib/lint_config
 require daslib/fio
-require fio
 require strings
 
 // Per-process temp directory. Created on first call, removed by [finalize].

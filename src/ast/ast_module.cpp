@@ -287,11 +287,18 @@ namespace das {
         return nullptr;
     }
 
-    Module * Module::requireEx ( const string & name, bool allowPromoted ) {
+    Module * Module::requireEx ( const string & name, bool allowPromoted, const string & expectedFileName ) {
         if ( !daScriptEnvironment::getBound() ) return nullptr;
         for ( auto m = daScriptEnvironment::getBound()->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
+                    // We key by module name only.
+                    // If someone required daslib/fio earlier (fio is shared),
+                    // and now we write require fio it will be found, although
+                    // it's an error.
+                    if ( m->promoted && !expectedFileName.empty() && m->fileName != expectedFileName ) {
+                        continue;
+                    }
                     return m;
                 }
             }
