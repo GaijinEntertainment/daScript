@@ -13,7 +13,9 @@ Output (under out_dir):
     blog/feed.xml           — Atom feed of posts
     news/<slug>.html        — one per news entry that has a body
     changelist.html         — full long-form news list (all entries by date desc)
-    files/news.json         — top-N news for forge.js to render landing § 05
+    files/news.json         — top-N news for forge.js to render landing § 06
+    files/news-meta.json    — newest_date + baseline_date + all dates, drives
+                              the "N NEW" nav chip via files/news-counter.js
 
 Hexo extensions translated:
     <!-- more -->            → excerpt boundary (excerpt above used on index)
@@ -552,6 +554,20 @@ def main():
     }
     (out / 'files' / 'blog.json').write_text(
         json.dumps(blog_data, indent=2), encoding='utf-8')
+
+    # 8. news-meta.json — parallel of blog.json for the news feed; same
+    #    metadata fields (newest_date, baseline_date), entries live under
+    #    `news` instead of `posts`. Drives the "N NEW" chip on the news
+    #    nav link via news-counter.js.
+    newest_news = news[0].date if news else '1970-01-01'
+    baseline_news = news[1].date if len(news) >= 2 else '1970-01-01'
+    news_meta = {
+        'newest_date': newest_news,
+        'baseline_date': baseline_news,
+        'news': [{'slug': n.slug, 'date': n.date} for n in news],
+    }
+    (out / 'files' / 'news-meta.json').write_text(
+        json.dumps(news_meta, indent=2), encoding='utf-8')
 
     print(f"built {len(posts)} posts, {len(news)} news entries -> {out}/")
 
