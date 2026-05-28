@@ -205,12 +205,12 @@ Array-source patterns
    * - ``._group_by(K)._select(reduce)._order_by(K2).to_array()`` / ``._order_by_descending(K2).to_array()``
      - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core``, trailing ``order_by`` as ORDER BY)
      - Theme 3 Phase 2 (audit C2). Inline-cmp ``sort(buf, ...)`` after the bucket-fill mutates the same output buffer in place — vs the tier-2 cascade's separate ``order_by_inplace`` over a fresh allocation. v1: ``_order_by(K2)`` / ``_order_by_descending(K2)`` with inline-able key only; non-inline keys (side-effects, multi-stmt body) cascade. Composes with HAVING / ``_having(P)``.
-   * - ``.reverse().take(N).to_array()`` (with no ``where`` / ``select``)
-     - ``plan_reverse`` (two-pass)
-     - Sum archetype sizes, then walk tail-first with skip-counter and early-exit.
-   * - ``.reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
-     - ``plan_reverse`` (terminal ``_select``)
-     - Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
+   * - ``.reverse().take(N)[._select(F)].to_array()`` (with no pre-reverse ``where`` / ``select``)
+     - ``plan_reverse`` R6 (backward-index walk)
+     - Single loop ``for k in 0..K`` indexes ``arr[len-1-k]``; K push_clones into a single buffer typed as the projection element (when ``_select`` is captured) or as the source element (bare ``take``). Skips full-source push + ``reverse_inplace`` + resize that the catch-all R1-R4 would do. Trailing ``_select`` extension added symmetrically to the decs-side ``emit_decs_reverse_skip_into_tail`` (PR #2915). Fast path bails (cascades to R1-R4) when termsel's call-result element type is unresolved at macro stage.
+   * - ``[._where(P)][._select(f)].reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
+     - ``plan_reverse`` R1-R4 (terminal ``_select`` on catch-all) / Rb (walk-and-overwrite scalar)
+     - Catch-all path for chains with pre-reverse ``_where`` / ``_select`` (R6 doesn't accept those slots, cascades here). Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
    * - ``each(arr).reverse()._distinct[_by](K).to_array()``
      - ``plan_reverse`` (backward index walk + set-gate)
      - Theme 8 (audit 2a). Array source only. Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` and non-array sources bail to cascade.
@@ -306,12 +306,12 @@ identical — only the source iteration changes.
    * - ``from_decs_template(...)._distinct()`` / ``._distinct_by(K)`` followed by ``.count(P)`` / ``.long_count(P)``
      - ``plan_decs_distinct`` (predicate counter)
      - Decs mirror of the array-side predicate-distinct splice. Same dedup-unconditional / counter-gated-on-P shape across archetypes.
-   * - ``from_decs_template(...).reverse().take(N).to_array()``
-     - ``plan_decs_reverse``
-     - Whole-archetype skip + partial-archetype skip-counter + early-exit.
-   * - ``from_decs_template(...).reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
-     - ``plan_decs_reverse`` (terminal ``_select``)
-     - Decs mirror of ``plan_reverse``'s terminal ``_select``. Skip-into-tail fast path is gated off when ``_select`` is present.
+   * - ``from_decs_template(...).reverse().take(N)[._select(F)].to_array()``
+     - ``plan_decs_reverse`` (skip-into-tail; extended for terminal ``_select`` in PR #2915)
+     - Whole-archetype skip + partial-archetype skip-counter + early-exit. When trailing ``_select(F)`` is captured (no pre-reverse ``_where`` / ``_select``), the K reversed survivors are projected into a separate buffer typed by termsel's call-result element type — saves the catch-all's N push_clones + full reverse_inplace + project pass. Bails (cascades to R1-R4) when termsel's call-result element type is unresolved at macro stage.
+   * - ``from_decs_template(...).reverse()._select(F).first()``
+     - ``plan_decs_reverse`` (Rb walk-and-overwrite scalar with terminal ``_select``)
+     - Decs mirror of ``plan_reverse``'s Rb walk-and-overwrite scalar. Projection applies to the surviving ``last`` value at return.
    * - ``from_decs_template(...)._group_by(K)._select(reduce).to_array()``
      - pattern ``group_by_decs`` (sub-codegen ``plan_group_by_core``)
      - Shared bucket-reducer with the array path; differs only in the per-element source.

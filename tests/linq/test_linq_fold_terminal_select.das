@@ -116,6 +116,63 @@ def test_reverse_take_select_array(t : T?) {
     }
 }
 
+// PR after #2915: bare `reverse + take + _select` (no where, no pre-select) on an array source
+// is the symmetric m3f mirror of #2915's decs skip-into-tail termsel extension. R6 backward-index
+// walk now accepts an optional trailing `_select(F)` slot, so the K push_clones carry the projection
+// directly (single buffer typed as projection element). Previously this shape fell through to R1-R4's
+// catch-all, which walked ALL N entries + reversed + resized + projected.
+
+[test]
+def test_reverse_take_select_array_bare(t : T?) {
+    t |> run("plan_reverse R6: bare reverse + take + terminal _select — backward index walk projects K only") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // ids 1..5; reverse: 5,4,3,2,1; take 2: 5,4; select _.id: 5,4
+            let ids <- _fold(each(sounds).reverse().take(2)._select(_.id).to_array())
+            tt |> equal(length(ids), 2)
+            tt |> equal(ids[0], 5)
+            tt |> equal(ids[1], 4)
+        }
+    }
+}
+
+[test]
+def test_reverse_take_select_array_take_exceeds(t : T?) {
+    t |> run("plan_reverse R6: bare reverse + take(N>len) + _select clamps to length") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            // ids 1..5; reverse: 5,4,3,2,1; take 100 clamps to 5; select _.id*2
+            let xs <- _fold(each(sounds).reverse().take(100)._select(_.id * 2).to_array())
+            tt |> equal(length(xs), 5)
+            tt |> equal(xs[0], 10)
+            tt |> equal(xs[1], 8)
+            tt |> equal(xs[4], 2)
+        }
+    }
+}
+
+[test]
+def test_reverse_take_select_array_take_zero(t : T?) {
+    t |> run("plan_reverse R6: bare reverse + take(0) + _select returns empty") @(tt : T?) {
+        let sounds <- make_sounds()
+        unsafe {
+            let ids <- _fold(each(sounds).reverse().take(0)._select(_.id).to_array())
+            tt |> equal(length(ids), 0)
+        }
+    }
+}
+
+[test]
+def test_reverse_take_select_array_empty(t : T?) {
+    t |> run("plan_reverse R6: bare reverse + take + _select on empty source") @(tt : T?) {
+        var empty_sounds : array<Sound>
+        unsafe {
+            let ids <- _fold(each(empty_sounds).reverse().take(3)._select(_.id).to_array())
+            tt |> equal(length(ids), 0)
+        }
+    }
+}
+
 [test]
 def test_reverse_select_first_array(t : T?) {
     t |> run("plan_reverse: where + reverse + _select + first") @(tt : T?) {

@@ -3057,19 +3057,31 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
     ), ctx.src, at)
 }
 
-// R6 — backward index walk (bare reverse + take(N) + implicit to_array on array source).
+// R6 — backward index walk (bare reverse + take(N) [+ trailing `_select(F)`] + implicit to_array on array source).
 // Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
+// When `termsel` is captured, the K push_clones carry the projection directly (single buffer typed as projection element), saving the catch-all's N push_clones + reverse_inplace + resize + project pass. Mirrors the decs-side fast path extended in PR #2915 (`emit_decs_reverse_skip_into_tail`).
 [macro_function]
 def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     if (!(c.single |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
-    var bufElemType = strip_const_ref(clone_type(top._type.firstType))
+    var srcElemType = strip_const_ref(clone_type(top._type.firstType))
+    var termselLam : Expression?
+    var bufElemType : TypeDeclPtr
+    if (c.single |> key_exists("termsel")) {
+        termselLam = c.single["termsel"].arguments[1]
+        // Fast-path needs termsel's typer-resolved element type: `peel_lambda_rename_var`'s invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so the call result's `firstType` is the authoritative source. If missing, cascade — R1-R4 catch-all has its own termsel handling for that case.
+        if (termselLam == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) return null
+        bufElemType = strip_const_ref(clone_type(c.single["termsel"]._type.firstType))
+    } else {
+        bufElemType = srcElemType
+    }
     let bufName = qn("buf", at)
     let lenName = qn("rlen", at)
     let takeLimName = qn("rtakeLim", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
+    let elemName = qn("rev_elem", at)
     var takeArg = c.single["take"].arguments[1]
     // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
     var prologueStmts <- qmacro_block_to_array() {
@@ -3081,8 +3093,18 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
     reserveStmts |> push <| qmacro_expr() {
         $i(bufName) |> reserve($i(takeNName))
     }
-    var perElementPush : Expression? = qmacro_expr() {
-        $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+    var perElementPush : Expression?
+    if (termselLam != null) {
+        var projBody = peel_lambda_rename_var(termselLam, elemName)
+        if (projBody == null) return null
+        perElementPush = qmacro_block() {
+            let $i(elemName) = $i(srcName)[$i(lenName) - 1 - $i(kName)]
+            $i(bufName) |> push_clone($e(projBody))
+        }
+    } else {
+        perElementPush = qmacro_expr() {
+            $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
+        }
     }
     var tailStmts : array<Expression?>
     tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
@@ -3380,12 +3402,13 @@ def private register_reverse_rows {
         requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > no_terminator],
         emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
     )
-    // R6 — bare reverse + take + to_array, backward index walk
+    // R6 — bare reverse + take + [optional trailing _select(F)] + to_array, backward index walk
     splice_patterns |> emplace <| SplicePattern(
         name = "reverse_take_backward_index",
         chain <- [
             Slot(matcher = m_literal("reverse"), cardinality = c_one()),
-            Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take")
+            Slot(matcher = m_literal("take"), cardinality = c_one(), capture_name = "take"),
+            Slot(matcher = m_literal("select"), cardinality = c_opt(), capture_name = "termsel")
         ],
         requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > take_arg_is_int, @@ < RequiresPredicate > no_terminator],
         emit = @@ < EmitFn > emit_reverse_backward_index_walk
