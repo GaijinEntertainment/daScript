@@ -1781,38 +1781,66 @@ def private adapter_element_type(adapter : SourceAdapter) : TypeDeclPtr {
     return clone_type(top._type.firstType)
 }
 
-// Per-element source loop. Array: `for(bindName in srcName) { body }`. Decs: `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`. DecsJoin (PR D2): hashB-collect + srcA-probe + per-pair result-lam bind (lifted from PR D1's GroupBy `adapter_emit_source_loop`; GroupBy is the only consumer — `emit_decs_join` keeps its own collect+probe inline to preserve the count-no-where bucket-length fast path). Zip (PR D2): plain `for (itA, itB in srcA, srcB) { body }` — the `let it = (itA, itB)` bind, when needed by chain ops, is prepended inside `body` by emit_zip (only emit_zip knows whether the body references `it`).
+// JoinAdapterPieces — shared output of build_join_adapter_pieces. collectInner and probeOuter are framework-agnostic: caller wraps in `build_decs_inner_for(bridge, tupBind, ...)` + `for_each_archetype` (decs) or plain `for (tupName in srcName) { ... }` (array).
+struct private JoinAdapterPieces {
+    collectInner : Expression?
+    probeOuter   : Expression?
+}
+
+// Peels keya/keyb/result lambdas and emits the hashed-join collect+probe inners shared between the DecsJoin and ArrayJoin branches of adapter_wrap_source_loop. The two callsites differ only in how they wrap these pieces with source iteration.
+[macro_function]
+def private build_join_adapter_pieces(
+                                      keyaLam        : Expression?;
+                                      keybLam        : Expression?;
+                                      resultLam      : Expression?;
+                                      tupAName       : string;
+                                      tupBName       : string;
+                                      jhashName      : string;
+                                      arrName        : string;
+                                      resName        : string;
+                                      tupBType       : TypeDeclPtr;
+                                      resultType     : TypeDeclPtr;
+                                      var body       : Expression?;
+                                      at             : LineInfo
+                                      ) : JoinAdapterPieces? {
+    var keyaBody = peel_lambda_rename_var(keyaLam, tupAName)
+    var keybBody = peel_lambda_rename_var(keybLam, tupBName)
+    var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, tupBName)
+    if (keyaBody == null || keybBody == null || resultBody == null) return null
+    var collectInner <- qmacro_expr() {
+        // nolint:PERF006 per-key bucket size unknown ahead of time
+        $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
+    }
+    var probeOuter <- qmacro_expr() {
+        get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(tupBType)>) {
+            for ($i(tupBName) in $i(arrName)) {
+                let $i(resName) : $t(resultType) = $e(resultBody)
+                $e(body)
+            }
+        })
+    }
+    return <- new JoinAdapterPieces(
+        collectInner <- collectInner,
+        probeOuter <- probeOuter
+    )
+}
+
+// Per-element source loop. Array: `for(bindName in srcName) { body }`. Decs: `for_each_archetype(...) { build_decs_inner_for_pruned(bridge, tupName, body) }`. DecsJoin / ArrayJoin (PR D2 / chunk N+2): hashB-collect + srcA-probe + per-pair result-lam bind via build_join_adapter_pieces — GroupBy is the only consumer of the join shapes (the standalone emit_{decs,array}_join keep their own inline collect+probe to preserve the count-no-where bucket-length fast path). Zip (PR D2): plain `for (itA, itB in srcA, srcB) { body }` — the `let it = (itA, itB)` bind, when needed by chain ops, is prepended inside `body` by emit_zip (only emit_zip knows whether the body references `it`).
 [macro_function]
 def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Expression?; at : LineInfo) : Expression? {
     if (adapter is DecsJoin) {
-        // GroupBy's decs-join is the only consumer (emit_decs_join keeps its own inline collect+probe per D2-A).
         let dj & = unsafe(adapter as DecsJoin)
         let jhashName = qn("djoin_jhash", at)
         let arrName   = qn("djoin_jarr", at)
         let tupAName  = qn("djoin_jta", at)
         let tupBName  = qn("djoin_jtb", at)
-        let resName   = dj.resBindName
-        var keyaBody   = peel_lambda_rename_var(dj.keyaLam, tupAName)
-        var keybBody   = peel_lambda_rename_var(dj.keybLam, tupBName)
-        var resultBody = peel_lambda_rename_2vars(dj.resultLam, tupAName, tupBName)
-        if (keyaBody == null || keybBody == null || resultBody == null) return null
         var tupBindA = build_decs_tup_bind(dj.bridgeA, tupAName, at)
         var tupBindB = build_decs_tup_bind(dj.bridgeB, tupBName, at)
         if (tupBindA == null || tupBindB == null) return null
-        var collectBody <- qmacro_block_to_array() {
-            // nolint:PERF006 per-key bucket size unknown ahead of time
-            $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
-        }
-        var collectInner = build_decs_inner_for(dj.bridgeB, tupBindB, stmts_to_expr(collectBody), at)
-        var probeBody <- qmacro_block_to_array() {
-            get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(dj.tupBType)>) {
-                for ($i(tupBName) in $i(arrName)) {
-                    let $i(resName) : $t(dj.resultType) = $e(resultBody)
-                    $e(body)
-                }
-            })
-        }
-        var probeInner = build_decs_inner_for(dj.bridgeA, tupBindA, stmts_to_expr(probeBody), at)
+        var pieces = build_join_adapter_pieces(dj.keyaLam, dj.keybLam, dj.resultLam, tupAName, tupBName, jhashName, arrName, dj.resBindName, dj.tupBType, dj.resultType, body, at)
+        if (pieces == null) return null
+        var collectInner = build_decs_inner_for(dj.bridgeB, tupBindB, pieces.collectInner, at)
+        var probeInner = build_decs_inner_for(dj.bridgeA, tupBindA, pieces.probeOuter, at)
         return <- qmacro_block() {
             var $i(jhashName) : table<$t(dj.keyType); array<$t(dj.tupBType)>>
             for_each_archetype($e(dj.bridgeB.reqHashExpr), $e(dj.bridgeB.erqExpr), $($i(dj.bridgeB.archName) : Archetype) {
@@ -1824,30 +1852,21 @@ def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Express
         }
     }
     if (adapter is ArrayJoin) {
-        // GroupBy's array-join consumer (mirror of DecsJoin branch above). srcAName / srcBName are bound by adapter_wrap_invoke as invoke params; iteration uses plain `for` loops.
+        // srcAName / srcBName are bound by adapter_wrap_invoke as invoke params; iteration uses plain `for` loops.
         let aj & = unsafe(adapter as ArrayJoin)
         let jhashName = qn("ajoin_jhash", at)
         let arrName   = qn("ajoin_jarr", at)
         let tupAName  = qn("ajoin_jta", at)
         let tupBName  = qn("ajoin_jtb", at)
-        let resName   = aj.resBindName
-        var keyaBody   = peel_lambda_rename_var(aj.keyaLam, tupAName)
-        var keybBody   = peel_lambda_rename_var(aj.keybLam, tupBName)
-        var resultBody = peel_lambda_rename_2vars(aj.resultLam, tupAName, tupBName)
-        if (keyaBody == null || keybBody == null || resultBody == null) return null
+        var pieces = build_join_adapter_pieces(aj.keyaLam, aj.keybLam, aj.resultLam, tupAName, tupBName, jhashName, arrName, aj.resBindName, aj.tupBType, aj.resultType, body, at)
+        if (pieces == null) return null
         return <- qmacro_block() {
             var $i(jhashName) : table<$t(aj.keyType); array<$t(aj.tupBType)>>
             for ($i(tupBName) in $i(aj.srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
-                $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
+                $e(pieces.collectInner)
             }
             for ($i(tupAName) in $i(aj.srcAName)) {
-                get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(aj.tupBType)>) {
-                    for ($i(tupBName) in $i(arrName)) {
-                        let $i(resName) : $t(aj.resultType) = $e(resultBody)
-                        $e(body)
-                    }
-                })
+                $e(pieces.probeOuter)
             }
         }
     }
