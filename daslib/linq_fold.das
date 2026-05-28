@@ -2304,9 +2304,8 @@ def private make_inline_less_call(orderKey : Expression?; orderName : string;
 }
 
 
-[_macro]
-def private register_order_family_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_order_family_rows {
     // Row 1 — streaming_min: inline-cmp + first[_or_default]; no distinct (final imperative bail).
     splice_patterns |> emplace <| SplicePattern(
         name = "order_streaming_min",
@@ -3133,9 +3132,8 @@ def private emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : Li
         skipExpr, takeExpr, skipWhileCond, loopBody, at)
 }
 
-[_macro]
-def private register_loop_or_count_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_loop_or_count_rows {
     // Single row — c_chain head matches the where_/select run (0+ contiguous calls), then canonical-order range ops, optional post-take where, optional terminator from loop_terminator_family.
     splice_patterns |> emplace <| SplicePattern(
         name = "loop_or_count_general",
@@ -3611,9 +3609,8 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
 
 // [_macro] runs at macro-compile time and stays off the JIT runtime graph — the rows carry @@<EmitFn>
 // addresses of [macro_function] emit fns whose quote() bodies the LLVM JIT can't lower.
-[_macro]
-def private register_reverse_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_reverse_rows {
     // R-2a (most specific) — Theme 8 / audit 2a — backward walk + dset gate
     splice_patterns |> emplace <| SplicePattern(
         name = "reverse_distinct_backward_walk",
@@ -3880,9 +3877,8 @@ def private emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineI
     return ctx.src->wrap_invoke(stmts, null, needIterWrap, at)
 }
 
-[_macro]
-def private register_distinct_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_distinct_rows {
     // distinct_take — distinct[_by] |> take(N) [|> terminator]; inner-loop break on take cap
     splice_patterns |> emplace <| SplicePattern(
         name = "distinct_take",
@@ -4890,9 +4886,8 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
         terminatorName, orderName, orderKey, ctx.expr_is_iterator, at, adapter)
 }
 
-[_macro]
-def private register_group_by_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_group_by_rows {
     // Array-source group_by: head segments + opt upstream_join + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
     splice_patterns |> emplace <| SplicePattern(
         name = "group_by_array",
@@ -6404,9 +6399,8 @@ def private build_join_standalone_pieces(
 
 // ── decs join splice (PR D2 — pattern-table stub through splice_patterns) ───────
 
-[_macro]
-def private register_decs_join_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_decs_join_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "decs_join_general",
         chain <- [
@@ -6497,9 +6491,8 @@ def private emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; va
 
 // ── array join splice (chunk N+2 — array mirror of register_decs_join_rows) ───────
 
-[_macro]
-def private register_array_join_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_array_join_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "array_join_general",
         chain <- [
@@ -6583,9 +6576,8 @@ def private emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     return finalize_invoke(emission, at)
 }
 
-[_macro]
-def private register_zip_rows {
-    if (!is_compiling_macros_in_module("linq_fold")) return
+[macro_function]
+def build_zip_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "zip_general",
         chain <- [
@@ -6919,6 +6911,22 @@ def private emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expre
         }
     }
     return adapter->wrap_invoke(bodyStmts, null, false, at)
+}
+
+// Single registration entry — separate modules run [_macro]s in separate macro contexts that
+// can't coordinate, so the engine calls each source's row-builder explicitly. Order is the
+// former register_* definition order (preserves first-match priority in `splice_patterns`).
+[_macro]
+def private register_all_linq_fold_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
+    build_order_family_rows()
+    build_loop_or_count_rows()
+    build_reverse_rows()
+    build_distinct_rows()
+    build_group_by_rows()
+    build_decs_join_rows()
+    build_array_join_rows()
+    build_zip_rows()
 }
 
 [macro_function]
