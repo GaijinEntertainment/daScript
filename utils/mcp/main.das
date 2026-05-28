@@ -19,17 +19,15 @@ require protocol public
 
 [export]
 def main() {
-    log_to_stderr = true
-    log_path = "{get_das_root()}/{LOG_FILE}"
-    log_open()
-    log_write("Starting daslang MCP server (stdio transport)")
+    logger_init(MCP_LOG_NAME)
+    logger_info("mcp", "Starting daslang MCP server (stdio transport)")
     // detect ast-grep for grep_usage/outline tools
     let sg_check = detect_ast_grep()
     if (!empty(sg_check)) {
         ast_grep_available = true
-        log_write("ast-grep detected ({sg_check}) — grep_usage tool enabled")
+        logger_info("mcp", "ast-grep detected ({sg_check}) — grep_usage tool enabled")
     } else {
-        log_write("WARNING: ast-grep not found — grep_usage tool disabled")
+        logger_warning("mcp", "ast-grep not found — grep_usage tool disabled")
     }
 
     let sin = fstdin()
@@ -70,11 +68,11 @@ def main() {
         let heap_used = heap_bytes_allocated()
         let str_used = string_heap_bytes_allocated()
         if (heap_used > HEAP_COLLECT_THRESHOLD || str_used > HEAP_COLLECT_THRESHOLD) {
-            log_write("HEAP collecting — heap: {int(heap_used)}, string heap: {int(str_used)}")
+            logger_info("mcp.heap", "collecting — heap: {int(heap_used)}, string heap: {int(str_used)}")
             unsafe {
                 heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false)
             }
         }
     }
-    log_write("stdin closed, shutting down")
+    logger_info("mcp", "stdin closed, shutting down")
 }

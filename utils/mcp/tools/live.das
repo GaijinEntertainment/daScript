@@ -5,6 +5,7 @@ options no_unused_block_arguments = false
 
 require dashv/dashv_boost
 require common public
+require daslib/logger
 
 // --- Helpers ---
 
@@ -228,6 +229,12 @@ def do_live_launch(file, project, project_root : string; port : string = ""; loa
         // either get an "already running" false-positive or a never-responds timeout.
         script_args = "--live-port {port} {script_args}"
     }
+    // Spawn the daslang-live process via a tiny launcher script that
+    // detaches the child (Start-Process on Windows, nohup+& on POSIX).
+    // CRITICAL: use popen_argv (not system()) — system() inherits MCP's
+    // stdio, so any output from PowerShell / sh / chmod would land on the
+    // JSON-RPC channel and break framing. popen_argv pipe-captures both
+    // streams; we log any captured chatter for debugging.
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
         let launch_exe = replace(live_exe, "/", "\\")
@@ -237,12 +244,15 @@ def do_live_launch(file, project, project_root : string; port : string = ""; loa
                 fprint(f, "Start-Process -FilePath \"{launch_exe}\" -ArgumentList '{script_args}'\n")
             }
         }
-        var exit_code = 0
-        unsafe {
-            exit_code = system("powershell -NoProfile -ExecutionPolicy Bypass -File \"{ps1}\"")
-        }
+        var captured : string
+        let exit_code = run_and_capture(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1],
+            captured)
         remove(ps1)
-        if (exit_code != 0) return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
+        if (!empty(captured)) {
+            logger_warning("mcp.live.launch", "powershell output (would have corrupted JSON-RPC if not captured): {captured}")
+        }
+        return make_tool_result("Failed to launch daslang-live (exit {exit_code}): {captured}", true) if (exit_code != 0)
     } else {
         let sh = "{launcher}.sh"
         fopen(sh, "wt") $(f) {
@@ -250,12 +260,22 @@ def do_live_launch(file, project, project_root : string; port : string = ""; loa
                 fprint(f, "#!/bin/sh\nnohup \"{live_exe}\" {script_args} > /dev/null 2>&1 &\n")
             }
         }
-        var exit_code : int
-        unsafe {
-            exit_code = system("chmod +x {sh} && {sh}")
+        // chmod first (silent on success), then sh to launch the detached
+        // daslang-live. Two popen_argv calls avoid invoking a shell to
+        // parse `&&` — keeps the stdio capture clean either way.
+        var chmod_out : string
+        let chmod_rc = run_and_capture(["chmod", "+x", sh], chmod_out)
+        if (chmod_rc != 0) {
+            remove(sh)
+            return make_tool_result("Failed to chmod launcher (exit {chmod_rc}): {chmod_out}", true)
         }
+        var sh_out : string
+        let sh_rc = run_and_capture(["sh", sh], sh_out)
         remove(sh)
-        if (exit_code != 0) return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
+        if (!empty(sh_out)) {
+            logger_warning("mcp.live.launch", "launcher output (would have corrupted JSON-RPC if not captured): {sh_out}")
+        }
+        return make_tool_result("Failed to launch daslang-live (exit {sh_rc}): {sh_out}", true) if (sh_rc != 0)
     }
     // Poll for startup (up to 10 seconds)
     for (_ in range(20)) {

@@ -12,6 +12,7 @@ require daslib/jsonrpc
 require daslib/jobque_boost
 require strings
 require daslib/fio
+require daslib/logger public
 
 require tools/compile_check public
 require tools/list_functions public
@@ -46,75 +47,47 @@ require tools/find_dupe public
 require tools/live public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
-let LOG_FILE = "utils/mcp/mcp_server.log"
+let MCP_LOG_NAME = "mcp_server"
 
 // ── Logging ───────────────────────────────────────────────────────────
+//
+// Thin wrappers around daslib/logger. Categories are dotted so consumers
+// can filter (e.g. `logger_set_category_level("mcp.tool", LOG_DEBUG)`).
+//
+// CRITICAL: MCP uses stdio JSON-RPC. ANY write to the parent process's
+// stdout corrupts protocol framing. Every diagnostic must go to the log
+// file (or stderr fallback) — never stdout. `logger_install_hook()` in
+// main() enforces this for accidental print() / to_log() calls — a
+// single global install covers main + every new_thread worker.
 
-var log_path : string
-var log_start_clock : clock
-var log_to_stderr : bool = false
 var ast_grep_available : bool = false
-
-def log_open() {
-    log_start_clock = get_clock()
-    fopen(log_path, "ab") $(f) {
-        if (f != null) {
-            fprint(f, "\n--- server start ---\n")
-        }
-    }
-}
-
-def log_timestamp() : string {
-    let elapsed = get_clock() - log_start_clock
-    let total_sec = int(elapsed)
-    let h = total_sec / 3600
-    let m = (total_sec % 3600) / 60
-    let s = total_sec % 60
-    return build_string() $(var w) {
-        if (h > 0) {
-            write(w, "{h}h")
-        }
-        write(w, "{m}m{s}s")
-    }
-}
-
-def log_write(msg : string) {
-    let line = "[{log_timestamp()}] {msg}\n"
-    if (log_to_stderr) {
-        fprint(fstderr(), line)
-        fflush(fstderr())
-    } else {
-        print(line)
-    }
-    fopen(log_path, "ab") $(f) {
-        if (f != null) {
-            fprint(f, line)
-        }
-    }
-}
 
 def log_request(method, body : string) {
     let truncated = length(body) > 500 ? slice(body, 0, 500) + "..." : body
-    log_write("REQ {method} {truncated}")
+    logger_info("mcp.req", "{method} {truncated}")
 }
 
 def log_response(method : string; elapsed_sec : double) {
     let ms = int(elapsed_sec * 1000.0lf)
-    log_write("RES {method} ({ms}ms)")
+    logger_info("mcp.res", "{method} ({ms}ms)")
 }
 
 def log_tool(tool_name : string; args : string) {
-    log_write("TOOL {tool_name} {args}")
+    logger_info("mcp.tool", "{tool_name} {args}")
 }
 
 def log_tool_done(tool_name : string; elapsed_sec : double; is_error : bool) {
     let ms = int(elapsed_sec * 1000.0lf)
     let status = is_error ? "ERR" : "OK"
-    log_write("TOOL {tool_name} {status} ({ms}ms)")
+    if (is_error) {
+        logger_warning("mcp.tool", "{tool_name} {status} ({ms}ms)")
+    } else {
+        logger_info("mcp.tool", "{tool_name} {status} ({ms}ms)")
+    }
 }
 
 def log_error(msg : string) {
-    log_write("ERROR {msg}")
+    logger_error("mcp", msg)
 }
 
 // ── MCP protocol structs ─────────────────────────────────────────────
@@ -762,6 +735,11 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project, project_roo
     } else {
         with_channel(1) $(ch) {
             new_thread() <| @ capture(<- load_modules) () {
+                // logger_install_hook in main() registered a GLOBAL debug
+                // agent — worker contexts inherit it automatically, no
+                // re-install needed here. Worker print()/to_log() routes
+                // through the agent's owning context (main) into the
+                // shared log file.
                 let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project, project_root, load_modules)
                 ch |> push_clone(ToolMessage(text = tool_result))
                 ch |> notify_and_release()
@@ -1022,13 +1000,13 @@ def dispatch_jsonrpc(body : string) : string {
     }
     if (empty(parts)) return ""
     return build_string() $(var w) {
-        write_char(w, int('['))
+        write_char(w, '[')
         var first = true
         for (p in parts) {
-            if (!first) write_char(w, int(','))
+            if (!first) write_char(w, ',')
             first = false
             write(w, p)
         }
-        write_char(w, int(']'))
+        write_char(w, ']')
     }
 }

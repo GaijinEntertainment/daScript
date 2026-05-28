@@ -17,3 +17,4 @@ File I/O, networking, URI parsing, terminal output, and binary serialization.
    generated/ansi_colors.rst
    generated/archive.rst
    generated/command_line.rst
+   generated/logger.rst
