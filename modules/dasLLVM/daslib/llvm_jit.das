@@ -4318,12 +4318,13 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprErase
-    def build_table_erase(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+    def build_table_erase(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
             types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at)
         )
         var (fun_ptr, typ) = get_table_erase(g_builder, g_mod, ttype, types)
         let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
@@ -4348,7 +4349,7 @@ class public LlvmJitVisitor : AstVisitor {
             var uvt = get_underlying_value_type(subExprT.firstType)
             keyType = uvt.baseType
         }
-        var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
         setE(expr, res)
         return expr
     }

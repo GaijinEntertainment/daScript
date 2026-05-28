@@ -280,12 +280,13 @@ def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaq
 def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
     let fn_name = DllName(FN_JIT_TABLE_ERASE(t))
     assume fn_ptr = get_jit_table_erase(unsafe(reinterpret<int> t))
-    // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+    // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context, LineInfoArg * at )
     let erase_type = LLVMFunctionType(types.t_int1,                        // bool result
             fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
             base_type_to_llvm_type(t),                          // key
             types.t_int32,                                    // valueTypeSize
-            types.LLVMVoidPtrType()                 // context
+            types.LLVMVoidPtrType(),                          // context
+            types.LLVMVoidPtrType()                           // at
             ))
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, erase_type, fn_ptr)
     assert(tab_fun != null)
