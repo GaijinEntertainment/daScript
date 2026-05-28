@@ -754,4 +754,84 @@ def test_array_join_splice(t : T?) {
                            |> count())
         t |> equal(n, 4)
     }
+    // Phase 2 — cross-arm `_join |> _group_by` (ArrayJoin SourceAdapter routed through plan_group_by_core)
+    t |> run("_join + _group_by + count — bucket counts per Brand") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        // Dealer brands: 10=Acme, 20=Beta, 30=Acme. Cars: 2+1+1+orphan into 3 dealers → Acme bucket = 3 (2 via dealer 10 + 1 via dealer 30), Beta bucket = 1 (via dealer 20). Group count = 2.
+        let groups <- _fold(cars |> _join(dealers,
+                                          $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                          $(c : AJCar, d : AJDealer) => (Brand = d.brand, CarName = c.name))
+                                 |> _group_by(_.Brand)
+                                 |> _select((Brand = _._0, N = _._1 |> count())))
+        t |> equal(length(groups), 2)
+        var acme_n = 0
+        var beta_n = 0
+        for (g in groups) {
+            if (g.Brand == "Acme") {
+                acme_n = g.N
+            }
+            if (g.Brand == "Beta") {
+                beta_n = g.N
+            }
+        }
+        t |> equal(acme_n, 3)
+        t |> equal(beta_n, 1)
+    }
+    t |> run("_join + _group_by + sum — per-Brand totals via select+sum aggregate") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let groups <- _fold(cars |> _join(dealers,
+                                          $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                          $(c : AJCar, d : AJDealer) => (Brand = d.brand, Price = c.price))
+                                 |> _group_by(_.Brand)
+                                 |> _select((Brand = _._0, Total = _._1 |> _select(_.Price) |> sum())))
+        t |> equal(length(groups), 2)
+        var acme_total = 0
+        var beta_total = 0
+        for (g in groups) {
+            if (g.Brand == "Acme") {
+                acme_total = g.Total
+            }
+            if (g.Brand == "Beta") {
+                beta_total = g.Total
+            }
+        }
+        // Acme rows: cars 1+2 (dealer 10) + car 4 (dealer 30) → 1000+2000+4000 = 7000
+        // Beta rows: car 3 (dealer 20) → 3000
+        t |> equal(acme_total, 7000)
+        t |> equal(beta_total, 3000)
+    }
+    t |> run("_join + _group_by + min/max — per-Brand min/max via select+min/max") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let groups <- _fold(cars |> _join(dealers,
+                                          $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                          $(c : AJCar, d : AJDealer) => (Brand = d.brand, Price = c.price))
+                                 |> _group_by(_.Brand)
+                                 |> _select((Brand = _._0,
+                                             MinP = _._1 |> _select(_.Price) |> min(),
+                                             MaxP = _._1 |> _select(_.Price) |> max())))
+        t |> equal(length(groups), 2)
+        for (g in groups) {
+            if (g.Brand == "Acme") {
+                t |> equal(g.MinP, 1000)
+                t |> equal(g.MaxP, 4000)
+            }
+            if (g.Brand == "Beta") {
+                t |> equal(g.MinP, 3000)
+                t |> equal(g.MaxP, 3000)
+            }
+        }
+    }
+    t |> run("_join + _group_by — empty srcb yields empty groups") @(t : T?) {
+        let cars <- aj_cars()
+        var empty_dealers : array<AJDealer>
+        let groups <- _fold(cars |> _join(empty_dealers,
+                                          $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                          $(c : AJCar, d : AJDealer) => (Brand = d.brand, CarName = c.name))
+                                 |> _group_by(_.Brand)
+                                 |> _select((Brand = _._0, N = _._1 |> count())))
+        t |> equal(length(groups), 0)
+    }
 }

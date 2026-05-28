@@ -63,11 +63,23 @@ struct private ZipShape {
     srcAType, srcBType : TypeDeclPtr
 }
 
+// Array mirror of DecsJoinShape — same role (per-pair result bind for the cross-arm group_by case), 2 array sources iterated via plain `for` loops + a 2-source outer invoke. srcAType / srcBType are the FULL source types (array<T> / iterator<T>) for invoke-param spelling; tupAType / tupBType are the element types post strip_const_ref.
+struct private ArrayJoinShape {
+    srcAExpr, srcBExpr : Expression?
+    srcAName, srcBName : string
+    srcAType, srcBType : TypeDeclPtr
+    tupAType, tupBType : TypeDeclPtr
+    keyaLam, keybLam, resultLam : Expression?
+    keyType, resultType : TypeDeclPtr
+    resBindName : string
+}
+
 variant private SourceAdapter {
-    Array    : tuple<Expression?; string>               // (top, srcName) — PR A
-    Decs     : tuple<DecsBridgeShape?; string>          // (bridge, tupName) — PR C
-    DecsJoin : DecsJoinShape                            // PR D2
-    Zip      : ZipShape                                 // PR D2
+    Array     : tuple<Expression?; string>              // (top, srcName) — PR A
+    Decs      : tuple<DecsBridgeShape?; string>         // (bridge, tupName) — PR C
+    DecsJoin  : DecsJoinShape                           // PR D2
+    Zip       : ZipShape                                // PR D2
+    ArrayJoin : ArrayJoinShape                          // chunk N+2 — array mirror of DecsJoin
 }
 
 variant SlotMatcher {
@@ -354,6 +366,19 @@ def private decs_join_invariants(var c : Captures; var top : Expression?) : bool
     return ((c.many["head"] |> empty)
             && !(c.single |> key_exists("having"))
             && !(c.single |> key_exists("trailing_where")))
+}
+
+// Array mirror — same v1 constraints + srcb must be array/iterator (not a decs bridge).
+def private array_join_invariants(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("upstream_join"))) return true
+    if (!((c.many["head"] |> empty)
+            && !(c.single |> key_exists("having"))
+            && !(c.single |> key_exists("trailing_where")))) return false
+    let jc = c.single["upstream_join"]
+    if (jc == null || (jc.arguments |> length) < 2) return false
+    let srcb = jc.arguments[1]
+    if (srcb == null || srcb._type == null) return false
+    return srcb._type.isGoodArrayType || srcb._type.isArray || srcb._type.isIterator
 }
 
 // plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
@@ -1733,6 +1758,7 @@ def private strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
 [macro_function]
 def private adapter_bind_name(adapter : SourceAdapter; at : LineInfo) : string {
     return (adapter as DecsJoin).resBindName if (adapter is DecsJoin)
+    return (adapter as ArrayJoin).resBindName if (adapter is ArrayJoin)
     return qn("decs_tup", at) if (adapter is Decs)
     return qn("it", at)
 }
@@ -1743,6 +1769,7 @@ def private adapter_bind_name(adapter : SourceAdapter; at : LineInfo) : string {
 [macro_function]
 def private adapter_element_type(adapter : SourceAdapter) : TypeDeclPtr {
     if (adapter is DecsJoin) return clone_type((adapter as DecsJoin).resultType)
+    if (adapter is ArrayJoin) return clone_type((adapter as ArrayJoin).resultType)
     if (adapter is Zip) return null
     if (adapter is Decs) {
         let bridge = (adapter as Decs)._0
@@ -1796,6 +1823,34 @@ def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Express
             })
         }
     }
+    if (adapter is ArrayJoin) {
+        // GroupBy's array-join consumer (mirror of DecsJoin branch above). srcAName / srcBName are bound by adapter_wrap_invoke as invoke params; iteration uses plain `for` loops.
+        let aj & = unsafe(adapter as ArrayJoin)
+        let jhashName = qn("ajoin_jhash", at)
+        let arrName   = qn("ajoin_jarr", at)
+        let tupAName  = qn("ajoin_jta", at)
+        let tupBName  = qn("ajoin_jtb", at)
+        let resName   = aj.resBindName
+        var keyaBody   = peel_lambda_rename_var(aj.keyaLam, tupAName)
+        var keybBody   = peel_lambda_rename_var(aj.keybLam, tupBName)
+        var resultBody = peel_lambda_rename_2vars(aj.resultLam, tupAName, tupBName)
+        if (keyaBody == null || keybBody == null || resultBody == null) return null
+        return <- qmacro_block() {
+            var $i(jhashName) : table<$t(aj.keyType); array<$t(aj.tupBType)>>
+            for ($i(tupBName) in $i(aj.srcBName)) {
+                // nolint:PERF006 per-key bucket size unknown ahead of time
+                $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
+            }
+            for ($i(tupAName) in $i(aj.srcAName)) {
+                get($i(jhashName), $e(keyaBody), $(var $i(arrName) : array<$t(aj.tupBType)>) {
+                    for ($i(tupBName) in $i(arrName)) {
+                        let $i(resName) : $t(aj.resultType) = $e(resultBody)
+                        $e(body)
+                    }
+                })
+            }
+        }
+    }
     if (adapter is Zip) {
         let zip & = unsafe(adapter as Zip)
         let srcAName = zip.srcAName
@@ -1827,7 +1882,7 @@ def private adapter_wrap_source_loop(adapter : SourceAdapter; var body : Express
 }
 
 // Wrap stmts into the adapter's outer invoke. Array binds top as source-arg; Decs / DecsJoin are zero-arg invokes (state
-// hoisted); Zip is a 2-source invoke (force_at + force_generated + can_shadow on both arg flags). retType null = infer.
+// hoisted); Zip + ArrayJoin are 2-source invokes (force_at + force_generated + can_shadow on both arg flags). retType null = infer.
 // wrapIter wraps the emission with .to_sequence_move() — caller drives via ctx.expr_is_iterator on array-returning emits.
 [macro_function]
 def private adapter_wrap_invoke(adapter : SourceAdapter; var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
@@ -1844,6 +1899,30 @@ def private adapter_wrap_invoke(adapter : SourceAdapter; var stmts : array<Expre
             emission = qmacro(invoke($($i(srcAName) : $t(zip.srcAType), $i(srcBName) : $t(zip.srcBType)) {
                 $b(stmts)
             }, $e(zip.srcAExpr), $e(zip.srcBExpr)))
+        }
+        emission.force_at(at)
+        emission.force_generated(true)
+        let blk = (emission as ExprInvoke).arguments[0] as ExprMakeBlock
+        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+        (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
+        if (wrapIter) {
+            emission = qmacro($e(emission).to_sequence_move())
+            emission.force_generated(true)
+        }
+        return emission
+    }
+    if (adapter is ArrayJoin) {
+        let aj & = unsafe(adapter as ArrayJoin)
+        let srcAName = aj.srcAName
+        let srcBName = aj.srcBName
+        if (retType != null) {
+            emission = qmacro(invoke($($i(srcAName) : $t(aj.srcAType), $i(srcBName) : $t(aj.srcBType)) : $t(retType) {
+                $b(stmts)
+            }, $e(aj.srcAExpr), $e(aj.srcBExpr)))
+        } else {
+            emission = qmacro(invoke($($i(srcAName) : $t(aj.srcAType), $i(srcBName) : $t(aj.srcBType)) {
+                $b(stmts)
+            }, $e(aj.srcAExpr), $e(aj.srcBExpr)))
         }
         emission.force_at(at)
         emission.force_generated(true)
@@ -4126,8 +4205,8 @@ def private plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                                exprIsIterator : bool;
                                at : LineInfo;
                                var adapter : SourceAdapter) : Expression? {
-    // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join).
-    let prefix = (adapter is Array) ? "" : ((adapter is DecsJoin) ? "djoin_" : "decs_")
+    // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join / "ajoin_" array-join).
+    let prefix = (adapter is Array) ? "" : ((adapter is DecsJoin) ? "djoin_" : ((adapter is ArrayJoin) ? "ajoin_" : "decs_"))
     let tabName    = qn("{prefix}tab", at)
     let kName      = qn("{prefix}k", at)
     let ukName     = qn("{prefix}uk", at)
@@ -4549,7 +4628,45 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
     } else {
         var top = (ctx.src as Array)._0
         if (top._type == null) return null
-        adapter = SourceAdapter(Array = (top, qn("source", at)))
+        if (c.single |> key_exists("upstream_join")) {
+            // Array-side mirror of the DecsJoin branch above. srcA = chain top; srcB = join's second arg. Build ArrayJoin adapter; plan_group_by_core consumes it via adapter_wrap_source_loop's ArrayJoin branch.
+            var joinCall = c.single["upstream_join"]
+            var srcbSrc = joinCall.arguments[1]
+            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
+            if (!(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) return null
+            var keyaLam = joinCall.arguments[2]
+            var keybLam = joinCall.arguments[3]
+            var resultLam = joinCall.arguments[4]
+            if (keyaLam == null || keybLam == null || resultLam == null
+                    || keyaLam._type == null || resultLam._type == null
+                    || resultLam._type.firstType == null) return null
+            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+            if (!is_primitive_join_key_type(keyType)) return null
+            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            var tupAType = strip_const_ref(clone_type(top._type.firstType))
+            var tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
+            var topClone = clone_expression(top)
+            topClone.genFlags.alwaysSafe = true
+            var srcbClone = clone_expression(srcbSrc)
+            srcbClone.genFlags.alwaysSafe = true
+            adapter = SourceAdapter(ArrayJoin = ArrayJoinShape(
+                srcAExpr = topClone,
+                srcBExpr = srcbClone,
+                srcAName = qn("ajoin_srcA", at),
+                srcBName = qn("ajoin_srcB", at),
+                srcAType = invoke_src_param_type(top),
+                srcBType = invoke_src_param_type(srcbSrc),
+                tupAType = tupAType,
+                tupBType = tupBType,
+                keyaLam = keyaLam,
+                keybLam = keybLam,
+                resultLam = resultLam,
+                keyType = keyType,
+                resultType = resultType,
+                resBindName = qn("ajoin_jres", at)))
+        } else {
+            adapter = SourceAdapter(Array = (top, qn("source", at)))
+        }
     }
     return plan_group_by_core(headCalls, keyBlock, groupProjCall, havingCall, trailingWhereCall,
         terminatorName, orderName, orderKey, ctx.expr_is_iterator, at, adapter)
@@ -4558,11 +4675,12 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
 [_macro]
 def private register_group_by_rows {
     if (!is_compiling_macros_in_module("linq_fold")) return
-    // Array-source group_by: head segments + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
+    // Array-source group_by: head segments + opt upstream_join + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
     splice_patterns |> emplace <| SplicePattern(
         name = "group_by_array",
         chain <- [
             slot_chain_of(["where_", "select"], "head"),
+            Slot(matcher = m_literal("join"),          cardinality = c_opt(), capture_name = "upstream_join", arity = 5),
             Slot(matcher = m_literal("group_by_lazy"), cardinality = c_one(), capture_name = "gb", arity = 2),
             Slot(matcher = m_literal("having_"),       cardinality = c_opt(), capture_name = "having"),
             Slot(matcher = m_literal("select"),        cardinality = c_one(), capture_name = "groupproj"),
@@ -4570,7 +4688,7 @@ def private register_group_by_rows {
             Slot(matcher = m_alias("order_by_family"), cardinality = c_opt(), capture_name = "trailing_order", arity = 2),
             Slot(matcher = m_literal("count"),         cardinality = c_opt(), capture_name = "term", arity = 1)
         ],
-        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > no_order_with_count],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > array_join_invariants, @@ < RequiresPredicate > no_order_with_count],
         emit = @@ < EmitFn > emit_group_by
     )
     // Decs-source: same shape + optional upstream `join` slot; v1 join-shape limits via decs_join_invariants.
