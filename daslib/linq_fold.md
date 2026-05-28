@@ -31,6 +31,26 @@ Inventory: **19 of 22 leaf emit fns fit one of two clean shapes** — 11 Termina
 
 - [x] **PR F4.2** — Close decs-side post-take-where splice gap (Theme 2 5c on decs). The `benchmarks/sql/take_where_count` row exposed a 354× outlier: m4 = 35.4 ns/op vs m3f = 0.1 ns/op INTERP (10.4 vs 0.0 JIT). Root cause: `emit_loop_or_count_lane_decs` was explicitly cascading on `post_take_where` capture ("no decs lane fn yet"), so `take(N) |> _where(P) |> <term>` chains fell through to tier-2 unspliced `from_decs` (~3.5 ns/elem of iterator overhead × N). Array side has owned this shape since Theme 2 PR #2852 via `postTakeWhereCond` slot in `emit_accumulator_lane` / `emit_early_exit_lane` / the buffered tail path. Decs fix mirrors the array-side gate at a single chokepoint: new `postTakeWhereCond : Expression?` field on `DecsRangeInfo` populated in `emit_loop_or_count_lane_decs` (peeled against `chainInfo.finalBind`, simpler than array-side seenSelect split because `finalBind` already collapses to tupName / selected name / elided iter var), consumed in `emit_decs_terminator_lane` by wrapping `spec.perElement` BEFORE `wrap_inner_for_with_decs_ranges` — the gate lands AFTER takeC++ and BEFORE op-specific work, identical semantics to array. Because all 6 emit_decs_* paths (accumulator/early_exit/walk/to_array/min_max_by/element_at) route through the shared lane, the splice fires uniformly on every terminator with zero per-emit-fn signature change. 7 new decs tests under `test_linq_fold_theme2_trailing_where.das` cover count/sum/first/to_array lanes plus head-where+gate combo, select-before-take peel, and skip+post-take cross-shapes (1689 → 1703 tests/linq). Bench: take_where_count m4 35.4 → 0.1 ns/op INTERP (354× → 1×); other lanes within suite-ordering noise. Net **+19 LOC** in linq_fold.das (+22 / -3). Branch `bbatkin/linq-fold-decs-post-take-where`.
 
+## Phase G — class-based source adapters (file split prep)
+
+Match-side (Phase E) and emit-side (Phase F) are uniform. Phase G makes the **source side** open: replace the closed `variant SourceAdapter` with a class hierarchy so each data source (array, decs, future XML via dasPUGIXML) lives in its own file, and linq_fold keeps only the pattern-matching engine. Plan: `~/.claude/plans/streamed-jumping-puddle.md`.
+
+- [ ] **PR G1** — `variant SourceAdapter` → abstract `class SourceAdapter` + 5 subclasses (`ArrayAdapter` / `DecsAdapter` / `DecsJoinAdapter` / `ZipAdapter` / `ArrayJoinAdapter`). The 4 dispatch fns (`adapter_bind_name` / `adapter_element_type` / `adapter_wrap_source_loop` / `adapter_wrap_invoke`) → virtual methods; `EmitCtx.src : SourceAdapter?`. Source-branching emit-fn sites (`ctx.src is Array/Decs`) → virtual calls via a transitional `kind()` enum + getters. All in linq_fold.das (no file split yet). Behavior-identical (emitted AST unchanged); verified across ~550 linq/decs tests. Branch `bbatkin/linq-fold-adapter-extraction`.
+- [ ] **PR G2** — File split: `linq_fold_common.das` (decs-free abstract base + kernel + generic lane scaffolds), `linq_fold_array.das`, `linq_fold_decs.das`. Source files export pure row-builders; engine `linq_fold.das` calls them in explicit order from one `[_macro]`. The transitional `kind()`/getters from G1 are removed by relocating source-branching emit fns into subclass methods.
+- [ ] **PR G3** — Unify the decs parallel terminator scaffold onto the generic state+find lane via a `LoopDispatch` capability (promoted `DecsDispatch`) + `supports_direct_return` (array keeps direct-return fast path) + `count_shortcut` (array `length` / decs `Σ arch.size` / xml `null`). Benchmark refresh required.
+- [ ] **PR G4** (separate) — `linq_fold_xml.das` validates the interface (dasPUGIXML source; field access via `operator .` overloads).
+
+### Module layout & adapter contract
+
+The adapter is an abstract `class SourceAdapter` (`[macro_interface]`, so every method is macro-callable — no per-method `[macro_function]`). One subclass per data source carries that source's data as fields. The contract is four virtual methods:
+
+- `bind_name(at) : string` — per-element bind name.
+- `element_type() : TypeDeclPtr` — source element type.
+- `wrap_source_loop(var body; at) : Expression?` — emit the per-element iteration (array `for`, decs `for_each_archetype`, zip lockstep, joins hash+probe).
+- `wrap_invoke(var stmts; retType; wrapIter; at) : Expression?` — outer invoke binding sources as params.
+
+Emit fns hold a `SourceAdapter?` (via `EmitCtx.src` or an `adapter` local) and call these virtually. **daslang classes have no `is`/`as` downcast** (variant-only), so source-specific data is never pulled off a base pointer by downcasting — it goes through virtual methods. PR G1 keeps a transitional `kind() : AdapterKind` discriminator + `arrayTop()`/`arraySrcName()`/`decsBridge()`/`decsTupName()` getters (default null/"" on base, overridden per subclass) only so source-branching emit fns compile before G2 moves them into subclass methods.
+
 ## Goal
 
 Split `_fold` splice machinery into two layers:
