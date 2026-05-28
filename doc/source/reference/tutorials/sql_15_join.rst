@@ -90,6 +90,49 @@ Single-column and named-tuple projections both work. Per-source
 projections (``_select(...)`` on the right side) are rejected ---
 the join's ``into`` lambda is the only projection.
 
+Joining + grouping
+==================
+
+``_group_by`` / ``_having`` / ``_order_by`` after ``_join`` accept the
+join's ``into``-projection alias names as keys, not base-table fields.
+The translator resolves each alias through the join's projection
+registry and emits the underlying qualified column (``"t0"."brand"``,
+``"t1"."Id"``) in the GROUP BY / HAVING / ORDER BY clauses, so the
+SQL composes cleanly with the JOIN:
+
+.. code-block:: das
+
+    let groups <- _sql(db |> select_from(type<Car>)
+        |> _join(db |> select_from(type<Dealer>),
+                 $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                 $(c : Car, d : Dealer) => (Brand = c.brand, Price = c.price))
+        |> _group_by(_.Brand)
+        |> _select((Brand = _._0, N = _._1 |> count())))
+    // SELECT ("t0"."brand"), COUNT(*)
+    //   FROM "Cars" AS "t0" INNER JOIN "Dealers" AS "t1"
+    //     ON "t0"."dealer_id" = "t1"."id"
+    //   GROUP BY ("t0"."brand")
+
+Per-group aggregates over a projection alias resolve the same way ---
+``_._1 |> _select(_.Price) |> sum()`` becomes ``SUM("t0"."price")``,
+not the bare alias:
+
+.. code-block:: das
+
+    let totals <- _sql(db |> select_from(type<Car>)
+        |> _join(db |> select_from(type<Dealer>),
+                 $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                 $(c : Car, d : Dealer) => (Brand = c.brand, Price = c.price))
+        |> _group_by(_.Brand)
+        |> _select((Brand = _._0,
+                    Total = _._1 |> _select(_.Price) |> sum())))
+    // ... SUM("t0"."price") ... GROUP BY ("t0"."brand")
+
+``_order_by`` and computed-expression group keys (``_group_by(_.Price / 100)``)
+read aliases through the same registry. Aliases that don't appear in
+the join's ``into`` projection reject with a clear macro_error listing
+the valid alias names.
+
 What's not shipped
 ==================
 

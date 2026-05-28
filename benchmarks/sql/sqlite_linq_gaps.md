@@ -51,19 +51,24 @@ require them.
 
 ---
 
+## ~~`_group_by` after `_join`~~ — closed in PR #2910
+
+Originally catalogued 2 cells as blocked on resolving `_group_by` keys against
+the join's `into` projection. Closed in PR #2910 (chunk N+2) via a central
+`pred_to_sql` extension that consults a snapshot of the join's projection
+registry — single hook transitively enables alias resolution in `_group_by` /
+`_having` / `_order_by` / `try_translate_group_aggregate` / computed-expression
+keys.
+
+**Closed cells**:
+- `join_groupby_count` — `_join |> _group_by(_.Brand) |> _select((Brand=_._0, N=_._1|>count()))`.
+- `join_groupby_to_array` — `_join |> _group_by(_.Brand) |> _select((Brand=_._0, Total=_._1|>_select(_.Price)|>sum()))`.
+
+The fix surfaced one residual: HAVING with an alias-resolved aggregate in the
+`_sql(...)` runtime form hits a typer-ordering quirk; `_sql_text` emit is
+correct, runtime path deferred to chunk N+3.
+
 ## Other deferred lowerings (independent, each its own PR)
-
-### `_group_by` after `_join` — group key from joined projection
-
-Benches: [`join_groupby_count`](join_groupby_count.das),
-[`join_groupby_to_array`](join_groupby_to_array.das).
-
-`sqlite_linq`'s `_group_by` after `_join` doesn't lower today because the
-group key column comes from the join's `into` projection, not from a
-base-table column. The lowering would need to either emit the `JOIN` as a
-subquery and `GROUP BY` over the subquery's column, or surface the
-projection-column → SQL-fragment mapping into `_group_by`'s key-extractor
-logic. Originally TODO'd 2026-05-25.
 
 ### `COUNT(DISTINCT computed-expr)`
 

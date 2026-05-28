@@ -109,5 +109,38 @@ def main {
                                        $(u : User, o : Order) => u.Id == o.UserId,
                                        $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total)))
         to_log(LOG_INFO, "SQL: {sql}")
+
+        // ── Joining + grouping ──────────────────────────────────────────
+        // `_group_by(_.<alias>)` after `_join` reads the projection alias
+        // through the join's `into` registry and emits the qualified source
+        // column in GROUP BY. Aggregates over alias names (`_._1 |> _select(_.X)
+        // |> sum()`) resolve the same way.
+        let per_user <- _sql(db |> select_from(type<User>)
+                               |> _join(db |> select_from(type<Order>),
+                                        $(u : User, o : Order) => u.Id == o.UserId,
+                                        $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total))
+                               |> _group_by(_.UserName)
+                               |> _select((Name = _._0,
+                                           N = _._1 |> count(),
+                                           Spend = _._1 |> _select(_.OrderTotal) |> sum())))
+        to_log(LOG_INFO, "per-user totals ({length(per_user)} users):")
+        for (g in per_user) {
+            to_log(LOG_INFO, "  {g.Name}: {g.N} orders totalling {g.Spend}")
+        }
+        // Expected:
+        //   Alice: 2 orders totalling 350
+        //   Bob:   1 orders totalling 50
+
+        // The emitted SQL — GROUP BY uses the qualified source column,
+        // SUM wraps it too.
+        let per_user_sql = _sql_text(db |> select_from(type<User>)
+                                       |> _join(db |> select_from(type<Order>),
+                                                $(u : User, o : Order) => u.Id == o.UserId,
+                                                $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total))
+                                       |> _group_by(_.UserName)
+                                       |> _select((Name = _._0,
+                                                   N = _._1 |> count(),
+                                                   Spend = _._1 |> _select(_.OrderTotal) |> sum())))
+        to_log(LOG_INFO, "SQL: {per_user_sql}")
     }
 }
