@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-28 from PRs `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers) + follow-up `bbatkin/linq-fold-decs-reverse-take-select` (extend decs skip-into-tail to handle trailing `_select`). The first two close the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
+Generated 2026-05-28 from PRs `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers) + follow-up `bbatkin/linq-fold-decs-reverse-take-select` (extend decs skip-into-tail to handle trailing `_select`) + symmetric m3f follow-up `bbatkin/linq-fold-array-reverse-take-select` (extend array-side R6 backward-index walk to handle trailing `_select`). The first two close the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
 
 | Cell | m3f INTERP before / after | m3f JIT before / after |
 |---|---:|---:|
@@ -85,7 +85,7 @@ before the timer resolution can measure them — they should be read as
 | `order_take_desc` | 36.3 | 15.9 | 19.8 | 1.25× |
 | `reverse_distinct_by` | 284.8 | 21.3 | — | — |
 | `reverse_take` | 0.1 | 0.0 | 10.0 | — |
-| `reverse_take_select` | 0.0 | 33.4 | 9.2 | 0.28× |
+| `reverse_take_select` | 0.0 | 0.0 | 9.2 | — |
 | `select_count` | 0.1 | 0.0 | 2.2 | — |
 | `select_where` | 190.8 | 10.9 | 19.1 | 1.75× |
 | `select_where_count` | 31.4 | 5.1 | 7.3 | 1.43× |
@@ -162,7 +162,7 @@ before the timer resolution can measure them — they should be read as
 | `order_take_desc` | 36.5 | 0.7 | 1.3 | 1.86× |
 | `reverse_distinct_by` | 289.8 | 2.6 | — | — |
 | `reverse_take` | 0.0 | 0.0 | 1.1 | — |
-| `reverse_take_select` | 0.0 | 8.1 | 1.1 | 0.14× |
+| `reverse_take_select` | 0.0 | 0.0 | 1.1 | — |
 | `select_count` | 0.1 | 0.0 | 0.0 | — |
 | `select_where` | 105.0 | 4.1 | 5.3 | 1.29× |
 | `select_where_count` | 31.3 | 0.4 | 0.6 | 1.50× |
@@ -285,11 +285,22 @@ keep chasing them.
   a struct-aware hashing scheme).
 
 `reverse_take_select` USED to be on this list (m4 was +14 ns INTERP at
-the catch-all path). It is NOT a floor — closed by extending the decs
-skip-into-tail fast path to handle a trailing `_select` (was previously
-gated to bail out when termsel was present, forcing fall-through to the
-expensive full-buffer-then-reverse-then-resize-then-project path that
-did N push_clones with string clones for N=100K to keep just K=10).
+the catch-all path). It is NOT a floor — closed on the decs side by
+extending the decs skip-into-tail fast path to handle a trailing
+`_select` (was previously gated to bail out when termsel was present,
+forcing fall-through to the expensive full-buffer-then-reverse-then-
+resize-then-project path that did N push_clones with string clones for
+N=100K to keep just K=10). The symmetric m3f side was closed in the
+follow-up by extending the array-side R6 backward-index walk to accept
+a trailing `_select(F)` slot: K raw source elements push_clone into a
+srcElem-typed scratch buffer during the backward loop, then a post-loop
+`build_terminal_select_tail` projection pass fills a separate projElem-
+typed output buffer (K projection push_clones). Two-buffer/two-pass
+mirrors the decs sibling and R1-R4 catch-all discipline (all source
+reads complete before any projection runs — impure `_select` semantics
+match across the three paths). Both m3f and m4 are now sub-resolution
+per-op (the 2K push_clones for K=10 amortize over chunk_size=100K and
+round to 0.0 ns/op in INTERP and JIT).
 
 ## How to re-run
 
