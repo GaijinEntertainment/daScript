@@ -5,6 +5,7 @@ require math
 
 require daslib/linq
 require daslib/linq_boost
+require daslib/linq_fold
 
 require _common
 
@@ -608,4 +609,149 @@ def test_left_join_macro(t : T?) {
     }
 }
 
+// ── array-side _join splice (chunk N+2) — exercises emit_array_join via _fold(...) wraps ───────
 
+struct AJCar {
+    id : int
+    dealer_id : int
+    name : string
+    price : int
+}
+
+struct AJDealer {
+    id : int
+    name : string
+    brand : string
+}
+
+def aj_cars() : array<AJCar> {
+    return <- [
+        AJCar(id = 1, dealer_id = 10, name = "C1", price = 1000),
+        AJCar(id = 2, dealer_id = 10, name = "C2", price = 2000),
+        AJCar(id = 3, dealer_id = 20, name = "C3", price = 3000),
+        AJCar(id = 4, dealer_id = 30, name = "C4", price = 4000),
+        AJCar(id = 5, dealer_id = 99, name = "C5_orphan", price = 5000)
+    ]
+}
+
+def aj_dealers() : array<AJDealer> {
+    return <- [
+        AJDealer(id = 10, name = "D10", brand = "Acme"),
+        AJDealer(id = 20, name = "D20", brand = "Beta"),
+        AJDealer(id = 30, name = "D30", brand = "Acme")
+    ]
+}
+
+[test]
+def test_array_join_splice(t : T?) {
+    t |> run("_join + count — int key, 4 matches (orphan dropped)") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let n = _fold(cars |> _join(dealers,
+                                    $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                    $(c : AJCar, d : AJDealer) => (c.name, d.brand))
+                           |> count())
+        t |> equal(n, 4)
+    }
+    t |> run("_join + count(where) — runs predicate on each pair") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let n = _fold(cars |> _join(dealers,
+                                    $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                    $(c : AJCar, d : AJDealer) => (CarName = c.name, Brand = d.brand))
+                           |> _where(_.Brand == "Acme")
+                           |> count())
+        t |> equal(n, 3)
+    }
+    t |> run("_join + _select(_.X) — bare-select on array chain (no to_array)") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let rows <- _fold(cars |> _join(dealers,
+                                        $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                        $(c : AJCar, d : AJDealer) => (CarName = c.name, Brand = d.brand))
+                               |> _select(_.CarName))
+        t |> equal(length(rows), 4)
+        var has_c1 = false
+        for (r in rows) {
+            if (r == "C1") {
+                has_c1 = true
+            }
+        }
+        t |> success(has_c1)
+    }
+    t |> run("_join + _select(_.X) via iterator chain + to_array — projects single field") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let rows <- _fold(each(cars) |> _join(each(dealers),
+                                              $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                              $(c : AJCar, d : AJDealer) => (CarName = c.name, Brand = d.brand))
+                                     |> _select(_.CarName)
+                                     |> to_array())
+        t |> equal(length(rows), 4)
+    }
+
+    t |> run("_join + _where + to_array — filters pairs") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let rows <- _fold(cars |> _join(dealers,
+                                        $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                        $(c : AJCar, d : AJDealer) => (CarName = c.name, Brand = d.brand))
+                               |> _where(_.Brand == "Beta"))
+        t |> equal(length(rows), 1)
+        t |> equal(rows[0].CarName, "C3")
+        t |> equal(rows[0].Brand, "Beta")
+    }
+    t |> run("_join + named-tuple projection — round-trips both sides") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let rows <- _fold(cars |> _join(dealers,
+                                        $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                        $(c : AJCar, d : AJDealer) => (Price = c.price, Brand = d.brand)))
+        t |> equal(length(rows), 4)
+        var total = 0
+        for (r in rows) {
+            total += r.Price
+        }
+        t |> equal(total, 1000 + 2000 + 3000 + 4000)
+    }
+    t |> run("_join + count — string key") @(t : T?) {
+        let a <- [
+            (k = "x", v = 1),
+            (k = "y", v = 2),
+            (k = "z", v = 3)
+        ]
+        let b <- [
+            (k = "x", w = 10),
+            (k = "y", w = 20),
+            (k = "y", w = 21)
+        ]
+        let n = _fold(a |> _join(b,
+                                 $(l, r) => l.k == r.k,
+                                 $(l, r) => (l.v, r.w))
+                        |> count())
+        t |> equal(n, 3)
+    }
+    t |> run("_join — empty srcb yields 0 / empty array") @(t : T?) {
+        let cars <- aj_cars()
+        var empty_dealers : array<AJDealer>
+        let n = _fold(cars |> _join(empty_dealers,
+                                    $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                    $(c : AJCar, d : AJDealer) => (c.name, d.brand))
+                           |> count())
+        t |> equal(n, 0)
+        let rows <- _fold(cars |> _join(empty_dealers,
+                                        $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                        $(c : AJCar, d : AJDealer) => (CarName = c.name, Brand = d.brand)))
+        t |> equal(length(rows), 0)
+    }
+    t |> run("_join + count — many-to-one (multi-bucket fast path)") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        // Dealer 10 has 2 cars; dealer 20 has 1; dealer 30 has 1; orphan car has 0. Bucket count: 2+1+1+0 = 4. Fast path = no per-pair body, just `cnt += length(arr)`.
+        let n = _fold(cars |> _join(dealers,
+                                    $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                    $(c : AJCar, d : AJDealer) => (c.name, d.brand))
+                           |> count())
+        t |> equal(n, 4)
+    }
+}

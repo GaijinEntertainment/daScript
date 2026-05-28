@@ -370,6 +370,17 @@ def private decs_join_no_select_with_count(var c : Captures; var top : Expressio
     return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
 }
 
+// Array-side join splice guard: srcb must be an array/iterator type the splice can iterate via plain `for`.
+// Asymmetric "array `_join` decs-bridge" shape cascades to tier-2 — caller must rewrite explicitly.
+def private array_join_srcb_is_array(var c : Captures; var top : Expression?) : bool {
+    if (!(c.single |> key_exists("join"))) return true
+    let jc = c.single["join"]
+    if (jc == null || (jc.arguments |> length) < 2) return false
+    let srcb = jc.arguments[1]
+    if (srcb == null || srcb._type == null) return false
+    return srcb._type.isGoodArrayType || srcb._type.isArray || srcb._type.isIterator
+}
+
 // Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
 def private zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("zip"))) return true
@@ -6110,6 +6121,190 @@ def private emit_decs_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) :
         $b(allStmts)
     }))
     return finalize_decs_emission(emission, at, false)
+}
+
+// ── array join splice (chunk N+2 — array mirror of register_decs_join_rows) ───────
+
+[_macro]
+def private register_array_join_rows {
+    if (!is_compiling_macros_in_module("linq_fold")) return
+    splice_patterns |> emplace <| SplicePattern(
+        name = "array_join_general",
+        chain <- [
+            Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
+            Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
+            Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
+            Slot(matcher = m_literal("count"),   cardinality = c_opt(), capture_name = "term", arity = 1)
+        ],
+        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > decs_join_no_select_with_count, @@ < RequiresPredicate > array_join_srcb_is_array],
+        emit = @@ < EmitFn > emit_array_join
+    )
+}
+
+[macro_function]
+def private emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // Array mirror of emit_decs_join: hashed equi-join with collect+probe inline, preserving the count-no-where bucket-length fast path. Two sources bind as invoke parameters (mirrors Zip's 2-source wrap rather than the 1-source Array helper).
+    var joinCall = c.single["join"]
+    var whereLam : Expression?
+    if (c.single |> key_exists("trailing_where")) {
+        whereLam = joinCall != null && c.single["trailing_where"] != null ? c.single["trailing_where"].arguments[1] : null
+        if (whereLam == null) return null
+    }
+    var selectLam : Expression?
+    if (c.single |> key_exists("trailing_select")) {
+        var selCall = c.single["trailing_select"]
+        if (selCall == null || selCall._type == null || selCall._type.firstType == null) return null
+        selectLam = selCall.arguments[1]
+        if (selectLam == null) return null
+    }
+    let terminatorName = (c.single |> key_exists("term")) ? "count" : ""
+    if (terminatorName == "" && ctx.expr_is_iterator) return null
+    var topSrc = (ctx.src as Array)._0
+    if (topSrc == null || topSrc._type == null || topSrc._type.firstType == null) return null
+    var srcbSrc = joinCall.arguments[1]
+    if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
+    var keyaLam = joinCall.arguments[2]
+    var keybLam = joinCall.arguments[3]
+    if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
+    let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+    if (!is_primitive_join_key_type(keyType)) return null
+    let srcAName  = qn("ajoin_srcA", at)
+    let srcBName  = qn("ajoin_srcB", at)
+    let tupAName  = qn("ajoin_tup_a", at)
+    let tupBName  = qn("ajoin_tup_b", at)
+    let hashName  = qn("ajoin_hash", at)
+    let cntName   = qn("ajoin_cnt", at)
+    let bufName   = qn("ajoin_buf", at)
+    let bElemName = qn("ajoin_b", at)
+    let arrName   = qn("ajoin_arr", at)
+    var keyaBody = peel_lambda_rename_var(keyaLam, tupAName)
+    var keybBody = peel_lambda_rename_var(keybLam, tupBName)
+    if (keyaBody == null || keybBody == null) return null
+    let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
+    var probeStmts : array<Expression?>
+    var preludeStmts : array<Expression?>
+    var returnStmt : Expression?
+    var invokeRetType : TypeDeclPtr
+    if (terminatorName == "count") {
+        invokeRetType = new TypeDecl(baseType = Type.tInt, at = at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(cntName) : int = 0
+        }
+        if (whereLam == null) {
+            // Fast path: bucket-length sum at bucket granularity, never enters per-pair loop.
+            probeStmts |> push <| qmacro_expr() {
+                $i(cntName) += length($i(arrName))
+            }
+        } else {
+            var resultLam = joinCall.arguments[4]
+            if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
+            var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
+            if (resultBody == null) return null
+            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            let resBindName = qn("ajoin_res", at)
+            var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
+            probeStmts |> push <| qmacro_expr() {
+                for ($i(bElemName) in $i(arrName)) {
+                    let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                    if ($e(wherePred)) {
+                        $i(cntName) += 1
+                    }
+                }
+            }
+        }
+        returnStmt = qmacro_expr() {
+            return $i(cntName)
+        }
+    } else {
+        var resultLam = joinCall.arguments[4]
+        if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
+        var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
+        if (resultBody == null) return null
+        var resultType : TypeDeclPtr
+        if (selectLam != null) {
+            // selCall._type.firstType is `typedecl(result_selector(type<TT>))` and may stay unresolved when the chain doesn't end with `to_array()` (array-overload select returns array directly, so no enclosing wrap forces resolution). Extract from the select lambda's body type instead — always resolved post inner-first expansion.
+            var selBody = peel_lambda_single_return(selectLam)
+            if (selBody == null || selBody._type == null) return null
+            resultType = strip_const_ref(clone_type(selBody._type))
+        } else {
+            resultType = clone_type(resultLam._type.firstType)
+        }
+        if (resultType == null) return null
+        invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(resultType)>
+        }
+        let needBind = selectLam != null || whereLam != null
+        if (needBind) {
+            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            let resBindName = qn("ajoin_res", at)
+            var pushExpr : Expression?
+            if (selectLam != null) {
+                var projBody = peel_lambda_replace_var(selectLam, qmacro($i(resBindName)))
+                pushExpr = qmacro($i(bufName) |> push_clone($e(projBody)))
+            } else {
+                pushExpr = qmacro($i(bufName) |> push_clone($i(resBindName)))
+            }
+            if (whereLam != null) {
+                var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
+                probeStmts |> push <| qmacro_expr() {
+                    for ($i(bElemName) in $i(arrName)) {
+                        let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                        if ($e(wherePred)) {
+                            $e(pushExpr)
+                        }
+                    }
+                }
+            } else {
+                probeStmts |> push <| qmacro_expr() {
+                    for ($i(bElemName) in $i(arrName)) {
+                        let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                        $e(pushExpr)
+                    }
+                }
+            }
+        } else {
+            probeStmts |> push <| qmacro_expr() {
+                for ($i(bElemName) in $i(arrName)) {
+                    $i(bufName) |> push_clone($e(resultBody))
+                }
+            }
+        }
+        returnStmt = qmacro_expr() {
+            return <- $i(bufName)
+        }
+    }
+    var allStmts : array<Expression?>
+    allStmts |> push_from(preludeStmts)
+    allStmts |> push <| qmacro_expr() {
+        var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+    }
+    allStmts |> push <| qmacro_expr() {
+        for ($i(tupBName) in $i(srcBName)) {
+            // nolint:PERF006 per-key bucket size unknown ahead of time
+            $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
+        }
+    }
+    allStmts |> push <| qmacro_expr() {
+        for ($i(tupAName) in $i(srcAName)) {
+            get($i(hashName), $e(keyaBody), $(var $i(arrName) : array<$t(tupBType)>) {
+                $b(probeStmts)
+            })
+        }
+    }
+    allStmts |> push(returnStmt)
+    var topClone = clone_expression(topSrc)
+    topClone.genFlags.alwaysSafe = true
+    var srcbClone = clone_expression(srcbSrc)
+    srcbClone.genFlags.alwaysSafe = true
+    let srcAParamType = invoke_src_param_type(topSrc)
+    let srcBParamType = invoke_src_param_type(srcbSrc)
+    var emission = qmacro(invoke(
+        $($i(srcAName) : $t(srcAParamType), $i(srcBName) : $t(srcBParamType)) : $t(invokeRetType) {
+            $b(allStmts)
+        },
+        $e(topClone), $e(srcbClone)))
+    return finalize_invoke(emission, at)
 }
 
 [_macro]
