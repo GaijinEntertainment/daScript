@@ -51,10 +51,10 @@ require them.
 
 ---
 
-## ~~`_group_by` after `_join`~~ — closed in PR #2911
+## ~~`_group_by` after `_join`~~ — closed in PR #2910
 
 Originally catalogued 2 cells as blocked on resolving `_group_by` keys against
-the join's `into` projection. Closed in PR #2911 (chunk N+2) via a central
+the join's `into` projection. Closed in PR #2910 (chunk N+2) via a central
 `pred_to_sql` extension that consults a snapshot of the join's projection
 registry — single hook transitively enables alias resolution in `_group_by` /
 `_having` / `_order_by` / `try_translate_group_aggregate` / computed-expression
