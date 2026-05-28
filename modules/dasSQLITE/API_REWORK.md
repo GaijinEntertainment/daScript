@@ -5570,6 +5570,46 @@ All 4 m1 lanes backfilled in `benchmarks/sql/{distinct_by_order_take,distinct_by
 - **Pre-distinct phase-divert composition** (Copilot R1 #2909). Chains like `take(N) |> _distinct_by(K)` or `skip(N) |> _distinct_by(K)` trigger `divert_to_inner` BEFORE `_distinct_by` peels — `q.innerSql`/`q.innerBindExprs` get populated by the take's inner subquery, and chunk N+1's passthrough finalize would overwrite the inner SQL while orphaning the take's bind. Currently rejected with a clear macro_error pointing the user to restructure as `_distinct_by(K) |> take(N)` (cap-after-distinct semantics). A future composition would 2-level wrap: `SELECT … FROM (SELECT *, MIN(pk) FROM ({prior_innerSql}) GROUP BY K) AS t0` to preserve cap-before-distinct semantics — needs design + tests for arbitrary phase-divert combinations.
 - **Whole-row projection as inner subquery** (Copilot R1 #2909). `_group_by(K) |> _select((K=_._0, R=_._1 |> first())) |> _where(P) |> to_array` triggers `divert_to_inner` (PHASE_WHERE forces a SELECT divert), which would wrap the grouped+first projection as inner. The row entry expands to N source columns without `AS <alias>` under `force_aliases=true`, and `apply_passthrough_projection` expects 1 column per record name. Currently rejected with a clear macro_error pointing the user to restructure (run the wrap-triggering op before `_group_by`, or split into separate `_sql` calls). Resolution options: (a) emit deterministic per-field aliases (`"col1" AS "<RecordName>_col1"`) under `force_aliases` and teach `apply_passthrough_projection` to reconstruct the row entry from those, or (b) keep the rejection and document the constraint. Same PR could lift the v1 single-key-only constraint on `first()` projections.
 
+## Shipped — chunk N+2: `_group_by` / `_having` / `_order_by` after `_join` via projection-alias resolution (branch `bbatkin/sqlite-linq-join-groupby-alias`)
+
+### Surface in this PR
+
+Closes 2 SQL bench cells from [`benchmarks/sql/sqlite_linq_gaps.md`](../../benchmarks/sql/sqlite_linq_gaps.md)'s "`_group_by` after `_join`" section. After this PR, every chain operator that references a column reads the join's `into`-projection alias through a single registry — fields named in the `into` lambda's named tuple (`(Brand = c.brand, Price = c.price)`) become first-class names for subsequent `_group_by` / `_having` / `_order_by` / aggregate / computed-key operations:
+
+- `_join(...) |> _group_by(_.Brand) |> _select((Brand=_._0, N=_._1|>count()))` lowers to `SELECT ("t0"."brand"), COUNT(*) FROM "Cars" AS "t0" INNER JOIN ... GROUP BY ("t0"."brand")`.
+- `_join(...) |> _group_by(_.Brand) |> _select((Brand=_._0, Total=_._1|>_select(_.Price)|>sum()))` lowers to `... SUM("t0"."price") ... GROUP BY ("t0"."brand")`.
+- `_join(...) |> _having(_._1 |> _select(_.Price) |> sum() > 200) |> _select(...)` resolves the alias inside HAVING.
+- `_join(...) |> _order_by(_.Brand)` resolves the alias inside ORDER BY.
+- `_join(...) |> _group_by(_.Price / 100) |> _select(...)` resolves the alias inside a computed group key.
+
+### Architecture
+
+Single load-bearing change: `pred_to_sql`'s column-reference branch consults a new `joinProjRecordNames` snapshot of the join's `into` projection (captured at the end of `process_join_call`, preserved across `analyze_grouped_projection`'s clear-and-repopulate of `projRecordNames`). New helpers `find_projection_alias(q, name)` and `render_projection_alias_sql(q, idx)` resolve aliases to qualified SQL fragments. Bare-`_.Field` fast paths in `push_group_key`, `collect_order_keys`, and `try_translate_group_aggregate` mirror the same lookup so they don't bypass `pred_to_sql`. v1 supports `t0` / `t1` aliases (the 2-source `_join` shape); other aliases (multi-source / nested joins) reject loudly.
+
+### Constraints (v1)
+
+- 2-source `_join` only (carries forward from chunks N / N+1).
+- The join's `into` lambda's named-tuple aliases are the field namespace post-join — base-table column names ARE NOT available unqualified. Users referring to base-table fields by name post-join get a `not a projection alias` error listing the valid alias names.
+- HAVING with alias-resolved aggregate (`_._1 |> _select(_.X) |> sum() > N`) has a known typer-ordering quirk: in compilation units with multiple `_sql` calls referencing the same chain shape, the typer pre-folds the predicate's aggregate side and the runtime `_sql` form fails to bind `_` for the row builder. The SQL emit itself is correct (verified via `_sql_text`), so chains that don't need to materialize the predicate body at runtime work. Investigating in chunk N+3.
+
+### Tests
+
+`tests/dasSQLITE/test_33_join_groupby.das` — 12 new tests covering Arm B (4: emit + runtime × 2 chain shapes), Arm C (4: emit + runtime + min/max/avg + multi-aggregate), and transitive coverage via HAVING / ORDER BY / computed-key (4: emit-shape + runtime mix). 3 new `failed_*.das` rejection probes:
+- `failed_join_groupby_unknown_alias.das` — `_group_by(_.NotAnAlias)` after join rejects with alias list
+- `failed_join_groupby_aggregate_unknown_alias.das` — `_._1 |> _select(_.NotAField) |> sum()` rejects similarly
+- `failed_join_order_by_unknown_alias.das` — `_order_by(_.NotAnAlias)` after join rejects similarly
+
+### Benches
+
+Both `benchmarks/sql/join_groupby_count.das` and `benchmarks/sql/join_groupby_to_array.das` got `run_m1` lanes. INTERP m1 beats array-fold m3f baselines (158 vs 184 ns/op for count; 191 vs 216 for to_array). `benchmarks/sql/results.md` refreshed. `sqlite_linq_gaps.md` "`_group_by` after `_join`" section struck.
+
+### Deferred to chunk N+3
+
+- **HAVING with alias-resolved aggregate in `_sql(...)` runtime form** — typer-ordering quirk noted above. `_sql_text(...)` emit is correct; only the row-binder in `_sql(...)` is affected. Workaround for now: split the chain into a separate `_sql_text` probe for verification, or restructure to use bare `count()` predicates.
+- Nested / multi-way joins (`_join |> _join |> ...`) — chunks N / N+1 already constrain to 2-source; `render_projection_alias_sql` rejects aliases beyond `t0`/`t1`. A future extension would generalize `source_rootType_for_alias` over an N-source join chain.
+- HAVING / ORDER BY / computed-key composition with `_distinct_by` (orthogonal to this chunk's _join surface; deferred from N+1's "where-then-distinct" follow-up).
+- Real window functions — still no bench needs them.
+
 ## Plan (to be written after all tutorials are reviewed)
 
 _TBD — this section is filled in once we have notes from every tutorial._
