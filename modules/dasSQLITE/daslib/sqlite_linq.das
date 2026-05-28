@@ -1586,6 +1586,28 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(distinctSource, q, prog, at)
         }
     }
+    // nolint:STYLE015 Stage op: `reverse()` upstream of `_distinct_by(K)` flips the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order. Only valid when wrapped by `_distinct_by` (SQL has no inherent row ordering to reverse; bare `reverse()` makes no sense without an ORDER BY).
+    {
+        var rCall = match_call_in_linq(node, "reverse")
+        if (rCall != null) {
+            let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
+            if (dr != 0) return dr > 0
+            if (empty(q.distinctByCol)) {
+                macro_error(prog, at, "_sql: `reverse()` requires an immediately-outer `_distinct_by(_.K)` — SQL has no inherent row ordering to reverse; use `_order_by_descending(...)` for sort reversal, or `reverse() |> _distinct_by(_.K)` for last-per-K semantics")
+                return false
+            }
+            if (q.distinctByLast) {
+                macro_error(prog, at, "_sql: duplicate `reverse()` in chain — double-reverse is a no-op; remove both")
+                return false
+            }
+            if (rCall.arguments |> length != 1) {
+                macro_error(prog, at, "_sql: reverse() takes no explicit arguments (chain form: `|> reverse()`)")
+                return false
+            }
+            q.distinctByLast = true
+            return analyze_chain(rCall.arguments[0], q, prog, at)
+        }
+    }
     // Peel take(prev, n) — sets LIMIT n; bind emitted after WHERE so placeholder index lines up.
     {
         var tCall = match_call_in_linq(node, "take")

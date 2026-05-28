@@ -273,3 +273,48 @@ def test_distinct_by_skip_emits_outer_offset(t : T?) {
         "SELECT \"Id\", \"Name\", \"Price\" FROM (SELECT *, MIN(\"Id\") FROM \"Cars\" GROUP BY \"Name\") AS \"t0\" ORDER BY \"Price\" ASC LIMIT -1 OFFSET ?",
         "_distinct_by(K) |> _order_by(S) |> skip(N) emits outer OFFSET (LIMIT -1 OFFSET ? when no take)")
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// `reverse() |> _distinct_by(K)` — MAX(pk) variant of the bare-aggregate
+// wrap, picks the LAST row per K by source/PK order (mirrors linq's
+// `each(arr).reverse()._distinct_by(K)` "last per group" splice).
+// ──────────────────────────────────────────────────────────────────────────
+
+[test]
+def test_reverse_distinct_by_emits_max_pk(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> reverse() |> _distinct_by(_.Name))
+    t |> equal(sql,
+        "SELECT \"Id\", \"Name\", \"Price\" FROM (SELECT *, MAX(\"Id\") FROM \"Cars\" GROUP BY \"Name\") AS \"t0\"",
+        "reverse() |> _distinct_by(K) emits MAX(pk) in the inner subquery")
+}
+
+[test]
+def test_reverse_distinct_by_returns_last_row_per_K(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture_with_dupes(db)
+        // Fixture: BMW×2 (Ids 1,3), Audi×2 (Ids 2,5), Tesla×1 (Id 4).
+        // LAST-per-Name by PK: Id 3 (BMW), Id 5 (Audi, 200), Id 4 (Tesla).
+        let rows <- _sql(db |> select_from(type<Car>) |> reverse() |> _distinct_by(_.Name))
+        t |> equal(length(rows), 3, "3 distinct Names → 3 rows")
+        var ids : table<int>
+        for (r in rows) {
+            ids |> insert(r.Id)
+        }
+        t |> equal(key_exists(ids, 3), true, "last BMW (Id=3) survives")
+        t |> equal(key_exists(ids, 5), true, "last Audi (Id=5) survives")
+        t |> equal(key_exists(ids, 4), true, "Tesla (Id=4) survives")
+    }
+}
+
+[test]
+def test_reverse_distinct_by_composes_with_order_by(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>)
+                          |> reverse()
+                          |> _distinct_by(_.Name)
+                          |> _order_by(_.Price))
+    t |> equal(sql,
+        "SELECT \"Id\", \"Name\", \"Price\" FROM (SELECT *, MAX(\"Id\") FROM \"Cars\" GROUP BY \"Name\") AS \"t0\" ORDER BY \"Price\" ASC",
+        "MAX(pk) composes with outer ORDER BY same as MIN(pk)")
+}
