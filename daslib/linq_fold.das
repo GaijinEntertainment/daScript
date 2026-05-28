@@ -4632,8 +4632,8 @@ def private emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : 
             // Array-side mirror of the DecsJoin branch above. srcA = chain top; srcB = join's second arg. Build ArrayJoin adapter; plan_group_by_core consumes it via adapter_wrap_source_loop's ArrayJoin branch.
             var joinCall = c.single["upstream_join"]
             var srcbSrc = joinCall.arguments[1]
-            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
-            if (!(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) return null
+            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null
+                    || !(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) return null
             var keyaLam = joinCall.arguments[2]
             var keybLam = joinCall.arguments[3]
             var resultLam = joinCall.arguments[4]
