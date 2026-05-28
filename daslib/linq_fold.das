@@ -3166,8 +3166,9 @@ def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : Emi
 }
 
 // Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
+// `terminalSelectElemType` must be the typer-resolved element type of the termsel call result (caller reads it from `c.single["termsel"]._type.firstType`) — peel_lambda_rename_var's invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so deriving projType from the peeled body would mis-classify those as untyped and bail. Caller is responsible for ensuring termselElemType is non-null before this fast-path is selected; otherwise the gate falls through to the catch-all which has its own termsel handling.
 [macro_function]
-def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; at : LineInfo) : Expression? {
+def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {
     let bufName = qn("buf", at)
     let takeNName = qn("take_n", at)
     let totalName = qn("decs_total", at)
@@ -3184,8 +3185,8 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
     var projType : TypeDeclPtr
     if (terminalSelectLam != null) {
         projBody = peel_lambda_rename_var(terminalSelectLam, projElemName)
-        if (projBody == null || projBody._type == null) return null
-        projType = strip_const_ref(clone_type(projBody._type))
+        if (projBody == null) return null
+        projType = strip_const_ref(clone_type(terminalSelectElemType))
         if (projType == null) return null
     }
     var innerBody : Expression? = qmacro_block() {
@@ -3284,12 +3285,20 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         projection = peel_lambda_rename_var(c.single["preproj"].arguments[1], bindName)
     }
     var terminalSelectLam_check : Expression?
+    var terminalSelectElemType_check : TypeDeclPtr
+    var termsel_fast_path_ok = true
     if (c.single |> key_exists("termsel")) {
         terminalSelectLam_check = c.single["termsel"].arguments[1]
+        // Fast path needs termsel's typer-resolved element type (see helper docstring). If missing, fall through to the catch-all which has its own termsel handling.
+        if (terminalSelectLam_check == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) {
+            termsel_fast_path_ok = false
+        } else {
+            terminalSelectElemType_check = c.single["termsel"]._type.firstType
+        }
     }
-    // Decs skip-into-tail fast path for `reverse |> take(N) [|> _select(F)] |> to_array` (no where, no pre-reverse select) — preserves PR #2834's 5.2× perf gain and extends to the trailing-select case so the catch-all (which walks ALL N entities, push_clones full tuples, reverses, resizes, then projects) is reserved for shapes that genuinely need it (pre-reverse where_/select).
-    if (ctx.src is Decs && (c.single |> key_exists("take")) && whereCond == null && projection == null)
-        return emit_decs_reverse_skip_into_tail(c.single["take"].arguments[1], (ctx.src as Decs)._0, (ctx.src as Decs)._1, ctx.expr_is_iterator, terminalSelectLam_check, at)
+    // Decs skip-into-tail fast path for `reverse |> take(N) [|> _select(F)] |> to_array` (no where, no pre-reverse select) — preserves PR #2834's 5.2× perf gain and extends to the trailing-select case so the catch-all (which walks ALL N entities, push_clones full tuples, reverses, resizes, then projects) is reserved for shapes that genuinely need it (pre-reverse where_/select, or termsel without a resolved element type).
+    if (ctx.src is Decs && (c.single |> key_exists("take")) && whereCond == null && projection == null && termsel_fast_path_ok)
+        return emit_decs_reverse_skip_into_tail(c.single["take"].arguments[1], (ctx.src as Decs)._0, (ctx.src as Decs)._1, ctx.expr_is_iterator, terminalSelectLam_check, terminalSelectElemType_check, at)
     var takeExpr : Expression?
     if (c.single |> key_exists("take")) {
         takeExpr = clone_expression(c.single["take"].arguments[1])
