@@ -754,7 +754,7 @@ namespace das
         // Copies ExprConst's own fields (value + per-constant flags) on top of Expression::clone.
         // Concrete ExprConst subclasses must route through here, not Expression::clone directly,
         // or per-constant metadata (foldedNonConst, promotedFromInt, inexactFloatPromotion) is lost.
-        ExpressionPtr clone ( ExpressionPtr expr ) const;
+        ExpressionPtr clone ( ExpressionPtr expr ) const override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
         bool    foldedNonConst = false;
