@@ -1012,6 +1012,58 @@ semantics while still letting ``apply_template`` produce N clones.
 ``clone_type`` call sites typically feed direct AST construction, not qmacro
 splices).
 
+PERF025 — redundant ``string(...)`` inside string interpolation
+================================================================
+
+String interpolation already converts every element to a string via the
+string builder's ``DebugDataWalker``. Wrapping an element in ``string(...)``
+allocates an intermediate string that the builder then copies — a wasted heap
+allocation per interpolation.
+
+.. code-block:: das
+
+    // Bad
+    def f(iv : int) : string {
+        return "{string(iv)}"                   // PERF025
+    }
+
+    // Good
+    def f(iv : int) : string {
+        return "{iv}"
+    }
+
+The rule fires only for **stringify-equivalent** value types — those where
+``"{x}"`` and ``string(x)`` produce identical text: the signed integer widths
+(``int`` / ``int8`` / ``int16`` / ``int64``), ``float``, ``double``,
+``string``, and ``das_string`` (e.g. ``"{string(fn.name)}"`` where ``fn.name``
+is a ``das_string``).
+
+Unsigned integers (``uint`` / ``uint8`` / ``uint16`` / ``uint64``) still warn,
+but with an extra note: they interpolate as **hex** by default
+(``"{42u}"`` → ``0x2a``), so dropping the cast changes the output. Use the
+``:d`` format tag to keep decimal:
+
+.. code-block:: das
+
+    // Bad — string() gives decimal "42"
+    return "{string(uv)}"                       // PERF025 + ':d' hint
+
+    // Good — same decimal output, no intermediate allocation
+    return "{uv:d}"
+
+The rule deliberately does NOT fire when dropping ``string(...)`` would change
+the **value shape**, not just the numeric format:
+
+- ``string(array<uint8>)`` reinterprets the bytes as text, whereas ``"{bytes}"``
+  prints the array structure.
+- ``string(uri)`` / ``string(text_range)`` likewise produce a different
+  representation than direct interpolation.
+
+It also does NOT fire when ``string(...)`` is nested as an argument to another
+call inside the braces (e.g. ``"{length(string(x))}"``) — only direct
+interpolation elements are flagged — nor for an explicit hex request
+``string(x, true)``.
+
 .. _style_lint:
 
 -----------

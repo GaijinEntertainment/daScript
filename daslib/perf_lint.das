@@ -36,6 +36,8 @@ module perf_lint shared private
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
 //!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
 //!   PERF023 — var X = clone_expression(E); ... $e(X) ... — qmacro splice already clones; drop the pre-clone
+//!   PERF024 — var X = clone_*(E); func(X) where func is [clone(...)]-annotated — callee clones; drop the pre-clone
+//!   PERF025 — string(...) inside string interpolation is redundant — interpolation already converts to string
 
 require daslib/ast_boost
 require strings
@@ -111,6 +113,14 @@ struct Perf023Candidate {
     @do_not_delete v : Variable?
     safe_uses : int
     disqualified : bool
+}
+
+enum private Perf025Kind {
+    // How a string()-cast value inside interpolation compares to direct
+    // interpolation, deciding whether/how PERF025 fires.
+    skip            // not flaggable: value-shape change, or not a string() cast
+    equivalent      // "{x}" == string(x): drop the cast
+    unsigned_hex    // "{x}" is hex but string(x) is decimal: drop + ':d' hint
 }
 
 class PerfLintVisitor : AstVisitor {
@@ -562,6 +572,60 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
+    }
+
+    // --- PERF025: redundant string(...) inside string interpolation helpers ---
+
+    def perf025_value_kind(arg : Expression const?) : Perf025Kind {
+        //! Classifies a string() cast's value argument by how `"{x}"` (the string
+        //! builder's own conversion) compares to `string(x)`:
+        //!   equivalent   — identical output (drop the cast): signed ints, float,
+        //!                  double, string, das_string.
+        //!   unsigned_hex — decimal vs hex difference (drop, but suggest the ':d'
+        //!                  tag): the four unsigned int widths interpolate as hex.
+        //!   skip         — not flaggable: value-shape-changing conversions
+        //!                  (array<uint8>, uri, text_range, other handled types)
+        //!                  and anything else.
+        if (arg == null || arg._type == null || !empty(arg._type.dim)) return Perf025Kind.skip
+        let bt = arg._type.baseType
+        if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
+            || bt == Type.tFloat || bt == Type.tDouble || bt == Type.tString
+            || (bt == Type.tHandle && arg._type.annotation != null
+                && arg._type.annotation.name == "das_string")) return Perf025Kind.equivalent
+        if (bt == Type.tUInt || bt == Type.tUInt8 || bt == Type.tUInt16 || bt == Type.tUInt64) return Perf025Kind.unsigned_hex
+        return Perf025Kind.skip
+    }
+
+    def perf025_string_call_value(e : Expression const?) : Expression const? {
+        //! If `e` is a `string(value)` cast call, return its value argument
+        //! (arguments[0]). Skips an explicit `string(x, true)` hex request — the
+        //! second argument being a literal `true` means the user wants hex, which
+        //! no longer matches plain interpolation for signed types. The float /
+        //! double / string / das_string overloads have no hex param, so their
+        //! arguments[1] (a FakeContext) is not an ExprConstBool and passes through.
+        if (e == null || !(e is ExprCall)) return null
+        let c = e as ExprCall
+        if (c.func == null || empty(c.arguments)) return null
+        let fname = string(c.func.fromGeneric != null ? c.func.fromGeneric.name : c.func.name)
+        if (fname != "string") return null
+        if (length(c.arguments) >= 2) {
+            let a1 = c.arguments[1]
+            if (a1 != null && a1 is ExprConstBool && (a1 as ExprConstBool).value) return null
+        }
+        return c.arguments[0]
+    }
+
+    def perf025_unwrap_element(elem : Expression const?) : Expression const? {
+        //! Peels one ExprRef2Value off an interpolation element so a `string(...)`
+        //! call read through a value-context wrapper is still exposed. A format
+        //! spec (`"{x:fmt}"`) lowers to `_::fmt(":fmt", x)`, but `fmt` has no
+        //! string-valued overload, so `string(x)` can never sit under a fmt
+        //! wrapper (it would not compile) — no fmt unwrap is needed.
+        var ex = elem
+        if (ex != null && ex is ExprRef2Value) {
+            ex = (ex as ExprRef2Value.subexpr)
+        }
+        return ex
     }
 
     // --- function tracking ---
@@ -1640,7 +1704,7 @@ class PerfLintVisitor : AstVisitor {
         // Arm A: inner is itself a clone_* call → redundant.
         if (is_clone_init_call(inner)) {
             perf_warning(
-                "PERF024: argument to function annotated [clone({string(expr.func.arguments[arg_index].name)})] is wrapped in clone_*; the callee clones internally, drop the outer clone wrap",
+                "PERF024: argument to function annotated [clone({expr.func.arguments[arg_index].name})] is wrapped in clone_*; the callee clones internally, drop the outer clone wrap",
                 arg.at)
             return
         }
@@ -1794,6 +1858,20 @@ class PerfLintVisitor : AstVisitor {
             in_string_builder_check--
         }
         return <- expr
+    }
+
+    // --- PERF025: redundant string(...) inside string interpolation ---
+
+    def override preVisitExprStringBuilderElement(sb : ExprStringBuilder?; elem : ExpressionPtr; last : bool) {
+        let inner = perf025_unwrap_element(elem)
+        let value = perf025_string_call_value(inner)
+        return if (value == null)
+        let kind = perf025_value_kind(value)
+        if (kind == Perf025Kind.equivalent) {
+            perf_warning("PERF025: string(...) inside string interpolation is redundant — the interpolation already converts to string; drop the cast", inner.at)
+        } elif (kind == Perf025Kind.unsigned_hex) {
+            perf_warning("PERF025: string(...) inside string interpolation is redundant; drop the cast — unsigned values interpolate as hex by default, so use the '\{x:d\}' format tag to keep decimal output", inner.at)
+        }
     }
 
     // --- Central ExprVar handler (PERF002, PERF004, PERF005) ---
