@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-28 from PR `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter). Closes the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
+Generated 2026-05-28 from PR `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers). Closes the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
 
 | Cell | m3f INTERP before / after | m3f JIT before / after |
 |---|---:|---:|
@@ -8,7 +8,7 @@ Generated 2026-05-28 from PR `bbatkin/linq-fold-array-join-splice` (chunk N+3 �
 | `join_select` | 148.1 → **72.0** | 41.6 → **19.7** |
 | `join_where_count` | 148.5 → **60.1** | 41.2 → **20.4** |
 | `join_groupby_count` | 186.2 → **78.3** | 47.2 → **19.4** |
-| `join_groupby_to_array` | 217.8 → **88.1** | 55.5 → **19.5** |
+| `join_groupby_to_array` | 217.8 → **78.1** | 55.5 → **19.5** |
 
 Drift across the rest of the matrix is at measurement floor (±5% INTERP, ±10% JIT). The splice is gated on `array_source` + primitive equi-key + (for cross-arm) `upstream_join` capture, so non-join chains aren't touched.
 Fixture size: n = 100 000 (cars), 100 dealers, 5 brands. Each row is
@@ -73,7 +73,7 @@ before the timer resolution can measure them — they should be read as
 | `indexed_lookup` | 1453.2 | 202198.9 | 470.2 | 0.00× |
 | `join_count` | 36.8 | 51.0 | 63.6 | 1.25× |
 | `join_groupby_count` | 153.9 | 78.3 | 90.1 | 1.15× |
-| `join_groupby_to_array` | 186.0 | 88.1 | 91.4 | 1.04× |
+| `join_groupby_to_array` | 186.0 | 78.1 | 91.4 | 1.17× |
 | `join_select` | — | 72.0 | 83.8 | 1.16× |
 | `join_where_count` | 38.3 | 60.1 | 74.3 | 1.24× |
 | `last_match` | 0.0 | 5.7 | 13.9 | 2.44× |
