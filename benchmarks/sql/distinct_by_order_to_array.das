@@ -2,21 +2,32 @@ options gen2
 options persistent_heap
 
 require _common public
+require daslib/sql
+require sqlite/sqlite_boost
+require sqlite/sqlite_linq
 
-// _distinct_by(_.dealer_id) |> _order_by(_.price) |> to_array — pick first car per
-// dealer, sort by price. NO take suffix (compare against distinct_by_order_take,
-// which adds `take(N)` and routes through emit_bounded_heap). n=100k, DEALER_COUNT=100
-// → output is 100 rows. Theme 8 audit 3b (PR #2875).
-// Both lanes splice through emit_fused_prefilter (linq_fold.das:2351) — single fused
-// loop: per-element dset gate (`var order_dset : table<int>`) writes into fresh
-// `buf`, then `order_inplace(buf, ...)` tail. Saves cascade's distinct_by_to_array
-// intermediate iterator setup. Composes across source modes via the shared FoldArraySpec
-// dispatch (PR F4) — same emit fn drives array (each(arr)) and decs
-// (from_decs_template(...)) sources.
-// SQL (m1) — same window-function story as distinct_by_order_take: "one row per
-// dealer" needs `ROW_NUMBER() OVER (PARTITION BY dealer_id ORDER BY price) WHERE rn=1`.
-// sqlite_linq does not currently lower window functions — see
-// benchmarks/sql/sqlite_linq_gaps.md "window functions".
+// `_distinct_by(_.dealer_id) |> _order_by(_.price) |> to_array` — pick first car per
+// dealer (by source/PK order), sort by price. NO take suffix (compare against
+// distinct_by_order_take, which adds `take(N)`). n=100k, DEALER_COUNT=100 → 100 rows.
+// SQL (m1) — bare-aggregate trick + outer ORDER BY via Arm A passthrough (PR #2906's
+// chunk N+1): `SELECT … FROM (SELECT *, MIN(pk) FROM Cars GROUP BY dealer_id) ORDER BY price ASC`.
+// Array/Decs (m3f/m4) splice through emit_fused_prefilter (linq_fold.das:2351) — single
+// fused loop with per-element dset gate then `order_inplace(buf, ...)` tail. Theme 8 3b.
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let rows <- _sql(db |> select_from(type<Car>)
+                                |> _distinct_by(_.dealer_id)
+                                |> _order_by(_.price))
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -42,6 +53,11 @@ def run_m4(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def distinct_by_order_to_array_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]

@@ -2,21 +2,36 @@ options gen2
 options persistent_heap
 
 require _common public
+require daslib/sql
+require sqlite/sqlite_boost
+require sqlite/sqlite_linq
 
-// each(arr).reverse()._distinct_by(_.brand).to_array() — pick LAST row per brand
-// in source order. n=100k, BRAND_COUNT=5 → output is 5 rows (the last car seen
-// for each brand). Theme 8 audit 2a (PR #2875, R-2a row in linq_fold.das:3215).
-// Array m3f splices through emit_reverse_backward_walk_dset_gate: single backward
-// `for (k in 0..length(arr))` walk over `arr[length-1-k]`, `var rev_dset : table<int>`
-// gating push by !key_exists. Saves cascade's reverse_to_array allocation AND second
-// distinct_by_inplace pass — single source pass with set-gate.
+// `each(arr).reverse()._distinct_by(_.brand).to_array()` — pick LAST row per brand
+// in source/PK order. n=100k, BRAND_COUNT=5 → 5 rows. Theme 8 audit 2a (PR #2875).
+// SQL (m1) — Arm B: `reverse() |> _distinct_by(K)` flips the bare-aggregate from
+// MIN(pk) to MAX(pk). `SELECT … FROM (SELECT *, MAX(pk) FROM Cars GROUP BY brand) AS t0`.
+// Bench's m1/m3f lanes use parallel chain shapes (the linq Theme 8 splice walks the
+// array backward; the SQL form uses MAX(pk) bare-aggregate) — same "last per K"
+// semantics, different engines. Note: SQL bare-aggregate returns rows in
+// engine-defined order (group-key order, typically), while linq returns
+// reverse-source-order. Bench doesn't assert order; for deterministic ordering add
+// `_order_by` to the m1 chain.
 // Decs (m4) — splice gates on `array_source` predicate (linq_fold.das:3221), so the
 // arm is array-only. plan_decs_reverse has no backward-index analog (archetype walk
-// is forward-only). Skip — see benchmarks/sql/sqlite_linq_gaps.md "decs scope".
-// SQL (m1) — no faithful form. "Last row per group" requires
-// `ROW_NUMBER() OVER (PARTITION BY brand ORDER BY id DESC) WHERE rn=1` (window
-// function). sqlite_linq does not currently lower window functions — see
-// sqlite_linq_gaps.md "window functions".
+// is forward-only). Closed by design — see sqlite_linq_gaps.md "decs scope".
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let rows <- _sql(db |> select_from(type<Car>) |> reverse() |> _distinct_by(_.brand))
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -29,6 +44,11 @@ def run_m3f(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def reverse_distinct_by_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]
