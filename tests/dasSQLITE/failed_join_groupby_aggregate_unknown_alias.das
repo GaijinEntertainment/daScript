@@ -5,7 +5,12 @@ options gen2
 // the join's `into` projection. The fix path is in try_translate_group_aggregate's
 // post-join branch — when the col name isn't found in joinProjRecordNames,
 // emit a macro_error listing the available aliases.
+//
+// macro_error fires but typer cascade adds typer-level errors for the unknown
+// tuple field in the inner _select lambda; probe expects all 3 codes.
 expect 50503
+expect 30831
+expect 30341
 
 require daslib/sql
 require sqlite/sqlite_boost

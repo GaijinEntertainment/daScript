@@ -2993,15 +2993,15 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             let argName = string((receiver as ExprVar).name)
             // Alias-qualification is driven by rootAlias != "", NOT seenJoin (right-side subQ runs with rootAlias="t1" but seenJoin=false).
             if (!empty(q.rootAlias)) {
-                // Post-join `_` refers to the joined-tuple row whose fields are projection aliases, not base-table columns. Consult the `into` projection registry before falling through to base-table resolution; this single hook transitively enables alias references in _group_by / _having / _order_by / computed-expression keys / try_translate_group_aggregate (all of which call pred_to_sql).
+                // Post-join `_` refers to the joined-tuple row whose fields are projection aliases, not base-table columns. Consult the `into` projection registry; this single hook transitively enables alias references in _having / _order_by / computed-expression keys / try_translate_group_aggregate (all of which call pred_to_sql). On miss, reject loudly — `push_group_key` / `collect_order_keys` / `try_translate_group_aggregate` all reject the same way; falling through to base-table resolution here would leak the unqualified base-table namespace into post-join `_having` / computed-key predicates inconsistently with the bare-`_.Field` fast paths (Copilot R1 #2910).
                 if (argName == "_" && q.seenJoin && !empty(q.joinProjRecordNames)) {
                     let aliasIdx = find_projection_alias(q, fieldName)
-                    if (aliasIdx >= 0) {
-                        let frag = render_projection_alias_sql(q, aliasIdx)
-                        if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
-                        return frag
+                    if (aliasIdx < 0) {
+                        return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
                     }
-                    // Fall through to base-table resolution — user may have typoed an alias; the existing path either resolves or fails with a column-not-found message.
+                    let frag = render_projection_alias_sql(q, aliasIdx)
+                    if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                    return frag
                 }
                 var srcIdx = lookup_arg_source(q, argName)
                 // Pre-join `_where` references root through `_` — arg-binding stack only populated inside `into` projection.
