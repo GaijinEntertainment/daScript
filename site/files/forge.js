@@ -494,7 +494,7 @@ def main() {
             `<a href="/playground/index.html?example=${slug}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`;
     }
 
-    // ─── § 05 News feed (top 5 from news.json) ─────────────────────
+    // ─── § 06 News feed (top 5 from news.json) ─────────────────────
     async function loadNews() {
         const rowsEl = document.getElementById('news-rows');
         if (!rowsEl) return;
