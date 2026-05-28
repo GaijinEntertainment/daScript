@@ -5496,14 +5496,77 @@ note both gaps closed.
 
 ### Deferred to chunk N+1
 
-- MAX(pk) variant for `each |> reverse |> _distinct_by(K) |> ...` ("last per K"
-  semantics — corresponds to bench `reverse_distinct_by`'s SQL gap).
-- Composition with other chain ops between `_distinct_by` and the
-  terminator: `_where(P) |> _distinct_by(K) |> ...` (where-then-distinct
-  vs. distinct-then-where semantic split), `_distinct_by(K) |> _order_by` /
-  `take` / `skip` (each needs explicit composition logic in `build_sql_string`).
+- ~~MAX(pk) variant for `each |> reverse |> _distinct_by(K) |> ...`~~ — **shipped in chunk N+1**.
+- ~~`_distinct_by(K) |> _order_by` / `take` / `skip` composition~~ — **shipped in chunk N+1**.
+- `_where(P) |> _distinct_by(K) |> ...` — still deferred (where-then-distinct
+  vs. distinct-then-where semantic split; inner-WHERE placement needs design).
 - Composite-PK support (would need a tuple-key MIN like `MIN(pk1, pk2)` or
   a synthetic row-id projection).
+
+## Shipped — chunk N+1: `_distinct_by` composition + `reverse()` + `_group_by |> first()` (branch `bbatkin/sqlite-linq-distinct-by-composition`)
+
+### Surface in this PR
+
+Closes 4 SQL gap cells from [`benchmarks/sql/sqlite_linq_gaps.md`](../../benchmarks/sql/sqlite_linq_gaps.md)'s
+"window-function lowerings" group — turns out 3 of them are bare-aggregate composition,
+not window functions (the gaps doc's ROW_NUMBER prescription was conservative). The
+4th (`groupby_first`) is a genuine new arm but reuses the bare-aggregate machinery.
+
+**Arm A — `_distinct_by(K)` row passthrough + composition:**
+- `_distinct_by(_.K) |> to_array` → `SELECT … FROM (SELECT *, MIN(pk) FROM t GROUP BY K) AS t0`
+  (closes a latent silent-drop bug from chunk N — `_distinct_by(K) |> to_array` emitted no GROUP BY)
+- `_distinct_by(_.K) |> _order_by(_.S) [|> take(N)] [|> skip(N)]` — outer ORDER BY / LIMIT / OFFSET
+  composes over the bare-aggregate subquery.
+
+**Arm B — `reverse() |> _distinct_by(K)` (MAX(pk) variant):**
+- `reverse() |> _distinct_by(_.K)` → `SELECT … FROM (SELECT *, MAX(pk) FROM t GROUP BY K) AS t0`
+  — picks LAST row per K by source/PK order; mirrors linq's
+  `each(arr).reverse()._distinct_by(K)` "last per group" splice.
+- Strict gating: `reverse()` only legal when wrapped by `_distinct_by` (SQL has no inherent
+  row ordering to reverse). Bare `reverse() |> to_array` rejects with a fixit pointing to
+  `_order_by_descending(...)`.
+
+**Arm C — `_group_by(K) |> _select((K=_._0, R=_._1 |> first()))` (tuple projection):**
+- Whole-row entry in a grouped projection lowers to `SELECT "key", "col1", "col2", …
+  FROM (SELECT *, MIN(pk) FROM t GROUP BY key) AS t0`. Row entry expands inline to all
+  source columns; `build_row_builder` reconstructs the struct via `ExprMakeStruct` with
+  per-field reads at the right column offset.
+
+### Why no window functions
+
+SQLite's bare-aggregate optimization (already used by chunk N for first-row aggregates)
+covers all 4 of these cells without `ROW_NUMBER() OVER (PARTITION BY K ORDER BY S)`.
+The bare-aggregate trick + outer ORDER BY / LIMIT is faster (no window-function
+overhead) and idiomatic SQLite. Window-function lowering (for "min-S per K", "rank",
+"lag" etc.) remains future work — none of today's benches need it.
+
+### Constraints (v1)
+
+- All chunk N constraints carry forward (single `@sql_primary_key`, single source table, no `_join`, no repeat `_distinct_by`).
+- Arm A passthrough rejects `_where` / `_join` / `_group_by` / `_having` / set ops / additional `distinct` between `_distinct_by` and the row terminator; permits `_order_by` / `take` / `skip`.
+- Arm B: `reverse()` must be immediately above `_distinct_by`; double-reverse rejects as a no-op.
+- Arm C: single-key groups only; no mixing `first()` with column aggregates (`length` / `sum` / `min` / `max` / `average`) in the same projection; no computed-expression group keys with `first()`.
+
+### Tests
+
+`tests/dasSQLITE/test_32_distinct.das` — 13 new tests (11 → 24 total) covering each new
+chain shape × (emit-shape + runtime correctness). 3 new `failed_*.das` rejection probes:
+- `failed_distinct_by_with_where.das` — Arm A `_where` composition rejected
+- `failed_reverse_without_distinct_by.das` — Arm B bare `reverse()` rejected
+- `failed_groupby_first_mixed_with_aggregate.das` — Arm C `first()` + `length` rejected
+
+### Benches
+
+All 4 m1 lanes backfilled in `benchmarks/sql/{distinct_by_order_take,distinct_by_order_to_array,reverse_distinct_by,groupby_first}.das`. `benchmarks/sql/results.md` refreshed. `sqlite_linq_gaps.md` "window-function lowerings" group fully drained.
+
+### Deferred to chunk N+2
+
+- `_where(P) |> _distinct_by(K) |> ...` — inner-WHERE composition (`SELECT … FROM (SELECT *, MIN(pk) FROM t WHERE P GROUP BY K)` — semantically distinct from outer-WHERE; needs design).
+- Composite-PK support (still pending from chunk N).
+- Mixed projection: `_group_by(K) |> _select((K=_._0, N=_._1|>length, R=_._1|>first()))` — would require inner subquery to add `COUNT(*) AS group_count` alongside `MIN(pk)`, and outer row builder to interleave scalar + offset row reads.
+- Multi-key groups with `_._1 |> first()` (single-key only today).
+- Computed-expression group keys with `first()` (only `_.<field>` keys today).
+- Real window functions (`ROW_NUMBER() OVER (PARTITION BY K ORDER BY S)`) — not blocked by today's benches but useful for `_distinct_by_min_by(K, S)` ("min-S row per K") shape if a future bench needs it.
 
 ## Plan (to be written after all tutorials are reviewed)
 
