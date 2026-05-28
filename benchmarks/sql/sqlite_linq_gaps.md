@@ -33,7 +33,7 @@ optimization + composition (no window functions needed) — closed in two PRs.
   K and P can't reference other columns. The bare-aggregate form preserves all
   `SELECT *` columns at the min-PK row, matching linq `_distinct_by` semantics.
 
-**Closed in PR #YYYY** (chunk N+1 — composition + MAX(pk) + group-by-first):
+**Closed in PR #2909** (chunk N+1 — composition + MAX(pk) + group-by-first):
 - `distinct_by_order_take` — bare-aggregate + outer `ORDER BY` + `LIMIT` (no window function needed).
   `SELECT … FROM (SELECT *, MIN(pk) FROM Cars GROUP BY dealer_id) AS t0 ORDER BY price LIMIT N`.
 - `distinct_by_order_to_array` — same without `LIMIT`.
