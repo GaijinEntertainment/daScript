@@ -150,6 +150,12 @@ struct private SqlQuery {
     selectColTypes : array<TypeDeclPtr>
     selectColSqlFragments : array<string>
     projRecordNames : array<string>
+    // nolint:STYLE014 Snapshot of the join's `into` projection registry, captured at the end of process_join_call. Survives `analyze_grouped_projection`'s clear-and-repopulate of projRecordNames (which holds the outer named-tuple's record names mid-projection). Read by find_projection_alias / render_projection_alias_sql so post-join `_.<alias>` resolution inside aggregates / HAVING / ORDER BY / computed group keys keeps pointing at the join's projected slots, not the outer projection's freshly-clobbered names.
+    joinProjRecordNames : array<string>
+    joinSelectCols : array<string>
+    joinSelectColAliases : array<string>
+    joinSelectColTypes : array<TypeDeclPtr>
+    joinSelectColSqlFragments : array<string>
     aggregateExpr : string
     aggregateType : TypeDeclPtr
     whereSql    : string
@@ -464,6 +470,39 @@ def private lookup_arg_source(q : SqlQuery; argName : string) : int {
         if (q.argNames[i] == argName) return q.argSourceIdx[i]
     }
     return -1
+}
+
+// Looks up a join's `into`-projection alias by name. Reads from the snapshot in joinProjRecordNames (preserved across analyze_grouped_projection's clear of projRecordNames), so post-join lookups inside grouped projections still resolve against the join's slots.
+[macro_function]
+def private find_projection_alias(q : SqlQuery; name : string) : int {
+    let n = length(q.joinProjRecordNames)
+    for (i in range(n)) {
+        if (q.joinProjRecordNames[i] == name) return i
+    }
+    return -1
+}
+
+[macro_function]
+def private projection_alias_list(q : SqlQuery) : string {
+    if (empty(q.joinProjRecordNames)) return "(none)"
+    return build_string() $(var w) {
+        for (i in range(length(q.joinProjRecordNames))) {
+            if (i > 0) w |> write(", ")
+            w |> write("`{q.joinProjRecordNames[i]}`")
+        }
+    }
+}
+
+// nolint:STYLE015 Renders a join's `into`-projection alias as a fully-qualified SQL column fragment. Computed slots (e.g. LEFT JOIN's `is_some` probe at analyze_projection's named-tuple branch) carry a pre-rendered fragment in `q.joinSelectColSqlFragments[i]`; simple field projections rebuild it from `(alias, srcRootType, srcField)`. Returns `""` if the alias's source can't be resolved (defensive — should not happen for joins that v1 supports).
+[macro_function]
+def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : string {
+    if (!empty(q.joinSelectColSqlFragments[aliasIdx])) {
+        return q.joinSelectColSqlFragments[aliasIdx]
+    }
+    let alias = q.joinSelectColAliases[aliasIdx]
+    let rootT = source_rootType_for_alias(q, alias)
+    if (rootT == null) return ""
+    return column_sql_for_alias(alias, rootT, q.joinSelectCols[aliasIdx])
 }
 
 [macro_function]
@@ -1187,6 +1226,25 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         if (savedAggProj) {
             q.proj = ProjectionShape.Aggregate
         }
+    }
+    // Snapshot the join's projection registry — preserved across analyze_grouped_projection's clear-and-repopulate so downstream `_.<alias>` lookups inside aggregates / HAVING / ORDER BY / computed group keys still resolve against the join's projected slots.
+    let nProj = length(q.projRecordNames)
+    q.joinProjRecordNames |> clear
+    q.joinSelectCols |> clear
+    q.joinSelectColAliases |> clear
+    q.joinSelectColTypes |> clear
+    q.joinSelectColSqlFragments |> clear
+    q.joinProjRecordNames |> reserve(nProj)
+    q.joinSelectCols |> reserve(nProj)
+    q.joinSelectColAliases |> reserve(nProj)
+    q.joinSelectColTypes |> reserve(nProj)
+    q.joinSelectColSqlFragments |> reserve(nProj)
+    for (i in range(nProj)) {
+        q.joinProjRecordNames |> push(q.projRecordNames[i]) // nolint:PERF006 reserved above
+        q.joinSelectCols |> push(q.selectCols[i]) // nolint:PERF006 reserved above
+        q.joinSelectColAliases |> push(q.selectColAliases[i]) // nolint:PERF006 reserved above
+        q.joinSelectColTypes |> push(q.selectColTypes[i]) // nolint:PERF006 reserved above
+        q.joinSelectColSqlFragments |> push(q.selectColSqlFragments[i]) // nolint:PERF006 reserved above
     }
     q.seenSelect = true
     return true
@@ -2270,7 +2328,7 @@ def private group_key_column_name(q : SqlQuery; idx : int) : string {
 }
 
 [macro_function]
-def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery; prog : ProgramPtr; at : LineInfo;
+def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
                                           var sqlOut : string&; var typeOut : TypeDeclPtr&) : bool {
     var n = node
     if (n is ExprRef2Value) {
@@ -2317,6 +2375,26 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
                     sqlOp = "MIN"
                 } else {
                     sqlOp = "MAX"
+                }
+                // Post-join: `col` refers to a projection alias (e.g. `Price` from `(Brand=d.brand, Price=c.price)`), not a base-table field. Resolve through the projection registry so the SUM/MIN/MAX/AVG wraps the fully-qualified source column.
+                if (q.seenJoin && !empty(q.joinProjRecordNames)) {
+                    let aliasIdx = find_projection_alias(q, col)
+                    if (aliasIdx < 0) {
+                        macro_error(prog, at, "_sql: {fname}(_.{col}): '{col}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
+                        return true
+                    }
+                    let frag = render_projection_alias_sql(q, aliasIdx)
+                    if (empty(frag)) {
+                        macro_error(prog, at, "_sql: {fname}(_.{col}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                        return true
+                    }
+                    sqlOut = "{sqlOp}({frag})"
+                    if (fname == "average") {
+                        typeOut = new TypeDecl(at = at, baseType = Type.tDouble)
+                    } else {
+                        typeOut = q.joinSelectColTypes[aliasIdx]
+                    }
+                    return true
                 }
                 sqlOut = "{sqlOp}(\"{col}\")"
                 if (fname == "average") {
@@ -2569,6 +2647,21 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
     {
         var fieldName : string
         if (qmatch(body, _.$f(fieldName)).matched) {
+            // Post-join: `_.<alias>` resolves through the join's projection registry → qualified column.
+            if (q.seenJoin && !empty(q.joinProjRecordNames)) {
+                let aliasIdx = find_projection_alias(q, fieldName)
+                if (aliasIdx < 0) {
+                    macro_error(prog, at, "_sql: _order_by(_.{fieldName}): '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
+                    return false
+                }
+                let frag = render_projection_alias_sql(q, aliasIdx)
+                if (empty(frag)) {
+                    macro_error(prog, at, "_sql: _order_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                    return false
+                }
+                q.orderByCols |> push("{frag} {direction}")
+                return true
+            }
             let sqlCol = field_to_column_name(q.rootType, fieldName)
             q.orderByCols |> push("\"{sqlCol}\" {direction}")
             return true
@@ -2585,6 +2678,20 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
             var val = mkTup.values[i]
             var fieldName : string
             if (qmatch(val, _.$f(fieldName)).matched) {
+                if (q.seenJoin && !empty(q.joinProjRecordNames)) {
+                    let aliasIdx = find_projection_alias(q, fieldName)
+                    if (aliasIdx < 0) {
+                        macro_error(prog, at, "_sql: _order_by(_.{fieldName}): '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
+                        return false
+                    }
+                    let frag = render_projection_alias_sql(q, aliasIdx)
+                    if (empty(frag)) {
+                        macro_error(prog, at, "_sql: _order_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                        return false
+                    }
+                    q.orderByCols |> push("{frag} {direction}")
+                    continue
+                }
                 let sqlCol = field_to_column_name(q.rootType, fieldName)
                 q.orderByCols |> push("\"{sqlCol}\" {direction}")
             } elif (val._type != null && val._type.baseType == Type.tString) {
@@ -2611,6 +2718,26 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
 def private push_group_key(var entry : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     var fieldName : string
     if (qmatch(entry, _.$f(fieldName)).matched) {
+        // Post-join: `_.<alias>` refers to the join's `into` projection slot, not a base-table column. Route through the computed-expression key path so the SQL emitter writes the pre-resolved fragment (e.g. `"t0"."brand"`) verbatim. Downstream analyze_grouped_projection sees groupByKeyExprs[i] != null and reuses the same fragment for the outer SELECT.
+        if (q.seenJoin && !empty(q.joinProjRecordNames)) {
+            let aliasIdx = find_projection_alias(q, fieldName)
+            if (aliasIdx >= 0) {
+                let frag = render_projection_alias_sql(q, aliasIdx)
+                if (empty(frag)) {
+                    macro_error(prog, at, "_sql: _group_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                    q.hadError = true
+                    return false
+                }
+                q.groupByCols |> push("({frag})")
+                q.groupByKeyExprs |> push <| clone_expression(entry)
+                q.groupByKeyTypes |> push(q.joinSelectColTypes[aliasIdx])
+                return true
+            }
+            // Fall through — `_.Field` not in projection registry: user typoed an alias, or referenced a base-table column post-join (not v1 supported). Emit a clear error rather than falling through to the bare-field path (which would silently emit invalid SQL).
+            macro_error(prog, at, "_sql: _group_by(_.{fieldName}): '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
+            q.hadError = true
+            return false
+        }
         q.groupByCols |> push("\"{fieldName}\"")
         q.groupByKeyExprs |> push(null)
         q.groupByKeyTypes |> push(null)
@@ -2866,6 +2993,16 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             let argName = string((receiver as ExprVar).name)
             // Alias-qualification is driven by rootAlias != "", NOT seenJoin (right-side subQ runs with rootAlias="t1" but seenJoin=false).
             if (!empty(q.rootAlias)) {
+                // Post-join `_` refers to the joined-tuple row whose fields are projection aliases, not base-table columns. Consult the `into` projection registry before falling through to base-table resolution; this single hook transitively enables alias references in _group_by / _having / _order_by / computed-expression keys / try_translate_group_aggregate (all of which call pred_to_sql).
+                if (argName == "_" && q.seenJoin && !empty(q.joinProjRecordNames)) {
+                    let aliasIdx = find_projection_alias(q, fieldName)
+                    if (aliasIdx >= 0) {
+                        let frag = render_projection_alias_sql(q, aliasIdx)
+                        if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                        return frag
+                    }
+                    // Fall through to base-table resolution — user may have typoed an alias; the existing path either resolves or fails with a column-not-found message.
+                }
                 var srcIdx = lookup_arg_source(q, argName)
                 // Pre-join `_where` references root through `_` — arg-binding stack only populated inside `into` projection.
                 if (srcIdx < 0 && argName == "_") {
