@@ -162,6 +162,8 @@ struct private SqlQuery {
     // Triggers the SQLite bare-aggregate inner-subquery wrap (`SELECT *, MIN(pk) FROM t GROUP BY K`)
     // in `peel_count_terminal`'s 2-arg `count(P)` branch and `peel_column_aggregate` distinct path.
     distinctByCol : string
+    // nolint:STYLE014 True when an immediately-preceding `reverse()` chain op flipped the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order, mirroring linq's `reverse() |> _distinct_by(K)` semantics.
+    distinctByLast : bool
     orderByCols : array<string>
     orderByInlineExprs : array<ExpressionPtr>
     groupByCols : array<string>
@@ -553,12 +555,13 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
 
 // ===== Chain analysis (walk pipe-composed chain backwards) =====
 
-// nolint:STYLE015 Shared subquery-wrap: SQLite's bare-aggregate optimization — `SELECT *, MIN(pk) FROM t GROUP BY K` picks the row with the minimum pk per K, preserving all `*` columns at those values. Matches linq `_distinct_by`'s "first row per K" semantics when pk is monotonic with insertion order.
+// nolint:STYLE015 Shared subquery-wrap: SQLite's bare-aggregate optimization — `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` picks the row with the min (useMax=false) or max (useMax=true) pk per K, preserving all `*` columns at those values. MIN matches linq `_distinct_by`'s "first row per K" semantics; MAX matches `reverse() |> _distinct_by(K)` "last row per K" — both when pk is monotonic with insertion order.
 [macro_function]
-def private build_distinct_by_inner_subquery(var q : SqlQuery&; pkField : string) : string {
+def private build_distinct_by_inner_subquery(var q : SqlQuery&; pkField : string; useMax : bool) : string {
     let sqlK = field_to_column_name(q.rootType, q.distinctByCol)
     let pkCol = field_to_column_name(q.rootType, pkField)
-    return "SELECT *, MIN(\"{pkCol}\") FROM \"{q.tableName}\" GROUP BY \"{sqlK}\""
+    let aggOp = useMax ? "MAX" : "MIN"
+    return "SELECT *, {aggOp}(\"{pkCol}\") FROM \"{q.tableName}\" GROUP BY \"{sqlK}\""
 }
 
 // nolint:STYLE015 v1 only supports `_distinct_by` applied directly to a single `select_from` source, with no other chain operators anywhere in the chain. Supported terminators: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Compositions with `_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct` are deferred to chunk N+1.
@@ -588,7 +591,7 @@ def private finalize_distinct_by_count_wrap(var q : SqlQuery&; isLong : bool; pr
         q.hadError = true
         return
     }
-    q.innerSql := build_distinct_by_inner_subquery(q, pkField)
+    q.innerSql := build_distinct_by_inner_subquery(q, pkField, false)
     q.fromRowType = q.rootType
     q.whereSql := predSql
     q.aggregateExpr := "COUNT(*)"
@@ -608,13 +611,46 @@ def private finalize_distinct_by_aggregate_wrap(var q : SqlQuery&; sqlOp : strin
         q.hadError = true
         return
     }
-    q.innerSql := build_distinct_by_inner_subquery(q, pkField)
+    q.innerSql := build_distinct_by_inner_subquery(q, pkField, false)
     q.fromRowType = q.rootType
     q.aggregateExpr := "{sqlOp}(\"{sqlCol}\")"
     q.aggregateType = aggregateType
     q.proj = ProjectionShape.Aggregate
     q.matr = Materializer.One
     q.seenTerminal = true
+}
+
+// nolint:STYLE015 Passthrough finalize for row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`). Outer SELECT preserves source columns from `fill_default_columns`; outer ORDER BY / LIMIT / OFFSET piggyback on `build_sql_select`'s existing emission over `q.innerSql`. Permits trailing `_order_by` / `take` / `skip`; everything else gated by `check_distinct_by_passthrough_gating`.
+[macro_function]
+def private finalize_distinct_by_passthrough_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) {
+    let pkField = find_single_pk_field(q.rootType, prog, at)
+    if (empty(pkField)) {
+        q.hadError = true
+        return
+    }
+    q.innerSql := build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
+    q.fromRowType = q.rootType
+}
+
+// nolint:STYLE015 Narrower than `check_distinct_by_v1_gating`: passthrough permits `_order_by` / `take` / `skip` (handled by outer SELECT around the bare-aggregate subquery); rejects `_where` / `_join` / `_group_by` / `_having` / set ops / additional `distinct` (each requires explicit composition logic and may have semantic ambiguity).
+[macro_function]
+def private check_distinct_by_passthrough_gating(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+    if (!empty(q.whereSql) || q.seenJoin || q.seenSetOp
+            || q.seenGroupBy || q.seenHaving || q.seenDistinct) {
+        macro_error(prog, at, "_sql: `_distinct_by(K)` composed with `_where` / `_join` / `_group_by` / `_having` / set ops / `distinct` is not yet supported — v1 permits only trailing `_order_by` / `take` / `skip` between `_distinct_by` and the row terminator")
+        q.hadError = true
+        return false
+    }
+    return true
+}
+
+// nolint:STYLE015 Post-pass invoked by every `analyze_chain` consumer (_sql / _try_sql / _sql_text / _each_sql / _create_view). When the chain set `q.distinctByCol` but no aggregate terminator finalized the inner-subquery wrap (i.e. row-returning chain like `|> to_array` or `|> first`), this runs the gating + passthrough finalize. Returns false on macro_error; true otherwise.
+[macro_function]
+def private maybe_finalize_distinct_by_passthrough(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+    if (empty(q.distinctByCol) || q.proj == ProjectionShape.Aggregate) return true
+    if (!check_distinct_by_passthrough_gating(q, prog, at)) return false
+    finalize_distinct_by_passthrough_wrap(q, prog, at)
+    return !q.hadError
 }
 
 [macro_function]
@@ -878,6 +914,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.offsetBindExpr = null
     q.distinctFlag = false
     q.distinctByCol := ""
+    q.distinctByLast = false
     q.orderByCols |> clear
     q.orderByInlineExprs |> clear
     q.groupByCols |> clear
@@ -3540,7 +3577,8 @@ class private SqlTextMacro : AstCallMacro {
         macro_verify(argT != null, prog, call.at, "_sql_text: chain argument is not inferred yet")
         macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
         var q = SqlQuery()
-        if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
+        if (!analyze_chain(call.arguments[0], q, prog, call.at)
+                || !maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
         let sql = build_sql_string(q)
         var noBinds : array<ExpressionPtr>
         var frags : array<SqlFrag>
@@ -3605,6 +3643,7 @@ class private SqlCreateViewMacro : AstCallMacro {
             macro_error(prog, call.at, "_create_view: chain ends in `_to_array()` — views are by definition arrays of rows; drop the `_to_array()` terminal.")
             return null
         }
+        if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
         // CREATE VIEW DDL is run once; baking a runtime column name at view-creation time is surprising. Reject.
         if (!empty(q.orderByInlineExprs)) {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
@@ -3967,6 +4006,8 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
         macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
         return null
     }
+    // Row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`): wrap the source FROM in a bare-aggregate subquery. Aggregate terminators already finalized inside peel_count_terminal / peel_column_aggregate.
+    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
     // Bind order (centralized in collect_query_binds): inner-Q FROM → per-join ON → WHERE → HAVING → set-op-RHS → LIMIT → OFFSET.
     var allBinds : array<ExpressionPtr>
     collect_query_binds(q, allBinds)
@@ -4038,6 +4079,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` — those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
         return null
     }
+    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
     // Same bind ordering as emit_sql_macro_body via collect_query_binds. take/skip binds OK here (lazy stream).
     var allBinds : array<ExpressionPtr>
     collect_query_binds(q, allBinds)
