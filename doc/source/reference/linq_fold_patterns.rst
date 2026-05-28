@@ -377,6 +377,59 @@ primitive (``int*`` / ``uint*`` / ``float`` / ``double`` / ``bool`` /
        between ``join`` and ``group_by_lazy``; HAVING (trailing ``_where``
        after the reducer ``_select``) defers to v2.
 
+Array-array equi-join
+---------------------
+
+``emit_array_join`` is the array-source mirror of ``emit_decs_join`` —
+hashed equi-join over two array / iterator sources. Algorithm is
+identical (collect srcb into ``table<KEY; array<TUPB>>`` in one pass,
+then walk srca and probe via ``table.get``) but the per-source
+iteration is a plain ``for (elem in src) { ... }`` loop instead of
+``for_each_archetype + build_decs_inner_for``. Both sources bind as
+invoke parameters (2-source wrap, mirrors ``Zip``). Same primitive
+equi-key gate as the decs side; non-primitive keys cascade to
+``join_impl_const``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 25 40
+
+   * - Chain shape
+     - Splice arm
+     - Notes
+   * - ``arrA |> _join(arrB, on, into) |> count()``
+     - pattern ``array_join_general`` (emit fn ``emit_array_join``)
+     - Hash-fill + probe; ``count`` bumped by bucket length per hit.
+       No per-pair invoke (count-no-where bucket-length fast path).
+   * - ``arrA |> _join(arrB, on, into)`` (no explicit terminator)
+     - pattern ``array_join_general`` (emit fn ``emit_array_join``)
+     - Implicit ``to_array`` lane: hash-fill + probe; ``result`` lambda
+       inlined at the push site. Note: ``select``'s array overload
+       returns ``array<...>`` directly, so the chain types as an array
+       without a trailing ``to_array()`` call.
+   * - ``arrA |> _join(arrB, ...) |> _select(F)`` or with trailing ``|> to_array()``
+     - pattern ``array_join_general`` (terminal ``_select``)
+     - Single bind of the join result per matched pair, then
+       projection. ``resultType`` extracted from the select lambda's
+       body type (not from ``selCall._type.firstType``, which may
+       stay as an unresolved ``typedecl(...)`` when no ``to_array()``
+       forces resolution).
+   * - ``arrA |> _join(arrB, ...) |> _where(P) |> count() / to_array()``
+     - pattern ``array_join_general`` (trailing ``_where``)
+     - Bind join result, evaluate predicate, gate ``count++`` /
+       ``push_clone``. Composes with the trailing ``_select`` form
+       (filter then project, single bind per pair).
+   * - ``arrA |> _join(arrB, ...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
+     - ``plan_group_by_core`` via ``SourceAdapter.ArrayJoin`` (chunk N+2)
+     - Cross-arm composition. ``emit_group_by``'s Array branch
+       recognizes a trailing ``join`` upstream of ``group_by_lazy``
+       and builds an ``ArrayJoin`` adapter; ``plan_group_by_core``
+       consumes it via ``adapter_wrap_source_loop``'s ``ArrayJoin``
+       branch (plain ``for`` loops in lieu of ``for_each_archetype``).
+       Same v1 constraints as the decs-side cross-arm: primitive
+       equi-key, no segments between ``join`` and ``group_by_lazy``,
+       HAVING defers to v2.
+
 Zip patterns
 ============
 

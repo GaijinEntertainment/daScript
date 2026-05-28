@@ -642,6 +642,11 @@ def aj_dealers() : array<AJDealer> {
     ]
 }
 
+struct AJKey {
+    a : int
+    b : int
+}
+
 [test]
 def test_array_join_splice(t : T?) {
     t |> run("_join + count — int key, 4 matches (orphan dropped)") @(t : T?) {
@@ -833,5 +838,23 @@ def test_array_join_splice(t : T?) {
                                  |> _group_by(_.Brand)
                                  |> _select((Brand = _._0, N = _._1 |> count())))
         t |> equal(length(groups), 0)
+    }
+    t |> run("_join — non-primitive key cascades to tier-2 (still produces correct result)") @(t : T?) {
+        // is_primitive_join_key_type rejects struct keys → splice returns null → fold_linq_default takes over → join_impl_const path with _::unique_key wrapping handles the struct key.
+        let left <- [
+            (k = AJKey(a = 1, b = 1), v = 10),
+            (k = AJKey(a = 2, b = 2), v = 20),
+            (k = AJKey(a = 3, b = 3), v = 30)
+        ]
+        let right <- [
+            (k = AJKey(a = 1, b = 1), w = 100),
+            (k = AJKey(a = 2, b = 2), w = 200),
+            (k = AJKey(a = 3, b = 3), w = 300)
+        ]
+        let n = _fold(left |> _join(right,
+                                    $(l, r) => l.k == r.k,
+                                    $(l, r) => (l.v, r.w))
+                           |> count())
+        t |> equal(n, 3)
     }
 }
