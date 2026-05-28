@@ -204,8 +204,42 @@ def test_reverse_take_select_decs(t : T?) {
             apply_decs_template(cmp, DecsSound(id = i + 1, x = float(i)))
         }
         unsafe {
+            // ids: [1,2,3,4]; reverse: [4,3,2,1]; take 2: [4,3]; select _.id: [4,3]
             let ids <- _fold(from_decs_template(type<DecsSound>).reverse().take(2)._select(_.id).to_array())
             tt |> equal(length(ids), 2)
+            tt |> equal(ids[0], 4)
+            tt |> equal(ids[1], 3)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_reverse_take_select_decs_take_exceeds(t : T?) {
+    t |> run("plan_decs_reverse: reverse + take(N>total) + terminal _select clamps to total") @(tt : T?) {
+        restart()
+        create_entities(3) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+            apply_decs_template(cmp, DecsSound(id = i + 10, x = float(i)))
+        }
+        unsafe {
+            // ids: [10,11,12]; reverse: [12,11,10]; take 100 clamps to 3: [12,11,10]; select _.id
+            let ids <- _fold(from_decs_template(type<DecsSound>).reverse().take(100)._select(_.id).to_array())
+            tt |> equal(length(ids), 3)
+            tt |> equal(ids[0], 12)
+            tt |> equal(ids[1], 11)
+            tt |> equal(ids[2], 10)
+        }
+        restart()
+    }
+}
+
+[test]
+def test_reverse_take_select_decs_empty(t : T?) {
+    t |> run("plan_decs_reverse: reverse + take + terminal _select on empty source") @(tt : T?) {
+        restart()
+        unsafe {
+            let ids <- _fold(from_decs_template(type<DecsSound>).reverse().take(5)._select(_.id).to_array())
+            tt |> equal(length(ids), 0)
         }
         restart()
     }
