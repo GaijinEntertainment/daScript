@@ -643,6 +643,12 @@ def private check_distinct_by_passthrough_gating(var q : SqlQuery&; prog : Progr
         q.hadError = true
         return false
     }
+    // A phase-divert (e.g. `take(N) |> _distinct_by(K)` — take's PHASE_TAKE > distinct_by's PHASE_DISTINCT triggers divert_to_inner) populates q.innerSql + q.innerBindExprs before _distinct_by peels. finalize_distinct_by_passthrough_wrap would overwrite q.innerSql (silently dropping the pre-distinct op) and leave q.innerBindExprs orphaned (bind/placeholder mismatch). Reject loudly until composition with pre-distinct phase-divert is designed.
+    if (!empty(q.innerSql) || !empty(q.innerBindExprs)) {
+        macro_error(prog, at, "_sql: chain operators that phase-divert before `_distinct_by(K)` (e.g. `take(N) |> _distinct_by(K)` or `skip(N) |> _distinct_by(K)`) are not yet supported — restructure so `_distinct_by` sits directly above the source (e.g. `_distinct_by(K) |> take(N)` for cap-after-distinct semantics)")
+        q.hadError = true
+        return false
+    }
     return true
 }
 
@@ -1429,6 +1435,20 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     if (subQ.proj == ProjectionShape.SingleColumn || subQ.proj == ProjectionShape.Aggregate) {
         // SingleColumn / Aggregate inner has no row for the outer to filter — reject both shapes.
         macro_error(prog, at, "_sql: cannot lower a chain whose inner subquery projects a single value (`_select(_.X)` or an aggregate) into an outer query — there is no named row to filter on. Restructure the chain so the divergent op runs before the projection, or wrap the projection in a named tuple `(X=_.X)`.")
+        return false
+    }
+    // Mirror the top-level emit_sql_macro_body path: a nested `_distinct_by(K)` chain (set by analyze_chain via the wrapped chain-op branch) needs the bare-aggregate inner-subquery wrap built BEFORE build_sql_string runs — otherwise the subquery silently drops the dedup (same silent-drop bug chunk N+1 fixed at the top level).
+    if (!maybe_finalize_distinct_by_passthrough(subQ, prog, at)) return false
+    // Whole-row entries in a grouped projection (`_._1 |> first()`) expand to N source columns in the inner SQL but apply_passthrough_projection / outer SELECT expect 1 aliased column per record name. Reject when this projection shape is being wrapped as an inner subquery; user must keep `_group_by |> _select(...first())` at the outermost level (no `_where` / `_take` after it that would trigger divert).
+    var anyRowEntry = false
+    for (b in subQ.groupedSelectIsRow) {
+        if (b) {
+            anyRowEntry = true
+            break
+        }
+    }
+    if (anyRowEntry) {
+        macro_error(prog, at, "_sql: `_group_by |> _select((K=_._0, R=_._1 |> first()))` cannot be wrapped as an inner subquery — the whole-row entry expands to multiple unaliased columns that the outer query can't reference by name. Restructure so the chain that triggers wrap (e.g. `_where`) runs before `_group_by`, or split into separate `_sql` calls.")
         return false
     }
     // nolint:STYLE015 force_aliases=true: outer references inner cols by alias. Without AS, SQLite
