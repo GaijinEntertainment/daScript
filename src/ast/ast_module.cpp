@@ -151,8 +151,18 @@ namespace das {
 
     atomic<int> g_envTotal(0);
 
+    static void daslang_atexit_audit() {
+        int n = g_envTotal.load();
+        if ( n != 0 ) {
+            fprintf(stderr, "[daslang atexit] FATAL: g_envTotal=%d at exit (Initialize/Shutdown not balanced)\n", n);
+            _Exit(1);
+        }
+    }
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
+        static bool atexit_registered = (atexit(daslang_atexit_audit), true);
+        (void)atexit_registered;
         g_envTotal ++;
 
         if (daScriptEnvironment::getBound()->modules == nullptr) {

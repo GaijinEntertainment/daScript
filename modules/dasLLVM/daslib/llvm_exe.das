@@ -881,13 +881,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         LLVMBuildCall2(builder, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, dst_str), "")
     }
 
-    // Finalize module initialization after all static/dynamic modules are registered
-    if (has_cpp_modules) {
-        let init_done_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        var jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
-        LLVMBuildCall2(builder, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
-    }
-
     // Call initialize_modules() — built by CollectExternVisitor during collect_external_functions
     let init_modules_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
     var init_modules_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
