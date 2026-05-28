@@ -373,7 +373,15 @@ FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 SET(AOT_DASLIB_TEST_FILES
     tests/daslib/clargs_test.das
     tests/daslib/test_toml.das
+    tests/daslib/test_logger.das
 )
+
+# AOT for MCP server tests (subprocess JSON-RPC smoke tests)
+FILE(GLOB AOT_MCP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/mcp/*.das")
+# Skip _fixture_*.das — those are subprocess targets spawned BY the tests,
+# not test entry points; AOT'ing them would pull in get_command_line_arguments
+# at a fixture that doesn't need it and bloats the build for no coverage.
+list(FILTER AOT_MCP_FILES EXCLUDE REGEX "/_")
 
 # AOT for lint test files
 FILE(GLOB AOT_LINT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lint/*.das")
@@ -698,6 +706,10 @@ add_custom_target(test_aot_daslib)
 SET(DASLIB_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DASLIB_TEST_FILES}" DASLIB_AOT_GENERATED_SRC test_aot_daslib daslang)
 
+add_custom_target(test_aot_mcp)
+SET(MCP_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MCP_FILES}" MCP_AOT_GENERATED_SRC test_aot_mcp daslang)
+
 add_custom_target(test_aot_stbimage)
 SET(STBIMAGE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_STBIMAGE_FILES}" STBIMAGE_AOT_GENERATED_SRC test_aot_stbimage daslang)
@@ -769,6 +781,7 @@ SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MCP_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STRUDEL_MODULES_AOT_GENERATED_SRC)
@@ -854,6 +867,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${PUGIXML_AOT_GENERATED_SRC}
     ${DASHV_MODULES_AOT_GENERATED_SRC}
     ${DASHV_AOT_GENERATED_SRC}
+    ${MCP_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -891,6 +905,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_dassqlite test_aot_dassqlite_modules
     test_aot_pugixml test_aot_pugixml_modules
     test_aot_dashv test_aot_dashv_modules
+    test_aot_mcp
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${CIPIC_HRTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft ${PROJECT_SOURCE_DIR}/modules/dasPUGIXML/pugixml ${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include ${SQLITE_INCLUDE_DIR})
 target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT MINFFT_SINGLE HRTF_SAMPLE_RATE=${DAS_AUDIO_SAMPLE_RATE})

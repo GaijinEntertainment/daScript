@@ -88,6 +88,7 @@ require daslib/dynamic_cast_rtti
 require daslib/generic_return
 // require daslib/heartbeat                     // qmacro(heartbeat()) conflicts when used in das2rst context
 require daslib/lint
+require daslib/logger
 // require daslib/lint_everything               // global_lint_macro causes lint errors in other modules
 require daslib/profiler
 require daslib/profiler_boost
@@ -169,7 +170,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
-        group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime)$%%),
+        group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now)$%%),
         group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|is_standalone_exe|get_platform_name|get_architecture_name)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
@@ -196,7 +197,7 @@ def document_module_fio(root : string) {
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),
         group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
-        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_argv|popen_timed_out|run_and_capture|get_env_variable|sanitize_command_line|has_env_variable)$%%),
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_argv|popen_argv_pipe|popen_timed_out|run_and_capture|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
     documents("File input output library", mod, "fio.rst", groups)
@@ -1173,6 +1174,18 @@ def document_module_toml(root : string) {
     document("TOML 1.0 parser", mod, "toml.rst", groups)
 }
 
+def document_module_logger(root : string) {
+    var mod = find_module("logger")
+    var groups <- array<DocGroup>(
+        group_by_regex("Setup", mod, %regex~.*(logger_init|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
+        group_by_regex("Level filters", mod, %regex~.*(logger_set_min_level|logger_get_min_level|logger_set_category_level|logger_clear_category_levels)$%%),
+        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_flush|logger_close)$%%),
+        group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
+        group_by_regex("Stdout hook", mod, %regex~.*(logger_install_hook)$%%)
+    )
+    document("Structured JSON Lines logger", mod, "logger.rst", groups)
+}
+
 def document_module_lint_everything(root : string) {
     var mod = find_module("lint_everything")
     var groups <- array<DocGroup>(
@@ -1694,6 +1707,7 @@ def main {
     document_module_lint(root)
     document_module_lint_config(root)
     document_module_toml(root)
+    document_module_logger(root)
     // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
     // document_module_live(root)                  // uses multiple_contexts
     document_module_lpipe(root)

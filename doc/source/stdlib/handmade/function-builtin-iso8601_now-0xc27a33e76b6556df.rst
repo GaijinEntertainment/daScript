@@ -1,0 +1,1 @@
+Returns the current UTC wallclock time as an ISO 8601 string with millisecond precision: ``"YYYY-MM-DDTHH:MM:SS.mmmZ"`` (24 characters, trailing ``Z`` for UTC). Used by ``daslib/logger`` for log-record timestamps; useful anywhere a sortable, parseable, timezone-explicit timestamp is needed.

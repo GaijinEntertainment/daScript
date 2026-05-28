@@ -15,6 +15,7 @@
 #include "daScript/misc/sysos.h"
 
 #include <sstream>
+#include <chrono>
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
 
@@ -65,6 +66,27 @@ namespace das {
         return t;
     }
 
+    // Current UTC wallclock as ISO 8601 with millisecond precision:
+    //   "YYYY-MM-DDTHH:MM:SS.mmmZ"
+    // Used by daslib/log for log-record timestamps; also general-purpose.
+    char * iso8601_now ( Context * context, LineInfoArg * at ) {
+        auto now = std::chrono::system_clock::now();
+        auto t = std::chrono::system_clock::to_time_t(now);
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+        if ( ms < 0 ) ms += 1000;
+        struct tm utc;
+#ifdef _WIN32
+        gmtime_s(&utc, &t);
+#else
+        gmtime_r(&t, &utc);
+#endif
+        char buf[32];
+        int n = snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+            utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+            utc.tm_hour, utc.tm_min, utc.tm_sec, (int)ms);
+        return context->allocateString(buf, uint32_t(n < 0 ? 0 : n), at);
+    }
+
     Time builtin_mktime(int year, int month, int mday, int hour, int min, int sec) {
         struct tm timeinfo = {};
         timeinfo.tm_year = year - 1900;
@@ -82,6 +104,8 @@ namespace das {
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(new TimeAnnotation(lib));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
+        addExtern<DAS_BIND_FUN(iso8601_now)>(*this, lib, "iso8601_now",
+            SideEffects::accessExternal, "iso8601_now");
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
         // operations on time
@@ -209,6 +233,7 @@ namespace das {
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
 #endif
@@ -819,9 +844,18 @@ namespace das {
                 SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
             }
         }
+        // Isolate child stdin from the parent's. Without this, the child
+        // inherits the parent's stdin handle (via bInheritHandles=TRUE), and
+        // any accidental read in the child silently steals bytes intended
+        // for the parent — fatal for MCP / language-server style stdio
+        // transports. NUL reads return EOF immediately.
+        HANDLE hNullInput = CreateFileA("NUL", GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         STARTUPINFOA si;
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
+        si.hStdInput = (hNullInput == INVALID_HANDLE_VALUE) ? NULL : hNullInput;
         si.hStdOutput = hWritePipe;
         si.hStdError = hWritePipe;
         si.dwFlags = STARTF_USESTDHANDLES;
@@ -834,6 +868,7 @@ namespace das {
         BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
             createFlags, NULL, NULL, &si, &pi);
         CloseHandle(hWritePipe);
+        if ( hNullInput != INVALID_HANDLE_VALUE ) CloseHandle(hNullInput);
         if ( !created ) {
             CloseHandle(hReadPipe);
             if ( hJob ) CloseHandle(hJob);
@@ -901,6 +936,15 @@ namespace das {
         }
         if ( pid == 0 ) {
             close(pipefd[0]);
+            // Isolate child stdin from the parent's: redirect to /dev/null so
+            // any accidental read in the child returns EOF instead of stealing
+            // bytes intended for the parent (fatal for MCP / language-server
+            // style stdio transports).
+            int devnull = open("/dev/null", O_RDONLY);
+            if ( devnull >= 0 ) {
+                dup2(devnull, STDIN_FILENO);
+                close(devnull);
+            }
             dup2(pipefd[1], STDOUT_FILENO);
             dup2(pipefd[1], STDERR_FILENO);
             close(pipefd[1]);
@@ -934,6 +978,190 @@ namespace das {
         fclose(f);
         if ( watchdog.joinable() ) watchdog.join();
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
+        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+#endif
+    }
+
+    // popen_argv_pipe: argv-based subprocess with bidirectional pipes.
+    // Block receives two FILE*: writable stdin (parent → child) and readable
+    // stdout (child → parent, with stderr merged). After the block returns,
+    // parent closes stdin (signaling EOF), waits for the child to exit,
+    // closes stdout, and returns the exit code. Same shell-bypass semantics
+    // as popen_argv (CreateProcess / fork+execvp).
+    int builtin_popen_argv_pipe ( const Array & args_arr,
+                                  const TBlock<void,const FILE *,const FILE *> & blk,
+                                  Context * context, LineInfoArg * at ) {
+        if ( args_arr.size == 0 ) {
+            context->throw_error_at(at, "popen_argv_pipe with empty args");
+            return -1;
+        }
+        char ** argv = (char **) args_arr.data;
+        if ( !argv[0] ) {
+            context->throw_error_at(at, "popen_argv_pipe with null exe");
+            return -1;
+        }
+#ifdef _WIN32
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+        HANDLE hStdinR = NULL, hStdinW = NULL;
+        HANDLE hStdoutR = NULL, hStdoutW = NULL;
+        if ( !CreatePipe(&hStdinR, &hStdinW, &sa, 0) ) {
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        if ( !CreatePipe(&hStdoutR, &hStdoutW, &sa, 0) ) {
+            CloseHandle(hStdinR); CloseHandle(hStdinW);
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        // Parent ends must not be inherited by the child.
+        SetHandleInformation(hStdinW, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(hStdoutR, HANDLE_FLAG_INHERIT, 0);
+        STARTUPINFOA si;
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        si.hStdInput = hStdinR;
+        si.hStdOutput = hStdoutW;
+        si.hStdError = hStdoutW;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof(pi));
+        string cmdLine = winBuildCommandLine(argv, args_arr.size);
+        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+            CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+        // Close child-side pipe ends in parent.
+        CloseHandle(hStdinR);
+        CloseHandle(hStdoutW);
+        if ( !created ) {
+            CloseHandle(hStdinW);
+            CloseHandle(hStdoutR);
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        CloseHandle(pi.hThread);
+        // Wrap each pipe end in a FILE*. Check both fd and FILE* — if either
+        // conversion fails, close any raw handles/fds we still own to avoid
+        // leaking the child's stdin write end (would deadlock waitpid since
+        // child never sees EOF).
+        int stdinFd  = _open_osfhandle((intptr_t)hStdinW,  _O_WRONLY | _O_BINARY);
+        if ( stdinFd == -1 ) CloseHandle(hStdinW);
+        int stdoutFd = _open_osfhandle((intptr_t)hStdoutR, _O_RDONLY | _O_BINARY);
+        if ( stdoutFd == -1 ) CloseHandle(hStdoutR);
+        FILE * fStdin  = stdinFd  != -1 ? _fdopen(stdinFd,  "wb") : nullptr;
+        if ( !fStdin  && stdinFd  != -1 ) _close(stdinFd);
+        FILE * fStdout = stdoutFd != -1 ? _fdopen(stdoutFd, "rb") : nullptr;
+        if ( !fStdout && stdoutFd != -1 ) _close(stdoutFd);
+        vec4f cargs[2];
+        cargs[0] = cast<FILE *>::from(fStdin);
+        cargs[1] = cast<FILE *>::from(fStdout);
+        context->invoke(blk, cargs, nullptr, at);
+        // Block done: close stdin (EOF → child). Drain stdout on a thread
+        // while waiting — a child that writes more than the pipe buffer
+        // (~4-64KB) after EOF-on-stdin would otherwise block in write() and
+        // deadlock our WaitForSingleObject. Discard the drained bytes; the
+        // contract is "read what you care about inside the block".
+        if ( fStdin ) fclose(fStdin);
+        thread drain;
+        if ( fStdout ) {
+            FILE * f = fStdout;
+            drain = thread([f]() {
+                char buf[4096];
+                while ( fread(buf, 1, sizeof(buf), f) > 0 ) { /* discard */ }
+            });
+        }
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        DWORD exitCode = 0;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        CloseHandle(pi.hProcess);
+        if ( drain.joinable() ) drain.join();
+        if ( fStdout ) fclose(fStdout);
+        return (int)exitCode;
+#else
+        int inPipe[2], outPipe[2];
+        if ( pipe(inPipe) == -1 ) {
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        if ( pipe(outPipe) == -1 ) {
+            close(inPipe[0]); close(inPipe[1]);
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        vector<char *> cargv;
+        cargv.reserve(args_arr.size + 1);
+        for ( uint32_t i = 0; i < args_arr.size; ++i ) {
+            cargv.push_back(argv[i] ? argv[i] : (char *)"");
+        }
+        cargv.push_back(nullptr);
+        pid_t pid = fork();
+        if ( pid == -1 ) {
+            close(inPipe[0]); close(inPipe[1]);
+            close(outPipe[0]); close(outPipe[1]);
+            vec4f cargs[2];
+            cargs[0] = cast<FILE *>::from(nullptr);
+            cargs[1] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        if ( pid == 0 ) {
+            close(inPipe[1]);
+            close(outPipe[0]);
+            dup2(inPipe[0], STDIN_FILENO);
+            dup2(outPipe[1], STDOUT_FILENO);
+            dup2(outPipe[1], STDERR_FILENO);
+            close(inPipe[0]);
+            close(outPipe[1]);
+            execvp(cargv[0], cargv.data());
+            _exit(127);
+        }
+        close(inPipe[0]);
+        close(outPipe[1]);
+        // Wrap each pipe end in a FILE*. If fdopen fails, close the raw fd
+        // we still own — otherwise the child's stdin write end leaks and
+        // waitpid would deadlock (child never sees EOF).
+        FILE * fStdin  = fdopen(inPipe[1],  "wb");
+        if ( !fStdin  ) close(inPipe[1]);
+        FILE * fStdout = fdopen(outPipe[0], "rb");
+        if ( !fStdout ) close(outPipe[0]);
+        vec4f cargs[2];
+        cargs[0] = cast<FILE *>::from(fStdin);
+        cargs[1] = cast<FILE *>::from(fStdout);
+        context->invoke(blk, cargs, nullptr, at);
+        // Block done: close stdin (EOF → child). Drain stdout on a thread
+        // while waiting — a child that writes more than the pipe buffer
+        // (~64KB on Linux) after EOF-on-stdin would otherwise block in
+        // write() and deadlock our waitpid. Discard the drained bytes;
+        // the contract is "read what you care about inside the block".
+        if ( fStdin ) fclose(fStdin);
+        thread drain;
+        if ( fStdout ) {
+            FILE * f = fStdout;
+            drain = thread([f]() {
+                char buf[4096];
+                while ( fread(buf, 1, sizeof(buf), f) > 0 ) { /* discard */ }
+            });
+        }
+        int status = 0;
+        waitpid(pid, &status, 0);
+        if ( drain.joinable() ) drain.join();
+        if ( fStdout ) fclose(fStdout);
         return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
 #endif
     }
@@ -1570,6 +1798,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen_argv)>(*this, lib, "popen_argv",
                 SideEffects::modifyExternal, "builtin_popen_argv")
                     ->args({"args","timeout","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen_argv_pipe)>(*this, lib, "popen_argv_pipe",
+                SideEffects::modifyExternal, "builtin_popen_argv_pipe")
+                    ->args({"args","scope","context","at"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_fread_to_eof)>(*this, lib, "fread_to_eof",
                 SideEffects::modifyExternal, "builtin_fread_to_eof")
                     ->args({"f","context","at"})->unsafeOperation = true;
