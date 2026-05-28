@@ -3059,29 +3059,26 @@ def private emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitC
 
 // R6 — backward index walk (bare reverse + take(N) [+ trailing `_select(F)`] + implicit to_array on array source).
 // Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
-// When `termsel` is captured, the K push_clones carry the projection directly (single buffer typed as projection element), saving the catch-all's N push_clones + reverse_inplace + resize + project pass. Mirrors the decs-side fast path extended in PR #2915 (`emit_decs_reverse_skip_into_tail`).
+// When `termsel` is captured, the loop still pushes RAW source elements into a srcElem-typed buffer; the projection runs post-loop via `build_terminal_select_tail`. This matches the decs-side fast path discipline (PR #2915) and R1-R4 catch-all: all source reads complete before any projection-side-effect can observe (or mutate) the source. Cost vs inlined-projection: K extra push_clones into the scratch buf (still O(K), no full-source walk).
 [macro_function]
 def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
     let srcName = (ctx.src as Array)._1
     if (!(c.single |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
-    var srcElemType = strip_const_ref(clone_type(top._type.firstType))
+    var bufElemType = strip_const_ref(clone_type(top._type.firstType))
     var termselLam : Expression?
-    var bufElemType : TypeDeclPtr
+    var termselElemType : TypeDeclPtr
     if (c.single |> key_exists("termsel")) {
         termselLam = c.single["termsel"].arguments[1]
-        // Fast-path needs termsel's typer-resolved element type: `peel_lambda_rename_var`'s invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so the call result's `firstType` is the authoritative source. If missing, cascade — R1-R4 catch-all has its own termsel handling for that case.
+        // Fast-path needs termsel's typer-resolved element type: `build_terminal_select_tail`'s `peel_lambda_replace_var` falls back to an `invoke(...)` shape for non-peelable lambdas whose `_type` is null at macro stage. If missing, cascade — R1-R4 catch-all has its own termsel handling for that case.
         if (termselLam == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) return null
-        bufElemType = strip_const_ref(clone_type(c.single["termsel"]._type.firstType))
-    } else {
-        bufElemType = srcElemType
+        termselElemType = strip_const_ref(clone_type(c.single["termsel"]._type.firstType))
     }
     let bufName = qn("buf", at)
     let lenName = qn("rlen", at)
     let takeLimName = qn("rtakeLim", at)
     let takeNName = qn("rtn", at)
     let kName = qn("rk", at)
-    let elemName = qn("rev_elem", at)
     var takeArg = c.single["take"].arguments[1]
     // Bind `take` arg once — user expression may have side effects; matches normal call semantics.
     var prologueStmts <- qmacro_block_to_array() {
@@ -3093,28 +3090,26 @@ def private emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx
     reserveStmts |> push <| qmacro_expr() {
         $i(bufName) |> reserve($i(takeNName))
     }
-    var perElementPush : Expression?
-    if (termselLam != null) {
-        var projBody = peel_lambda_rename_var(termselLam, elemName)
-        if (projBody == null) return null
-        perElementPush = qmacro_block() {
-            let $i(elemName) = $i(srcName)[$i(lenName) - 1 - $i(kName)]
-            $i(bufName) |> push_clone($e(projBody))
-        }
-    } else {
-        perElementPush = qmacro_expr() {
-            $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
-        }
+    var perElementPush : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(srcName)[$i(lenName) - 1 - $i(kName)])
     }
     var tailStmts : array<Expression?>
-    tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    var wrapIter = false
+    if (termselLam != null) {
+        // Post-loop projection mirrors emit_decs_reverse_skip_into_tail + R1-R4 catch-all: scratch buf carries K raw source elements, then projBuf is filled by termsel(elem) per K. Impure `_select` sees the same pre-walk source state under R6 as under the catch-all.
+        tailStmts |> push_from <| build_terminal_select_tail(bufName, termselLam, termselElemType, at)
+        wrapIter = ctx.expr_is_iterator
+    } else {
+        tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
+    }
     var spec = FoldArraySpec(
         prologueStmts <- prologueStmts,
         bufElemType = bufElemType,
         bufName = bufName,
         reserveStmts <- reserveStmts,
         perElementPush = perElementPush,
-        tailStmts <- tailStmts
+        tailStmts <- tailStmts,
+        wrapIter = wrapIter
     )
     var composedPE = compose_fold_per_element(spec)
     if (composedPE == null) return null
