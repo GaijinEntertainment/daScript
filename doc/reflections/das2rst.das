@@ -156,7 +156,7 @@ def document_module_builtin(root : string) {
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|get_key|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_from|push_clone|push_clone_from|back|sort|to_array|to_table|to_array_move|
 to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|remove_value|erase_if|resize_and_init|
-get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify)$%%),
+get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify|long_length|long_capacity|long_find_index)$%%),
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%),
@@ -180,7 +180,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("RTTI", mod, %regex~(class_rtti_size)$%%),
         hide_group(group_by_regex("Jit", mod,%regex~(invoke_code|.*jit.*)$%%)),
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%),
-        group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%),
+        group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount|long_iter_range)$%%),
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),
         group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%),
         group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name|get_module_file_name)$%%),
@@ -289,7 +289,7 @@ def document_module_rtti(root : string) {
         group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate|create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data)$%%),
         group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root|add_extra_module)$%%),
         group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%),
-        group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%),
+        group_by_regex("Data walking and printing", mod, %regex~(sprint_data|sprint_json_at|sscan_json_at|describe|get_mangled_name)$%%),
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%),
         group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%),
@@ -400,7 +400,7 @@ def document_module_functional(root : string) {
         group_by_regex("Transformations", mod, %regex~(filter|map|flat_map|flatten|sorted|scan)$%%),
         group_by_regex("Aggregation", mod, %regex~(reduce|reduce_or_default|fold|sum|any|all|count)$%%),
         group_by_regex("Search and split", mod, %regex~(find|find_index|partition)$%%),
-        group_by_regex("Iteration", mod, %regex~(for_each|tap|echo|enumerate)$%%),
+        group_by_regex("Iteration", mod, %regex~(for_each|tap|echo|enumerate|long_enumerate)$%%),
         group_by_regex("Generators", mod, %regex~(repeat_ref|repeat|cycle|iterate|chain|pairwise|islice)$%%),
         group_by_regex("Predicates", mod, %regex~(is_equal|is_not_equal|not)$%%)
     )
@@ -625,7 +625,7 @@ def document_module_templates_boost(root : string) {
         group_by_regex("Template application", mod, %regex~(apply_template)$%%),
         group_by_regex("Expression helpers", mod, %regex~(remove_deref|visit_expression|expression_at)$%%),
         group_by_regex("Expression generation", mod, %regex~(make_expression_block)$%%),
-        group_by_regex("Block helpers", mod, %regex~(unquote_block|move_unquote_block)$%%),
+        group_by_regex("Block helpers", mod, %regex~(unquote_block|move_unquote_block|push_block_list)$%%),
         group_by_regex("Global variable helpers", mod, %regex~(add_global_var|add_global_let|add_global_private_var|add_global_private_let)$%%),
         group_by_regex("Hygienic names", mod, %regex~(make_unique_private_name)$%%),
         group_by_regex("Quoting macros", mod, %regex~(apply_qmacro|apply_qblock|apply_qblock_to_array|apply_qblock_expr|apply_qtype|apply_qmacro_function|apply_qmacro_method|apply_qmacro_variable|apply_qmacro_template_class|apply_qmacro_template_function)$%%),
@@ -756,14 +756,16 @@ def document_module_ast_match(root : string) {
     var mod = find_module("ast_match")
     var groups <- array<DocGroup>(
         group_by_regex("Match execution", mod, %regex~.*(qm_run|qm_run_function)$%%),
+        group_by_regex("Call matching", mod, %regex~.*(match_call_in_module|match_call_in_linq)$%%),
         group_by_regex("Result builders", mod, %regex~.*(qm_ok|qm_fail_.*)$%%),
-        group_by_regex("Value extraction", mod, %regex~.*(qm_extract)$%%),
+        group_by_regex("Value extraction", mod, %regex~.*(qm_extract|extract_const_string)$%%),
         group_by_regex("Name and type extraction", mod, %regex~.*(qm_extract_name|qm_extract_call_name|qm_extract_field_name|qm_extract_type|qm_rtti|qm_call_name_matches)$%%),
         group_by_regex("Argument filtering", mod, %regex~.*(qm_count_real_args|qm_real_arg_index|qm_extract_remaining_args|qm_is_fake_arg|qm_count_real_call_args|qm_real_call_arg_index)$%%),
         group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%),
         group_by_regex("Constant construction", mod, %regex~.*(qm_make_zero_const)$%%),
         group_by_regex("AST reconstruction", mod, %regex~.*(qm_convert_local_function|qm_resolve_local_function|qm_convert_comprehension|qm_resolve_comprehension)$%%),
-        group_by_regex("AST normalization", mod, %regex~.*(qm_peel_ref2value)$%%)
+        group_by_regex("AST normalization", mod, %regex~.*(qm_peel_ref2value|peel_lambda.*|peel_tuple_field_read)$%%),
+        group_by_regex("Hygienic names", mod, %regex~.*(qn)$%%)
     )
     document("AST pattern matching", mod, "ast_match.rst", groups)
 }
@@ -842,7 +844,7 @@ def document_module_enum_trait(root : string) {
     var mod = find_module("enum_trait")
     var groups <- array<DocGroup>(
         group_by_regex("Enumeration iteration", mod, %regex~(each|each_name|find_value)$%%),
-        group_by_regex("Enumeration conversion", mod, %regex~(string|to_enum|enum_to_table)$%%)
+        group_by_regex("Enumeration conversion", mod, %regex~(string|to_enum|enum_to_table|bool|\!)$%%)
     )
     document("Enumeration traits", mod, "enum_trait.rst", groups)
 }
@@ -860,7 +862,7 @@ def document_module_decs(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Comparison and access", mod, %regex~(\=\=|\!\=|\.)$%%),
         group_by_regex("Access (get/set/clone)", mod, %regex~(has|get|set|set_direct|set_direct_at|clone|remove|get_component|find_component_index)$%%),
-        group_by_regex("Entity status", mod, %regex~(is_alive|entity_count)$%%),
+        group_by_regex("Entity status", mod, %regex~(is_alive|entity_count|long_entity_count)$%%),
         group_by_regex("Debug and serialization", mod, %regex~(describe|serialize|finalize|debug_dump.*)$%%),
         group_by_regex("Stages", mod, %regex~(register_decs_stage_call|decs_stage|commit)$%%),
         group_by_regex("Deferred actions", mod, %regex~(update_entity|create_entity|create_entities|create_entities_from_cmp|delete_entity)$%%),
@@ -894,7 +896,8 @@ def document_module_macro_boost(root : string) {
     var mod = find_module("macro_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Implementation details", mod, %regex~(macro_verify)$%%),
-        group_by_regex("Block analysis", mod, %regex~(capture_block|collect_finally|collect_labels)$%%)
+        group_by_regex("Block analysis", mod, %regex~(capture_block|collect_finally|collect_labels)$%%),
+        group_by_regex("Expression analysis", mod, %regex~(has_sideeffects)$%%)
     )
     document("Boost package for macro manipulations", mod, "macro_boost.rst", groups)
 }
@@ -958,7 +961,7 @@ def document_module_linq(root : string) {
     var mod = find_module("linq")
     var groups <- array<DocGroup>(
         group_by_regex("Sorting data", mod, %regex~(reverse.*|order.*)$%%),
-        group_by_regex("Top-N selection", mod, %regex~(top_n.*)$%%),
+        group_by_regex("Top-N selection", mod, %regex~(top_n.*|spliced_push_heap|spliced_pop_heap)$%%),
         group_by_regex("Set operations", mod, %regex~(distinct.*|union.*|intersect.*|except.*|unique.*)$%%),
         group_by_regex("Concatenation operations", mod, %regex~(concat.*|append.*|prepend.*)$%%),
         group_by_regex("Generation operations", mod, %regex~(default_empty|repeat|empty|range_sequence)$%%),
@@ -986,7 +989,10 @@ def document_module_linq_boost(root : string) {
 
 def document_module_linq_fold(root : string) {
     var mod = find_module("linq_fold")
-    var groups : array<DocGroup>
+    var groups <- array<DocGroup>(
+        group_by_regex("Pattern slot construction", mod, %regex~(m_literal|m_alias|c_one|c_opt|c_chain|slot_chain_of)$%%),
+        group_by_regex("Pattern table validation", mod, %regex~(chain_prefix_of|check_pattern_table_reachable)$%%)
+    )
     document("LINQ fold macros (_fold / _old_fold)", mod, "linq_fold.rst", groups)
 }
 
@@ -1161,7 +1167,7 @@ def document_module_lint(root : string) {
 def document_module_lint_config(root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
-        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|seed_default_disabled)$%%)
+        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|seed_default_disabled|build_lint_macro_disabled)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)
 }
@@ -1409,12 +1415,13 @@ def document_module_audio_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|audio_system_create|audio_system_finalize|audio_system_release_context)$%%),
         group_by_regex("Sound playback", mod, %regex~(play_sound|play_3d_sound)%%),
-        group_by_regex("Sound control", mod, %regex~(set_volume|set_pan|set_pitch|set_pause|set_global_pitch|set_global_pause|stop|set_playback_position)$%%),
+        group_by_regex("Sound control", mod, %regex~(set_volume|set_pan|set_pitch|set_pause|set_global_pitch|set_global_pause|set_global_volume|set_ignore_global_volume|stop|set_playback_position)$%%),
         group_by_regex("3D audio", mod, %regex~(set_head_position|set_position)$%%),
+        group_by_regex("HRTF", mod, %regex~(hrtf_budget_classify|set_hrtf_budget)$%%),
         group_by_regex("Reverb", mod, %regex~(set_reverb|set_reverb_preset)$%%),
         group_by_regex("Chorus", mod, %regex~(set_chorus|set_chorus_default)$%%),
         group_by_regex("Attenuation", mod, %regex~(compute_attenuation|default_attenuation|inverse_distance_attenuation|linear_attenuation|quadratic_attenuation|inverse_square_attenuation)$%%),
-        group_by_regex("Status monitoring", mod, %regex~(set_status_update|clear_status|unset_status_update)$%%),
+        group_by_regex("Status monitoring", mod, %regex~(set_status_update|clear_status|unset_status_update|set_audio_stats_box)$%%),
         group_by_regex("Command batching", mod, %regex~(begin_batch|end_batch|batch)$%%),
         group_by_regex("PCM stream", mod, %regex~(append_to_pcm|append_box_to_pcm)$%%),
         group_by_regex("Decoding", mod, %regex~(decode_audio)$%%),
