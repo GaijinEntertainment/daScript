@@ -3165,9 +3165,10 @@ def private emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : Emi
     return emit_fold_array_lane(spec, ctx.src, at)
 }
 
-// Decs `reverse |> take(N) |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain.
+// Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
+// `terminalSelectElemType` must be the typer-resolved element type of the termsel call result (caller reads it from `c.single["termsel"]._type.firstType`) — peel_lambda_rename_var's invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so deriving projType from the peeled body would mis-classify those as untyped and bail. Caller is responsible for ensuring termselElemType is non-null before this fast-path is selected; otherwise the gate falls through to the catch-all which has its own termsel handling.
 [macro_function]
-def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; at : LineInfo) : Expression? {
+def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {
     let bufName = qn("buf", at)
     let takeNName = qn("take_n", at)
     let totalName = qn("decs_total", at)
@@ -3175,9 +3176,19 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
     let skipName = qn("decs_skip", at)
     let seenName = qn("decs_seen", at)
     let skipsLeftName = qn("decs_skips", at)
+    let projElemName = qn("decs_rts_e", at)
+    let projBufName = qn("decs_rts_buf", at)
     let archName = bridge.archName
     var bufElemType = strip_const_ref(clone_type(bridge.elementType))
     let tupBind = build_decs_tup_bind(bridge, tupName, at)
+    var projBody : Expression?
+    var projType : TypeDeclPtr
+    if (terminalSelectLam != null) {
+        projBody = peel_lambda_rename_var(terminalSelectLam, projElemName)
+        if (projBody == null) return null
+        projType = strip_const_ref(clone_type(terminalSelectElemType))
+        if (projType == null) return null
+    }
     var innerBody : Expression? = qmacro_block() {
         if ($i(skipsLeftName) > 0_l) {
             $i(skipsLeftName) --
@@ -3194,33 +3205,69 @@ def private emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge 
     var newForBody = new ExprBlock(at = at)
     newForBody.list |> push(innerBody)
     clonedFor.body = newForBody
-    var emission : Expression? = qmacro(invoke($() : array<$t(bufElemType)> {
-        var $i(totalName) = 0_l
-        for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-            $i(totalName) += $i(archName).size
-        })
-        let $i(takeNName) = $e(takeExpr)
-        let $i(actualName) = ($i(takeNName) <= 0) ? 0_l : ((int64($i(takeNName)) < $i(totalName)) ? int64($i(takeNName)) : $i(totalName))
-        let $i(skipName) = $i(totalName) - $i(actualName)
-        var $i(bufName) : array<$t(bufElemType)>
-        if ($i(actualName) == 0_l) {
-            return <- $i(bufName)
-        }
-        $i(bufName) |> reserve(int($i(actualName)))
-        var $i(seenName) = 0_l
-        for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-            if ($i(seenName) + $i(archName).size <= $i(skipName)) {
-                $i(seenName) += $i(archName).size
-                return false
+    var emission : Expression?
+    if (terminalSelectLam == null) {
+        emission = qmacro(invoke($() : array<$t(bufElemType)> {
+            var $i(totalName) = 0_l
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $i(totalName) += $i(archName).size
+            })
+            let $i(takeNName) = $e(takeExpr)
+            let $i(actualName) = ($i(takeNName) <= 0) ? 0_l : ((int64($i(takeNName)) < $i(totalName)) ? int64($i(takeNName)) : $i(totalName))
+            let $i(skipName) = $i(totalName) - $i(actualName)
+            var $i(bufName) : array<$t(bufElemType)>
+            if ($i(actualName) == 0_l) {
+                return <- $i(bufName)
             }
-            var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
-            $e(clonedForExpr)
-            $i(seenName) += $i(archName).size
-            return long_length($i(bufName)) >= $i(actualName)
-        })
-        _::reverse_inplace($i(bufName))
-        return <- $i(bufName)
-    }))
+            $i(bufName) |> reserve(int($i(actualName)))
+            var $i(seenName) = 0_l
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+                if ($i(seenName) + $i(archName).size <= $i(skipName)) {
+                    $i(seenName) += $i(archName).size
+                    return false
+                }
+                var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
+                $e(clonedForExpr)
+                $i(seenName) += $i(archName).size
+                return long_length($i(bufName)) >= $i(actualName)
+            })
+            _::reverse_inplace($i(bufName))
+            return <- $i(bufName)
+        }))
+    } else {
+        emission = qmacro(invoke($() : array<$t(projType)> {
+            var $i(totalName) = 0_l
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $i(totalName) += $i(archName).size
+            })
+            let $i(takeNName) = $e(takeExpr)
+            let $i(actualName) = ($i(takeNName) <= 0) ? 0_l : ((int64($i(takeNName)) < $i(totalName)) ? int64($i(takeNName)) : $i(totalName))
+            let $i(skipName) = $i(totalName) - $i(actualName)
+            var $i(bufName) : array<$t(bufElemType)>
+            var $i(projBufName) : array<$t(projType)>
+            if ($i(actualName) == 0_l) {
+                return <- $i(projBufName)
+            }
+            $i(bufName) |> reserve(int($i(actualName)))
+            var $i(seenName) = 0_l
+            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
+                if ($i(seenName) + $i(archName).size <= $i(skipName)) {
+                    $i(seenName) += $i(archName).size
+                    return false
+                }
+                var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
+                $e(clonedForExpr)
+                $i(seenName) += $i(archName).size
+                return long_length($i(bufName)) >= $i(actualName)
+            })
+            _::reverse_inplace($i(bufName))
+            $i(projBufName) |> reserve(length($i(bufName)))
+            for ($i(projElemName) in $i(bufName)) {
+                $i(projBufName) |> push_clone($e(projBody))
+            }
+            return <- $i(projBufName)
+        }))
+    }
     return finalize_decs_emission(emission, at, needIterWrap)
 }
 
@@ -3238,12 +3285,20 @@ def private emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at 
         projection = peel_lambda_rename_var(c.single["preproj"].arguments[1], bindName)
     }
     var terminalSelectLam_check : Expression?
+    var terminalSelectElemType_check : TypeDeclPtr
+    var termsel_fast_path_ok = true
     if (c.single |> key_exists("termsel")) {
         terminalSelectLam_check = c.single["termsel"].arguments[1]
+        // Fast path needs termsel's typer-resolved element type (see helper docstring). If missing, fall through to the catch-all which has its own termsel handling.
+        if (terminalSelectLam_check == null || c.single["termsel"]._type == null || c.single["termsel"]._type.firstType == null) {
+            termsel_fast_path_ok = false
+        } else {
+            terminalSelectElemType_check = c.single["termsel"]._type.firstType
+        }
     }
-    // Decs skip-into-tail fast path for `reverse |> take(N) |> to_array` (no where/select/termsel) — preserves PR #2834's 5.2× perf gain; otherwise the unified path walks all entities then resizes.
-    if (ctx.src is Decs && (c.single |> key_exists("take")) && whereCond == null && projection == null && terminalSelectLam_check == null)
-        return emit_decs_reverse_skip_into_tail(c.single["take"].arguments[1], (ctx.src as Decs)._0, (ctx.src as Decs)._1, ctx.expr_is_iterator, at)
+    // Decs skip-into-tail fast path for `reverse |> take(N) [|> _select(F)] |> to_array` (no where, no pre-reverse select) — preserves PR #2834's 5.2× perf gain and extends to the trailing-select case so the catch-all (which walks ALL N entities, push_clones full tuples, reverses, resizes, then projects) is reserved for shapes that genuinely need it (pre-reverse where_/select, or termsel without a resolved element type).
+    if (ctx.src is Decs && (c.single |> key_exists("take")) && whereCond == null && projection == null && termsel_fast_path_ok)
+        return emit_decs_reverse_skip_into_tail(c.single["take"].arguments[1], (ctx.src as Decs)._0, (ctx.src as Decs)._1, ctx.expr_is_iterator, terminalSelectLam_check, terminalSelectElemType_check, at)
     var takeExpr : Expression?
     if (c.single |> key_exists("take")) {
         takeExpr = clone_expression(c.single["take"].arguments[1])

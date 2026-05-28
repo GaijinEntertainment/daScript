@@ -1,6 +1,6 @@
 # Benchmarks — SQL / Array / Decs comparison
 
-Generated 2026-05-28 from PR `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers). Closes the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
+Generated 2026-05-28 from PRs `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers) + follow-up `bbatkin/linq-fold-decs-reverse-take-select` (extend decs skip-into-tail to handle trailing `_select`). The first two close the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
 
 | Cell | m3f INTERP before / after | m3f JIT before / after |
 |---|---:|---:|
@@ -85,7 +85,7 @@ before the timer resolution can measure them — they should be read as
 | `order_take_desc` | 36.3 | 15.9 | 19.8 | 1.25× |
 | `reverse_distinct_by` | 284.8 | 21.3 | — | — |
 | `reverse_take` | 0.1 | 0.0 | 10.0 | — |
-| `reverse_take_select` | 0.0 | 33.4 | 47.4 | 1.42× |
+| `reverse_take_select` | 0.0 | 33.4 | 9.2 | 0.28× |
 | `select_count` | 0.1 | 0.0 | 2.2 | — |
 | `select_where` | 190.8 | 10.9 | 19.1 | 1.75× |
 | `select_where_count` | 31.4 | 5.1 | 7.3 | 1.43× |
@@ -162,7 +162,7 @@ before the timer resolution can measure them — they should be read as
 | `order_take_desc` | 36.5 | 0.7 | 1.3 | 1.86× |
 | `reverse_distinct_by` | 289.8 | 2.6 | — | — |
 | `reverse_take` | 0.0 | 0.0 | 1.1 | — |
-| `reverse_take_select` | 0.0 | 8.1 | 9.9 | 1.22× |
+| `reverse_take_select` | 0.0 | 8.1 | 1.1 | 0.14× |
 | `select_count` | 0.1 | 0.0 | 0.0 | — |
 | `select_where` | 105.0 | 4.1 | 5.3 | 1.29× |
 | `select_where_count` | 31.3 | 0.4 | 0.6 | 1.50× |
@@ -254,6 +254,42 @@ and which gaps could land in a single PR — see
   splice — trailing `reverse()` on the zip array lane emits
   `_::reverse_inplace` after the zip lockstep buffer fill. By design,
   no follow-up.
+
+## Accepted architectural floors (m4 vs m3f)
+
+Three cells where m4 stays ≥1.5× m3f INTERP and the gap is structural,
+not a splice/emit oversight. Documented here so the close-out doesn't
+keep chasing them.
+
+- **`last_match` m4 +8.2 ns INTERP (m3f 5.7 → m4 13.9, 2.44×)** — m3f's
+  iterator `last()` walks an `array<T>` and rebinds a single `var last : TT -&`
+  reference on each match (O(1) per match, one final clone at return).
+  m4 walks `for_each_archetype` and emits a 6-column lockstep
+  `for (car_id, car_name, car_price, car_brand, car_year, car_dealer_id in
+  get_default_ro(arch, ...) × 6)` — every element pays for all six
+  `get_default_ro` advances regardless of match status, then on match
+  constructs a tuple and `:=` clone-assigns it (which deep-clones the
+  string field). The fetch-all-columns model is the cost of decs columnar
+  storage; reducing it would require redesigning the per-element walk to
+  fetch the predicate column first and defer the rest until match —
+  significant infrastructure change for an 8 ns cell.
+- **`select_where` m4 +8.2 ns INTERP (m3f 10.9 → m4 19.1, 1.75×)** — same
+  root cause as `last_match`: 6-column lockstep fetch per element plus
+  per-match `push_clone(tuple(...))` (string clone) into the output
+  buffer. The `to_array` shape can't avoid materializing each match, so
+  the per-match clone is structural; the per-element fetch cost is the
+  same decs columnar overhead.
+- **`order_distinct_take` m4 +78 ns INTERP, 35× JIT** — `unique_key`
+  string-interpolation path on non-workhorse `DecsBrand` keys (already
+  documented in "Notes on missing lanes" above — not closeable without
+  a struct-aware hashing scheme).
+
+`reverse_take_select` USED to be on this list (m4 was +14 ns INTERP at
+the catch-all path). It is NOT a floor — closed by extending the decs
+skip-into-tail fast path to handle a trailing `_select` (was previously
+gated to bail out when termsel was present, forcing fall-through to the
+expensive full-buffer-then-reverse-then-resize-then-project path that
+did N push_clones with string clones for N=100K to keep just K=10).
 
 ## How to re-run
 
