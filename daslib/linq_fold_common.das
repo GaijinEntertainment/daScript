@@ -39,6 +39,7 @@ enum AdapterKind {
     k_decs_join
     k_zip
     k_array_join
+    k_xml
 }
 
 [macro_interface]

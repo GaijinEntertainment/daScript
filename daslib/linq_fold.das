@@ -37,6 +37,7 @@ require strings
 require daslib/linq_fold_common public
 require daslib/linq_fold_array public
 require daslib/linq_fold_decs public
+require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — loaded only when pugixml is linked
 
 [macro_function]
 def private fold_linq_default(var expr : Expression?) : Expression? {
@@ -126,6 +127,24 @@ def private register_all_linq_fold_rows {
     build_zip_rows()
 }
 
+// Shared dispatch loop — the source `adapter` is the only per-source variation. Tries each splice
+// pattern against `matchTop` (or just `onlyRow` when set), returns the first non-null emission.
+[macro_function]
+def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; var matchTop, ctxTop : Expression?;
+                               var adapter : SourceAdapter?; exprIsIter : bool; at : LineInfo;
+                               onlyRow : string = "") : Expression? {
+    for (p in splice_patterns) {
+        if (onlyRow != "" && p.name != onlyRow) continue
+        var r <- match_pattern(p, calls, matchTop)
+        if (r is matched) {
+            var ctx = EmitCtx(top = ctxTop, src = adapter, expr_is_iterator = exprIsIter)
+            var result = invoke(p.emit, r as matched, ctx, at)
+            if (result != null) return result
+        }
+    }
+    return null
+}
+
 [macro_function]
 def private try_splice_patterns(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
@@ -135,37 +154,28 @@ def private try_splice_patterns(var expr : Expression?) : Expression? {
     collapse_chained_wheres(calls)
     let at = calls[0]._0.at
     let exprIsIter = expr._type.isIterator
-    // Decs adapter first when a from_decs_template bridge is present (Slice 5d cascade rule).
+    // Decs first; returning the result directly is the cascade rule — an unclaimed decs source falls to fold_linq_default, never the Array adapter (see linq_fold_patterns.rst "How dispatch works").
     var bridge = extract_decs_bridge(top)
     if (bridge != null) {
-        let tupName = qn("decs_tup", at)
-        for (p in splice_patterns) {
-            var r <- match_pattern(p, calls, top)
-            if (r is matched) {
-                var ctx = EmitCtx(top = null,
-                                  src = new DecsAdapter(bridge = bridge, tupName = tupName),
-                                  expr_is_iterator = exprIsIter)
-                var result = invoke(p.emit, r as matched, ctx, at)
-                if (result != null) return result
-            }
-        }
+        return run_splice_adapter(calls, top, null,
+            new DecsAdapter(bridge = bridge, tupName = qn("decs_tup", at)), exprIsIter, at)
     }
-    // Cascaded decs chains fall through to fold_linq_default rather than risk a decs-only row matching here (peel_each doesn't strip the eager-bridge ExprInvoke, so decs_source stays true) and emitting via Array adapter — see linq_fold_patterns.rst "How dispatch works".
-    if (bridge != null) return null
-    top = peel_each(top)
-    let srcName = qn("source", at)
-    for (p in splice_patterns) {
-        var r <- match_pattern(p, calls, top)
-        if (r is matched) {
+    // XML adapter (pass 2a, loop_or_count_general only) — static_if drops the block pre name-resolution when pugixml is absent, so extract_xml_source / XmlAdapter never resolve in pugixml-disabled builds.
+    static_if (typeinfo builtin_module_exists(pugixml)) {
+        var xmlCall = extract_xml_source(top)
+        if (xmlCall != null) {
             var topClone = clone_expression(top)
-            var ctx = EmitCtx(top = topClone,
-                              src = new ArrayAdapter(top = topClone, srcName = srcName),
-                              expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
+            var nameArg : Expression? = length(xmlCall.arguments) == 3 ? clone_expression(xmlCall.arguments[1]) : null
+            return run_splice_adapter(calls, topClone, topClone,
+                new XmlAdapter(nodeExpr = clone_expression(xmlCall.arguments[0]), srcName = qn("xnode", at),
+                               elemType = clone_type(xmlCall._type.firstType), nameArg = nameArg),
+                exprIsIter, at, "loop_or_count_general")
         }
     }
-    return null
+    top = peel_each(top)
+    var topClone = clone_expression(top)
+    return run_splice_adapter(calls, top, topClone,
+        new ArrayAdapter(top = topClone, srcName = qn("source", at)), exprIsIter, at)
 }
 
 [call_macro(name="_fold")]

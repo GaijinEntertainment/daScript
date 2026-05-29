@@ -270,7 +270,8 @@ class ArrayJoinAdapter : SourceAdapter {
 [clone(top), macro_function]
 def emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                       var skipExpr, takeExpr, skipWhileCond : Expression?;
-                      var loopBody : Expression?; at : LineInfo) : Expression? {
+                      var loopBody : Expression?; at : LineInfo;
+                      var adapterOverride : SourceAdapter? = null) : Expression? {
     // loopBody is caller-pre-wrapped (where/binds/post-take/in-loop ranges); spec only handles prelude+prologue+tail.
     var prologue : array<Expression?>
     append_ranges_prelude(prologue, skipExpr, takeExpr, skipWhileCond, names)
@@ -290,15 +291,17 @@ def emit_counter_lane(var top : Expression?; srcName, accName, itName : string; 
         prologue <- prologue,
         perElementStmts <- perElementStmts,
         tailStmts <- tailStmts
-    ), build_lane_adapter(laneTops, laneSrcs), at)
+    ), build_lane_adapter(laneTops, laneSrcs, adapterOverride), at)
 }
 
 // ===== Emission-lane unification (Phase F — see linq_fold.md) =====
 
 // Bridge for orchestrators that still take parallel (topExprs, srcNames) arrays. 1-source → Array;
-// 2-source → Zip (types derived via invoke_src_param_type, matches the prior inline-invoke shape).
+// 2-source → Zip. adapterOverride (when set) wins outright — lets a non-array single-source adapter
+// (e.g. XmlAdapter) ride the array lanes; topExprs/srcNames are then ignored.
 [macro_function]
-def build_lane_adapter(var topExprs : array<Expression?>; srcNames : array<string>) : SourceAdapter? {
+def build_lane_adapter(var topExprs : array<Expression?>; srcNames : array<string>; var adapterOverride : SourceAdapter? = null) : SourceAdapter? {
+    if (adapterOverride != null) return adapterOverride
     let nSrcs = length(srcNames)
     if (nSrcs != 1 && nSrcs != 2) panic("build_lane_adapter: only 1- or 2-source supported (got {nSrcs})")
     if (length(topExprs) != nSrcs) panic("build_lane_adapter: topExprs length {length(topExprs)} != srcNames length {nSrcs}")
@@ -330,7 +333,8 @@ def emit_accumulator_lane(
                           accName, itName : string;
                           names : RangeStateNames;
                           var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
-                          at : LineInfo
+                          at : LineInfo;
+                          var adapterOverride : SourceAdapter? = null
                           ) : Expression? {
     // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
     var valueExpr : Expression?
@@ -377,7 +381,7 @@ def emit_accumulator_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts
-    ), build_lane_adapter(topExprs, srcNames), at)
+    ), build_lane_adapter(topExprs, srcNames, adapterOverride), at)
 }
 
 [macro_function]
@@ -395,7 +399,8 @@ def emit_early_exit_lane(
                          itName : string;
                          names : RangeStateNames;
                          var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
-                         at : LineInfo
+                         at : LineInfo;
+                         var adapterOverride : SourceAdapter? = null
                          ) : Expression? {
     // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
     var perMatchStmts : array<Expression?>
@@ -661,13 +666,16 @@ def emit_early_exit_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts
-    ), build_lane_adapter(topExprs, srcNames), at)
+    ), build_lane_adapter(topExprs, srcNames, adapterOverride), at)
 }
 
 [macro_function]
 def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // PR C Decs-arm: route to existing emit_decs_* lane fns. State hoists above for_each_archetype (different invoke shape from array side); unifying lane fns is out of scope per D1.
     if (ctx.src->kind() == AdapterKind.k_decs) return ctx.src->emit_loop_or_count(c, ctx, at)
+    // Non-array single-source adapters (XML) ride this whole lane via the override — it wins over the
+    // ArrayAdapter that build_lane_adapter / the buffer lane would otherwise reconstruct from top+srcName.
+    var adapterOverride : SourceAdapter? = ctx.src->kind() == AdapterKind.k_xml ? ctx.src : null
     var top = ctx.top
     let srcName = ctx.src->arraySrcName()
     let itName = qn("it", at)
@@ -801,7 +809,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         laneSrcs |> push(srcName)
         return emit_accumulator_lane(lastName, laneTops, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at, adapterOverride)
     }
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = c.single["term"]
@@ -815,7 +823,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         laneSrcs |> push(srcName)
         return emit_early_exit_lane(lastName, laneTops, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at, adapterOverride)
     }
     var loopBody : Expression?
     if (counterLane) {
@@ -870,6 +878,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         }
         var tailStmts : array<Expression?>
         tailStmts |> push(buffer_return(accName, ctx.expr_is_iterator))
+        var bufAdapter : SourceAdapter? = adapterOverride
+        if (bufAdapter == null) {
+            bufAdapter = new ArrayAdapter(top = top, srcName = srcName)
+        }
         return emit_fold_array_lane(FoldArraySpec(
             prologueStmts <- prologueStmts,
             bufElemType = elementType,
@@ -880,10 +892,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             perElementPush = perElementPush,
             tailStmts <- tailStmts,
             wrapIter = false
-        ), new ArrayAdapter(top = top, srcName = srcName), at)
+        ), bufAdapter, at)
     }
     return emit_counter_lane(top, srcName, accName, itName, names,
-        skipExpr, takeExpr, skipWhileCond, loopBody, at)
+        skipExpr, takeExpr, skipWhileCond, loopBody, at, adapterOverride)
 }
 
 [macro_function]
