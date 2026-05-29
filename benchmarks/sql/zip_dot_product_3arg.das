@@ -7,8 +7,9 @@ require _common public
 // The 3-arg form `zip(a, b, sel)` is pre-lowered by plan_zip to
 // `zip(a, b) |> _select(sel-as-tuple)` so the standard zip+select fusion fires —
 // this bench measures the natural dot-product idiom that previously cascaded.
-// No SQL form (zip is not relational); no decs form (no zip on archetype walks).
-// Companion to zip_dot_product.das which uses the explicit 2-arg + _select form.
+// SQL (m1) deferred for the same reason as zip_dot_product: the degenerate `SUM(price*year*brand)`
+// overflows int and needs an int64-typed computed projection (cast follow-up). No decs form (no zip
+// on archetype walks). Companion to zip_dot_product.das which uses the explicit 2-arg + _select form.
 // int64 cast in the selector avoids int32 overflow for n=100k.
 
 def make_ints(n : int) : array<int> {

@@ -13,7 +13,7 @@ require dastest/testing_boost public
 // bridge survives all `plan_decs_*` arms and the chain materializes a temp array
 // before the tier-2 cascade. This file exercises the FIRES path: the warning is
 // visible at compile time, and the cascade still returns the correct result.
-// Companion file `_silenced` covers `options _no_decs_perf_warn = true`.
+// Companion file `_silenced` covers `options _no_linq_perf_warn = true`.
 
 [decs_template(prefix = "t6_")]
 struct Theme6Row {

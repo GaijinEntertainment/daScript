@@ -5,12 +5,24 @@ require _common public
 
 let TAKE_N = 1000
 
-// `_sql` rejects `take(n) |> sum()` — semantic mismatch: in SQL, LIMIT after an
-// aggregate has no effect (aggregate collapses to one row), so the bound-then-sum
-// shape has no faithful SQL translation. [By design — no follow-up TODO.] Array and
-// Decs lanes bound the projection-sum loop to the first TAKE_N matched elements
-// (no upstream where here, so "matched" == "every source element"). Exercises
-// accumulator-lane take splice in _fold.
+// _select(price) |> take(N) |> sum — "sum the first N". SQL (m1): take before an aggregate
+// wraps the pre-aggregate chain into an inner subquery (LIMIT stays inner) and sums the outer —
+// `SELECT SUM("price") FROM (SELECT * FROM Cars LIMIT ?)`. Array and Decs lanes bound the
+// projection-sum loop to the first TAKE_N elements (no upstream where, so "matched" == "every
+// element"). Exercises accumulator-lane take splice in _fold.
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let s = _sql(db |> select_from(type<Car>) |> _select(_.price) |> take(TAKE_N) |> sum())
+            b |> accept(s)
+            if (s == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def run_m3f(b : B?; n : int) {
     let arr <- fixture_array(n)
@@ -32,6 +44,11 @@ def run_m4(b : B?; n : int) {
             b->failNow()
         }
     }
+}
+
+[benchmark]
+def take_sum_aggregate_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]

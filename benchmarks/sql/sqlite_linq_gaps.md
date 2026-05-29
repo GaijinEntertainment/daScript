@@ -7,11 +7,15 @@ missing** rather than by bench. Each gap is either:
   `PARTITION BY` / `LAG` / `LAG`, and `sqlite_linq` does not currently lower any
   window-function surface. One follow-up PR could open the whole group.
 - **other deferred lowerings** — narrower surface gaps (`COUNT(DISTINCT
-  computed-expr)`, `COUNT(*) FILTER (WHERE ...)`, `_select` after `_join`,
-  LIMIT-before-WHERE semantics) where `sqlite_linq` has nothing equivalent
-  today but each could land independently.
-- **by design** — the chain has no faithful SQL form (zip is not relational;
-  LIMIT after an aggregate is a no-op).
+  computed-expr)`, `COUNT(*) FILTER (WHERE ...)`) where `sqlite_linq` has
+  nothing equivalent today but each could land independently. (`_select`
+  after `_join`, LIMIT-before-aggregate, and computed-scalar `_select` are
+  now **closed** — see below.)
+- **deferred (computed cast)** — computed projections containing a type
+  cast (`int64(...)`) fail inference, so the wide-result dot-product sum
+  lanes stay `—` until the cast follow-up.
+- **by design** — the chain has no faithful SQL form (zip is positional,
+  not relational; `reverse()` has no SQL order key).
 
 Cross-reference back to the `.das` bench file at each row — that's where the
 gap is documented inline.
@@ -74,62 +78,69 @@ correct, runtime path deferred to chunk N+3.
 
 Bench: [`chained_select_collapse`](chained_select_collapse.das).
 
-`distinct() |> count()` after a `_select` rejects today because the
-collapsed `_select` projects a computed expression, and SQLite's
-`COUNT(DISTINCT x)` accepts only column references in its grammar (or
-`COUNT(DISTINCT expr)` with parenthesization, depending on dialect).
-`sqlite_linq`'s emitter doesn't form the `DISTINCT computed-expr` shape
-yet. Plausible to lower if the projected expression has no aggregates,
-side effects, or non-pure functions.
+`distinct() |> count()` after a `_select` rejects today because it needs
+`COUNT(DISTINCT <expr>)` (DISTINCT *inside* the aggregate), which
+`sqlite_linq`'s emitter doesn't form yet. (Computed-scalar `_select`
+itself now lowers — see "Closed" below — so the remaining gap is the
+aggregate-distinct shape + the chained `_select |> _select` collapse.)
+Deferred to the aggregate-distinct follow-up.
 
-### `_select` after `_join` — bare `_` rejected
+### ~~`_select` after `_join`~~ — closed (into-projection `m1`)
 
 Bench: [`join_select`](join_select.das).
 
-`_sql`'s `_select` after `_join` only accepts the `into` lambda's
-parameter names as receivers — bare `_` and computed projections are
-rejected. The fix would be to inline the projection into the `into`
-lambda before lowering, or surface a separate `_select` arm that
-post-projects the join result via a derived table. Surface limitation, not
-a query-shape impossibility.
+A standalone `_select` after `_join` still rejects bare `_` (only the
+`into` lambda's parameter names are valid receivers), but the comparable
+SQL inlines the projection into the `into` lambda
+(`_join(..., $(c,d) => (CarName = c.name))`) — same result. The bench
+`m1` lane uses that form.
 
-### `LIMIT` semantics edge cases
+### ~~`LIMIT` before an aggregate~~ — closed (inner-subquery wrap)
 
 Benches: [`take_count_filtered`](take_count_filtered.das),
 [`take_sum_aggregate`](take_sum_aggregate.das),
 [`take_where_count`](take_where_count.das).
 
-In SQL:
-- `LIMIT` after `COUNT(*)` / `SUM(...)` is a no-op (the aggregate collapses
-  to one row).
-- `LIMIT` applies after `WHERE`, not before, so `take(N) |> _where(P) |>
-  count()` ("first N rows, count matching") would need a derived-table
-  form (`SELECT COUNT(*) FROM (SELECT ... LIMIT N) WHERE ...`).
-
-`sqlite_linq` doesn't currently lower the derived-table form. Each of
-these can be addressed independently, but in practice the bench cells will
-likely stay `—` because the chain shape is unusual in SQL idiom (it's a
-fold-fold idiom).
+`take(n)`/`skip(n)` before an aggregate now wraps the pre-aggregate chain
+into an inner subquery so the LIMIT applies pre-aggregate
+(`SELECT COUNT(*) FROM (SELECT * FROM t WHERE P LIMIT n)`) — via
+`maybe_wrap_take_before_aggregate` reusing `snapshot_q_to_subquery_wrap`.
+`take_where_count` (take-before-where) was already faithful via the
+existing take/where phase divert. All three have `m1` lanes.
 
 ---
 
-## By design — no SQL form possible
+## Computed-scalar `_select` — closed
 
-### `zip` family — not a relational operation
+`_select(_.a + _.b)` (and any expression `pred_to_sql` can render) now
+lowers into a single computed projection slot, so `sum`/`min`/`max`/
+`average`/`count` over a computed value work. **Caveat:** a computed
+projection containing a type cast (`int64(_.a) * int64(_.b)`) fails
+inference (the `_` placeholder + cast interaction in linq's `_select`),
+so the wide-result dot-product **sum** lanes (`zip_dot_product`,
+`zip_dot_product_3arg`) stay `—` — their `SUM(price*year)` overflows
+int32 at n=100k and needs an int64-typed projection. Deferred to the
+computed-cast follow-up.
 
-Benches: [`zip_count_pred`](zip_count_pred.das),
+---
+
+## By design / deferred — no clean SQL form
+
+### `zip` family — positional, not relational
+
+Benches: [`zip_count_pred`](zip_count_pred.das) (degenerate `m1` added),
 [`zip_dot_product`](zip_dot_product.das),
 [`zip_dot_product_3arg`](zip_dot_product_3arg.das),
 [`zip_reverse_to_array`](zip_reverse_to_array.das).
 
-`zip(a, b)` pairs elements by position across two unrelated sequences.
-SQL has no concept of positional pairing across tables (joins are
-key-based, not index-based). A `ROW_NUMBER()`-joined emulation
-(`a JOIN b ON a.rn = b.rn`) would technically work but would be
-fundamentally different from the in-memory zip — different cost model,
-no real-world SQL idiom.
-
-These cells will stay `—` permanently.
+`zip(a, b)` pairs elements by position across two unrelated sequences;
+SQL has no positional pairing (joins are key-based). The decs/SQL lanes
+instead measure the degenerate **same-row** interpretation (two columns
+of one row). `zip_count_pred` gets an `m1` on that basis (count of
+`price*year > T`, product pushed into `_where` — the per-row product fits
+int32). The dot-product **sum** lanes need an int64-typed projection
+(see "Computed-scalar `_select`" above) — deferred.
+`zip_reverse_to_array` stays `—`: `reverse()` has no SQL order key.
 
 ### `decs_count_bare_pred` — decs-specific Theme 4 root-cause fix
 

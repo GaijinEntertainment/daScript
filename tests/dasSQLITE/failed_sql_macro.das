@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:23
+expect 30341, 30928:2, 50503:22
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -43,8 +43,8 @@ def main() {
     // 4. _sql with double _select
     let bad4 <- _sql(db |> select_from(type<Car>) |> _select(_.Name) |> _select(_.Price))
 
-    // 5. _sql with _select projection that's not a column ref (chunk 2 only supports _.Field)
-    let bad5 <- _sql(db |> select_from(type<Car>) |> _select(_.Price * 2))
+    // (bad5 removed: a computed scalar `_select(_.Price * 2)` now lowers to `SELECT ("Price") * ?`
+    //  via pred_to_sql + push_computed_proj_slot. Coverage moved to test_99_computed_select_subquery.das.)
 
     // (bad6 removed: pred_to_sql no longer has an "unsupported expression"
     //  catch-all — unrecognized AST shapes fall through to a `?`-bind, and

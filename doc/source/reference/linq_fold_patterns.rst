@@ -523,13 +523,13 @@ site::
     runs on the materialized buffer. Rewrite the chain to a
     recognized decs shape (see
     doc/source/reference/linq_fold_patterns.rst), or suppress with
-    `options _no_decs_perf_warn = true`.
+    `options _no_linq_perf_warn = true`.
 
 The fix is usually to reorder ops so the chain matches a row in the
 Decs section above (e.g. push ``_select`` past ``_skip_while`` /
 ``_take_while`` since their predicates run on the source tuple, not
 the projected value). Suppress per file with ``options
-_no_decs_perf_warn = true`` for tests that intentionally exercise
+_no_linq_perf_warn = true`` for tests that intentionally exercise
 cascade behavior as regression guards.
 
 See also
