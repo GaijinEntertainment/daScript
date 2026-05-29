@@ -67,7 +67,8 @@ Optional requires
 -----------------
 
 A ``require`` may be **guarded** by a module name written as ``?guard`` directly
-after the ``require`` keyword:
+after the ``require`` keyword (gen2 syntax only — the guard form is not accepted
+under the v1 ``options gen2 = false`` parser):
 
 .. code-block:: das
 

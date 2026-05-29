@@ -83,9 +83,9 @@ Each macro-bearing module is `simulate`d into its **own context** at compile tim
 
 The practical pattern: to contribute macro-time state into module A's registry, the contributing code must **compile into A's context** — i.e. **A `require`s the contributor**, pulling its definitions in. Direction is *consumer → contributor*, never contributor-self-registers-into-consumer. (Example: the linq_fold engine's `splice_patterns` table lives in linq_fold's macro context, so a source adapter for an external module is pulled in via `linq_fold` requiring the adapter file — not the module registering itself.)
 
-This forces a hard `require` even when the dependency is logically optional / inverted (core requiring an external module). Make it conditional **later** with two pieces, both currently net-new machinery (verify/implement before relying on them):
-- an **optional require** (require a module only if it's available — a plain top-level `require` is resolved at module-resolution time, *before* `static_if`, so `static_if` alone can't gate it), and
-- a **`static_if typeinfo has_module(...)`**-style guard around the registration call and any dispatcher branch that names the contributor's symbols. As of 2026-05, no `has_module` typeinfo exists yet — adding it is C++-side work.
+This forces a hard `require` even when the dependency is logically optional / inverted (core requiring an external module). Make it conditional with two pieces (both available):
+- an **optional require** — `require ?<guard> <target>` (gen2) requires `<target>` only when module `<guard>` is available, and skips silently otherwise (a plain top-level `require` resolves at module-resolution time, *before* `static_if`, so `static_if` alone can't gate it — this is what the `?guard` form solves). See `doc/source/reference/language/modules.rst` "Optional requires".
+- a **`static_if (typeinfo builtin_module_exists(<guard>))`** guard around the registration call and any dispatcher branch that names the contributor's symbols (the `static_if` drops its untaken branch before name resolution, so the symbols resolve only when the module is present).
 
 Note adapters can still *emit* code referencing the contributor's symbols by name (resolved at the user's splice site, like linq_fold_decs emitting `for_each_archetype` without requiring decs) — that's orthogonal to *registering* into the consumer's macro state, which is the part bound by the context model.
 
