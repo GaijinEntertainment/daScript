@@ -659,33 +659,39 @@ skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
 PERF014 — char-class range check
 ================================
 
-Hand-rolled ranges like ``c >= 'a' && c <= 'z'`` reimplement
-``strings::is_alpha``/``is_alnum``/``is_number``/``is_white_space``/etc.
-The helper functions read clearer and centralise locale/codepoint
-behaviour. Both the closed in-range form (``&&``) and its negated
-out-of-range complement (``||`` with strict ``<``/``>``) are flagged.
-Only three ranges are recognised:
+Hand-rolled char ranges reimplement ``strings::is_number`` /
+``strings::is_alpha``. The helpers read clearer and centralise
+locale/codepoint behaviour. Only ranges that are **exactly** equivalent
+to a helper are flagged, so the suggested rewrite never changes
+behaviour:
 
-* ``'0'..'9'`` (48..57) — ``is_number``
-* ``'a'..'z'`` (97..122) — ``is_alpha`` lower half
-* ``'A'..'Z'`` (65..90) — ``is_alpha`` upper half
+* ``c >= '0' && c <= '9'`` ⟺ ``is_number(c)``
+* ``(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')`` ⟺ ``is_alpha(c)``
+  (``is_alpha`` is *defined* as exactly this both-case union)
 
-The hex extras ``'a'..'f'`` / ``'A'..'F'`` are deliberately **not**
-flagged — ``is_hex`` is broader. An ``&&`` of strict inequalities
-(``c > '0' && c < '9'``) is an open *intersection* with different
-endpoints, so it is skipped — distinct from the ``||`` strict-inequality
-*complement* (``c < '0' || c > '9'``) which is flagged.
+Both the closed forms above and their De Morgan negations (out-of-range
+forms, suggesting ``!is_number`` / ``!is_alpha``) are flagged.
+
+Deliberately **not** flagged:
+
+* A **single-case** range (``c >= 'a' && c <= 'z'`` on its own) — there is
+  no ``is_lower`` / ``is_upper`` helper, so no exact rewrite exists.
+* Hex extras (``'a'..'f'`` / ``'A'..'F'``) — ``is_hex`` is broader.
+* An ``&&`` of strict inequalities (``c > '0' && c < '9'``) — an open
+  *intersection* with different endpoints, distinct from the ``||``
+  strict-inequality *complement* (``c < '0' || c > '9'``) which is flagged.
 
 .. code-block:: das
 
     // Bad
-    if (c >= 'a' && c <= 'z') { ... }           // PERF014
-    if (c >= 48  && c <= 57)  { ... }           // PERF014 (raw int form)
-    if (c < '0' || c > '9')   { ... }           // PERF014 (negated / out-of-range)
+    if (c >= '0' && c <= '9') { ... }                          // PERF014 (→ is_number)
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { }  // PERF014 (→ is_alpha)
+    if (c < '0' || c > '9')   { ... }                          // PERF014 (negated → !is_number)
 
     // Good
-    if (is_alpha(c))  { ... }
     if (is_number(c)) { ... }
+    if (is_alpha(c))  { ... }
+    if (c >= 'a' && c <= 'z') { ... }           // single case — no exact helper, not flagged
     if (!is_number(c)) { ... }                  // negated form
 
 PERF015 — ternary min / max

@@ -1259,12 +1259,16 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
-        // PERF014: closed in-range (&&) and negated out-of-range (||) char-class checks
+        // PERF014: exact char-class checks. Digit range is a single bounded range
+        // (closed joins with &&, negated complement with ||). Alpha is the both-case
+        // compound (closed = || of two ranges, negated = && of two complements).
         if (expr.op == "&&") {
-            check_perf014_char_class(expr, false)
+            check_perf014_digit(expr, false)
+            check_perf014_alpha(expr, true)
         }
         if (expr.op == "||") {
-            check_perf014_char_class(expr, true)
+            check_perf014_digit(expr, true)
+            check_perf014_alpha(expr, false)
         }
         // PERF017: length(s) <op> 0 / 1 → empty(s) / !empty(s)
         if (expr.op == "==" || expr.op == "!=" || expr.op == "<" || expr.op == "<=" || expr.op == ">" || expr.op == ">=") {
@@ -1398,7 +1402,7 @@ class PerfLintVisitor : AstVisitor {
         perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary — hoist as {lname}(cond ? a : b)", expr.at)
     }
 
-    // --- PERF014: char-class range checks (closed in-range && / negated out-of-range ||) ---
+    // --- PERF014: exact char-class checks — is_number (digit range) / is_alpha (both-case compound) ---
 
     def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
         //! Parse `var <op> const` or `const <op> var` where op is `upper_op` or
@@ -1427,47 +1431,70 @@ class PerfLintVisitor : AstVisitor {
         return false
     }
 
-    def is_known_char_class_range(lo : int; hi : int) : bool {
-        //! Three closed ranges hint at the strings is_*() helpers.
-        //! Hex extras ('a'..'f', 'A'..'F') are excluded — is_hex is broader.
-        return ((lo == 48 && hi == 57)         // '0'..'9' — is_number
-                || (lo == 97 && hi == 122)     // 'a'..'z' — is_alpha (lower half)
-                || (lo == 65 && hi == 90))     // 'A'..'Z' — is_alpha (upper half)
-    }
-
-    def check_perf014_char_class(expr : ExprOp2?; negated : bool) : void {
-        //! `negated == false`: closed in-range `c >= lo && c <= hi` → is_*(c).
-        //! `negated == true`:  open  out-of-range `c < lo || c > hi` → !is_*(c)
-        //! (the De Morgan complement, written with strict `<`/`>`).
-        let upper_op = negated ? ">"  : "<="
-        let lower_op = negated ? "<"  : ">="
+    def parse_bounded_range(expr : ExprOp2?; negated : bool; var v_out : Expression?&; var lo_out : int&; var hi_out : int&) : bool {
+        //! Parse a single bounded range on one variable from a two-leg ExprOp2.
+        //! Closed (`negated == false`): `c >= lo && c <= hi` (join `&&`, legs <=/>=).
+        //! Open   (`negated == true`):  `c < lo || c > hi`   (join `||`, legs </>).
+        //! Both legs must constrain the SAME (pure) expression — one upper, one
+        //! lower bound. Fills v_out / lo_out / hi_out; returns true on clean parse.
+        if (expr == null || expr.op != (negated ? "||" : "&&")) return false
+        let upper_op = negated ? ">" : "<="
+        let lower_op = negated ? "<" : ">="
         var va : Expression? = null
         var vb : Expression? = null
         var bound_a = 0
         var bound_b = 0
         var hi_a = false
         var hi_b = false
-        // Both legs must parse, constrain the SAME expression, and split into
-        // one upper / one lower bound.
         if (!parse_range_leg(expr.left, upper_op, lower_op, va, bound_a, hi_a)
             || !parse_range_leg(expr.right, upper_op, lower_op, vb, bound_b, hi_b)
             || !expr_equal_struct(va, vb)
-            || hi_a == hi_b) return
+            || hi_a == hi_b) return false
         let lo = hi_a ? bound_b : bound_a
         let hi = hi_a ? bound_a : bound_b
-        if (lo >= hi || !is_known_char_class_range(lo, hi)) return
-        // Pick the helper that matches the detected range. Note: is_alpha covers
-        // BOTH cases, so for a single-case range ('a'..'z' or 'A'..'Z') it's a
-        // broader replacement, not an exact one — call that out so the user
-        // doesn't replace lower-only with a both-cases check.
+        if (lo >= hi) return false
+        v_out = va
+        lo_out = lo
+        hi_out = hi
+        return true
+    }
+
+    def check_perf014_digit(expr : ExprOp2?; negated : bool) : void {
+        //! Exact: `c >= '0' && c <= '9'` → is_number(c); the negated De Morgan
+        //! complement `c < '0' || c > '9'` → !is_number(c).
+        var v : Expression? = null
+        var lo = 0
+        var hi = 0
+        if (!parse_bounded_range(expr, negated, v, lo, hi) || lo != 48 || hi != 57) return
         let neg = negated ? "!" : ""
-        if (lo == 48 && hi == 57) {
-            perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number(c)' from strings module", expr.at)
-        } else {
-            // 'a'..'z' or 'A'..'Z'
-            let case_kind = (lo == 97) ? "lowercase" : "uppercase"
-            perf_warning("PERF014: char-class range check ({case_kind} only{negated ? ", negated" : ""}) — consider '{neg}is_alpha(c)' from strings module (note: is_alpha matches both cases, broader than this range)", expr.at)
-        }
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number(c)' from strings module", expr.at)
+    }
+
+    def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
+        //! Exact: `('a'..'z') || ('A'..'Z')` → is_alpha(c). Its De Morgan negation
+        //! `(c < 'a' || c > 'z') && (c < 'A' || c > 'Z')` → !is_alpha(c). is_alpha
+        //! is DEFINED as exactly this both-case union, so a single-case range is
+        //! intentionally NOT flagged (no equivalent helper). The top-level join is
+        //! `||` for the closed form / `&&` for the negated form; each child is a
+        //! bounded range of the matching polarity.
+        if (expr == null || expr.op != (negated ? "&&" : "||")
+            || expr.left == null || expr.right == null
+            || !(expr.left is ExprOp2) || !(expr.right is ExprOp2)) return
+        var vL : Expression? = null
+        var vR : Expression? = null
+        var loL = 0
+        var hiL = 0
+        var loR = 0
+        var hiR = 0
+        if (!parse_bounded_range(expr.left as ExprOp2, negated, vL, loL, hiL)
+            || !parse_bounded_range(expr.right as ExprOp2, negated, vR, loR, hiR)
+            || !expr_equal_struct(vL, vR)) return
+        // One half must be 'a'..'z' (97..122), the other 'A'..'Z' (65..90).
+        let lowerUpper = loL == 97 && hiL == 122 && loR == 65 && hiR == 90
+        let upperLower = loL == 65 && hiL == 90 && loR == 97 && hiR == 122
+        if (!lowerUpper && !upperLower) return
+        let neg = negated ? "!" : ""
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' — use '{neg}is_alpha(c)' from strings module", expr.at)
     }
 
     // --- PERF017: length(collection) <op> 0/1 → empty / !empty ---

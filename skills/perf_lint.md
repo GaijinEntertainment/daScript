@@ -119,7 +119,7 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF011 | `get_ptr(x).field` | Low | unnecessary; smart_ptr auto-dereferences for field access |
 | PERF012 | `find(string(das_string), ...)` | Medium | unnecessary allocation; use `peek(das_string)` instead |
 | PERF013 | `a += 1` / `a -= 1` (six numeric scalars) | Low | use postfix `a++` / `a--` (single SimNode, idiomatic) |
-| PERF014 | char-class range (`'0'..'9'` / `'a'..'z'` / `'A'..'Z'`) — closed in-range (`c >= lo && c <= hi`) **and** negated out-of-range (`c < lo \|\| c > hi`, strict `<`/`>`) | Info | use `strings::is_number` / `is_alpha` (negated form suggests `!is_number` / `!is_alpha`) |
+| PERF014 | **exact** char-class ranges only: digit `c >= '0' && c <= '9'` → `is_number`; both-case compound `(c >= 'a' && c <= 'z') \|\| (c >= 'A' && c <= 'Z')` → `is_alpha` (is_alpha is *defined* as this union). Plus De Morgan negations (out-of-range forms → `!is_number` / `!is_alpha`). Single-case ranges (`'a'..'z'` alone) NOT flagged — no `is_lower`/`is_upper` helper exists, so no exact rewrite. Hex (`'a'..'f'`) and `&&`-strict intersection (`c > '0' && c < '9'`) also skipped | Info | `strings::is_number` / `is_alpha` |
 | PERF015 | ternary min/max (`a < b ? a : b`) | Low | use `math::min(a, b)` / `max(a, b)` |
 | PERF016 | ternary abs (`x < 0 ? -x : x`) | Low | use `math::abs(x)` (negabs `x < 0 ? x : -x` not flagged) |
 | PERF017 | `length(x) == 0` / `> 0` / `>= 1` etc. | Medium | use `empty(x)` / `!empty(x)`; avoids strlen on strings |
