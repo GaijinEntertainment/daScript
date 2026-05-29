@@ -13,7 +13,9 @@ those in C-family languages (C/C++, Java, C#, etc.): assignments, function calls
 control flow, and declarations. There are also Daslang-specific statements such as
 ``with``, ``assume``, ``static_if``, and generators.
 
-Statements can be separated with a newline or a semicolon ``;``.
+Statements can be separated with a newline or a semicolon ``;``. The closing ``}`` of a
+block terminates its last statement, so no trailing semicolon is required before it (see
+:ref:`automatic semicolons <automatic-semicolons>` in the lexical structure reference).
 
 ----------------
 Visibility Block

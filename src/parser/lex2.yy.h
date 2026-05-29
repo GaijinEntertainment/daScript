@@ -2,9 +2,9 @@
 #define das2_yyHEADER_H 1
 #define das2_yyIN_HEADER 1
 
-#line 6 "lex2.yy.h"
+#line 5 "lex2.yy.h"
 
-#line 8 "lex2.yy.h"
+#line 7 "lex2.yy.h"
 
 #define  YY_INT_ALIGNED short int
 
@@ -720,9 +720,9 @@ extern int yylex \
 #undef yyTABLES_NAME
 #endif
 
-#line 786 "ds2_lexer.lpp"
+#line 805 "ds2_lexer.lpp"
 
 
-#line 727 "lex2.yy.h"
+#line 726 "lex2.yy.h"
 #undef das2_yyIN_HEADER
 #endif /* das2_yyHEADER_H */
