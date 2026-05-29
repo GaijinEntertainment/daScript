@@ -37,6 +37,18 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	MACRO(BUILD_GLFW glfw_libraries glfw3_target build_shared_libs install_prefix prefix_dir)
 		LIST(APPEND CMAKE_MODULE_PATH ${DAS_GLFW_DIR})
 		IF(APPLE)
+			# Forward the macOS SDK sysroot into the GLFW sub-build. Without it the
+			# ExternalProject configures with no -isysroot and falls back to the
+			# header-less /System/Library/Frameworks, so framework headers Apple now
+			# ships SDK-only (e.g. Carbon.h) are not found. Guard against an unset
+			# value so we don't clobber CMake's own SDK auto-detection in the child.
+			SET(GLFW_APPLE_SDK_ARGS "")
+			IF(CMAKE_OSX_SYSROOT)
+				LIST(APPEND GLFW_APPLE_SDK_ARGS -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT})
+			ENDIF()
+			IF(CMAKE_OSX_DEPLOYMENT_TARGET)
+				LIST(APPEND GLFW_APPLE_SDK_ARGS -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+			ENDIF()
 			ExternalProject_Add(
 				${glfw3_target}
 				URL ${GLFW_URL}
@@ -51,6 +63,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 					-DGLFW_BUILD_TESTS=OFF
 					-DGLFW_BUILD_DOCS=OFF
 					-DBUILD_SHARED_LIBS=${build_shared_libs}
+					${GLFW_APPLE_SDK_ARGS}
 				BUILD_BYPRODUCTS ${glfw_libraries}
 				BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
 				INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${install_prefix}/$<CONFIG>
