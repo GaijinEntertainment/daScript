@@ -32,7 +32,7 @@ def collect_aot_functions(program : smart_ptr<Program>) : array<AotFuncInfo> {
                     write(w, "; ")
                 }
                 first = false
-                write(w, "{string(fn.arguments[i].name)} : {describe(fn.arguments[i]._type)}")
+                write(w, "{fn.arguments[i].name} : {describe(fn.arguments[i]._type)}")
             }
             write(w, ")")
             if (fn.result != null && !fn.result.isVoid) {
@@ -129,5 +129,10 @@ def main {
     let file = args[0]
     let func_name = args[1]
     let project = args[2]
-    print(run_aot(file, func_name, project))
+    // run_aot -> run_aot_function builds AST during C++ codegen; without this
+    // guard those nodes leak and the GC dumps "GC APP LEAK ..." to stdout on
+    // exit, corrupting the JSON-RPC frame the MCP server sends to the client.
+    ast_gc_guard() {
+        print(run_aot(file, func_name, project))
+    }
 }

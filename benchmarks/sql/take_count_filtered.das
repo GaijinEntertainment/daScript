@@ -34,6 +34,34 @@ def run_m4(b : B?; n : int) {
     }
 }
 
+// m5_xml lane: non-fold baseline — plain iteration over from_xml_node, capping
+// at TAKE_N matches.
+def run_m5(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        let root = doc.document_element
+        b |> run("m5_xml/{n}", n) {
+            var c = 0
+            for (car in from_xml_node(root, type<Car>)) {
+                if (car.price > THRESHOLD) {
+                    c++
+                    if (c >= TAKE_N) {
+                        break
+                    }
+                }
+            }
+            b |> accept(c)
+            if (c == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 [benchmark]
 def take_count_filtered_m3f(b : B?) {
     run_m3f(b, 100000)
@@ -42,4 +70,9 @@ def take_count_filtered_m3f(b : B?) {
 [benchmark]
 def take_count_filtered_m4(b : B?) {
     run_m4(b, 100000)
+}
+
+[benchmark]
+def take_count_filtered_m5(b : B?) {
+    run_m5(b, 100000)
 }

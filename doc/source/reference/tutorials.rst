@@ -251,6 +251,7 @@ Run any tutorial from the project root::
    tutorials/dasPUGIXML_02_building.rst
    tutorials/dasPUGIXML_03_xpath.rst
    tutorials/dasPUGIXML_04_serialization.rst
+   tutorials/dasPUGIXML_05_linq.rst
 
 .. _tutorials_dasstbimage:
 

@@ -16,6 +16,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require protocol public
+require strings
 
 [export]
 def main() {
@@ -57,8 +58,18 @@ def main() {
 
         if (empty(msg)) continue
 
-        let response = dispatch_jsonrpc(msg)
+        var response = dispatch_jsonrpc(msg)
         if (!empty(response)) {
+            // A JSON-RPC frame is one line; the trailing "\n" below is the only
+            // delimiter. Embedded newlines mean stray output (a subtool GC-leak
+            // dump, a panic backtrace, a stray print) leaked into the payload and
+            // would desync the client's line framing for the rest of the session.
+            // Collapse to a single line so only this one request fails, not the
+            // stream, and log it loudly so the leak is diagnosable.
+            if (find(response, "\n") >= 0) {
+                logger_error("mcp.frame", "response contains embedded newline(s) — stray output leaked into JSON-RPC frame; collapsing to keep the stream aligned. preview: {slice(response, 0, 240)}")
+                response = replace(response, "\n", "\\n")
+            }
             fprint(sout, response)
             fprint(sout, "\n")
             fflush(sout)

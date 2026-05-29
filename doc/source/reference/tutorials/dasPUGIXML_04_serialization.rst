@@ -276,3 +276,5 @@ A full game-state roundtrip with nested struct, array, and vector:
    Full source: :download:`tutorials/dasPUGIXML/04_serialization.das <../../../../tutorials/dasPUGIXML/04_serialization.das>`
 
    Previous tutorial: :ref:`tutorial_dasPUGIXML_xpath`
+
+   Next tutorial: :ref:`tutorial_dasPUGIXML_linq`
