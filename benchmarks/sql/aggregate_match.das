@@ -91,3 +91,29 @@ def aggregate_match_m4(b : B?) {
 def aggregate_match_m5(b : B?) {
     run_m5(b, 100000)
 }
+
+// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2a). XmlAdapter emits an inlined
+// child-element walk in place of the generator; full row materialization is retained until 2b prunes it.
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        var root = doc.document_element
+        b |> run("m5f_xml_fold/{n}", n) {
+            let total = _fold(unsafe(from_xml_node(root, type<Car>))._where(_.price > THRESHOLD)
+                .aggregate(0, $(acc : int, c : Car) => acc + c.price))
+            b |> accept(total)
+            if (total == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+[benchmark]
+def aggregate_match_m5f(b : B?) {
+    run_m5f(b, 100000)
+}

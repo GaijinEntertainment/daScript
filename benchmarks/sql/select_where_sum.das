@@ -100,3 +100,28 @@ def select_where_sum_m4(b : B?) {
 def select_where_sum_m5(b : B?) {
     run_m5(b, 100000)
 }
+
+// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2a). XmlAdapter emits an inlined
+// child-element walk in place of the generator; full row materialization is retained until 2b prunes it.
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        var root = doc.document_element
+        b |> run("m5f_xml_fold/{n}", n) {
+            let s = _fold(unsafe(from_xml_node(root, type<Car>))._select(_.price * 2)._where(_ > THRESHOLD).sum())
+            b |> accept(s)
+            if (s == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+[benchmark]
+def select_where_sum_m5f(b : B?) {
+    run_m5f(b, 100000)
+}

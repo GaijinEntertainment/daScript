@@ -131,6 +131,9 @@ Source-side entry points
    * - ``from_decs(...)``
      - ``plan_decs_unroll`` etc.
      - Runtime component-name list form. Same decs splices as the template form.
+   * - ``unsafe(from_xml_node(node[, name], type<Row>))``
+     - ``extract_xml_source`` (``XmlAdapter``, ``modules/dasPUGIXML/daslib/linq_fold_xml.das``)
+     - Optional source — only when the ``pugixml`` module is linked (``require ?pugixml`` + ``static_if (typeinfo builtin_module_exists(pugixml))``). Emits an inlined DOM child-element walk + ``build_xml_row`` materialize, replacing the generator. As of pass 2a only the ``loop_or_count_general`` row fuses (count / sum / min / max / average / any / first / take / to-array with ``_where`` / ``_select``); other chain shapes fall back to the unfused tier-2 pipeline. ``unsafe`` is required (the source is ``[unsafe_outside_of_for]``) and the node is passed by value (``var root`` — ``_fold``'s macro-arg inference skips the const&→value copy).
 
 Array-source patterns
 =====================
