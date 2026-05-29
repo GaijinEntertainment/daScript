@@ -301,6 +301,8 @@ lines and can be nested:
     // This is a single-line comment.
     var x = 42  // This is also a comment.
 
+.. _automatic-semicolons:
+
 ----------------------------------------------
 Automatic Semicolons
 ----------------------------------------------
@@ -328,3 +330,17 @@ keep them together:
         some_long_function_name(arg1, arg2)
         + another_value
     )
+
+A closing ``}`` also terminates the last statement of the block it closes, so the final
+statement of a one-liner block needs no trailing semicolon — just as if a newline preceded
+the ``}``:
+
+.. code-block:: das
+
+    if ( ready ) { start() }            // no ';' needed before '}'
+    for ( i in range(n) ) { total += i }
+    { a = 1; b = 2 }                    // only the inner separators remain
+
+This applies wherever a newline before ``}`` would already insert a semicolon (blocks,
+``finally`` clauses, struct / lambda bodies); it does not affect table or array literals,
+where ``}`` / ``]`` close a comma-separated list rather than a statement block.

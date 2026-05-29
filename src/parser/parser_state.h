@@ -34,6 +34,7 @@ namespace das {
         bool das_has_type_declarations = false;
         bool das_gen2_make_syntax = false;
         bool das_keyword = false;
+        bool das_emit_semi_before_curly = false; // one-shot: we just auto-inserted a ';' before '}', skip on the re-lex
         int  das_indent_char = ';';
         LineInfo last_token_end; // Sometimes we need to know previous matched token end location
         vector<int> das_line_no;

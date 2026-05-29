@@ -648,6 +648,25 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return '}';
         }
     } else {
+        // Auto-insert a statement terminator before '}', so the last statement in a
+        // one-liner block need not end with ';' — e.g. `if (c) { foo() }`. We only fire
+        // where a newline before '}' would already emit a semicolon (das_indent_char ==
+        // DAS_EMIT_SEMICOLON, outside any (...) / [...]), so it is a no-op in every context
+        // where it would be wrong: table/array literals bump das_nested_parentheses /
+        // _square_braces, enum/bitfield bodies use DAS_EMIT_COMMA. The one-shot flag breaks
+        // the unput re-lex loop (das_indent_char is only popped after the parser shifts '}').
+        if ( !yyextra->das_emit_semi_before_curly
+             && yyextra->das_indent_char == DAS_EMIT_SEMICOLON
+             && !yyextra->das_keyword
+             && !yyextra->das_nested_parentheses
+             && !yyextra->das_nested_square_braces
+             && yyextra->das_nested_curly_braces ) {
+            yyextra->das_emit_semi_before_curly = true;
+            unput('}');
+            YYCOLUMN(yyextra->das_yycolumn--, "UNPUT } for auto-semicolon");
+            return DAS_EMIT_SEMICOLON;
+        }
+        yyextra->das_emit_semi_before_curly = false;
         if ( !yyextra->das_nested_curly_braces ) {
             das2_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return '}';
@@ -854,6 +873,7 @@ void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     yyextra->das_line_no.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
     yyextra->das_indent_char = DAS_EMIT_SEMICOLON;
+    yyextra->das_emit_semi_before_curly = false;
     yyextra->das_nested_parentheses = 0;
     yyextra->das_nested_curly_braces = 0;
     yyextra->das_nested_square_braces = 0;
