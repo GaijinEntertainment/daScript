@@ -1467,7 +1467,7 @@ class PerfLintVisitor : AstVisitor {
         var hi = 0
         if (!parse_bounded_range(expr, negated, v, lo, hi) || lo != 48 || hi != 57) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number(c)' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number({describe(v)})' from strings module", expr.at)
     }
 
     def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
@@ -1494,7 +1494,7 @@ class PerfLintVisitor : AstVisitor {
         let upperLower = loL == 65 && hiL == 90 && loR == 97 && hiR == 122
         if (!lowerUpper && !upperLower) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' — use '{neg}is_alpha(c)' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' — use '{neg}is_alpha({describe(vL)})' from strings module", expr.at)
     }
 
     // --- PERF017: length(collection) <op> 0/1 → empty / !empty ---

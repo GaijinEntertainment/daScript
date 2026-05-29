@@ -25,7 +25,7 @@ options gen2
 // is_upper helper, so no exact rewrite exists. Hex extras ('a'..'f') are not
 // flagged either (is_hex is broader).
 
-expect 31208:8
+expect 31208:9
 
 require daslib/perf_lint
 require strings
@@ -66,6 +66,11 @@ def bad_alpha_compound(c : int) : bool {
 
 def bad_neg_alpha_compound(c : int) : bool {
     return (c < 'a' || c > 'z') && (c < 'A' || c > 'Z')       // PERF014 (negated → !is_alpha)
+}
+
+def bad_alpha_compound_cast(c : uint8) : bool {
+    // non-trivial checked expression — suggestion must name int(c), not c
+    return (int(c) >= 'a' && int(c) <= 'z') || (int(c) >= 'A' && int(c) <= 'Z')   // PERF014 (→ is_alpha(int(c)))
 }
 
 // --- Good patterns (no warnings) ---
