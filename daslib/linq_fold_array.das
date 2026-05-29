@@ -99,6 +99,9 @@ class ArrayAdapter : SourceAdapter {
             }
         }
     }
+    def override count_shortcut(opName : string; at : LineInfo) : Expression? {
+        return emit_length_shortcut(opName, top, srcName, at)
+    }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (top._type == null) {
             return null
@@ -870,7 +873,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
     if (isCountShaped && whereCond == null && allProjectionsPure && noLimits
             && type_has_length(top._type))
-        return emit_length_shortcut(lastName, top, srcName, at)
+        return ctx.src->count_shortcut(lastName, at)
     if (lane == LinqLane.ACCUMULATOR) {
         var laneTops : array<Expression?>
         laneTops |> push(top)

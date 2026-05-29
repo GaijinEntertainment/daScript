@@ -91,6 +91,11 @@ class DecsAdapter : SourceAdapter {
     def override emit_decs_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_decs_join_impl(bridge, c, ctx, at)
     }
+    def override count_shortcut(opName : string; at : LineInfo) : Expression? {
+        // Only plain count() — arch.size sum truncates to int, so long_count must walk for an int64-safe total.
+        if (opName != "count") return null
+        return emit_decs_count_archsize(bridge, at)
+    }
     def override bind_name(at : LineInfo) : string {
         return qn("decs_tup", at)
     }
@@ -194,7 +199,7 @@ def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; va
     let noRangeOps = (!(c.single |> key_exists("skip")) && !(c.single |> key_exists("skip_while"))
         && !(c.single |> key_exists("take_while")) && !(c.single |> key_exists("take")))
     if (hasTerm && termName == "count" && length(termCall.arguments) == 1
-            && (c.many["head"] |> empty) && noRangeOps) return emit_decs_count_archsize(bridge, at)
+            && (c.many["head"] |> empty) && noRangeOps) return ctx.src->count_shortcut("count", at)
     // Reconstruct calls = head + range ops (canonical order) + term, so existing helpers (compute_decs_chain_info, extract_decs_ranges) work unchanged. LinqCall records come from the linqCalls registry by call_norm_name; addr() to convert ref→pointer matches flatten_linq's pattern.
     var calls : array<tuple<ExprCall?; LinqCall?>>
     calls |> reserve(length(c.many["head"]) + 5)        // head + up to 4 range slots + term

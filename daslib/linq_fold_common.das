@@ -65,6 +65,11 @@ class SourceAdapter {
     def emit_decs_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return null
     }
+    // Bare-count fast path (no chain/range ops): O(1)-ish count without an element walk.
+    // null = this source must walk (e.g. decs long_count, which arch.size sum can't represent int64-safe).
+    def count_shortcut(opName : string; at : LineInfo) : Expression? {
+        return null
+    }
     // transitional source-data getters (removed once all consumers move into subclass methods)
     def arrayTop() : Expression? {
         return null
