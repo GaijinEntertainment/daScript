@@ -184,6 +184,48 @@ def test_xml_fold_preserves_declared_default(t : T?) {
     }
 }
 
+// 3 cars; price 20.0 appears TWICE (ids 2,3) and 10.0 once (id 1) — to verify single()'s exactly-one
+// contract over XML actually scans past the first match instead of early-returning it. Uses the
+// no-string XCar (single()/first() declare an uninitialized `var of the element type, which is unsafe
+// for a string field outside `options persistent_heap` — the bench uses that; tests should not need it).
+let DUP_XML = ("<cars>" +
+    "<car id=\"1\" price=\"10.0\" qty=\"2\"/>" +
+    "<car id=\"2\" price=\"20.0\" qty=\"4\"/>" +
+    "<car id=\"3\" price=\"20.0\" qty=\"6\"/>" +
+    "</cars>")
+
+[test]
+def test_xml_fold_single_unique(t : T?) {
+    // single() over XML must return the one survivor when exactly one matches.
+    parse_xml(DUP_XML) $(doc, ok) {
+        t |> success(ok)
+        var root = doc.document_element
+        let row = _fold(unsafe(from_xml_node(root, type<XCar>))._where(_.price == 10.0).single())
+        t |> equal(row.id, 1)
+        t |> equal(row.qty, 2)
+    }
+}
+
+[test]
+def test_xml_fold_single_or_default_enforces_uniqueness(t : T?) {
+    // The exactly-one contract: single_or_default must SEE the second match (it does not early-exit on
+    // the first) and fall back to the default. This is the proof that single-family scans, not first-match.
+    parse_xml(DUP_XML) $(doc, ok) {
+        t |> success(ok)
+        var root = doc.document_element
+        let SENTINEL = XCar(id = -1)
+        // exactly one match -> the survivor
+        let one = _fold(unsafe(from_xml_node(root, type<XCar>))._where(_.price == 10.0).single_or_default(SENTINEL))
+        t |> equal(one.id, 1)
+        // two matches -> default (proves the second match was observed, i.e. a full scan, not find-first)
+        let dup = _fold(unsafe(from_xml_node(root, type<XCar>))._where(_.price == 20.0).single_or_default(SENTINEL))
+        t |> equal(dup.id, -1)
+        // zero matches -> default
+        let none = _fold(unsafe(from_xml_node(root, type<XCar>))._where(_.price == 99.0).single_or_default(SENTINEL))
+        t |> equal(none.id, -1)
+    }
+}
+
 [test]
 def test_xml_fold_whole_row_escape(t : T?) {
     // `.to_array()` pushes the whole row -> the scanner sees a whole-`it` ref -> full build_xml_row, so
