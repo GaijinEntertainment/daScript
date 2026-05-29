@@ -92,8 +92,8 @@ def aggregate_match_m5(b : B?) {
     run_m5(b, 100000)
 }
 
-// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2a). XmlAdapter emits an inlined
-// child-element walk in place of the generator; full row materialization is retained until 2b prunes it.
+// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2b). XmlAdapter emits an inlined
+// child-element walk and field-prunes the materialization to the attributes the chain reads.
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
