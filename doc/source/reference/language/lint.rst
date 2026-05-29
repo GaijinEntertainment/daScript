@@ -665,9 +665,9 @@ locale/codepoint behaviour. Only ranges that are **exactly** equivalent
 to a helper are flagged, so the suggested rewrite never changes
 behaviour:
 
-* ``c >= '0' && c <= '9'`` ⟺ ``is_number(c)``
-* ``(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')`` ⟺ ``is_alpha(c)``
-  (``is_alpha`` is *defined* as exactly this both-case union)
+* ``c >= '0' && c <= '9'`` is exactly ``is_number(c)``
+* ``(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')`` is exactly
+  ``is_alpha(c)`` (``is_alpha`` is *defined* as this both-case union)
 
 Both the closed forms above and their De Morgan negations (out-of-range
 forms, suggesting ``!is_number`` / ``!is_alpha``) are flagged.
