@@ -358,57 +358,23 @@ def emit_accumulator_lane(
     let workhorse = ((projection != null && projection._type != null && projection._type.isWorkhorseType)
         || (projection == null && elementType != null && elementType.isWorkhorseType))
     let isDoubleAccType = accType != null && accType.baseType == Type.tDouble
-    var prologue : array<Expression?>
+    var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
+    if (spec.returnExpr == null) return null
     var perElementStmts : array<Expression?>
-    var returnExpr : Expression?
-    if (opName == "long_count") {
-        prologue <- qmacro_block_to_array() {
-            var $i(accName) : int64 = 0l
+    // long_count: value is discarded, but bind the projection when it has side effects (keeps the AST visit).
+    if (opName == "long_count" && projection != null && has_sideeffects(projection)) {
+        let finalBindName = qn("vfinal", at)
+        perElementStmts |> push <| qmacro_expr() {
+            var $i(finalBindName) = $e(projection)
         }
-        // Value is unused; mirror counter-lane discipline and bind only when projection has side effects (keeps the AST visit but discards the value).
-        if (projection != null && has_sideeffects(projection)) {
-            let finalBindName = qn("vfinal", at)
-            perElementStmts |> push <| qmacro_expr() {
-                var $i(finalBindName) = $e(projection)
-            }
-        }
-        returnExpr = qmacro_expr() {
-            $i(accName)
-        }
-    } elif (opName == "sum") {
-        prologue <- qmacro_block_to_array() {
-            var $i(accName) : $t(accType) = default<$t(accType)>
-        }
-        returnExpr = qmacro_expr() {
-            $i(accName)
-        }
-    } elif (opName == "average") {
-        // Matches linq.das:1545 average(iterator) — always-double accumulator, uint64 counter, empty source returns 0.0lf instead of NaN.
-        prologue <- qmacro_block_to_array() {
-            var $i(accName) : double = 0lf
-            var $i(cntName) : uint64 = 0ul
-        }
-        returnExpr = qmacro_expr() {
-            $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
-        }
-    } elif (opName == "min" || opName == "max") {
-        prologue <- qmacro_block_to_array() {
-            var $i(firstName) = true
-            var $i(accName) : $t(accType)
-        }
-        returnExpr = qmacro_expr() {
-            $i(accName)
-        }
-    } else {
-        return null
     }
     perElementStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
     var tailStmts : array<Expression?>
     tailStmts |> push <| qmacro_expr() {
-        return $e(returnExpr)
+        return $e(spec.returnExpr)
     }
     return emit_terminator_lane(TerminatorSpec(
-        prologue <- prologue,
+        prologue <- spec.prologue,
         preCondStmts <- preCondStmts,
         intermediateBinds <- intermediateBinds,
         whereCond = whereCond,

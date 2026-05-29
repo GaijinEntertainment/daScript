@@ -998,6 +998,56 @@ def build_accumulator_perelement_stmts(opName : string;
     return <- stmts
 }
 
+// Per-op accumulator state: prologue var decls + the return-value expr + the invoke retType.
+// Shared by emit_accumulator_lane (array) and emit_decs_accumulator (decs). Array passes retType=null
+// to its lane (inference); decs uses retType explicitly. min/max/sum read accType.
+struct AccumulatorSpec {
+    prologue   : array<Expression?>
+    returnExpr : Expression?
+    retType    : TypeDeclPtr
+}
+
+[macro_function]
+def build_accumulator_spec(opName : string; accName, cntName, firstName : string;
+                           accType : TypeDeclPtr; at : LineInfo) : AccumulatorSpec {
+    var sp : AccumulatorSpec
+    if (opName == "long_count") {
+        sp.prologue <- qmacro_block_to_array() {
+            var $i(accName) : int64 = 0l
+        }
+        sp.returnExpr = qmacro_expr() { $i(accName); }
+        sp.retType = new TypeDecl(baseType = Type.tInt64)
+    } elif (opName == "count") {
+        sp.prologue <- qmacro_block_to_array() {
+            var $i(accName) = 0
+        }
+        sp.returnExpr = qmacro_expr() { $i(accName); }
+        sp.retType = new TypeDecl(baseType = Type.tInt)
+    } elif (opName == "sum") {
+        sp.prologue <- qmacro_block_to_array() {
+            var $i(accName) : $t(accType) = default<$t(accType)>
+        }
+        sp.returnExpr = qmacro_expr() { $i(accName); }
+        sp.retType = clone_type(accType)
+    } elif (opName == "average") {
+        // double accumulator + uint64 counter; empty source returns 0.0lf (matches linq.das average()).
+        sp.prologue <- qmacro_block_to_array() {
+            var $i(accName) : double = 0lf
+            var $i(cntName) : uint64 = 0ul
+        }
+        sp.returnExpr = qmacro_expr() { $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf; }
+        sp.retType = new TypeDecl(baseType = Type.tDouble)
+    } elif (opName == "min" || opName == "max") {
+        sp.prologue <- qmacro_block_to_array() {
+            var $i(firstName) = true
+            var $i(accName) : $t(accType)
+        }
+        sp.returnExpr = qmacro_expr() { $i(accName); }
+        sp.retType = clone_type(accType)
+    }
+    return <- sp
+}
+
 // Single-pass terminator scaffold — see linq_fold.md "Phase F" for the canonical shape.
 struct TerminatorSpec {
     prologue          : array<Expression?>   // op-specific var decls (acc=0, found=false, etc.)

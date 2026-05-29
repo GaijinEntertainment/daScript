@@ -1010,59 +1010,14 @@ def emit_decs_accumulator(bridge : DecsBridgeShape?;
             }
         }
     }
-    var preludeStmts : array<Expression?>
+    var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
+    if (spec.returnExpr == null) return null
+    var preludeStmts <- spec.prologue
     var tailStmts : array<Expression?>
-    if (opName == "long_count") {
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(accName) = 0l
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } elif (opName == "count") {
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(accName) = 0
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } elif (opName == "sum") {
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(accName) : $t(accType) = default<$t(accType)>
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } elif (opName == "average") {
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(accName) : double = 0lf
-            var $i(cntName) : uint64 = 0ul
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(cntName) != 0ul ? $i(accName) / double($i(cntName)) : 0lf
-        }
-    } elif (opName == "min" || opName == "max") {
-        // No empty-panic — matches non-decs emit_accumulator_lane (returns default-initialized acc).
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(firstName) = true
-            var $i(accName) : $t(accType)
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } else {
-        return null
+    tailStmts |> push <| qmacro_expr() {
+        return $e(spec.returnExpr)
     }
-    var retType : TypeDeclPtr
-    if (opName == "long_count") {
-        retType = new TypeDecl(baseType = Type.tInt64)
-    } elif (opName == "count") {
-        retType = new TypeDecl(baseType = Type.tInt)
-    } elif (opName == "average") {
-        retType = new TypeDecl(baseType = Type.tDouble)
-    } else {
-        retType = clone_type(accType)
-    }
+    var retType = spec.retType
     // Slice 5b: take/take_while produces inner `return true` (terminates iteration globally) so it needs the bool-lambda archetype-find dispatch.
     let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
         ? DecsDispatch(Find = null)
