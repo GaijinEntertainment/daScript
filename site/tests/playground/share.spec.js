@@ -1,6 +1,6 @@
-// ↗ share — compressed multi-file state in a URL hash, with optional is.gd
-// shortener. is.gd is stubbed via Playwright's route() so the test does not
-// depend on the external service.
+// ↗ share — compressed multi-file state in a URL hash, with an optional
+// shortener that tries da.gd, then tinyurl, then spoo.me. All three are stubbed
+// via Playwright's route() so the tests do not depend on the external services.
 
 const { test, expect } = require('./fixtures.js');
 
@@ -77,13 +77,13 @@ test('shared URL restores state in a fresh context', async ({ playground, browse
     await ctx.close();
 });
 
-test('Shorten button replaces the URL with the is.gd response', async ({ playground }) => {
-    // Stub is.gd so the test is self-contained.
-    await playground.route('https://is.gd/create.php**', route => {
+test('Shorten button replaces the URL with the da.gd response', async ({ playground }) => {
+    // Stub the primary shortener so the test is self-contained.
+    await playground.route('https://da.gd/s**', route => {
         return route.fulfill({
             status: 200,
             contentType: 'text/plain',
-            body: 'https://is.gd/ABCxyz',
+            body: 'https://da.gd/ABCxyz\n',
         });
     });
 
@@ -92,12 +92,52 @@ test('Shorten button replaces the URL with the is.gd response', async ({ playgro
     await playground.locator('#share').click();
     await playground.locator('.pg-share__shorten').click();
 
-    await expect(playground.locator('.pg-share__url')).toHaveValue('https://is.gd/ABCxyz');
-    await expect(playground.locator('.pg-share__shorten')).toHaveText(/shortened/);
+    await expect(playground.locator('.pg-share__url')).toHaveValue('https://da.gd/ABCxyz');
+    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via da\.gd/);
 });
 
-test('Shorten button surfaces a failure', async ({ playground }) => {
-    await playground.route('https://is.gd/create.php**', route => route.fulfill({ status: 502, body: '' }));
+test('Shorten falls back to tinyurl when da.gd fails', async ({ playground }) => {
+    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
+    await playground.route('https://tinyurl.com/api-create.php**', route => {
+        return route.fulfill({
+            status: 200,
+            contentType: 'text/plain',
+            body: 'https://tinyurl.com/abc123',
+        });
+    });
+
+    await waitTabsReady(playground);
+    await playground.locator('#share').click();
+    await playground.locator('.pg-share__shorten').click();
+
+    await expect(playground.locator('.pg-share__url')).toHaveValue('https://tinyurl.com/abc123');
+    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via tinyurl/);
+});
+
+test('Shorten falls back to spoo.me and upgrades http to https', async ({ playground }) => {
+    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
+    await playground.route('https://tinyurl.com/api-create.php**', route => route.fulfill({ status: 502, body: '' }));
+    // spoo.me answers with JSON and an http:// short_url; the client upgrades it.
+    await playground.route('https://spoo.me/**', route => {
+        return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ short_url: 'http://spoo.me/xyz789', domain: 'spoo.me' }),
+        });
+    });
+
+    await waitTabsReady(playground);
+    await playground.locator('#share').click();
+    await playground.locator('.pg-share__shorten').click();
+
+    await expect(playground.locator('.pg-share__url')).toHaveValue('https://spoo.me/xyz789');
+    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via spoo\.me/);
+});
+
+test('Shorten button surfaces a failure when every service fails', async ({ playground }) => {
+    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
+    await playground.route('https://tinyurl.com/api-create.php**', route => route.fulfill({ status: 502, body: '' }));
+    await playground.route('https://spoo.me/**', route => route.fulfill({ status: 502, body: '' }));
 
     await waitTabsReady(playground);
     await playground.locator('#share').click();

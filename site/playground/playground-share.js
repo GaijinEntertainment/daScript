@@ -1,9 +1,50 @@
 // ↗ share — generate a URL containing every file in pgState, lz-compressed
 // into the hash. Click opens a small popover with the URL, a Copy button,
-// and an optional "Shorten to is.gd" action.
+// and an optional "Shorten URL" action.
 
 (function () {
-    const SHORTENER = 'https://is.gd/create.php?format=simple&url=';
+    // Free, no-auth shorteners tried in order until one returns a URL. Each
+    // `run` performs its own fetch + parse and returns the short URL string;
+    // the chain validates the `https?://` shape. is.gd/v.gd are intentionally
+    // absent — they send no CORS headers, so a browser fetch from daslang.io is
+    // always blocked. da.gd/tinyurl (plain-text GET) and spoo.me (form POST +
+    // JSON) do send them. A longer chain survives any one service rate-limiting
+    // or dropping CORS later.
+    async function getText(url, name) {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(name + ' error ' + resp.status);
+        return (await resp.text()).trim();
+    }
+
+    const SHORTENERS = [
+        { name: 'da.gd', run: (u, name) => getText('https://da.gd/s?url=' + encodeURIComponent(u), name) },
+        { name: 'tinyurl', run: (u, name) => getText('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(u), name) },
+        { name: 'spoo.me', run: async (u, name) => {
+            const resp = await fetch('https://spoo.me/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                body: 'url=' + encodeURIComponent(u),
+            });
+            if (!resp.ok) throw new Error(name + ' error ' + resp.status);
+            // spoo.me returns { short_url: "http://spoo.me/xxxx" } — upgrade to https.
+            return ((await resp.json()).short_url || '').replace(/^http:/, 'https:');
+        } },
+    ];
+
+    async function shortenWithFallback(longUrl) {
+        let lastErr = null;
+        for (const svc of SHORTENERS) {
+            try {
+                const short = (await svc.run(longUrl, svc.name)).trim();
+                if (!/^https?:\/\//.test(short)) throw new Error(svc.name + ' non-URL: ' + short.slice(0, 60));
+                return { short, name: svc.name };
+            } catch (e) {
+                lastErr = e;
+                console.warn('share-shorten:', e);
+            }
+        }
+        throw lastErr || new Error('no shortener available');
+    }
 
     function buildShareUrl() {
         if (!window.pgState || !window.LZString) return null;
@@ -34,7 +75,7 @@
                 '<button class="pg-share__copy" type="button">Copy</button>' +
             '</div>' +
             '<div class="pg-share__footer">' +
-                '<button class="pg-share__shorten" type="button">↘ Shorten to is.gd</button>' +
+                '<button class="pg-share__shorten" type="button">↘ Shorten URL</button>' +
                 '<span class="pg-share__meta">' + esc(fileCount() + ' file' + (fileCount() === 1 ? '' : 's')) + '</span>' +
             '</div>'
         );
@@ -77,18 +118,15 @@
             shortenBtn.disabled = true;
             shortenBtn.textContent = '…';
             try {
-                const resp = await fetch(SHORTENER + encodeURIComponent(input.value));
-                if (!resp.ok) throw new Error('is.gd error ' + resp.status);
-                const short = (await resp.text()).trim();
-                if (!/^https?:\/\//.test(short)) throw new Error('non-URL response: ' + short.slice(0, 60));
+                const { short, name } = await shortenWithFallback(input.value);
                 input.value = short;
-                shortenBtn.textContent = '✓ shortened';
+                shortenBtn.textContent = '✓ via ' + name;
             } catch (e) {
                 shortenBtn.textContent = 'shorten failed';
                 console.warn('share-shorten:', e);
             } finally {
                 setTimeout(() => {
-                    shortenBtn.textContent = '↘ Shorten to is.gd';
+                    shortenBtn.textContent = '↘ Shorten URL';
                     shortenBtn.disabled = false;
                 }, 2000);
             }
