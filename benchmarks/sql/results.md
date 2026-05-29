@@ -1,6 +1,8 @@
-# Benchmarks — SQL / Array / Decs comparison
+# Benchmarks — SQL / Array / Decs / XML comparison
 
-Generated 2026-05-28 from PRs `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers) + follow-up `bbatkin/linq-fold-decs-reverse-take-select` (extend decs skip-into-tail to handle trailing `_select`) + symmetric m3f follow-up `bbatkin/linq-fold-array-reverse-take-select` (extend array-side R6 backward-index walk to handle trailing `_select`). The first two close the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
+Updated 2026-05-28 (branch `bbatkin/from-xml-node-linq-source`): added the **XML (m5)** lane — a non-fold baseline that iterates `from_xml_node(root, type<Car>)` (the new typed LINQ-over-XML source in `pugixml/PUGIXML_boost`) and runs the query with a plain loop. v1 has no `_fold` for XML, so m5 is the reference the fused XML lane (`m5f`, pass 2) will be measured against; it is wired into 5 representative single-source files so far (`select_where_count`, `select_where_sum`, `aggregate_match`, `single_match`, `take_count_filtered`) — every other row's m5 cell is `—`. The full-scan cells (~356 ns INTERP) are dominated by materializing all 100k `Car` rows — including a `name` string clone per row the query never reads — which is exactly the per-element materialization a fused lane elides; the early-exit cells (`single_match`, `take_count_filtered`) only materialize rows up to the break.
+
+Prior baseline generated from PRs `bbatkin/linq-fold-array-join-splice` (chunk N+3 — linq_fold array-side `_join` splice + cross-arm `_join |> _group_by` via new `ArrayJoin` SourceAdapter) + follow-up `bbatkin/linq-fold-join-emit-dedup` (refactor: shared standalone + adapter helpers) + follow-up `bbatkin/linq-fold-decs-reverse-take-select` (extend decs skip-into-tail to handle trailing `_select`) + symmetric m3f follow-up `bbatkin/linq-fold-array-reverse-take-select` (extend array-side R6 backward-index walk to handle trailing `_select`). The first two close the m3f-vs-m4 parity gap across the entire `join_*` family — all 5 cells m3f beats m4 in both INTERP and JIT:
 
 | Cell | m3f INTERP before / after | m3f JIT before / after |
 |---|---:|---:|
@@ -25,6 +27,9 @@ catalogued in `doc/source/reference/linq_fold_patterns.rst`.
 - **Array** — `_fold` over `each(arr)` chain, in-memory `array<Car>`.
 - **Decs** — `_fold` over `from_decs_template(type<DecsCar>)`,
   per-archetype walk.
+- **XML** — plain loop over `from_xml_node(root, type<Car>)`, rows
+  materialized from XML child-element attributes. **Un-fused** v1
+  baseline (no `_fold` for XML yet); only 5 files carry this lane.
 - **Decs vs Array** — ratio `decs_ns / array_ns`. Values below 1× mean
   decs wins; values above mean array wins.
 
@@ -35,157 +40,157 @@ before the timer resolution can measure them — they should be read as
 
 ## INTERP
 
-| Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | Decs vs Array |
-|---|---:|---:|---:|---:|
-| `aggregate_match` | 32.3 | 5.8 | 5.8 | 1.00× |
-| `all_match` | 26.3 | 3.5 | 3.5 | 1.00× |
-| `any_match` | 0.0 | 0.0 | 0.0 | — |
-| `average_aggregate` | 29.0 | 5.9 | 8.8 | 1.49× |
-| `bare_order_where` | 270.0 | 115.2 | 124.7 | 1.08× |
-| `chained_select_collapse` | — | 17.7 | 17.4 | 0.98× |
-| `chained_where` | 35.5 | 6.6 | 7.1 | 1.08× |
-| `contains_match` | 0.0 | 2.2 | 1.4 | 0.64× |
-| `count_aggregate` | 28.3 | 4.1 | 4.0 | 0.98× |
-| `decs_count_bare_pred` | — | — | 4.1 | — |
-| `distinct_by_count` | 39.8 | 15.5 | 15.7 | 1.01× |
-| `distinct_by_order_take` | 247.9 | 21.6 | 23.9 | 1.11× |
-| `distinct_by_order_to_array` | 236.5 | 21.8 | 23.2 | 1.06× |
-| `distinct_count` | 40.2 | 15.8 | 15.9 | 1.01× |
-| `distinct_count_pred` | 246.2 | 15.7 | 15.8 | 1.01× |
-| `distinct_take` | 0.0 | 0.0 | 0.0 | — |
-| `element_at_match` | 0.0 | 0.0 | 0.0 | — |
-| `first_match` | 0.0 | 0.0 | 0.0 | — |
-| `first_or_default_match` | 0.0 | 0.0 | 0.0 | — |
-| `groupby_average` | 170.1 | 29.7 | 29.7 | 1.00× |
-| `groupby_count` | 139.6 | 19.2 | 19.1 | 0.99× |
-| `groupby_first` | 246.7 | 18.3 | 19.0 | 1.04× |
-| `groupby_having_count` | 139.3 | 19.0 | 19.0 | 1.00× |
-| `groupby_having_hidden_sum` | 173.2 | 23.6 | 24.0 | 1.02× |
-| `groupby_having_post_where` | 168.0 | 18.9 | 18.6 | 0.98× |
-| `groupby_max` | 171.2 | 24.9 | 25.0 | 1.00× |
-| `groupby_min` | 170.2 | 25.4 | 25.6 | 1.01× |
-| `groupby_multi_reducer` | 195.4 | 31.8 | 32.2 | 1.01× |
-| `groupby_select_order` | 168.0 | 18.5 | 18.5 | 1.00× |
-| `groupby_select_sum` | 197.7 | 35.6 | 35.7 | 1.00× |
-| `groupby_sum` | 168.5 | 18.4 | 18.4 | 1.00× |
-| `groupby_where_count` | 74.2 | 14.4 | 14.8 | 1.03× |
-| `groupby_where_sum` | 84.7 | 14.1 | 14.4 | 1.02× |
-| `indexed_lookup` | 1453.2 | 202198.9 | 470.2 | 0.00× |
-| `join_count` | 36.8 | 51.0 | 63.6 | 1.25× |
-| `join_groupby_count` | 153.9 | 78.3 | 90.1 | 1.15× |
-| `join_groupby_to_array` | 186.0 | 78.1 | 91.4 | 1.17× |
-| `join_select` | — | 72.0 | 83.8 | 1.16× |
-| `join_where_count` | 38.3 | 60.1 | 74.3 | 1.24× |
-| `last_match` | 0.0 | 5.7 | 13.9 | 2.44× |
-| `long_count_aggregate` | 28.1 | 4.0 | 4.0 | 1.00× |
-| `max_aggregate` | 29.3 | 6.0 | 6.8 | 1.13× |
-| `min_aggregate` | 29.2 | 6.0 | 6.7 | 1.12× |
-| `order_distinct_take` | 135.7 | 15.6 | 93.6 | 6.00× |
-| `order_reverse_normalized` | 36.4 | 16.0 | 19.8 | 1.24× |
-| `order_take_desc` | 36.3 | 15.9 | 19.8 | 1.25× |
-| `reverse_distinct_by` | 284.8 | 21.3 | — | — |
-| `reverse_take` | 0.1 | 0.0 | 10.0 | — |
-| `reverse_take_select` | 0.0 | 0.0 | 9.2 | — |
-| `select_count` | 0.1 | 0.0 | 2.2 | — |
-| `select_where` | 190.8 | 10.9 | 19.1 | 1.75× |
-| `select_where_count` | 31.4 | 5.1 | 7.3 | 1.43× |
-| `select_where_order_take` | 35.3 | 12.1 | 14.7 | 1.21× |
-| `select_where_sum` | 35.8 | 7.4 | 7.4 | 1.00× |
-| `single_match` | 0.0 | 2.9 | 5.4 | 1.86× |
-| `skip_take` | 0.5 | 0.1 | 0.2 | 2.00× |
-| `skip_while_match` | 3.4 | 5.2 | 5.3 | 1.02× |
-| `sort_first` | 36.6 | 10.9 | 13.2 | 1.21× |
-| `sort_take` | 38.8 | 16.2 | 20.5 | 1.27× |
-| `sort_take_select` | 36.9 | 16.0 | 19.8 | 1.24× |
-| `sum_aggregate` | 29.4 | 2.2 | 2.1 | 0.95× |
-| `sum_where` | 31.4 | 4.2 | 4.2 | 1.00× |
-| `take_count` | 3.6 | 0.2 | 0.4 | 2.00× |
-| `take_count_filtered` | — | 0.2 | 0.2 | 1.00× |
-| `take_sum_aggregate` | — | 0.1 | 0.1 | 1.00× |
-| `take_where_count` | — | 0.1 | 0.1 | 1.00× |
-| `take_while_match` | 7.5 | 2.4 | 2.4 | 1.00× |
-| `to_array_filter` | 68.0 | 11.5 | 11.6 | 1.01× |
-| `zip_count_pred` | — | 15.1 | — | — |
-| `zip_dot_product` | — | 12.5 | 10.9 | 0.87× |
-| `zip_dot_product_3arg` | — | 12.8 | — | — |
-| `zip_reverse_to_array` | — | 31.1 | — | — |
+| Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | XML (m5) | Decs vs Array |
+|---|---:|---:|---:|---:|---:|
+| `aggregate_match` | 32.3 | 5.8 | 5.8 | 356.0 | 1.00× |
+| `all_match` | 26.3 | 3.5 | 3.5 | — | 1.00× |
+| `any_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `average_aggregate` | 29.0 | 5.9 | 8.8 | — | 1.49× |
+| `bare_order_where` | 270.0 | 115.2 | 124.7 | — | 1.08× |
+| `chained_select_collapse` | — | 17.7 | 17.4 | — | 0.98× |
+| `chained_where` | 35.5 | 6.6 | 7.1 | — | 1.08× |
+| `contains_match` | 0.0 | 2.2 | 1.4 | — | 0.64× |
+| `count_aggregate` | 28.3 | 4.1 | 4.0 | — | 0.98× |
+| `decs_count_bare_pred` | — | — | 4.1 | — | — |
+| `distinct_by_count` | 39.8 | 15.5 | 15.7 | — | 1.01× |
+| `distinct_by_order_take` | 247.9 | 21.6 | 23.9 | — | 1.11× |
+| `distinct_by_order_to_array` | 236.5 | 21.8 | 23.2 | — | 1.06× |
+| `distinct_count` | 40.2 | 15.8 | 15.9 | — | 1.01× |
+| `distinct_count_pred` | 246.2 | 15.7 | 15.8 | — | 1.01× |
+| `distinct_take` | 0.0 | 0.0 | 0.0 | — | — |
+| `element_at_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `first_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `first_or_default_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `groupby_average` | 170.1 | 29.7 | 29.7 | — | 1.00× |
+| `groupby_count` | 139.6 | 19.2 | 19.1 | — | 0.99× |
+| `groupby_first` | 246.7 | 18.3 | 19.0 | — | 1.04× |
+| `groupby_having_count` | 139.3 | 19.0 | 19.0 | — | 1.00× |
+| `groupby_having_hidden_sum` | 173.2 | 23.6 | 24.0 | — | 1.02× |
+| `groupby_having_post_where` | 168.0 | 18.9 | 18.6 | — | 0.98× |
+| `groupby_max` | 171.2 | 24.9 | 25.0 | — | 1.00× |
+| `groupby_min` | 170.2 | 25.4 | 25.6 | — | 1.01× |
+| `groupby_multi_reducer` | 195.4 | 31.8 | 32.2 | — | 1.01× |
+| `groupby_select_order` | 168.0 | 18.5 | 18.5 | — | 1.00× |
+| `groupby_select_sum` | 197.7 | 35.6 | 35.7 | — | 1.00× |
+| `groupby_sum` | 168.5 | 18.4 | 18.4 | — | 1.00× |
+| `groupby_where_count` | 74.2 | 14.4 | 14.8 | — | 1.03× |
+| `groupby_where_sum` | 84.7 | 14.1 | 14.4 | — | 1.02× |
+| `indexed_lookup` | 1453.2 | 202198.9 | 470.2 | — | 0.00× |
+| `join_count` | 36.8 | 51.0 | 63.6 | — | 1.25× |
+| `join_groupby_count` | 153.9 | 78.3 | 90.1 | — | 1.15× |
+| `join_groupby_to_array` | 186.0 | 78.1 | 91.4 | — | 1.17× |
+| `join_select` | — | 72.0 | 83.8 | — | 1.16× |
+| `join_where_count` | 38.3 | 60.1 | 74.3 | — | 1.24× |
+| `last_match` | 0.0 | 5.7 | 13.9 | — | 2.44× |
+| `long_count_aggregate` | 28.1 | 4.0 | 4.0 | — | 1.00× |
+| `max_aggregate` | 29.3 | 6.0 | 6.8 | — | 1.13× |
+| `min_aggregate` | 29.2 | 6.0 | 6.7 | — | 1.12× |
+| `order_distinct_take` | 135.7 | 15.6 | 93.6 | — | 6.00× |
+| `order_reverse_normalized` | 36.4 | 16.0 | 19.8 | — | 1.24× |
+| `order_take_desc` | 36.3 | 15.9 | 19.8 | — | 1.25× |
+| `reverse_distinct_by` | 284.8 | 21.3 | — | — | — |
+| `reverse_take` | 0.1 | 0.0 | 10.0 | — | — |
+| `reverse_take_select` | 0.0 | 0.0 | 9.2 | — | — |
+| `select_count` | 0.1 | 0.0 | 2.2 | — | — |
+| `select_where` | 190.8 | 10.9 | 19.1 | — | 1.75× |
+| `select_where_count` | 31.4 | 5.1 | 7.3 | 357.3 | 1.43× |
+| `select_where_order_take` | 35.3 | 12.1 | 14.7 | — | 1.21× |
+| `select_where_sum` | 35.8 | 7.4 | 7.4 | 358.5 | 1.00× |
+| `single_match` | 0.0 | 2.9 | 5.4 | 0.2 | 1.86× |
+| `skip_take` | 0.5 | 0.1 | 0.2 | — | 2.00× |
+| `skip_while_match` | 3.4 | 5.2 | 5.3 | — | 1.02× |
+| `sort_first` | 36.6 | 10.9 | 13.2 | — | 1.21× |
+| `sort_take` | 38.8 | 16.2 | 20.5 | — | 1.27× |
+| `sort_take_select` | 36.9 | 16.0 | 19.8 | — | 1.24× |
+| `sum_aggregate` | 29.4 | 2.2 | 2.1 | — | 0.95× |
+| `sum_where` | 31.4 | 4.2 | 4.2 | — | 1.00× |
+| `take_count` | 3.6 | 0.2 | 0.4 | — | 2.00× |
+| `take_count_filtered` | — | 0.2 | 0.2 | 7.1 | 1.00× |
+| `take_sum_aggregate` | — | 0.1 | 0.1 | — | 1.00× |
+| `take_where_count` | — | 0.1 | 0.1 | — | 1.00× |
+| `take_while_match` | 7.5 | 2.4 | 2.4 | — | 1.00× |
+| `to_array_filter` | 68.0 | 11.5 | 11.6 | — | 1.01× |
+| `zip_count_pred` | — | 15.1 | — | — | — |
+| `zip_dot_product` | — | 12.5 | 10.9 | — | 0.87× |
+| `zip_dot_product_3arg` | — | 12.8 | — | — | — |
+| `zip_reverse_to_array` | — | 31.1 | — | — | — |
 
 ## JIT
 
-| Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | Decs vs Array |
-|---|---:|---:|---:|---:|
-| `aggregate_match` | 33.8 | 0.4 | 0.7 | 1.75× |
-| `all_match` | 27.8 | 0.3 | 0.2 | 0.67× |
-| `any_match` | 0.0 | 0.0 | 0.0 | — |
-| `average_aggregate` | 29.0 | 1.0 | 3.5 | 3.50× |
-| `bare_order_where` | 177.2 | 33.9 | 35.2 | 1.04× |
-| `chained_select_collapse` | — | 2.1 | 2.1 | 1.00× |
-| `chained_where` | 35.3 | 0.6 | 0.9 | 1.50× |
-| `contains_match` | 0.0 | 0.2 | 0.1 | 0.50× |
-| `count_aggregate` | 28.9 | 0.4 | 0.6 | 1.50× |
-| `decs_count_bare_pred` | — | — | 0.6 | — |
-| `distinct_by_count` | 40.1 | 2.1 | 2.1 | 1.00× |
-| `distinct_by_order_take` | 235.3 | 2.6 | 3.2 | 1.23× |
-| `distinct_by_order_to_array` | 238.8 | 2.7 | 3.3 | 1.22× |
-| `distinct_count` | 40.5 | 2.1 | 2.1 | 1.00× |
-| `distinct_count_pred` | 246.8 | 2.1 | 2.2 | 1.05× |
-| `distinct_take` | 0.0 | 0.1 | 0.0 | 0.00× |
-| `element_at_match` | 0.0 | 0.0 | 0.0 | — |
-| `first_match` | 0.0 | 0.0 | 0.0 | — |
-| `first_or_default_match` | 0.0 | 0.0 | 0.0 | — |
-| `groupby_average` | 168.6 | 2.6 | 2.9 | 1.12× |
-| `groupby_count` | 141.0 | 2.3 | 2.5 | 1.09× |
-| `groupby_first` | 250.4 | 2.2 | 3.1 | 1.41× |
-| `groupby_having_count` | 146.9 | 2.3 | 2.5 | 1.09× |
-| `groupby_having_hidden_sum` | 171.6 | 2.5 | 2.8 | 1.12× |
-| `groupby_having_post_where` | 167.2 | 2.4 | 2.6 | 1.08× |
-| `groupby_max` | 168.0 | 2.4 | 2.6 | 1.08× |
-| `groupby_min` | 167.5 | 2.4 | 2.6 | 1.08× |
-| `groupby_multi_reducer` | 189.6 | 2.7 | 2.9 | 1.07× |
-| `groupby_select_order` | 168.3 | 2.4 | 2.6 | 1.08× |
-| `groupby_select_sum` | 190.1 | 3.2 | 3.6 | 1.12× |
-| `groupby_sum` | 165.7 | 2.7 | 2.7 | 1.00× |
-| `groupby_where_count` | 73.8 | 1.4 | 1.7 | 1.21× |
-| `groupby_where_sum` | 84.4 | 1.5 | 1.8 | 1.20× |
-| `indexed_lookup` | 1224.3 | 34689.8 | 106.0 | 0.00× |
-| `join_count` | 36.7 | 11.6 | 12.7 | 1.09× |
-| `join_groupby_count` | 153.3 | 19.4 | 21.6 | 1.11× |
-| `join_groupby_to_array` | 187.2 | 19.5 | 21.6 | 1.11× |
-| `join_select` | — | 19.7 | 22.2 | 1.13× |
-| `join_where_count` | 38.2 | 20.4 | 22.5 | 1.10× |
-| `last_match` | 0.0 | 0.5 | 1.4 | 2.80× |
-| `long_count_aggregate` | 28.0 | 0.4 | 0.6 | 1.50× |
-| `max_aggregate` | 29.5 | 0.6 | 0.5 | 0.83× |
-| `min_aggregate` | 29.4 | 0.6 | 0.5 | 0.83× |
-| `order_distinct_take` | 136.1 | 2.1 | 73.9 | 35.19× |
-| `order_reverse_normalized` | 36.5 | 0.7 | 1.3 | 1.86× |
-| `order_take_desc` | 36.5 | 0.7 | 1.3 | 1.86× |
-| `reverse_distinct_by` | 289.8 | 2.6 | — | — |
-| `reverse_take` | 0.0 | 0.0 | 1.1 | — |
-| `reverse_take_select` | 0.0 | 0.0 | 1.1 | — |
-| `select_count` | 0.1 | 0.0 | 0.0 | — |
-| `select_where` | 105.0 | 4.1 | 5.3 | 1.29× |
-| `select_where_count` | 31.3 | 0.4 | 0.6 | 1.50× |
-| `select_where_order_take` | 35.2 | 0.7 | 1.3 | 1.86× |
-| `select_where_sum` | 35.8 | 0.5 | 0.6 | 1.20× |
-| `single_match` | 0.0 | 0.4 | 1.1 | 2.75× |
-| `skip_take` | 0.3 | 0.0 | 0.0 | — |
-| `skip_while_match` | 3.3 | 0.4 | 0.4 | 1.00× |
-| `sort_first` | 36.4 | 0.4 | 1.3 | 3.25× |
-| `sort_take` | 36.4 | 0.7 | 1.3 | 1.86× |
-| `sort_take_select` | 37.1 | 0.7 | 1.4 | 2.00× |
-| `sum_aggregate` | 28.4 | 0.4 | 0.3 | 0.75× |
-| `sum_where` | 31.1 | 0.4 | 0.6 | 1.50× |
-| `take_count` | 1.8 | 0.1 | 0.1 | 1.00× |
-| `take_count_filtered` | — | 0.0 | 0.0 | — |
-| `take_sum_aggregate` | — | 0.0 | 0.0 | — |
-| `take_where_count` | — | 0.0 | 0.0 | — |
-| `take_while_match` | 7.4 | 0.2 | 0.3 | 1.50× |
-| `to_array_filter` | 45.7 | 3.1 | 3.2 | 1.03× |
-| `zip_count_pred` | — | 0.6 | — | — |
-| `zip_dot_product` | — | 0.5 | 0.5 | 1.00× |
-| `zip_dot_product_3arg` | — | 0.5 | — | — |
-| `zip_reverse_to_array` | — | 4.3 | — | — |
+| Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | XML (m5) | Decs vs Array |
+|---|---:|---:|---:|---:|---:|
+| `aggregate_match` | 33.8 | 0.4 | 0.7 | 154.3 | 1.75× |
+| `all_match` | 27.8 | 0.3 | 0.2 | — | 0.67× |
+| `any_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `average_aggregate` | 29.0 | 1.0 | 3.5 | — | 3.50× |
+| `bare_order_where` | 177.2 | 33.9 | 35.2 | — | 1.04× |
+| `chained_select_collapse` | — | 2.1 | 2.1 | — | 1.00× |
+| `chained_where` | 35.3 | 0.6 | 0.9 | — | 1.50× |
+| `contains_match` | 0.0 | 0.2 | 0.1 | — | 0.50× |
+| `count_aggregate` | 28.9 | 0.4 | 0.6 | — | 1.50× |
+| `decs_count_bare_pred` | — | — | 0.6 | — | — |
+| `distinct_by_count` | 40.1 | 2.1 | 2.1 | — | 1.00× |
+| `distinct_by_order_take` | 235.3 | 2.6 | 3.2 | — | 1.23× |
+| `distinct_by_order_to_array` | 238.8 | 2.7 | 3.3 | — | 1.22× |
+| `distinct_count` | 40.5 | 2.1 | 2.1 | — | 1.00× |
+| `distinct_count_pred` | 246.8 | 2.1 | 2.2 | — | 1.05× |
+| `distinct_take` | 0.0 | 0.1 | 0.0 | — | 0.00× |
+| `element_at_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `first_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `first_or_default_match` | 0.0 | 0.0 | 0.0 | — | — |
+| `groupby_average` | 168.6 | 2.6 | 2.9 | — | 1.12× |
+| `groupby_count` | 141.0 | 2.3 | 2.5 | — | 1.09× |
+| `groupby_first` | 250.4 | 2.2 | 3.1 | — | 1.41× |
+| `groupby_having_count` | 146.9 | 2.3 | 2.5 | — | 1.09× |
+| `groupby_having_hidden_sum` | 171.6 | 2.5 | 2.8 | — | 1.12× |
+| `groupby_having_post_where` | 167.2 | 2.4 | 2.6 | — | 1.08× |
+| `groupby_max` | 168.0 | 2.4 | 2.6 | — | 1.08× |
+| `groupby_min` | 167.5 | 2.4 | 2.6 | — | 1.08× |
+| `groupby_multi_reducer` | 189.6 | 2.7 | 2.9 | — | 1.07× |
+| `groupby_select_order` | 168.3 | 2.4 | 2.6 | — | 1.08× |
+| `groupby_select_sum` | 190.1 | 3.2 | 3.6 | — | 1.12× |
+| `groupby_sum` | 165.7 | 2.7 | 2.7 | — | 1.00× |
+| `groupby_where_count` | 73.8 | 1.4 | 1.7 | — | 1.21× |
+| `groupby_where_sum` | 84.4 | 1.5 | 1.8 | — | 1.20× |
+| `indexed_lookup` | 1224.3 | 34689.8 | 106.0 | — | 0.00× |
+| `join_count` | 36.7 | 11.6 | 12.7 | — | 1.09× |
+| `join_groupby_count` | 153.3 | 19.4 | 21.6 | — | 1.11× |
+| `join_groupby_to_array` | 187.2 | 19.5 | 21.6 | — | 1.11× |
+| `join_select` | — | 19.7 | 22.2 | — | 1.13× |
+| `join_where_count` | 38.2 | 20.4 | 22.5 | — | 1.10× |
+| `last_match` | 0.0 | 0.5 | 1.4 | — | 2.80× |
+| `long_count_aggregate` | 28.0 | 0.4 | 0.6 | — | 1.50× |
+| `max_aggregate` | 29.5 | 0.6 | 0.5 | — | 0.83× |
+| `min_aggregate` | 29.4 | 0.6 | 0.5 | — | 0.83× |
+| `order_distinct_take` | 136.1 | 2.1 | 73.9 | — | 35.19× |
+| `order_reverse_normalized` | 36.5 | 0.7 | 1.3 | — | 1.86× |
+| `order_take_desc` | 36.5 | 0.7 | 1.3 | — | 1.86× |
+| `reverse_distinct_by` | 289.8 | 2.6 | — | — | — |
+| `reverse_take` | 0.0 | 0.0 | 1.1 | — | — |
+| `reverse_take_select` | 0.0 | 0.0 | 1.1 | — | — |
+| `select_count` | 0.1 | 0.0 | 0.0 | — | — |
+| `select_where` | 105.0 | 4.1 | 5.3 | — | 1.29× |
+| `select_where_count` | 31.3 | 0.4 | 0.6 | 149.5 | 1.50× |
+| `select_where_order_take` | 35.2 | 0.7 | 1.3 | — | 1.86× |
+| `select_where_sum` | 35.8 | 0.5 | 0.6 | 149.5 | 1.20× |
+| `single_match` | 0.0 | 0.4 | 1.1 | 0.1 | 2.75× |
+| `skip_take` | 0.3 | 0.0 | 0.0 | — | — |
+| `skip_while_match` | 3.3 | 0.4 | 0.4 | — | 1.00× |
+| `sort_first` | 36.4 | 0.4 | 1.3 | — | 3.25× |
+| `sort_take` | 36.4 | 0.7 | 1.3 | — | 1.86× |
+| `sort_take_select` | 37.1 | 0.7 | 1.4 | — | 2.00× |
+| `sum_aggregate` | 28.4 | 0.4 | 0.3 | — | 0.75× |
+| `sum_where` | 31.1 | 0.4 | 0.6 | — | 1.50× |
+| `take_count` | 1.8 | 0.1 | 0.1 | — | 1.00× |
+| `take_count_filtered` | — | 0.0 | 0.0 | 3.4 | — |
+| `take_sum_aggregate` | — | 0.0 | 0.0 | — | — |
+| `take_where_count` | — | 0.0 | 0.0 | — | — |
+| `take_while_match` | 7.4 | 0.2 | 0.3 | — | 1.50× |
+| `to_array_filter` | 45.7 | 3.1 | 3.2 | — | 1.03× |
+| `zip_count_pred` | — | 0.6 | — | — | — |
+| `zip_dot_product` | — | 0.5 | 0.5 | — | 1.00× |
+| `zip_dot_product_3arg` | — | 0.5 | — | — | — |
+| `zip_reverse_to_array` | — | 4.3 | — | — | — |
 
 ## Notes on missing lanes (the `—` cells)
 

@@ -60,13 +60,14 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 ## sql/
 
-3-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice. Each bench builds the same data three ways via `_common.das` fixtures and runs the same query expression through each lane. See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
+Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice vs XML (`from_xml_node`). Each bench builds the same data several ways via `_common.das` fixtures and runs the same query expression through each lane. See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
 
 | Lane | Source | Form |
 |---|---|---|
 | `m1` (SQL) | `:memory:` SQLite | `_sql` macro — compile-time SQL emission, work pushed to the engine |
 | `m3f` (Array) | pre-populated `array<Car>` | `_fold` over `each(arr).chain()` — fuses the chain into a single pass |
 | `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<DecsCar>).chain()` — fuses into a per-archetype walk |
+| `m5` (XML) | in-memory XML doc (`fixture_xml_string`) | plain loop over `from_xml_node(root, type<Car>)` — **un-fused** v1 baseline; fused `m5f` lands in pass 2. Only 5 files carry this lane so far. |
 
 The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 

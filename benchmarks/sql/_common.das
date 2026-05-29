@@ -8,6 +8,8 @@ require sqlite/sqlite_linq public
 require dastest/testing_boost public
 require daslib/fio public
 require daslib/decs_boost public
+require pugixml/PUGIXML_boost public
+require strings public
 
 let public BRAND_COUNT = 5
 let public DEALER_COUNT = 100
@@ -66,6 +68,20 @@ def public fixture_array(n : int) : array<Car> {
         )
     }
     return <- arr
+}
+
+// m5_xml lane: same Car schema, rows materialized from XML child elements via
+// from_xml_node. Attribute names match Car's fields; same deterministic row
+// generator as fixture_array so the XML lane is directly comparable. Built with
+// a string writer (not `+`) to keep fixture construction O(n).
+def public fixture_xml_string(n : int) : string {
+    return build_string() $(var w) {
+        w |> write("<cars>")
+        for (i in range(n)) {
+            w |> write("<car id=\"{i + 1}\" name=\"Car{i}\" price=\"{(i * 37) % 1000}\" brand=\"{i % BRAND_COUNT}\" year=\"{2010 + (i * 7) % 16}\" dealer_id=\"{(i % DEALER_COUNT) + 1}\"/>")
+        }
+        w |> write("</cars>")
+    }
 }
 
 def public fixture_dealers_array() : array<Dealer> {
