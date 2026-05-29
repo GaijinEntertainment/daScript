@@ -40,6 +40,7 @@ class DecsAdapter : SourceAdapter {
     }
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         // take(N) early-exit: for_each_archetype_find returning bool stops the archetype walk (mirrors plan_decs_distinct).
+        if (bridge == null) return null   // bridge is non-null by construction; guard mirrors element_type() for the nullable field type
         let archName = bridge.archName
         var innerBody : Expression? = qmacro_block() {
             break if ($i(takenName) >= $i(takeLimName))
@@ -597,6 +598,7 @@ def build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
 }
 
 struct DecsChainInfo {
+    tupName     : string            // source bind the chain was peeled against — the inner-for bind name; emit_decs_terminator_lane uses this instead of regenerating qn("decs_tup", at)
     bindAt      : array<string>    // bind name visible at each chain position
     elidedAt    : array<bool>      // true when the select at position i was elided (peeled to a single decs_tup field access → reused iter var as next bind, no `let decs_sel_N = ...` emit needed)
     finalBind   : string            // bind name AFTER full chain — what terminator references
@@ -612,6 +614,7 @@ def compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?>>;
                             at : LineInfo) : DecsChainInfo? {
     // Each select introduces a fresh `decs_sel{N}` bind; subsequent ops peel against it. Returns null on any non-where_/select op.
     var info = new DecsChainInfo(
+        tupName := tupName,
         finalBind := tupName,
         finalType = clone_type(bridge.elementType),
         selectCount = 0
@@ -909,7 +912,7 @@ def emit_decs_terminator_lane(
                               intermediateEnd : int;
                               at : LineInfo
                               ) : Expression? {
-    let tupName = qn("decs_tup", at)
+    let tupName = chainInfo.tupName   // the bind the chain was peeled against — not a fresh qn(), so the inner-for bind can't desync from peeling
     let names <- make_decs_range_names(at)
     let archName = bridge.archName
     var ptwCond : Expression?
