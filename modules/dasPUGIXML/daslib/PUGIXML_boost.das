@@ -128,6 +128,66 @@ def each_attribute(node : xml_node) : iterator<xml_attribute> {
     }
 }
 
+// ============ LINQ source — typed iteration over child elements ============
+
+def private read_xml_attr(a : xml_attribute; defv : auto(TT)) : TT {
+    return defv     // generic fallback — a field type with no specific reader keeps its default
+}
+def private read_xml_attr(a : xml_attribute; defv : int) : int { return as_int(a, defv); }
+def private read_xml_attr(a : xml_attribute; defv : uint) : uint { return as_uint(a, defv); }
+def private read_xml_attr(a : xml_attribute; defv : float) : float { return as_float(a, defv); }
+def private read_xml_attr(a : xml_attribute; defv : double) : double { return as_double(a, defv); }
+def private read_xml_attr(a : xml_attribute; defv : bool) : bool { return as_bool(a, defv); }
+def private read_xml_attr(a : xml_attribute; defv : string) : string {
+    return clone_string(as_string(a, defv))     // clone out of the document so the row survives the RAII block
+}
+
+def build_xml_row(node : xml_node; var row) {
+    //! Fills *row*'s scalar fields from same-named attributes of *node*. A missing attribute
+    //! leaves the field at its declared default. Supported field types: ``int``, ``uint``,
+    //! ``float``, ``double``, ``bool``, ``string`` — fields of other types keep their default.
+    apply(row) $(name : string; var field) {
+        field = read_xml_attr(node[name], field)
+    }
+}
+
+[unsafe_outside_of_for]
+def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT> {
+    //! Lazily walks every child element of *node*, materializing each into a *TT* by reading
+    //! same-named attributes (see ``build_xml_row``). Yields owned values, so rows collected via
+    //! ``to_array`` or a comprehension stay valid past the document's RAII block.
+    //! Intended for ``for`` loops and LINQ chains:
+    //!
+    //!   ``for (car in from_xml_node(root, type<Car>)) { ... }``
+    return <- generator<TT> {
+        var ch = node.first_child
+        while (ch.ok) {
+            var next = ch.next_sibling   // capture before yield (user may mutate)
+            var row = default<TT>
+            build_xml_row(ch, row)
+            yield row
+            ch = next
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for]
+def from_xml_node(node : xml_node; name : string; t : type<auto(TT)>) : iterator<TT> {
+    //! As ``from_xml_node`` above, but only walks child elements whose tag matches *name*.
+    return <- generator<TT> {
+        var ch = child(node, name)
+        while (ch.ok) {
+            var next = next_sibling(ch, name)   // capture before yield
+            var row = default<TT>
+            build_xml_row(ch, row)
+            yield row
+            ch = next
+        }
+        return false
+    }
+}
+
 // ============ RAII document management ============
 
 def open_xml(filename : string; blk : block<(doc : xml_document?; success : bool) : void>) {
@@ -651,9 +711,7 @@ def from_XML(node : xml_node; anything : auto(TT)) {
     } static_elif (typeinfo is_variant(anything)) {
         var ret : TT
         let index = node_attr_int(node, "_variant", 0)
-        unsafe {
-            set_variant_index(ret, index)
-        }
+        unsafe(set_variant_index(ret, index))
         apply(ret) $(name : string; var field) {
             let ch = child(node, name)
             if (ch.ok) {
