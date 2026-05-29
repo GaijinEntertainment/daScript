@@ -32,7 +32,7 @@ struct LinqCall {
 
 // ===== Source adapter (class hierarchy) — see linq_fold.md "Module layout & adapter contract" =====
 // Abstract base + one subclass per data source. The 4 dispatch methods are the adapter contract;
-// transitional getters (arrayTop/.../decsBridge) + kind() are removed once consumers move to subclass methods.
+// transitional getters (arrayTop/arraySrcName) + kind() are removed once consumers move to subclass methods.
 enum AdapterKind {
     k_array
     k_decs

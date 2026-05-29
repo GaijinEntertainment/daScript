@@ -33,7 +33,7 @@ Inventory: **19 of 22 leaf emit fns fit one of two clean shapes** — 11 Termina
 
 ## Phase G — class-based source adapters (file split prep)
 
-Match-side (Phase E) and emit-side (Phase F) are uniform. Phase G makes the **source side** open: replace the closed `variant SourceAdapter` with a class hierarchy so each data source (array, decs, future XML via dasPUGIXML) lives in its own file, and linq_fold keeps only the pattern-matching engine. Plan: `~/.claude/plans/streamed-jumping-puddle.md`.
+Match-side (Phase E) and emit-side (Phase F) are uniform. Phase G makes the **source side** open: replace the closed `variant SourceAdapter` with a class hierarchy so each data source (array, decs, future XML via dasPUGIXML) lives in its own file, and linq_fold keeps only the pattern-matching engine. The staged plan is the G1–G4 checklist below.
 
 - [x] **PR G1** (`de0851b62`) — `variant SourceAdapter` → abstract `class SourceAdapter` + 5 subclasses (`ArrayAdapter` / `DecsAdapter` / `DecsJoinAdapter` / `ZipAdapter` / `ArrayJoinAdapter`). The 4 dispatch fns (`adapter_bind_name` / `adapter_element_type` / `adapter_wrap_source_loop` / `adapter_wrap_invoke`) → virtual methods; `EmitCtx.src : SourceAdapter?`. Source-branching emit-fn sites (`ctx.src is Array/Decs`) → virtual calls via a transitional `kind()` enum + getters. All in linq_fold.das. Behavior-identical; verified across ~550 linq/decs tests. Branch `bbatkin/linq-fold-adapter-extraction`.
 - [x] **PR G2** — File split, done in 5 commits:

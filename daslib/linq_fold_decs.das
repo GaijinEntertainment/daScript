@@ -97,7 +97,9 @@ class DecsAdapter : SourceAdapter {
         return emit_decs_count_archsize(bridge, at)
     }
     def override bind_name(at : LineInfo) : string {
-        return qn("decs_tup", at)
+        // The actual loop bind (wrap_source_loop uses self.tupName) — return it directly rather than
+        // regenerating qn("decs_tup", at), so peeling can't desync from the loop if `at` ever differs.
+        return tupName
     }
     def override element_type() : TypeDeclPtr {
         if (bridge == null) {
