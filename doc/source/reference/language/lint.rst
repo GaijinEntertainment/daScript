@@ -656,31 +656,37 @@ skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
     a ++
     a --
 
-PERF014 — closed-interval char-class range check
-==================================================
+PERF014 — char-class range check
+================================
 
 Hand-rolled ranges like ``c >= 'a' && c <= 'z'`` reimplement
 ``strings::is_alpha``/``is_alnum``/``is_number``/``is_white_space``/etc.
 The helper functions read clearer and centralise locale/codepoint
-behaviour. Only three closed ranges are flagged:
+behaviour. Both the closed in-range form (``&&``) and its negated
+out-of-range complement (``||`` with strict ``<``/``>``) are flagged.
+Only three ranges are recognised:
 
 * ``'0'..'9'`` (48..57) — ``is_number``
 * ``'a'..'z'`` (97..122) — ``is_alpha`` lower half
 * ``'A'..'Z'`` (65..90) — ``is_alpha`` upper half
 
 The hex extras ``'a'..'f'`` / ``'A'..'F'`` are deliberately **not**
-flagged — ``is_hex`` is broader. Open intervals (``c > '0' && c < '9'``)
-have different endpoints, so they are also skipped.
+flagged — ``is_hex`` is broader. An ``&&`` of strict inequalities
+(``c > '0' && c < '9'``) is an open *intersection* with different
+endpoints, so it is skipped — distinct from the ``||`` strict-inequality
+*complement* (``c < '0' || c > '9'``) which is flagged.
 
 .. code-block:: das
 
     // Bad
     if (c >= 'a' && c <= 'z') { ... }           // PERF014
     if (c >= 48  && c <= 57)  { ... }           // PERF014 (raw int form)
+    if (c < '0' || c > '9')   { ... }           // PERF014 (negated / out-of-range)
 
     // Good
     if (is_alpha(c))  { ... }
     if (is_number(c)) { ... }
+    if (!is_number(c)) { ... }                  // negated form
 
 PERF015 — ternary min / max
 ============================

@@ -119,7 +119,7 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF011 | `get_ptr(x).field` | Low | unnecessary; smart_ptr auto-dereferences for field access |
 | PERF012 | `find(string(das_string), ...)` | Medium | unnecessary allocation; use `peek(das_string)` instead |
 | PERF013 | `a += 1` / `a -= 1` (six numeric scalars) | Low | use postfix `a++` / `a--` (single SimNode, idiomatic) |
-| PERF014 | closed-interval char-class range (`'0'..'9'` / `'a'..'z'` / `'A'..'Z'`) | Info | use `strings::is_alpha` / `is_alnum` / `is_number` |
+| PERF014 | char-class range (`'0'..'9'` / `'a'..'z'` / `'A'..'Z'`) — closed in-range (`c >= lo && c <= hi`) **and** negated out-of-range (`c < lo \|\| c > hi`, strict `<`/`>`) | Info | use `strings::is_number` / `is_alpha` (negated form suggests `!is_number` / `!is_alpha`) |
 | PERF015 | ternary min/max (`a < b ? a : b`) | Low | use `math::min(a, b)` / `max(a, b)` |
 | PERF016 | ternary abs (`x < 0 ? -x : x`) | Low | use `math::abs(x)` (negabs `x < 0 ? x : -x` not flagged) |
 | PERF017 | `length(x) == 0` / `> 0` / `>= 1` etc. | Medium | use `empty(x)` / `!empty(x)`; avoids strlen on strings |

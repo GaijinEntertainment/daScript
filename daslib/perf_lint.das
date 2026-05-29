@@ -1259,9 +1259,12 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
-        // PERF014: closed-interval char-class range check
+        // PERF014: closed in-range (&&) and negated out-of-range (||) char-class checks
         if (expr.op == "&&") {
-            check_perf014_char_class(expr)
+            check_perf014_char_class(expr, false)
+        }
+        if (expr.op == "||") {
+            check_perf014_char_class(expr, true)
         }
         // PERF017: length(s) <op> 0 / 1 → empty(s) / !empty(s)
         if (expr.op == "==" || expr.op == "!=" || expr.op == "<" || expr.op == "<=" || expr.op == ">" || expr.op == ">=") {
@@ -1395,26 +1398,30 @@ class PerfLintVisitor : AstVisitor {
         perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary — hoist as {lname}(cond ? a : b)", expr.at)
     }
 
-    // --- PERF014: closed-interval char-class range checks ---
+    // --- PERF014: char-class range checks (closed in-range && / negated out-of-range ||) ---
 
-    def parse_range_leg(leg : Expression?; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
-        //! Parse `var <op> const` or `const <op> var` where op is `<=` or `>=`.
-        //! Returns true and fills outputs with: the variable expression,
-        //! the int bound, and whether this leg expresses an upper bound on var.
+    def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
+        //! Parse `var <op> const` or `const <op> var` where op is `upper_op` or
+        //! `lower_op`. Returns true and fills outputs with: the variable
+        //! expression, the int bound, and whether this leg expresses the upper
+        //! bound of the range on var. `upper_op` is the var-on-left operator that
+        //! marks the upper-bound leg ("<=" closed-in-range, ">" open-out-of-range);
+        //! `lower_op` the lower-bound one (">=" / "<"). Yoda (const-on-left) forms
+        //! flip, so the const-on-left arm tests against `lower_op`.
         if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)
-        if (opname != "<=" && opname != ">=") return false
+        if (opname != upper_op && opname != lower_op) return false
         if (op2.right is ExprConstInt && op2.left != null) {
             v_out = op2.left
             bound_out = (op2.right as ExprConstInt).value
-            is_hi_out = opname == "<="
+            is_hi_out = opname == upper_op
             return true
         }
         if (op2.left is ExprConstInt && op2.right != null) {
             v_out = op2.right
             bound_out = (op2.left as ExprConstInt).value
-            is_hi_out = opname == ">="
+            is_hi_out = opname == lower_op
             return true
         }
         return false
@@ -1428,7 +1435,12 @@ class PerfLintVisitor : AstVisitor {
                 || (lo == 65 && hi == 90))     // 'A'..'Z' — is_alpha (upper half)
     }
 
-    def check_perf014_char_class(expr : ExprOp2?) : void {
+    def check_perf014_char_class(expr : ExprOp2?; negated : bool) : void {
+        //! `negated == false`: closed in-range `c >= lo && c <= hi` → is_*(c).
+        //! `negated == true`:  open  out-of-range `c < lo || c > hi` → !is_*(c)
+        //! (the De Morgan complement, written with strict `<`/`>`).
+        let upper_op = negated ? ">"  : "<="
+        let lower_op = negated ? "<"  : ">="
         var va : Expression? = null
         var vb : Expression? = null
         var bound_a = 0
@@ -1437,8 +1449,8 @@ class PerfLintVisitor : AstVisitor {
         var hi_b = false
         // Both legs must parse, constrain the SAME expression, and split into
         // one upper / one lower bound.
-        if (!parse_range_leg(expr.left, va, bound_a, hi_a)
-            || !parse_range_leg(expr.right, vb, bound_b, hi_b)
+        if (!parse_range_leg(expr.left, upper_op, lower_op, va, bound_a, hi_a)
+            || !parse_range_leg(expr.right, upper_op, lower_op, vb, bound_b, hi_b)
             || !expr_equal_struct(va, vb)
             || hi_a == hi_b) return
         let lo = hi_a ? bound_b : bound_a
@@ -1448,12 +1460,13 @@ class PerfLintVisitor : AstVisitor {
         // BOTH cases, so for a single-case range ('a'..'z' or 'A'..'Z') it's a
         // broader replacement, not an exact one — call that out so the user
         // doesn't replace lower-only with a both-cases check.
+        let neg = negated ? "!" : ""
         if (lo == 48 && hi == 57) {
-            perf_warning("PERF014: char-class range check '0'..'9' — use 'is_number(c)' from strings module", expr.at)
+            perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number(c)' from strings module", expr.at)
         } else {
             // 'a'..'z' or 'A'..'Z'
             let case_kind = (lo == 97) ? "lowercase" : "uppercase"
-            perf_warning("PERF014: char-class range check ({case_kind} only) — consider 'is_alpha(c)' from strings module (note: is_alpha matches both cases, broader than this range)", expr.at)
+            perf_warning("PERF014: char-class range check ({case_kind} only{negated ? ", negated" : ""}) — consider '{neg}is_alpha(c)' from strings module (note: is_alpha matches both cases, broader than this range)", expr.at)
         }
     }
 
