@@ -402,6 +402,7 @@
 %type <s>                   das_type_name
 %type <s>                   optional_structure_parent
 %type <s>                   require_module_name
+%type <s>                   optional_require_guard
 %type <s>                   annotation_argument_name
 %type <s>                   format_string
 %type <s>                   optional_format_string
@@ -807,12 +808,17 @@ require_module_name
     }
     ;
 
+optional_require_guard
+    :                       { $$ = nullptr; }
+    |   '?' NAME[g]         { $$ = $g; }
+    ;
+
 require_module
-    :   require_module_name[name]  is_public_module[pub] {
-        ast_requireModule(scanner,$name,nullptr,$pub,tokAt(scanner,@name));
+    :   optional_require_guard[guard] require_module_name[name]  is_public_module[pub] {
+        ast_requireModule(scanner,$name,nullptr,$pub,tokAt(scanner,@name),$guard);
     }
-    |   require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
-        ast_requireModule(scanner,$name,$modalias,$pub,tokAt(scanner,@name));
+    |   optional_require_guard[guard] require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
+        ast_requireModule(scanner,$name,$modalias,$pub,tokAt(scanner,@name),$guard);
     }
     ;
 

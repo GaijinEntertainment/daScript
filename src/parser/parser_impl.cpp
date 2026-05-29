@@ -1113,7 +1113,18 @@ namespace das {
         }
     }
 
-    void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName ) {
+    void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName, string * guard ) {
+        // Optional require `require ?guard target`: when the guard module is not available, skip the
+        // require entirely (no error). A present guard with a missing target still errors below.
+        if ( guard ) {
+            bool guardAvailable = Module::requireEx(*guard, false) != nullptr;
+            delete guard;
+            if ( !guardAvailable ) {
+                delete name;
+                if ( modalias ) delete modalias;
+                return;
+            }
+        }
         auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
         if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
