@@ -56,6 +56,30 @@ node |> for_each_attribute()   $(a)       { ... }
 
 Manual `node.first_child` / `node.next_sibling` walking still works but is rarely the right choice.
 
+## LINQ source — `from_xml_node`
+
+`from_xml_node(root, type<Row>)` is a typed, lazy iterator over `root`'s child elements: each child is materialized into a `Row` by reading **same-named attributes**, so comprehensions and `daslib/linq_boost` queries run straight over an XML document.
+
+```das
+struct Car {
+    id : int
+    make : string
+    price : float
+    year : int = 2000        // default kept when the attribute is absent
+}
+
+for (car in from_xml_node(root, type<Car>)) { ... }                 // all children
+let makes <- [for (car in from_xml_node(root, type<Car>));          // comprehension
+    car.make; where car.price < 30000.0]
+let cars <- unsafe(from_xml_node(root, "car", type<Car>) |> to_array())   // tag-filtered + collect
+```
+
+- **Field mapping (v1):** every struct field reads from an attribute of the same name. Supported scalar types: `int`, `uint`, `float`, `double`, `bool`, `string`. Fields of other types keep their default. Child-element / text mapping (via `@xml_*` field annotations) is a planned growth path.
+- **Defaults:** a missing attribute leaves the field at its declared default (`year : int = 2000` above), because the field value is passed as the accessor's fallback.
+- **Lifetime-safe:** rows are owned values — string fields are cloned out of the document — so results collected with `to_array` / a comprehension stay valid **past** the `parse_xml` / `open_xml` RAII block. (Contrast: a raw `xml_node` must not escape the block.)
+- **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs an `unsafe` block.
+- A fused `_fold` lane for XML is planned (pass 2); today `from_xml_node` composes with comprehensions / `linq_boost` (the un-fused path). See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
+
 ## Quick accessors (with defaults)
 
 ```das
@@ -169,6 +193,7 @@ Supports nested structs, enums, arrays, tables, tuples, variants, vector types (
   - [tutorials/dasPUGIXML/02_building_xml.das](tutorials/dasPUGIXML/02_building_xml.das) — `with_doc`, `tag`/`attr` EDSL, serialization
   - [tutorials/dasPUGIXML/03_xpath.das](tutorials/dasPUGIXML/03_xpath.das) — XPath queries, compiled XPath
   - [tutorials/dasPUGIXML/04_serialization.das](tutorials/dasPUGIXML/04_serialization.das) — `to_XML`/`from_XML` round-trip
+  - [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das) — `from_xml_node` LINQ source (typed rows from attributes)
 - daslib helpers (the source of truth for the EDSL): [modules/dasPUGIXML/daslib/PUGIXML_boost.das](modules/dasPUGIXML/daslib/PUGIXML_boost.das)
 - C++ binding (for adding new functions): [modules/dasPUGIXML/src/dasPUGIXML.h](modules/dasPUGIXML/src/dasPUGIXML.h), `dasPUGIXML.cpp`
 - Tests with patterns: [tests/dasPUGIXML/](tests/dasPUGIXML/) — `test_pugixml_core.das`, `test_pugixml_mutation.das`, `test_pugixml_boost.das`, `test_serial_*.das`
