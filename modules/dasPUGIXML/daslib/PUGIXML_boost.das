@@ -151,6 +151,14 @@ def build_xml_row(node : xml_node; var row) {
     }
 }
 
+def read_xml_field(node : xml_node; name : string; defv : auto(TT)) : TT {
+    //! Reads one same-named attribute of *node* into a *TT*-typed value — the field-pruned
+    //! counterpart to ``build_xml_row``, emitted by linq_fold's fused XML lane. A missing
+    //! attribute keeps *defv*, so pass the struct field's declared default to match
+    //! ``build_xml_row`` semantics. Same supported field types as ``build_xml_row``.
+    return read_xml_attr(node[name], defv)
+}
+
 [unsafe_outside_of_for]
 def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT -const> {
     //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading

@@ -46,8 +46,10 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: non-fold baseline — plain iteration over from_xml_node, breaking
-// on the (unique) match.
+// m5_xml lane: non-fold baseline. Mirrors `.single()` semantics (the m3f/m4/m5f lanes) — a FULL scan
+// asserting exactly one survivor, NOT an early-exit find-first. (A `for ... break` baseline would
+// process ~TARGET_ID elements yet still divide by n, reporting a misleadingly tiny ns/op against the
+// full-scan fold lanes — see results.md.)
 def run_m5(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -58,14 +60,15 @@ def run_m5(b : B?; n : int) {
         let root = doc.document_element
         b |> run("m5_xml/{n}", n) {
             var row = default<Car>
+            var found = 0
             for (car in from_xml_node(root, type<Car>)) {
                 if (car.id == TARGET_ID) {
                     row = car
-                    break
+                    found ++
                 }
             }
             b |> accept(row)
-            if (row.id == 0) {
+            if (found != 1) {
                 b->failNow()
             }
         }
@@ -92,8 +95,9 @@ def single_match_m5(b : B?) {
     run_m5(b, 100000)
 }
 
-// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2a). XmlAdapter emits an inlined
-// child-element walk in place of the generator; full row materialization is retained until 2b prunes it.
+// m5f_xml_fold lane: fused `_fold` over from_xml_node (pass 2b). XmlAdapter emits an inlined
+// child-element walk; `.single()` returns the whole row, so the scanner sees a whole-row escape and
+// keeps the full build_xml_row materialization (field-pruning applies to filter/project/aggregate chains).
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
