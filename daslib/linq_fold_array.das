@@ -341,17 +341,8 @@ def emit_accumulator_lane(
             $i(itName)
         }
     }
-    // Accumulator type: projection-typed if present, else source's element type. Strip
-    var accType : TypeDeclPtr
-    if (projection != null) {
-        accType = clone_type(projection._type)
-    } else {
-        accType = clone_type(elementType)
-    }
-    if (accType != null) {
-        accType.flags.constant = false
-        accType.flags.ref = false
-    }
+    // Accumulator type: projection-typed if present, else source's element type, const/ref stripped.
+    var accType = mut_result_type(projection, elementType)
     let valBindName = qn("val", at)
     let firstName = qn("first", at)
     let cntName = qn("cnt", at)
@@ -420,17 +411,7 @@ def emit_early_exit_lane(
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
     if (opName == "first") {
-        // Return type for first: projection's type (if any) or source's element type.
-        var retType : TypeDeclPtr
-        if (projection != null) {
-            retType = clone_type(projection._type)
-        } else {
-            retType = clone_type(elementType)
-        }
-        if (retType != null) {
-            retType.flags.constant = false
-            retType.flags.ref = false
-        }
+        var retType = mut_result_type(projection, elementType)
         perMatchStmts |> push <| qmacro_expr() {
             return $i(valueName)
         }
@@ -494,16 +475,7 @@ def emit_early_exit_lane(
         }
     } elif (opName == "last" || opName == "last_or_default") {
         // Full walk; per-match overwrites a single bind; tail returns it after found-check (panic/default for empty).
-        var retType : TypeDeclPtr
-        if (projection != null) {
-            retType = clone_type(projection._type)
-        } else {
-            retType = clone_type(elementType)
-        }
-        if (retType != null) {
-            retType.flags.constant = false
-            retType.flags.ref = false
-        }
+        var retType = mut_result_type(projection, elementType)
         let foundName = qn("found", at)
         let lastBindName = qn("lst", at)
         preludeStmts |> push_from <| qmacro_block_to_array() {
@@ -535,16 +507,7 @@ def emit_early_exit_lane(
         }
     } elif (opName == "single" || opName == "single_or_default") {
         // Full walk; on the SECOND match `single` panics and `single_or_default` returns the default; same for empty source.
-        var retType : TypeDeclPtr
-        if (projection != null) {
-            retType = clone_type(projection._type)
-        } else {
-            retType = clone_type(elementType)
-        }
-        if (retType != null) {
-            retType.flags.constant = false
-            retType.flags.ref = false
-        }
+        var retType = mut_result_type(projection, elementType)
         let foundName = qn("found", at)
         let bindName = qn("sng", at)
         preludeStmts |> push_from <| qmacro_block_to_array() {
@@ -586,16 +549,7 @@ def emit_early_exit_lane(
         }
     } elif (opName == "element_at" || opName == "element_at_or_default") {
         // Counter-style early-exit: return the N-th element that survives upstream where/select. Negative index panics or returns default pre-loop.
-        var retType : TypeDeclPtr
-        if (projection != null) {
-            retType = clone_type(projection._type)
-        } else {
-            retType = clone_type(elementType)
-        }
-        if (retType != null) {
-            retType.flags.constant = false
-            retType.flags.ref = false
-        }
+        var retType = mut_result_type(projection, elementType)
         let idxName = qn("idx", at)
         let cntName = qn("ec", at)
         preludeStmts |> push <| qmacro_expr() {

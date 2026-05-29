@@ -1244,6 +1244,13 @@ def strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
     return t
 }
 
+[macro_function]
+def mut_result_type(projection : Expression?; elementType : TypeDeclPtr) : TypeDeclPtr {
+    // Post-projection element type, cloned + const/ref stripped — the mutable acc/result/buf element
+    // type used by the accumulator and early-exit (first/last/single) lanes.
+    return strip_const_ref(clone_type(projection != null ? projection._type : elementType))
+}
+
 // ===== SourceAdapter join helpers — shared between DecsJoinAdapter / ArrayJoinAdapter wrap_source_loop. =====
 
 // JoinAdapterPieces — shared output of build_join_adapter_pieces. collectInner and probeOuter are framework-agnostic: caller wraps in `build_decs_inner_for(bridge, tupBind, ...)` + `for_each_archetype` (decs) or plain `for (tupName in srcName) { ... }` (array).
