@@ -55,3 +55,17 @@ def test_from_xml_node_filtered(t : T?) {
         t |> equal(ids[2], 3)
     }
 }
+
+[test]
+def test_from_xml_node_mixed_content(t : T?) {
+    // bare from_xml_node skips non-element children (PCDATA between the cars),
+    // so mixed content yields only the 2 elements — not extra default rows
+    parse_xml("<cars>noise<car id=\"1\"/>more<car id=\"2\"/></cars>") $(doc, ok) {
+        t |> success(ok)
+        let root = doc.document_element
+        let ids <- [for (c in from_xml_node(root, type<XmlCar>)); c.id]
+        t |> equal(length(ids), 2)
+        t |> equal(ids[0], 1)
+        t |> equal(ids[1], 2)
+    }
+}

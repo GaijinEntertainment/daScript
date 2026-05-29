@@ -126,7 +126,9 @@ def tag_filter() {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // Rows are owned values (strings cloned out of the document), so collecting them
-// with to_array and using them AFTER the RAII block closes is safe.
+// and using them AFTER the RAII block closes is safe. A for-loop is the safe way
+// to consume the iterator (to_array would need an `unsafe` block — the
+// [unsafe_outside_of_for] rule — since it consumes the iterator outside a for).
 
 def lifetime() {
     print("=== Section 5: results outlive the document ===\n")
@@ -134,10 +136,8 @@ def lifetime() {
     parse_xml(CATALOG) $(doc, ok) {
         if (!ok) return
         let root = doc.document_element
-        // to_array consumes the iterator outside a for-loop → unsafe (the
-        // [unsafe_outside_of_for] iterator rule); the result is plain owned data
-        unsafe {
-            inventory <- from_xml_node(root, type<Car>) |> to_array()
+        for (car in from_xml_node(root, type<Car>)) {
+            inventory |> push(car)
         }
     }
     // doc is freed here — inventory and its strings remain valid

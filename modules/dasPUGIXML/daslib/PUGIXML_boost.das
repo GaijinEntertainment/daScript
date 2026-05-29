@@ -152,20 +152,25 @@ def build_xml_row(node : xml_node; var row) {
 }
 
 [unsafe_outside_of_for]
-def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT> {
-    //! Lazily walks every child element of *node*, materializing each into a *TT* by reading
-    //! same-named attributes (see ``build_xml_row``). Yields owned values, so rows collected via
-    //! ``to_array`` or a comprehension stay valid past the document's RAII block.
+def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT -const> {
+    //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading
+    //! same-named attributes (see ``build_xml_row``). Non-element children (text/PCDATA/comments
+    //! in mixed content) are skipped. Yields owned values, so rows collected via ``to_array`` or a
+    //! comprehension stay valid past the document's RAII block.
     //! Intended for ``for`` loops and LINQ chains:
     //!
     //!   ``for (car in from_xml_node(root, type<Car>)) { ... }``
-    return <- generator<TT> {
+    // -const on the element: type<auto(TT)> binds TT const, so a bare iterator<TT> makes the
+    // consumer's loop var a const struct — which the AOT C++ emitter can't default-initialize.
+    return <- generator<TT -const> {
         var ch = node.first_child
         while (ch.ok) {
-            var next = ch.next_sibling   // capture before yield (user may mutate)
-            var row = default<TT>
-            build_xml_row(ch, row)
-            yield row
+            let next = ch.next_sibling   // capture before yield (user may mutate)
+            if (ch._type == xml_node_type.node_element) {
+                var row = default<TT -const>
+                build_xml_row(ch, row)
+                yield row
+            }
             ch = next
         }
         return false
@@ -173,13 +178,14 @@ def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT> {
 }
 
 [unsafe_outside_of_for]
-def from_xml_node(node : xml_node; name : string; t : type<auto(TT)>) : iterator<TT> {
-    //! As ``from_xml_node`` above, but only walks child elements whose tag matches *name*.
-    return <- generator<TT> {
+def from_xml_node(node : xml_node; name : string; t : type<auto(TT)>) : iterator<TT -const> {
+    //! As ``from_xml_node`` above, but only walks child elements whose tag matches *name*
+    //! (``child``/``next_sibling`` by name already match elements only).
+    return <- generator<TT -const> {
         var ch = child(node, name)
         while (ch.ok) {
-            var next = next_sibling(ch, name)   // capture before yield
-            var row = default<TT>
+            let next = next_sibling(ch, name)   // capture before yield
+            var row = default<TT -const>
             build_xml_row(ch, row)
             yield row
             ch = next
