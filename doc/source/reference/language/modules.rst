@@ -62,6 +62,45 @@ In project mode, regular ``.das`` source files have their requires routed
 through ``module_get``; projects that want the same file-path convenience
 must implement it inside their own resolver.
 
+-----------------
+Optional requires
+-----------------
+
+A ``require`` may be **guarded** by a module name written as ``?guard`` directly
+after the ``require`` keyword (gen2 syntax only — the guard form is not accepted
+under the v1 ``options gen2 = false`` parser):
+
+.. code-block:: das
+
+    require ?pugixml pugixml/PUGIXML_boost      // only if module `pugixml` is available
+    require ?pugixml pugixml/PUGIXML_boost public
+
+The require loads its target **only when the guard module is available** (linked
+into this build / registered). When the guard is *absent*, the require is
+**skipped silently** — no dependency is added and no error is raised, even if the
+target itself does not exist. When the guard is *present*, the require behaves
+exactly like an ordinary require, so a missing target still produces the usual
+``missing prerequisite`` error (the guard never masks a genuine resolution
+failure).
+
+The guard module is named separately from the target on purpose: the condition
+to load (``pugixml`` — the C++ module that makes the path resolvable) is distinct
+from what is loaded (``pugixml/PUGIXML_boost``, whose own module name is
+``PUGIXML_boost``).
+
+Pair it with :ref:`typeinfo builtin_module_exists <generic_programming>` to guard
+code that uses the optional target's symbols — ``static_if`` drops the untaken
+branch before name resolution, so the symbols are referenced only when present:
+
+.. code-block:: das
+
+    require ?pugixml pugixml/PUGIXML_boost
+
+    static_if (typeinfo builtin_module_exists(pugixml)) {
+        // resolved only when pugixml is available
+        parse_xml("<root/>") $(doc, ok) { /* ... */ }
+    }
+
 --------------
 Native modules
 --------------

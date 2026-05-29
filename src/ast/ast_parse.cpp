@@ -152,6 +152,27 @@ namespace das {
                             if ( src >= src_end ) {
                                 continue;
                             }
+                            // Optional require `require ?guard target`: parse the guard module name.
+                            // When the guard module is unavailable, skip this require entirely (no
+                            // dependency collected, no error). Only `require` is guarded, not `include`.
+                            string reqGuard;
+                            bool hasReqGuard = false;
+                            if ( isReq && src[0]=='?' ) {
+                                hasReqGuard = true;
+                                src ++; // skip '?'
+                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                    src ++;
+                                }
+                                while ( src < src_end && (isalnumE(src[0]) || src[0]=='_') ) {
+                                    reqGuard += *src ++;
+                                }
+                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                    src ++;
+                                }
+                                if ( src >= src_end ) {
+                                    continue;
+                                }
+                            }
                             if ( src[0]=='_' || isalphaE(src[0]) || src[0] == '%' || src[0] == '.' || src[0]=='/' ) {
                                 string mod;
                                 mod += *src++;
@@ -159,6 +180,10 @@ namespace das {
                                     mod += *src ++;
                                 }
                                 if ( isReq ) {
+                                    // guarded optional require whose guard module is absent — skip
+                                    if ( hasReqGuard && Module::requireEx(reqGuard, false)==nullptr ) {
+                                        continue;
+                                    }
                                     bool isPublic = false;
                                     while ( src < src_end && src[0] == ' ' ) {
                                         src ++;
