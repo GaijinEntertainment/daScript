@@ -671,26 +671,26 @@ class public AotDebugInfoHelper {
     def str() {
         return build_string() $(var writer) {
             verify(info2Name.empty() && info2TypeName.empty())
-            helper |> debug_helper_iter_structs($(name, ti) {
+            helper |> debug_helper_iter_structs($(_name, ti) {
                 write(writer, "extern StructInfo {structInfoName(ti)};\n");
             });
-            helper |> debug_helper_iter_types($(name, ti){
+            helper |> debug_helper_iter_types($(_name, ti){
                 write(writer, "extern TypeInfo {typeInfoName(ti)};\n");
             })
             write(writer, "\n");
-            helper |> debug_helper_iter_enums($(name, ti){
+            helper |> debug_helper_iter_enums($(_name, ti){
                 describeCppEnumInfoValues(unsafe(addr(writer)), ti);
                 write(writer, "EnumInfo {enumInfoName(ti)} = \{ {describeCppEnumInfo(ti)} \};\n");
             })
-            helper |> debug_helper_iter_structs($(name, ti){
+            helper |> debug_helper_iter_structs($(_name, ti){
                 describeCppStructInfoFields(unsafe(addr(writer)), ti);
                 write(writer, "StructInfo {structInfoName(ti)} = \{{describeCppStructInfo(ti)} \};\n");
             })
-            helper |> debug_helper_iter_funcs($(name, ti){
+            helper |> debug_helper_iter_funcs($(_name, ti){
                 describeCppFuncInfoFields(unsafe(addr(writer)), ti);
                 write(writer, "FuncInfo {funcInfoName(ti)} = \{{describeCppFuncInfo(ti)} \};\n");
             })
-            helper |> debug_helper_iter_types($(name, ti){
+            helper |> debug_helper_iter_types($(_name, ti){
                 assume wr = unsafe(addr(writer))
                 writeDim(wr, ti);
                 writeArgTypes(wr, ti);
@@ -700,7 +700,7 @@ class public AotDebugInfoHelper {
             write(writer, "\n");
             write(writer, "static void resolveTypeInfoAnnotations()\n\{\n");
             write(writer, "    vector<TypeInfo> annotations = \{")
-            helper |> debug_helper_iter_types($(name, ti) {
+            helper |> debug_helper_iter_types($(_name, ti) {
                 if (ti._type == Type.tHandle) {
                     write(writer, "{typeInfoName(ti)}, ");
                 }
@@ -709,7 +709,7 @@ class public AotDebugInfoHelper {
             write(writer, "    for (auto& ann : annotations) \{\n")
             write(writer, "        ann.resolveAnnotation();\n")
             write(writer, "    \}\n")
-            helper |> debug_helper_iter_structs($(name, si) {
+            helper |> debug_helper_iter_structs($(_name, si) {
                 if (si.fields == null) return ;
                 for (fi in range(si.count)) {
                     let fld & = unsafe(si.fields[fi])
@@ -3728,7 +3728,10 @@ class public CppAot : AstVisitor {
         write(*ss, ");\n");
 
         // source
-        let skipTC : bool = variable._type.isString && !variable._type.flags.ref;
+        // A value (non-ref) loop var is a local copy that first()/next() write into, so it must not be
+        // C++-const — a const POD value local is ill-formed without a user default ctor (e.g. struct rows
+        // from a const-element iterator such as from_xml_node). Ref vars are pointers (const on pointee is ok).
+        let skipTC : bool = !variable._type.flags.ref
         let cfg = DescribeConfig(substitute_ref = true, skip_const = skipTC, cross_platform = cross_platform)
         let type_str = describeCppType(variable._type, cfg);
         write(*ss, "{tabs()}{type_str} {collector.getVarName(variable)};\n");
@@ -4175,7 +4178,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
     }
 }
 
-[export]
+[export, unused_argument(paranoid_validation), unused_argument(cross_platform)]
 def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
     //! Compiles, simulates, and generates AOT C++ code for a daslang input file.
     var result = "";
