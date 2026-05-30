@@ -27,8 +27,14 @@ struct DecsJoinShape {
 class DecsAdapter : SourceAdapter {
     bridge : DecsBridgeShape?
     tupName : string
-    def override kind() : AdapterKind {
-        return AdapterKind.k_decs
+    def override name_prefix() : string {
+        return "decs_"
+    }
+    def override has_own_loop_or_count_lane() : bool {
+        return true
+    }
+    def override const can_group_by() : bool {
+        return true
     }
     def override emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_loop_or_count_lane_decs(bridge, tupName, c, ctx, at)
@@ -133,8 +139,8 @@ class DecsAdapter : SourceAdapter {
 
 class DecsJoinAdapter : SourceAdapter {
     shape : DecsJoinShape
-    def override kind() : AdapterKind {
-        return AdapterKind.k_decs_join
+    def override name_prefix() : string {
+        return "djoin_"
     }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName

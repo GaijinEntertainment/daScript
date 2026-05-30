@@ -37,8 +37,11 @@ struct ArrayJoinShape {
 class ArrayAdapter : SourceAdapter {
     top : Expression?
     srcName : string
-    def override kind() : AdapterKind {
-        return AdapterKind.k_array
+    def override can_reserve_by_length() : bool {
+        return true
+    }
+    def override const can_group_by() : bool {
+        return true
     }
     def override arrayTop() : Expression? {
         return top
@@ -153,8 +156,8 @@ class ArrayAdapter : SourceAdapter {
 
 class ZipAdapter : SourceAdapter {
     shape : ZipShape
-    def override kind() : AdapterKind {
-        return AdapterKind.k_zip
+    def override name_prefix() : string {
+        return "zip_"
     }
     def override bind_name(at : LineInfo) : string {
         return qn("it", at)
@@ -203,8 +206,8 @@ class ZipAdapter : SourceAdapter {
 
 class ArrayJoinAdapter : SourceAdapter {
     shape : ArrayJoinShape
-    def override kind() : AdapterKind {
-        return AdapterKind.k_array_join
+    def override name_prefix() : string {
+        return "ajoin_"
     }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName
@@ -669,11 +672,11 @@ def emit_early_exit_lane(
 
 [macro_function]
 def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    // PR C Decs-arm: route to existing emit_decs_* lane fns. State hoists above for_each_archetype (different invoke shape from array side); unifying lane fns is out of scope per D1.
-    if (ctx.src->kind() == AdapterKind.k_decs) return ctx.src->emit_loop_or_count(c, ctx, at)
+    // PR C Decs-arm: route to existing emit_decs_* lane fns. State hoists above for_each_archetype (different invoke shape from array side); unifying lane fns is out of scope per D1. Sources with their own lane delegate entirely — a null hook result bails to tier-2 (must NOT fall through to the array lane, which assumes an array `top`).
+    if (ctx.src->has_own_loop_or_count_lane()) return ctx.src->emit_loop_or_count(c, ctx, at)
     // Non-array single-source adapters (XML) ride this whole lane via the override — it wins over the
     // ArrayAdapter that build_lane_adapter / the buffer lane would otherwise reconstruct from top+srcName.
-    var adapterOverride : SourceAdapter? = ctx.src->kind() == AdapterKind.k_xml ? ctx.src : null
+    var adapterOverride : SourceAdapter? = ctx.src->can_ride_array_lane() ? ctx.src : null
     var top = ctx.top
     let srcName = ctx.src->arraySrcName()
     let itName = qn("it", at)
