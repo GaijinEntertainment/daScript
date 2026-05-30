@@ -89,6 +89,38 @@ class SourceAdapter {
     }
 }
 
+// Decorator adapter — absorbs a leading `_select(f)` source projection: binds `projName = f(innerBind)` atop
+// the per-element body and delegates loop/invoke to the inner adapter, so order/distinct fuse over
+// `source |> _select(f) |> <rest>` (XML field-pruning preserved — f's it.<field> reads reach the materializer).
+class ProjectedSourceAdapter : SourceAdapter {
+    inner     : SourceAdapter?
+    selectLam : Expression?
+    projType  : TypeDeclPtr
+    projName  : string
+    def override name_prefix() : string {
+        return inner->name_prefix()
+    }
+    def override bind_name(at : LineInfo) : string {
+        return projName
+    }
+    def override element_type() : TypeDeclPtr {
+        return clone_type(projType)
+    }
+    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+        let innerBind = inner->bind_name(at)
+        var projExpr = peel_lambda_rename_var(selectLam, innerBind)
+        let pn = projName
+        var newBody = qmacro_block() {
+            let $i(pn) = $e(projExpr)
+            $e(body)
+        }
+        return inner->wrap_source_loop(newBody, at)
+    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+        return inner->wrap_invoke(stmts, retType, wrapIter, at)
+    }
+}
+
 variant SlotMatcher {
     literal : string                       // exact name match
     one_of  : array<string>                // any-of name set
@@ -1421,6 +1453,7 @@ def build_order_family_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "order_streaming_min",
         chain <- [
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "srcsel"),
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
             Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
@@ -1434,6 +1467,7 @@ def build_order_family_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "order_bounded_heap",
         chain <- [
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "srcsel"),
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
             Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
@@ -1447,6 +1481,7 @@ def build_order_family_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "order_then_plain_distinct",
         chain <- [
+            Slot(matcher = m_literal("select"),     cardinality = c_opt(), capture_name = "srcsel"),
             Slot(matcher = m_alias("order_family"), cardinality = c_one(), capture_name = "order"),
             Slot(matcher = m_literal("distinct"),   cardinality = c_one(), capture_name = "distinct_after"),
             Slot(matcher = m_literal("take"),       cardinality = c_opt(), capture_name = "take"),
@@ -1460,6 +1495,7 @@ def build_order_family_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "order_fused_prefilter",
         chain <- [
+            Slot(matcher = m_literal("select"),        cardinality = c_opt(), capture_name = "srcsel"),
             Slot(matcher = m_literal("where_"),       cardinality = c_opt(), capture_name = "where"),
             Slot(matcher = m_alias("distinct_family"), cardinality = c_opt(), capture_name = "distinct"),
             Slot(matcher = m_alias("order_family"),    cardinality = c_one(), capture_name = "order"),
