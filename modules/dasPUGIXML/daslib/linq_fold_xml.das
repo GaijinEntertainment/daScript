@@ -169,23 +169,26 @@ class XmlAdapter : SourceAdapter {
     }
     def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
         let chName = qn("xch", at)
-        let nxName = qn("xnx", at)
+        let curName = qn("xcur", at)
         let defName = qn("xdef", at)
         let sn = srcName
         var declT = strip_const_ref(clone_type(elemType))
         var prelude : array<Expression?>
         var inner : array<Expression?>
-        build_xml_materializer(body, bind_name(at), declT, defName, chName, at, prelude, inner)
+        // `xch` advances to the next sibling BEFORE the body runs, so a `continue` inside the body
+        // (emitted by skip / skip_while) lands on the advanced cursor, not the same element; the body
+        // reads attributes from the captured current element `xcur`.
+        build_xml_materializer(body, bind_name(at), declT, defName, curName, at, prelude, inner)
         var loop : Expression?
         if (nameArg == null) {
             loop = qmacro_block() {
                 var $i(chName) = $i(sn).first_child
                 while ($i(chName).ok) {
-                    let $i(nxName) = $i(chName).next_sibling
-                    if ($i(chName)._type == xml_node_type.node_element) {
+                    let $i(curName) = $i(chName)
+                    $i(chName) = $i(chName).next_sibling
+                    if ($i(curName)._type == xml_node_type.node_element) {
                         $b(inner)
                     }
-                    $i(chName) = $i(nxName)
                 }
             }
         } else {
@@ -194,9 +197,9 @@ class XmlAdapter : SourceAdapter {
                 let $i(nmName) = $e(nameArg)
                 var $i(chName) = child($i(sn), $i(nmName))
                 while ($i(chName).ok) {
-                    let $i(nxName) = next_sibling($i(chName), $i(nmName))
+                    let $i(curName) = $i(chName)
+                    $i(chName) = next_sibling($i(chName), $i(nmName))
                     $b(inner)
-                    $i(chName) = $i(nxName)
                 }
             }
         }
