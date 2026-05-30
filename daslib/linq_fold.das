@@ -133,7 +133,7 @@ def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; v
                                onlyRow : string = "") : Expression? {
     for (p in splice_patterns) {
         if (onlyRow != "" && p.name != onlyRow) continue
-        var r <- match_pattern(p, calls, matchTop)
+        var r <- match_pattern(p, calls, matchTop, adapter)
         if (r is matched) {
             var ctx = EmitCtx(top = ctxTop, src = adapter, expr_is_iterator = exprIsIter)
             var result = invoke(p.emit, r as matched, ctx, at)

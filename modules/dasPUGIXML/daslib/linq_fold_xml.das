@@ -155,8 +155,11 @@ class XmlAdapter : SourceAdapter {
     srcName  : string
     elemType : TypeDeclPtr
     nameArg  : Expression?
-    def override kind() : AdapterKind {
-        return AdapterKind.k_xml
+    def override can_ride_array_lane() : bool {
+        return true
+    }
+    def override name_prefix() : string {
+        return "xml_"
     }
     def override arraySrcName() : string {
         return srcName

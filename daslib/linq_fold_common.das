@@ -29,24 +29,29 @@ struct LinqCall {
 // See daslib/linq_fold.md for masterplan.
 
 // ===== Source adapter (class hierarchy) — see linq_fold.md "Module layout & adapter contract" =====
-// Abstract base + one subclass per data source. The 4 dispatch methods are the adapter contract;
-// transitional getters (arrayTop/arraySrcName) + kind() are removed once consumers move to subclass methods.
-enum AdapterKind {
-    k_array
-    k_decs
-    k_decs_join
-    k_zip
-    k_array_join
-    k_xml
-}
+// Abstract base + one subclass per data source. Sources answer capability questions about themselves
+// (can_*/name_prefix) — no central source enum, so a new source only implements the methods.
 
 [macro_interface]
 class SourceAdapter {
-    def abstract kind() : AdapterKind
     def abstract bind_name(at : LineInfo) : string
     def abstract element_type() : TypeDeclPtr
     def abstract wrap_source_loop(var body : Expression?; at : LineInfo) : Expression?
     def abstract wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression?
+    // Capability queries — the source answers about itself; no central source enum to extend. Defaults
+    // are the conservative answer (no fast path); the owning source overrides.
+    def can_reserve_by_length() : bool {        // O(1) length known → planners pre-reserve buffers
+        return false
+    }
+    def can_ride_array_lane() : bool {          // single-source adapter that supplies its own source loop and rides the array lane emit (vs. a reconstructed ArrayAdapter)
+        return false
+    }
+    def has_own_loop_or_count_lane() : bool {   // emits loop_or_count itself (via emit_loop_or_count) instead of the array lane; a null hook result then bails to tier-2 rather than falling through
+        return false
+    }
+    def name_prefix() : string {                // gensym prefix keeping hoisted names per-source distinct in plan_group_by_core
+        return ""
+    }
     // Per-operation source-specific emit hooks. Default null = "this source has no special path here";
     // the dispatcher falls back to its inline (array) body. Overridden by the source that owns a path.
     def emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
@@ -109,7 +114,7 @@ variant MatchResult {
     matched  : Captures
 }
 
-typedef RequiresPredicate = function<(var c : Captures; var top : Expression?) : bool>
+typedef RequiresPredicate = function<(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool>
 
 // Fold-time context passed to every emit archetype. Carries the peeled source expression, source adapter, and the outer
 // `_fold(...)` expression's iterator-ness (drives `buffer_return` wrap so iterator-typed contexts wrap survivors with
@@ -268,7 +273,8 @@ def slot_matches_call(slot : Slot; call : ExprCall?; name : string; pattern_name
 
 def match_pattern(p : SplicePattern;
                   var calls : array<tuple<ExprCall?; LinqCall?>>;
-                  var top : Expression?) : MatchResult {
+                  var top : Expression?;
+                  src : SourceAdapter?) : MatchResult {
     var captures : Captures
     var slot_i = 0
     var call_i = 0
@@ -307,7 +313,7 @@ def match_pattern(p : SplicePattern;
     }
     if (call_i < length(calls)) return MatchResult(no_match = null)
     for (pred in p.requires) {
-        if (!invoke(pred, captures, top)) return MatchResult(no_match = null)
+        if (!invoke(pred, captures, top, src)) return MatchResult(no_match = null)
     }
     return MatchResult(matched <- captures)
 }
@@ -316,20 +322,22 @@ def match_pattern(p : SplicePattern;
 // produce `_localfunction_*` symbols the JIT pass can't resolve). Pattern rows wrap each with `@@<RequiresPredicate>`.
 // Starts minimal; grows with use per masterplan.
 
-[unused_argument(c)]
-def array_source(var c : Captures; var top : Expression?) : bool {
+// RequiresPredicates take the source `src` adapter (threaded from run_splice_adapter via match_pattern) so
+// source/capability gating asks the adapter (src->can_*()) rather than re-deriving the source kind here.
+[unused_argument(c, src)]
+def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     // top is already peel_each'd by the calling stub; verify it carries an array type. Naturally false for decs sources (`from_decs_template(...)` is iterator-typed).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
-[unused_argument(c)]
-def decs_source(var c : Captures; var top : Expression?) : bool {
+[unused_argument(c, src)]
+def decs_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     // For rows that should only match decs adapter (PR C). extract_decs_bridge is cheap shape check.
     return extract_decs_bridge(top) != null
 }
 
-[unused_argument(top)]
-def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def take_arg_is_int(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c.single["take"]
     return (take != null && length(take.arguments) >= 2 && take.arguments[1] != null
@@ -338,14 +346,14 @@ def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
 
 // `no_terminator` — chain ends bare (no `count` / `sum` / `first[_or_default]` / `to_array` captured).
 // Return shape (array vs iterator) is decided by `ctx.expr_is_iterator` in the emit fn, not this predicate.
-[unused_argument(top)]
-def no_terminator(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def no_terminator(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return !(c.single |> key_exists("term"))
 }
 
 // True only for `order_by[_descending]` with an inline-splice-able key lambda. `order` / `order_descending` route elsewhere.
-[unused_argument(top)]
-def inline_cmp_available(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def inline_cmp_available(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("order"))) return false
     let orderCall = c.single["order"]
     if (orderCall == null || orderCall._type == null || orderCall._type.firstType == null
@@ -357,14 +365,14 @@ def inline_cmp_available(var c : Captures; var top : Expression?) : bool {
 
 // `has_where_or_distinct` — used by order_fused_prefilter row to distinguish from bare buffer_helper_dispatch.
 // At least one prefilter source must be present for the fused-loop path to make sense.
-[unused_argument(top)]
-def has_where_or_distinct(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def has_where_or_distinct(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 }
 
 // v1 limit (imperative line 6011): upstream `join` requires empty head + no having + no trailing_where. Vacuous when no upstream_join captured.
-[unused_argument(top)]
-def decs_join_invariants(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def decs_join_invariants(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("upstream_join"))) return true
     return ((c.many["head"] |> empty)
             && !(c.single |> key_exists("having"))
@@ -382,35 +390,35 @@ def srcb_is_array_shaped(var c : Captures; captureName : string) : bool {
 }
 
 // Array mirror of decs_join_invariants — strict superset (same v1 shape limits + srcb-shape on the upstream join).
-def array_join_invariants(var c : Captures; var top : Expression?) : bool {
-    return decs_join_invariants(c, top) && srcb_is_array_shaped(c, "upstream_join")
+def array_join_invariants(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
+    return decs_join_invariants(c, top, src) && srcb_is_array_shaped(c, "upstream_join")
 }
 
 // plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
 // the order_by key lambda (and its side effects). Cascade to tier-2 instead. Matches the pre-PR-D1
 // imperative recognizer which only popped trailing order when no count terminator was present.
-[unused_argument(top)]
-def no_order_with_count(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def no_order_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
 }
 
 // Matches pre-PR-D2 plan_decs_join: trailing_select is only popped when terminator is NOT count
 // (count's emission ignores select entirely). Splicing `join+select+count` would silently drop
 // select's side effects — cascade to tier-2 instead.
-[unused_argument(top)]
-def decs_join_no_select_with_count(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def decs_join_no_select_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
 }
 
 // Array-side join splice guard — same srcb-shape check as on the upstream-join slot of array_join_invariants, but applied to the `join` capture.
-[unused_argument(top)]
-def array_join_srcb_is_array(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def array_join_srcb_is_array(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return srcb_is_array_shaped(c, "join")
 }
 
 // Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
-[unused_argument(top)]
-def zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def zip_arity_2_or_3(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("zip"))) return true
     let n = c.single["zip"].arguments |> length
     return n == 2 || n == 3
@@ -418,8 +426,8 @@ def zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
 
 // skip_while/take_while peel against the zip tuple `it`; an upstream select rebinds the element type
 // so the while predicate would dangle. Matches pre-PR-D2 plan_zip chain-walk bail (lines 6494/6500).
-[unused_argument(top)]
-def zip_no_while_after_select(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def zip_no_while_after_select(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("skip_while")) && !(c.single |> key_exists("take_while"))) return true
     for (call in c.many["head"]) {
         if (call_norm_name(call) == "select") return false
@@ -429,8 +437,8 @@ def zip_no_while_after_select(var c : Captures; var top : Expression?) : bool {
 
 // Trailing reverse is identity for count/sum/min/max/average/any/all/contains but picks a different
 // element for first/first_or_default. Matches pre-PR-D2 plan_zip post-walk bail (line 6644).
-[unused_argument(top)]
-def zip_reverse_compatible_with_term(var c : Captures; var top : Expression?) : bool {
+[unused_argument(top, src)]
+def zip_reverse_compatible_with_term(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("trailing_reverse")) || !(c.single |> key_exists("term"))) return true
     let name = c.single_name["term"]
     return name != "first" && name != "first_or_default"
@@ -1810,7 +1818,7 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         )
     }
     var reserveStmts : array<Expression?>
-    if (ctx.src->kind() == AdapterKind.k_array && oc.distinctName == "") {
+    if (ctx.src->can_reserve_by_length() && oc.distinctName == "") {
         let top = ctx.src->arrayTop()
         let srcName = ctx.src->arraySrcName()
         if (top != null && top._type != null && type_has_length(top._type)) {
@@ -2213,9 +2221,11 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
             terminalSelectElemType_check = c.single["termsel"]._type.firstType
         }
     }
-    // Decs skip-into-tail fast path for `reverse |> take(N) [|> _select(F)] |> to_array` (no where, no pre-reverse select) — preserves PR #2834's 5.2× perf gain and extends to the trailing-select case so the catch-all (which walks ALL N entities, push_clones full tuples, reverses, resizes, then projects) is reserved for shapes that genuinely need it (pre-reverse where_/select, or termsel without a resolved element type).
-    if (ctx.src->kind() == AdapterKind.k_decs && (c.single |> key_exists("take")) && whereCond == null && projection == null && termsel_fast_path_ok)
-        return ctx.src->emit_reverse_skip_into_tail(c.single["take"].arguments[1], ctx.expr_is_iterator, terminalSelectLam_check, terminalSelectElemType_check, at)
+    // skip-into-tail fast path for `reverse |> take(N) [|> _select(F)] |> to_array` (no where, no pre-reverse select) — preserves PR #2834's 5.2× perf gain and extends to the trailing-select case so the catch-all (which walks ALL N entities, push_clones full tuples, reverses, resizes, then projects) is reserved for shapes that genuinely need it (pre-reverse where_/select, or termsel without a resolved element type). The hook is null for sources without the fast path (only decs overrides it) → fall through to the catch-all.
+    if ((c.single |> key_exists("take")) && whereCond == null && projection == null && termsel_fast_path_ok) {
+        var rev = ctx.src->emit_reverse_skip_into_tail(c.single["take"].arguments[1], ctx.expr_is_iterator, terminalSelectLam_check, terminalSelectElemType_check, at)
+        if (rev != null) return rev
+    }
     var takeExpr : Expression?
     if (c.single |> key_exists("take")) {
         takeExpr = clone_expression(c.single["take"].arguments[1])
@@ -2249,7 +2259,7 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
     }
     // Reserve hint: array source with no prefilter has known length. Decs has no random-access length — skip.
     var reserveStmts : array<Expression?>
-    if (ctx.src->kind() == AdapterKind.k_array && whereCond == null) {
+    if (ctx.src->can_reserve_by_length() && whereCond == null) {
         let top = ctx.src->arrayTop()
         let srcName = ctx.src->arraySrcName()
         if (top != null && top._type != null && type_has_length(top._type)) {
@@ -3165,8 +3175,8 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                        exprIsIterator : bool;
                        at : LineInfo;
                        var adapter : SourceAdapter?) : Expression? {
-    // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join / "ajoin_" array-join).
-    let prefix = (adapter->kind() == AdapterKind.k_array) ? "" : ((adapter->kind() == AdapterKind.k_decs_join) ? "djoin_" : ((adapter->kind() == AdapterKind.k_array_join) ? "ajoin_" : "decs_"))
+    // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join / "ajoin_" array-join / "xml_" xml). The adapter supplies its own.
+    let prefix = adapter->name_prefix()
     let tabName    = qn("{prefix}tab", at)
     let kName      = qn("{prefix}k", at)
     let ukName     = qn("{prefix}uk", at)
