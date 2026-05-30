@@ -56,7 +56,7 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: non-fold baseline — plain iteration over from_xml_node.
+// m5_xml lane: non-fold baseline — the same chain over from_xml_node, un-fused (tier-2 cascade).
 def run_m5(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -64,15 +64,8 @@ def run_m5(b : B?; n : int) {
             b->failNow()
             return
         }
-        let root = doc.document_element
         b |> run("m5_xml/{n}", n) {
-            var s = 0
-            for (car in from_xml_node(root, type<Car>)) {
-                let p = car.price * 2
-                if (p > THRESHOLD) {
-                    s += p
-                }
-            }
+            let s = unsafe(from_xml_node(doc.document_element, type<Car>)) |> _select(_.price * 2) |> _where(_ > THRESHOLD) |> sum()
             b |> accept(s)
             if (s == 0) {
                 b->failNow()
@@ -110,9 +103,8 @@ def run_m5f(b : B?; n : int) {
             b->failNow()
             return
         }
-        var root = doc.document_element
         b |> run("m5f_xml_fold/{n}", n) {
-            let s = _fold(unsafe(from_xml_node(root, type<Car>))._select(_.price * 2)._where(_ > THRESHOLD).sum())
+            let s = _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._select(_.price * 2)._where(_ > THRESHOLD).sum())
             b |> accept(s)
             if (s == 0) {
                 b->failNow()

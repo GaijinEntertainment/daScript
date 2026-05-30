@@ -41,6 +41,40 @@ def run_m4(b : B?; n : int) {
     }
 }
 
+def run_m5(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5_xml/{n}", n) {
+            let m = unsafe(from_xml_node(doc.document_element, type<Car>)) |> _select(_.price) |> min()
+            b |> accept(m)
+            if (m > 999) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5f_xml_fold/{n}", n) {
+            let m = _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._select(_.price).min())
+            b |> accept(m)
+            if (m > 999) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 [benchmark]
 def min_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -54,4 +88,14 @@ def min_aggregate_m3f(b : B?) {
 [benchmark]
 def min_aggregate_m4(b : B?) {
     run_m4(b, 100000)
+}
+
+[benchmark]
+def min_aggregate_m5(b : B?) {
+    run_m5(b, 100000)
+}
+
+[benchmark]
+def min_aggregate_m5f(b : B?) {
+    run_m5f(b, 100000)
 }

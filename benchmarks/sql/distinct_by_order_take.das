@@ -58,6 +58,46 @@ def run_m4(b : B?; n : int) {
     }
 }
 
+// m5_xml lane: non-fold baseline — the same chain over from_xml_node, un-fused (tier-2 cascade).
+def run_m5(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5_xml/{n}", n) {
+            unsafe {
+                let rows <- (from_xml_node(doc.document_element, type<Car>) |> _distinct_by(_.dealer_id) |> _order_by(_.price) |> take(TAKE_N) |> to_array())
+                b |> accept(rows)
+                if (empty(rows)) {
+                    b->failNow()
+                }
+            }
+        }
+    }
+}
+
+// m5f_xml_fold lane: fused _fold over from_xml_node.
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5f_xml_fold/{n}", n) {
+            unsafe {
+                let rows <- _fold(from_xml_node(doc.document_element, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).take(TAKE_N).to_array())
+                b |> accept(rows)
+                if (empty(rows)) {
+                    b->failNow()
+                }
+            }
+        }
+    }
+}
+
 [benchmark]
 def distinct_by_order_take_m1(b : B?) {
     run_m1(b, 100000)
@@ -71,4 +111,14 @@ def distinct_by_order_take_m3f(b : B?) {
 [benchmark]
 def distinct_by_order_take_m4(b : B?) {
     run_m4(b, 100000)
+}
+
+[benchmark]
+def distinct_by_order_take_m5(b : B?) {
+    run_m5(b, 100000)
+}
+
+[benchmark]
+def distinct_by_order_take_m5f(b : B?) {
+    run_m5f(b, 100000)
 }
