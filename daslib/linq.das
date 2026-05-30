@@ -1812,12 +1812,12 @@ def left_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya
     return <- left_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def left_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) {
+def left_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&> {
     //! Left outer join of an iterator (left) and an array (right); right side is Option<TB>
     return <- left_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def left_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) {
+def left_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&> {
     //! Left outer join of an array (left) and an iterator (right); right side is Option<TB>
     return <- left_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
@@ -1867,12 +1867,12 @@ def right_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; key
     return <- right_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def right_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) {
+def right_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> {
     //! Right outer join of an iterator (left) and an array (right); left side is Option<TA>
     return <- right_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def right_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) {
+def right_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> {
     //! Right outer join of an array (left) and an iterator (right); left side is Option<TA>
     return <- right_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
@@ -1933,12 +1933,12 @@ def full_outer_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>
     return <- full_outer_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def full_outer_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) {
+def full_outer_join(var srca : iterator<auto(TA) const>; srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
     //! Full outer join of an iterator (left) and an array (right); unmatched rows pair with `none`
     return <- full_outer_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-def full_outer_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) {
+def full_outer_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
     //! Full outer join of an array (left) and an iterator (right); unmatched rows pair with `none`
     return <- full_outer_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
