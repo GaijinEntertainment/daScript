@@ -36,7 +36,7 @@ def run_m3f(b : B?; n : int) {
         let c = _fold(cars |> _join(dealers,
                                     $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                     $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
-                           |> _where(_.CarPrice > THRESHOLD)
+                           |> _where(_.CarPrice > THRESHOLD)  // nolint:PERF013 macro-generated `+= 1`
                            |> count())
         b |> accept(c)
         if (c == 0) {
@@ -60,6 +60,52 @@ def run_m4(b : B?; n : int) {
     }
 }
 
+// m5_xml lane: non-fold baseline — the XML iterator joined with the dealers array, un-fused.
+def run_m5(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    let dealers <- fixture_dealers_array()
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5_xml/{n}", n) {
+            let c = (unsafe(from_xml_node(doc.document_element, type<Car>)) |> _join(dealers,
+                                    $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                                    $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
+                           |> _where(_.CarPrice > THRESHOLD)
+                           |> count())
+            b |> accept(c)
+            if (c == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+// m5f_xml_fold lane: fused _fold over the XML iterator joined with the dealers array.
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    let dealers <- fixture_dealers_array()
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5f_xml_fold/{n}", n) {
+            let c = _fold(unsafe(from_xml_node(doc.document_element, type<Car>)) |> _join(dealers,
+                                    $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                                    $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
+                           |> _where(_.CarPrice > THRESHOLD)
+                           |> count())
+            b |> accept(c)
+            if (c == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 [benchmark]
 def join_where_count_m1(b : B?) {
     run_m1(b, 100000)
@@ -73,4 +119,14 @@ def join_where_count_m3f(b : B?) {
 [benchmark]
 def join_where_count_m4(b : B?) {
     run_m4(b, 100000)
+}
+
+[benchmark]
+def join_where_count_m5(b : B?) {
+    run_m5(b, 100000)
+}
+
+[benchmark]
+def join_where_count_m5f(b : B?) {
+    run_m5f(b, 100000)
 }

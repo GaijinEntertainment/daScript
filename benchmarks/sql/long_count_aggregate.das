@@ -44,6 +44,40 @@ def run_m4(b : B?; n : int) {
     }
 }
 
+def run_m5(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5_xml/{n}", n) {
+            let c = unsafe(from_xml_node(doc.document_element, type<Car>)) |> _where(_.price > THRESHOLD) |> long_count()
+            b |> accept(c)
+            if (c == 0l) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+def run_m5f(b : B?; n : int) {
+    let xml = fixture_xml_string(n)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) {
+            b->failNow()
+            return
+        }
+        b |> run("m5f_xml_fold/{n}", n) {
+            let c = _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.price > THRESHOLD).long_count())
+            b |> accept(c)
+            if (c == 0l) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 [benchmark]
 def long_count_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -57,4 +91,14 @@ def long_count_aggregate_m3f(b : B?) {
 [benchmark]
 def long_count_aggregate_m4(b : B?) {
     run_m4(b, 100000)
+}
+
+[benchmark]
+def long_count_aggregate_m5(b : B?) {
+    run_m5(b, 100000)
+}
+
+[benchmark]
+def long_count_aggregate_m5f(b : B?) {
+    run_m5f(b, 100000)
 }
