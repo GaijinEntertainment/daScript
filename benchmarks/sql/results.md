@@ -1,5 +1,7 @@
 # Benchmarks — SQL / Array / Decs / XML comparison
 
+Updated 2026-05-30 (branch `bbatkin/linq-fold-join-unify-xml`): **XML `join` (and `group_by` with an upstream `join`) now fuses** — the last family the cascade arc deferred. Two parts: (1) an **architecture refactor** — the two parallel join splice patterns (`array_join_general` + `decs_join_general`) collapse into one `join_general` gated by a `can_join` capability, dispatching the source-specific body through a renamed `emit_join_hook` (a new source adds one override, not a parallel pattern); **zero perf delta** — each adapter's emitted AST is byte-identical (the gate moves `requires`→hook, and `run_splice_adapter` cascades to tier-2 identically on a failed `requires` or a null emit). (2) **XML join fuses** — `XmlAdapter.emit_join_hook` collects the in-memory srcB into a hash and probes from the field-pruned DOM walk; `build_group_by_adapter` returns an `XmlJoinAdapter` on the upstream-join arm so `join |> group_by` fuses single-pass. Wins (INTERP m5f): `join_count` 519 → **114** (4.6×, 0 string-clones — count needs only the join key), `join_where_count` 577 → **165** (3.5×), `join_groupby_count` 581 → **182** (3.2×), `join_groupby_to_array` 609 → **217** (2.8×). `join_select` stays modest (550 → 511) — its result selector keeps a `name` string field, so field-pruning can't drop the clone. Earlier note:
+
 Updated 2026-05-30 (branch `bbatkin/linq-fold-xml-cascade-fusion`): **XML cascade fusion — `group_by` / `distinct[_by]` / `order_by[_descending]` / `sort` / `reverse` now fuse over the `XmlAdapter`.** Previously only the `loop_or_count` family fused (XML was hard-restricted to one splice pattern); the cascade families fell to the tier-2 cascade, so m5f ≈ m5. Two changes: (1) an **architecture refactor** — `AdapterKind`/`kind()` (which needed a new enum value + switch arm per source) is replaced by capability methods the adapter answers about itself (`can_group_by`, `can_reserve_by_length`, `can_ride_array_lane`, …), and the source adapter is threaded into the splice-pattern `requires` predicates so gating asks the adapter; a new source (`linq_json`, …) now only implements the methods. (2) **lift the XML splice gate** so the cascade planners run with the `XmlAdapter`, driving the DOM walk through `wrap_source_loop` — which **field-prunes for free**: where the chain reduces/projects (not the whole row), the per-element body reads only the touched attributes and the per-row `name` string-clone disappears. Wins (INTERP m5f): `groupby_sum` 462 → **115** (4×, 0 clones), `groupby_count` 431 → **77** (5.6×), `distinct_by_count` 392 → **71** (5.5×), `distinct_count` 473 → **71** (6.7×), `distinct_take` 394 → **0.0** (early-exit), `sort_take`/`order_take_desc` ~1080 → **~340** (3.2×). Whole-row-buffering shapes stay modest (`reverse_take` 379 → 359; `order_distinct_take` 2203 → 2082 — order buffers whole rows). **`join` (and `group_by` with an upstream `join`) still falls to tier-2** — the hashed collect+probe driven from the DOM walk is the next arc. Earlier note:
 
 Updated 2026-05-30 (branch `bbatkin/linq-fold-zip-iterator-preservation`): **zip XML lanes (m5, m5f) now landed** across all four `zip_*` benches. The blocker was a real bug, not just an artificial source: `zip` had no mixed `(iterator, array)` overload, so `zip(xmlIter, arr)` — the natural ceremony-free form — failed to resolve, and `_fold`'s array-rewrite couldn't lower it (it produced `zip_to_array(iterator, array)`, also unoverloaded). The fix adds 2-source mixed `zip`/`zip_to_array` overloads (iterator-preserving; the private `zip_impl` already walked mixed sources). Each zip bench now zips the XML `Car` price-stream against a synthetic int array. **Finding: m5f modestly beats m5** (INTERP ~10–24%, JIT ~3–14% — e.g. `zip_dot_product` 508.7 → 431.3 INTERP, 181.6 → 165.0 JIT), so the zip splice *does* partially fuse over XML (unlike the cascade families, where m5f ≈ m5), but both lanes still pay the full unpruned `Car` materialization — every row clones its unused `name` string (~888k string-bytes/op) — which dominates the absolute cost. Field-pruning the zip source is the next lever. Earlier note:
@@ -65,17 +67,19 @@ identical logic, so the delta is purely what the `XmlAdapter` fusion buys:
   `aggregate` / `first` / `last` / `single` / `element_at` / `any` / `all` /
   `contains` / `take` / `skip` / `take_while` / `skip_while` (5–10× INTERP, e.g.
   `count_aggregate` 419 → 64; early-exit cells like `take_count_filtered` → ~1) —
-  **and the cascade families** `group_by` (incl. `having` / multi-reducer),
-  `distinct[_by]`, `order_by[_descending]`, `sort`, `reverse`, which now ride the
-  cascade planners over the DOM walk. The win tracks whether field-pruning fires:
+  **the cascade families** `group_by` (incl. `having` / multi-reducer),
+  `distinct[_by]`, `order_by[_descending]`, `sort`, `reverse`, which ride the
+  cascade planners over the DOM walk, **and `join`** (incl. `group_by` with an
+  upstream `join`) — the in-memory srcB is collected into a hash and srcA is
+  probed from the DOM walk. The win tracks whether field-pruning fires:
   reducing/projecting/key-only shapes drop the per-row `name` clone (e.g.
-  `groupby_sum` 462 → 115, `distinct_by_count` 392 → 71, `distinct_take` → 0).
-- **m5f ≈ m5 → still tier-2.** Whole-row-buffering cascades (`reverse |> to_array`,
-  `order_distinct_take` — order buffers whole rows so the row escapes → no pruning)
-  give only the modest fusion win (intermediate array elided, string-clone floor
-  remains). And **`join`** (incl. `group_by` with an upstream `join`) has no XML
-  arm yet — `build_group_by_adapter` bails to tier-2. These rows are the
-  **work-to-do map** for the next arc (hashed collect+probe driven from the DOM walk).
+  `groupby_sum` 462 → 115, `distinct_by_count` 392 → 71, `distinct_take` → 0,
+  `join_count` 519 → 114 with 0 clones, `join_groupby_count` 581 → 182).
+- **m5f ≈ m5 → modest fusion only.** Whole-row-buffering cascades (`reverse |> to_array`,
+  `order_distinct_take` — order buffers whole rows so the row escapes → no pruning),
+  and joins whose result keeps a string field (`join_select` 550 → 511 — the
+  `(name, name)` selector clones `name`, so pruning can't drop it) give only the
+  modest win (intermediate array elided, string-clone floor remains).
 
 (The absolute XML numbers stay far above the array/decs lanes either way — XML
 carries DOM-parse + per-element attribute reads + `string` clones the in-memory
@@ -89,155 +93,155 @@ lanes never pay. The m5↔m5f delta, not the XML-vs-array gap, is the fusion sig
 
 | Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | XML (m5) | XML fold (m5f) | Decs vs Array |
 |---|---:|---:|---:|---:|---:|---:|
-| `aggregate_match` | 34.4 | 6.0 | 5.9 | 452.9 | 60.7 | 0.98× |
-| `all_match` | 27.5 | 3.5 | 3.6 | 380.1 | 56.0 | 1.02× |
+| `aggregate_match` | 35.1 | 6.0 | 5.8 | 451.6 | 59.8 | 0.97× |
+| `all_match` | 27.8 | 3.4 | 3.6 | 380.2 | 55.5 | 1.04× |
 | `any_match` | 0.0 | 0.0 | 0.0 | 0.1 | 0.0 | — |
-| `average_aggregate` | 29.8 | 6.0 | 8.8 | 434.7 | 59.3 | 1.47× |
-| `bare_order_where` | 278.4 | 117.5 | 130.5 | 779.5 | 448.4 | 1.11× |
-| `chained_select_collapse` | — | 18.0 | 17.8 | 540.4 | 70.6 | 0.99× |
-| `chained_where` | 36.6 | 6.7 | 7.2 | 454.4 | 107.0 | 1.08× |
-| `contains_match` | 0.0 | 2.2 | 1.4 | 413.9 | 28.3 | 0.62× |
-| `count_aggregate` | 29.3 | 4.2 | 4.2 | 416.1 | 65.5 | 1.00× |
-| `decs_count_bare_pred` | — | — | 4.2 | — | — | — |
-| `distinct_by_count` | 41.0 | 15.9 | 16.2 | 392.0 | 71.3 | 1.02× |
-| `distinct_by_order_take` | 240.4 | 22.6 | 24.3 | 400.6 | 356.9 | 1.07× |
-| `distinct_by_order_to_array` | 239.3 | 21.9 | 23.5 | 402.8 | 359.0 | 1.07× |
-| `distinct_count` | 41.3 | 16.0 | 15.8 | 473.0 | 70.7 | 0.99× |
-| `distinct_count_pred` | 254.1 | 15.9 | 16.1 | 393.9 | 115.1 | 1.02× |
-| `distinct_take` | 0.0 | 0.0 | 0.0 | 393.6 | 0.0 | — |
-| `element_at_match` | 0.0 | 0.0 | 0.0 | 396.9 | 0.7 | — |
-| `first_match` | 0.0 | 0.0 | 0.0 | 399.6 | 0.1 | — |
-| `first_or_default_match` | 0.0 | 0.0 | 0.0 | 394.4 | 0.1 | — |
-| `groupby_average` | 172.9 | 30.4 | 30.7 | 466.1 | 125.2 | 1.01× |
-| `groupby_count` | 145.1 | 19.1 | 19.2 | 431.0 | 77.1 | 1.01× |
-| `groupby_first` | 252.4 | 18.5 | 19.2 | 429.0 | 347.3 | 1.04× |
-| `groupby_having_count` | 141.3 | 19.1 | 19.2 | 434.8 | 76.9 | 1.00× |
-| `groupby_having_hidden_sum` | 174.8 | 23.7 | 24.0 | 464.2 | 121.2 | 1.01× |
-| `groupby_having_post_where` | 170.8 | 18.4 | 18.7 | 458.0 | 114.6 | 1.02× |
-| `groupby_max` | 171.6 | 24.7 | 25.1 | 464.4 | 120.1 | 1.01× |
-| `groupby_min` | 173.1 | 25.0 | 25.1 | 468.2 | 120.7 | 1.01× |
-| `groupby_multi_reducer` | 189.5 | 32.4 | 32.1 | 499.5 | 127.8 | 0.99× |
-| `groupby_select_order` | 170.7 | 18.6 | 18.7 | 461.2 | 115.1 | 1.01× |
-| `groupby_select_sum` | 199.4 | 36.5 | 36.0 | 509.3 | 101.2 | 0.99× |
-| `groupby_sum` | 171.0 | 18.6 | 18.9 | 461.7 | 115.1 | 1.02× |
-| `groupby_where_count` | 75.8 | 14.3 | 14.9 | 453.9 | 119.4 | 1.04× |
-| `groupby_where_sum` | 87.1 | 14.2 | 14.6 | 464.6 | 117.8 | 1.03× |
-| `indexed_lookup` | 1450.0 | 197320.0 | 492.1 | 37805604.2 | 5740549.0 | 0.00× |
-| `join_count` | 38.4 | 53.1 | 64.1 | 521.7 | 482.3 | 1.21× |
-| `join_groupby_count` | 157.9 | 78.2 | 90.8 | 576.3 | 543.7 | 1.16× |
-| `join_groupby_to_array` | 190.2 | 78.7 | 90.2 | 608.1 | 578.3 | 1.15× |
-| `join_select` | 155.2 | 71.8 | 84.8 | 545.8 | 507.1 | 1.18× |
-| `join_where_count` | 39.5 | 60.9 | 75.1 | 566.0 | 509.4 | 1.23× |
-| `last_match` | 0.0 | 5.8 | 14.1 | 416.4 | 332.2 | 2.42× |
-| `long_count_aggregate` | 29.6 | 4.1 | 4.1 | 416.4 | 64.8 | 1.00× |
-| `max_aggregate` | 31.1 | 6.0 | 6.8 | 435.9 | 58.4 | 1.14× |
-| `min_aggregate` | 31.0 | 6.0 | 6.8 | 444.9 | 58.2 | 1.14× |
-| `order_distinct_take` | 138.8 | 16.0 | 94.8 | 2203.0 | 2082.3 | 5.92× |
-| `order_reverse_normalized` | 38.6 | 16.2 | 19.9 | 1147.6 | 349.5 | 1.23× |
-| `order_take_desc` | 38.6 | 16.2 | 20.0 | 1056.9 | 342.1 | 1.24× |
-| `reverse_distinct_by` | 298.4 | 21.4 | — | 452.2 | 427.9 | — |
-| `reverse_take` | 0.1 | 0.0 | 9.2 | 378.7 | 358.7 | — |
-| `reverse_take_select` | 0.0 | 0.0 | 9.2 | 380.7 | 361.9 | — |
-| `select_count` | 0.1 | 0.0 | 2.2 | 434.5 | 69.2 | — |
-| `select_where` | 195.8 | 11.0 | 19.6 | 425.3 | 341.6 | 1.79× |
-| `select_where_count` | 33.1 | 5.1 | 7.4 | 480.8 | 65.4 | 1.45× |
-| `select_where_order_take` | 37.0 | 12.4 | 15.0 | 747.2 | 337.9 | 1.21× |
-| `select_where_sum` | 37.4 | 7.4 | 7.5 | 483.4 | 67.1 | 1.01× |
-| `single_match` | 0.0 | 2.8 | 5.5 | 384.3 | 330.2 | 2.00× |
-| `skip_take` | 0.5 | 0.1 | 0.2 | 4.4 | 3.7 | 1.47× |
-| `skip_while_match` | 3.5 | 5.2 | 5.4 | 409.0 | 58.9 | 1.03× |
-| `sort_first` | 38.1 | 11.0 | 13.2 | 1100.8 | 341.5 | 1.20× |
-| `sort_take` | 38.6 | 16.6 | 20.6 | 1117.4 | 340.1 | 1.25× |
-| `sort_take_select` | 38.6 | 16.2 | 20.1 | 1076.9 | 343.8 | 1.24× |
-| `sum_aggregate` | 30.1 | 2.1 | 2.1 | 429.9 | 54.4 | 1.00× |
-| `sum_where` | 32.8 | 4.3 | 4.3 | 451.8 | 64.2 | 0.99× |
-| `take_count` | 3.6 | 0.2 | 0.4 | 4.4 | 3.5 | 1.89× |
-| `take_count_filtered` | 1.1 | 0.2 | 0.2 | 397.8 | 1.3 | 1.14× |
-| `take_sum_aggregate` | 0.8 | 0.1 | 0.1 | 391.5 | 0.6 | 1.05× |
-| `take_where_count` | 0.9 | 0.1 | 0.1 | 4.7 | 0.7 | 1.01× |
-| `take_while_match` | 7.8 | 2.4 | 2.4 | 228.4 | 29.9 | 1.00× |
-| `to_array_filter` | 70.9 | 11.6 | 11.7 | 463.5 | 72.5 | 1.00× |
-| `zip_count_pred` | 39.6 | 17.1 | — | 534.4 | 381.8 | — |
-| `zip_dot_product` | — | 13.6 | 10.6 | 510.1 | 368.5 | 0.78× |
-| `zip_dot_product_3arg` | — | 13.6 | — | 432.1 | 371.7 | — |
-| `zip_reverse_to_array` | — | 31.2 | — | 529.1 | 402.7 | — |
+| `average_aggregate` | 31.3 | 6.0 | 8.8 | 431.5 | 57.9 | 1.47× |
+| `bare_order_where` | 276.4 | 117.0 | 125.0 | 802.2 | 447.5 | 1.07× |
+| `chained_select_collapse` | — | 17.6 | 17.9 | 538.1 | 70.2 | 1.01× |
+| `chained_where` | 36.7 | 6.6 | 7.2 | 449.3 | 105.3 | 1.09× |
+| `contains_match` | 0.0 | 2.2 | 1.4 | 411.1 | 28.2 | 0.62× |
+| `count_aggregate` | 29.8 | 4.1 | 4.1 | 416.0 | 64.4 | 1.00× |
+| `decs_count_bare_pred` | — | — | 4.1 | — | — | — |
+| `distinct_by_count` | 41.6 | 15.8 | 16.0 | 389.5 | 70.2 | 1.02× |
+| `distinct_by_order_take` | 254.8 | 21.9 | 23.3 | 401.0 | 359.0 | 1.06× |
+| `distinct_by_order_to_array` | 239.9 | 21.9 | 23.2 | 399.7 | 357.1 | 1.06× |
+| `distinct_count` | 41.5 | 21.0 | 15.7 | 473.4 | 71.1 | 0.75× |
+| `distinct_count_pred` | 252.2 | 15.9 | 16.0 | 393.2 | 116.4 | 1.00× |
+| `distinct_take` | 0.0 | 0.0 | 0.0 | 390.4 | 0.0 | — |
+| `element_at_match` | 0.0 | 0.0 | 0.0 | 394.7 | 0.7 | — |
+| `first_match` | 0.0 | 0.0 | 0.0 | 392.8 | 0.1 | — |
+| `first_or_default_match` | 0.0 | 0.0 | 0.0 | 393.0 | 0.1 | — |
+| `groupby_average` | 172.8 | 30.3 | 30.1 | 466.6 | 124.8 | 0.99× |
+| `groupby_count` | 142.8 | 19.1 | 19.3 | 430.5 | 76.6 | 1.01× |
+| `groupby_first` | 252.1 | 18.4 | 19.1 | 434.9 | 346.1 | 1.04× |
+| `groupby_having_count` | 142.6 | 19.2 | 19.2 | 437.0 | 76.6 | 1.00× |
+| `groupby_having_hidden_sum` | 176.4 | 24.0 | 24.2 | 467.5 | 122.4 | 1.01× |
+| `groupby_having_post_where` | 172.1 | 18.7 | 18.7 | 464.7 | 115.6 | 1.00× |
+| `groupby_max` | 174.6 | 24.7 | 25.1 | 474.9 | 120.8 | 1.01× |
+| `groupby_min` | 173.8 | 25.2 | 25.4 | 471.2 | 120.8 | 1.01× |
+| `groupby_multi_reducer` | 190.8 | 32.9 | 32.0 | 503.5 | 127.8 | 0.97× |
+| `groupby_select_order` | 170.3 | 18.6 | 18.8 | 463.6 | 115.3 | 1.01× |
+| `groupby_select_sum` | 200.1 | 36.9 | 36.0 | 512.6 | 102.0 | 0.97× |
+| `groupby_sum` | 170.0 | 18.6 | 18.8 | 467.7 | 115.7 | 1.01× |
+| `groupby_where_count` | 75.9 | 14.5 | 14.9 | 454.1 | 119.4 | 1.03× |
+| `groupby_where_sum` | 87.3 | 14.2 | 14.8 | 469.3 | 123.3 | 1.04× |
+| `indexed_lookup` | 1432.6 | 197689.9 | 481.3 | 38356136.6 | 5756561.1 | 0.00× |
+| `join_count` | 38.5 | 51.3 | 65.8 | 519.3 | 114.1 | 1.28× |
+| `join_groupby_count` | 157.8 | 79.2 | 91.1 | 581.4 | 182.1 | 1.15× |
+| `join_groupby_to_array` | 193.3 | 78.5 | 91.4 | 609.3 | 217.1 | 1.16× |
+| `join_select` | 150.2 | 72.3 | 85.6 | 549.8 | 510.7 | 1.18× |
+| `join_where_count` | 39.5 | 61.4 | 76.3 | 576.5 | 164.6 | 1.24× |
+| `last_match` | 0.0 | 5.9 | 14.0 | 419.0 | 335.0 | 2.36× |
+| `long_count_aggregate` | 30.1 | 4.1 | 4.1 | 418.0 | 63.8 | 1.00× |
+| `max_aggregate` | 31.2 | 5.9 | 6.8 | 441.5 | 58.3 | 1.15× |
+| `min_aggregate` | 31.0 | 6.0 | 6.9 | 441.5 | 58.2 | 1.14× |
+| `order_distinct_take` | 138.5 | 15.8 | 95.2 | 2207.0 | 2091.8 | 6.02× |
+| `order_reverse_normalized` | 38.3 | 16.2 | 19.9 | 1137.3 | 341.4 | 1.23× |
+| `order_take_desc` | 38.5 | 16.2 | 20.1 | 1055.1 | 342.1 | 1.24× |
+| `reverse_distinct_by` | 296.7 | 21.3 | — | 454.1 | 427.9 | — |
+| `reverse_take` | 0.1 | 0.0 | 9.2 | 378.2 | 358.4 | — |
+| `reverse_take_select` | 0.0 | 0.0 | 9.2 | 381.0 | 360.7 | — |
+| `select_count` | 0.1 | 0.0 | 2.2 | 437.5 | 69.3 | — |
+| `select_where` | 194.1 | 11.2 | 19.6 | 423.7 | 338.9 | 1.75× |
+| `select_where_count` | 33.0 | 5.1 | 7.4 | 479.6 | 65.3 | 1.45× |
+| `select_where_order_take` | 36.6 | 12.3 | 14.9 | 747.9 | 340.6 | 1.22× |
+| `select_where_sum` | 37.3 | 7.4 | 7.5 | 483.2 | 67.6 | 1.02× |
+| `single_match` | 0.0 | 2.8 | 5.5 | 388.3 | 329.9 | 1.97× |
+| `skip_take` | 0.5 | 0.1 | 0.2 | 4.4 | 3.7 | 1.45× |
+| `skip_while_match` | 3.5 | 5.2 | 5.4 | 404.6 | 59.1 | 1.03× |
+| `sort_first` | 38.1 | 11.0 | 13.2 | 1090.8 | 340.0 | 1.20× |
+| `sort_take` | 38.6 | 16.6 | 20.7 | 1097.0 | 366.2 | 1.25× |
+| `sort_take_select` | 38.6 | 16.2 | 20.2 | 1071.1 | 344.2 | 1.24× |
+| `sum_aggregate` | 30.3 | 2.1 | 2.1 | 430.7 | 53.9 | 1.00× |
+| `sum_where` | 33.3 | 4.3 | 4.3 | 450.5 | 64.2 | 1.00× |
+| `take_count` | 3.6 | 0.2 | 0.4 | 4.3 | 3.6 | 1.90× |
+| `take_count_filtered` | 1.1 | 0.2 | 0.2 | 393.8 | 1.3 | 1.14× |
+| `take_sum_aggregate` | 0.8 | 0.1 | 0.1 | 394.8 | 0.6 | 1.05× |
+| `take_where_count` | 0.9 | 0.1 | 0.1 | 4.7 | 0.7 | 1.03× |
+| `take_while_match` | 7.8 | 2.4 | 2.4 | 229.1 | 30.0 | 1.00× |
+| `to_array_filter` | 72.8 | 11.6 | 11.6 | 463.0 | 72.4 | 1.00× |
+| `zip_count_pred` | 39.6 | 17.2 | — | 535.6 | 382.6 | — |
+| `zip_dot_product` | — | 13.5 | 10.8 | 506.4 | 367.2 | 0.80× |
+| `zip_dot_product_3arg` | — | 13.5 | — | 427.9 | 368.4 | — |
+| `zip_reverse_to_array` | — | 31.5 | — | 529.3 | 399.6 | — |
 
 ## JIT
 
 | Benchmark | SQL (m1) | Array (m3f) | Decs (m4) | XML (m5) | XML fold (m5f) | Decs vs Array |
 |---|---:|---:|---:|---:|---:|---:|
-| `aggregate_match` | 34.5 | 0.3 | 0.6 | 174.9 | 16.6 | 1.85× |
-| `all_match` | 27.8 | 0.3 | 0.2 | 159.8 | 19.4 | 0.63× |
+| `aggregate_match` | 34.6 | 0.3 | 0.6 | 174.8 | 16.5 | 1.85× |
+| `all_match` | 27.9 | 0.3 | 0.2 | 160.3 | 19.3 | 0.63× |
 | `any_match` | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | — |
-| `average_aggregate` | 30.5 | 1.0 | 3.6 | 168.8 | 18.1 | 3.67× |
-| `bare_order_where` | 185.9 | 33.9 | 35.2 | 282.2 | 181.5 | 1.04× |
-| `chained_select_collapse` | — | 2.1 | 2.1 | 182.4 | 21.3 | 0.99× |
-| `chained_where` | 36.7 | 0.6 | 0.8 | 178.6 | 33.9 | 1.35× |
-| `contains_match` | 0.0 | 0.2 | 0.1 | 164.1 | 16.7 | 0.64× |
-| `count_aggregate` | 29.6 | 0.3 | 0.6 | 169.7 | 16.7 | 1.91× |
+| `average_aggregate` | 30.5 | 1.0 | 3.6 | 169.0 | 18.0 | 3.68× |
+| `bare_order_where` | 187.6 | 33.9 | 35.3 | 281.0 | 180.5 | 1.04× |
+| `chained_select_collapse` | — | 2.1 | 2.1 | 182.6 | 21.3 | 1.00× |
+| `chained_where` | 36.7 | 0.6 | 0.8 | 178.1 | 33.9 | 1.35× |
+| `contains_match` | 0.0 | 0.2 | 0.1 | 164.3 | 17.1 | 0.64× |
+| `count_aggregate` | 29.4 | 0.3 | 0.6 | 169.9 | 16.5 | 1.91× |
 | `decs_count_bare_pred` | — | — | 0.6 | — | — | — |
-| `distinct_by_count` | 41.3 | 2.1 | 2.1 | 158.8 | 21.3 | 0.99× |
-| `distinct_by_order_take` | 241.1 | 2.6 | 3.2 | 172.0 | 162.7 | 1.22× |
-| `distinct_by_order_to_array` | 240.8 | 2.7 | 3.3 | 170.9 | 161.1 | 1.21× |
-| `distinct_count` | 41.4 | 2.1 | 2.1 | 173.8 | 21.3 | 1.00× |
-| `distinct_count_pred` | 252.6 | 2.1 | 2.3 | 160.7 | 40.2 | 1.07× |
-| `distinct_take` | 0.0 | 0.0 | 0.0 | 161.3 | 0.0 | — |
-| `element_at_match` | 0.0 | 0.0 | 0.0 | 165.3 | 0.3 | — |
+| `distinct_by_count` | 41.5 | 2.1 | 2.1 | 159.0 | 21.3 | 1.00× |
+| `distinct_by_order_take` | 239.2 | 2.6 | 3.2 | 171.9 | 162.6 | 1.22× |
+| `distinct_by_order_to_array` | 238.7 | 2.7 | 3.3 | 171.2 | 160.9 | 1.21× |
+| `distinct_count` | 41.7 | 2.1 | 2.1 | 173.6 | 21.3 | 1.00× |
+| `distinct_count_pred` | 250.9 | 2.1 | 2.3 | 160.8 | 40.4 | 1.08× |
+| `distinct_take` | 0.0 | 0.0 | 0.0 | 161.7 | 0.0 | — |
+| `element_at_match` | 0.0 | 0.0 | 0.0 | 165.5 | 0.3 | — |
 | `first_match` | 0.0 | 0.0 | 0.0 | 169.7 | 0.0 | — |
-| `first_or_default_match` | 0.0 | 0.0 | 0.0 | 167.7 | 0.0 | — |
-| `groupby_average` | 171.0 | 2.6 | 2.9 | 185.5 | 36.4 | 1.12× |
-| `groupby_count` | 142.3 | 2.4 | 2.5 | 175.9 | 23.2 | 1.03× |
-| `groupby_first` | 253.4 | 2.2 | 3.1 | 176.2 | 147.2 | 1.41× |
-| `groupby_having_count` | 142.0 | 2.4 | 2.5 | 178.0 | 21.4 | 1.05× |
-| `groupby_having_hidden_sum` | 176.2 | 2.5 | 2.8 | 186.9 | 37.9 | 1.13× |
-| `groupby_having_post_where` | 171.7 | 2.4 | 2.7 | 182.9 | 37.5 | 1.11× |
-| `groupby_max` | 173.6 | 2.4 | 2.7 | 184.1 | 36.3 | 1.12× |
-| `groupby_min` | 173.5 | 2.4 | 2.7 | 186.0 | 37.2 | 1.11× |
-| `groupby_multi_reducer` | 191.3 | 2.7 | 3.0 | 193.5 | 38.0 | 1.11× |
-| `groupby_select_order` | 171.5 | 2.4 | 2.7 | 184.0 | 38.4 | 1.12× |
-| `groupby_select_sum` | 201.0 | 3.3 | 3.7 | 199.1 | 32.3 | 1.13× |
-| `groupby_sum` | 171.3 | 2.4 | 2.7 | 185.3 | 37.0 | 1.11× |
-| `groupby_where_count` | 76.2 | 1.5 | 1.8 | 179.8 | 37.2 | 1.21× |
-| `groupby_where_sum` | 87.0 | 1.5 | 1.8 | 183.5 | 36.4 | 1.20× |
-| `indexed_lookup` | 1226.8 | 32485.8 | 106.0 | 15824182.8 | 3769076.1 | 0.00× |
-| `join_count` | 43.2 | 14.2 | 13.5 | 204.1 | 231.3 | 0.95× |
-| `join_groupby_count` | 158.1 | 19.8 | 22.4 | 210.0 | 200.9 | 1.13× |
-| `join_groupby_to_array` | 194.5 | 19.7 | 22.4 | 217.3 | 209.0 | 1.14× |
-| `join_select` | 93.6 | 20.5 | 23.0 | 202.9 | 196.1 | 1.12× |
-| `join_where_count` | 39.3 | 20.3 | 22.5 | 206.9 | 196.3 | 1.11× |
-| `last_match` | 0.0 | 0.5 | 1.4 | 171.8 | 148.6 | 2.61× |
-| `long_count_aggregate` | 29.7 | 0.3 | 0.6 | 168.5 | 26.7 | 1.84× |
-| `max_aggregate` | 31.1 | 0.3 | 0.5 | 168.0 | 16.9 | 1.50× |
-| `min_aggregate` | 31.2 | 0.3 | 0.5 | 168.0 | 16.9 | 1.50× |
-| `order_distinct_take` | 138.9 | 2.1 | 75.3 | 640.3 | 629.1 | 35.78× |
-| `order_reverse_normalized` | 38.5 | 0.7 | 1.4 | 386.0 | 144.4 | 1.93× |
-| `order_take_desc` | 38.7 | 0.7 | 1.3 | 372.6 | 145.4 | 1.93× |
-| `reverse_distinct_by` | 303.3 | 2.6 | — | 170.8 | 165.6 | — |
-| `reverse_take` | 0.0 | 0.0 | 1.1 | 157.9 | 156.6 | — |
-| `reverse_take_select` | 0.0 | 0.0 | 1.1 | 158.5 | 156.2 | — |
-| `select_count` | 0.1 | 0.0 | 0.0 | 167.4 | 66.6 | — |
-| `select_where` | 108.0 | 4.2 | 5.6 | 178.0 | 154.5 | 1.35× |
-| `select_where_count` | 32.7 | 0.3 | 0.6 | 179.0 | 28.0 | 1.88× |
-| `select_where_order_take` | 36.8 | 0.7 | 1.4 | 277.6 | 148.5 | 1.86× |
-| `select_where_sum` | 37.4 | 0.4 | 0.6 | 177.7 | 18.7 | 1.57× |
-| `single_match` | 0.0 | 0.4 | 1.1 | 161.2 | 147.7 | 3.22× |
+| `first_or_default_match` | 0.0 | 0.0 | 0.0 | 167.9 | 0.0 | — |
+| `groupby_average` | 171.1 | 2.6 | 2.9 | 185.3 | 36.3 | 1.12× |
+| `groupby_count` | 142.8 | 2.4 | 2.5 | 175.3 | 23.2 | 1.06× |
+| `groupby_first` | 254.3 | 2.2 | 3.1 | 176.4 | 147.3 | 1.41× |
+| `groupby_having_count` | 141.7 | 2.3 | 2.5 | 178.2 | 21.4 | 1.06× |
+| `groupby_having_hidden_sum` | 176.7 | 2.5 | 2.8 | 187.6 | 37.9 | 1.13× |
+| `groupby_having_post_where` | 173.2 | 2.4 | 2.7 | 183.1 | 37.4 | 1.12× |
+| `groupby_max` | 173.1 | 2.4 | 2.7 | 186.4 | 36.2 | 1.13× |
+| `groupby_min` | 172.2 | 2.4 | 2.7 | 186.2 | 36.9 | 1.11× |
+| `groupby_multi_reducer` | 191.1 | 2.7 | 3.0 | 193.8 | 37.9 | 1.11× |
+| `groupby_select_order` | 171.2 | 2.4 | 2.7 | 184.1 | 38.0 | 1.12× |
+| `groupby_select_sum` | 198.9 | 3.2 | 3.7 | 198.6 | 32.2 | 1.15× |
+| `groupby_sum` | 170.1 | 2.4 | 2.7 | 185.2 | 36.8 | 1.11× |
+| `groupby_where_count` | 76.0 | 1.5 | 1.8 | 179.3 | 37.0 | 1.21× |
+| `groupby_where_sum` | 86.3 | 1.5 | 1.8 | 182.8 | 36.3 | 1.20× |
+| `indexed_lookup` | 1235.6 | 32366.2 | 105.3 | 15728589.3 | 4679606.6 | 0.00× |
+| `join_count` | 38.4 | 12.4 | 12.9 | 194.7 | 46.2 | 1.04× |
+| `join_groupby_count` | 163.0 | 19.8 | 22.5 | 209.9 | 70.6 | 1.14× |
+| `join_groupby_to_array` | 197.1 | 19.8 | 22.4 | 216.7 | 80.8 | 1.13× |
+| `join_select` | 93.7 | 20.4 | 22.9 | 203.6 | 196.9 | 1.12× |
+| `join_where_count` | 39.2 | 19.9 | 22.2 | 207.6 | 64.6 | 1.12× |
+| `last_match` | 0.0 | 0.5 | 1.4 | 171.1 | 148.3 | 2.60× |
+| `long_count_aggregate` | 29.7 | 0.3 | 0.6 | 168.3 | 26.7 | 1.83× |
+| `max_aggregate` | 31.1 | 0.3 | 0.5 | 167.7 | 16.8 | 1.50× |
+| `min_aggregate` | 31.0 | 0.3 | 0.5 | 168.1 | 16.8 | 1.49× |
+| `order_distinct_take` | 139.8 | 2.1 | 75.3 | 639.7 | 629.2 | 35.81× |
+| `order_reverse_normalized` | 38.6 | 0.7 | 1.4 | 390.7 | 144.2 | 2.03× |
+| `order_take_desc` | 38.2 | 0.7 | 1.4 | 383.5 | 145.3 | 1.95× |
+| `reverse_distinct_by` | 298.5 | 2.6 | — | 170.7 | 165.4 | — |
+| `reverse_take` | 0.0 | 0.0 | 1.1 | 158.2 | 156.8 | — |
+| `reverse_take_select` | 0.0 | 0.0 | 1.1 | 158.2 | 156.0 | — |
+| `select_count` | 0.1 | 0.0 | 0.0 | 167.4 | 67.3 | — |
+| `select_where` | 107.5 | 4.1 | 5.6 | 176.7 | 154.3 | 1.35× |
+| `select_where_count` | 32.5 | 0.3 | 0.6 | 178.9 | 28.1 | 1.86× |
+| `select_where_order_take` | 36.8 | 0.7 | 1.4 | 277.2 | 148.1 | 1.87× |
+| `select_where_sum` | 37.2 | 0.4 | 0.6 | 177.9 | 18.6 | 1.58× |
+| `single_match` | 0.0 | 0.4 | 1.1 | 161.0 | 147.9 | 3.12× |
 | `skip_take` | 0.3 | 0.0 | 0.0 | 1.7 | 1.6 | — |
-| `skip_while_match` | 3.4 | 0.4 | 0.4 | 161.4 | 46.1 | 1.01× |
-| `sort_first` | 38.2 | 0.4 | 1.3 | 375.8 | 145.4 | 3.35× |
-| `sort_take` | 38.7 | 0.7 | 1.3 | 374.6 | 144.9 | 1.93× |
-| `sort_take_select` | 38.3 | 0.7 | 1.4 | 376.8 | 142.5 | 1.94× |
-| `sum_aggregate` | 30.1 | 0.3 | 0.1 | 168.0 | 16.7 | 0.15× |
-| `sum_where` | 32.7 | 0.3 | 0.6 | 177.9 | 16.6 | 1.90× |
-| `take_count` | 1.8 | 0.1 | 0.1 | 1.7 | 1.6 | 1.60× |
-| `take_count_filtered` | 1.1 | 0.0 | 0.0 | 166.7 | 0.4 | — |
-| `take_sum_aggregate` | 0.8 | 0.0 | 0.0 | 162.6 | 0.2 | — |
+| `skip_while_match` | 3.5 | 0.4 | 0.4 | 161.5 | 46.5 | 1.01× |
+| `sort_first` | 38.1 | 0.4 | 1.3 | 374.8 | 145.2 | 3.36× |
+| `sort_take` | 38.6 | 0.7 | 1.3 | 377.8 | 144.8 | 1.93× |
+| `sort_take_select` | 38.2 | 0.7 | 1.4 | 376.7 | 142.5 | 1.93× |
+| `sum_aggregate` | 30.1 | 0.3 | 0.1 | 168.2 | 16.6 | 0.15× |
+| `sum_where` | 32.6 | 0.3 | 0.6 | 177.4 | 16.5 | 1.91× |
+| `take_count` | 1.8 | 0.1 | 0.1 | 1.7 | 1.6 | 1.63× |
+| `take_count_filtered` | 1.1 | 0.0 | 0.0 | 166.8 | 0.4 | — |
+| `take_sum_aggregate` | 0.8 | 0.0 | 0.0 | 163.8 | 0.2 | — |
 | `take_where_count` | 0.9 | 0.0 | 0.0 | 1.8 | 0.2 | — |
-| `take_while_match` | 7.9 | 0.2 | 0.3 | 85.6 | 17.9 | 1.52× |
-| `to_array_filter` | 48.4 | 3.3 | 3.5 | 179.1 | 20.3 | 1.06× |
-| `zip_count_pred` | 39.3 | 0.1 | — | 184.8 | 151.4 | — |
-| `zip_dot_product` | — | 0.1 | 0.1 | 187.2 | 153.1 | 0.81× |
-| `zip_dot_product_3arg` | — | 0.1 | — | 171.2 | 153.6 | — |
-| `zip_reverse_to_array` | — | 4.6 | — | 188.5 | 162.2 | — |
+| `take_while_match` | 7.8 | 0.2 | 0.3 | 85.4 | 17.6 | 1.52× |
+| `to_array_filter` | 48.7 | 3.3 | 3.4 | 178.6 | 20.1 | 1.05× |
+| `zip_count_pred` | 39.2 | 0.1 | — | 184.5 | 151.2 | — |
+| `zip_dot_product` | — | 0.1 | 0.1 | 181.8 | 153.2 | 0.82× |
+| `zip_dot_product_3arg` | — | 0.1 | — | 171.0 | 154.2 | — |
+| `zip_reverse_to_array` | — | 4.5 | — | 188.6 | 162.0 | — |
 <!-- BENCH:TABLES END -->
 
 ## Notes on missing lanes (the `—` cells)

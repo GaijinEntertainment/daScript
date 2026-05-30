@@ -120,8 +120,7 @@ def private register_all_linq_fold_rows {
     build_reverse_rows()
     build_distinct_rows()
     build_group_by_rows()
-    build_decs_join_rows()
-    build_array_join_rows()
+    build_join_rows()
     build_zip_rows()
 }
 

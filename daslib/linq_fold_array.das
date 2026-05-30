@@ -43,6 +43,12 @@ class ArrayAdapter : SourceAdapter {
     def override const can_group_by() : bool {
         return true
     }
+    def override const can_join() : bool {
+        return true
+    }
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+        return emit_array_join(c, ctx, at)
+    }
     def override arrayTop() : Expression? {
         return top
     }
