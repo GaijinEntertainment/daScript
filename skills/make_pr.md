@@ -99,6 +99,22 @@ Skip this step for PRs that only touch tests, fixtures, or generated files.
 
 See `skills/detect_dupe.md` for the full workflow including B1 baseline / CI gate modes.
 
+## 1.7. Workaround audit — read every changed file for hacks
+
+Before the functional gates, **read the whole diff** and ask of every change: *is this compensating for something that should already work?* A workaround is always more total work than asking — it spreads, gets copied, calcifies into fake-API, and later needs an audit to unwind. Catch it at PR time, in your own diff.
+
+```bash
+git diff origin/master..HEAD
+```
+
+**Workaround smells — each is a STOP-and-decide signal, not a thing to ship silently:**
+- **Redundant step** — code that "shouldn't be necessary" if the underlying thing worked: an explicit close/reset/refresh after an action that already does it; a manual re-assert; a `sleep`/retry to make timing line up.
+- **Divergence compensation** — a synthetic/programmatic path gives a different result than the real user action and you added code to paper over the gap. **Invariant: synthetic input MUST equal real input, side-effects included** — synth mouse == real mouse, synth key == real key, an injected / L2 click == a real click, a remote value-set == a real edit. A divergence is a framework bug to fix at the source layer, never to route around in the app/test/recording.
+- **Special-case / "make it work" branch** — a button for an action that already has a key; an injection rail used because "the gesture doesn't fire"; disabling real input so synthetic input lands; a flag toggled only to dodge a misbehavior.
+- **Copied-from-here justification** — "the codebase already does it this way" is NOT validation, especially in heavily AI-assisted code where you may be copying a *past* workaround. Validate against native/upstream semantics, not local precedent.
+
+**Resolution:** the fix-vs-workaround call is the user's. Surface it — name the divergence, offer (1) fix at source vs (2) keep the workaround — and **ask before shipping the compensating code**. Never bury a workaround in a PR. If you fixed a root cause in a dependency, note the now-redundant compensations elsewhere so they can be swept. One question now beats a multi-file audit later.
+
 ## 2. Run all tests
 
 ```bash
@@ -283,6 +299,7 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
+| Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
