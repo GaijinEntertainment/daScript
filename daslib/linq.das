@@ -3370,9 +3370,29 @@ def zip(a : array<auto(TT)>; b : array<auto(UU)>) : array<tuple<TT -const -&, UU
     return <- zip_impl_const(a, type<TT -const -&>, b, type<UU -const -&>)
 }
 
+def zip(var a : iterator<auto(TT)>; b : array<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
+    //! Merges an iterator and an array into an iterator of tuples (iterator-preserving).
+    return <- zip(a, unsafe(each(b)))
+}
+
+def zip(a : array<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
+    //! Merges an array and an iterator into an iterator of tuples (iterator-preserving).
+    return <- zip(unsafe(each(a)), b)
+}
+
 def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an array of tuples
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; b : array<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
+    //! Merges an iterator and an array into an array of tuples.
+    return <- zip_to_array(a, unsafe(each(b)))
+}
+
+def zip_to_array(a : array<auto(TT)>; var b : iterator<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
+    //! Merges an array and an iterator into an array of tuples.
+    return <- zip_to_array(unsafe(each(a)), b)
 }
 
 [unused_argument(tt, uu)]
@@ -3402,9 +3422,29 @@ def zip(a : array<auto(TT)>; b : array<auto(UU)>; result_selector : block<(l : T
     return <- zip_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
 }
 
+def zip(var a : iterator<auto(TT)>; b : array<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges an iterator and an array into an iterator by applying a specified function (iterator-preserving).
+    return <- zip(a, unsafe(each(b)), result_selector)
+}
+
+def zip(a : array<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges an array and an iterator into an iterator by applying a specified function (iterator-preserving).
+    return <- zip(unsafe(each(a)), b, result_selector)
+}
+
 def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
     //! Merges two iterators into an array by applying a specified function
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; b : array<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges an iterator and an array into an array by applying a specified function.
+    return <- zip_to_array(a, unsafe(each(b)), result_selector)
+}
+
+def zip_to_array(a : array<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges an array and an iterator into an array by applying a specified function.
+    return <- zip_to_array(unsafe(each(a)), b, result_selector)
 }
 
 // zip with 3 sources
