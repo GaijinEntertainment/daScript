@@ -4,13 +4,13 @@ options persistent_heap
 require _common public
 
 // zip(a, b) |> select(t => int64(t._0) * int64(t._1)) |> sum — dot product of two int sequences.
-// No clean SQL form (zip is not a natural relational operation), so the SQL lane is
-// omitted. Splice mode fuses zip + select + sum into a single accumulator loop.
-// The Decs lane is the intra-archetype analogue: two int components on the same
-// DecsCar entity (price * year), summed over all entities. Wave 4 pruning keeps
-// only those two get_ro slots, so per-element cost matches the Array two-column read.
-// int64 cast in the projection avoids int32 overflow on i*i for n=100k (sum of
-// squares is ~3.3e14, well past INT_MAX).
+// SQL (m1) deferred: the degenerate same-row form `_select(_.price * _.year) |> sum()` lowers, but
+// `SUM(price*year)` over n=100k is ~1e11 and the computed-projection result is read back as the
+// expression's daslang type (int), which truncates. A faithful lane needs an int64-typed computed
+// projection (`int64(_.price) * int64(_.year)`), which currently fails inference — deferred to the
+// computed-cast follow-up at the end of the linq work. Splice mode fuses zip + select + sum into a
+// single accumulator loop. The Decs lane is the intra-archetype analogue: two int components on the
+// same DecsCar entity (price * year), summed over all entities, with int64 casts avoiding overflow.
 
 def make_ints(n : int) : array<int> {
     var a : array<int>

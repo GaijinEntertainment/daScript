@@ -720,9 +720,16 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
         return true
     }
     let col = q.selectCols[0]
+    // A computed scalar `_select` (`_.a + _.b`) stores its rendered SQL in selectColSqlFragments[0] with col == "".
+    let hasFrag = !empty(q.selectColSqlFragments[0])
     let sqlCol = field_to_column_name(q.rootType, col)
+    let aggArg = hasFrag ? q.selectColSqlFragments[0] : "\"{sqlCol}\""
     // nolint:STYLE015 Bare-aggregate `_distinct_by(_.K) |> _select(_.F) |> {agg}()` wrap: same SQL as for count(P) but with SUM/MIN/MAX/AVG over the projected column and no outer WHERE.
     if (!empty(q.distinctByCol)) {
+        if (hasFrag) {
+            macro_error(prog, at, "_sql: `_distinct_by(K) |> _select(<computed>) |> {linqName}()` is not yet supported — project a single column for the distinct-by aggregate path")
+            return true
+        }
         if (!check_distinct_by_v1_gating(q, linqName, true, prog, at)) return true
         var aggType : TypeDeclPtr
         if (promote_to_double) {
@@ -733,9 +740,11 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
         finalize_distinct_by_aggregate_wrap(q, sqlOp, sqlCol, aggType, prog, at)
         return true
     }
-    q.aggregateExpr = "{sqlOp}(\"{sqlCol}\")"
+    q.aggregateExpr = "{sqlOp}({aggArg})"
     if (promote_to_double) {
         q.aggregateType = new TypeDecl(at = at, baseType = Type.tDouble)
+    } elif (hasFrag) {
+        q.aggregateType = clone_type(q.selectColTypes[0])
     } else {
         q.aggregateType = lookup_struct_field_type(q.rootType, col)
     }
@@ -883,8 +892,10 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
 // then reset q so the outer join installs its own state. Outer's `into` resolves against q.fromRowType.
 [macro_function]
 def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
-                                        fillPassthrough : bool = false) : bool {
+                                        fillPassthrough : bool = false; keepLimitInner : bool = false) : bool {
     // nolint:STYLE015
+    // keepLimitInner: take(n)/skip(n) BEFORE an aggregate applies to the pre-aggregate rows, so LIMIT/OFFSET
+    // stays on the INNER subquery (default = moved to the outer, the multi-join LHS semantics).
     // NOTE: don't gate on q.seenTerminal / q.seenToArray here — analyze_chain peels
     // outermost-first, so by the time snapshot is called, those flags reflect the OUTER
     // chain's terminal (which is fine) and there's no way to distinguish that from an
@@ -922,8 +933,10 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     var savedAggType = q.aggregateType
     // Clear them on q so the inner SQL emits without outer-only clauses.
     q.matr = Materializer.Array
-    q.limitBindExpr = null
-    q.offsetBindExpr = null
+    if (!keepLimitInner) {
+        q.limitBindExpr = null
+        q.offsetBindExpr = null
+    }
     q.distinctFlag = false
     q.seenTake = false
     q.seenSkip = false
@@ -934,8 +947,19 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.aggregateExpr := ""
     q.aggregateType = null
     if (savedAggExpr != "") {
-        // Force NamedTuple so inner emits selectCols (analyze_projection populated them); empty aggregateExpr would emit nothing.
-        q.proj = ProjectionShape.NamedTuple
+        if (keepLimitInner) {
+            // Inner re-emits ALL source columns (limited by the kept LIMIT/OFFSET); the outer aggregate refs them by name. Drop any _select — subsumed into savedAggExpr.
+            q.selectCols |> clear
+            q.selectColAliases |> clear
+            q.selectColSqlFragments |> clear
+            q.selectColTypes |> clear
+            q.projRecordNames |> clear
+            fill_default_columns(q, q.rootType, prog, at)
+            q.proj = ProjectionShape.FullRow
+        } else {
+            // multi-join LHS wrap: re-emit the `into` projection so selectCols populates the inner.
+            q.proj = ProjectionShape.NamedTuple
+        }
     }
     var savedDb = q.dbExpr
     let savedInView = q.inView
@@ -1002,8 +1026,11 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.hadError = savedHadError
     // Restore outer-terminal state — LIMIT/ORDER BY/DISTINCT belong on the outer SELECT post-wrap.
     q.matr = savedMatr
-    q.limitBindExpr = savedLimitBindExpr
-    q.offsetBindExpr = savedOffsetBindExpr
+    // keepLimitInner: LIMIT/OFFSET stayed on the inner build above; leave the outer clean.
+    if (!keepLimitInner) {
+        q.limitBindExpr = savedLimitBindExpr
+        q.offsetBindExpr = savedOffsetBindExpr
+    }
     q.distinctFlag = savedDistinctFlag
     q.orderByCols <- savedOrderByCols
     q.orderByInlineExprs <- savedOrderByInlineExprs
@@ -1023,6 +1050,15 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
         if (!apply_passthrough_projection(q, projType, prog, at)) return false
     }
     return true
+}
+
+// nolint:STYLE014 Shared post-analyze pass (mirror of maybe_finalize_distinct_by_passthrough), run by every
+// _sql / _sql_text / _each_sql / _create_view consumer so emitted SQL is identical. take(n)/skip(n) before an
+// aggregate wraps the pre-aggregate chain into an inner subquery (LIMIT/OFFSET inner) + aggregate on the outer.
+[macro_function]
+def private maybe_wrap_take_before_aggregate(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+    if (q.proj != ProjectionShape.Aggregate || (q.limitBindExpr == null && q.offsetBindExpr == null)) return true
+    return snapshot_q_to_subquery_wrap(q, prog, at, [keepLimitInner = true])
 }
 
 // Replace q's projection with passthrough column refs against named-tuple projType (= NamedTuple).
@@ -2313,7 +2349,21 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
             return true
         }
     }
-    macro_error(prog, at, "_sql: _select: supported shapes are `<arg>.Field` (single column) and `(Name=<arg>.Name, Price=<arg>.Price)` (named tuple); got: {describe(body)}")
+    // Computed scalar projection (`_.price * _.year`) — pred_to_sql renders it into a single computed slot (col == ""), mirroring the [sql_function] / json_extract paths above.
+    if (body._type != null && !body._type.isAutoOrAlias) {
+        let frag = pred_to_sql(body, q, prog, at)
+        if (q.hadError) return false
+        if (!empty(frag)) {
+            q.selectCols |> clear
+            q.selectColAliases |> clear
+            q.selectColTypes |> clear
+            q.selectColSqlFragments |> clear
+            push_computed_proj_slot(q, frag, clone_type(body._type), "")
+            q.proj = ProjectionShape.SingleColumn
+            return true
+        }
+    }
+    macro_error(prog, at, "_sql: _select: supported shapes are `<arg>.Field` (single column), `(Name=<arg>.Name, Price=<arg>.Price)` (named tuple), or a computed scalar (`_.a + _.b`); got: {describe(body)}")
     return false
 }
 
@@ -3833,7 +3883,8 @@ class private SqlTextMacro : AstCallMacro {
         macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
         var q = SqlQuery()
         if (!analyze_chain(call.arguments[0], q, prog, call.at)
-                || !maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
+                || !maybe_finalize_distinct_by_passthrough(q, prog, call.at)
+                || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
         let sql = build_sql_string(q)
         var noBinds : array<ExpressionPtr>
         var frags : array<SqlFrag>
@@ -3898,7 +3949,8 @@ class private SqlCreateViewMacro : AstCallMacro {
             macro_error(prog, call.at, "_create_view: chain ends in `_to_array()` — views are by definition arrays of rows; drop the `_to_array()` terminal.")
             return null
         }
-        if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
+        if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)
+                || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
         // CREATE VIEW DDL is run once; baking a runtime column name at view-creation time is surprising. Reject.
         if (!empty(q.orderByInlineExprs)) {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
@@ -4283,19 +4335,14 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
     var q = SqlQuery()
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
-    // take(n)/skip(n) before an aggregate is degenerate in SQL — aggregate collapses to one row, LIMIT/OFFSET no-op; reject loudly.
-    if (q.proj == ProjectionShape.Aggregate
-            && (q.limitBindExpr != null || q.offsetBindExpr != null)) {
-        macro_error(prog, call.at, "_sql: take(n)/skip(n) before an aggregate is not translatable — `LIMIT`/`OFFSET` after an aggregate has no effect (aggregate collapses to one row); use `_where(...)` for pre-aggregate filtering")
-        return null
-    }
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
     if (q.proj == ProjectionShape.Aggregate && q.distinctFlag) {
         macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
         return null
     }
     // Row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`): wrap the source FROM in a bare-aggregate subquery. Aggregate terminators already finalized inside peel_count_terminal / peel_column_aggregate.
-    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
+    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)
+            || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
     // Bind order (centralized in collect_query_binds): inner-Q FROM → per-join ON → WHERE → HAVING → set-op-RHS → LIMIT → OFFSET.
     var allBinds : array<ExpressionPtr>
     collect_query_binds(q, allBinds)
@@ -4367,7 +4414,8 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` — those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
         return null
     }
-    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)) return null
+    if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)
+            || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
     // Same bind ordering as emit_sql_macro_body via collect_query_binds. take/skip binds OK here (lazy stream).
     var allBinds : array<ExpressionPtr>
     collect_query_binds(q, allBinds)

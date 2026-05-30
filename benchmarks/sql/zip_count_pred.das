@@ -4,17 +4,34 @@ options persistent_heap
 require _common public
 
 let THRESHOLD = 50000l
+let THRESHOLD_SQL = 1000000
 
 // zip(xs, ys) |> _select(int64(_._0) * int64(_._1)) |> count(P) — count of zipped
 // products satisfying P. int64 cast avoids int32 overflow for n=100k (i*i wraps past
 // INT_MAX, producing negative products and unstable predicate counts).
-// SQL: no relational form (zip is not relational).
+// SQL (m1): zip has no positional relational form, so this lane measures the degenerate
+// same-row interpretation — count of rows whose `price * year` exceeds a threshold, with
+// the product pushed into the predicate (`_where(_.price * _.year > ?)`). The per-row
+// product fits int32 (only the sum-over-all form overflowed, see zip_dot_product).
 // Array (m3f): plan_zip's 2-arg count(P) extension (Theme 4, plan_zip arm).
 // The predicate is captured into a dedicated counter-predicate gate around `acc++`
 // INSIDE the upstream select wrap, so eager `select(F).count(P)` ordering is preserved
 // (F runs once per element, then P decides whether to count). With _select, the
 // predicate peels against the projected value via a `vproj` bind. Length-shortcut
 // suppressed once P is present.
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let c = _sql(db |> select_from(type<Car>) |> _where(_.price * _.year > THRESHOLD_SQL) |> count())
+            b |> accept(c)
+            if (c == 0) {
+                b->failNow()
+            }
+        }
+    }
+}
 
 def make_ints(n : int) : array<int> {
     var a : array<int>
@@ -37,6 +54,11 @@ def run_m3f(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def zip_count_pred_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]

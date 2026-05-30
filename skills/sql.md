@@ -177,10 +177,10 @@ let cars <- _sql(db |> select_from(type<Car>)
 |---|---|
 | **Source** | `select_from(db, type<T>)` where `T` carries `[sql_table]` or `[sql_view]` |
 | **Filter** | `_where(p)` — multiple calls compose with AND |
-| **Project** | `_select(_.Field)` (single column), `_select((A=_.A, B=_.B))` (named-tuple), default = full row |
+| **Project** | `_select(_.Field)` (single column), `_select((A=_.A, B=_.B))` (named-tuple), `_select(_.A + _.B)` (computed scalar → the arithmetic renders into the projection/aggregate), default = full row |
 | **Order** | `_order_by(_.Field)`, `_order_by_descending(_.Field)`, tuple-key `_order_by((_.k1, _.k2))` |
 | **Group** | `_group_by(_.Key)`, `_group_by((_.k1, _.k2))`; post-group `_having(p)` |
-| **Page** | `take(n)`, `skip(m)` — canonical fast form is `skip(m) \|> take(n)` |
+| **Page** | `take(n)`, `skip(m)` — canonical fast form is `skip(m) \|> take(n)`. `take`/`skip` BEFORE an aggregate (`take(n) \|> count()`, `_select(_.X) \|> take(n) \|> sum()`) wraps the bounded rows into an inner subquery so the LIMIT applies pre-aggregate |
 | **Distinct** | `distinct()` |
 | **Aggregate** | `count()`, `sum`, `average`, `min`, `max` (terminal) |
 | **Joins** | `_join(other, $(l, r) => l.X == r.Y, $(l, r) => projection)`, `_left_join(...)` (right side flows as `Option<TB>` through `into`) |
@@ -198,7 +198,7 @@ let cars <- _sql(db |> select_from(type<Car>)
 Compile-time `macro_error` pointing at the offending node:
 
 - Unknown function calls in `_where` / `_select`
-- `_select` projections that aren't `_.Field` or named-tuple (struct-type projection is a deferred follow-up)
+- `_select` struct-type projection (a whole-struct project is a deferred follow-up; `_.Field`, named-tuple, and computed-scalar `_.A + _.B` projections are supported). A computed projection containing a type cast (`int64(_.A) * int64(_.B)`) currently fails inference — deferred
 - Multiple `_select` calls in one chain
 - Multiple terminals in one chain (`_to_array() |> _first()`)
 - `text_match` on a non-`[sql_fts5]` column (suggests `contains` or `[sql_fts5]`)
