@@ -192,7 +192,7 @@ recovers from errors.
     let good = ok("1", type<string>) |> and_then() $(s : string) { return parse_digit(s); }
     // good |> unwrap_or(-1) == 1
 
-    let recovered = err("boom", type<int>) |> or_else() $(e : string) {
+    let recovered = err("boom", type<int>) |> or_else() $(_e : string) {
         return ok(99, type<string>)
     }
     // recovered |> unwrap == 99

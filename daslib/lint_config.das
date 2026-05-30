@@ -1,6 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_function_arguments = false
 
 module lint_config shared private
 

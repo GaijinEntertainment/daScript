@@ -101,6 +101,7 @@ def not_a_number(x) : string {
 // Fallback that accepts anything (including numeric)
 // When x IS numeric, the contract [!expect_any_numeric] fails,
 // so this fallback is selected instead.
+[unused_argument(x)]
 def not_a_number(x : int) : string {
     return "is numeric"
 }

@@ -368,7 +368,7 @@ def broken( \{
 "
     using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("bad", bad_src, cop) $(ok, program, issues) {
+        compile("bad", bad_src, cop) $(ok, _program, _issues) {
             if (!ok) {
                 print("  compile error caught (expected)\n")
             }

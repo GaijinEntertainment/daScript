@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options _comment_hygiene = true
 
 module linq_fold_array shared public
@@ -267,7 +265,7 @@ class ArrayJoinAdapter : SourceAdapter {
     }
 }
 
-[clone(top), macro_function]
+[clone(top), macro_function, unused_argument(itName)]
 def emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
                       var skipExpr, takeExpr, skipWhileCond : Expression?;
                       var loopBody : Expression?; at : LineInfo;

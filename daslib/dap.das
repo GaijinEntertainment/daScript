@@ -2,8 +2,6 @@ options gen2
 options rtti
 options no_aot
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module dap shared
@@ -24,6 +22,7 @@ struct InitializeRequestArguments {
     //! Arguments for the DAP initialize request.
 }
 
+[unused_argument(data)]
 def InitializeRequestArguments(data : JsonValue?) {
     //! Constructs an InitializeRequestArguments from a JSON value.
     return InitializeRequestArguments()

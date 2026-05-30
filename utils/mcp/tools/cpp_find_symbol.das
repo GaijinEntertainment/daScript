@@ -1,6 +1,4 @@
 options gen2
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require cpp_common public
 require daslib/strings_boost public
@@ -43,7 +41,7 @@ def do_cpp_find_symbol(query : string; kind : string = ""; directory : string = 
         var by_file : table<string; array<int>>
         var file_order : array<string>
         for (idx in matched) {
-            let fp = unsafe(entries[idx]).file
+            let fp = entries[idx].file
             if (!key_exists(by_file, fp)) {
                 file_order |> push(fp)
             }

@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers
 
 module ast_boost shared public
@@ -395,7 +393,7 @@ class SetupAnyAnnotation : AstStructureAnnotation {
         }
         var blk <- setup_macro("__setup_macros", st.at)
         var cll = new ExprCall(at = st.at, name := annotation_function_call)
-        self->setup_call(st, cll)
+        setup_call(st, cll)
         var nee = new ExprNew(at = st.at, initializer = true,
             typeexpr = new TypeDecl(baseType = Type.tStructure, structType = st, at = st.at)
         )
@@ -823,6 +821,7 @@ def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at :
     }
 }
 
+[unused_argument(at)]
 def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
     var eval = 0l
     if (info.baseType == Type.tEnumeration) {
@@ -1198,14 +1197,14 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         if (e.at.fileInfo != null) {
             writer |> write(" file=\"{e.at.fileInfo.name}\"")
         }
-        if (string(e.__rtti) == "ExprCall" || string(e.__rtti) == "ExprInvoke") { // nolint:STYLE006
+        if (e.__rtti == "ExprCall" || e.__rtti == "ExprInvoke") { // nolint:STYLE006
             let enc = unsafe(reinterpret<ExprLooksLikeCall?> e)
             if (int(enc.atEnclosure.line) != 0 || int(enc.atEnclosure.last_line) != 0) {
                 writer |> write(" atEnclosure={int(enc.atEnclosure.line)}:{int(enc.atEnclosure.column)}-{int(enc.atEnclosure.last_line)}:{int(enc.atEnclosure.last_column)}")
             }
         }
     }
-    if (string(expr.__rtti) |> starts_with("ExprConst")) {
+    if (expr.__rtti |> starts_with("ExprConst")) {
         writer |> write(" {describe(expr)})")
         return
     }
@@ -1214,7 +1213,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         writer |> write(")")
         return
     }
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, _cppName, xtype, offset) {
         if (offset != -1u) {
             let tstr = describe(xtype)
             var p8 : int8?
@@ -1251,7 +1250,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         }
     }
                 // writer |> write(" {name}={describe(xtype)}")
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, _cppName, xtype, offset) {
         if (offset != -1u) {
             let tstr = describe(xtype)
             var p8 : int8?

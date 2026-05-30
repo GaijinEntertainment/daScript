@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module async_boost shared private
@@ -40,7 +38,7 @@ class AwaitMacro : AstFunctionAnnotation {
 }
 
 
-[tag_function(await_coroutine_tag)]
+[tag_function(await_coroutine_tag), unused_argument(a)]
 def public await(var a : iterator<bool>) : bool {
     //! This function is used to wait for the result of the async function.
     panic("await() should not be called directly, add [async] annotation to the function in that you want to use it")

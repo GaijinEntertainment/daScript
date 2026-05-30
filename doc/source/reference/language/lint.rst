@@ -13,7 +13,7 @@ Lint Tools
 
 daslang provides three complementary lint passes that detect issues at compile time:
 
-- **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables, variables that can be ``let``, underscore naming, redundant reinterpret casts
+- **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables and arguments, variables that can be ``let``, underscore naming, redundant reinterpret casts
 - **Performance lint** (``daslib/perf_lint``) — performance anti-patterns (error code ``40217``)
 - **Style lint** (``daslib/style_lint``) — non-idiomatic patterns (error code ``40218``)
 
@@ -189,12 +189,16 @@ A ``var`` variable is never mutated. Declare it with ``let`` instead.
 LINT004 — underscore-prefixed variable is used
 ================================================
 
-A variable named ``_x`` is conventionally unused. If it is actually accessed,
-rename it without the underscore prefix.
+A local variable named ``_x`` is conventionally unused. If it is actually
+read, rename it without the underscore prefix. This applies to locals only —
+a ``_``-prefixed *argument* is never flagged (a parameter name is often
+constrained: intentionally unused, or dodging a reserved keyword / shadow such
+as ``_in``).
 
 .. code-block:: das
 
-    def foo(_x : int) : int {
+    def foo() : int {
+        var _x = compute()
         return _x                           // LINT004
     }
 
@@ -406,6 +410,64 @@ sources stay covered.
 
 Suppress with ``// nolint:LINT011`` on the offending line when the inexact
 value is intentional (a sentinel, a sampled constant, etc.).
+
+LINT012 — unused function argument
+===================================
+
+A function argument is never read. Prefix the name with an underscore
+(``_x``) to suppress, annotate the function with ``[unused_argument(x)]``, or
+remove the argument. The underscore and annotation forms are the right tool
+when the signature is fixed — interface conformance or a default-value
+placeholder.
+
+Arguments of **class methods** are exempt: their signature is dictated by the
+base class or interface, so an unused parameter there is structural rather
+than a mistake. LINT012 fires on free functions only.
+
+.. code-block:: das
+
+    // Bad — `b` is never used
+    def scale(a : int; b : int) : int {     // LINT012 on b
+        return a * 2
+    }
+
+    // Good — underscore marks it intentionally unused
+    def scale(a : int; _b : int) : int {
+        return a * 2
+    }
+
+    // Good — annotation keeps the name (call sites / docs unchanged)
+    [unused_argument(b)]
+    def scale(a : int; b : int) : int {
+        return a * 2
+    }
+
+LINT013 — unused block argument
+================================
+
+The same check for the parameters of a block, lambda, or generator passed as
+a callback. Callbacks that ignore a parameter are common; suppress exactly as
+for LINT012.
+
+.. code-block:: das
+
+    // Bad — the callback ignores its second parameter
+    tab |> get(key) $(found : bool; value : int) {  // LINT013 on value
+        report(found)
+    }
+
+    // Good
+    tab |> get(key) $(found : bool; _value : int) {
+        report(found)
+    }
+
+.. note::
+
+    ``// nolint:LINT012`` / ``// nolint:LINT013`` suppression is scanned on the
+    **exact reported line** only — not the line above. On a multi-line argument
+    or block-parameter list, place the comment on the specific parameter's
+    line; on a single-line ``def foo(a, b, c)`` a trailing ``// nolint:LINT012``
+    suppresses the whole line.
 
 .. _perf_lint:
 

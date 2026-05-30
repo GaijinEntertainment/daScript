@@ -432,7 +432,7 @@ class CoveragePass : AstPassMacro {
         //! Applies the coverage instrumentation visitor to the program.
         if (mod.name == "coverage" || (prog._options |> find_arg("no_coverage") ?as tBool ?? false)) return false
         var found = false
-        mod |> for_each_function("__coverage_init") $(fn) {
+        mod |> for_each_function("__coverage_init") $(_fn) {
             found = true
         }
         if (found) return false
@@ -718,7 +718,7 @@ def public fill_coverage_report(var dest : string?; name : string = "") {
 }
 
 // Returns all recorded coverage table to this moment.
-[export]
+[export, unused_argument(cov)]
 def public get_coverage_details(var cov : table<string; CoverageData>?) {
     return <- clone(coverageData)
 }

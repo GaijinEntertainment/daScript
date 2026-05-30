@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module style_lint shared private
@@ -1296,7 +1294,7 @@ class StyleLintVisitor : AstVisitor {
                 file_max_line |> insert(fname, s)
             }
         }
-        for_each_typedef(mod) $(name, value) {
+        for_each_typedef(mod) $(_name, value) {
             if (value.at.fileInfo == null || value.at.line == 0u) return
             let fname = string(value.at.fileInfo.name)
             let s = value.at.line
@@ -1356,7 +1354,7 @@ class StyleLintVisitor : AstVisitor {
                 file_first_decl[fname], file_max_line[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
-        for_each_typedef(mod) $(name, value) {
+        for_each_typedef(mod) $(_name, value) {
             if (value.at.fileInfo == null) return
             let fname = string(value.at.fileInfo.name)
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return

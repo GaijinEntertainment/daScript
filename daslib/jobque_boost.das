@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
@@ -82,7 +80,7 @@ class private NewJobMacro : AstFunctionAnnotation {
         var ncall = new ExprCall(at = call.at, name := "{call.name}_invoke")
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new ExprAddr(at = call.at, target := "clone", funcType <- ftype)
-        ncall.arguments |> emplace_new <| new ExprConstInt(at = call.at, value = int(mks._type.sizeOf))
+        ncall.arguments |> emplace_new <| new ExprConstInt(at = call.at, value = mks._type.sizeOf)
         return <- ncall
     }
 }
@@ -546,7 +544,7 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
     }
 }
 
-[tag_function(tag_parallel_for)]
+[tag_function(tag_parallel_for), unused_argument(range_begin, range_end, num_jobs, blk)]
 def parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job_begin : int; job_end : int; var wg : JobStatus?) : void>) {
     //! this one is stub for _parallel_for
 }

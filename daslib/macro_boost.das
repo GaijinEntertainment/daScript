@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 
@@ -16,7 +14,7 @@ module macro_boost shared private
 require daslib/ast_boost
 require daslib/templates_boost
 
-[macro_function, tag_function(macro_verify_tag)]
+[macro_function, tag_function(macro_verify_tag), unused_argument(expr, prog, at, message)]
 def public macro_verify(expr : bool; prog : ProgramPtr; at : LineInfo; message : string) {
     //! Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
     pass

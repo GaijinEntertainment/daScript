@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module lint shared private
@@ -20,7 +18,7 @@ require daslib/lint_config
 [lint_macro]
 class LintEverything : AstPassMacro {
     //! Pass macro that enables lint checking for modules.
-    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+    def override apply(prog : ProgramPtr; _mod : Module?) : bool {
         let disabled <- build_lint_macro_disabled(prog)
         paranoid(prog, true, disabled)
         return true
@@ -53,7 +51,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT001: unreachable code
     //!   - LINT002: unused variable
     //!   - LINT003: variable can be made const (var→let)
-    //!   - LINT004: underscore-prefixed variable is actually used
+    //!   - LINT004: underscore-prefixed variable is actually used (locals only)
     //!   - LINT005: redundant reinterpret<T>(x) where T matches source type
     //!   - LINT006: division by zero (constant 0 divisor)
     //!   - LINT007: left and right operands of binary operator are identical
@@ -61,6 +59,8 @@ class LintVisitor : AstVisitor {
     //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
     //!   - LINT010: dead store — local variable written but value never read
     //!   - LINT011: int literal promoted to float/double with precision loss
+    //!   - LINT012: unused function argument (class-method args skipped — signature is dictated by the base)
+    //!   - LINT013: unused block argument
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -154,7 +154,7 @@ class LintVisitor : AstVisitor {
         }
         return <- blk
     }
-    def override visitExprBlockExpression(blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
+    def override visitExprBlockExpression(_blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
         // Flag if a prior direct-child of THIS block already terminated control flow.
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
@@ -171,7 +171,7 @@ class LintVisitor : AstVisitor {
         }
         return <- expr
     }
-    def override preVisitExprLabel(expr : ExprLabel?) : void {
+    def override preVisitExprLabel(_expr : ExprLabel?) : void {
         if (!empty(exprForTerminator)) {
             exprForTerminator |> pop()
         }
@@ -189,7 +189,7 @@ class LintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprForVariable(expr : ExprFor?; v : VariablePtr; last : bool) : void {
+    def override preVisitExprForVariable(expr : ExprFor?; v : VariablePtr; _last : bool) : void {
         if (expr.canShadow) return
         validate_var(v, false)
     }
@@ -237,6 +237,31 @@ class LintVisitor : AstVisitor {
             lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
+    }
+
+    def validate_argument(v : VariablePtr; code, kind : string) {
+        // skip template/generic/[no_lint] context, generated vars, and [unused_argument(name)] (marked_used)
+        if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
+        let name = string(v.name)
+        // A leading underscore on an argument means "leave it alone": intentionally unused, or
+        // dodging a reserved keyword / shadow (e.g. `_in`). Unlike locals, we do NOT raise LINT004
+        // for a used `_arg` — a parameter name is often constrained and can't drop the underscore.
+        // Backtick names are compiler-generated.
+        if (name |> starts_with("_") || find(name, "`") >= 0) return
+        if (v.isAccessUnused) {
+            lint_error("{code}: unused {kind} {v.name}: {describe(v._type)} (add an underscore prefix or [unused_argument({v.name})] if intentional)", v.at)
+        }
+    }
+
+    def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
+        // class-method signatures are dictated by the base class / interface, so an
+        // unused param there is structural, not a mistake — skip to avoid override noise
+        if (fun.flags.isClassMethod) return
+        validate_argument(arg, "LINT012", "function argument")
+    }
+
+    def override preVisitExprBlockArgument(_blk : ExprBlock?; arg : VariablePtr; _lastArg : bool) : void {
+        validate_argument(arg, "LINT013", "block argument")
     }
 
     def override preVisitExprLet(expr : ExprLet?) : void {
@@ -395,21 +420,21 @@ class LintVisitor : AstVisitor {
 
     // Branch / loop / try / lambda — bumps branch_depth so any var referenced
     // inside is bailed-on.
-    def override preVisitExprFor(expr : ExprFor?) : void {
+    def override preVisitExprFor(_expr : ExprFor?) : void {
         if (!noLint && genericDepth == 0) branch_depth++
     }
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
         if (!noLint && genericDepth == 0) branch_depth--
         return <- expr
     }
-    def override preVisitExprWhile(expr : ExprWhile?) : void {
+    def override preVisitExprWhile(_expr : ExprWhile?) : void {
         if (!noLint && genericDepth == 0) branch_depth++
     }
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
         if (!noLint && genericDepth == 0) branch_depth--
         return <- expr
     }
-    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+    def override preVisitExprTryCatch(_expr : ExprTryCatch?) : void {
         if (!noLint && genericDepth == 0) branch_depth++
     }
     def override visitExprTryCatch(var expr : ExprTryCatch?) : ExpressionPtr {

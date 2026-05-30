@@ -1,6 +1,4 @@
 options gen2
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options indenting = 4
 options strict_smart_pointers = true
 
@@ -109,6 +107,7 @@ def public re_gen_get_rep_limit {
     return re_gen_rep_limit
 }
 
+[unused_argument(msg, offset)]
 def private trace(msg : string; offset : int) {
     static_if (log_parse_enabled) {
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
@@ -116,6 +115,7 @@ def private trace(msg : string; offset : int) {
     }
 }
 
+[unused_argument(msg, offset)]
 def private note(msg : string; offset : int) {
     static_if (log_parse_enabled) {
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
@@ -129,6 +129,7 @@ def private trace_backtrack() {
     }
 }
 
+[unused_argument(value)]
 def private trace_value(value : ReNode?) {
     static_if (log_parse_enabled) {
         if (value == null) {
@@ -1790,7 +1791,7 @@ def private expand_replacement(var regex : Regex; str : string; replacement : st
                             // try numeric group reference first (${0}, ${1}, ...)
                             var is_numeric = !empty(name)
                             for (nc in name) {
-                                if (nc < '0' || nc > '9') {
+                                if (!is_number(nc)) {
                                     is_numeric = false
                                     break
                                 }
@@ -2097,6 +2098,7 @@ def private rnd_set_character(cset : uint[8]; var rnd : ReGenRandom) : int {
     return set_element(int(idx), cset)
 }
 
+[unused_argument(node, rnd, str)]
 def private re_gen2_fail(var node : ReNode?; var rnd : ReGenRandom; var str : StringBuilderWriter) : void {
     if (log_gen_enabled) {
         print("gen fail\n")

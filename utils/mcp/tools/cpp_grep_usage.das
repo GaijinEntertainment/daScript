@@ -1,6 +1,4 @@
 options gen2
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require cpp_common public
 require daslib/strings_boost public
@@ -21,6 +19,7 @@ require strings public
 // `directory`: optional — repo-relative or absolute; empty -> default cpp dirs.
 // `context_lines_str`: reserved (currently unused; ast-grep already returns the matched line).
 // `glob_filter`: optional --globs filter (gitignore syntax; `!pattern` for exclusion).
+[unused_argument(context_lines_str)]
 def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : string {
     if (empty(symbol)) return make_tool_result("'symbol' argument is required", true)
     let sg = get_ast_grep_cmd()

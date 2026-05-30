@@ -1,15 +1,13 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 
 //! Subprocess form of `list_functions`. Argv: <file> <project>.
 
 def run_list_functions(file : string; project : string = "") : string {
-    return compile_and_simulate(file, project) $(program; issues) {
+    return compile_and_simulate(file, project) $(program; _issues) {
         let res = build_string() $(var writer) {
             write_function_list(writer, program)
         }

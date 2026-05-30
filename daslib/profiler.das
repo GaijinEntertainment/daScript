@@ -1,8 +1,6 @@
 options gen2
 options indenting = 4
 options unsafe_table_lookup = false
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 options threadlock_context
 
@@ -549,6 +547,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
     }
 }
 
+[unused_argument(ctx)]
 def debug_agent(ctx : Context) {
     assert(this_context().category.debug_context)
     let cfg <- parse_profiler_args()

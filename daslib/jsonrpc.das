@@ -1,6 +1,4 @@
 options gen2
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options indenting = 4
 options strict_smart_pointers = true
 
@@ -133,14 +131,14 @@ def public make_batch(messages : array<string>) : string {
     //! Empty input returns ``"[]"`` — note that ``[]`` is itself a -32600 invalid
     //! request per the spec, so this is mostly useful for testing the rejection path.
     return build_string() $(var w) {
-        write_char(w, int('['))
+        write_char(w, '[')
         var first = true
         for (m in messages) {
-            if (!first) write_char(w, int(','))
+            if (!first) write_char(w, ',')
             first = false
             write(w, m)
         }
-        write_char(w, int(']'))
+        write_char(w, ']')
     }
 }
 
@@ -401,13 +399,13 @@ def public dispatch_line(line : string; strict : bool; dispatcher : block<(metho
     }
     if (empty(parts)) return ""
     return build_string() $(var w) {
-        write_char(w, int('['))
+        write_char(w, '[')
         var first = true
         for (p in parts) {
-            if (!first) write_char(w, int(','))
+            if (!first) write_char(w, ',')
             first = false
             write(w, p)
         }
-        write_char(w, int(']'))
+        write_char(w, ']')
     }
 }

@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module soa private
@@ -26,7 +24,7 @@ struct public SOA_INDEX {
     //! Field access on this proxy is rewritten by `SoaCallMacro` to index into the correct column array.
 }
 
-[tag_function(soa_call)]
+[tag_function(soa_call), unused_argument(src, field)]
 def public operator .(src : SOA_INDEX explicit; field : string) {
     //! Field access operator for SOA_INDEX; rewritten by SoaCallMacro to convert soa[index].field into soa.field[index].
     // its important that this operator returns `void`, because it would prevent the compiler from cascading infer of wrong type

@@ -52,6 +52,7 @@ of the program that stays resident:
         count : int = 0
     }
 
+    [unused_argument(ctx)]
     def install_counter(ctx : Context) {
         install_new_debug_agent(new CounterAgent(), "counter")
     }
@@ -88,6 +89,7 @@ intercept program output:
         }
     }
 
+    [unused_argument(ctx)]
     def install_log_agent(ctx : Context) {
         install_new_debug_agent(new LogAgent(), "log_watcher")
     }
@@ -185,6 +187,7 @@ Syntax: ``invoke_debug_agent_method("agent_name", "method", args...)``
         }
     }
 
+    [unused_argument(ctx)]
     def install_calc_agent(ctx : Context) {
         install_new_debug_agent(new CalcAgent(), "calc")
     }

@@ -79,7 +79,7 @@ def main() {
 
     print("\n=== Section 3: Empty batch ===\n")
 
-    let empty_resp = jsonrpc::dispatch_line("[]", false) $(method, params_json) {
+    let empty_resp = jsonrpc::dispatch_line("[]", false) $(_method, _params_json) {
         return "unused"
     }
     print("[] response: {empty_resp}\n")
@@ -96,7 +96,7 @@ def main() {
 
     var notif_calls = 0
     let all_notif = "[\{\"method\":\"a\"},\{\"method\":\"b\"},\{\"method\":\"c\"}]"
-    let all_notif_resp = jsonrpc::dispatch_line(all_notif, false) $(method, params_json) {
+    let all_notif_resp = jsonrpc::dispatch_line(all_notif, false) $(_method, _params_json) {
         notif_calls++
         return "ignored"
     }

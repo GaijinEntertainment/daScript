@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 
@@ -65,7 +63,7 @@ def write_handled_type_detail(var w : StringBuilderWriter; value : Annotation co
     }
     write(w, "\n")
     var field_count = 0
-    for_each_field(*ann) $(fname, cppName, xtype, offset) {
+    for_each_field(*ann) $(fname, cppName, xtype, _offset) {
         if (field_count == 0) {
             write(w, "Fields:\n")
         }
@@ -166,7 +164,7 @@ def private try_describe_type(name, module_name, preamble, project : string) : T
         return TryResult(text = make_tool_result("Cannot write temp file: {stub_path}", true), ok = false, retryable = false)
     }
     var ok = false
-    let res = compile_and_simulate(stub_path, project) $(program; issues) {
+    let res = compile_and_simulate(stub_path, project) $(program; _issues) {
         ok = true
         var result = ""
         program_for_each_module(program) $(mod) {

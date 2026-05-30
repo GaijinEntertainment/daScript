@@ -13,7 +13,6 @@
 // Run: daslang.exe tutorials/language/41_serialization.das
 
 options gen2
-options no_unused_function_arguments = false
 
 require daslib/archive
 require math

@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 options unsafe_table_lookup = false
 
@@ -289,10 +287,10 @@ def onEnum(var root) {
     let name = root["name"] as _string
     let fullName = getCppName(name)
     if (root |> key_exists("scopedEnumTag")) {
-        let _tag = root["scopedEnumTag"] as _string
+        let tag = root["scopedEnumTag"] as _string
         let qtype = getQualType(root, "fixedUnderlyingType")
         if (verbose) {
-            print("enum {_tag} {name} : {qtype} // {fullName}\n")
+            print("enum {tag} {name} : {qtype} // {fullName}\n")
         }
         ast.enums[fullName] <- ClangEnum(
             name = name,

@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module defer shared private
@@ -18,7 +16,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
 
-[tag_function(defer_tag)]
+[tag_function(defer_tag), unused_argument(blk)]
 def public defer(blk : block<() : void>) {
     //! defer a block of code. For example::
     //!

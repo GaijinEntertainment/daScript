@@ -140,7 +140,7 @@ def test_option_operators {
 def test_option_side_effects {
     var counter = 0
     some(3) |> if_some() $(x : int) { counter = x; }
-    none(type<int>) |> if_some() $(x : int) { counter = 99; }
+    none(type<int>) |> if_some() $(_x : int) { counter = 99; }
     print("if_some counter = {counter}\n")                    // 3
 
     var fired = false
@@ -224,7 +224,7 @@ def test_result_and_then {
 // === Result<T, E> — or_else (recovery) ===
 
 def test_result_or_else {
-    let recovered = err("boom", type<int>) |> or_else($(e : string) => ok(99, type<string>))
+    let recovered = err("boom", type<int>) |> or_else($(_e : string) => ok(99, type<string>))
     print("recovered = {recovered |> unwrap}\n")              // 99
 }
 

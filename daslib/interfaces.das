@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module interfaces shared private
@@ -466,13 +464,9 @@ class InterfaceAsIs : AstVariantMacro {
             if (fld.name == getter_field) {
                 // ── Code generation ──
                 let func_name = "{st.name}`get`{iname}"
-                // clone_expression is needed because expr.value appears
-                // twice in the generated code (null check + getter call).
-                // The first $e() splice *moves* the expression, so the
-                // second use needs a deep copy to avoid a dangling node.
-                var val = clone_expression(expr.value)
                 // Ternary: null check → getter call, or null.
-                return <- qmacro($e(val) != null ? $c(func_name)(*$e(expr.value)) : null)
+                // Each $e(expr.value) splice clones independently via apply_template.
+                return <- qmacro($e(expr.value) != null ? $c(func_name)(*$e(expr.value)) : null)
             }
         }
         return null

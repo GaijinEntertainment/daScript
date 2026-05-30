@@ -1,6 +1,4 @@
 options gen2
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require common public
 require grep_usage public
@@ -492,7 +490,7 @@ def cpp_collect_git_excludes(search_dirs : array<string>; overrides : array<stri
         // keyed `modules/dasSQLITE/...`, matching how `CPP_SEARCH_INCLUDE_OVERRIDES`
         // is documented (repo-relative generic paths).
         let sd_rel = to_generic_path(make_relative_path(sd, das_root))
-        dir_rec(sd) $(filename, is_dir) {
+        dir_rec(sd) $(filename, _is_dir) {
             if (base_name(filename) != ".git") return
             let inner_repo = dir_name(filename)  // ".daspkg_cache/index"
             let rel = empty(inner_repo) ? sd_rel : "{sd_rel}/{to_generic_path(inner_repo)}"

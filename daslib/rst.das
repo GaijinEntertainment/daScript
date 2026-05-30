@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
@@ -989,7 +987,7 @@ def document_typedefs(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break
-        for_each_typedef(mod) $(name, value) {
+        for_each_typedef(mod) $(_name, value) {
             if (value.flags.isPrivateAlias) return
             any = true
         }
@@ -1116,6 +1114,7 @@ def document_function_declaration(doc_file : file; domain, func_name : string;
     fwrite(doc_file, "\n\n")
 }
 
+[unused_argument(doc_file)]
 def document_function_arguments(doc_file : file; argNames : array<string>; argTypes : array<TypeDecl?>; skip_args : int) : array<array<string>> {
     var tab : array<array<string>>
     emplace(tab, array<string>("argument", "type"))
@@ -1676,7 +1675,7 @@ def document_call_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break
-        for_each_call_macro(mod) $(value) {
+        for_each_call_macro(mod) $(_value) {
             any = true
         }
     }
@@ -1700,7 +1699,7 @@ def document_reader_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break
-        for_each_reader_macro(mod) $(value) {
+        for_each_reader_macro(mod) $(_value) {
             any = true
         }
     }
@@ -1724,7 +1723,7 @@ def document_variant_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break
-        for_each_variant_macro(mod) $(value) {
+        for_each_variant_macro(mod) $(_value) {
             any = true
         }
     }
@@ -1748,7 +1747,7 @@ def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break
-        for_each_typeinfo_macro(mod) $(value) {
+        for_each_typeinfo_macro(mod) $(_value) {
             any = true
         }
     }
@@ -2055,7 +2054,7 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
         if (stub_file != null) {
             var tab : table<string>
             // typedefs
-            for_each_typedef(mod) $(name, value) {
+            for_each_typedef(mod) $(name, _value) {
                 generate_topic_stub(tab, stub_file, topic("typedef", mod, name))
             }
             // enumerations

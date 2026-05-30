@@ -1,6 +1,4 @@
 options gen2
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options no_global_variables = false
 
 require dastest/testing_boost public
@@ -1709,7 +1707,7 @@ def test_cmd_release_pure_daslang(t : T?) {
 [test]
 def test_cmd_release_native_dep(t : T?) {
     var dasSQLITE_present = false
-    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(_path, _mod_name, das_name) {
         if (das_name == "sqlite") {
             dasSQLITE_present = true
         }
@@ -1805,7 +1803,7 @@ def test_cmd_release_include_dll_missing_fails(t : T?) {
 def test_cmd_release_no_false_positive_shared(t : T?) {
     var dasSQLITE_present = false
     var other_pkg_dir = ""
-    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, _mod_name, das_name) {
         if (das_name == "sqlite") {
             dasSQLITE_present = true
         } elif (empty(other_pkg_dir)) {
@@ -1980,7 +1978,7 @@ def test_cmd_release_portable_on_macos(t : T?) {
         return
     }
     var dasGlfw_present = false
-    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(_path, _mod_name, das_name) {
         if (das_name == "glfw") {
             dasGlfw_present = true
         }

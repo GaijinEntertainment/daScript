@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/ast_boost
@@ -15,7 +13,7 @@ def run_program_log(file, func_name : string; project : string = "") : string {
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     // filter to specific function — use ast_dump source mode approach
-    if (!empty(func_name)) return compile_and_simulate(file, project) $(program, issues) {
+    if (!empty(func_name)) return compile_and_simulate(file, project) $(program, _issues) {
         let thisMod = get_this_module(program)
         var result = ""
         var found = false

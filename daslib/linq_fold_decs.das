@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options _comment_hygiene = true
 
 module linq_fold_decs shared public
@@ -673,7 +671,7 @@ def compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?>>;
     return info
 }
 
-[macro_function]
+[macro_function, unused_argument(at)]
 def wrap_decs_chain(var action : Expression?;
                     chainInfo : DecsChainInfo?;
                     var calls : array<tuple<ExprCall?; LinqCall?>>;
@@ -740,7 +738,7 @@ def make_decs_range_names(at : LineInfo) : DecsRangeStateNames {
         skippingName  = qn("decs_skipping", at))
 }
 
-[macro_function]
+[macro_function, unused_argument(at)]
 def extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
                         intermediateEnd : int;
                         tupName : string;

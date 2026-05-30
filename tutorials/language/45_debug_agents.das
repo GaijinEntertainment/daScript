@@ -54,6 +54,7 @@ class CounterAgent : DapiDebugAgent {
     count : int = 0
 }
 
+[unused_argument(ctx)]
 def install_counter(ctx : Context) {
     install_new_debug_agent(new CounterAgent(), "counter")
 }
@@ -95,6 +96,7 @@ class LogAgent : DapiDebugAgent {
     }
 }
 
+[unused_argument(ctx)]
 def install_log_agent(ctx : Context) {
     install_new_debug_agent(new LogAgent(), "log_watcher")
 }
@@ -205,6 +207,7 @@ class CalcAgent : DapiDebugAgent {
     }
 }
 
+[unused_argument(ctx)]
 def install_calc_agent(ctx : Context) {
     install_new_debug_agent(new CalcAgent(), "calc")
 }
@@ -268,6 +271,7 @@ class StateAgent : DapiDebugAgent {
     }
 }
 
+[unused_argument(ctx)]
 def install_state_agent(ctx : Context) {
     install_new_debug_agent(new StateAgent(), "my_state")
 }
@@ -366,6 +370,7 @@ def ensure_agent(name : string; setup : function<(ctx : Context) : void>) {
 
 class ServiceAgent : DapiDebugAgent {}
 
+[unused_argument(ctx)]
 def install_service(ctx : Context) {
     install_new_debug_agent(new ServiceAgent(), "service")
 }
@@ -409,6 +414,7 @@ def get_data(var result : int?) {
     }
 }
 
+[unused_argument(ctx)]
 def install_data_host(ctx : Context) {
     install_new_debug_agent(new DapiDebugAgent(), "data_host")
 }
@@ -471,6 +477,7 @@ class ThreadLocalAgent : DapiDebugAgent {
     }
 }
 
+[unused_argument(ctx)]
 def install_thread_local_agent(ctx : Context) {
     install_new_thread_local_debug_agent(new ThreadLocalAgent())
 }

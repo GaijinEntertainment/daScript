@@ -169,7 +169,7 @@ match range (as ``int2``) to a block. Return ``true`` to continue::
 ``regex_replace`` replaces every match using a block that receives the
 matched substring and returns the replacement::
 
-  let result = regex_replace(re_num, "a12b34c56") $(match_str) {
+  let result = regex_replace(re_num, "a12b34c56") $(_match_str) {
       return "X"
   }
   print("{result}\n")   // aXbXcX
