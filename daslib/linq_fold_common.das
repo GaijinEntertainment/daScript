@@ -52,6 +52,9 @@ class SourceAdapter {
     def const can_group_by() : bool {           // supports plan_group_by_core (the actual source loop + adapter come from build_group_by_adapter, which gates the join shape). const: queried from a predicate's const adapter
         return false
     }
+    def const can_join() : bool {               // supports the join_general splice (the source-specific emit comes from emit_join_hook, which gates the srcb shape). const: queried from a predicate's const adapter
+        return false
+    }
     def name_prefix() : string {                // gensym prefix keeping hoisted names per-source distinct in plan_group_by_core
         return ""
     }
@@ -69,7 +72,7 @@ class SourceAdapter {
     def build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         return null
     }
-    def emit_decs_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    def emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return null
     }
     // Bare-count fast path (no chain/range ops): O(1)-ish count without an element walk.
@@ -333,10 +336,11 @@ def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) 
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
-[unused_argument(c, src)]
-def decs_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    // For rows that should only match decs adapter (PR C). extract_decs_bridge is cheap shape check.
-    return extract_decs_bridge(top) != null
+[unused_argument(c, top)]
+def can_join_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
+    // Adapter-owned gate: any source whose adapter supports the join_general splice. emit_join_hook
+    // then supplies the source-specific emit and gates the srcb shape, so no per-source predicate is needed.
+    return src != null && src->can_join()
 }
 
 [unused_argument(c, top)]
@@ -399,11 +403,6 @@ def srcb_is_array_shaped(var c : Captures; captureName : string) : bool {
     return srcb._type.isGoodArrayType || srcb._type.isArray || srcb._type.isIterator
 }
 
-// Array mirror of decs_join_invariants — strict superset (same v1 shape limits + srcb-shape on the upstream join).
-def array_join_invariants(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return decs_join_invariants(c, top, src) && srcb_is_array_shaped(c, "upstream_join")
-}
-
 // plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
 // the order_by key lambda (and its side effects). Cascade to tier-2 instead. Matches the pre-PR-D1
 // imperative recognizer which only popped trailing order when no count terminator was present.
@@ -412,18 +411,12 @@ def no_order_with_count(var c : Captures; var top : Expression?; src : SourceAda
     return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
 }
 
-// Matches pre-PR-D2 plan_decs_join: trailing_select is only popped when terminator is NOT count
-// (count's emission ignores select entirely). Splicing `join+select+count` would silently drop
-// select's side effects — cascade to tier-2 instead.
+// Trailing_select is only popped when the terminator is NOT count (count's emission ignores select
+// entirely). Splicing `join+select+count` would silently drop select's side effects — cascade to
+// tier-2 instead. Shared across every join source (array / decs / xml).
 [unused_argument(top, src)]
-def decs_join_no_select_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
+def join_no_select_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
-}
-
-// Array-side join splice guard — same srcb-shape check as on the upstream-join slot of array_join_invariants, but applied to the `join` capture.
-[unused_argument(top, src)]
-def array_join_srcb_is_array(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return srcb_is_array_shaped(c, "join")
 }
 
 // Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
@@ -3770,7 +3763,7 @@ def is_primitive_join_key_type(keyType : TypeDeclPtr) : bool {
             || keyType.baseType == Type.tBool))
 }
 
-// JoinStandalonePieces — shared output of the standalone hashed-join shape builder. Returned to emit_decs_join / emit_array_join which then wrap the source loops differently (decs uses for_each_archetype + build_decs_inner_for; array uses plain `for`).
+// JoinStandalonePieces — shared output of the standalone hashed-join shape builder. Returned to emit_decs_join_impl / emit_array_join / emit_xml_join which then wrap the source loops differently (decs uses for_each_archetype + build_decs_inner_for; array uses plain `for`; xml uses the DOM walk).
 struct JoinStandalonePieces {
     preludeStmts  : array<Expression?>
     probeOuter    : Expression?
@@ -3823,7 +3816,7 @@ def build_join_standalone_pieces(
                 for ($i(bElemName) in $i(arrName)) {
                     let $i(resBindName) : $t(joinResultType) = $e(resultBody)
                     if ($e(wherePred)) {
-                        $i(cntName) += 1
+                        $i(cntName) ++
                     }
                 }
             }
@@ -3903,48 +3896,36 @@ def build_join_standalone_pieces(
     )
 }
 
-// ── decs join splice (PR D2 — pattern-table stub through splice_patterns) ───────
+// ── join splice (one pattern for every source) ───────
+// `can_join()` admits the adapter; `emit_join_hook()` supplies the source-specific emit + srcb gate
+// (null → tier-2). decs / array / xml each override emit_join_hook — no parallel per-source pattern.
 
 [macro_function]
-def build_decs_join_rows {
+def build_join_rows {
     splice_patterns |> emplace <| SplicePattern(
-        name = "decs_join_general",
+        name = "join_general",
         chain <- [
             Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
             Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
             Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
             Slot(matcher = m_literal("count"),   cardinality = c_opt(), capture_name = "term", arity = 1)
         ],
-        requires <- [@@ < RequiresPredicate > decs_source, @@ < RequiresPredicate > decs_join_no_select_with_count],
-        emit = @@ < EmitFn > emit_decs_join
+        requires <- [@@ < RequiresPredicate > can_join_source, @@ < RequiresPredicate > join_no_select_with_count],
+        emit = @@ < EmitFn > emit_join
     )
 }
 
-// Row emit (thin): routes to the DecsAdapter override so the standalone join body reads self.bridge.
+// Row emit (thin): routes to the source adapter's emit_join_hook override.
 [macro_function]
-def emit_decs_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    return ctx.src->emit_decs_join_hook(c, ctx, at)
-}
-
-[macro_function]
-def build_array_join_rows {
-    splice_patterns |> emplace <| SplicePattern(
-        name = "array_join_general",
-        chain <- [
-            Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
-            Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
-            Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
-            Slot(matcher = m_literal("count"),   cardinality = c_opt(), capture_name = "term", arity = 1)
-        ],
-        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > decs_join_no_select_with_count, @@ < RequiresPredicate > array_join_srcb_is_array],
-        emit = @@ < EmitFn > emit_array_join
-    )
+def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    return ctx.src->emit_join_hook(c, ctx, at)
 }
 
 [macro_function]
 def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    // Array mirror of emit_decs_join: hashed equi-join with collect+probe inline, preserving the count-no-where bucket-length fast path. Two sources bind as invoke parameters (mirrors Zip's 2-source wrap rather than the 1-source Array helper).
+    // Array mirror of emit_decs_join_impl: hashed equi-join with collect+probe inline, preserving the count-no-where bucket-length fast path. Two sources bind as invoke parameters (mirrors Zip's 2-source wrap rather than the 1-source Array helper).
     var joinCall = c.single["join"]
+    if (!srcb_is_array_shaped(c, "join")) return null   // srcb must be array/iterator-shaped (formerly the array_join_srcb_is_array requires gate, moved here so the unified pattern asks the adapter)
     var whereLam : Expression?
     if (c.single |> key_exists("trailing_where")) {
         whereLam = joinCall != null && c.single["trailing_where"] != null ? c.single["trailing_where"].arguments[1] : null
