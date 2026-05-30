@@ -4,9 +4,16 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 
 **Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly)
 
-> **WARNING:** Do NOT confuse formatting with `utils/dasFormatter/` — that is a **v1→v2 syntax converter** (`das-fmt`), not a code formatter.
+**CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 
-**CI check:** The GitHub Actions CI workflow clones [profelis/das-fmt](https://github.com/profelis/das-fmt) and runs `dasfmt.das --path ./ --verify`, which internally calls `daslib/das_source_formatter` — the same formatter engine used by the MCP `format_file` tool. If CI reports `[E] Unformatted file`, it means the file was not formatted.
+- Format: `bin/Release/daslang.exe utils/das-fmt/dasfmt.das -- --path <dirOrFile>` — formats in place; add `--verify` for a dry-run check (changes nothing, fails on any unformatted file — same as CI).
+- Lint: `bin/Release/daslang.exe utils/lint/main.das -- <dirOrFile>` — STYLE/PERF/LINT rules; `0 issue(s), 0 error(s)` is clean.
+
+For a module under `modules/` whose files `require` sibling modules (e.g. `require openai/openai_chat`), pass `-load_module <moduleDir>` before `--` so cross-module requires resolve. The formatter only parses, so it works regardless; lint reports `SKIP … missing prerequisite` for files it can't fully resolve (e.g. examples/tests before the module is registered/installed).
+
+> **WARNING:** `utils/das-fmt/` (script `dasfmt.das`) is the formatter. Do NOT confuse it with `utils/dasFormatter/` — a *different* directory holding the **v1→v2 syntax converter**, which is not a code formatter.
+
+**CI check:** The `extended_checks` job builds `das-fmt` from the in-tree `utils/das-fmt/dasfmt.das` and runs the formatter over the whole tree twice — interpreted (`daslang utils/das-fmt/dasfmt.das -- --path ./ --verify`) and compiled (`das-fmt.exe --path ./ --verify`). Both call `daslib/das_source_formatter` — the same engine as the MCP `format_file` tool. If CI reports `[E] Unformatted file`, the file was not formatted.
 
 **Procedure:**
 

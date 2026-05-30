@@ -1,0 +1,14 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    let files = [
+        "openai_common", "openai_chat", "openai_embeddings", "openai_models",
+        "openai_completions", "openai_audio", "openai_moderations", "openai_images",
+        "openai_vision"
+    ]
+    for (f in files) {
+        register_native_path("openai", "{f}", "{project_path}/openai/{f}.das")
+    }
+}
