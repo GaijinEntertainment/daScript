@@ -33,6 +33,9 @@ class DecsAdapter : SourceAdapter {
     def override has_own_loop_or_count_lane() : bool {
         return true
     }
+    def override const can_group_by() : bool {
+        return true
+    }
     def override emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_loop_or_count_lane_decs(bridge, tupName, c, ctx, at)
     }

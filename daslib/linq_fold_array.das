@@ -40,6 +40,9 @@ class ArrayAdapter : SourceAdapter {
     def override can_reserve_by_length() : bool {
         return true
     }
+    def override const can_group_by() : bool {
+        return true
+    }
     def override arrayTop() : Expression? {
         return top
     }

@@ -158,7 +158,7 @@ def private try_splice_patterns(var expr : Expression?) : Expression? {
         return run_splice_adapter(calls, top, null,
             new DecsAdapter(bridge = bridge, tupName = qn("decs_tup", at)), exprIsIter, at)
     }
-    // XML adapter (pass 2a, loop_or_count_general only) — static_if drops the block pre name-resolution when pugixml is absent, so extract_xml_source / XmlAdapter never resolve in pugixml-disabled builds.
+    // XML adapter (static_if drops it pre name-resolution when pugixml is absent). No onlyRow restriction: the XmlAdapter rides every pattern; capability gates + null hooks keep cascades it can't fuse on the tier-2 path. See linq_fold.md.
     static_if (typeinfo builtin_module_exists(pugixml)) {
         var xmlCall = extract_xml_source(top)
         if (xmlCall != null) {
@@ -167,7 +167,7 @@ def private try_splice_patterns(var expr : Expression?) : Expression? {
             return run_splice_adapter(calls, topClone, topClone,
                 new XmlAdapter(nodeExpr = clone_expression(xmlCall.arguments[0]), srcName = qn("xnode", at),
                                elemType = clone_type(xmlCall._type.firstType), nameArg = nameArg),
-                exprIsIter, at, "loop_or_count_general")
+                exprIsIter, at)
         }
     }
     top = peel_each(top)

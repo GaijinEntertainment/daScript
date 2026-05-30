@@ -49,6 +49,9 @@ class SourceAdapter {
     def has_own_loop_or_count_lane() : bool {   // emits loop_or_count itself (via emit_loop_or_count) instead of the array lane; a null hook result then bails to tier-2 rather than falling through
         return false
     }
+    def const can_group_by() : bool {           // supports plan_group_by_core (the actual source loop + adapter come from build_group_by_adapter, which gates the join shape). const: queried from a predicate's const adapter
+        return false
+    }
     def name_prefix() : string {                // gensym prefix keeping hoisted names per-source distinct in plan_group_by_core
         return ""
     }
@@ -334,6 +337,13 @@ def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) 
 def decs_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     // For rows that should only match decs adapter (PR C). extract_decs_bridge is cheap shape check.
     return extract_decs_bridge(top) != null
+}
+
+[unused_argument(c, top)]
+def can_group_by_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
+    // Adapter-owned gate: any source whose adapter supports plan_group_by_core. build_group_by_adapter
+    // then supplies the loop and gates the upstream-join srcb shape, so no per-source predicate is needed.
+    return src != null && src->can_group_by()
 }
 
 [unused_argument(top, src)]
@@ -2525,7 +2535,10 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
     perElement = wrap_with_condition(perElement, whereCond)
     if (takeExpr != null) {
         // take(N) early-exit shape diverges by adapter (array break vs decs for_each_archetype_find) — see emit_distinct_take_loop overrides.
-        stmts |> push <| ctx.src->emit_distinct_take_loop(bindName, takenName, takeLimName, perElement, at)
+        // A null hook means this source has no distinct+take fusion path — bail so the chain falls back to the tier-2 cascade rather than emitting a null statement.
+        var dtl = ctx.src->emit_distinct_take_loop(bindName, takenName, takeLimName, perElement, at)
+        if (dtl == null) return null
+        stmts |> push(dtl)
     } else {
         stmts |> push <| ctx.src->wrap_source_loop(perElement, at)
     }
@@ -3573,9 +3586,11 @@ def emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expressi
 
 [macro_function]
 def build_group_by_rows {
-    // Array-source group_by: head segments + opt upstream_join + group_by_lazy + opt having + select(groupproj) + opt trailing_where + opt trailing_order + opt count terminator.
+    // group_by, one pattern for every source: `can_group_by()` admits the adapter; `build_group_by_adapter()`
+    // then supplies the source loop and gates the upstream-join srcb shape (null bails to tier-2).
+    // decs_join_invariants is the shared v1 join-shape limit. Shape: head + opt join + group_by_lazy + opt having + select + opt where/order/count.
     splice_patterns |> emplace <| SplicePattern(
-        name = "group_by_array",
+        name = "group_by",
         chain <- [
             slot_chain_of(["where_", "select"], "head"),
             Slot(matcher = m_literal("join"),          cardinality = c_opt(), capture_name = "upstream_join", arity = 5),
@@ -3586,23 +3601,7 @@ def build_group_by_rows {
             Slot(matcher = m_alias("order_by_family"), cardinality = c_opt(), capture_name = "trailing_order", arity = 2),
             Slot(matcher = m_literal("count"),         cardinality = c_opt(), capture_name = "term", arity = 1)
         ],
-        requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > array_join_invariants, @@ < RequiresPredicate > no_order_with_count],
-        emit = @@ < EmitFn > emit_group_by
-    )
-    // Decs-source: same shape + optional upstream `join` slot; v1 join-shape limits via decs_join_invariants.
-    splice_patterns |> emplace <| SplicePattern(
-        name = "group_by_decs",
-        chain <- [
-            slot_chain_of(["where_", "select"], "head"),
-            Slot(matcher = m_literal("join"),          cardinality = c_opt(), capture_name = "upstream_join", arity = 5),
-            Slot(matcher = m_literal("group_by_lazy"), cardinality = c_one(), capture_name = "gb", arity = 2),
-            Slot(matcher = m_literal("having_"),       cardinality = c_opt(), capture_name = "having"),
-            Slot(matcher = m_literal("select"),        cardinality = c_one(), capture_name = "groupproj"),
-            Slot(matcher = m_literal("where_"),        cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
-            Slot(matcher = m_alias("order_by_family"), cardinality = c_opt(), capture_name = "trailing_order", arity = 2),
-            Slot(matcher = m_literal("count"),         cardinality = c_opt(), capture_name = "term", arity = 1)
-        ],
-        requires <- [@@ < RequiresPredicate > decs_source, @@ < RequiresPredicate > decs_join_invariants, @@ < RequiresPredicate > no_order_with_count],
+        requires <- [@@ < RequiresPredicate > can_group_by_source, @@ < RequiresPredicate > decs_join_invariants, @@ < RequiresPredicate > no_order_with_count],
         emit = @@ < EmitFn > emit_group_by
     )
 }

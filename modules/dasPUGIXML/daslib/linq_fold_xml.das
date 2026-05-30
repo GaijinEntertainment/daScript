@@ -147,6 +147,58 @@ def private build_xml_materializer(var body : Expression?; bindName : string; de
     inner |> push(body)
 }
 
+// Build the DOM child-element walk shared by wrap_source_loop and emit_distinct_take_loop. `xch` advances
+// before the body so a `continue` (skip/skip_while) lands on the next sibling; the body reads the captured
+// `xcur`. Non-null breakGuard emits `break if (guard)` first (distinct+take early-exit); nameArg null = 2-arg overload, non-null = 3-arg named.
+[macro_function]
+def private build_xml_dom_walk(sn : string; var nameArg : Expression?; curName, chName : string;
+                               var inner : array<Expression?>; var breakGuard : Expression?; at : LineInfo) : Expression? {
+    var elemBody : array<Expression?>
+    if (breakGuard != null) {
+        elemBody |> push <| qmacro_expr() {
+            break if ($e(breakGuard))
+        }
+    }
+    elemBody |> push_from(inner)
+    if (nameArg == null) {
+        return qmacro_block() {
+            var $i(chName) = $i(sn).first_child
+            while ($i(chName).ok) {
+                let $i(curName) = $i(chName)
+                $i(chName) = $i(chName).next_sibling
+                if ($i(curName)._type == xml_node_type.node_element) {
+                    $b(elemBody)
+                }
+            }
+        }
+    }
+    let nmName = qn("xname", at)
+    return qmacro_block() {
+        let $i(nmName) = $e(nameArg)
+        var $i(chName) = child($i(sn), $i(nmName))
+        while ($i(chName).ok) {
+            let $i(curName) = $i(chName)
+            $i(chName) = next_sibling($i(chName), $i(nmName))
+            $b(elemBody)
+        }
+    }
+}
+
+// Hoist the materializer prelude (`let xdef`, flatten path only) as a FLAT sibling before the walk — a
+// `$b(prelude)` splice would nest it in its own scope, hiding it from the per-element reads.
+[macro_function]
+def private hoist_prelude(var prelude : array<Expression?>; var loop : Expression?; at : LineInfo) : Expression? {
+    if (empty(prelude)) return loop
+    var outBlk = new ExprBlock(at = at)
+    for (s in prelude) {
+        outBlk.list |> push(s)
+    }
+    for (s in (loop as ExprBlock).list) {
+        outBlk.list |> push(s)
+    }
+    return outBlk
+}
+
 // Single flat loop, like ArrayAdapter (unlike decs's 2-level archetype walk). nameArg null = the 2-arg
 // `from_xml_node(node, type<Row>)` overload (walk all child elements); non-null = the 3-arg named overload
 // (walk child elements whose tag matches the name).
@@ -161,6 +213,17 @@ class XmlAdapter : SourceAdapter {
     def override name_prefix() : string {
         return "xml_"
     }
+    def override const can_group_by() : bool {
+        return true
+    }
+    def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
+        // No-upstream-join group_by only: plan_group_by_core drives the DOM walk via wrap_source_loop
+        // (field-pruning free). An upstream join over an XML source is a later arc — bail to tier-2.
+        if (c.single |> key_exists("upstream_join")) return null
+        var nameClone : Expression? = nameArg != null ? clone_expression(nameArg) : null
+        return new XmlAdapter(nodeExpr = clone_expression(nodeExpr), srcName = qn("xnode", at),
+                              elemType = clone_type(elemType), nameArg = nameClone)
+    }
     def override arraySrcName() : string {
         return srcName
     }
@@ -171,52 +234,27 @@ class XmlAdapter : SourceAdapter {
         return clone_type(elemType)
     }
     def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
-        let chName = qn("xch", at)
         let curName = qn("xcur", at)
         let defName = qn("xdef", at)
-        let sn = srcName
         var declT = strip_const_ref(clone_type(elemType))
         var prelude : array<Expression?>
         var inner : array<Expression?>
-        // `xch` advances to the next sibling BEFORE the body runs, so a `continue` inside the body
-        // (emitted by skip / skip_while) lands on the advanced cursor, not the same element; the body
-        // reads attributes from the captured current element `xcur`.
         build_xml_materializer(body, bind_name(at), declT, defName, curName, at, prelude, inner)
-        var loop : Expression?
-        if (nameArg == null) {
-            loop = qmacro_block() {
-                var $i(chName) = $i(sn).first_child
-                while ($i(chName).ok) {
-                    let $i(curName) = $i(chName)
-                    $i(chName) = $i(chName).next_sibling
-                    if ($i(curName)._type == xml_node_type.node_element) {
-                        $b(inner)
-                    }
-                }
-            }
-        } else {
-            let nmName = qn("xname", at)
-            loop = qmacro_block() {
-                let $i(nmName) = $e(nameArg)
-                var $i(chName) = child($i(sn), $i(nmName))
-                while ($i(chName).ok) {
-                    let $i(curName) = $i(chName)
-                    $i(chName) = next_sibling($i(chName), $i(nmName))
-                    $b(inner)
-                }
-            }
-        }
-        if (empty(prelude)) return loop
-        // Flatten path: hoist `let xdef` before the walk as a FLAT sibling of the loop statements
-        // (a `$b(prelude)` splice would nest it in its own scope, hiding it from the per-element reads).
-        var outBlk = new ExprBlock(at = at)
-        for (s in prelude) {
-            outBlk.list |> push(s)
-        }
-        for (s in (loop as ExprBlock).list) {
-            outBlk.list |> push(s)
-        }
-        return outBlk
+        var loop = build_xml_dom_walk(srcName, nameArg, curName, qn("xch", at), inner, null, at)
+        return hoist_prelude(prelude, loop, at)
+    }
+    def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
+        // distinct(...) |> take(N): walk child elements with the same materializer as wrap_source_loop,
+        // breaking once N distinct elements have been taken (perElement's distinct gate bumps `taken`).
+        let curName = qn("xcur", at)
+        let defName = qn("xdef", at)
+        var declT = strip_const_ref(clone_type(elemType))
+        var prelude : array<Expression?>
+        var inner : array<Expression?>
+        build_xml_materializer(perElement, bindName, declT, defName, curName, at, prelude, inner)
+        var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
+        var loop = build_xml_dom_walk(srcName, nameArg, curName, qn("xch", at), inner, breakGuard, at)
+        return hoist_prelude(prelude, loop, at)
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
         var nodeType = strip_const_ref(clone_type(nodeExpr._type))

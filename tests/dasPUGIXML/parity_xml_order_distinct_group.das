@@ -5,9 +5,10 @@ require daslib/linq_fold
 require daslib/linq_boost public
 require dastest/testing_boost public
 
-// XML linq parity — the cascade families (order_by / distinct / distinct_by / group_by / reverse).
-// These are NOT fused by the XmlAdapter (loop_or_count only); they fall to tier-2 over the XML
-// iterator source. This file proves the correct-but-unfused result still equals the array lanes.
+// XML linq parity — the cascade families (order_by / distinct / distinct_by / group_by / reverse,
+// plus distinct+take, group_by+reduction, order+take). These now FUSE over the XmlAdapter (the cascade
+// arms ride wrap_source_loop / build_group_by_adapter / emit_distinct_take_loop). This file proves the
+// fused XML result equals the array lanes — the correctness gate for the fusion.
 //   m5f = _fold over from_xml_node(...)   m3f = _fold over each(arr)   m3 = plain array linq
 
 struct Car {
@@ -120,6 +121,52 @@ def parity_reverse(t : T?) {
         var m3f <- _fold(each(arr)._where(_.price > 0.0).reverse().to_array())
         var m3  <- (arr |> _where(_.price > 0.0) |> reverse())
         check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_distinct_by_take(t : T?) {
+    // distinct+take fuses via XmlAdapter.emit_distinct_take_loop (early-exit after N distinct).
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._distinct_by(_.brand).take(2).to_array())
+        var m3f <- _fold(each(arr)._distinct_by(_.brand).take(2).to_array())
+        var m3  <- (arr |> _distinct_by(_.brand) |> take(2))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_order_by_take(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._order_by(_.price).take(3).to_array())
+        var m3f <- _fold(each(arr)._order_by(_.price).take(3).to_array())
+        var m3  <- (arr |> _order_by(_.price) |> take(3))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_group_by_sum(t : T?) {
+    // group_by + per-group reduction (sum) — the field-pruning win shape (reads only brand + qty).
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._group_by(_.brand)._select((b = _._0, total = _._1 |> _select(_.qty) |> sum())).to_array())
+        var m3f <- _fold(each(arr)._group_by(_.brand)._select((b = _._0, total = _._1 |> _select(_.qty) |> sum())).to_array())
+        t |> equal(length(m5f), length(m3f))
+        var s5 : table<string; int>
+        var sf : table<string; int>
+        for (g in m5f) { s5[g.b] = g.total }
+        for (g in m3f) { sf[g.b] = g.total }
+        t |> equal(length(s5), length(sf))
+        for (k, v in keys(s5), values(s5)) {
+            t |> equal(v, sf?[k] ?? -1)
+        }
+        delete m5f; delete m3f
     }
 }
 
