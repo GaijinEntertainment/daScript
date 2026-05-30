@@ -192,3 +192,54 @@ def parity_join_group_by_sum(t : T?) {
         delete m5f; delete m3f
     }
 }
+
+[test]
+def parity_join_edge_buckets(t : T?) {
+    // Inner-join semantics the 1:1 fixture above never hits: an unmatched srcA row (Tesla has no HQ → 0 rows)
+    // and a multi-row srcB bucket (Ford has two HQ rows → each Ford car fans out ×2). Both exercise the
+    // XmlAdapter hash-probe branches directly. Hand-computed inner join: Ford 2cars ×2HQ = 4, Honda 1×1 = 1,
+    // Tesla 0 → 5 rows; country→sum(id) = {USA:3, Canada:3, Japan:4}.
+    let xml = ("<cars>" +
+        "<car id=\"1\" price=\"100.0\" qty=\"2\" brand=\"Ford\"/>" +
+        "<car id=\"2\" price=\"200.0\" qty=\"3\" brand=\"Ford\"/>" +
+        "<car id=\"3\" price=\"300.0\" qty=\"4\" brand=\"Tesla\"/>" +
+        "<car id=\"4\" price=\"400.0\" qty=\"5\" brand=\"Honda\"/>" +
+        "</cars>")
+    parse_xml(xml) $(doc, ok) {
+        t |> success(ok)
+        let arr <- [
+            Car(id = 1, price = 100.0, qty = 2, brand = "Ford"),
+            Car(id = 2, price = 200.0, qty = 3, brand = "Ford"),
+            Car(id = 3, price = 300.0, qty = 4, brand = "Tesla"),
+            Car(id = 4, price = 400.0, qty = 5, brand = "Honda")]
+        let hqs <- [
+            BrandHQ(brand = "Ford",  country = "USA"),
+            BrandHQ(brand = "Ford",  country = "Canada"),   // duplicate key → multi-row bucket → fan-out
+            BrandHQ(brand = "Honda", country = "Japan")]    // no Tesla → unmatched srcA row
+        // count fast-path over a length-2 bucket + an unmatched row.
+        let c5 = _fold(unsafe(from_xml_node(doc.document_element, type<Car>)) |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> count())
+        let cf = _fold(each(arr) |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> count())
+        t |> equal(c5, 5)
+        t |> equal(c5, cf)
+        // materializing path — country→sum(id) must agree across the fan-out + unmatched row.
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)) |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> to_array())
+        var m3f <- _fold(each(arr) |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> to_array())
+        t |> equal(length(m5f), 5)
+        var s5 <- country_id_sums(m5f)
+        var sf <- country_id_sums(m3f)
+        t |> success(tables_equal(s5, sf), "edge country→sum(id) m5f == m3f")
+        delete m5f; delete m3f; delete s5; delete sf
+    }
+}
