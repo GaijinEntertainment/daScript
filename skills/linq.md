@@ -54,6 +54,8 @@ LINQ is the chainable iterator surface in `daslib/linq` plus the pipe/dot-syntax
 - Transforms: `select`, `select_to_array`, `select_many`, `zip`.
 - Materialize: `*_to_array` variants for any of the above.
 
+The **binary two-source** ops — `join` / `group_join` / `left_join` / `right_join` / `full_outer_join` / `cross_join`, `union` / `union_by` / `intersect` / `intersect_by` / `except` / `except_by` / `concat`, and `sequence_equal` / `sequence_equal_by` — accept **one `array` and one `iterator` source mixed** (e.g. `from_xml_node(...) |> _join(dealersArray, ...)` or `eachIter |> union(otherArray)`), not just both-array or both-iterator. `zip` is the exception: it is N-ary, so mix its operands with `each(arr)` rather than a mixed overload.
+
 ```das
 require daslib/linq_boost
 ```
