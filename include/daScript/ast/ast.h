@@ -1510,6 +1510,7 @@ namespace das
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        lint_check = false;                 // this code is being compiled for lint/style checking
         bool        no_lint = false;                    // skip Program::lint() entirely
+        bool        no_init_check = false;              // skip the Module::Initialize() assert, most of the time should be false (except maybe dynamic-module discovery)
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
         bool        keep_alive = false;                 // produce keep-alive noodes
@@ -1886,6 +1887,7 @@ namespace das
         vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
+        bool            g_modulesInitialized = false;
 
 
         static daScriptEnvironment *getBound();

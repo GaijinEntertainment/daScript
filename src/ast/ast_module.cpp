@@ -209,6 +209,7 @@ namespace das {
             m->gc_collect(&threadRoot);
         }
         threadRoot.gc_sweep();
+        daScriptEnvironment::getBound()->g_modulesInitialized = true;
     }
 
     void Module::CollectFileInfo(das::vector<FileInfoPtr> &finfos) {
