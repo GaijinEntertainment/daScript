@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers
 options unsafe_table_lookup = false
 
@@ -441,6 +439,7 @@ def private visit_type(var typ : TypeDeclPtr&; var adapter : VisitorAdapter?) {
     }
 }
 
+[unused_argument(at)]
 def apply_template(var rules : Template; at : LineInfo; var typ : TypeDecl?; forceAt : bool = true) : TypeDeclPtr {
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var astVisitor = new TemplateVisitor(unsafe(addr(rules)))

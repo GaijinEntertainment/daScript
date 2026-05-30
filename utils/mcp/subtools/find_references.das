@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/ast_cursor
@@ -383,7 +381,7 @@ def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str 
     if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt, project) $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; _issues) {
         // Step 1: identify the target from cursor (expression-based)
         var target : RefTarget
         var hits <- find_at_cursor(program, file, line, col)

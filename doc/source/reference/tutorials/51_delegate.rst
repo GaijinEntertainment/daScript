@@ -196,6 +196,7 @@ Practical example — event system
 
     typedef OnPlayerHit = delegate(type<function<(player : string; damage : int) : int>>)
 
+    [unused_argument(player)]
     def armor_reduction(player : string; damage : int) : int {
         let reduced = damage - 5
         print("armor: {damage} -> {reduced}\n")

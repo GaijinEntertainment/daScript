@@ -1,11 +1,10 @@
 options gen2
 options rtti
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require dashv/dashv_boost
 require common public
 require daslib/logger
+require strings
 
 // --- Helpers ---
 
@@ -183,7 +182,7 @@ def private port_in_range(s : string) : bool {
     peek_data(s) $(bytes) {
         for (b in bytes) {
             let c = int(b)
-            if (c < '0' || c > '9') {
+            if (!is_number(c)) {
                 n = -1
                 return
             }

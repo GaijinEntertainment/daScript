@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options multiple_contexts
 options strict_smart_pointers = true
 
@@ -422,7 +420,7 @@ def private new_entity_id() {
             panic("decs: entityLookup reached UINT_MAX entries ({next_id}); EntityId.id (uint) widening is required to allocate more")
         }
         eid.id = uint(next_id)
-        decsState.entityLookup |> push((generation = 0, archetype = ComponentHash(0ul), index = 0_l))
+        decsState.entityLookup |> push((generation = 0, archetype = 0ul, index = 0_l))
     }
     eid.generation ++
     return eid
@@ -552,6 +550,7 @@ def private get_eid(var arch : Archetype; index : int64) : EntityId& {
     }
 }
 
+[unused_argument(eid)]
 def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentMap) {
     //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++

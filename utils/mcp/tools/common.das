@@ -1,7 +1,5 @@
 options gen2
 options rtti
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require daslib/json_boost public
 require daslib/strings_boost public
@@ -149,7 +147,7 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
                     result = "Compilation failed:\n{issues}"
                     had_error = true
                 } else {
-                    simulate(program) $(sok; ctx; serrors) {
+                    simulate(program) $(sok; _ctx; serrors) {
                         if (!sok) {
                             result = "Simulation failed:\n{serrors}"
                             had_error = true
@@ -238,7 +236,7 @@ def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
         write(w, "  // C++ {value.cppName}")
     }
     write(w, "\n")
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, _offset) {
         if (!empty(cppName) && cppName != name) {
             write(w, "    {name} : {describe(xtype)}  // C++ {cppName}\n")
         } else {

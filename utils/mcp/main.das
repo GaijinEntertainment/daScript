@@ -12,8 +12,6 @@ options persistent_heap
 options gc
 options multiple_contexts
 options rtti
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require protocol public
 require strings

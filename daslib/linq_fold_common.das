@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options _comment_hygiene = true
 
 module linq_fold_common shared public
@@ -196,6 +194,7 @@ def chain_prefix_of(a : array<Slot>; b : array<Slot>) : bool {
 
 // Walk a pattern table; return true iff every pattern is reachable (no earlier pattern is its strict prefix).
 // Silent — return value carries the verdict. Tests assert on the bool; future compile-time hook can add diagnostics.
+[unused_argument(name)]
 def check_pattern_table_reachable(name : string; patterns : array<SplicePattern>) : bool {
     for (i in 0 .. length(patterns)) {
         for (j in i + 1 .. length(patterns)) {
@@ -317,16 +316,19 @@ def match_pattern(p : SplicePattern;
 // produce `_localfunction_*` symbols the JIT pass can't resolve). Pattern rows wrap each with `@@<RequiresPredicate>`.
 // Starts minimal; grows with use per masterplan.
 
+[unused_argument(c)]
 def array_source(var c : Captures; var top : Expression?) : bool {
     // top is already peel_each'd by the calling stub; verify it carries an array type. Naturally false for decs sources (`from_decs_template(...)` is iterator-typed).
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
+[unused_argument(c)]
 def decs_source(var c : Captures; var top : Expression?) : bool {
     // For rows that should only match decs adapter (PR C). extract_decs_bridge is cheap shape check.
     return extract_decs_bridge(top) != null
 }
 
+[unused_argument(top)]
 def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("take"))) return true   // vacuous: no take to constrain
     let take = c.single["take"]
@@ -336,11 +338,13 @@ def take_arg_is_int(var c : Captures; var top : Expression?) : bool {
 
 // `no_terminator` — chain ends bare (no `count` / `sum` / `first[_or_default]` / `to_array` captured).
 // Return shape (array vs iterator) is decided by `ctx.expr_is_iterator` in the emit fn, not this predicate.
+[unused_argument(top)]
 def no_terminator(var c : Captures; var top : Expression?) : bool {
     return !(c.single |> key_exists("term"))
 }
 
 // True only for `order_by[_descending]` with an inline-splice-able key lambda. `order` / `order_descending` route elsewhere.
+[unused_argument(top)]
 def inline_cmp_available(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("order"))) return false
     let orderCall = c.single["order"]
@@ -353,11 +357,13 @@ def inline_cmp_available(var c : Captures; var top : Expression?) : bool {
 
 // `has_where_or_distinct` — used by order_fused_prefilter row to distinguish from bare buffer_helper_dispatch.
 // At least one prefilter source must be present for the fused-loop path to make sense.
+[unused_argument(top)]
 def has_where_or_distinct(var c : Captures; var top : Expression?) : bool {
     return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 }
 
 // v1 limit (imperative line 6011): upstream `join` requires empty head + no having + no trailing_where. Vacuous when no upstream_join captured.
+[unused_argument(top)]
 def decs_join_invariants(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("upstream_join"))) return true
     return ((c.many["head"] |> empty)
@@ -383,6 +389,7 @@ def array_join_invariants(var c : Captures; var top : Expression?) : bool {
 // plan_group_by_core's count lane ignores orderName/orderKey — splicing this shape would silently drop
 // the order_by key lambda (and its side effects). Cascade to tier-2 instead. Matches the pre-PR-D1
 // imperative recognizer which only popped trailing order when no count terminator was present.
+[unused_argument(top)]
 def no_order_with_count(var c : Captures; var top : Expression?) : bool {
     return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
 }
@@ -390,16 +397,19 @@ def no_order_with_count(var c : Captures; var top : Expression?) : bool {
 // Matches pre-PR-D2 plan_decs_join: trailing_select is only popped when terminator is NOT count
 // (count's emission ignores select entirely). Splicing `join+select+count` would silently drop
 // select's side effects — cascade to tier-2 instead.
+[unused_argument(top)]
 def decs_join_no_select_with_count(var c : Captures; var top : Expression?) : bool {
     return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
 }
 
 // Array-side join splice guard — same srcb-shape check as on the upstream-join slot of array_join_invariants, but applied to the `join` capture.
+[unused_argument(top)]
 def array_join_srcb_is_array(var c : Captures; var top : Expression?) : bool {
     return srcb_is_array_shaped(c, "join")
 }
 
 // Zip arity guard: 2-source (lockstep) or 3-source (result-selector form). Matches pre-PR-D2 plan_zip.
+[unused_argument(top)]
 def zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("zip"))) return true
     let n = c.single["zip"].arguments |> length
@@ -408,6 +418,7 @@ def zip_arity_2_or_3(var c : Captures; var top : Expression?) : bool {
 
 // skip_while/take_while peel against the zip tuple `it`; an upstream select rebinds the element type
 // so the while predicate would dangle. Matches pre-PR-D2 plan_zip chain-walk bail (lines 6494/6500).
+[unused_argument(top)]
 def zip_no_while_after_select(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("skip_while")) && !(c.single |> key_exists("take_while"))) return true
     for (call in c.many["head"]) {
@@ -418,6 +429,7 @@ def zip_no_while_after_select(var c : Captures; var top : Expression?) : bool {
 
 // Trailing reverse is identity for count/sum/min/max/average/any/all/contains but picks a different
 // element for first/first_or_default. Matches pre-PR-D2 plan_zip post-walk bail (line 6644).
+[unused_argument(top)]
 def zip_reverse_compatible_with_term(var c : Captures; var top : Expression?) : bool {
     if (!(c.single |> key_exists("trailing_reverse")) || !(c.single |> key_exists("term"))) return true
     let name = c.single_name["term"]
@@ -1008,7 +1020,7 @@ struct AccumulatorSpec {
     retType    : TypeDeclPtr
 }
 
-[macro_function]
+[macro_function, unused_argument(at)]
 def build_accumulator_spec(opName : string; accName, cntName, firstName : string;
                            accType : TypeDeclPtr; at : LineInfo) : AccumulatorSpec {
     var sp : AccumulatorSpec
@@ -1261,7 +1273,7 @@ struct JoinAdapterPieces {
 }
 
 // Peels keya/keyb/result lambdas and emits the hashed-join collect+probe inners shared between the DecsJoin and ArrayJoin branches of adapter_wrap_source_loop. The two callsites differ only in how they wrap these pieces with source iteration.
-[macro_function]
+[macro_function, unused_argument(at)]
 def build_join_adapter_pieces(
                               keyaLam        : Expression?;
                               keybLam        : Expression?;
@@ -1335,7 +1347,7 @@ def order_min_call_name(orderName : string; hasKey : bool) : string {
     return isDesc ? "max" : "min"
 }
 
-[macro_function]
+[macro_function, unused_argument(elemType, at)]
 def try_make_inline_cmp(orderKey : Expression?; orderName : string;
                         elemType : TypeDeclPtr; at : LineInfo) : Expression? {
     if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
@@ -1366,6 +1378,7 @@ def try_make_inline_cmp(orderKey : Expression?; orderName : string;
     })
 }
 
+[unused_argument(at)]
 def make_inline_less_call(orderKey : Expression?; orderName : string;
                           var lhsExpr, rhsExpr : Expression?; at : LineInfo) : Expression? {
     // Direct-call mirror of try_make_inline_cmp: builds `less(KEY_BODY[lhsExpr], KEY_BODY[rhsExpr])` (or flipped for descending) for inline use without a block dispatch — needed for the bounded-heap less-test where invoking a block on a 100K-element hot path costs ~5ns/op extra.
@@ -1478,7 +1491,7 @@ struct OrderCaptures {
     ok                  : bool               // false on extraction failure (caller bails to cascade)
 }
 
-[macro_function]
+[macro_function, unused_argument(at)]
 def extract_order_captures(var c : Captures; at : LineInfo; itName : string) : OrderCaptures {
     var oc : OrderCaptures
     oc.ok = false
@@ -2712,7 +2725,7 @@ def mk_strictly_preferred(workhorse, isMin : bool; var valExpr : Expression?; va
     return qmacro(_::less($e(cmpExpr), $e(valExpr)))
 }
 
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
@@ -2725,7 +2738,7 @@ def mk_reducer_count(spec : ReducerSpec; at : LineInfo; entryName, itName : stri
     return (missInit, hitUpdate)
 }
 
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_long_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
@@ -2751,7 +2764,7 @@ def mk_reducer_sum(spec : ReducerSpec; at : LineInfo; entryName, itName : string
     return (missInit, hitUpdate)
 }
 
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_sum_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
@@ -2783,7 +2796,7 @@ def mk_reducer_min_max(spec : ReducerSpec; at : LineInfo; entryName, itName : st
     return (missInit, hitUpdate)
 }
 
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_min_max_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     let workhorse = spec.accType != null && spec.accType.isWorkhorseType
     let isMin = spec.name == "min_inner_select"
@@ -2813,7 +2826,7 @@ def mk_reducer_first(spec : ReducerSpec; at : LineInfo; entryName, itName : stri
     return (missInit, null)
 }
 
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_first_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
@@ -2839,7 +2852,7 @@ def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : st
 }
 
 // Inner projection evaluated once into a temp per side — matches reference single-eval-per-element.
-[macro_function]
+[macro_function, unused_argument(itName)]
 def mk_reducer_average_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     let tmp = "`vavg`{at.line}`{at.column}`{spec.slot}"
     var lInit = mk_slot_ref(at, entryName, spec.slot)

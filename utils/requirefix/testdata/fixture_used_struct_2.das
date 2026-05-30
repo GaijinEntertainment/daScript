@@ -2,7 +2,7 @@ options gen2
 
 require daslib/math_boost
 
-def check_box(box : array<AABB>) {}
+[unused_argument(box)] def check_box(box : array<AABB>) {}
 
 [export]
 def main() {

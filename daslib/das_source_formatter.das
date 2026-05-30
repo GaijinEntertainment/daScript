@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module das_source_formatter shared private
@@ -211,7 +209,7 @@ def on_token_added(var ctx : FormatterCtx) {
 
 
 def push_token(var ctx : FormatterCtx; from_char_idx, to_char_idx, space_count, new_lines, src_line, column : int; token_type : TokenType) {
-    var buf <- [ for (i in range(from_char_idx, to_char_idx)); uint8(ctx.data[i]) ]
+    var buf <- [ for (i in range(from_char_idx, to_char_idx)); ctx.data[i] ]
     ctx.tokens |> push(Token(
         str = string(buf), spaces = space_count, newLines = new_lines,
         lineInSource = src_line, column = column, tokenType = token_type

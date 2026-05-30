@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 //! ast_cursor provides position-based AST queries — given a file, line, and column,
@@ -97,7 +95,7 @@ class CursorVisitor : AstVisitor {
                 expr = e,
                 func = currentFunc,
                 name = expression_name(expr),
-                rtti = string(e.__rtti)
+                rtti = e.__rtti
             ))
         }
     }

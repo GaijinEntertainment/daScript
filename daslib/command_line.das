@@ -1,5 +1,4 @@
 options gen2
-options no_unused_function_arguments = false
 
 module command_line shared public
 

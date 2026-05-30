@@ -15,7 +15,6 @@
 // Run: daslang.exe tutorials/language/50_soa.das
 
 options gen2
-options no_unused_function_arguments = false
 
 require daslib/soa
 require math

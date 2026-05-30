@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 options stack = 1_048_576
 
@@ -890,13 +888,13 @@ def private has_tags_in_args(call : ExprCall?) : bool {
     return false
 }
 
-[macro_function]
+[macro_function, unused_argument(cast_var)]
 def private qm_const_value_guard(at : LineInfo; cast_var : string; actual_var : string; var cond : Expression?&; var body : array<Expression?>&) {
     var fail = qmacro(qm_fail_field($i(actual_var)))
     body |> push <| qm_guard(at, cond, fail)
 }
 
-[macro_function]
+[macro_function, unused_argument(at)]
 def private generate_synth_component(comp_rtti : string; synth_var : string; cast_var : string; field_name : string; var body : array<Expression?>&; at : LineInfo) {
     //! Synthesize a ``var synth = new ExprConstXxx(value = cast_var.value.field)``
     //! so that the component can be fed through generate_match for tag handling.
@@ -1298,7 +1296,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         // Run annotation reflection for fields
         var ann = unsafe(reinterpret<BasicStructureAnnotation?> get_expression_annotation(pattern))
         if (ann != null) {
-            for_each_field(*ann) $(name, cppName, xtype, offset) {
+            for_each_field(*ann) $(name, _cppName, xtype, offset) {
                 return if (offset == 0xFFFFFFFFu
                         || qm_skip_field(rtti, name)
                         || name == "iteratorsTags"
@@ -1578,7 +1576,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     if (ann == null) return
 
     // Field-by-field matching via annotation reflection
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, _cppName, xtype, offset) {
         return if (offset == 0xFFFFFFFFu || qm_skip_field(rtti, name))
         if (!empty(xtype.dim)) {
             panic("qmatch: fixed-size array field '{name}' not supported")

@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/lint
@@ -80,7 +78,7 @@ def lint_file(file : string; project : string;
             cop.lint_check = true
             cop.no_optimizations = true
             cop.no_infer_time_folding = true
-            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; _issues) {
                 if (!ok) {
                     result.failed = true
                 } else {

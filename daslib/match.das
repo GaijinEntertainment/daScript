@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module match shared private
@@ -42,7 +40,7 @@ struct MatchTo {
     failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
 }
 
-[macro_function]
+[macro_function, unused_argument(msg)]
 def log_m(msg : string) {
     static_if (LOG_MATCH) {
         to_log(LOG_INFO, msg)
@@ -88,7 +86,7 @@ def match_as_is(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; 
     return match_any(makeType, wths, access_expr, to)
 }
 
-[macro_function]
+[macro_function, unused_argument(as_is_name)]
 def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; as_is_name : das_string; access : Expression?; var to : MatchTo) {
     log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy", wths.at)
@@ -454,7 +452,7 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
     return true
 }
 
-[macro_function]
+[macro_function, unused_argument(what)]
 def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
     var tag = wth as ExprTag
     if (tag.name != "v") {
@@ -547,7 +545,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return match_guards(what, wth as ExprOp2, access, to)
     } elif ((wth is ExprOp2) && (wth as ExprOp2).op == "||") {
         return match_or(what, wth as ExprOp2, access, to)
-    } elif (string(wth.__rtti) |> starts_with("ExprConst")) {
+    } elif (wth.__rtti |> starts_with("ExprConst")) {
         if (wth._type == null) {
             to.errors |> match_error("unresolved constant type", wth.at)
             return false

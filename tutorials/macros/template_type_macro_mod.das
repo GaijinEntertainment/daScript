@@ -50,7 +50,7 @@ struct template Pair {
 //     (macroArgument = td, passArgument = passT, then user args)
 // ---------------------------------------------------------------------------
 
-[typemacro_function]
+[typemacro_function, unused_argument(macroArgument)]
 def pair(macroArgument, passArgument : TypeDeclPtr; T1, T2 : TypeDeclPtr) : TypeDeclPtr {
     // Get the TypeDecl that points to our template struct.
     var template_type = typeinfo ast_typedecl(type<Pair>)

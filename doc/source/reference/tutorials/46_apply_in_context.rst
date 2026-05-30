@@ -37,6 +37,7 @@ the agent exists solely to own a named context:
 
     var counter : int = 0
 
+    [unused_argument(ctx)]
     def install_service(ctx : Context) {
         install_new_debug_agent(new DapiDebugAgent(), "counter_service")
     }
@@ -137,6 +138,7 @@ without worrying about which context they're in:
 
     var cache : table<string; int>
 
+    [unused_argument(ctx)]
     def install_cache(ctx : Context) {
         install_new_debug_agent(new DapiDebugAgent(), "my_cache")
     }

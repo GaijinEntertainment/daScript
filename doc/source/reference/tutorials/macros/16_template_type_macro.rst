@@ -97,7 +97,10 @@ The ``[typemacro_function]`` annotation on ``pair`` converts the
 function into an ``AstTypeMacro`` registered under the name
 ``"pair"``.  The annotation also generates code that extracts
 ``dimExpr[1]`` and ``dimExpr[2]`` into the ``T1`` and ``T2``
-``TypeDecl?`` parameters.
+``TypeDecl?`` parameters.  ``pair`` builds its result from ``Pair``
+and those two arguments, so it never reads the incoming
+``macroArgument`` type — hence the ``unused_argument(macroArgument)``
+on the annotation.
 
 The argument names in ``TypeMacroTemplateArgument`` (``"T1"``,
 ``"T2"``) **must** match the alias names used in the template struct

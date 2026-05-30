@@ -1,8 +1,6 @@
 options gen2
 
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module quote shared private
@@ -308,7 +306,7 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
                                     tstr : string; info : TypeDeclPtr; at : LineInfo) : Expression? {
     assume ann = info.annotation;
     var mkS1 = new MakeStruct(uninitialized);
-    for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) $(name, cppName, xtype, offset) {
+    for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) $(name, _cppName, xtype, offset) {
         var mkFld = convert_quote_struct_field(mod, data, tstr, name, offset, xtype, at);
         if (mkFld != null) {
             emplace(*mkS1, mkFld);

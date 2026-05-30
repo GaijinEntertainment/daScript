@@ -43,6 +43,7 @@ var counter : int = 0       // this variable lives in each context
                             // separately — the agent context gets
                             // its own copy
 
+[unused_argument(ctx)]
 def install_service(ctx : Context) {
     install_new_debug_agent(new DapiDebugAgent(), "counter_service")
 }
@@ -158,6 +159,7 @@ def demo_arguments() {
 
 var cache : table<string; int>
 
+[unused_argument(ctx)]
 def install_cache(ctx : Context) {
     install_new_debug_agent(new DapiDebugAgent(), "my_cache")
 }

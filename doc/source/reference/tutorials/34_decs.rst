@@ -284,9 +284,9 @@ needed:
 
 .. code-block:: das
 
-    create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(100) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, Particle(
-            pos  = float3(float(i), 0, 0),
+            pos  = float3(i, 0, 0),
             vel  = float3(0, 1, 0),
             life = 100
         ))
@@ -301,8 +301,8 @@ creation function that writes directly into archetype storage:
 
 .. code-block:: das
 
-    create_entities`Particle(1000) $(eid : EntityId; i : int; var p : Particle) {
-        p.pos  = float3(float(i), 0.0, 0.0)
+    create_entities`Particle(1000) $(_eid : EntityId; i : int; var p : Particle) {
+        p.pos  = float3(i, 0.0, 0.0)
         p.vel  = float3(0, 1, 0)
         p.life = 100
     }

@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module if_not_null shared private
@@ -43,10 +41,9 @@ class ApplyMacro : AstCallMacro {
             if (!PTR._type.flags.constant) {
                 vtype.flags.removeConstant = true
             }
-            var ptrClone = clone_expression(PTR)
             let argClones <- [for (a in fcall.arguments); clone_expression(a)]
             return <- qmacro_block() {
-                let $i(ifnn_name) : $t(vtype) = $e(ptrClone)
+                let $i(ifnn_name) : $t(vtype) = $e(PTR)
                 if ($i(ifnn_name) != null) {
                     $c(fcall.name)(*$i(ifnn_name), $a(argClones))
                 }

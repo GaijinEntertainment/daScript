@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/json_boost
@@ -31,12 +29,12 @@ def module_kind(mod : Module?) : string {
 def run_list_requires(file : string; project : string = ""; json : bool = false) : string {
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
-    return compile_and_simulate(file, project) $(program; issues) {
+    return compile_and_simulate(file, project) $(program; _issues) {
         // direct requires from allRequireDecl
         var direct_text : array<string>
         var direct_entries : array<RequireEntry>
         var direct_modules : array<string>
-        for_each_require_declaration(program) $(var mod : Module?; mod_name : string#; mod_file : string#; var is_public : bool; at : LineInfo&) {
+        for_each_require_declaration(program) $(var mod : Module?; mod_name : string#; _mod_file : string#; var is_public : bool; _at : LineInfo&) {
             let kind = module_kind(mod)
             if (!json) {
                 let pub_marker = is_public ? " public" : ""
@@ -53,7 +51,7 @@ def run_list_requires(file : string; project : string = ""; json : bool = false)
         var visited <- {for (dm in direct_modules); dm => true}
         visited |> insert("$", true)
         var queue : array<Module?>
-        module_for_each_dependency(thisMod) $(var dep : Module?; var is_pub : bool) {
+        module_for_each_dependency(thisMod) $(var dep : Module?; var _is_pub : bool) {
             let dep_name = string(dep.name)
             if (!key_exists(visited, dep_name)) {
                 visited |> insert(dep_name, true)
@@ -71,7 +69,7 @@ def run_list_requires(file : string; project : string = ""; json : bool = false)
             } else {
                 transitive_entries |> emplace(RequireEntry(name = mod_name, source = kind))
             }
-            module_for_each_dependency(mod) $(var dep : Module?; var is_pub : bool) {
+            module_for_each_dependency(mod) $(var dep : Module?; var _is_pub : bool) {
                 let dep_name = string(dep.name)
                 if (!key_exists(visited, dep_name)) {
                     visited |> insert(dep_name, true)

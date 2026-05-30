@@ -1,6 +1,4 @@
 options gen2
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers
 options indenting = 4
 
@@ -146,6 +144,7 @@ def loadI(data : void?; t : auto(TT)) {
     }
 }
 
+[unused_argument(st)]
 def getPD(var st : TokenStream; result : Result; offset : int = 0) : void? {
     unsafe {
         var data : void const?
@@ -183,11 +182,12 @@ def getI(var st : TokenStream; result : Result) : int64 {
     return int64(loadI(data, type<int>)) if (bt == Type.tInt || bt == Type.tUInt)
     return int64(loadI(data, type<int16>)) if (bt == Type.tInt16 || bt == Type.tUInt16)
     return int64(loadI(data, type<int8>)) if (bt == Type.tInt8 || bt == Type.tUInt8)
-    return int64(loadI(data, type<bool>) ? 1l : 0l) if (bt == Type.tBool)
+    return (loadI(data, type<bool>) ? 1l : 0l) if (bt == Type.tBool)
     st |> error("can't get value of {result.tinfo.basicType}")
     return INVALID_VALUE
 }
 
+[unused_argument(st)]
 def getT(var st : TokenStream; result : Result) : string {
     if (!empty(result.error)) return ""
     if (result.data != null) {
@@ -261,6 +261,7 @@ def expr_value(var st : TokenStream) : Result {
     return st |> error("unexpected token {token}, expecting number or (")
 }
 
+[unused_argument(st)]
 def getStructFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     var size = 0
     for (field in *result.tinfo.structType) {
@@ -276,6 +277,7 @@ def getStructFieldOffset(var st : TokenStream; ident : string; var result : Resu
     return (offset = -1, tinfo = TypeInfo(uninitialized))
 }
 
+[unused_argument(st)]
 def getTupleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     var size = 0
     for (cnt in range(result.tinfo.argCount)) {
@@ -288,6 +290,7 @@ def getTupleFieldOffset(var st : TokenStream; ident : string; var result : Resul
     return (offset = -1, tinfo = TypeInfo(uninitialized))
 }
 
+[unused_argument(st)]
 def getVectorOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     let ofs = getVectorOffset(result.tinfo.basicType, ident)
     return (offset = -1, tinfo = TypeInfo(uninitialized)) if (ofs < 0)
@@ -299,6 +302,7 @@ def getVectorOffset(var st : TokenStream; ident : string; var result : Result) :
     return (offset = ofs * fieldSize, tinfo = tinfo)
 }
 
+[unused_argument(st)]
 def getHandleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     unsafe {
         var ann = unsafe(reinterpret<TypeAnnotation?> result.tinfo.annotation)
@@ -425,7 +429,7 @@ def expr_at(var st : TokenStream) : Result {
             if (TypeInfo(dimSize = 0u)) {
                 return st |> error("can't index non-array")
             }
-            if (_) {
+            if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
                 nresult = opDim(st, st |> getI(eindex), result)
             }
         }
@@ -466,7 +470,7 @@ def expr_mul_div(var st : TokenStream) : Result {
             if (rightValue == 0l) return st |> error("runtime error, division by 0")
             return Result(st |> getI(leftValue) * rightValue)
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, token)
         }
     }
@@ -483,7 +487,7 @@ def expr_add_sub(var st : TokenStream) : Result {
         if (Token(punkt = '-')) {
             return Result(st |> getI(leftValue) - st |> getI(expr_add_sub(st)))
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, token)
         }
     }
@@ -560,7 +564,7 @@ def expr_bool_op(var st : TokenStream) : Result {
             unput(st, subtoken)
             return Result(st |> getI(leftValue) > st |> getI(expr_bool_op(st)))
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, subtoken)
             unput(st, token)
         }

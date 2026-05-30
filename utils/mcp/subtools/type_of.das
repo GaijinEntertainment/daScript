@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/ast_cursor
@@ -24,7 +22,7 @@ def run_type_of(file : string; line_str, col_str, no_opt_str, project : string) 
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt, project) $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; _issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         return build_string() $(var w) {

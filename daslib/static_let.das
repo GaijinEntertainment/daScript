@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module static_let shared private
@@ -18,21 +16,21 @@ require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 
-[tag_function(static_let_tag)]
+[tag_function(static_let_tag), unused_argument(blk)]
 def public static_let(blk : block) {
     //! Given a scope with the variable declarations, this function will make those variables global.
     //! Variable will be renamed under the hood, and all local access to it will be renamed as well.
     pass
 }
 
-[tag_function(static_let_tag)]
+[tag_function(static_let_tag), unused_argument(name, blk)]
 def public static_let(name : string; blk : block) {
     //! Given a scope with the variable declarations, this function will make those variables global.
     //! Variable will be renamed under the hood, and all local access to it will be renamed as well.
     pass
 }
 
-[tag_function(static_let_tag)]
+[tag_function(static_let_tag), unused_argument(blk)]
 def public static_let_finalize(blk : block) {
     //! This is very similar to regular static_let, but additionally the variable will be deleted on the context shutdown.
     pass

@@ -51,7 +51,7 @@ def main() {
 
     var notif_count = 0
     let notif = "\{\"method\":\"log\",\"params\":[\"hi\"]}"
-    let notif_resp = jsonrpc::dispatch_line(notif, false) $(method, params_json) {
+    let notif_resp = jsonrpc::dispatch_line(notif, false) $(_method, _params_json) {
         notif_count++  // side effect: dispatcher runs
         return "\"ignored\""
     }
@@ -71,7 +71,7 @@ def main() {
     print("\n=== Section 3: Top-level parse error ===\n")
 
     var bad_count = 0
-    let bad_resp = jsonrpc::dispatch_line("not json", false) $(method, params_json) {
+    let bad_resp = jsonrpc::dispatch_line("not json", false) $(_method, _params_json) {
         bad_count++
         return "ok"
     }

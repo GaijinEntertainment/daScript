@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 
@@ -94,7 +92,7 @@ def write_type_list(var writer : StringBuilderWriter; program : smart_ptr<Progra
 }
 
 def run_list_types(file : string; project : string = "") : string {
-    return compile_and_simulate(file, project) $(program; issues) {
+    return compile_and_simulate(file, project) $(program; _issues) {
         let res = build_string() $(var writer) {
             write_type_list(writer, program)
         }

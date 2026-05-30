@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module ast_debug shared private
@@ -128,6 +126,7 @@ class ContextStateAgent : DapiDebugAgent {
 }
 
 
+[unused_argument(ctx)]
 def state_agent(ctx : Context) {
     install_new_debug_agent(new ContextStateAgent(), "ast_debug")
 }

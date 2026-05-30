@@ -1,7 +1,5 @@
 options gen2
 options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
 module cpp_bind public
@@ -39,6 +37,7 @@ def private log_cpp_class_method(cpp_file : file; name : string; fntype : TypeDe
     fwrite(cpp_file, " )")
 }
 
+[unused_argument(name)]
 def private log_cpp_class_method_call(cpp_file : file; name : string; fntype : TypeDeclPtr) {
     let rettd = describe_cpp(fntype.firstType)
     fwrite(cpp_file, "das_invoke_function<{rettd}>::invoke\n      <")

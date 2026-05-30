@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require daslib/json_boost
@@ -52,7 +50,7 @@ def private compile_check_single_json(file : string; project : string = "") : Co
                 if (!ok) {
                     result.errors = string(issues)
                 } else {
-                    simulate(program) $(sok; ctx; serrors) {
+                    simulate(program) $(sok; _ctx; serrors) {
                         if (!sok) {
                             result.errors = string(serrors)
                         } else {

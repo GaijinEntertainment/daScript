@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require ../tools/cpp_common.das public
@@ -292,7 +290,7 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
             }
         }
     }
-    return compile_program(file, true, no_opt, project) $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; _issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         for (hit in hits) {

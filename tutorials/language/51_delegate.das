@@ -15,7 +15,6 @@
 // Run: daslang.exe tutorials/language/51_delegate.das
 
 options gen2
-options no_unused_function_arguments = false
 
 require daslib/delegate
 require math
@@ -208,6 +207,7 @@ def test_iteration() {
 
 typedef OnPlayerHit = delegate(type<function<(player : string; damage : int) : int>>)
 
+[unused_argument(player)]
 def armor_reduction(player : string; damage : int) : int {
     let reduced = damage - 5
     print("  armor: {damage} -> {reduced}\n")

@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 require ../tools/cpp_common.das public
@@ -70,7 +68,7 @@ def struct_has_matching_field(value; query : string) : bool {
 def handled_has_matching_field(value : Annotation const; query : string) : bool {
     var found = false
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, _cppName, _xtype, _offset) {
         if (symbol_matches(name, query)) {
             found = true
         }
@@ -90,7 +88,7 @@ def write_struct_fields_highlighted(var w : StringBuilderWriter; value; query : 
 
 def write_handled_fields_highlighted(var w : StringBuilderWriter; value : Annotation const; query : string; field_search : bool) {
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
-    for_each_field(*ann) $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, _offset) {
         let prefix = field_search && symbol_matches(name, query) ? "  > " : "    "
         if (!empty(cppName) && cppName != name) {
             write(w, "{prefix}{name} : {describe(xtype)}  // C++ {cppName}\n")
@@ -242,7 +240,7 @@ def run_find_symbol(query : string; kind : string = ""; file : string = ""; proj
         cpp_entries <- cpp_run_scan(cpp_dirs, "", err)
     }
     if (!empty(file)) {
-        return compile_and_simulate(file, project) $(program; issues) {
+        return compile_and_simulate(file, project) $(program; _issues) {
             var results : array<string>
             var total_found = 0
             program_for_each_module(program) $(mod) {

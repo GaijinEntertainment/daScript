@@ -1,8 +1,6 @@
 options gen2
 options rtti
 options indenting = 4
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
 require ../tools/common.das public
 
@@ -327,7 +325,7 @@ def private try_list_module_api(name : string; preamble : string; filter : strin
         return TryResult(text = make_tool_result("Cannot write temp file: {stub_path}", true), ok = false, retryable = false)
     }
     var ok = false
-    let result = compile_and_simulate(stub_path, project) $(program; issues) {
+    let result = compile_and_simulate(stub_path, project) $(program; _issues) {
         var target_mod : Module?
         program_for_each_module(program) $(mod) {
             let mname = string(mod.name)
