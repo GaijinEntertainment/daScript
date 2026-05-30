@@ -1,6 +1,8 @@
 # Benchmarks — SQL / Array / Decs / XML comparison
 
-Updated 2026-05-30 (branch `bbatkin/xml-bench-coverage`): **full XML coverage — both XML lanes (m5, m5f) now wired across every applicable family (67), up from 5.** Two changes: (1) **`m5` redefined** from the hand-written plain loop to the *un-fused tier-2 linq cascade* over the XML iterator — `unsafe(from_xml_node(root, type<Car>)) |> _where(…) |> … |> term()` — the same chain as m3f/m5f but without `_fold`, so **m5 vs m5f is now a clean fused-vs-not comparison on identical logic** (the prior hand-loop was an apples-to-oranges hand-optimal floor). The 5 pre-existing hand-loop m5 lanes were reworked to match. (2) **m5f added** to every family that had an array fold. The headline finding (see "Reading the XML lanes" below): the `XmlAdapter` **fuses the `loop_or_count` family** — where/select/aggregate/count/sum/min/max/average/first/element_at/any/all/contains/take/skip — where m5f runs **5–10× faster than m5** (e.g. INTERP `count_aggregate` 419 → **64**, `aggregate_match` 453 → **65**, `take_count_filtered` 395 → **1.3**), but it **does NOT fuse the cascade families** — group_by / distinct / order / sort / reverse / join — where **m5f ≈ m5** (e.g. `groupby_sum` 462.9 vs 465.1, `distinct_by_count` 393.4 vs 393.5, `sort_take` 1069 vs 1069, `join_count` 521 vs 484): the adapter falls back to full per-element materialization, so folding buys nothing. Those `m5f ≈ m5` cells are the map for the *next* arc (widening `XmlAdapter` to fuse the cascade families). **zip stays `—`** in both XML lanes — its source is a synthetic `make_ints(n)` int stream, not Car/XML, so an XML zip lane would be artificial (and `_fold` over `zip(xmlIter, each(arr))` hits the separate `plan_zip` iterator-preservation gap, a tracked follow-up). Earlier note:
+Updated 2026-05-30 (branch `bbatkin/linq-fold-zip-iterator-preservation`): **zip XML lanes (m5, m5f) now landed** across all four `zip_*` benches. The blocker was a real bug, not just an artificial source: `zip` had no mixed `(iterator, array)` overload, so `zip(xmlIter, arr)` — the natural ceremony-free form — failed to resolve, and `_fold`'s array-rewrite couldn't lower it (it produced `zip_to_array(iterator, array)`, also unoverloaded). The fix adds 2-source mixed `zip`/`zip_to_array` overloads (iterator-preserving; the private `zip_impl` already walked mixed sources). Each zip bench now zips the XML `Car` price-stream against a synthetic int array. **Finding: m5f modestly beats m5** (INTERP ~10–24%, JIT ~3–14% — e.g. `zip_dot_product` 508.7 → 431.3 INTERP, 181.6 → 165.0 JIT), so the zip splice *does* partially fuse over XML (unlike the cascade families, where m5f ≈ m5), but both lanes still pay the full unpruned `Car` materialization — every row clones its unused `name` string (~888k string-bytes/op) — which dominates the absolute cost. Field-pruning the zip source is the next lever. Earlier note:
+
+Updated 2026-05-30 (branch `bbatkin/xml-bench-coverage`): **full XML coverage — both XML lanes (m5, m5f) now wired across every applicable family (67), up from 5.** Two changes: (1) **`m5` redefined** from the hand-written plain loop to the *un-fused tier-2 linq cascade* over the XML iterator — `unsafe(from_xml_node(root, type<Car>)) |> _where(…) |> … |> term()` — the same chain as m3f/m5f but without `_fold`, so **m5 vs m5f is now a clean fused-vs-not comparison on identical logic** (the prior hand-loop was an apples-to-oranges hand-optimal floor). The 5 pre-existing hand-loop m5 lanes were reworked to match. (2) **m5f added** to every family that had an array fold. The headline finding (see "Reading the XML lanes" below): the `XmlAdapter` **fuses the `loop_or_count` family** — where/select/aggregate/count/sum/min/max/average/first/element_at/any/all/contains/take/skip — where m5f runs **5–10× faster than m5** (e.g. INTERP `count_aggregate` 419 → **64**, `aggregate_match` 453 → **65**, `take_count_filtered` 395 → **1.3**), but it **does NOT fuse the cascade families** — group_by / distinct / order / sort / reverse / join — where **m5f ≈ m5** (e.g. `groupby_sum` 462.9 vs 465.1, `distinct_by_count` 393.4 vs 393.5, `sort_take` 1069 vs 1069, `join_count` 521 vs 484): the adapter falls back to full per-element materialization, so folding buys nothing. Those `m5f ≈ m5` cells are the map for the *next* arc (widening `XmlAdapter` to fuse the cascade families). **zip stayed `—` in this PR** — its source is a synthetic `make_ints(n)` int stream, not Car/XML, and the mixed `zip(iterator, array)` overload was still missing; both were addressed in the follow-up noted above. Earlier note:
 
 Updated 2026-05-29 (branch `bbatkin/sqlite-linq-computed-select-subqueries`): **two `_sql` surface gains + 5 m1 backfills.** (1) Computed-scalar `_select` — `_select(_.a + _.b) |> sum/min/max/average/count()` now lowers (pred_to_sql renders the arithmetic into the aggregate argument) instead of being rejected as "`_.Field` only". (2) take/skip BEFORE an aggregate — `_where(P) |> take(n) |> count()` / `_select(_.X) |> take(n) |> sum()` wrap the bounded rows into an inner subquery (`SELECT COUNT(*) FROM (SELECT * FROM t WHERE P LIMIT n)`) so the LIMIT applies pre-aggregate, instead of the no-op-LIMIT rejection. New `m1` lanes: `join_select` (into-projection), `take_where_count`, `take_count_filtered`, `take_sum_aggregate`, `zip_count_pred` (degenerate same-row interpretation). The zip dot-product **sum** lanes (`zip_dot_product`, `zip_dot_product_3arg`) stay `—`: `SUM(price*year)` overflows int32 at n=100k and needs an int64-typed computed projection (`int64(...)` in `_select` currently fails inference) — deferred to the computed-cast follow-up. SQL coverage 62 → 67 / 72. Earlier note:
 
@@ -150,10 +152,10 @@ lanes never pay. The m5↔m5f delta, not the XML-vs-array gap, is the fusion sig
 | `take_where_count` | 0.9 | 0.1 | 0.1 | 4.8 | 0.7 | 1.01× |
 | `take_while_match` | 7.9 | 2.4 | 2.4 | 226.8 | 32.3 | 0.98× |
 | `to_array_filter` | 72.8 | 14.9 | 15.0 | 465.8 | 74.9 | 1.00× |
-| `zip_count_pred` | 39.4 | 17.2 | — | — | — | — |
-| `zip_dot_product` | — | 13.5 | 10.7 | — | — | 0.79× |
-| `zip_dot_product_3arg` | — | 13.5 | — | — | — | — |
-| `zip_reverse_to_array` | — | 31.1 | — | — | — | — |
+| `zip_count_pred` | 39.4 | 17.2 | — | 535.4 | 451.9 | — |
+| `zip_dot_product` | — | 13.5 | 10.7 | 508.7 | 431.3 | 0.79× |
+| `zip_dot_product_3arg` | — | 13.5 | — | 431.5 | 392.6 | — |
+| `zip_reverse_to_array` | — | 31.1 | — | 529.6 | 403.3 | — |
 
 ## JIT
 
@@ -227,10 +229,10 @@ lanes never pay. The m5↔m5f delta, not the XML-vs-array gap, is the fusion sig
 | `take_where_count` | 0.9 | 0.0 | 0.0 | 1.8 | 0.2 | — |
 | `take_while_match` | 7.8 | 0.2 | 0.3 | 85.6 | 17.6 | 1.52× |
 | `to_array_filter` | 48.7 | 3.3 | 3.4 | 178.9 | 20.2 | 1.04× |
-| `zip_count_pred` | 39.4 | 0.1 | — | — | — | — |
-| `zip_dot_product` | — | 0.1 | 0.1 | — | — | 0.77× |
-| `zip_dot_product_3arg` | — | 0.1 | — | — | — | — |
-| `zip_reverse_to_array` | — | 4.6 | — | — | — | — |
+| `zip_count_pred` | 39.4 | 0.1 | — | 185.6 | 168.2 | — |
+| `zip_dot_product` | — | 0.1 | 0.1 | 181.6 | 165.0 | 0.77× |
+| `zip_dot_product_3arg` | — | 0.1 | — | 170.4 | 165.0 | — |
+| `zip_reverse_to_array` | — | 4.6 | — | 189.5 | 163.0 | — |
 <!-- BENCH:TABLES END -->
 
 ## Notes on missing lanes (the `—` cells)
@@ -284,15 +286,13 @@ and which gaps could land in a single PR — see
 - **`zip_reverse_to_array` SQL / Decs** — `reverse()` has no SQL order key
   (relational rows are unordered without an `ORDER BY`), and zip is not
   naturally expressible over a single archetype walk. By design, no follow-up.
-- **all four `zip_*` XML lanes (m5, m5f)** — the zip benchmarks source a
-  synthetic `make_ints(n)` int stream (`[0, 1, 2, …]`), not Car/XML data, so
-  an XML zip lane would be artificial — there is no real Car/XML zip workload
-  to measure. Separately, `_fold` over `zip(xmlIter, each(arr))` hits the
-  `plan_zip` iterator-preservation gap (the array-rewrite downgrades the
-  iterator operand to a mixed `zip(array, iterator)` with no overload), a
-  **tracked follow-up** distinct from this arc. An m5-only lane zipping an
-  artificial XML price-stream against a synthetic array was considered and
-  declined (contrived; doesn't mirror the m3f). Both cells stay `—`.
+- **`zip_*` XML lanes (m5, m5f)** — now landed (see the top banner). Each zip
+  bench zips the XML `Car` price-stream against a synthetic int array via the
+  mixed `zip(iterator, array)` overload; m5f modestly beats m5 (the zip splice
+  partially fuses over XML), with both lanes still paying the unpruned `Car`
+  materialization. The remaining `—` zip cells are **SQL (m1)** and **Decs
+  (m4)**: `zip` is not a relational op and not expressible over a single
+  archetype walk (see the two bullets above).
 
 ## Accepted architectural floors (m4 vs m3f)
 
