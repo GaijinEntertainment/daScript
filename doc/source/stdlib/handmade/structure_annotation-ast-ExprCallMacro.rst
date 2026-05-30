@@ -9,4 +9,5 @@ Name of the macro being called
 List of argument expressions
 If the arguments failed to infer their types
 Location of the expression in source code
+The function this macro call appears in.
 Call macro, if resolved

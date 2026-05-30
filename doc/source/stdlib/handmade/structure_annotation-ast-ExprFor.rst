@@ -16,3 +16,4 @@ The body of the for loop
 Line information for visibility of the iterators
 Whether iterator optimization is allowed
 Whether shadowing is allowed, i.e. if the iterator names can shadow outer scope variables
+Annotations of the expression

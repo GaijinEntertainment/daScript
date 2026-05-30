@@ -13,3 +13,4 @@ Type of the array elements
 Array of expressions for the elements
 If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
 If key-value syntax is used (i.e. `[key=>val; key2=>val2]`)
+Field names, when key-value record syntax is used
