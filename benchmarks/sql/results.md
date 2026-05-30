@@ -1,5 +1,7 @@
 # Benchmarks — SQL / Array / Decs / XML comparison
 
+Updated 2026-05-30 (branch `bbatkin/linq-fold-leading-select-absorption`): **a leading `_select(f)` source projection no longer blocks order/distinct fusion.** A chain whose first op projects the source (`source |> _select(f) |> order |> distinct |> take`) used to fall to tier-2 — the order-family matcher had no leading-select slot, so the whole chain materialized + sorted instead of fusing single-pass. The m3f/m4 bench lanes hid this by pre-projecting their source array; the XML lane can't (its source carries whole `Car`s), so `order_distinct_take` m5f sat at the cascade floor. Fix: an optional leading `srcsel` slot on the four `wrap_source_loop`-based order rows, plus a `ProjectedSourceAdapter` decorator that binds `projName = f(rawElem)` atop the per-element body and delegates the loop to the inner adapter — so every emit sees the projected element with no emit-fn changes, and XML field-pruning is preserved (f's `it.<field>` reads reach the materializer). Win: `order_distinct_take` m5f **2091.8 → 72.5** INTERP (28.9×, 0 string clones — reads only the projected `brand`), **629.2 → 22.3** JIT (28.2×); single-pass dedup-walk + bounded top-N replaces materialize-all + sort-all. The slot is optional, so non-leading-select chains stay byte-identical. Earlier note:
+
 Updated 2026-05-30 (branch `bbatkin/linq-fold-join-unify-xml`): **XML `join` (and `group_by` with an upstream `join`) now fuses** — the last family the cascade arc deferred. Two parts: (1) an **architecture refactor** — the two parallel join splice patterns (`array_join_general` + `decs_join_general`) collapse into one `join_general` gated by a `can_join` capability, dispatching the source-specific body through a renamed `emit_join_hook` (a new source adds one override, not a parallel pattern); **zero perf delta** — each adapter's emitted AST is byte-identical (the gate moves `requires`→hook, and `run_splice_adapter` cascades to tier-2 identically on a failed `requires` or a null emit). (2) **XML join fuses** — `XmlAdapter.emit_join_hook` collects the in-memory srcB into a hash and probes from the field-pruned DOM walk; `build_group_by_adapter` returns an `XmlJoinAdapter` on the upstream-join arm so `join |> group_by` fuses single-pass. Wins (INTERP m5f): `join_count` 519 → **114** (4.6×, 0 string-clones — count needs only the join key), `join_where_count` 577 → **165** (3.5×), `join_groupby_count` 581 → **182** (3.2×), `join_groupby_to_array` 609 → **217** (2.8×). `join_select` stays modest (550 → 511) — its result selector keeps a `name` string field, so field-pruning can't drop the clone. Earlier note:
 
 Updated 2026-05-30 (branch `bbatkin/linq-fold-xml-cascade-fusion`): **XML cascade fusion — `group_by` / `distinct[_by]` / `order_by[_descending]` / `sort` / `reverse` now fuse over the `XmlAdapter`.** Previously only the `loop_or_count` family fused (XML was hard-restricted to one splice pattern); the cascade families fell to the tier-2 cascade, so m5f ≈ m5. Two changes: (1) an **architecture refactor** — `AdapterKind`/`kind()` (which needed a new enum value + switch arm per source) is replaced by capability methods the adapter answers about itself (`can_group_by`, `can_reserve_by_length`, `can_ride_array_lane`, …), and the source adapter is threaded into the splice-pattern `requires` predicates so gating asks the adapter; a new source (`linq_json`, …) now only implements the methods. (2) **lift the XML splice gate** so the cascade planners run with the `XmlAdapter`, driving the DOM walk through `wrap_source_loop` — which **field-prunes for free**: where the chain reduces/projects (not the whole row), the per-element body reads only the touched attributes and the per-row `name` string-clone disappears. Wins (INTERP m5f): `groupby_sum` 462 → **115** (4×, 0 clones), `groupby_count` 431 → **77** (5.6×), `distinct_by_count` 392 → **71** (5.5×), `distinct_count` 473 → **71** (6.7×), `distinct_take` 394 → **0.0** (early-exit), `sort_take`/`order_take_desc` ~1080 → **~340** (3.2×). Whole-row-buffering shapes stay modest (`reverse_take` 379 → 359; `order_distinct_take` 2203 → 2082 — order buffers whole rows). **`join` (and `group_by` with an upstream `join`) still falls to tier-2** — the hashed collect+probe driven from the DOM walk is the next arc. Earlier note:
@@ -74,12 +76,15 @@ identical logic, so the delta is purely what the `XmlAdapter` fusion buys:
   probed from the DOM walk. The win tracks whether field-pruning fires:
   reducing/projecting/key-only shapes drop the per-row `name` clone (e.g.
   `groupby_sum` 462 → 115, `distinct_by_count` 392 → 71, `distinct_take` → 0,
-  `join_count` 519 → 114 with 0 clones, `join_groupby_count` 581 → 182).
-- **m5f ≈ m5 → modest fusion only.** Whole-row-buffering cascades (`reverse |> to_array`,
-  `order_distinct_take` — order buffers whole rows so the row escapes → no pruning),
-  and joins whose result keeps a string field (`join_select` 550 → 511 — the
-  `(name, name)` selector clones `name`, so pruning can't drop it) give only the
-  modest win (intermediate array elided, string-clone floor remains).
+  `join_count` 519 → 114 with 0 clones, `join_groupby_count` 581 → 182,
+  `order_distinct_take` 2092 → 72 — a leading `_select(_.brand)` projection is
+  absorbed into the source walk by `ProjectedSourceAdapter`, so even an
+  `order |> distinct |> take` chain prunes to just the projected field).
+- **m5f ≈ m5 → modest fusion only.** Whole-row-buffering cascades (`reverse |> to_array` —
+  reverse buffers whole rows so the row escapes → no pruning), and joins whose
+  result keeps a string field (`join_select` 550 → 511 — the `(name, name)`
+  selector clones `name`, so pruning can't drop it) give only the modest win
+  (intermediate array elided, string-clone floor remains).
 
 (The absolute XML numbers stay far above the array/decs lanes either way — XML
 carries DOM-parse + per-element attribute reads + `string` clones the in-memory
@@ -136,7 +141,7 @@ lanes never pay. The m5↔m5f delta, not the XML-vs-array gap, is the fusion sig
 | `long_count_aggregate` | 30.1 | 4.1 | 4.1 | 418.0 | 63.8 | 1.00× |
 | `max_aggregate` | 31.2 | 5.9 | 6.8 | 441.5 | 58.3 | 1.15× |
 | `min_aggregate` | 31.0 | 6.0 | 6.9 | 441.5 | 58.2 | 1.14× |
-| `order_distinct_take` | 138.5 | 15.8 | 95.2 | 2207.0 | 2091.8 | 6.02× |
+| `order_distinct_take` | 138.5 | 15.8 | 95.2 | 2207.0 | 72.5 | 6.02× |
 | `order_reverse_normalized` | 38.3 | 16.2 | 19.9 | 1137.3 | 341.4 | 1.23× |
 | `order_take_desc` | 38.5 | 16.2 | 20.1 | 1055.1 | 342.1 | 1.24× |
 | `reverse_distinct_by` | 296.7 | 21.3 | — | 454.1 | 427.9 | — |
@@ -213,7 +218,7 @@ lanes never pay. The m5↔m5f delta, not the XML-vs-array gap, is the fusion sig
 | `long_count_aggregate` | 29.7 | 0.3 | 0.6 | 168.3 | 26.7 | 1.83× |
 | `max_aggregate` | 31.1 | 0.3 | 0.5 | 167.7 | 16.8 | 1.50× |
 | `min_aggregate` | 31.0 | 0.3 | 0.5 | 168.1 | 16.8 | 1.49× |
-| `order_distinct_take` | 139.8 | 2.1 | 75.3 | 639.7 | 629.2 | 35.81× |
+| `order_distinct_take` | 139.8 | 2.1 | 75.3 | 639.7 | 22.3 | 35.81× |
 | `order_reverse_normalized` | 38.6 | 0.7 | 1.4 | 390.7 | 144.2 | 2.03× |
 | `order_take_desc` | 38.2 | 0.7 | 1.4 | 383.5 | 145.3 | 1.95× |
 | `reverse_distinct_by` | 298.5 | 2.6 | — | 170.7 | 165.4 | — |

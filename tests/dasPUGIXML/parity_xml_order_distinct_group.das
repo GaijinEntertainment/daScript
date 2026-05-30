@@ -150,6 +150,37 @@ def parity_order_by_take(t : T?) {
 }
 
 [test]
+def parity_select_order_distinct_take(t : T?) {
+    // Leading `_select(_.brand)` projects the source, then order |> distinct |> take. Fuses via
+    // ProjectedSourceAdapter (the srcsel slot) — single-pass dedup-walk + bounded top-N, field-pruned to brand.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._select(_.brand)._order_by(_).distinct().take(2).to_array())
+        var m3f <- _fold(each(arr)._select(_.brand)._order_by(_).distinct().take(2).to_array())
+        t |> success(strings_equal(m5f, m3f), "select|order|distinct|take m5f == m3f")
+        t |> equal(length(m5f), 2)
+        t |> equal(m5f[0], "Ferrari")   // distinct sorted brands: Ferrari, Ford, Honda, Toyota → take 2
+        t |> equal(m5f[1], "Ford")
+        delete m5f; delete m3f
+    }
+}
+
+[test]
+def parity_select_order_take(t : T?) {
+    // Leading `_select` + order + take (no distinct) — bounded heap over projected brands.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._select(_.brand)._order_by(_).take(3).to_array())
+        var m3f <- _fold(each(arr)._select(_.brand)._order_by(_).take(3).to_array())
+        t |> success(strings_equal(m5f, m3f), "select|order|take m5f == m3f")
+        t |> equal(length(m5f), 3)
+        delete m5f; delete m3f
+    }
+}
+
+[test]
 def parity_group_by_sum(t : T?) {
     // group_by + per-group reduction (sum) — the field-pruning win shape (reads only brand + qty).
     parse_xml(XML) $(doc, ok) {

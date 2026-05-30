@@ -134,9 +134,27 @@ def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; v
         if (onlyRow != "" && p.name != onlyRow) continue
         var r <- match_pattern(p, calls, matchTop, adapter)
         if (r is matched) {
-            var ctx = EmitCtx(top = ctxTop, src = adapter, expr_is_iterator = exprIsIter)
-            var result = invoke(p.emit, r as matched, ctx, at)
-            if (result != null) return result
+            var caps <- r as matched
+            // A captured leading `_select(f)` (srcsel slot) wraps the adapter so the emit sees f(rawElem); skip if unusable (un-projected would order/dedup raw rows).
+            var effSrc = adapter
+            var usable = true
+            if (caps.single |> key_exists("srcsel")) {
+                var selCall = caps.single["srcsel"]
+                if (selCall != null && length(selCall.arguments) >= 2 && selCall.arguments[1] != null
+                        && selCall._type != null && selCall._type.firstType != null) {
+                    effSrc = new ProjectedSourceAdapter(inner = adapter,
+                        selectLam = clone_expression(selCall.arguments[1]),
+                        projType = clone_type(selCall._type.firstType),
+                        projName = qn("psel", at))
+                } else {
+                    usable = false
+                }
+            }
+            if (usable) {
+                var ctx = EmitCtx(top = ctxTop, src = effSrc, expr_is_iterator = exprIsIter)
+                var result = invoke(p.emit, caps, ctx, at)
+                if (result != null) return result
+            }
         }
     }
     return null

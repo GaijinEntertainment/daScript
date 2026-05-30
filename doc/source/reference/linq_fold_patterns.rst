@@ -86,10 +86,9 @@ what would otherwise be many lookalike chains:
   Applied by ``collapse_chained_selects``, called from
   ``plan_zip``, ``plan_distinct``, ``plan_decs_distinct``,
   ``plan_reverse``, ``plan_decs_reverse``, ``plan_decs_join`` (also
-  ``collapse_chained_wheres`` per PR D2), and defensively from
-  ``plan_order_family`` / ``plan_decs_order_family``
-  (which don't currently accept any leading ``_select`` but would
-  inherit collapse if they ever did). Mirrors how chained ``_where``
+  ``collapse_chained_wheres`` per PR D2), and from
+  ``plan_order_family`` / ``plan_decs_order_family`` (which now accept
+  a leading ``_select`` — see the next bullet). Mirrors how chained ``_where``
   already compose via ``&&``. Composition takes the INNER lambda's
   structure (preserves param type), renames its bound param to a
   fresh ``qn("cs", at)`` name to avoid ``apply_template`` recursive
@@ -108,6 +107,21 @@ what would otherwise be many lookalike chains:
   ``plan_loop_or_count``, ``plan_group_by_core``, and ``plan_decs_unroll``
   already handle chained selects natively via their ``intermediateBinds`` /
   chain-info machinery and don't need the pre-pass.
+
+- ``source |> _select(f) |> <order/distinct/take>`` — a leading ``_select(f)``
+  that projects the source is absorbed into the source walk. An optional leading
+  ``srcsel`` slot on the four ``wrap_source_loop``-based order rows
+  (``streaming_min`` / ``bounded_heap`` / ``order_then_plain_distinct`` /
+  ``fused_prefilter`` — not the source-direct ``buffer_helper_dispatch``)
+  captures the ``_select``; ``run_splice_adapter`` then wraps the source adapter
+  in ``ProjectedSourceAdapter`` (``linq_fold_common``), which binds
+  ``projName = f(rawElem)`` atop the per-element body and delegates
+  ``wrap_source_loop`` / ``wrap_invoke`` to the inner adapter. Every emit sees
+  ``f(rawElem)`` as the element with no emit-fn change, and XML field-pruning is
+  preserved (``f``'s ``it.<field>`` reads reach the inner materializer). Without
+  it the chain bails to tier-2 (materialize-all + sort-all); the bench m3f/m4
+  lanes hid the gap by pre-projecting their source array, the XML lane can't.
+  The slot is optional — chains with no leading ``_select`` are byte-identical.
 
 Source-side entry points
 ========================
