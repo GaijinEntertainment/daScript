@@ -727,7 +727,7 @@ def build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
 }
 
 struct DecsChainInfo {
-    tupName     : string            // source bind the chain was peeled against — the inner-for bind name; emit_decs_terminator_lane uses this instead of regenerating qn("decs_tup", at)
+    tupName     : string            // source bind the chain was peeled against — the inner-for bind name; make_decs_term_adapter passes this instead of regenerating qn("decs_tup", at)
     bindAt      : array<string>    // bind name visible at each chain position
     elidedAt    : array<bool>      // true when the select at position i was elided (peeled to a single decs_tup field access → reused iter var as next bind, no `let decs_sel_N = ...` emit needed)
     finalBind   : string            // bind name AFTER full chain — what terminator references
@@ -1014,51 +1014,6 @@ def decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStateNames) 
     return <- stmts
 }
 
-struct DecsTerminatorSpec {
-    preludeStmts : array<Expression?>   // hoisted at invoke scope (op-specific state vars + default binds)
-    perElement   : Expression?           // OP-specific per-tup work (caller wraps own predicate gates; lane wraps ranges+chain)
-    tailStmts    : array<Expression?>   // post-walk; INCLUDES the return — skipped for FindReturn/FindReturnNegated
-    retType      : TypeDeclPtr
-    dispatch     : LoopDispatch
-    wrapIter     : bool                  // emission wrapped with .to_sequence_move() — for array-returning shapes in iterator-typed contexts
-}
-
-[macro_function]
-def emit_decs_terminator_lane(
-                              var spec : DecsTerminatorSpec;
-                              var bridge : DecsBridgeShape?;
-                              var chainInfo : DecsChainInfo?;
-                              var rangeInfo : DecsRangeInfo?;
-                              var calls : array<tuple<ExprCall?; LinqCall?>>;
-                              intermediateEnd : int;
-                              at : LineInfo
-                              ) : Expression? {
-    // Shim over the generic emit_terminator_lane: a DecsAdapter carrying the chain + range context owns the
-    // decs-specific walk (in-loop ranges + chain-binding + pruning + range prelude + for_each{,_find} dispatch)
-    // inside its wrap_source_loop. Lane applies postTakeWhereCond innermost; decs has no whereCond/binds/preCond.
-    var adapter : SourceAdapter? = new DecsAdapter(
-        bridge = bridge,
-        tupName = chainInfo.tupName,
-        chainInfo = chainInfo,
-        calls <- calls,
-        intermediateEnd = intermediateEnd,
-        rangeInfo = rangeInfo)
-    var ptw : Expression?
-    if (rangeInfo.postTakeWhereCond != null) {
-        ptw = clone_expression(rangeInfo.postTakeWhereCond)
-    }
-    var perStmts : array<Expression?>
-    perStmts |> push(spec.perElement)
-    return emit_terminator_lane(TerminatorSpec(
-        prologue <- spec.preludeStmts,
-        perElementStmts <- perStmts,
-        postTakeWhereCond = ptw,
-        tailStmts <- spec.tailStmts,
-        outElemType = spec.retType,
-        wrapIter = spec.wrapIter,
-        dispatch = spec.dispatch), adapter, at)
-}
-
 [macro_function]
 def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
@@ -1124,13 +1079,22 @@ def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
     let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
         ? LoopDispatch(Find = null)
         : LoopDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
+    // Each+tail walk over the generic terminator lane: the field-carrying DecsAdapter owns the chain +
+    // ranges + for_each{,_find} dispatch; postTakeWhereCond (if any) gates the per-element work innermost.
+    var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, intermediateEnd)
+    var ptw : Expression?
+    if (rangeInfo.postTakeWhereCond != null) {
+        ptw = clone_expression(rangeInfo.postTakeWhereCond)
+    }
+    var perStmts : array<Expression?>
+    perStmts |> push(perElement)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- preludeStmts,
+        perElementStmts <- perStmts,
+        postTakeWhereCond = ptw,
         tailStmts <- tailStmts,
-        retType = elemType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
+        outElemType = elemType,
+        dispatch = dispatch), adapter, at)
 }
 
 // ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────
