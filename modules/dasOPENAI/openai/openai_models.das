@@ -10,10 +10,10 @@ require openai/openai_common public
 
 struct Model {
     //! A single model entry.
-    id : string
-    @rename = "object" _object : string
-    @optional created : int64
-    @optional owned_by : string
+    id : string                          //!< Model id (e.g. "gpt-4o-mini").
+    @rename = "object" _object : string  //!< Object type ("model").
+    @optional created : int64            //!< Unix creation time, when provided.
+    @optional owned_by : string          //!< Owning organization, when provided.
 }
 
 struct private ModelList {
@@ -23,16 +23,16 @@ struct private ModelList {
 
 struct ModelsResult {
     //! Outcome of ``list_models``: ``models`` valid when ``ok`` is true.
-    ok : bool
-    models : array<Model>
-    error : OpenAIError
+    ok : bool             //!< True when ``models`` is valid.
+    models : array<Model>  //!< Available models on success.
+    error : OpenAIError   //!< Error detail on failure.
 }
 
 struct ModelResult {
     //! Outcome of ``retrieve_model``: ``model`` valid when ``ok`` is true.
-    ok : bool
-    model : Model
-    error : OpenAIError
+    ok : bool            //!< True when ``model`` is valid.
+    model : Model        //!< The retrieved model on success.
+    error : OpenAIError  //!< Error detail on failure.
 }
 
 def list_models(client : OpenAIClient) : ModelsResult {

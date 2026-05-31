@@ -10,38 +10,39 @@ require openai/openai_common public
 
 struct CompletionRequest {
     //! Request body for the legacy ``/completions`` endpoint.
-    model : string
-    prompt : string
-    @optional max_tokens : int
-    @optional temperature : float
-    @optional top_p : float
-    @optional n : int
-    @optional stop : array<string>
-    @optional seed : int
-    @optional user : string
+    model : string             //!< Completion model id.
+    prompt : string            //!< The prompt to complete.
+    @optional max_tokens : int //!< Maximum tokens to generate.
+    @optional temperature : float  //!< Sampling temperature.
+    @optional top_p : float    //!< Nucleus-sampling probability mass.
+    @optional n : int          //!< Number of completions to generate.
+    @optional stop : array<string>  //!< Stop sequences.
+    @optional seed : int       //!< Seed for (best-effort) deterministic sampling.
+    @optional user : string    //!< Optional end-user id for abuse monitoring.
 }
 
 struct CompletionChoice {
-    text : string
-    index : int
-    finish_reason : string
+    //! One generated completion.
+    text : string           //!< The completion text.
+    index : int             //!< Index of this choice.
+    finish_reason : string  //!< Why generation stopped (e.g. "stop", "length").
 }
 
 struct CompletionResponse {
     //! Response body for ``/completions``.
-    id : string
-    @rename = "object" _object : string
-    created : int64
-    model : string
-    choices : array<CompletionChoice>
-    usage : Usage
+    id : string                          //!< Completion id.
+    @rename = "object" _object : string  //!< Object type ("text_completion").
+    created : int64                      //!< Unix creation time.
+    model : string                       //!< Model that produced the completion.
+    choices : array<CompletionChoice>    //!< Generated choices.
+    usage : Usage                        //!< Token accounting.
 }
 
 struct CompletionResult {
     //! Outcome of ``completions``: ``response`` valid when ``ok`` is true.
-    ok : bool
-    response : CompletionResponse
-    error : OpenAIError
+    ok : bool                   //!< True when ``response`` is valid.
+    response : CompletionResponse  //!< Decoded response on success.
+    error : OpenAIError         //!< Error detail on failure.
 }
 
 def completions(client : OpenAIClient; req : CompletionRequest) : CompletionResult {

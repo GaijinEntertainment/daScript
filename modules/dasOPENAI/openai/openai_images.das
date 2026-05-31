@@ -10,33 +10,34 @@ require openai/openai_common public
 
 struct ImageRequest {
     //! Request body for ``/images/generations``.
-    prompt : string
-    @optional model : string
-    @optional n : int
-    @optional size : string
-    @optional quality : string
-    @optional style : string
-    @optional response_format : string
-    @optional user : string
+    prompt : string                      //!< Text description of the desired image.
+    @optional model : string             //!< Image model id.
+    @optional n : int                    //!< Number of images to generate.
+    @optional size : string              //!< Image dimensions (e.g. "1024x1024").
+    @optional quality : string           //!< Quality hint (e.g. "standard", "hd").
+    @optional style : string             //!< Style hint (e.g. "vivid", "natural").
+    @optional response_format : string   //!< "url" or "b64_json".
+    @optional user : string              //!< Optional end-user id for abuse monitoring.
 }
 
 struct ImageData {
-    @optional url : string
-    @optional b64_json : string
-    @optional revised_prompt : string
+    //! One generated image.
+    @optional url : string            //!< Image URL (when ``response_format`` is "url").
+    @optional b64_json : string       //!< Base64-encoded image (when ``response_format`` is "b64_json").
+    @optional revised_prompt : string //!< The prompt the model actually used, if it revised yours.
 }
 
 struct ImageResponse {
     //! Response body for ``/images/generations``.
-    created : int64
-    data : array<ImageData>
+    created : int64           //!< Unix creation time.
+    data : array<ImageData>   //!< Generated images.
 }
 
 struct ImageResult {
     //! Outcome of ``generate_image``: ``response`` valid when ``ok`` is true.
-    ok : bool
-    response : ImageResponse
-    error : OpenAIError
+    ok : bool              //!< True when ``response`` is valid.
+    response : ImageResponse  //!< Decoded response on success.
+    error : OpenAIError    //!< Error detail on failure.
 }
 
 def generate_image(client : OpenAIClient; req : ImageRequest) : ImageResult {

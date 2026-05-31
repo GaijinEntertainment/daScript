@@ -10,7 +10,7 @@ This section provides hands-on tutorials organized by topic:
 * **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
 * **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
 * **Macro Tutorials** — write compile-time code transformations using the daslang macro system
-* **Module Tutorials** — dasHV (HTTP), dasPUGIXML (XML), dasStbImage, dasAudio, dasPEG (parser generator)
+* **Module Tutorials** — dasHV (HTTP), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasPEG (parser generator)
 
 .. _tutorials_language:
 
@@ -229,6 +229,33 @@ Run any tutorial from the project root::
    tutorials/dasHV_05_cookies_and_forms.rst
    tutorials/dasHV_06_websockets.rst
    tutorials/dasHV_07_sse_and_streaming.rst
+
+.. _tutorials_dasopenai:
+
+dasOPENAI (OpenAI-compatible API) Tutorials
+===========================================
+
+These tutorials cover the ``openai`` module — a pure-daslang client for
+OpenAI-compatible APIs (OpenAI, Ollama, OpenRouter, Kokoro, …): chat,
+conversations, structured outputs, function calling, embeddings, models,
+audio, and streaming. Built on ``dashv`` (HTTP) and ``daslib/json_boost``.
+The companion ``.das`` files are in ``tutorials/dasOPENAI/`` and run against a
+local mock server, so no live LLM is required.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasOPENAI/01_first_chat.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasOPENAI_01_first_chat.rst
+   tutorials/dasOPENAI_02_conversations_and_params.rst
+   tutorials/dasOPENAI_03_structured_outputs.rst
+   tutorials/dasOPENAI_04_tools_and_function_calling.rst
+   tutorials/dasOPENAI_05_embeddings_and_models.rst
+   tutorials/dasOPENAI_06_audio.rst
+   tutorials/dasOPENAI_07_streaming_chat.rst
 
 .. _tutorials_daspugixml:
 

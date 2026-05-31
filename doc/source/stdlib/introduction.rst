@@ -173,6 +173,7 @@ HTTP and WebSocket
 
 * :doc:`dashv <generated/dashv>` — HTTP client/server and WebSocket bindings (C++ module, based on libhv)
 * :doc:`dashv_boost <generated/dashv_boost>` — dasHV convenience helpers: GET/POST/PUT/PATCH/DELETE, response iteration
+* :doc:`openai <generated/openai>` — OpenAI-compatible API client: chat, tools, embeddings, models, audio, images, vision, streaming
 
 XML
 ---
