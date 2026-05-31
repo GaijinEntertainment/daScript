@@ -285,7 +285,10 @@ class XmlAdapter : SourceAdapter {
             if (selectLam == null) return null
         }
         let countOnly = c.single |> key_exists("term")
-        if (!countOnly && ctx.expr_is_iterator) return null
+        // Iterator-typed result (no count terminator): the fused single-pass build is the measured
+        // winner over a streaming generator (benchmarks/micro/join_select_shapes.das) — materialize
+        // the field-pruned result array, then wrap as a sequence to honor the iterator contract.
+        let wrapIter = !countOnly && ctx.expr_is_iterator
         var srcbSrc = joinCall.arguments[1]
         if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
         var keyaLam = joinCall.arguments[2]
@@ -316,7 +319,7 @@ class XmlAdapter : SourceAdapter {
         }
         allStmts |> push(wrap_source_loop(pieces.probeOuter, at))
         allStmts |> push(pieces.returnStmt)
-        return build_xml_join_invoke(nodeExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, false, at)
+        return build_xml_join_invoke(nodeExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, wrapIter, at)
     }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) {

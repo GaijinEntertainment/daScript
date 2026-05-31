@@ -165,6 +165,41 @@ def parity_join_select(t : T?) {
 }
 
 [test]
+def parity_join_select_no_terminator(t : T?) {
+    // join + bare _select with NO to_array → iterator-typed result. Previously bailed to tier-2;
+    // now fuses via the fused-materialize path (build result array, wrap as sequence). Correctness
+    // gate: the fused sequence equals the eager array lane.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        let hqs <- brand_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)) |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> _select(_.id))
+        var m3f <- _fold(arr |> _join(hqs,
+                            $(c : Car, h : BrandHQ) => c.brand == h.brand,
+                            $(c : Car, h : BrandHQ) => (id = c.id, country = h.country))
+                       |> _select(_.id))
+        var sum5 = 0
+        var cnt5 = 0
+        for (x in m5f) {
+            sum5 += x
+            cnt5 ++
+        }
+        var sumf = 0
+        for (x in m3f) {
+            sumf += x
+        }
+        t |> equal(cnt5, 8)
+        t |> equal(sum5, 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8)
+        t |> equal(sum5, sumf)
+        delete m5f
+        delete m3f
+    }
+}
+
+[test]
 def parity_join_group_by_sum(t : T?) {
     // join |> group_by(country) |> select(sum qty) — group-by-after-join (XmlJoinAdapter). Compare country→sum(qty).
     parse_xml(XML) $(doc, ok) {

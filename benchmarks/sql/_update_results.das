@@ -57,16 +57,6 @@ def fmt1(v : double) : string {
     return "{scaled / 10}.{scaled % 10}"
 }
 
-// 2-decimal ratio with the multiply glyph. 1.0 -> "1.00x". absent or sub-resolution inputs -> em-dash
-// (m3f below 0.05 ns/op rounds to 0.0 in the table — the ratio would be measurement noise).
-def fmt_ratio(m4present, m3fpresent : bool; m4, m3f : double) : string {
-    if (!m4present || !m3fpresent || m3f < 0.05lf) return "—"
-    let h = int((m4 / m3f) * 100.0lf + 0.5lf)
-    let frac = h % 100
-    let pad = frac < 10 ? "0" : ""
-    return "{h / 100}.{pad}{frac}×"
-}
-
 // Parse a JSON-lines benchmark file into the flat cell map keyed "family\tlane" -> ns/op, collecting
 // the set of family names seen.
 def load_cells(path : string; var cells : table<string; double>; var families : table<string>) {
@@ -98,18 +88,14 @@ def build_table(cells : table<string; double>; families : array<string>) : strin
         for (h in HEADERS) {
             w |> write(" {h} |")
         }
-        w |> write(" Decs vs Array |\n")
-        w |> write("|---|---:|---:|---:|---:|---:|---:|\n")
+        w |> write("\n")
+        w |> write("|---|---:|---:|---:|---:|---:|\n")
         for (fam in families) {
             w |> write("| `{fam}` |")
             for (lane in LANES) {
                 w |> write(" {cell_str(cells, fam, lane)} |")
             }
-            let m3fKey = "{fam}\tm3f"
-            let m4Key = "{fam}\tm4"
-            let hasM3f = key_exists(cells, m3fKey)
-            let hasM4 = key_exists(cells, m4Key)
-            w |> write(" {fmt_ratio(hasM4, hasM3f, cells?[m4Key] ?? 0.0lf, cells?[m3fKey] ?? 0.0lf)} |\n")
+            w |> write("\n")
         }
     }
 }
@@ -140,7 +126,7 @@ def main : int {
 
     let body = build_string() $(w) {
         w |> write("{BEGIN_MARKER}\n")
-        w |> write("*Generated {cfg.date} by `benchmarks/sql/_update_results.das` — ns/op; `—` = absent lane; Decs vs Array = m4/m3f. Edit the prose around the markers, not the tables.*\n\n")
+        w |> write("*Generated {cfg.date} by `benchmarks/sql/_update_results.das` — ns/op; `—` = absent lane. Edit the prose around the markers, not the tables.*\n\n")
         w |> write("## INTERP\n\n")
         w |> write(build_table(interpCells, families))
         w |> write("\n## JIT\n\n")
