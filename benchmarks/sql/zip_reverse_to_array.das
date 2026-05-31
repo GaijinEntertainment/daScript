@@ -39,27 +39,6 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: zip the XML Car stream against a synthetic int array, reverse + to_array, un-fused (tier-2).
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    let ys <- make_ints(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            let rows <- (zip(unsafe(from_xml_node(doc.document_element, type<Car>)), ys)
-                         |> reverse() |> to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
-        }
-    }
-}
-
-// m5f_xml_fold lane: fused _fold over the same zip(from_xml_node, array) with trailing reverse + to_array.
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     let ys <- make_ints(n)
@@ -83,11 +62,6 @@ def run_m5f(b : B?; n : int) {
 [benchmark]
 def zip_reverse_to_array_m3f(b : B?) {
     run_m3f(b, 100000)
-}
-
-[benchmark]
-def zip_reverse_to_array_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

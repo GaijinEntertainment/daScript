@@ -46,8 +46,8 @@ struct Config {
     help : bool
 }
 
-let LANES = ["m1", "m3f", "m4", "m5", "m5f"]
-let HEADERS = ["SQL (m1)", "Array (m3f)", "Decs (m4)", "XML (m5)", "XML fold (m5f)"]
+let LANES = ["m1", "m3f", "m4", "m5f"]
+let HEADERS = ["SQL (m1)", "Array (m3f)", "Decs (m4)", "XML fold (m5f)"]
 let BEGIN_MARKER = "<!-- BENCH:TABLES BEGIN -->"
 let END_MARKER = "<!-- BENCH:TABLES END -->"
 

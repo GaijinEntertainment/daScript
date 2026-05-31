@@ -56,28 +56,6 @@ def run_m3f(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: zip the XML Car price-stream against a synthetic int array, un-fused (tier-2 cascade).
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    let ys <- make_ints(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            let c = (unsafe(from_xml_node(doc.document_element, type<Car>)) |> zip(ys)
-                     |> _select(int64(_._0.price) * int64(_._1))
-                     |> count($(v) => v > THRESHOLD))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
-        }
-    }
-}
-
-// m5f_xml_fold lane: fused _fold over the same zip(from_xml_node, array) with trailing count(P).
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     let ys <- make_ints(n)
@@ -106,11 +84,6 @@ def zip_count_pred_m1(b : B?) {
 [benchmark]
 def zip_count_pred_m3f(b : B?) {
     run_m3f(b, 100000)
-}
-
-[benchmark]
-def zip_count_pred_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

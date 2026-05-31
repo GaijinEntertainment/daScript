@@ -60,27 +60,6 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: non-fold baseline — the same chain over from_xml_node, un-fused (tier-2 cascade).
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            unsafe {
-                let c = from_xml_node(doc.document_element, type<Car>) |> _distinct_by(_.brand) |> count($(c) => c.year > THRESHOLD)
-                b |> accept(c)
-                if (c == 0) {
-                    b->failNow()
-                }
-            }
-        }
-    }
-}
-
-// m5f_xml_fold lane: fused _fold over from_xml_node.
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -113,11 +92,6 @@ def distinct_count_pred_m3f(b : B?) {
 [benchmark]
 def distinct_count_pred_m4(b : B?) {
     run_m4(b, 100000)
-}
-
-[benchmark]
-def distinct_count_pred_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

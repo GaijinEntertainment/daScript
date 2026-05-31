@@ -43,23 +43,6 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            let prices <- unsafe(from_xml_node(doc.document_element, type<Car>)) |> _where(_.price > THRESHOLD) |> _select(_.price) |> to_array()
-            b |> accept(prices)
-            if (empty(prices)) {
-                b->failNow()
-            }
-        }
-    }
-}
-
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -90,11 +73,6 @@ def to_array_filter_m3f(b : B?) {
 [benchmark]
 def to_array_filter_m4(b : B?) {
     run_m4(b, 100000)
-}
-
-[benchmark]
-def to_array_filter_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]
