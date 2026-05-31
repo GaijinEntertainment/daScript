@@ -274,11 +274,10 @@ class ArrayJoinAdapter : SourceAdapter {
     }
 }
 
-[clone(top), macro_function, unused_argument(itName)]
-def emit_counter_lane(var top : Expression?; srcName, accName, itName : string; names : RangeStateNames;
+[macro_function, unused_argument(itName)]
+def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; names : RangeStateNames;
                       var skipExpr, takeExpr, skipWhileCond : Expression?;
-                      var loopBody : Expression?; at : LineInfo;
-                      var adapterOverride : SourceAdapter? = null) : Expression? {
+                      var loopBody : Expression?; at : LineInfo) : Expression? {
     // loopBody is caller-pre-wrapped (where/binds/post-take/in-loop ranges); spec only handles prelude+prologue+tail.
     var prologue : array<Expression?>
     append_ranges_prelude(prologue, skipExpr, takeExpr, skipWhileCond, names)
@@ -290,58 +289,29 @@ def emit_counter_lane(var top : Expression?; srcName, accName, itName : string; 
     var tailStmts <- qmacro_block_to_array() {
         return $i(accName)
     }
-    var laneTops : array<Expression?>
-    laneTops |> push(top)
-    var laneSrcs : array<string>
-    laneSrcs |> push(srcName)
     return emit_terminator_lane(TerminatorSpec(
         prologue <- prologue,
         perElementStmts <- perElementStmts,
         tailStmts <- tailStmts
-    ), build_lane_adapter(laneTops, laneSrcs, adapterOverride), at)
+    ), adapter, at)
 }
 
 // ===== Emission-lane unification (Phase F — see linq_fold.md) =====
 
-// Bridge for orchestrators that still take parallel (topExprs, srcNames) arrays. 1-source → Array;
-// 2-source → Zip. adapterOverride (when set) wins outright — lets a non-array single-source adapter
-// (e.g. XmlAdapter) ride the array lanes; topExprs/srcNames are then ignored.
-[macro_function]
-def build_lane_adapter(var topExprs : array<Expression?>; srcNames : array<string>; var adapterOverride : SourceAdapter? = null) : SourceAdapter? {
-    if (adapterOverride != null) return adapterOverride
-    let nSrcs = length(srcNames)
-    if (nSrcs != 1 && nSrcs != 2) panic("build_lane_adapter: only 1- or 2-source supported (got {nSrcs})")
-    if (length(topExprs) != nSrcs) panic("build_lane_adapter: topExprs length {length(topExprs)} != srcNames length {nSrcs}")
-    if (nSrcs == 1) {
-        return new ArrayAdapter(top = topExprs[0], srcName = srcNames[0])
-    }
-    var zipShape = ZipShape(
-        srcAExpr = topExprs[0],
-        srcBExpr = topExprs[1],
-        srcAName := srcNames[0],
-        srcBName := srcNames[1],
-        srcAType = invoke_src_param_type(topExprs[0]),
-        srcBType = invoke_src_param_type(topExprs[1])
-    )
-    return new ZipAdapter(shape = zipShape)
-}
-
 [macro_function]
 def emit_accumulator_lane(
                           opName : string;
-                          var topExprs : array<Expression?>;
+                          var adapter : SourceAdapter?;
                           var projection : Expression?;
                           var whereCond : Expression?;
                           var postTakeWhereCond : Expression?;
                           var intermediateBinds : array<Expression?>;
                           var preCondStmts : array<Expression?>;
                           var elementType : TypeDeclPtr;
-                          srcNames : array<string>;
                           accName, itName : string;
                           names : RangeStateNames;
                           var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
-                          at : LineInfo;
-                          var adapterOverride : SourceAdapter? = null
+                          at : LineInfo
                           ) : Expression? {
     // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
     var valueExpr : Expression?
@@ -388,13 +358,13 @@ def emit_accumulator_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts
-    ), build_lane_adapter(topExprs, srcNames, adapterOverride), at)
+    ), adapter, at)
 }
 
 [macro_function]
 def emit_early_exit_lane(
                          opName : string;
-                         var topExprs : array<Expression?>;
+                         var adapter : SourceAdapter?;
                          var projection : Expression?;
                          var whereCond : Expression?;
                          var postTakeWhereCond : Expression?;
@@ -402,12 +372,10 @@ def emit_early_exit_lane(
                          var preCondStmts : array<Expression?>;
                          var elementType : TypeDeclPtr;
                          terminatorCall : ExprCall?;
-                         srcNames : array<string>;
                          itName : string;
                          names : RangeStateNames;
                          var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
-                         at : LineInfo;
-                         var adapterOverride : SourceAdapter? = null
+                         at : LineInfo
                          ) : Expression? {
     // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
     var perMatchStmts : array<Expression?>
@@ -492,20 +460,20 @@ def emit_early_exit_lane(
         let lastBindName = qn("lst", at)
         // Deferred materialization (XML): a full walk clones the whole row on EVERY match, but only the LAST
         // survives. Store the node HANDLE per match; build the full row once, at the tail.
-        let deferLast = (adapterOverride != null && adapterOverride->defers_materialization()
-            && projection == null && adapterOverride->handle_type() != null)
+        let deferLast = (adapter != null && adapter->defers_materialization()
+            && projection == null && adapter->handle_type() != null)
         if (deferLast) {
-            var handleType = adapterOverride->handle_type()
+            var handleType = adapter->handle_type()
             let lastNodeName = qn("lst_node", at)
             let matItName = qn("lst_mat", at)
-            var matStmt = adapterOverride->materialize_handle(qmacro($i(lastNodeName)), matItName, at)
+            var matStmt = adapter->materialize_handle(qmacro($i(lastNodeName)), matItName, at)
             preludeStmts |> push_from <| qmacro_block_to_array() {
                 var $i(foundName) = false
                 var $i(lastNodeName) = default<$t(handleType)>
             }
             perMatchStmts |> push_from <| qmacro_block_to_array() {
                 $i(foundName) = true
-                $i(lastNodeName) = $e(adapterOverride->current_handle_expr(at))
+                $i(lastNodeName) = $e(adapter->current_handle_expr(at))
             }
             if (opName == "last") {
                 tailStmts <- qmacro_block_to_array() {
@@ -714,16 +682,15 @@ def emit_early_exit_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts
-    ), build_lane_adapter(topExprs, srcNames, adapterOverride), at)
+    ), adapter, at)
 }
 
 [macro_function]
 def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // PR C Decs-arm: route to existing emit_decs_* lane fns. State hoists above for_each_archetype (different invoke shape from array side); unifying lane fns is out of scope per D1. Sources with their own lane delegate entirely — a null hook result bails to tier-2 (must NOT fall through to the array lane, which assumes an array `top`).
     if (ctx.src->has_own_loop_or_count_lane()) return ctx.src->emit_loop_or_count(c, ctx, at)
-    // Non-array single-source adapters (XML) ride this whole lane via the override — it wins over the
-    // ArrayAdapter that build_lane_adapter / the buffer lane would otherwise reconstruct from top+srcName.
-    var adapterOverride : SourceAdapter? = ctx.src->can_ride_array_lane() ? ctx.src : null
+    // ctx.src IS the source adapter (ArrayAdapter for arrays, XmlAdapter for XML) — the lanes ride it
+    // directly. There's no leading-select slot on this pattern, so ctx.src is never a ProjectedSourceAdapter.
     var top = ctx.top
     let srcName = ctx.src->arraySrcName()
     let itName = qn("it", at)
@@ -851,13 +818,9 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             && type_has_length(top._type))
         return ctx.src->count_shortcut(lastName, at)
     if (lane == LinqLane.ACCUMULATOR) {
-        var laneTops : array<Expression?>
-        laneTops |> push(top)
-        var laneSrcs : array<string>
-        laneSrcs |> push(srcName)
-        return emit_accumulator_lane(lastName, laneTops, projection, whereCond, postTakeWhereCond,
-            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at, adapterOverride)
+        return emit_accumulator_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
+            intermediateBinds, preCondStmts, elementType, accName, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = c.single["term"]
@@ -865,13 +828,9 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         if (isAnyNoPred && whereCond == null && allProjectionsPure && noLimits
                 && type_has_length(top._type))
             return emit_any_empty_shortcut(top, srcName, at)
-        var laneTops : array<Expression?>
-        laneTops |> push(top)
-        var laneSrcs : array<string>
-        laneSrcs |> push(srcName)
-        return emit_early_exit_lane(lastName, laneTops, projection, whereCond, postTakeWhereCond,
-            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at, adapterOverride)
+        return emit_early_exit_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
+            intermediateBinds, preCondStmts, elementType, terminatorCall, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     var loopBody : Expression?
     if (counterLane) {
@@ -926,10 +885,6 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         }
         var tailStmts : array<Expression?>
         tailStmts |> push(buffer_return(accName, ctx.expr_is_iterator))
-        var bufAdapter : SourceAdapter? = adapterOverride
-        if (bufAdapter == null) {
-            bufAdapter = new ArrayAdapter(top = top, srcName = srcName)
-        }
         return emit_fold_array_lane(FoldArraySpec(
             prologueStmts <- prologueStmts,
             bufElemType = elementType,
@@ -940,10 +895,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             perElementPush = perElementPush,
             tailStmts <- tailStmts,
             wrapIter = false
-        ), bufAdapter, at)
+        ), ctx.src, at)
     }
-    return emit_counter_lane(top, srcName, accName, itName, names,
-        skipExpr, takeExpr, skipWhileCond, loopBody, at, adapterOverride)
+    return emit_counter_lane(ctx.src, accName, itName, names,
+        skipExpr, takeExpr, skipWhileCond, loopBody, at)
 }
 
 [macro_function]
@@ -1138,33 +1093,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let isCounter = lastName == "count" || lastName == "long_count"
     if (seenSelect && !allProjectionsPure && !noLimits) return null
     let lane = classify_terminator(lastName)
-    if (lane == LinqLane.ACCUMULATOR && !isCounter) {
-        if (projection == null) return null
-        var preCondStmts : array<Expression?>
-        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
-            let $i(itName) = (itA, itB)
-        }
-        var intermediateBinds : array<Expression?>
-        var laneTops <- [srcAExpr, srcBExpr]
-        let laneSrcs <- [srcAName, srcBName]
-        return emit_accumulator_lane(lastName, laneTops, projection, whereCond, null,
-            intermediateBinds, preCondStmts, elementType, laneSrcs, accName, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
-    }
-    if (lane == LinqLane.EARLY_EXIT) {
-        var preCondStmts : array<Expression?>
-        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
-            let $i(itName) = (itA, itB)
-        }
-        var intermediateBinds : array<Expression?>
-        let terminatorCall = c.single["term"]
-        var laneTops <- [srcAExpr, srcBExpr]
-        let laneSrcs <- [srcAName, srcBName]
-        return emit_early_exit_lane(lastName, laneTops, projection, whereCond, null,
-            intermediateBinds, preCondStmts, elementType, terminatorCall, laneSrcs, itName, names,
-            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
-    }
-    // ZipShape feeds adapter_wrap_invoke; the for(itA,itB in srcA,srcB) is built locally because emit_zip prepends the optional `let it = (itA,itB)` bind based on needsItBind (D2-D — only emit_zip knows).
+    // ZipShape feeds wrap_invoke; the for(itA,itB in srcA,srcB) is built locally because emit_zip prepends the optional `let it = (itA,itB)` bind based on needsItBind (D2-D — only emit_zip knows). Built up-front so the accumulator / early-exit lanes ride this adapter directly.
     var zipShape = ZipShape(
         srcAExpr = srcAExpr,
         srcBExpr = srcBExpr,
@@ -1174,6 +1103,28 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         srcBType = srcBType
     )
     var adapter = new ZipAdapter(shape = zipShape)
+    if (lane == LinqLane.ACCUMULATOR && !isCounter) {
+        if (projection == null) return null
+        var preCondStmts : array<Expression?>
+        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            let $i(itName) = (itA, itB)
+        }
+        var intermediateBinds : array<Expression?>
+        return emit_accumulator_lane(lastName, adapter, projection, whereCond, null,
+            intermediateBinds, preCondStmts, elementType, accName, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
+    if (lane == LinqLane.EARLY_EXIT) {
+        var preCondStmts : array<Expression?>
+        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            let $i(itName) = (itA, itB)
+        }
+        var intermediateBinds : array<Expression?>
+        let terminatorCall = c.single["term"]
+        return emit_early_exit_lane(lastName, adapter, projection, whereCond, null,
+            intermediateBinds, preCondStmts, elementType, terminatorCall, itName, names,
+            skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
     if (noChain && bothHaveLength && isCounter) {
         var bodyStmts : array<Expression?>
         let bothLongLength = type_has_long_length(srcAExpr._type) && type_has_long_length(srcBExpr._type)

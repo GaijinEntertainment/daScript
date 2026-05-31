@@ -43,9 +43,6 @@ class SourceAdapter {
     def can_reserve_by_length() : bool {        // O(1) length known → planners pre-reserve buffers
         return false
     }
-    def can_ride_array_lane() : bool {          // single-source adapter that supplies its own source loop and rides the array lane emit (vs. a reconstructed ArrayAdapter)
-        return false
-    }
     def has_own_loop_or_count_lane() : bool {   // emits loop_or_count itself (via emit_loop_or_count) instead of the array lane; a null hook result then bails to tier-2 rather than falling through
         return false
     }
