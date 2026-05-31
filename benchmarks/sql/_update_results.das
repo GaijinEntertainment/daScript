@@ -89,7 +89,12 @@ def build_table(cells : table<string; double>; families : array<string>) : strin
             w |> write(" {h} |")
         }
         w |> write("\n")
-        w |> write("|---|---:|---:|---:|---:|---:|\n")
+        // Generate the alignment row from HEADERS so it stays in sync when a lane is added/dropped.
+        w |> write("|---|")
+        for (_h in HEADERS) {
+            w |> write("---:|")
+        }
+        w |> write("\n")
         for (fam in families) {
             w |> write("| `{fam}` |")
             for (lane in LANES) {

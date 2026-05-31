@@ -265,7 +265,7 @@ and which gaps could land in a single PR — see
 - **`zip_reverse_to_array` SQL / Decs** — `reverse()` has no SQL order key
   (relational rows are unordered without an `ORDER BY`), and zip is not
   naturally expressible over a single archetype walk. By design, no follow-up.
-- **`zip_*` XML lane (m5f)** — now landed (see the top banner). Each zip
+- **`zip_*` XML lane (m5f)** — each zip
   bench zips the XML `Car` price-stream against a synthetic int array via the
   mixed `zip(iterator, array)` overload; the zip splice partially fuses over XML,
   still paying the unpruned `Car` materialization. The remaining `—` zip cells are
