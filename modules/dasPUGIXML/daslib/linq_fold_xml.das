@@ -97,9 +97,12 @@ class private XmlRowFieldFlattener : AstVisitor {
     }
 }
 
+// Rewrites every `bind.<field>` read in `body` to its `fieldToLocal` local, returning the (possibly
+// replaced) root — needed when `body` is itself a bare field access (`where(_.flag)`): visit_expression
+// updates its `Expression?&` argument in place, but our by-value copy wouldn't propagate the new root back.
 [macro_function]
-def private flatten_xml_row_to_locals(var body : Expression?; bindName : string; var fieldToLocal : table<string; string>) : void {
-    if (body == null) return
+def private flatten_xml_row_to_locals(var body : Expression?; bindName : string; var fieldToLocal : table<string; string>) : Expression? {
+    if (body == null) return body
     var fl = new XmlRowFieldFlattener(bindName, fieldToLocal)
     make_visitor(*fl) $(astVisitorAdapter) {
         visit_expression(body, astVisitorAdapter)
@@ -107,6 +110,47 @@ def private flatten_xml_row_to_locals(var body : Expression?; bindName : string;
     unsafe {
         delete fl
     }
+    return body
+}
+
+// Materialize-under-guard: when the whole row escapes only inside a bare `if (fieldCond) { ... }`, read
+// just the predicate's fields cheaply and build the full row (its `name` clone) only for matching elements.
+// Returns false (caller does the unconditional full build) unless the body is exactly that guarded shape.
+[macro_function]
+def private try_xml_under_guard_materialize(var body : Expression?; bindName : string; declT : TypeDeclPtr;
+                                            defName, chName : string; at : LineInfo;
+                                            var prelude : array<Expression?>; var inner : array<Expression?>) : bool {
+    if (!(body is ExprIfThenElse)) return false
+    var ite = body as ExprIfThenElse
+    if (ite.if_false != null || ite.cond == null || ite.if_true == null) return false
+    var (condAllUsed, condFields) = collect_xml_row_usage(ite.cond, bindName)
+    if (condAllUsed || empty(condFields)) return false   // whole-`it` in the guard, or no field to prune
+    sort(condFields)
+    var fieldToLocal <- {for (f in condFields); f => qn("xf_{f}", at)}
+    prelude |> push <| qmacro_expr() {
+        let $i(defName) = default<$t(declT)>
+    }
+    inner |> reserve(length(inner) + length(condFields) + 1)
+    for (f in condFields) {
+        let local = fieldToLocal[f]
+        // peek, not read: a string guard field stays a non-owning view (no clone) — consumed only by the cond, never stored.
+        inner |> push <| qmacro_expr() {
+            let $i(local) = peek_xml_field($i(chName), $v(f), $i(defName).$f(f))
+        }
+    }
+    ite.cond = flatten_xml_row_to_locals(ite.cond, bindName, fieldToLocal)
+    // Prepend the full materialize to the guarded branch so only matching elements pay build_xml_row.
+    var guarded : array<Expression?>   // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    guarded |> push <| qmacro_expr() {
+        var $i(bindName) = default<$t(declT)>
+    }
+    guarded |> push <| qmacro_expr() {
+        build_xml_row($i(chName), $i(bindName))
+    }
+    guarded |> push(ite.if_true)
+    ite.if_true = stmts_to_expr(guarded)
+    inner |> push(body)
+    return true
 }
 
 // Fills `prelude` (the hoisted default-row decl, flatten path only) + `inner` (per-element, ends with
@@ -118,6 +162,9 @@ def private build_xml_materializer(var body : Expression?; bindName : string; de
                                    var prelude : array<Expression?>; var inner : array<Expression?>) {
     var (allUsed, usedFields) = collect_xml_row_usage(body, bindName)
     if (allUsed) {
+        if (try_xml_under_guard_materialize(body, bindName, declT, defName, chName, at, prelude, inner)) {
+            return
+        }
         inner |> push <| qmacro_expr() {
             var $i(bindName) = default<$t(declT)>
         }
@@ -143,7 +190,7 @@ def private build_xml_materializer(var body : Expression?; bindName : string; de
             let $i(local) = read_xml_field($i(chName), $v(f), $i(defName).$f(f))
         }
     }
-    flatten_xml_row_to_locals(body, bindName, fieldToLocal)
+    body = flatten_xml_row_to_locals(body, bindName, fieldToLocal)
     inner |> push(body)
 }
 

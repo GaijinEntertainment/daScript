@@ -818,7 +818,7 @@ def document_module_PUGIXML_boost(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Block-based iteration", mod, %regex~.*(for_each_child|for_each_attribute|for_each)$%%),
         group_by_regex("Iterator-based iteration", mod, %regex~.*(each|each_child|each_attribute)$%%),
-        group_by_regex("LINQ source", mod, %regex~.*(from_xml_node|build_xml_row|read_xml_field)$%%),
+        group_by_regex("LINQ source", mod, %regex~.*(from_xml_node|build_xml_row|read_xml_field|peek_xml_field)$%%),
         group_by_regex("RAII document handling", mod, %regex~.*(open_xml|parse_xml|with_doc)$%%),
         group_by_regex("Quick accessors", mod, %regex~.*(node_text|node_attr|node_attr_int|node_attr_float|node_attr_bool)$%%),
         group_by_regex("Builder helpers", mod, %regex~.*(add_child|add_child_ex|add_attr)$%%),

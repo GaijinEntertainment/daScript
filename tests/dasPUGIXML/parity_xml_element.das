@@ -87,6 +87,24 @@ def parity_single(t : T?) {
 }
 
 [test]
+def parity_under_guard_string_field(t : T?) {
+    // Materialize-under-guard defers the full row build (incl. the string clone) behind the where-gate;
+    // read a STRING field off the survivor to confirm it is cloned correctly, and exercise a
+    // string-typed where-field (read cheaply, then re-read in the deferred full build).
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        // last matching price > 199 -> Toyota (id 8); read the survivor's string field
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.price > 199.0).last()).brand,
+                   _fold(each(arr)._where(_.price > 199.0).last()).brand)
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.brand == "Toyota").single()).brand, "Toyota")
+        // string-typed where-field with last() -> last Ford is id 7
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.brand == "Ford").last()).id,
+                   _fold(each(arr)._where(_.brand == "Ford").last()).id)
+    }
+}
+
+[test]
 def parity_element_at(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)

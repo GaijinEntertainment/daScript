@@ -159,6 +159,18 @@ def read_xml_field(node : xml_node; name : string; defv : auto(TT)) : TT {
     return read_xml_attr(node[name], defv)
 }
 
+def peek_xml_field(node : xml_node; name : string; defv : auto(TT)) : TT {
+    //! Like ``read_xml_field``, but a ``string`` attribute is returned as a NON-OWNING view into the
+    //! document (no ``clone_string``) — valid only within the current walk. For predicate / where-gate
+    //! reads consumed in the same iteration and never stored past it; scalar fields read identically to
+    //! ``read_xml_field``. linq_fold's materialize-under-guard path emits this for guard fields.
+    static_if (typeinfo is_string(defv)) {
+        return as_string(node[name], defv)
+    } else {
+        return read_xml_attr(node[name], defv)
+    }
+}
+
 [unsafe_outside_of_for]
 def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT -const> {
     //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading
