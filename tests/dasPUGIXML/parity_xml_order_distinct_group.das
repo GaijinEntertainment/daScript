@@ -125,6 +125,30 @@ def parity_reverse(t : T?) {
 }
 
 [test]
+def parity_reverse_take(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().take(3).to_array())
+        var m3f <- _fold(each(arr).reverse().take(3).to_array())
+        var m3  <- (arr |> reverse() |> take(3))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_reverse_take_select(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().take(3)._select(_.brand).to_array())
+        var m3f <- _fold(each(arr).reverse().take(3)._select(_.brand).to_array())
+        t |> success(strings_equal(m5f, m3f), "reverse|take|select m5f == m3f")
+        delete m5f; delete m3f
+    }
+}
+
+[test]
 def parity_distinct_by_take(t : T?) {
     // distinct+take fuses via XmlAdapter.emit_distinct_take_loop (early-exit after N distinct).
     parse_xml(XML) $(doc, ok) {
@@ -146,6 +170,90 @@ def parity_order_by_take(t : T?) {
         var m3f <- _fold(each(arr)._order_by(_.price).take(3).to_array())
         var m3  <- (arr |> _order_by(_.price) |> take(3))
         check3(t, m5f, m3f, m3)
+    }
+}
+
+// ===== Deferred-materialization (handle-buffering) bounded-heap variants — see linq_fold.md =====
+
+[test]
+def parity_order_by_descending_take(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._order_by_descending(_.price).take(3).to_array())
+        var m3f <- _fold(each(arr)._order_by_descending(_.price).take(3).to_array())
+        var m3  <- (arr |> _order_by_descending(_.price) |> take(3))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_distinct_by_order_take(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._distinct_by(_.brand)._order_by(_.price).take(3).to_array())
+        var m3f <- _fold(each(arr)._distinct_by(_.brand)._order_by(_.price).take(3).to_array())
+        var m3  <- (arr |> _distinct_by(_.brand) |> _order_by(_.price) |> take(3))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_where_order_take(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.price > 100.0)._order_by(_.price).take(3).to_array())
+        var m3f <- _fold(each(arr)._where(_.price > 100.0)._order_by(_.price).take(3).to_array())
+        var m3  <- (arr |> _where(_.price > 100.0) |> _order_by(_.price) |> take(3))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_distinct_by_order_to_array(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._distinct_by(_.brand)._order_by(_.price).to_array())
+        var m3f <- _fold(each(arr)._distinct_by(_.brand)._order_by(_.price).to_array())
+        var m3  <- (arr |> _distinct_by(_.brand) |> _order_by(_.price))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_where_order(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.price > 100.0)._order_by(_.price).to_array())
+        var m3f <- _fold(each(arr)._where(_.price > 100.0)._order_by(_.price).to_array())
+        var m3  <- (arr |> _where(_.price > 100.0) |> _order_by(_.price))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
+def parity_order_by_first(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        let m5f = _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._order_by(_.price).first())
+        let m3f = _fold(each(arr)._order_by(_.price).first())
+        t |> success(m5f.id == m3f.id && m5f.price == m3f.price && m5f.brand == m3f.brand, "order|first m5f == m3f")
+    }
+}
+
+[test]
+def parity_order_by_descending_first(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        let m5f = _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._order_by_descending(_.price).first())
+        let m3f = _fold(each(arr)._order_by_descending(_.price).first())
+        t |> success(m5f.id == m3f.id && m5f.price == m3f.price && m5f.brand == m3f.brand, "order_desc|first m5f == m3f")
     }
 }
 

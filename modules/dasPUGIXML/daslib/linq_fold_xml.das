@@ -455,6 +455,24 @@ class XmlAdapter : SourceAdapter {
         }
         return emission
     }
+    // Deferred materialization: a buffered reducer (order/take, distinct) holds `(orderKey, xml_node)`
+    // surrogates and runs build_xml_row only for the K survivors — `from_xml_node` otherwise materializes
+    // all N. The handle is the per-element node `xcur` bound inside build_pruned_dom_walk's walk.
+    def override const defers_materialization() : bool {
+        return true
+    }
+    def override handle_type() : TypeDeclPtr {
+        return strip_const_ref(clone_type(nodeExpr._type))
+    }
+    def override current_handle_expr(at : LineInfo) : Expression? {
+        let cn = qn("xcur", at)
+        return qmacro($i(cn))
+    }
+    def override materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? {
+        return qmacro_expr() {
+            build_xml_row($e(handleExpr), $i(outBind))
+        }
+    }
 }
 
 // XML analog of ArrayJoinShape / DecsJoinShape — srcA = XML node (DOM-walked), srcB = in-memory array.
