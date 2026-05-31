@@ -126,3 +126,11 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `take_while_match.das` | `take_while(P) + count` — predicate-driven take |
 | `to_array_filter.das` | `_where + _select + to_array` — three-stage materialize |
 | `zip_dot_product.das` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |
+
+## micro/
+
+Standalone micro-benchmarks — self-contained (no `_common`), kept out of `sql/` so they don't interfere with the `results.md` table-building sweep. Used to validate a design choice with hand-coded "fake code" (the AST the macro would emit) before building the macro.
+
+| File | Description |
+|------|-------------|
+| `join_select_shapes.das` | `join \|> select` output shapes over XML: C tier-2 (materialize tuples) vs A fused-materialize vs B streaming generator — A wins in every config; streaming is slower (generator overhead), string clone is a flat orthogonal cost |
