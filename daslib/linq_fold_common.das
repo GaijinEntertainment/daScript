@@ -75,6 +75,22 @@ class SourceAdapter {
     def emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return null
     }
+    // Deferred materialization (handle-buffering): a buffered reducer (order/take, distinct) holds a
+    // cheap `(key, handle)` surrogate and builds the full row only for the K survivors. Default = off;
+    // only sources whose iterator materializes every element (XML/json) override (see linq_fold.md).
+    def const defers_materialization() : bool {
+        return false
+    }
+    def handle_type() : TypeDeclPtr {                       // the surrogate's handle field type (e.g. xml_node)
+        return null
+    }
+    def current_handle_expr(at : LineInfo) : Expression? {  // handle for the element in scope inside wrap_source_loop's walk
+        return null
+    }
+    def materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? {
+        // statement(s) that fill an already-declared `var <outBind> = default<rowType>` from the handle.
+        return null
+    }
     // Bare-count fast path (no chain/range ops): O(1)-ish count without an element walk.
     // null = this source must walk (e.g. decs long_count, which arch.size sum can't represent int64-safe).
     def count_shortcut(opName : string; at : LineInfo) : Expression? {
@@ -1604,6 +1620,87 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
     let bestName = qn("order_best", at)
     let seenName = qn("order_seen", at)
     var elemType = clone_type(oc.orderElemType)
+
+    // Deferred materialization: track `(bestKey, bestNode)` instead of the best element, building the full
+    // row only once (the survivor) at the tail — `from_xml_node` otherwise materializes all N to compare.
+    if (ctx.src->defers_materialization() && oc.hasKey) {
+        var keyType = (oc.orderKey != null && oc.orderKey._type != null) ? strip_const_ref(clone_type(oc.orderKey._type.firstType)) : null
+        var handleType = ctx.src->handle_type()
+        var keyBody = peel_lambda_rename_var(oc.orderKey, bindName)
+        if (keyType != null && handleType != null && keyBody != null) {
+            let bestKeyName = qn("order_best_key", at)
+            let bestNodeName = qn("order_best_node", at)
+            let xkeyName = qn("order_xkey", at)
+            let matItName = qn("order_mat_it", at)
+            var dLess = (oc.orderName == "order_by_descending"
+                ? qmacro(_::less($i(bestKeyName), $i(xkeyName)))
+                : qmacro(_::less($i(xkeyName), $i(bestKeyName))))
+            var dPerElement : array<Expression?>
+            dPerElement |> push_from <| qmacro_block_to_array() {
+                let $i(xkeyName) = $e(keyBody)
+                if (!$i(seenName)) {
+                    $i(bestKeyName) = $i(xkeyName)
+                    $i(bestNodeName) = $e(ctx.src->current_handle_expr(at))
+                    $i(seenName) = true
+                } elif ($e(dLess)) {
+                    $i(bestKeyName) = $i(xkeyName)
+                    $i(bestNodeName) = $e(ctx.src->current_handle_expr(at))
+                }
+            }
+            var dOutElemType = (oc.selectLam != null) ? oc.selectElemType : clone_type(oc.orderElemType)
+            var matStmt = ctx.src->materialize_handle(qmacro($i(bestNodeName)), matItName, at)
+            var dRet = (oc.selectLam != null
+                ? peel_lambda_replace_var(oc.selectLam, qmacro($i(matItName)))
+                : qmacro($i(matItName)))
+            var dPrologue : array<Expression?>
+            var dTail : array<Expression?>
+            if (oc.firstName == "first") {
+                dPrologue <- qmacro_block_to_array() {
+                    var $i(bestKeyName) = default<$t(keyType)>
+                    var $i(bestNodeName) = default<$t(handleType)>
+                    var $i(seenName) = false
+                }
+                dTail |> push <| qmacro_expr() {
+                    panic("sequence contains no elements") if (!$i(seenName))
+                }
+                dTail |> push <| qmacro_expr() {
+                    var $i(matItName) = default<$t(oc.orderElemType)>
+                }
+                dTail |> push(matStmt)
+                dTail |> push <| qmacro_expr() {
+                    return $e(dRet)
+                }
+            } else {
+                let dBindName = qn("order_d", at)
+                var dDefRet = (oc.selectLam != null
+                    ? peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
+                    : qmacro($i(dBindName)))
+                dPrologue <- qmacro_block_to_array() {
+                    let $i(dBindName) = $e(oc.firstDefaultExpr)
+                    var $i(bestKeyName) = default<$t(keyType)>
+                    var $i(bestNodeName) = default<$t(handleType)>
+                    var $i(seenName) = false
+                }
+                dTail |> push <| qmacro_expr() {
+                    return $e(dDefRet) if (!$i(seenName))
+                }
+                dTail |> push <| qmacro_expr() {
+                    var $i(matItName) = default<$t(oc.orderElemType)>
+                }
+                dTail |> push(matStmt)
+                dTail |> push <| qmacro_expr() {
+                    return $e(dRet)
+                }
+            }
+            return emit_terminator_lane(TerminatorSpec(
+                prologue <- dPrologue,
+                whereCond = oc.whereCond,
+                perElementStmts <- dPerElement,
+                tailStmts <- dTail,
+                outElemType = dOutElemType
+            ), ctx.src, at)
+        }
+    }
     var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
         qmacro($i(bindName)), qmacro($i(bestName)), at)
     var perElementStmts : array<Expression?>
@@ -1663,7 +1760,58 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
     ), ctx.src, at)
 }
 
+// ===== Deferred-materialization surrogate helpers (handle-buffering) — shared by the order emits =====
+// The reducer buffers `(orderKey, handle)` tuples; the full row is built from the handle only for the
+// survivors. See linq_fold.md "Deferred materialization".
+
+// surrogate element type = tuple<keyType; handleType>; key at ._0, handle at ._1.
+[macro_function]
+def private build_surrogate_type(keyType : TypeDeclPtr; handleType : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
+    var t = new TypeDecl(baseType = Type.tTuple, at = at)
+    t.argTypes |> push(clone_type(keyType))
+    t.argTypes |> push(clone_type(handleType))
+    return t
+}
+
+// comparator over surrogate keys (._0); flipped for descending. Reused across heap push/pop + order_inplace.
+[macro_function, unused_argument(at)]
+def private build_surrogate_cmp(descending : bool; at : LineInfo) : Expression? {
+    if (descending) {
+        return qmacro($(v1, v2) { return _::less(v2._0, v1._0) })
+    }
+    return qmacro($(v1, v2) { return _::less(v1._0, v2._0) })
+}
+
+// the materialize-survivors loop: fill an already-declared `outBuf` by building the full row from each
+// surrogate handle (then projecting through selectLam). handleIsTuple: true → buffer holds `(key, handle)`
+// (handle at ._1); false → bare handle (reverse, no key). Returns [reserve; for; return <- outBuf].
+[macro_function]
+def private build_surrogate_materialize_loop(var ctx : EmitCtx; bufName, outBufName : string;
+                                             rowType : TypeDeclPtr; var selectLam : Expression?;
+                                             handleIsTuple : bool; at : LineInfo) : array<Expression?> {
+    let surrName = qn("order_surr", at)
+    let matItName = qn("order_mat_it", at)
+    var pushItem = (selectLam != null
+        ? peel_lambda_replace_var(selectLam, qmacro($i(matItName)))
+        : qmacro($i(matItName)))
+    var matHandle = (handleIsTuple ? qmacro($i(surrName)._1) : qmacro($i(surrName)))
+    var matStmt = ctx.src->materialize_handle(matHandle, matItName, at)
+    var stmts : array<Expression?>
+    stmts |> push_from <| qmacro_block_to_array() {
+        $i(outBufName) |> reserve(length($i(bufName)))
+        for ($i(surrName) in $i(bufName)) {
+            var $i(matItName) = default<$t(rowType)>
+            $e(matStmt)
+            $i(outBufName) |> push_clone($e(pushItem))
+        }
+        return <- $i(outBufName)
+    }
+    return <- stmts
+}
+
 // emit_bounded_heap — take(N) with inline-cmp key. Heap of size N during walk; distinct gate variant + terminal _select.
+// Deferred-materialization variant (XML): the heap holds `(orderKey, handle)` surrogates and build_xml_row
+// runs only for the K survivors — see linq_fold.md "Deferred materialization".
 [macro_function]
 def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
@@ -1675,26 +1823,106 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     let bhBufName = qn("order_buf", at)
     let dsetName = qn("order_dset", at)
     let dkeyName = qn("order_dkey", at)
-    var bufElemType = clone_type(oc.orderElemType)
-    var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
-        qmacro($i(bindName)), qmacro($i(bhBufName)[0]), at)
-    var perElementPush : Expression? = qmacro_expr() {
-        if (length($i(bhBufName)) < $i(takeNName)) {
-            $i(bhBufName) |> push_clone($i(bindName))
-            _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
-        } elif ($e(lessTest)) {
-            _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
-            $i(bhBufName)[length($i(bhBufName)) - 1] := $i(bindName)
-            _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+    var rowType = clone_type(oc.orderElemType)
+
+    // Deferred path requires a keyed order (whole-element compare can't be reduced to a surrogate key)
+    // and a peelable key + a handle type from the source.
+    var deferred = ctx.src->defers_materialization() && oc.hasKey
+    var keyType : TypeDeclPtr
+    var handleType : TypeDeclPtr
+    var keyBody : Expression?
+    if (deferred) {
+        keyType = (oc.orderKey != null && oc.orderKey._type != null) ? strip_const_ref(clone_type(oc.orderKey._type.firstType)) : null
+        handleType = ctx.src->handle_type()
+        keyBody = peel_lambda_rename_var(oc.orderKey, bindName)
+        if (keyType == null || handleType == null || keyBody == null) {
+            deferred = false
         }
     }
+
+    var laneBufType : TypeDeclPtr
+    var perElementPush : Expression?
+    var postBufDeclStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+
+    if (deferred) {
+        laneBufType = build_surrogate_type(keyType, handleType, at)
+        let xkeyName = qn("order_xkey", at)
+        let outBufName = qn("order_out_buf", at)
+        var surrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)   // nolint:PERF023 reused 3× across heap/order splices
+        var admitTest = (oc.orderName == "order_by_descending"
+            ? qmacro(_::less($i(bhBufName)[0]._0, $i(xkeyName)))
+            : qmacro(_::less($i(xkeyName), $i(bhBufName)[0]._0)))
+        perElementPush = qmacro_block() {
+            let $i(xkeyName) = $e(keyBody)
+            if (length($i(bhBufName)) < $i(takeNName)) {
+                $i(bhBufName) |> push(($i(xkeyName) => $e(ctx.src->current_handle_expr(at))))
+                _::spliced_push_heap($i(bhBufName), $e(surrCmp))
+            } elif ($e(admitTest)) {
+                _::spliced_pop_heap($i(bhBufName), $e(surrCmp))
+                $i(bhBufName)[length($i(bhBufName)) - 1] = ($i(xkeyName) => $e(ctx.src->current_handle_expr(at)))
+                _::spliced_push_heap($i(bhBufName), $e(surrCmp))
+            }
+        }
+        let outElemT = oc.selectLam != null ? clone_type(oc.selectElemType) : clone_type(rowType)
+        postBufDeclStmts |> push_from <| qmacro_block_to_array() {
+            var $i(outBufName) : array<$t(outElemT)>
+            return <- $i(outBufName) if ($i(takeNName) <= 0)
+        }
+        tailStmts |> push <| qmacro_expr() {
+            _::order_inplace($i(bhBufName), $e(surrCmp))
+        }
+        tailStmts |> push_from(build_surrogate_materialize_loop(ctx, bhBufName, outBufName, rowType, oc.selectLam, true, at))
+    } else {
+        laneBufType = clone_type(rowType)
+        var lessTest = make_inline_less_call(oc.orderKey, oc.orderName,
+            qmacro($i(bindName)), qmacro($i(bhBufName)[0]), at)
+        perElementPush = qmacro_expr() {
+            if (length($i(bhBufName)) < $i(takeNName)) {
+                $i(bhBufName) |> push_clone($i(bindName))
+                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+            } elif ($e(lessTest)) {
+                _::spliced_pop_heap($i(bhBufName), $e(inlineCmp))
+                $i(bhBufName)[length($i(bhBufName)) - 1] := $i(bindName)
+                _::spliced_push_heap($i(bhBufName), $e(inlineCmp))
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            _::order_inplace($i(bhBufName), $e(inlineCmp))
+        }
+        if (oc.selectLam != null) {
+            let outBufName = qn("order_proj_buf", at)
+            let elemName = qn("order_proj_e", at)
+            var projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
+            postBufDeclStmts |> push_from <| qmacro_block_to_array() {
+                var $i(outBufName) : array<$t(oc.selectElemType)>
+                return <- $i(outBufName) if ($i(takeNName) <= 0)
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                $i(outBufName) |> reserve(length($i(bhBufName)))
+                for ($i(elemName) in $i(bhBufName)) {
+                    $i(outBufName) |> push_clone($e(projBody))
+                }
+                return <- $i(outBufName)
+            }
+        } else {
+            postBufDeclStmts |> push <| qmacro_expr() {
+                return <- $i(bhBufName) if ($i(takeNName) <= 0)
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return <- $i(bhBufName)
+            }
+        }
+    }
+
     var distinctGate : DistinctGateSpec?
     if (oc.distinctName != "") {
         var dgKind : DistinctGateKind = (oc.distinctName == "distinct_by"
             ? DistinctGateKind(KeyLam = oc.distinctKey)
             : DistinctGateKind(NonKey = null))
+        // dedup key applies to the source element, so its witness type stays the full row even when deferred.
         distinctGate = new DistinctGateSpec(
-            kind = dgKind, bindName = bindName, bufElemType = bufElemType,
+            kind = dgKind, bindName = bindName, bufElemType = clone_type(rowType),
             dsetName = dsetName, dkeyName = dkeyName
         )
     }
@@ -1702,38 +1930,9 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     prologueStmts |> push <| qmacro_expr() {
         let $i(takeNName) = $e(oc.takeExpr)
     }
-    // takeN<=0 early-return + outBuf decl land in postBufDeclStmts so they emit AFTER bufDecl + dsetDecl.
-    var postBufDeclStmts : array<Expression?>
-    var tailStmts : array<Expression?>
-    tailStmts |> push <| qmacro_expr() {
-        _::order_inplace($i(bhBufName), $e(inlineCmp))
-    }
-    if (oc.selectLam != null) {
-        let outBufName = qn("order_proj_buf", at)
-        let elemName = qn("order_proj_e", at)
-        var projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
-        postBufDeclStmts |> push_from <| qmacro_block_to_array() {
-            var $i(outBufName) : array<$t(oc.selectElemType)>
-            return <- $i(outBufName) if ($i(takeNName) <= 0)
-        }
-        tailStmts |> push_from <| qmacro_block_to_array() {
-            $i(outBufName) |> reserve(length($i(bhBufName)))
-            for ($i(elemName) in $i(bhBufName)) {
-                $i(outBufName) |> push_clone($e(projBody))
-            }
-            return <- $i(outBufName)
-        }
-    } else {
-        postBufDeclStmts |> push <| qmacro_expr() {
-            return <- $i(bhBufName) if ($i(takeNName) <= 0)
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return <- $i(bhBufName)
-        }
-    }
     return emit_fold_array_lane(FoldArraySpec(
         prologueStmts <- prologueStmts,
-        bufElemType = bufElemType,
+        bufElemType = laneBufType,
         bufName = bhBufName,
         postBufDeclStmts <- postBufDeclStmts,
         whereCond = oc.whereCond,
@@ -1864,6 +2063,36 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
             reserveStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcName)))
             }
+        }
+    }
+    // Deferred materialization (distinct, no-take, no-first arm): buffer `(orderKey, handle)` surrogates
+    // gated by the distinct prefilter, order on the keys, build the full row only for survivors. Distinct-
+    // only — the pure-where case is already materialize-under-guard'd (see linq_fold.md).
+    if (ctx.src->defers_materialization() && oc.hasKey && oc.takeExpr == null && oc.firstName == "" && oc.distinctName != "") {
+        var keyType = (oc.orderKey != null && oc.orderKey._type != null) ? strip_const_ref(clone_type(oc.orderKey._type.firstType)) : null
+        var handleType = ctx.src->handle_type()
+        var keyBody = peel_lambda_rename_var(oc.orderKey, bindName)
+        if (keyType != null && handleType != null && keyBody != null) {
+            let dOutBufName = qn("order_out_buf", at)
+            let dOutElemT = oc.selectLam != null ? clone_type(oc.selectElemType) : clone_type(oc.orderElemType)
+            var dSurrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)
+            var dPush = qmacro_expr() {
+                $i(bufName) |> push(($e(keyBody) => $e(ctx.src->current_handle_expr(at))))
+            }
+            var dTail <- qmacro_block_to_array() {
+                _::order_inplace($i(bufName), $e(dSurrCmp))
+                var $i(dOutBufName) : array<$t(dOutElemT)>
+            }
+            dTail |> push_from(build_surrogate_materialize_loop(ctx, bufName, dOutBufName, oc.orderElemType, oc.selectLam, true, at))
+            return emit_fold_array_lane(FoldArraySpec(
+                bufElemType = build_surrogate_type(keyType, handleType, at),
+                bufName = bufName,
+                whereCond = oc.whereCond,
+                distinctGate = distinctGate,
+                perElementPush = dPush,
+                tailStmts <- dTail,
+                wrapIter = ctx.expr_is_iterator
+            ), ctx.src, at)
         }
     }
     // 4 tail arms hand-emitted: arms 1-2 bind single element (no re-iter), arm 4 wraps top_n result.
@@ -2264,6 +2493,43 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
     if ((c.single |> key_exists("take")) && whereCond == null && projection == null && termsel_fast_path_ok) {
         var rev = ctx.src->emit_reverse_skip_into_tail(c.single["take"].arguments[1], ctx.expr_is_iterator, terminalSelectLam_check, terminalSelectElemType_check, at)
         if (rev != null) return rev
+    }
+    // Deferred materialization (reverse + take): reverse has no order key, so the buffer holds bare node
+    // handles. Reverse, take K, then build the full row only for the K survivors. No pre-reverse projection
+    // (the buffer would hold projected values, not handles). where/termsel compose as in the order emits.
+    if (ctx.src->defers_materialization() && (c.single |> key_exists("take")) && projection == null && termsel_fast_path_ok) {
+        var handleType = ctx.src->handle_type()
+        var dRowType = ctx.src->element_type()
+        if (handleType != null && dRowType != null) {
+            var dTermselLam : Expression?
+            var dTermselElemType : TypeDeclPtr
+            if (c.single |> key_exists("termsel")) {
+                dTermselLam = c.single["termsel"].arguments[1]
+                dTermselElemType = clone_type(terminalSelectElemType_check)
+            }
+            var dTakeExpr = c.single["take"].arguments[1]
+            let dOutBufName = qn("rev_out_buf", at)
+            let dTakeLimName = qn("rev_takeLim", at)
+            let dOutElemT = dTermselLam != null ? clone_type(dTermselElemType) : clone_type(dRowType)
+            var dHandlePush = qmacro_expr() {
+                $i(bufName) |> push($e(ctx.src->current_handle_expr(at)))
+            }
+            var dTail <- qmacro_block_to_array() {
+                _::reverse_inplace($i(bufName))
+                let $i(dTakeLimName) = $e(dTakeExpr)
+                $i(bufName) |> resize($i(dTakeLimName) <= 0 ? 0 : ($i(dTakeLimName) < length($i(bufName)) ? $i(dTakeLimName) : length($i(bufName))))
+                var $i(dOutBufName) : array<$t(dOutElemT)>
+            }
+            dTail |> push_from(build_surrogate_materialize_loop(ctx, bufName, dOutBufName, dRowType, dTermselLam, false, at))
+            return emit_fold_array_lane(FoldArraySpec(
+                bufElemType = clone_type(handleType),
+                bufName = bufName,
+                whereCond = whereCond,
+                perElementPush = dHandlePush,
+                tailStmts <- dTail,
+                wrapIter = ctx.expr_is_iterator
+            ), ctx.src, at)
+        }
     }
     var takeExpr : Expression?
     if (c.single |> key_exists("take")) {
