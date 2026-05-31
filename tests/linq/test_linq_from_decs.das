@@ -528,6 +528,57 @@ def test_unroll_first_splice_shape(t : T?) {
     }
 }
 
+// No-range any/all/contains take the FindReturn / FindReturnNegated fast path: the for_each_archetype_find
+// result IS the answer (no found-state var). `found` count == 0 distinguishes this from the take_while+any
+// shape, which routes through an explicit found flag (count 3). This locks in the LoopDispatch fast-path arm.
+[test]
+def test_unroll_any_pred_findreturn_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_any_pred_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_any_pred_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "any(pred) no-range uses for_each_archetype_find")
+        t |> equal(describe_count(body_expr, "found"), 0, "any(pred) no-range takes the FindReturn fast path — no found-state")
+    }
+}
+
+[test]
+def test_unroll_all_findreturnnegated_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_all_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_all_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "all no-range uses for_each_archetype_find")
+        t |> equal(describe_count(body_expr, "found"), 0, "all no-range takes the FindReturnNegated fast path — no found-state")
+    }
+}
+
+[test]
+def test_unroll_contains_findreturn_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_contains_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_contains_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "contains no-range uses for_each_archetype_find")
+        t |> equal(describe_count(body_expr, "found"), 0, "contains no-range takes the FindReturn fast path — no found-state")
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Slice 3c: to_array buffer terminator
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1083,8 +1134,8 @@ def target_unroll_skip_while_take_count_fold() : int {
 
 // Predicates over the SOURCE TUPLE (no select; select-after-take_while bails per
 // canonical order). This is the only shape where the splice actually fires for
-// any/all/contains + take_while, which is what exercises the explicit-state
-// (decs_found) routing added in emit_decs_early_exit.
+// any/all/contains + take_while, which is what exercises the explicit found-state
+// routing in emit_early_exit_lane's !supports_direct_return arm (decs + range present).
 
 [export, marker(no_coverage)]
 def target_unroll_take_while_any_match_fold() : bool {
@@ -1111,8 +1162,8 @@ def target_unroll_take_while_all_fail_fold() : bool {
 // take_while + contains: source-tuple equality isn't defined (no `==` on tuple),
 // and the canonical-order rule forbids _select between take_while and contains
 // to project to a scalar — so this combination is not testable on decs today.
-// any/all above already exercise the same useExplicitState code path
-// (contains shares the branch in emit_decs_early_exit).
+// any/all above already exercise the same found-state code path
+// (contains shares the Find+state branch in emit_early_exit_lane).
 
 [test]
 def test_unroll_take_while_count_parity(t : T?) {
@@ -1285,8 +1336,8 @@ def test_unroll_take_while_any_splice_shape(t : T?) {
         t |> equal(describe_count(body_expr, "to_sequence"), 0, "take_while+any splice must NOT fall to tier-2 to_sequence")
         // take_while-stop produces inner `return true` — needs _find dispatch.
         t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take_while+any splice routes to for_each_archetype_find")
-        // Explicit-state routing emits `decs_found` to disambiguate take_while-stop from real-match.
-        t |> equal(describe_count(body_expr, "decs_found"), 3, "take_while+any routes through explicit decs_found state (var + set + return)")
+        // Explicit found-state routing disambiguates take_while-stop from a real match (var + set + return).
+        t |> equal(describe_count(body_expr, "found"), 3, "take_while+any routes through explicit found state (var + set + return)")
     }
 }
 

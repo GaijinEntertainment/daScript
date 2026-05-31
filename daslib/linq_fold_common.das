@@ -1482,13 +1482,35 @@ def emit_early_exit_lane(
     var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
     if (opName == "first") {
         var retType = mut_result_type(projection, elementType)
-        perMatchStmts |> push <| qmacro_expr() {
-            return $i(valueName)
-        }
-        // Tail: panic + unreachable default-return (matches linq.das line 2383).
-        tailStmts <- qmacro_block_to_array() {
-            panic("sequence contains no elements")
-            return default<$t(retType)>
+        if (directReturn) {
+            perMatchStmts |> push <| qmacro_expr() {
+                return $i(valueName)
+            }
+            // Tail: panic + unreachable default-return (matches linq.das line 2383).
+            tailStmts <- qmacro_block_to_array() {
+                panic("sequence contains no elements")
+                return default<$t(retType)>
+            }
+        } else {
+            // decs: the nested archetype lambda can't return out of the invoke — retain + `return true`, tail returns.
+            let foundName = qn("found", at)
+            let resultName = qn("fst", at)
+            preludeStmts |> push_from <| qmacro_block_to_array() {
+                var $i(foundName) = false
+                var $i(resultName) : $t(retType)
+            }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                $i(resultName) := $i(valueName)
+                $i(foundName) = true
+                return true
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("sequence contains no elements")
+                }
+                return $i(resultName)
+            }
+            dispatch = LoopDispatch(Find = null)
         }
     } elif (opName == "first_or_default") {
         // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
@@ -1496,38 +1518,128 @@ def emit_early_exit_lane(
         preludeStmts |> push <| qmacro_expr() {
             let $i(defaultName) = $e(terminatorCall.arguments[1])
         }
-        perMatchStmts |> push <| qmacro_expr() {
-            return $i(valueName)
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return $i(defaultName)
+        if (directReturn) {
+            perMatchStmts |> push <| qmacro_expr() {
+                return $i(valueName)
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return $i(defaultName)
+            }
+        } else {
+            var retType = mut_result_type(projection, elementType)
+            let foundName = qn("found", at)
+            let resultName = qn("fst", at)
+            preludeStmts |> push_from <| qmacro_block_to_array() {
+                var $i(foundName) = false
+                var $i(resultName) : $t(retType)
+            }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                $i(resultName) := $i(valueName)
+                $i(foundName) = true
+                return true
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    return $i(defaultName)
+                }
+                return $i(resultName)
+            }
+            dispatch = LoopDispatch(Find = null)
         }
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
+        var predExpr : Expression?
         if (argCount > 1) {
-            var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
-            perMatchStmts |> push <| qmacro_expr() {
-                if ($e(predExpr)) {
+            predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
+        }
+        if (directReturn) {
+            if (argCount > 1) {
+                perMatchStmts |> push <| qmacro_expr() {
+                    if ($e(predExpr)) {
+                        return true
+                    }
+                }
+            } else {
+                perMatchStmts |> push <| qmacro_expr() {
                     return true
                 }
             }
-        } else {
-            perMatchStmts |> push <| qmacro_expr() {
-                return true
+            tailStmts |> push <| qmacro_expr() {
+                return false
             }
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return false
+        } elif (dispatch is Find) {
+            // decs + take/take_while: the range cap's `return true` and a real match share the inner sentinel,
+            // so route the match through a found flag and use the find result only as iteration control.
+            if (argCount > 1 && predExpr == null) return null
+            let foundName = qn("found", at)
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            if (argCount > 1) {
+                perMatchStmts |> push <| qmacro_expr() {
+                    if ($e(predExpr)) {
+                        $i(foundName) = true
+                        return true
+                    }
+                }
+            } else {
+                perMatchStmts |> push_from <| qmacro_block_to_array() {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return $i(foundName)
+            }
+        } else {
+            // decs, no range: the find result IS the answer (inner `return true` on the first match).
+            if (argCount > 1 && predExpr == null) return null
+            if (argCount > 1) {
+                perMatchStmts |> push <| qmacro_expr() {
+                    if ($e(predExpr)) return true
+                }
+            } else {
+                perMatchStmts |> push <| qmacro_expr() {
+                    return true
+                }
+            }
+            dispatch = LoopDispatch(FindReturn = null)
         }
     } elif (opName == "all") {
         var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
-        perMatchStmts |> push <| qmacro_expr() {
-            if (!$e(predExpr)) {
-                return false
+        if (directReturn) {
+            perMatchStmts |> push <| qmacro_expr() {
+                if (!$e(predExpr)) {
+                    return false
+                }
             }
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return true
+            tailStmts |> push <| qmacro_expr() {
+                return true
+            }
+        } elif (dispatch is Find) {
+            // decs + take/take_while: a counterexample and the range cap both inner-return true; route the
+            // counterexample through a found flag, tail returns !found.
+            if (predExpr == null) return null
+            let foundName = qn("found", at)
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                if (!$e(predExpr)) {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return !$i(foundName)
+            }
+        } else {
+            // decs, no range: `all` == "no counterexample" — inner returns true on FAIL, so negate the find.
+            if (predExpr == null) return null
+            perMatchStmts |> push <| qmacro_expr() {
+                if (!$e(predExpr)) return true
+            }
+            dispatch = LoopDispatch(FindReturnNegated = null)
         }
     } elif (opName == "contains") {
         // `v` is bound once at the top of the block; per-element compare uses the bound name
@@ -1535,13 +1647,36 @@ def emit_early_exit_lane(
         preludeStmts |> push <| qmacro_expr() {
             let $i(containsValName) = $e(terminatorCall.arguments[1])
         }
-        perMatchStmts |> push <| qmacro_expr() {
-            if ($i(valueName) == $i(containsValName)) {
-                return true
+        if (directReturn) {
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($i(valueName) == $i(containsValName)) {
+                    return true
+                }
             }
-        }
-        tailStmts |> push <| qmacro_expr() {
-            return false
+            tailStmts |> push <| qmacro_expr() {
+                return false
+            }
+        } elif (dispatch is Find) {
+            // decs + take/take_while: value-match and range cap share the sentinel; route through found flag.
+            let foundName = qn("found", at)
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(foundName) = false
+            }
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($i(valueName) == $i(containsValName)) {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+            tailStmts |> push <| qmacro_expr() {
+                return $i(foundName)
+            }
+        } else {
+            // decs, no range: the find result IS the answer.
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($i(valueName) == $i(containsValName)) return true
+            }
+            dispatch = LoopDispatch(FindReturn = null)
         }
     } elif (opName == "last" || opName == "last_or_default") {
         // Full walk; per-match overwrites a single bind; tail returns it after found-check (panic/default for empty).

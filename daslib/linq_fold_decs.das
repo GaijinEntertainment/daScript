@@ -348,12 +348,11 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         return emit_accumulator_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, accName, finalBind, names, null, null, null, null, at)
     }
-    if (isEarlyExit) return emit_decs_early_exit(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
     if (isMinMaxBy) return emit_decs_min_max_by(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
-    if (isWalk || isElementAt) {
-        // last / single / single_or_default / aggregate / element_at — the shared early-exit lane. The
-        // DecsAdapter handles the walk (chain + ranges + for_each{,_find}); the lane supplies the per-op
-        // state path (supports_direct_return == false) and consumes the adapter's effective dispatch.
+    if (isEarlyExit || isWalk || isElementAt) {
+        // first/first_or_default/any/all/contains/last/single/single_or_default/aggregate/element_at — the
+        // shared early-exit lane. The DecsAdapter walks (chain+ranges+for_each{,_find}); the lane supplies the
+        // per-op !supports_direct_return state path + the adapter's effective dispatch (Each→Find under take).
         var elementType = clone_type(chainInfo.finalType)
         let names <- make_range_names(at)
         var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
@@ -1076,157 +1075,6 @@ def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Express
     emission.force_at(at)
     emission.force_generated(true)
     return emission
-}
-
-[macro_function]
-def emit_decs_early_exit(var bridge : DecsBridgeShape?;
-                         opName : string;
-                         var chainInfo : DecsChainInfo?;
-                         var rangeInfo : DecsRangeInfo?;
-                         var calls : array<tuple<ExprCall?; LinqCall?>>;
-                         intermediateEnd : int;
-                         terminatorCall : ExprCall?;
-                         at : LineInfo) : Expression? {
-    // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain. Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope).
-    let foundName = qn("decs_found", at)
-    let resultName = qn("decs_result", at)
-    let containsValName = qn("decs_cv", at)
-    let defaultName = qn("decs_dv", at)
-    let finalBind = chainInfo.finalBind
-    var elemType = clone_type(chainInfo.finalType)
-    let takeOrTakeWhile = (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-    var perElement : Expression?
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
-    var dispatch : LoopDispatch = LoopDispatch(Find = null)
-    var retType : TypeDeclPtr
-    if (opName == "first" || opName == "first_or_default") {
-        retType = elemType
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(resultName) : $t(elemType)
-        }
-        if (opName == "first_or_default") {
-            preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(terminatorCall.arguments[1])
-            }
-        }
-        perElement = qmacro_block() {
-            $i(resultName) := $i(finalBind)
-            $i(foundName) = true
-            return true
-        }
-        if (opName == "first") {
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) panic("sequence contains no elements")
-                return $i(resultName)
-            }
-        } else {
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) return $i(defaultName)
-                return $i(resultName)
-            }
-        }
-    } elif (opName == "any") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        let argCount = length(terminatorCall.arguments)
-        // When take OR take_while is present, distinguish "match found" from "iteration-stop signal" — both produce `return true` from the inner block, so route through an explicit foundName state and use the find result only as iteration control (tail returns foundName).
-        if (takeOrTakeWhile) {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-                if (predExpr == null) return null
-                perElement = qmacro_expr() {
-                    if ($e(predExpr)) {
-                        $i(foundName) = true
-                        return true
-                    }
-                }
-            } else {
-                perElement = qmacro_block() {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-                if (predExpr == null) return null
-                perElement = qmacro_expr() {
-                    if ($e(predExpr)) return true
-                }
-            } else {
-                perElement = qmacro_expr() {
-                    return true
-                }
-            }
-            dispatch = LoopDispatch(FindReturn = null)
-        }
-    } elif (opName == "all") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-        if (predExpr == null) return null
-        if (takeOrTakeWhile) {
-            // Take-cap / take_while-stop hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perElement = qmacro_expr() {
-                if (!$e(predExpr)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return !$i(foundName)
-            }
-        } else {
-            perElement = qmacro_expr() {
-                if (!$e(predExpr)) return true
-            }
-            // `all` is "no counterexample found" — inner returns true on FAIL, so negate.
-            dispatch = LoopDispatch(FindReturnNegated = null)
-        }
-    } elif (opName == "contains") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(containsValName) = $e(terminatorCall.arguments[1])
-        }
-        if (takeOrTakeWhile) {
-            // Same disambiguation as any: take-cap / take_while-stop and "value matched" both inner-return true, route through foundName.
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perElement = qmacro_expr() {
-                if ($i(finalBind) == $i(containsValName)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            perElement = qmacro_expr() {
-                if ($i(finalBind) == $i(containsValName)) return true
-            }
-            dispatch = LoopDispatch(FindReturn = null)
-        }
-    } else {
-        return null
-    }
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
 }
 
 [macro_function]
