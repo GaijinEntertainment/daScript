@@ -40,6 +40,14 @@ class DecsAdapter : SourceAdapter {
     def override has_own_loop_or_count_lane() : bool {
         return true
     }
+    def override effective_dispatch(base : LoopDispatch) : LoopDispatch {
+        // take / take_while emit an early-exit `return true` from the inner-for, which only works inside a
+        // for_each_archetype_find bool-lambda — so an otherwise-Each terminator must walk via Find.
+        if (rangeInfo != null && base is Each && (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)) {
+            return LoopDispatch(Find = null)
+        }
+        return base
+    }
     def override const can_group_by() : bool {
         return true
     }
@@ -246,6 +254,15 @@ class DecsJoinAdapter : SourceAdapter {
 }
 
 [macro_function]
+def private make_decs_term_adapter(var bridge : DecsBridgeShape?; var chainInfo : DecsChainInfo?;
+                                  var rangeInfo : DecsRangeInfo?; var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                  intermediateEnd : int) : SourceAdapter? {
+    // var params so the const-bound context pointers can land in the adapter's non-const fields.
+    return new DecsAdapter(bridge = bridge, tupName = chainInfo.tupName, chainInfo = chainInfo,
+                           calls <- calls, intermediateEnd = intermediateEnd, rangeInfo = rangeInfo)
+}
+
+[macro_function]
 def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
@@ -305,12 +322,31 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         || termName == "aggregate")
     let isElementAt = termName == "element_at" || termName == "element_at_or_default"
     if (isAccum) {
-        var accType : TypeDeclPtr
-        if (termName == "sum" || termName == "min" || termName == "max" || termName == "average") {
-            if (chainInfo.selectCount == 0 || chainInfo.finalType == null) return null
-            accType = clone_type(chainInfo.finalType)
+        let finalBind = chainInfo.finalBind
+        var elementType = clone_type(chainInfo.finalType)
+        let accName = qn("decs_acc", at)
+        let names <- make_range_names(at)
+        var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
+        if (termName == "count" || termName == "long_count") {
+            // count / long_count → counter lane. The chain (incl. side-effecting selects) runs in
+            // wrap_source_loop; the body just increments. _count(pred) and post-take-where gate the bump.
+            var loopBody : Expression? = qmacro_expr() {
+                $i(accName) ++
+            }
+            if (length(termCall.arguments) > 1) {
+                var predExpr = peel_lambda_rename_var(termCall.arguments[1], finalBind)
+                if (predExpr == null) return null
+                loopBody = wrap_with_condition(loopBody, predExpr)
+            }
+            loopBody = wrap_with_condition(loopBody, clone_expression(rangeInfo.postTakeWhereCond))
+            return emit_counter_lane(adapter, accName, finalBind, names, null, null, null, loopBody, at, termName == "long_count")
         }
-        return emit_decs_accumulator(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, accType, at)
+        // sum / min / max / average require a projecting select (no sense summing the raw tuple).
+        if (chainInfo.selectCount == 0 || elementType == null) return null
+        var noBinds : array<Expression?>
+        var noPre : array<Expression?>
+        return emit_accumulator_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
+            noBinds, noPre, elementType, accName, finalBind, names, null, null, null, null, at)
     }
     if (isEarlyExit) return emit_decs_early_exit(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
     if (isMinMaxBy) return emit_decs_min_max_by(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
@@ -1002,59 +1038,6 @@ def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Express
     emission.force_at(at)
     emission.force_generated(true)
     return emission
-}
-
-[macro_function]
-def emit_decs_accumulator(var bridge : DecsBridgeShape?;
-                          opName : string;
-                          var chainInfo : DecsChainInfo?;
-                          var rangeInfo : DecsRangeInfo?;
-                          var calls : array<tuple<ExprCall?; LinqCall?>>;
-                          intermediateEnd : int;
-                          terminatorCall : ExprCall?;
-                          var accType : TypeDeclPtr;
-                          at : LineInfo) : Expression? {
-    // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred). Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope, take present → for_each_archetype_find).
-    let accName = qn("decs_acc", at)
-    let cntName = qn("decs_cnt", at)
-    let firstName = qn("decs_first", at)
-    let valBindName = qn("decs_val", at)
-    let finalBind = chainInfo.finalBind
-    // Wrap finalBind as an Expression so the shared per-element builder (lane uses `$e(projection)`, decs uses `$e(qmacro($i(finalBind)))`) sees one shape.
-    var valueExpr : Expression? = qmacro($i(finalBind))
-    let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
-    let isDoubleAccType = (chainInfo.finalType != null && chainInfo.finalType.baseType == Type.tDouble)
-    var perElementStmts <- build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
-    var perElement : Expression? = stmts_to_expr(perElementStmts)
-    // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
-    if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
-        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-        if (predExpr == null) return null
-        perElement = qmacro_expr() {
-            if ($e(predExpr)) {
-                $e(perElement)
-            }
-        }
-    }
-    var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
-    if (spec.returnExpr == null) return null
-    var preludeStmts <- spec.prologue
-    var tailStmts : array<Expression?>
-    tailStmts |> push <| qmacro_expr() {
-        return $e(spec.returnExpr)
-    }
-    var retType = spec.retType
-    // Slice 5b: take/take_while produces inner `return true` (terminates iteration globally) so it needs the bool-lambda archetype-find dispatch.
-    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? LoopDispatch(Find = null)
-        : LoopDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
 }
 
 [macro_function]

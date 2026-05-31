@@ -65,6 +65,9 @@ class SourceAdapter {
     def supports_direct_return() : bool {       // a mid-loop `return X` in the per-element body exits the whole invoke (real for{}); false = nested-callback walk (decs/xml) needs state-var + find-stop + tail. Conservative default false (wrong-true mis-emits an escaping return; wrong-false is merely the slower-but-correct state path)
         return false
     }
+    def effective_dispatch(base : LoopDispatch) : LoopDispatch {   // a source may upgrade the base dispatch (e.g. decs needs Find when its ranges emit an early-exit `return true`). Default: as-is — array/zip/xml frame an unconditional loop and ignore dispatch entirely
+        return base
+    }
     def name_prefix() : string {                // gensym prefix keeping hoisted names per-source distinct in plan_group_by_core
         return ""
     }
@@ -1373,7 +1376,8 @@ def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; na
     return emit_terminator_lane(TerminatorSpec(
         prologue <- prologue,
         perElementStmts <- perElementStmts,
-        tailStmts <- tailStmts
+        tailStmts <- tailStmts,
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
     ), adapter, at)
 }
 
@@ -1438,7 +1442,8 @@ def emit_accumulator_lane(
         skipWhileCond = skipWhileCond,
         takeWhileCond = takeWhileCond,
         rangeNames = names,
-        tailStmts <- tailStmts
+        tailStmts <- tailStmts,
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
     ), adapter, at)
 }
 
