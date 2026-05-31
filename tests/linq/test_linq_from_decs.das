@@ -3168,6 +3168,87 @@ def test_unroll_take_last_splice_shape(t : T?) {
     }
 }
 
+// Range × walk/element_at combos: take present upgrades the otherwise-Each walk ops (single / aggregate)
+// to the _find dispatch (the range guard's `return true` only works in a bool-lambda), and caps the
+// counter-driven element_at. take+last covers `last`; these cover the rest of the migrated terminators.
+[export, marker(no_coverage)]
+def target_unroll_take_single_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(1).single())
+}
+
+[test]
+def test_unroll_take_single_parity(t : T?) {
+    fixture_unroll2(5)
+    // take(1) of 0..4 → exactly [0] → single returns 0 (no >1-match panic)
+    t |> equal(target_unroll_take_single_fold(), 0, "take+single returns the sole windowed element")
+}
+
+[test]
+def test_unroll_take_single_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_single_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_take_single_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take upgrades single from Each to _find")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_aggregate_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).aggregate(0) <| $(a, x) => a + x)
+}
+
+[test]
+def test_unroll_take_aggregate_parity(t : T?) {
+    fixture_unroll2(10)
+    // take(3) of 0..9 → 0,1,2 → 0+0+1+2 = 3
+    t |> equal(target_unroll_take_aggregate_fold(), 3, "take+aggregate folds the windowed elements")
+}
+
+[test]
+def test_unroll_take_aggregate_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_unroll_take_aggregate_fold)
+        t |> success(func != null, "RTTI must resolve target_unroll_take_aggregate_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 1, "take upgrades aggregate from Each to _find")
+    }
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_element_at_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).element_at(1))
+}
+
+[test]
+def test_unroll_take_element_at_parity(t : T?) {
+    fixture_unroll2(10)
+    // take(3) → window 0,1,2; element_at(1) → 1
+    t |> equal(target_unroll_take_element_at_fold(), 1, "take+element_at indexes inside the window")
+}
+
+[export, marker(no_coverage)]
+def target_unroll_take_element_at_or_default_oor_fold() : int {
+    // idx 5 is past the take(2) window [0,1] → default<int> == 0
+    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).element_at_or_default(5))
+}
+
+[test]
+def test_unroll_take_element_at_or_default_out_of_window(t : T?) {
+    fixture_unroll2(10)
+    t |> equal(target_unroll_take_element_at_or_default_oor_fold(), 0, "take+element_at_or_default past window → default")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Slice 1: trivial-let elision for `_select(_.userName)` → iter var (skips
 //          the `let decs_sel_N = car_price` no-op binding when the projection

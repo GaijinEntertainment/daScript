@@ -1476,6 +1476,10 @@ def emit_early_exit_lane(
     // Per-op (preludeStmts, per-element work appended to perMatchStmts, tailStmts).
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
+    // Nested-callback sources (decs) can't `return X` out of the invoke mid-loop — they take the
+    // state-var + find-stop + tail path and consume `dispatch`; direct-return sources ignore dispatch.
+    let directReturn = (adapter == null || adapter->supports_direct_return())
+    var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
     if (opName == "first") {
         var retType = mut_result_type(projection, elementType)
         perMatchStmts |> push <| qmacro_expr() {
@@ -1639,19 +1643,43 @@ def emit_early_exit_lane(
             let defaultName = qn("dval", at)
             let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
             preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-            // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                if ($i(foundName)) {
-                    $e(emit_default_return(defaultName, dvCanCopy))
+            if (directReturn) {
+                // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
+                perMatchStmts |> push_from <| qmacro_block_to_array() {
+                    if ($i(foundName)) {
+                        $e(emit_default_return(defaultName, dvCanCopy))
+                    }
+                    $i(foundName) = true
+                    $i(bindName) := $i(valueName)
                 }
-                $i(foundName) = true
-                $i(bindName) := $i(valueName)
-            }
-            tailStmts <- qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    $e(emit_default_return(defaultName, dvCanCopy))
+                tailStmts <- qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        $e(emit_default_return(defaultName, dvCanCopy))
+                    }
+                    return <- $i(bindName)
                 }
-                return <- $i(bindName)
+            } else {
+                // decs: the nested archetype lambda can't return the default mid-walk — set a stop flag and
+                // `return true` (exits the find walk); the tail returns default when stopped or never found.
+                let stopName = qn("stop", at)
+                preludeStmts |> push <| qmacro_expr() {
+                    var $i(stopName) = false
+                }
+                perMatchStmts |> push_from <| qmacro_block_to_array() {
+                    if ($i(foundName)) {
+                        $i(stopName) = true
+                        return true
+                    }
+                    $i(foundName) = true
+                    $i(bindName) := $i(valueName)
+                }
+                tailStmts <- qmacro_block_to_array() {
+                    if ($i(stopName) || !$i(foundName)) {
+                        $e(emit_default_return(defaultName, dvCanCopy))
+                    }
+                    return <- $i(bindName)
+                }
+                dispatch = LoopDispatch(Find = null)
             }
         }
     } elif (opName == "element_at" || opName == "element_at_or_default") {
@@ -1681,25 +1709,61 @@ def emit_early_exit_lane(
         preludeStmts |> push <| qmacro_expr() {
             var $i(cntName) = 0
         }
-        perMatchStmts |> push_from <| qmacro_block_to_array() {
-            if ($i(cntName) == $i(idxName)) {
-                return $i(valueName)
+        if (directReturn) {
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                if ($i(cntName) == $i(idxName)) {
+                    return $i(valueName)
+                }
+                $i(cntName) ++
             }
-            $i(cntName) ++
-        }
-        if (opName == "element_at") {
-            let tName = qn("emptyT", at)
-            tailStmts <- qmacro_block_to_array() {
-                panic("element index out of range")
-                var $i(tName) : $t(retType)
-                return <- $i(tName)
+            if (opName == "element_at") {
+                let tName = qn("emptyT", at)
+                tailStmts <- qmacro_block_to_array() {
+                    panic("element index out of range")
+                    var $i(tName) : $t(retType)
+                    return <- $i(tName)
+                }
+            } else {
+                let tName = qn("emptyT", at)
+                tailStmts |> push_from <| qmacro_block_to_array() {
+                    var $i(tName) : $t(retType)
+                    return <- $i(tName)
+                }
             }
         } else {
-            let tName = qn("emptyT", at)
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                var $i(tName) : $t(retType)
-                return <- $i(tName)
+            // decs: retain the matched element + `return true` (the nested lambda can't return it out); tail returns it.
+            let foundName = qn("found", at)
+            let resultName = qn("eares", at)
+            preludeStmts |> push_from <| qmacro_block_to_array() {
+                var $i(foundName) = false
+                var $i(resultName) : $t(retType)
             }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                if ($i(cntName) == $i(idxName)) {
+                    $i(resultName) := $i(valueName)
+                    $i(foundName) = true
+                    return true
+                }
+                $i(cntName) ++
+            }
+            if (opName == "element_at") {
+                tailStmts |> push_from <| qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        panic("element index out of range")
+                    }
+                    return <- $i(resultName)
+                }
+            } else {
+                let tName = qn("emptyT", at)
+                tailStmts |> push_from <| qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        var $i(tName) : $t(retType)
+                        return <- $i(tName)
+                    }
+                    return <- $i(resultName)
+                }
+            }
+            dispatch = LoopDispatch(Find = null)
         }
     } elif (opName == "aggregate") {
         // Peel single-return `block<(acc, x):AGG>` body inline; fall back to invoke on multi-stmt. Workhorse seed picks `=` / `return`; non-workhorse uses `<-` / `return <-` (matches linq.das:1466 static_if).
@@ -1767,7 +1831,8 @@ def emit_early_exit_lane(
         skipWhileCond = skipWhileCond,
         takeWhileCond = takeWhileCond,
         rangeNames = names,
-        tailStmts <- tailStmts
+        tailStmts <- tailStmts,
+        dispatch = dispatch
     ), adapter, at)
 }
 
