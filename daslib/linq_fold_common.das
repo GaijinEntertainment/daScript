@@ -1866,9 +1866,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
     let isCountShaped = (lane == LinqLane.COUNTER
         || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
-    if (isCountShaped && whereCond == null && allProjectionsPure && noLimits
-            && type_has_length(top._type))
-        return ctx.src->count_shortcut(lastName, at)
+    if (isCountShaped && whereCond == null && allProjectionsPure && noLimits) {
+        var sc = ctx.src->count_shortcut(lastName, at)   // source owns its O(1) applicability; null → walk
+        if (sc != null) return sc
+    }
     if (lane == LinqLane.ACCUMULATOR) {
         return emit_accumulator_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, accName, itName, names,

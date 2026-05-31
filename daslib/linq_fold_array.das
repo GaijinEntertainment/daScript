@@ -107,6 +107,7 @@ class ArrayAdapter : SourceAdapter {
         }
     }
     def override count_shortcut(opName : string; at : LineInfo) : Expression? {
+        if (!type_has_length(top._type)) return null      // no O(1) length (iterator source) → walk
         return emit_length_shortcut(opName, top, srcName, at)
     }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
