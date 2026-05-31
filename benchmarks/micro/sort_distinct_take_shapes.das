@@ -623,3 +623,92 @@ def probe_groupby_first_C_materialized(b : B?) {
 def probe_groupby_first_A_deferred(b : B?) {
     run_groupby_first_A(b)
 }
+
+// ===== reverse_distinct_by: reverse() |> distinct_by(dealer_id) |> to_array() =====
+// "keep the LAST forward row per key, output in reverse-discovery order." The only buffered XML shape
+// that still falls to tier-2: the fused emit (emit_reverse_backward_walk_dset_gate) is a backward index
+// walk gated `array_source` — XML's forward-only iterator fails the predicate, so `reverse()`
+// materializes all N, then distinct_by keeps first-per-key. survivors = DEALER_COUNT (100).
+//
+//   C — tier-2: from_xml_node materializes all N, reverse_inplace, distinct_by keep-first. N clones.
+//   A — forward single pass: read only dealer_id cheaply, table<key;(seq,node)> OVERWRITE per key (slot
+//       ends = last forward occurrence), sort survivors by seq descending, materialize the K survivors.
+//       Output-identical to the backward walk (descending forward-index of each last occurrence).
+
+def reverse_distinct_by_materialized(de : xml_node) : array<Car> {
+    var buf <- [for (c in from_xml_node(de, type<Car>)); c]
+    _::reverse_inplace(buf)
+    var dset : table<int>
+    var out : array<Car>
+    for (c in buf) {
+        if (!key_exists(dset, c.dealer_id)) {
+            dset |> insert(c.dealer_id)
+            out |> push_clone(c)
+        }
+    }
+    return <- out
+}
+
+def reverse_distinct_by_deferred(de : xml_node) : array<Car> {
+    let xdef = default<Car>
+    var tab : table<int; tuple<int; xml_node>>
+    var seq = 0
+    var ch = de.first_child
+    while (ch.ok) {
+        let cur = ch
+        ch = ch.next_sibling
+        if (cur._type == xml_node_type.node_element) {
+            let did = read_xml_field(cur, "dealer_id", xdef.dealer_id)
+            tab[did] = (seq, cur)   // overwrite → slot ends at last forward occurrence
+            seq++
+        }
+    }
+    var pairs : array<tuple<int; xml_node>>
+    pairs |> reserve(length(tab))
+    for (v in values(tab)) {
+        pairs |> push(v)
+    }
+    sort(pairs, $(a, b) => a._0 > b._0)   // descending seq = reverse-discovery order
+    var out : array<Car>
+    out |> reserve(length(pairs))
+    for (p in pairs) {
+        var it = default<Car>
+        build_xml_row(p._1, it)
+        out |> push_clone(it)
+    }
+    return <- out
+}
+
+def run_reverse_distinct_by_C(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("C_reverse_distinct_by_materialized/{N}", N) {
+            let r <- reverse_distinct_by_materialized(de)
+            if (check(r) == 0) { b->failNow() }
+        }
+    }
+}
+
+def run_reverse_distinct_by_A(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("A_reverse_distinct_by_deferred/{N}", N) {
+            let r <- reverse_distinct_by_deferred(de)
+            if (check(r) == 0) { b->failNow() }
+        }
+    }
+}
+
+[benchmark]
+def probe_reverse_distinct_by_C_materialized(b : B?) {
+    run_reverse_distinct_by_C(b)
+}
+
+[benchmark]
+def probe_reverse_distinct_by_A_deferred(b : B?) {
+    run_reverse_distinct_by_A(b)
+}

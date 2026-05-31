@@ -384,6 +384,12 @@ def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) 
     return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 }
 
+def non_array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
+    // Exact complement of array_source — forward-only sources (XML, decs, plain iterators) that walk via
+    // wrap_source_loop and can't do the backward-index walk. Gates the forward keep-last reverse+distinct emit.
+    return !array_source(c, top, src)
+}
+
 [unused_argument(c, top)]
 def can_join_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     // Adapter-owned gate: any source whose adapter supports the join_general splice. emit_join_hook
@@ -2464,6 +2470,102 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
     return emit_fold_array_lane(spec, ctx.src, at)
 }
 
+// R-2b — reverse + distinct[_by] + to_array over a FORWARD source (XML / decs / iterator). Single-pass
+// keep-last: OVERWRITE tab[key] = (seq, val) per element, sort survivors by descending seq, emit — output-
+// identical to the array backward-index walk; XML defers (table holds the node, build per survivor). See linq_fold.md.
+[macro_function]
+def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    if (!(c.single |> key_exists("dist"))) return null
+    let distinctCall = c.single["dist"]
+    let distinctName = call_norm_name(distinctCall)
+    let bindName = ctx.src->bind_name(at)
+    // ctx.top is null for decs sources (they walk via the bridge, not a top expression) — fall back to
+    // the adapter's element type. XML / array / iterator carry a typed top.
+    var top = ctx.top
+    var elemType = ((top != null && top._type != null && top._type.firstType != null)
+        ? strip_const_ref(clone_type(top._type.firstType))
+        : ctx.src->element_type())
+    if (elemType == null) return null
+    // Distinct key: distinct_by → peel the key lambda onto bindName; bare distinct → the whole element.
+    let isKeyed = distinctName == "distinct_by"
+    if (isKeyed && ((distinctCall.arguments |> length) < 2 || distinctCall.arguments[1] == null)) return null
+    var keyBody = isKeyed ? peel_lambda_rename_var(distinctCall.arguments[1], bindName) : qmacro($i(bindName))
+    if (keyBody == null) return null
+    // Defer only for distinct_by over a deferring source: bare distinct needs the whole element as its key
+    // (no handle reduction possible), so it always stores the full element.
+    var deferred = ctx.src->defers_materialization() && distinctName == "distinct_by"
+    var valType : TypeDeclPtr
+    var storeVal : Expression?
+    if (deferred) {
+        valType = ctx.src->handle_type()
+        storeVal = ctx.src->current_handle_expr(at)
+        if (valType == null || storeVal == null) {
+            deferred = false
+        }
+    }
+    if (!deferred) {
+        valType = clone_type(elemType)
+        storeVal = qmacro($i(bindName))
+    }
+    let tabName = qn("rdb_tab", at)
+    let seqName = qn("rdb_seq", at)
+    let pairsName = qn("rdb_pairs", at)
+    let svName = qn("rdb_sv", at)
+    let outBufName = qn("rdb_out", at)
+    var intType = new TypeDecl(baseType = Type.tInt, at = at)
+    var surrType = build_surrogate_type(intType, valType, at)
+    // Prologue: `table<keyType; (seq, val)>` + the seq counter. keyType = the unique_key of the distinct key.
+    var prologue : array<Expression?>
+    if (isKeyed) {
+        var keyLamClone = clone_expression(distinctCall.arguments[1])  // nolint:PERF023 load-bearing const-strip: $e wants Expression?, arg reads as const
+        prologue |> push <| qmacro_expr() {
+            var $i(tabName) : table<typedecl(_::unique_key(invoke($e(keyLamClone), default<$t(elemType)>))); $t(surrType)>
+        }
+    } else {
+        prologue |> push <| qmacro_expr() {
+            var $i(tabName) : table<typedecl(_::unique_key(default<$t(elemType)>)); $t(surrType)>
+        }
+    }
+    prologue |> push <| qmacro_expr() {
+        var $i(seqName) = 0
+    }
+    // Per-element: overwrite the key's slot, so it ends holding the last forward occurrence + its seq.
+    var perElement <- qmacro_block_to_array() {
+        $i(tabName)[_::unique_key($e(keyBody))] = ($i(seqName), $e(storeVal))
+        $i(seqName) ++
+    }
+    // Tail: collect survivors, sort by descending seq, materialize (deferred) or emit the stored element.
+    var seqDescCmp = build_surrogate_cmp(true, at)
+    var tail : array<Expression?>
+    tail |> push_from <| qmacro_block_to_array() {
+        var $i(pairsName) : array<$t(surrType)>
+        $i(pairsName) |> reserve(length($i(tabName)))
+        for ($i(svName) in values($i(tabName))) {
+            $i(pairsName) |> push_clone($i(svName))
+        }
+        _::order_inplace($i(pairsName), $e(seqDescCmp))
+        var $i(outBufName) : array<$t(elemType)>
+    }
+    if (deferred) {
+        tail |> push_from(build_surrogate_materialize_loop(ctx, pairsName, outBufName, elemType, null, true, at))
+    } else {
+        let oName = qn("rdb_o", at)
+        tail |> push_from <| qmacro_block_to_array() {
+            $i(outBufName) |> reserve(length($i(pairsName)))
+            for ($i(oName) in $i(pairsName)) {
+                $i(outBufName) |> push_clone($i(oName)._1)
+            }
+            return <- $i(outBufName)
+        }
+    }
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        perElementStmts <- perElement,
+        tailStmts <- tail,
+        wrapIter = ctx.expr_is_iterator
+    ), ctx.src, at)
+}
+
 // R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
 [macro_function]
 def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
@@ -2610,6 +2712,17 @@ def build_reverse_rows {
         ],
         requires <- [@@ < RequiresPredicate > array_source, @@ < RequiresPredicate > no_terminator],
         emit = @@ < EmitFn > emit_reverse_backward_walk_dset_gate
+    )
+    // R-2b — same chain over a FORWARD source (XML / decs / plain iterator): single-pass keep-last
+    // table-overwrite (no random index). `non_array_source` is the exact complement of R-2a's gate.
+    splice_patterns |> emplace <| SplicePattern(
+        name = "reverse_distinct_forward_keeplast",
+        chain <- [
+            Slot(matcher = m_literal("reverse"), cardinality = c_one()),
+            Slot(matcher = m_alias("distinct_family"), cardinality = c_one(), capture_name = "dist")
+        ],
+        requires <- [@@ < RequiresPredicate > non_array_source, @@ < RequiresPredicate > no_terminator],
+        emit = @@ < EmitFn > emit_reverse_distinct_forward_keeplast
     )
     // R6 — bare reverse + take + [optional trailing _select(F)] + to_array, backward index walk
     splice_patterns |> emplace <| SplicePattern(

@@ -228,9 +228,12 @@ Array-source patterns
    * - ``[._where(P)][._select(f)].reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
      - ``plan_reverse`` R1-R4 (terminal ``_select`` on catch-all) / Rb (walk-and-overwrite scalar)
      - Catch-all path for chains with pre-reverse ``_where`` / ``_select`` (R6 doesn't accept those slots, cascades here). Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
-   * - ``each(arr).reverse()._distinct[_by](K).to_array()``
-     - ``plan_reverse`` (backward index walk + set-gate)
-     - Theme 8 (audit 2a). Array source only. Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` and non-array sources bail to cascade.
+   * - ``each(arr).reverse()._distinct[_by](K).to_array()`` (array source)
+     - ``plan_reverse`` R-2a (backward index walk + set-gate)
+     - Theme 8 (audit 2a). Array source only (``array_source`` predicate). Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` bail to cascade. Non-array (forward) sources take R-2b below.
+   * - ``src.reverse()._distinct[_by](K).to_array()`` (XML / decs / iterator source)
+     - ``plan_reverse`` R-2b (forward keep-last table-overwrite)
+     - The exact complement of R-2a (``non_array_source`` predicate): forward-only sources have no random index for the backward walk. One forward pass OVERWRITES ``var rdb_tab : table<key; (seq, val)>`` per element (so the slot ends at the last forward occurrence + its monotonic seq), then sorts survivors by **descending seq** and emits — output-identical to R-2a (descending forward-index of each last occurrence). Source-generic via ``emit_terminator_lane`` + ``wrap_source_loop``: an XML source **defers** (``val`` is the ``xml_node`` handle; ``build_xml_row`` runs only for the K survivors, field-pruned to the key), while decs / iterator store the full element and still win single-pass over the cascade's reverse-buffer + second walk. Closes the decs ``m4`` cell for this shape (D6).
 
 Decs-source patterns
 ====================
@@ -264,8 +267,10 @@ identical — only the source iteration changes.
    to Array adapter via ``array_source`` — decs cascades to Row 3
    (``fused_prefilter``) which materializes the buffer, matching the
    imperative decs behavior. ``reverse |> distinct[_by]`` on decs
-   sources cascades to tier-2 (no decs equivalent of the array
-   backward-walk dset gate; deferred per masterplan D6).
+   sources now fuses via the source-generic R-2b forward keep-last row
+   (``emit_reverse_distinct_forward_keeplast``, gated ``non_array_source``)
+   — one table-overwrite emit shared by decs / XML / iterators, not a
+   parallel decs fn (closes masterplan D6).
 
    As of PR D3, the ``GroupBySourceAdapter`` shim (a parallel adapter
    used only by ``plan_group_by_core``) is gone — group_by's three

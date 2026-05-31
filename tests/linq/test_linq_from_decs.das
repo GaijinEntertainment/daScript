@@ -124,6 +124,39 @@ def test_from_decs_template(t : T?) {
     }
 }
 
+// reverse + distinct_by over a decs source: the FORWARD keep-last splice (R-2b) fuses single-pass
+// (decs is forward-only, so the array backward-index walk can't apply). Parity vs the tier-2 cascade
+// proves both the keep-last semantics and that the string field survives the table-overwrite store.
+[test]
+def test_from_decs_reverse_distinct_by(t : T?) {
+    restart()
+    for (i in range(6)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.ftd_default_index := i
+            cmp.ftd_default_text := "kl{i}"
+        }
+    }
+    commit()
+    t |> run("reverse._distinct_by(index%2) decs forward keep-last == tier-2 cascade") @(tt : T?) {
+        var fused <- _fold(from_decs($(ftd_default_index : int; ftd_default_text : string){})
+            .reverse()._distinct_by(_.ftd_default_index % 2).to_array())
+        var cascade <- (from_decs($(ftd_default_index : int; ftd_default_text : string){})
+            |> reverse() |> _distinct_by(_.ftd_default_index % 2) |> to_array())
+        // keep LAST per (index%2), reverse-discovery order → index 5 (key 1), index 4 (key 0).
+        tt |> equal(fused.length(), 2)
+        tt |> equal(fused.length(), cascade.length())
+        for (a, b in fused, cascade) {
+            tt |> equal(a.ftd_default_index, b.ftd_default_index)
+            tt |> equal(a.ftd_default_text, b.ftd_default_text)
+        }
+        tt |> equal(fused[0].ftd_default_index, 5)
+        tt |> equal(fused[0].ftd_default_text, "kl5")
+        tt |> equal(fused[1].ftd_default_index, 4)
+        tt |> equal(fused[1].ftd_default_text, "kl4")
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Approach Z splice (plan_decs_unroll) — Slice 1: bare count via arch.size
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3286,10 +3319,10 @@ struct JoinTestDealer {
 
 def private join_test_fixture(numCars, numDealers : int) {
     restart()
-    create_entities(numCars) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(numCars) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, JoinTestCar(id = i + 100, dealer_id = (i % max(numDealers, 1)) + 1))
     }
-    create_entities(numDealers) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(numDealers) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, JoinTestDealer(id = i + 1, name = "D{i}"))
     }
 }
@@ -3309,10 +3342,10 @@ def test_decs_join_count_basic(t : T?) {
 def test_decs_join_count_unmatched_cars(t : T?) {
     // 5 cars with dealer_id 1..5, only 3 dealers (ids 1..3) — cars whose dealer_id is 4 or 5 (the 4th and 5th car) are unmatched, so 3 of 5 cars contribute.
     restart()
-    create_entities(5) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(5) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, JoinTestCar(id = i + 100, dealer_id = i + 1))
     }
-    create_entities(3) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(3) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, JoinTestDealer(id = i + 1, name = "D{i}"))
     }
     let c = _fold(from_decs_template(type<JoinTestCar>) |> _join(from_decs_template(type<JoinTestDealer>),
