@@ -17,7 +17,7 @@ def test_stream_chunk_decode(t : T?) {
         frame.id = "chunk-1"
         frame._object = "chat.completion.chunk"
         frame.choices <- [ChunkChoice(index = 0,
-            delta = ChatMessageDelta(role = "assistant", content = "Hel"),
+            delta <- ChatMessageDelta(role = "assistant", content = "Hel"),
             finish_reason = "")]
         let js = sprint_json(frame, false)
         t |> success(find(js, "\"object\":\"chat.completion.chunk\"") >= 0, "renamed object key emitted")

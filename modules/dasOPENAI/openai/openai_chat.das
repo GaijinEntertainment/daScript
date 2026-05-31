@@ -99,10 +99,25 @@ struct ChatResult {
 
 // ===== Streaming chat types =====
 
+struct ToolCallFunctionDelta {
+    //! Incremental function fields in a streamed tool-call delta. ``arguments`` accretes across frames.
+    @optional name : string       //!< Function name (sent once, on the first frame for this call).
+    @optional arguments : string  //!< Partial JSON argument text; concatenate across frames in order.
+}
+
+struct ToolCallDelta {
+    //! One streamed tool-call fragment. Fragments with the same ``index`` reassemble into one ``ToolCall``.
+    index : int                                            //!< Which tool call this fragment belongs to.
+    @optional id : string                                  //!< Call id (sent once, on the first frame).
+    @optional @rename = "type" _type : string             //!< Tool type ("function"), sent once.
+    @optional @rename = "function" _function : ToolCallFunctionDelta //!< Incremental function name / arguments.
+}
+
 struct ChatMessageDelta {
     //! Incremental message fields in a streamed chunk (object == "chat.completion.chunk").
-    @optional role : string     //!< Role, sent on the first delta.
-    @optional content : string  //!< Incremental text content.
+    @optional role : string                    //!< Role, sent on the first delta.
+    @optional content : string                 //!< Incremental text content.
+    @optional tool_calls : array<ToolCallDelta> //!< Incremental tool-call fragments (reassembled by ``chat_stream``).
 }
 
 struct ChunkChoice {
@@ -123,10 +138,11 @@ struct ChatCompletionChunk {
 
 struct ChatStreamResult {
     //! Outcome of ``chat_stream``: ``content`` is the full accumulated assistant text.
-    ok : bool               //!< True on a successful stream.
-    content : string        //!< Full accumulated assistant text.
-    finish_reason : string  //!< Why generation stopped.
-    error : OpenAIError     //!< Error detail on failure.
+    ok : bool                       //!< True on a successful stream.
+    content : string                //!< Full accumulated assistant text.
+    finish_reason : string          //!< Why generation stopped ("stop", "tool_calls", ...).
+    tool_calls : array<ToolCall>    //!< Reassembled tool calls (empty unless the model streamed any).
+    error : OpenAIError             //!< Error detail on failure.
 }
 
 // ===== Chat =====
@@ -153,13 +169,19 @@ def chat_text(client : OpenAIClient; model : string; prompt : string) : string {
 
 // ===== Streaming chat =====
 
+// Upper bound on a streamed tool-call index — guards against a malformed/hostile
+// server forcing unbounded allocation by sending a huge index. Real responses
+// carry a handful of tool calls; this is far above any legitimate count.
+let private MAX_STREAM_TOOL_CALLS = 256
+
 def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
                 on_delta : block<(delta : string) : void>) : ChatStreamResult {
     //! Streams a ``/chat/completions`` response, invoking ``on_delta`` with each text
     //! increment as it arrives. Returns the full accumulated content plus status.
     //!
-    //! Accumulates text deltas (``choices[0].delta.content``) only — streamed tool/function
-    //! calls are not reassembled. For tool calls, use the non-streaming ``chat``.
+    //! Text deltas (``choices[0].delta.content``) are accumulated into ``result.content``;
+    //! streamed tool-call fragments are reassembled by ``index`` into ``result.tool_calls``
+    //! (``on_delta`` fires for text only). Tolerates CRLF line endings and SSE comment lines.
     req.stream = true
     let body_json = sprint_json(req, false)
     let url = "{client.base_url}/chat/completions"
@@ -167,6 +189,7 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
     var result : ChatStreamResult
     var buffer = ""
     var parts : array<string>   // accumulate deltas, join once at the end (avoid O(n^2) string growth)
+    var tools : array<ToolCall> // reassembled per-index from streamed tool-call fragments
     var finish = ""
 
     with_http_request() $(var hreq : HttpRequest?#) {
@@ -196,6 +219,19 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
                                     parts |> push(d)
                                     invoke(on_delta, d)
                                 }
+                                for (tcd in frame.choices[0].delta.tool_calls) {
+                                    let idx = tcd.index
+                                    // ignore out-of-range indices: negative would underflow the array,
+                                    // an absurdly large one would force unbounded allocation
+                                    continue if (idx < 0 || idx >= MAX_STREAM_TOOL_CALLS)
+                                    while (length(tools) <= idx) {
+                                        tools |> emplace(ToolCall())
+                                    }
+                                    if (!empty(tcd.id)) { tools[idx].id = tcd.id }
+                                    if (!empty(tcd._type)) { tools[idx]._type = tcd._type }
+                                    if (!empty(tcd._function.name)) { tools[idx]._function.name = tcd._function.name }
+                                    tools[idx]._function.arguments += tcd._function.arguments
+                                }
                                 if (!empty(frame.choices[0].finish_reason)) {
                                     finish = frame.choices[0].finish_reason
                                 }
@@ -220,6 +256,7 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
     }
     result.content = join(parts, "")
     delete parts
+    result.tool_calls <- tools
     result.finish_reason = finish
-    return result
+    return <- result
 }

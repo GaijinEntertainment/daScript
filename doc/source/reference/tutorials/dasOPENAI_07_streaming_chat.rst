@@ -12,7 +12,8 @@ OPENAI-07 — Streaming Chat
 
 Streaming delivers the assistant's reply token-by-token over Server-Sent Events
 (SSE) instead of waiting for the whole response. ``chat_stream`` invokes your
-``on_delta`` block for each text increment and also accumulates the full text.
+``on_delta`` block for each text increment, accumulates the full text, and
+reassembles any streamed tool calls into ``result.tool_calls``.
 
 Streaming with on_delta
 =======================
@@ -41,14 +42,35 @@ How it works
 Under the hood ``chat_stream`` reads the SSE response with ``request_cb``,
 splits it into ``data:`` lines, decodes each ``ChatCompletionChunk``, appends
 ``choices[0].delta.content``, and stops at ``data: [DONE]``. It tolerates CRLF
-line endings and accumulates increments efficiently (joining once at the end).
+line endings and SSE comment lines, and accumulates increments efficiently
+(joining once at the end).
 
-Scope
-=====
+Streamed tool calls
+===================
 
-``chat_stream`` accumulates text deltas (``choices[0].delta.content``) only.
-Streamed tool/function calls are a separate, later feature — for tool calls use
-the non-streaming :ref:`chat() <tutorial_dasOPENAI_tools>`.
+When a model streams a tool call, the id and function name arrive in the first
+frame and the JSON ``arguments`` accrete across later frames. ``chat_stream``
+reassembles them by ``index`` into ``result.tool_calls`` — ``on_delta`` fires for
+text only, so a pure tool-call stream produces no text deltas and ends with
+``finish_reason == "tool_calls"``:
+
+.. code-block:: das
+
+   var req = ChatCompletionRequest(model = "gpt-4o-mini",
+       messages <- [ChatMessage(role = "user", content = "What's the weather in Paris?")],
+       tools <- [Tool(_type = "function",
+           _function = FunctionDef(name = "get_weather", description = "Look up the weather."))])
+
+   let result = chat_stream(client, req) $(delta : string) {}
+
+   for (tc in result.tool_calls) {
+       print("{tc._function.name}({tc._function.arguments})\n")
+       // → get_weather({"location":"Paris"})
+   }
+
+The reassembled ``result.tool_calls`` are ordinary ``ToolCall`` values — identical
+to what the non-streaming :ref:`chat() <tutorial_dasOPENAI_tools>` returns, so you
+feed the result back the same way.
 
 Quick Reference
 ===============
@@ -64,7 +86,9 @@ Quick Reference
    * - ``result.content``
      - Full accumulated assistant text
    * - ``result.finish_reason``
-     - Why generation stopped (e.g. ``"stop"``)
+     - Why generation stopped (``"stop"``, ``"tool_calls"``)
+   * - ``result.tool_calls``
+     - Reassembled streamed tool calls (empty if none)
    * - ``result.ok`` / ``result.error``
      - Success flag / unified error
 
