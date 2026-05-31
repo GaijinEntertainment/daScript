@@ -5,8 +5,9 @@ options _comment_hygiene = true
 module linq_fold_decs shared public
 
 //! linq_fold decs (ECS) source adapters: DecsAdapter / DecsJoinAdapter, the decs-bridge tuple
-//! scanners/rewriters, the decs terminator scaffold and the emit_decs_* lanes. Requires
-//! linq_fold_common. See daslib/linq_fold.md.
+//! scanners/rewriters, and the decs-specific emit hooks (count_shortcut, reverse-skip-into-tail,
+//! join, min_by/max_by). Terminators ride the generic lanes in linq_fold_common via DecsAdapter.
+//! Requires linq_fold_common. See daslib/linq_fold.md.
 
 require daslib/linq public
 require daslib/ast_boost
@@ -27,11 +28,26 @@ struct DecsJoinShape {
 class DecsAdapter : SourceAdapter {
     bridge : DecsBridgeShape?
     tupName : string
+    // Terminator-path context (null/empty on the group_by/distinct path, where the chain + ranges are
+    // already baked into the body the group_by core hands to wrap_source_loop). When set, wrap_source_loop
+    // owns the decs in-loop ranges + chain-binding + range prelude + for_each{,_find} dispatch.
+    chainInfo : DecsChainInfo?
+    calls : array<tuple<ExprCall?; LinqCall?>>
+    intermediateEnd : int
+    rangeInfo : DecsRangeInfo?
     def override name_prefix() : string {
         return "decs_"
     }
     def override has_own_loop_or_count_lane() : bool {
         return true
+    }
+    def override effective_dispatch(base : LoopDispatch) : LoopDispatch {
+        // take / take_while emit an early-exit `return true` from the inner-for, which only works inside a
+        // for_each_archetype_find bool-lambda — so an otherwise-Each terminator must walk via Find.
+        if (rangeInfo != null && base is Each && (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)) {
+            return LoopDispatch(Find = null)
+        }
+        return base
     }
     def override const can_group_by() : bool {
         return true
@@ -105,25 +121,67 @@ class DecsAdapter : SourceAdapter {
         return emit_decs_count_archsize(bridge, at)
     }
     def override bind_name(at : LineInfo) : string {
-        // The actual loop bind (wrap_source_loop uses self.tupName) — return it directly rather than
-        // regenerating qn("decs_tup", at), so peeling can't desync from the loop if `at` ever differs.
+        // Terminator path: the post-chain element bind the generic lane's per-element work references
+        // (wrap_source_loop's chain-walk introduces it). Otherwise the raw source-tuple bind. Returned
+        // directly (not a fresh qn) so peeling can't desync from the loop if `at` ever differs.
+        if (chainInfo != null) return chainInfo.finalBind
         return tupName
     }
     def override element_type() : TypeDeclPtr {
         if (bridge == null) {
             return null
         }
+        if (chainInfo != null) return clone_type(chainInfo.finalType)
         return clone_type(bridge.elementType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
-        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
+        // Terminator path (chainInfo set): wrap decs in-loop ranges + chain-binding around the per-element
+        // body, prune unused columns, hoist the range prelude, and frame the walk per loopShape. group_by /
+        // distinct path (chainInfo null): the body is already complete — just prune + a plain for_each.
         let archName = bridge.archName
         let br = bridge
-        return <- qmacro_expr() {
-            for_each_archetype($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        var inner = body
+        var prelude : array<Expression?>
+        if (chainInfo != null) {
+            let names <- make_decs_range_names(at)
+            inner = wrap_inner_for_with_decs_ranges(inner, rangeInfo, names)
+            inner = wrap_decs_chain(inner, chainInfo, calls, intermediateEnd, at)
+            if (inner == null) return null
+            prelude <- decs_range_prelude(rangeInfo, names)
         }
+        var forExprNode = build_decs_inner_for_pruned(br, tupName, inner, at)
+        var loopExpr : Expression?
+        if (loopShape is FindReturn) {
+            loopExpr = qmacro_expr() {
+                return for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } elif (loopShape is FindReturnNegated) {
+            loopExpr = qmacro_expr() {
+                return !for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } elif (loopShape is Find) {
+            loopExpr = qmacro_expr() {
+                for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } else {
+            loopExpr = qmacro_expr() {
+                for_each_archetype($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+            }
+        }
+        if (empty(prelude)) return loopExpr
+        prelude |> push(loopExpr)
+        return stmts_to_expr(prelude)
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
         var emission : Expression?
@@ -151,7 +209,7 @@ class DecsJoinAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(shape.resultType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("djoin_jhash", at)
         let arrName   = qn("djoin_jarr", at)
         let tupAName  = qn("djoin_jta", at)
@@ -197,7 +255,16 @@ class DecsJoinAdapter : SourceAdapter {
 }
 
 [macro_function]
-def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def private make_decs_term_adapter(var bridge : DecsBridgeShape?; var chainInfo : DecsChainInfo?;
+                                   var rangeInfo : DecsRangeInfo?; var calls : array<tuple<ExprCall?; LinqCall?>>;
+                                   intermediateEnd : int) : SourceAdapter? {
+    // var params so the const-bound context pointers can land in the adapter's non-const fields.
+    return new DecsAdapter(bridge = bridge, tupName = chainInfo.tupName, chainInfo = chainInfo,
+                           calls <- calls, intermediateEnd = intermediateEnd, rangeInfo = rangeInfo)
+}
+
+[macro_function]
+def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
     var termName : string
@@ -237,7 +304,7 @@ def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; va
     let intermediateEnd = hasTerm ? length(calls) - 1 : length(calls)
     var rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
     if (rangeInfo == null) return null
-    let chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
+    var chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
     if (chainInfo == null) return null
     if (c.single |> key_exists("post_take_where")) {
         var ptwArg = c.single["post_take_where"].arguments[1]
@@ -256,20 +323,76 @@ def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; va
         || termName == "aggregate")
     let isElementAt = termName == "element_at" || termName == "element_at_or_default"
     if (isAccum) {
-        var accType : TypeDeclPtr
-        if (termName == "sum" || termName == "min" || termName == "max" || termName == "average") {
-            if (chainInfo.selectCount == 0 || chainInfo.finalType == null) return null
-            accType = clone_type(chainInfo.finalType)
+        let finalBind = chainInfo.finalBind
+        var elementType = clone_type(chainInfo.finalType)
+        let accName = qn("decs_acc", at)
+        let names <- make_range_names(at)
+        var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
+        if (termName == "count" || termName == "long_count") {
+            // count / long_count → counter lane. The chain (incl. side-effecting selects) runs in
+            // wrap_source_loop; the body just increments. _count(pred) and post-take-where gate the bump.
+            var loopBody : Expression? = qmacro_expr() {
+                $i(accName) ++
+            }
+            if (length(termCall.arguments) > 1) {
+                var predExpr = peel_lambda_rename_var(termCall.arguments[1], finalBind)
+                if (predExpr == null) return null
+                loopBody = wrap_with_condition(loopBody, predExpr)
+            }
+            loopBody = wrap_with_condition(loopBody, clone_expression(rangeInfo.postTakeWhereCond))
+            return emit_counter_lane(adapter, accName, finalBind, names, null, null, null, loopBody, at, termName == "long_count")
         }
-        return emit_decs_accumulator(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, accType, at)
+        // sum / min / max / average require a projecting select (no sense summing the raw tuple).
+        if (chainInfo.selectCount == 0 || elementType == null) return null
+        var noBinds : array<Expression?>
+        var noPre : array<Expression?>
+        return emit_accumulator_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
+            noBinds, noPre, elementType, accName, finalBind, names, null, null, null, null, at)
     }
-    if (isEarlyExit) return emit_decs_early_exit(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
     if (isMinMaxBy) return emit_decs_min_max_by(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
-    if (isWalk) return emit_decs_walk_lane(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
-    if (isElementAt) return emit_decs_element_at(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
+    if (isEarlyExit || isWalk || isElementAt) {
+        // first/first_or_default/any/all/contains/last/single/single_or_default/aggregate/element_at — the
+        // shared early-exit lane. The DecsAdapter walks (chain+ranges+for_each{,_find}); the lane supplies the
+        // per-op !supports_direct_return state path + the adapter's effective dispatch (Each→Find under take).
+        var elementType = clone_type(chainInfo.finalType)
+        let names <- make_range_names(at)
+        var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
+        var noBinds : array<Expression?>
+        var noPre : array<Expression?>
+        return emit_early_exit_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
+            noBinds, noPre, elementType, termCall, chainInfo.finalBind, names, null, null, null, null, at)
+    }
     // Implicit to_array: only when outer expr was array-typed (caller wrote `.to_array()`, peeled by linqCalls skip=true). Iterator-typed chains cascade to tier-2 here, matches imperative plan_decs_unroll line 5813.
     if (ctx.expr_is_iterator) return null
-    return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)
+    // to_array → the shared fold-array lane: buf decl + push_clone(finalBind), tail moves it out.
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
+    let bufName = qn("decs_buf", at)
+    var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
+    var pushExpr : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(finalBind))
+    }
+    pushExpr = wrap_with_condition(pushExpr, clone_expression(rangeInfo.postTakeWhereCond))
+    var prologueStmts : array<Expression?>
+    var reserveStmts : array<Expression?>
+    var preCondStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
+        return <- $i(bufName)
+    }
+    var retType = new TypeDecl(baseType = Type.tArray)
+    retType.firstType = clone_type(elemType)
+    return emit_fold_array_lane(FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = elemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        preCondStmts <- preCondStmts,
+        perElementPush = pushExpr,
+        tailStmts <- tailStmts,
+        outElemType = retType,
+        wrapIter = false,
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))), adapter, at)
 }
 
 // Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
@@ -605,7 +728,7 @@ def build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
 }
 
 struct DecsChainInfo {
-    tupName     : string            // source bind the chain was peeled against — the inner-for bind name; emit_decs_terminator_lane uses this instead of regenerating qn("decs_tup", at)
+    tupName     : string            // source bind the chain was peeled against — the inner-for bind name; make_decs_term_adapter passes this instead of regenerating qn("decs_tup", at)
     bindAt      : array<string>    // bind name visible at each chain position
     elidedAt    : array<bool>      // true when the select at position i was elided (peeled to a single decs_tup field access → reused iter var as next bind, no `let decs_sel_N = ...` emit needed)
     finalBind   : string            // bind name AFTER full chain — what terminator references
@@ -892,86 +1015,6 @@ def decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStateNames) 
     return <- stmts
 }
 
-// 4-way decs walk dispatch: covers every for_each_archetype{,_find} shape across the 5 decs terminator emits.
-variant DecsDispatch {
-    Each              : void?   // for_each_archetype(...); tail runs
-    Find              : void?   // for_each_archetype_find(...) { body; return false } discarded; tail runs (state-driven answer)
-    FindReturn        : void?   // return for_each_archetype_find(...) — bool result IS the answer
-    FindReturnNegated : void?   // return !for_each_archetype_find(...) — `all` shape (no counterexample)
-}
-
-struct DecsTerminatorSpec {
-    preludeStmts : array<Expression?>   // hoisted at invoke scope (op-specific state vars + default binds)
-    perElement   : Expression?           // OP-specific per-tup work (caller wraps own predicate gates; lane wraps ranges+chain)
-    tailStmts    : array<Expression?>   // post-walk; INCLUDES the return — skipped for FindReturn/FindReturnNegated
-    retType      : TypeDeclPtr
-    dispatch     : DecsDispatch
-    wrapIter     : bool                  // emission wrapped with .to_sequence_move() — for array-returning shapes in iterator-typed contexts
-}
-
-[macro_function]
-def emit_decs_terminator_lane(
-                              var spec : DecsTerminatorSpec;
-                              bridge : DecsBridgeShape?;
-                              chainInfo : DecsChainInfo?;
-                              rangeInfo : DecsRangeInfo?;
-                              var calls : array<tuple<ExprCall?; LinqCall?>>;
-                              intermediateEnd : int;
-                              at : LineInfo
-                              ) : Expression? {
-    let tupName = chainInfo.tupName   // the bind the chain was peeled against — not a fresh qn(), so the inner-for bind can't desync from peeling
-    let names <- make_decs_range_names(at)
-    let archName = bridge.archName
-    var ptwCond : Expression?
-    if (rangeInfo.postTakeWhereCond != null) {
-        ptwCond = clone_expression(rangeInfo.postTakeWhereCond)
-    }
-    var gatedPerElement = wrap_with_condition(spec.perElement, ptwCond)
-    var perElement = wrap_inner_for_with_decs_ranges(gatedPerElement, rangeInfo, names)
-    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
-    if (body == null) return null
-    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
-    var rangeStmts <- decs_range_prelude(rangeInfo, names)
-    var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(spec.preludeStmts) + length(rangeStmts) + length(spec.tailStmts) + 1)
-    bodyStmts |> push_from(spec.preludeStmts)
-    bodyStmts |> push_from(rangeStmts)
-    if (spec.dispatch is FindReturn) {
-        bodyStmts |> push <| qmacro_expr() {
-            return for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-    } elif (spec.dispatch is FindReturnNegated) {
-        bodyStmts |> push <| qmacro_expr() {
-            return !for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-    } elif (spec.dispatch is Find) {
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-        bodyStmts |> push_from(spec.tailStmts)
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
-        }
-        bodyStmts |> push_from(spec.tailStmts)
-    }
-    var emission = qmacro(invoke($() : $t(spec.retType) {
-        $b(bodyStmts)
-    }))
-    return finalize_decs_emission(emission, at, spec.wrapIter)
-}
-
 [macro_function]
 def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Expression? {
     // Bare count(): no chain ops, sum arch.size per archetype — skips the per-entity walk entirely.
@@ -991,250 +1034,10 @@ def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Express
 }
 
 [macro_function]
-def emit_decs_accumulator(bridge : DecsBridgeShape?;
-                          opName : string;
-                          chainInfo : DecsChainInfo?;
-                          rangeInfo : DecsRangeInfo?;
-                          var calls : array<tuple<ExprCall?; LinqCall?>>;
-                          intermediateEnd : int;
-                          terminatorCall : ExprCall?;
-                          var accType : TypeDeclPtr;
-                          at : LineInfo) : Expression? {
-    // Slice 2/3a/4 accumulator emission: count / long_count / sum / min / max / average with chained _select + interleaved _where + optional _count(pred). Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope, take present → for_each_archetype_find).
-    let accName = qn("decs_acc", at)
-    let cntName = qn("decs_cnt", at)
-    let firstName = qn("decs_first", at)
-    let valBindName = qn("decs_val", at)
-    let finalBind = chainInfo.finalBind
-    // Wrap finalBind as an Expression so the shared per-element builder (lane uses `$e(projection)`, decs uses `$e(qmacro($i(finalBind)))`) sees one shape.
-    var valueExpr : Expression? = qmacro($i(finalBind))
-    let workhorse = (chainInfo.finalType != null && chainInfo.finalType.isWorkhorseType)
-    let isDoubleAccType = (chainInfo.finalType != null && chainInfo.finalType.baseType == Type.tDouble)
-    var perElementStmts <- build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
-    var perElement : Expression? = stmts_to_expr(perElementStmts)
-    // _count(pred): count/long_count with extra predicate — wrap perElement with `if (pred) {...}`. Predicate peels against finalBind so it sees the post-chain element.
-    if ((opName == "count" || opName == "long_count") && length(terminatorCall.arguments) > 1) {
-        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-        if (predExpr == null) return null
-        perElement = qmacro_expr() {
-            if ($e(predExpr)) {
-                $e(perElement)
-            }
-        }
-    }
-    var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
-    if (spec.returnExpr == null) return null
-    var preludeStmts <- spec.prologue
-    var tailStmts : array<Expression?>
-    tailStmts |> push <| qmacro_expr() {
-        return $e(spec.returnExpr)
-    }
-    var retType = spec.retType
-    // Slice 5b: take/take_while produces inner `return true` (terminates iteration globally) so it needs the bool-lambda archetype-find dispatch.
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_early_exit(bridge : DecsBridgeShape?;
+def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
                          opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
-                         var calls : array<tuple<ExprCall?; LinqCall?>>;
-                         intermediateEnd : int;
-                         terminatorCall : ExprCall?;
-                         at : LineInfo) : Expression? {
-    // Slice 3b/4 early-exit: first / first_or_default / any / all / contains via for_each_archetype_find (block returns true to stop archetype walk). Supports chained _select + interleaved _where via wrap_decs_chain. Slice 5a adds take/skip ranges via rangeInfo (counters hoisted at invoke scope).
-    let foundName = qn("decs_found", at)
-    let resultName = qn("decs_result", at)
-    let containsValName = qn("decs_cv", at)
-    let defaultName = qn("decs_dv", at)
-    let finalBind = chainInfo.finalBind
-    var elemType = clone_type(chainInfo.finalType)
-    let takeOrTakeWhile = (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-    var perElement : Expression?
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
-    var dispatch : DecsDispatch = DecsDispatch(Find = null)
-    var retType : TypeDeclPtr
-    if (opName == "first" || opName == "first_or_default") {
-        retType = elemType
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(resultName) : $t(elemType)
-        }
-        if (opName == "first_or_default") {
-            preludeStmts |> push <| qmacro_expr() {
-                let $i(defaultName) = $e(terminatorCall.arguments[1])
-            }
-        }
-        perElement = qmacro_block() {
-            $i(resultName) := $i(finalBind)
-            $i(foundName) = true
-            return true
-        }
-        if (opName == "first") {
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) panic("sequence contains no elements")
-                return $i(resultName)
-            }
-        } else {
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) return $i(defaultName)
-                return $i(resultName)
-            }
-        }
-    } elif (opName == "any") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        let argCount = length(terminatorCall.arguments)
-        // When take OR take_while is present, distinguish "match found" from "iteration-stop signal" — both produce `return true` from the inner block, so route through an explicit foundName state and use the find result only as iteration control (tail returns foundName).
-        if (takeOrTakeWhile) {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-                if (predExpr == null) return null
-                perElement = qmacro_expr() {
-                    if ($e(predExpr)) {
-                        $i(foundName) = true
-                        return true
-                    }
-                }
-            } else {
-                perElement = qmacro_block() {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            if (argCount > 1) {
-                var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-                if (predExpr == null) return null
-                perElement = qmacro_expr() {
-                    if ($e(predExpr)) return true
-                }
-            } else {
-                perElement = qmacro_expr() {
-                    return true
-                }
-            }
-            dispatch = DecsDispatch(FindReturn = null)
-        }
-    } elif (opName == "all") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], finalBind)
-        if (predExpr == null) return null
-        if (takeOrTakeWhile) {
-            // Take-cap / take_while-stop hits produce inner `return true`; same sentinel as "counterexample found", so route through explicit foundName state ("found a !pred element"). Tail returns !foundName.
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perElement = qmacro_expr() {
-                if (!$e(predExpr)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return !$i(foundName)
-            }
-        } else {
-            perElement = qmacro_expr() {
-                if (!$e(predExpr)) return true
-            }
-            // `all` is "no counterexample found" — inner returns true on FAIL, so negate.
-            dispatch = DecsDispatch(FindReturnNegated = null)
-        }
-    } elif (opName == "contains") {
-        retType = new TypeDecl(baseType = Type.tBool)
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(containsValName) = $e(terminatorCall.arguments[1])
-        }
-        if (takeOrTakeWhile) {
-            // Same disambiguation as any: take-cap / take_while-stop and "value matched" both inner-return true, route through foundName.
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perElement = qmacro_expr() {
-                if ($i(finalBind) == $i(containsValName)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            perElement = qmacro_expr() {
-                if ($i(finalBind) == $i(containsValName)) return true
-            }
-            dispatch = DecsDispatch(FindReturn = null)
-        }
-    } else {
-        return null
-    }
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_to_array(bridge : DecsBridgeShape?;
-                       chainInfo : DecsChainInfo?;
-                       rangeInfo : DecsRangeInfo?;
-                       var calls : array<tuple<ExprCall?; LinqCall?>>;
-                       intermediateEnd : int;
-                       at : LineInfo) : Expression? {
-    // Slice 3c/4 to_array: shape is a thin DecsTerminatorSpec — prelude declares the buf, per-element push_clones the post-chain value at chainInfo.finalBind, tail moves it out. take/take_while → Find dispatch (else Each).
-    let bufName = qn("decs_buf", at)
-    var elemType = clone_type(chainInfo.finalType)
-    var preludeStmts : array<Expression?>
-    preludeStmts |> push <| qmacro_expr() {
-        var $i(bufName) : array<$t(elemType)>
-    }
-    let finalBind = chainInfo.finalBind
-    var perElement : Expression? = qmacro_expr() {
-        $i(bufName) |> push_clone($i(finalBind))
-    }
-    var tailStmts : array<Expression?>
-    tailStmts |> push <| qmacro_expr() {
-        return <- $i(bufName)
-    }
-    var retType = new TypeDecl(baseType = Type.tArray)
-    retType.firstType = clone_type(elemType)
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_min_max_by(bridge : DecsBridgeShape?;
-                         opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
+                         var chainInfo : DecsChainInfo?;
+                         var rangeInfo : DecsRangeInfo?;
                          var calls : array<tuple<ExprCall?; LinqCall?>>;
                          intermediateEnd : int;
                          terminatorCall : ExprCall?;
@@ -1274,241 +1077,25 @@ def emit_decs_min_max_by(bridge : DecsBridgeShape?;
     tailStmts |> push <| qmacro_expr() {
         return $i(bestElemName)
     }
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
+    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? LoopDispatch(Find = null)
+        : LoopDispatch(Each = null))
+    // Each+tail walk over the generic terminator lane: the field-carrying DecsAdapter owns the chain +
+    // ranges + for_each{,_find} dispatch; postTakeWhereCond (if any) gates the per-element work innermost.
+    var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, intermediateEnd)
+    var ptw : Expression?
+    if (rangeInfo.postTakeWhereCond != null) {
+        ptw = clone_expression(rangeInfo.postTakeWhereCond)
+    }
+    var perStmts : array<Expression?>
+    perStmts |> push(perElement)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- preludeStmts,
+        perElementStmts <- perStmts,
+        postTakeWhereCond = ptw,
         tailStmts <- tailStmts,
-        retType = elemType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_walk_lane(bridge : DecsBridgeShape?;
-                        opName : string;
-                        chainInfo : DecsChainInfo?;
-                        rangeInfo : DecsRangeInfo?;
-                        var calls : array<tuple<ExprCall?; LinqCall?>>;
-                        intermediateEnd : int;
-                        terminatorCall : ExprCall?;
-                        at : LineInfo) : Expression? {
-    // Slice 5f walk-lane: last/single/aggregate. State (found flag + retained element / accumulator) hoisted at invoke scope so it persists across archetype boundaries. single_or_default uses for_each_archetype_find for early-exit on 2nd match; others use plain for_each_archetype unless take/take_while is present.
-    let finalBind = chainInfo.finalBind
-    var elemType = clone_type(chainInfo.finalType)
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
-    var perElement : Expression?
-    var retType : TypeDeclPtr
-    var earlyExitFind = false
-    if (opName == "last" || opName == "last_or_default") {
-        retType = elemType
-        let foundName = qn("decs_found", at)
-        let bindName = qn("decs_lst", at)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(bindName) : $t(retType)
-        }
-        perElement = qmacro_block() {
-            $i(foundName) = true
-            $i(bindName) := $i(finalBind)
-        }
-        if (opName == "last") {
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) panic("sequence contains no elements")
-                return <- $i(bindName)
-            }
-        } else {
-            let defaultName = qn("decs_dv", at)
-            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    $e(emit_default_return(defaultName, dvCanCopy))
-                }
-                return <- $i(bindName)
-            }
-        }
-    } elif (opName == "single") {
-        retType = elemType
-        let foundName = qn("decs_found", at)
-        let bindName = qn("decs_sng", at)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(bindName) : $t(retType)
-        }
-        // Panic on 2nd match terminates the invoke regardless of nesting — no need for early-exit dispatch.
-        perElement = qmacro_block() {
-            if ($i(foundName)) panic("sequence contains more than one element")
-            $i(foundName) = true
-            $i(bindName) := $i(finalBind)
-        }
-        tailStmts |> push_from <| qmacro_block_to_array() {
-            if (!$i(foundName)) panic("sequence contains no elements")
-            return <- $i(bindName)
-        }
-    } elif (opName == "single_or_default") {
-        retType = elemType
-        let foundName = qn("decs_found", at)
-        let stopName = qn("decs_stop", at)
-        let bindName = qn("decs_sng", at)
-        let defaultName = qn("decs_dv", at)
-        let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(stopName) = false
-            var $i(bindName) : $t(retType)
-        }
-        preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-        // 2nd match → set stop, return true (exits inner lambda); for_each_archetype_find then stops the walk.
-        perElement = qmacro_block() {
-            if ($i(foundName)) {
-                $i(stopName) = true
-                return true
-            }
-            $i(foundName) = true
-            $i(bindName) := $i(finalBind)
-        }
-        tailStmts |> push_from <| qmacro_block_to_array() {
-            if ($i(stopName) || !$i(foundName)) {
-                $e(emit_default_return(defaultName, dvCanCopy))
-            }
-            return <- $i(bindName)
-        }
-        earlyExitFind = true
-    } elif (opName == "aggregate") {
-        var seedExpr = clone_expression(terminatorCall.arguments[1])
-        var aggFn = clone_expression(terminatorCall.arguments[2])
-        if (seedExpr._type == null) return null
-        var accType = clone_type(seedExpr._type)
-        accType.flags.constant = false
-        accType.flags.ref = false
-        retType = clone_type(accType)
-        let aggAccName = qn("decs_agg", at)
-        let aggIsWorkhorse = seedExpr._type.isWorkhorseType
-        if (aggIsWorkhorse) {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(aggAccName) : $t(accType) = $e(seedExpr)
-            }
-        } else {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(aggAccName) : $t(accType) <- $e(seedExpr)
-            }
-        }
-        var peeled = peel_lambda_rename_2vars(aggFn, aggAccName, finalBind)
-        if (peeled != null) {
-            if (aggIsWorkhorse) {
-                perElement = qmacro_expr() {
-                    $i(aggAccName) = $e(peeled)
-                }
-            } else {
-                perElement = qmacro_expr() {
-                    $i(aggAccName) <- $e(peeled)
-                }
-            }
-        } else {
-            if (aggIsWorkhorse) {
-                perElement = qmacro_expr() {
-                    $i(aggAccName) = invoke($e(aggFn), $i(aggAccName), $i(finalBind))
-                }
-            } else {
-                perElement = qmacro_expr() {
-                    $i(aggAccName) <- invoke($e(aggFn), $i(aggAccName), $i(finalBind))
-                }
-            }
-        }
-        if (aggIsWorkhorse) {
-            tailStmts |> push <| qmacro_expr() {
-                return $i(aggAccName)
-            }
-        } else {
-            tailStmts |> push <| qmacro_expr() {
-                return <- $i(aggAccName)
-            }
-        }
-    } else {
-        return null
-    }
-    let dispatch : DecsDispatch = ((earlyExitFind || rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_element_at(bridge : DecsBridgeShape?;
-                         opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
-                         var calls : array<tuple<ExprCall?; LinqCall?>>;
-                         intermediateEnd : int;
-                         terminatorCall : ExprCall?;
-                         at : LineInfo) : Expression? {
-    // Slice 5f element_at: counter-driven early-exit via for_each_archetype_find. idx + counter + found + result hoisted at invoke scope; perElement writes result + returns true on cnt == idx match.
-    let finalBind = chainInfo.finalBind
-    var retType = clone_type(chainInfo.finalType)
-    let idxName = qn("decs_idx", at)
-    let cntName = qn("decs_ec", at)
-    let foundName = qn("decs_found", at)
-    let resultName = qn("decs_res", at)
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
-    preludeStmts |> push <| qmacro_expr() {
-        let $i(idxName) = $e(terminatorCall.arguments[1])
-    }
-    if (opName == "element_at") {
-        preludeStmts |> push <| qmacro_expr() {
-            if ($i(idxName) < 0) panic("element index out of range")
-        }
-        tailStmts |> push_from <| qmacro_block_to_array() {
-            if (!$i(foundName)) panic("element index out of range")
-            return <- $i(resultName)
-        }
-    } else {
-        // element_at_or_default has no user-supplied default; mirrors linq.das via `var t : TT; return <- t` (move-init, works for both copyable and non-copyable element types).
-        let tName = qn("decs_emptyT", at)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            if ($i(idxName) < 0) {
-                var $i(tName) : $t(retType)
-                return <- $i(tName)
-            }
-        }
-        tailStmts |> push_from <| qmacro_block_to_array() {
-            if (!$i(foundName)) {
-                var $i(tName) : $t(retType)
-                return <- $i(tName)
-            }
-            return <- $i(resultName)
-        }
-    }
-    preludeStmts |> push_from <| qmacro_block_to_array() {
-        var $i(cntName) = 0
-        var $i(foundName) = false
-        var $i(resultName) : $t(retType)
-    }
-    var perElement : Expression? = qmacro_block() {
-        if ($i(cntName) == $i(idxName)) {
-            $i(resultName) := $i(finalBind)
-            $i(foundName) = true
-            return true
-        }
-        $i(cntName) ++
-    }
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = DecsDispatch(Find = null)
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
+        outElemType = elemType,
+        dispatch = dispatch), adapter, at)
 }
 
 // ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────

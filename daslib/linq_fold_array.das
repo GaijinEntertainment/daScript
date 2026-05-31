@@ -46,6 +46,9 @@ class ArrayAdapter : SourceAdapter {
     def override const can_join() : bool {
         return true
     }
+    def override supports_direct_return() : bool {
+        return true
+    }
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_array_join(c, ctx, at)
     }
@@ -64,7 +67,7 @@ class ArrayAdapter : SourceAdapter {
         }
         return clone_type(top._type.firstType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let bindName = qn("it", at)
         let sn = srcName
         return <- qmacro_block() {
@@ -166,6 +169,9 @@ class ZipAdapter : SourceAdapter {
     def override name_prefix() : string {
         return "zip_"
     }
+    def override supports_direct_return() : bool {
+        return true   // wrap_source_loop emits a real `for (itA, itB in ...)` inside the invoke
+    }
     def override bind_name(at : LineInfo) : string {
         return qn("it", at)
     }
@@ -193,7 +199,7 @@ class ZipAdapter : SourceAdapter {
         }
         return wrap_invoke(bodyStmts, null, false, at)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
         return <- qmacro_block() {
@@ -237,13 +243,16 @@ class ArrayJoinAdapter : SourceAdapter {
     def override name_prefix() : string {
         return "ajoin_"
     }
+    def override supports_direct_return() : bool {
+        return true   // probe `for (tupA in srcA)` is a real loop inside the invoke
+    }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName
     }
     def override element_type() : TypeDeclPtr {
         return clone_type(shape.resultType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("ajoin_jhash", at)
         let arrName   = qn("ajoin_jarr", at)
         let tupAName  = qn("ajoin_jta", at)
