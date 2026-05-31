@@ -877,7 +877,10 @@ def finalize_invoke(var res : Expression?; at : LineInfo) : Expression? {
 
 [clone(top), macro_function]
 def emit_length_shortcut(opName : string; var top : Expression?; srcName : string; at : LineInfo) : Expression? {
-    // Count-shaped shortcut: emit `length(src)` (count), `long_length(src)` (long_count on array/table), or `int64(length(src))` (long_count on string/dim/range — length returns int, capped). The int() cast on count would be redundant — interp doesn't fold it and PERF020 fires.
+    // nolint:STYLE014 — O(1) count shortcut, skips the walk. Emits `invoke((src) { return <X> }, top)`:
+    //   count                          → length(src)            // no int() cast — interp won't fold it and PERF020 fires
+    //   long_count (array / table)     → long_length(src)
+    //   long_count (string/dim/range)  → int64(length(src))     // length() returns int here; cast widens
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var res : Expression?
@@ -920,7 +923,7 @@ def prepend_binds(var stmts : array<Expression?>; var intermediateBinds : array<
 
 [macro_function]
 def stmts_to_expr(var stmts : array<Expression?>) : Expression? {
-    // Collapse a stmt list to a single expression: pass through when there's only one,
+    // Collapse a stmt list to one expression: the lone stmt when length == 1, else a `{ stmts… }` block.
     if (length(stmts) == 1) return stmts[0]
     return <- qmacro_block() {
         $b(stmts)
@@ -966,7 +969,10 @@ def make_range_names(at : LineInfo) : RangeStateNames {
 [macro_function]
 def append_ranges_prelude(var preludeStmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond : Expression?;
                           names : RangeStateNames) {
-    // Loop-level state for skip/take counters + skip_while flag (one-way, flips on first false-pred).
+    // nolint:STYLE014 — emits the loop-level range state, hoisted ABOVE the source loop (one var per active op):
+    //   var skipN = <skipExpr>      // skip(N) remaining-counter
+    //   var tc = 0                  // take(N) taken-counter
+    //   var skipping = true         // skip_while flag (one-way; flips false on the first failing predicate)
     let skipName      = names.skipName
     let takeCountName = names.takeCountName
     let skippingName  = names.skippingName
@@ -990,7 +996,14 @@ def append_ranges_prelude(var preludeStmts : array<Expression?>; var skipExpr, t
 [macro_function]
 def wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                      names : RangeStateNames) {
-    // Per-match prefix order: take-guard → skip counter → skip_while flip → take_while break → takeCount++ → body. takeCount++ sits AFTER skip_while/take_while so gated-out elements don't eat the take(N) budget.
+    // nolint:STYLE014 — prepends the per-iteration range guards to `stmts` (takeCount++ sits AFTER the skip/while
+    // gates so gated-out elements don't eat the take(N) budget). Emits, in order, then the original `stmts`:
+    //   if (tc >= <takeExpr>) { break }                                  // take(N)
+    //   if (skipN > 0) { skipN--; continue }                             // skip(N)
+    //   if (skipping) { if (<skipWhileCond>) continue; skipping = false } // skip_while
+    //   if (!(<takeWhileCond>)) { break }                                // take_while
+    //   tc ++                                                            // take(N) counter bump
+    //   <stmts…>
     if (skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null) return
     let skipName      = names.skipName
     let takeCountName = names.takeCountName
@@ -1041,7 +1054,8 @@ def wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeExpr, ski
 
 [macro_function]
 def min_max_compare(workhorse : bool; opName : string; valName, accName : string) : Expression? {
-    // Workhorse types use direct `<` / `>` (single-instruction comparison) — this is the
+    // "val beats acc" test for min/max. workhorse → native `val < acc` (min) / `val > acc` (max);
+    // non-workhorse → `_::less(val, acc)` (min) / `_::less(acc, val)` (max) so user `<` overloads apply.
     if (workhorse && opName == "min") return <- qmacro($i(valName) < $i(accName))
     if (workhorse) return <- qmacro($i(valName) > $i(accName))
     if (opName == "min") return <- qmacro(_::less($i(valName), $i(accName)))
@@ -1054,9 +1068,13 @@ def build_accumulator_perelement_stmts(opName : string;
                                        var valueExpr : Expression?;
                                        workhorse : bool;
                                        isDoubleAccType : bool) : array<Expression?> {
-    // Per-element accumulator update for sum / min / max / average — the only ops emit_accumulator_lane
-    // (its sole caller) handles. valueExpr is the cloned projection or the element bind. Preludes +
-    // return-expr stay caller-side because acc types and empty-source guards differ.
+    // nolint:STYLE014 — per-element accumulator update for sum / min / max / average. valueExpr = cloned
+    // projection or element bind. Emits:
+    //   sum     → acc += valueExpr
+    //   average → acc += double(valueExpr); cnt ++          // double() skipped when acc is already double
+    //   min/max → let val = valueExpr
+    //             if (first) { acc := val; first = false } elif (<val beats acc>) acc := val
+    // Preludes + return-expr stay caller-side (build_accumulator_spec) — acc types / empty-source guards differ.
     var stmts : array<Expression?>
     if (opName == "sum") {
         stmts |> push <| qmacro_expr() {
@@ -1102,6 +1120,11 @@ struct AccumulatorSpec {
 [macro_function, unused_argument(at)]
 def build_accumulator_spec(opName : string; accName, cntName, firstName : string;
                            accType : TypeDeclPtr; at : LineInfo) : AccumulatorSpec {
+    // nolint:STYLE014 — per-op accumulator prologue (var decls) + return expr (paired with the per-element
+    // update from build_accumulator_perelement_stmts). Emits:
+    //   sum     → prologue `var acc : T = default<T>`;                          return `acc`
+    //   average → prologue `var acc : double = 0lf; var cnt : uint64 = 0ul`;    return `cnt != 0 ? acc / double(cnt) : 0lf`
+    //   min/max → prologue `var first = true; var acc : T`;                     return `acc`   (first-element latch)
     var sp : AccumulatorSpec
     if (opName == "sum") {
         sp.prologue <- qmacro_block_to_array() {
@@ -1149,6 +1172,24 @@ struct TerminatorSpec {
 
 [macro_function]
 def emit_terminator_lane(var spec : TerminatorSpec; var adapter : SourceAdapter?; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — central single-pass assembler: stitches a TerminatorSpec into one source loop inside an
+    // invoke. The counter / accumulator / early-exit lanes all build a spec and hand it here. Generated skeleton
+    // (each slot drops out when its spec field is null/empty):
+    //   invoke((src…) {
+    //       <range prelude>                        // append_ranges_prelude: `var skipN = M` / `var tc = 0` / `var skipping = true`
+    //       <spec.prologue>                        // e.g. `var acc = 0` (counter / accumulator seed)
+    //       wrap_source_loop(spec.dispatch) {      // adapter: array → `for`, decs → for_each_archetype, xml → DOM walk
+    //           <spec.preCondStmts>                // per-element binds, inside the loop but outside the where-gate
+    //           if (spec.whereCond) {
+    //               <range guards>                 // wrap_with_ranges: skip/take/skip_while/take_while → continue / break
+    //               if (spec.postTakeWhereCond) {  // trailing where, applied after take
+    //                   <spec.intermediateBinds>   // chained-select running-projection binds
+    //                   <spec.perElementStmts>     // the op's per-element work
+    //               }
+    //           }
+    //       }
+    //       <spec.tailStmts>                       // e.g. `return acc`
+    //   }, src…)
     var perStmts <- spec.perElementStmts
     prepend_binds(perStmts, spec.intermediateBinds)
     if (spec.postTakeWhereCond != null) {
@@ -1208,8 +1249,14 @@ struct FoldArraySpec {
     dispatch        : LoopDispatch = LoopDispatch(Each = null)   // loop-framing knob for wrap_source_loop; only nested-callback sources (decs) consume it
 }
 
-// Compose perElement = distinct gate (innermost) → whereCond → preCondStmts.
-// Exposed so customSourceLoop callers wrap the exact body the lane would have wrapped, in their own outer-loop shape.
+// nolint:STYLE014 — composes the per-element body the fold-array lane wraps (distinct gate innermost →
+// where-cond → preCondStmts). Exposed so customSourceLoop callers wrap the exact same body in their own
+// outer-loop shape. Emits:
+//   <spec.preCondStmts>
+//   if (spec.whereCond) {
+//       let dkey = unique_key(<distinct key>)                              // distinctGate only
+//       if (!dset |> key_exists(dkey)) { dset |> insert(dkey); <spec.perElementPush> }
+//   }
 [macro_function]
 def compose_fold_per_element(var spec : FoldArraySpec) : Expression? {
     var perElement = spec.perElementPush
@@ -1237,7 +1284,27 @@ def compose_fold_per_element(var spec : FoldArraySpec) : Expression? {
 
 [macro_function]
 def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?; at : LineInfo) : Expression? {
-    // Assemble bodyStmts: prologue → bufDecl → dsetDecl → postBufDecl → reserve → source-loop → tail.
+    // nolint:STYLE014 — fold-into-array assembler (sibling of emit_terminator_lane, for ops that materialize a
+    // buffer): declare buf, run the source loop pushing survivors, return buf. Generated skeleton (slots =
+    // FoldArraySpec fields; each drops out when null/empty):
+    //   invoke((src…) {
+    //       <spec.prologueStmts>                       // e.g. takeN bind, BEFORE bufDecl
+    //       var buf : array<spec.bufElemType>
+    //       var inscope dset : table<unique_key(…)>    // only when spec.distinctGate != null
+    //       <spec.postBufDeclStmts>                    // e.g. bounded-heap early-return guards
+    //       <spec.reserveStmts>                        // e.g. buf |> reserve(length(src))
+    //       wrap_source_loop(spec.dispatch) {          // or spec.customSourceLoop when the caller pre-composed the loop
+    //           <spec.preCondStmts>
+    //           if (spec.whereCond) {                  // compose_fold_per_element: distinct gate is INSIDE the where,
+    //               let dkey = unique_key(<key>)       //   so filtered-out rows never poison the dedup set
+    //               if (!dset |> key_exists(dkey)) {
+    //                   dset |> insert(dkey)
+    //                   <spec.perElementPush>          // e.g. buf |> push_clone(projection)
+    //               }
+    //           }
+    //       }
+    //       <spec.tailStmts>                           // includes the return (e.g. `return <- buf`)
+    //   }, src…)
     var bodyStmts : array<Expression?>
     bodyStmts |> reserve(length(spec.prologueStmts) + length(spec.postBufDeclStmts)
                           + length(spec.reserveStmts) + length(spec.tailStmts) + 5)
@@ -1277,9 +1344,13 @@ def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?;
     return adapter->wrap_invoke(bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
 
-// Terminal _select re-iteration helper. selectLam==null → [return <- buf]; non-null →
-// [var outBuf; reserve; for(elem in buf){outBuf|>push_clone(projBody)}; return <- outBuf].
-// Tail returns raw array; lane's wrapIter knob handles to_sequence_move at the outer invoke.
+// nolint:STYLE014 — terminal `_select` re-iteration tail. selectLam == null → just `return <- buf`.
+// Non-null → re-project every buffered element into a fresh buffer:
+//   var outBuf : array<selectElemType>
+//   outBuf |> reserve(length(buf))
+//   for (e in buf) { outBuf |> push_clone(<select(e)>) }
+//   return <- outBuf
+// Returns the raw array; the lane's wrapIter knob adds .to_sequence_move() at the outer invoke.
 [macro_function]
 def build_terminal_select_tail(bufName : string; selectLam : Expression?;
                                selectElemType : TypeDeclPtr; at : LineInfo) : array<Expression?> {
@@ -1306,7 +1377,7 @@ def build_terminal_select_tail(bufName : string; selectLam : Expression?;
 
 [macro_function]
 def emit_any_empty_shortcut(var top : Expression?; srcName : string; at : LineInfo) : Expression? {
-    // any (no predicate) shortcut: emit `!empty(src)` directly. Caller has verified no
+    // `any()` with no predicate / where / limits: skip the walk. Emits `invoke((src) { return !empty(src) }, top)`.
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
     var res = qmacro(invoke($($i(srcName) : typedecl($e(topExpr))) {
@@ -1317,6 +1388,7 @@ def emit_any_empty_shortcut(var top : Expression?; srcName : string; at : LineIn
 
 [macro_function]
 def merge_where_cond(var curr : Expression?; var pred : Expression?) : Expression? {
+    // AND-merge two where predicates: null curr → pred unchanged; else emits `curr && pred`.
     if (curr == null) return pred
     return <- qmacro($e(curr) && $e(pred))
 }
@@ -1341,8 +1413,15 @@ def mut_result_type(projection : Expression?; elementType : TypeDeclPtr) : TypeD
 def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; names : RangeStateNames;
                       var skipExpr, takeExpr, skipWhileCond : Expression?;
                       var loopBody : Expression?; at : LineInfo; isLong : bool = false) : Expression? {
-    // loopBody is caller-pre-wrapped (where/binds/post-take/in-loop ranges); spec only handles prelude+prologue+tail.
-    // isLong → int64 accumulator (long_count); else int (count). Tail `return acc` is width-agnostic.
+    // nolint:STYLE014 — count() / long_count(): seed a counter and ride emit_terminator_lane. The caller passes a
+    // pre-wrapped loopBody (where / binds / post-take / in-loop ranges already applied) whose work is `acc ++`; this
+    // lane only adds the seed + range prelude + `return acc` tail. isLong → int64 acc (long_count), else int. Emits:
+    //   invoke((src…) {
+    //       <range prelude>
+    //       var acc = 0                       // `var acc : int64 = 0l` when isLong
+    //       for (it in src) { … acc ++ … }    // = loopBody, caller-supplied
+    //       return acc
+    //   }, src…)
     var prologue : array<Expression?>
     append_ranges_prelude(prologue, skipExpr, takeExpr, skipWhileCond, names)
     if (isLong) {
@@ -1384,7 +1463,17 @@ def emit_accumulator_lane(
                           var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                           at : LineInfo
                           ) : Expression? {
-    // Ring 1 single-pass accumulator lane: sum / min / max / average. (count/long_count ride emit_counter_lane.)
+    // nolint:STYLE014 — single-pass value reducer: sum / min / max / average (count/long_count ride emit_counter_lane).
+    // Seeds an accumulator, folds each projected value in, returns the result — all via emit_terminator_lane. The
+    // per-op seed / fold / return come from build_accumulator_spec + build_accumulator_perelement_stmts. Emits:
+    //   invoke((src…) {
+    //       var acc = <seed>              // sum: 0; min/max: first-element latch (a `first` flag); average: sum + cnt
+    //       for (it in src) {            // where / ranges / binds applied by emit_terminator_lane
+    //           let val = <projection ?? it>
+    //           <fold val into acc>      // sum: acc += val; min: if (val < acc) acc = val; …
+    //       }
+    //       return <result>              // sum/min/max: acc; average: acc / cnt
+    //   }, src…)
     var valueExpr : Expression?
     if (projection != null) {
         valueExpr = clone_expression(projection)
@@ -1442,7 +1531,30 @@ def emit_early_exit_lane(
                          var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                          at : LineInfo
                          ) : Expression? {
-    // Ring 2 early-exit lane: first / first_or_default / any / all / contains.
+    // nolint:STYLE014 — early-exit / single-result lane: first[_or_default] / any / all / contains /
+    // last[_or_default] / single[_or_default] / element_at[_or_default] / aggregate. Two emission modes:
+    //   • directReturn (array / zip / xml — supports_direct_return): mid-loop `return X` exits the invoke.
+    //   • decs (nested for_each_archetype lambda CAN'T return out): retain in a state var + `return true`
+    //     (which stops the find walk), then the tail returns. Picks dispatch = Find / FindReturn / FindReturnNegated.
+    // Canonical shape (first, directReturn):
+    //   invoke((src…) {
+    //       for (it in src) {                  // where / ranges / binds applied by emit_terminator_lane
+    //           let vproj = <projection(it)>   // only when projection != null; else `it` is used directly
+    //           return vproj
+    //       }
+    //       panic("sequence contains no elements"); return default<Ret>
+    //   }, src…)
+    // Same op on decs (state path): `var found=false; var fst:Ret; for_each{ fst:=v; found=true; return true }
+    //   …; if(!found) panic(...); return fst`.
+    // Per-op (directReturn shape; decs mirrors via found-flag + `return true`):
+    //   first_or_default  → bind `d` once; empty tail returns `d` instead of panic
+    //   any               → no pred: `return true` on first survivor; with pred: `if (p(v)) return true`; tail `return false` (decs no-range: FindReturn)
+    //   all               → `if (!p(v)) return false`; tail `return true` (decs no-range: FindReturnNegated — inner returns true on first counterexample, negate)
+    //   contains          → bind `cval` once; `if (v == cval) return true`; tail `return false` (decs no-range: FindReturn)
+    //   last[_or_default] → full walk, `lst := v` each match; tail returns lst (panic/default if none). XML defers: store node handle, materialize once at the tail
+    //   single            → full walk; 2nd match panics; empty panics
+    //   element_at        → negative index panics/defaults pre-loop; `if (cnt == idx) return v; cnt++`; tail panic/default
+    //   aggregate         → seed acc; `acc = aggFn(acc, v)` each element (workhorse `=`/`return`, else `<-`/`return <-`); tail returns acc
     var perMatchStmts : array<Expression?>
     var valueName = itName
     let projBindName = qn("vproj", at)
@@ -1952,6 +2064,16 @@ def emit_early_exit_lane(
 
 [macro_function]
 def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — the loop_or_count planner. Walks the head chain (where_ / select runs) into a whereCond,
+    // a running projection, intermediate select-binds + preCond binds; then reads skip / take / skip_while /
+    // take_while + an optional post-take where + terminator. Routes to one lane (the peeled where/select/range
+    // slots thread into whichever is chosen):
+    //   source has its own lane (decs)            → ctx.src->emit_loop_or_count
+    //   counting, no where/limits, pure proj      → ctx.src->count_shortcut          (O(1), e.g. length(src))
+    //   sum / min / max / average                 → emit_accumulator_lane
+    //   first / any / all / contains / last / …   → emit_early_exit_lane             (any-no-pred → emit_any_empty_shortcut)
+    //   count / long_count                        → emit_counter_lane,    loopBody = `acc ++` (gated)
+    //   no terminator (to_array)                  → emit_fold_array_lane, perElementPush = `buf |> push_clone(projection ?? it)`
     // PR C Decs-arm: route to existing emit_decs_* lane fns. State hoists above for_each_archetype (different invoke shape from array side); unifying lane fns is out of scope per D1. Sources with their own lane delegate entirely — a null hook result bails to tier-2 (must NOT fall through to the array lane, which assumes an array `top`).
     if (ctx.src->has_own_loop_or_count_lane()) return ctx.src->emit_loop_or_count(c, ctx, at)
     // ctx.src IS the source adapter (ArrayAdapter for arrays, XmlAdapter for XML) — the lanes ride it
@@ -2194,7 +2316,10 @@ struct JoinAdapterPieces {
     probeOuter   : Expression?
 }
 
-// Peels keya/keyb/result lambdas and emits the hashed-join collect+probe inners shared between the DecsJoin and ArrayJoin branches of adapter_wrap_source_loop. The two callsites differ only in how they wrap these pieces with source iteration.
+// nolint:STYLE014 — peels keya/keyb/result and builds the hashed-join collect + probe inners shared by the DecsJoin
+// / ArrayJoin adapter wrap_source_loop (the two callsites differ only in how they wrap these with source iteration):
+//   collectInner → hash[keyb(tupB)] |> push_clone(tupB)                                              // build side
+//   probeOuter   → get(hash, keya(tupA), $(var arr) { for (tupB in arr) { let res = result(tupA, tupB); <body> } })
 [macro_function, unused_argument(at)]
 def build_join_adapter_pieces(
                               keyaLam        : Expression?;
@@ -2235,6 +2360,7 @@ def build_join_adapter_pieces(
 
 [macro_function]
 def buffer_return(bufName : string; isIterator : bool) : Expression? {
+    // to_array tail: `return <- buf`, or `return <- buf.to_sequence_move()` when the result is an iterator.
     if (isIterator) return <- qmacro_expr() {
         return <- $i(bufName).to_sequence_move()
     }
@@ -2262,6 +2388,10 @@ def order_min_call_name(orderName : string; hasKey : bool) : string {
 [macro_function, unused_argument(elemType, at)]
 def try_make_inline_cmp(orderKey : Expression?; orderName : string;
                         elemType : TypeDeclPtr; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — if orderKey is a peelable single-return block `$(x) => KEY`, build an inline 2-arg
+    // comparator (untyped args; typer infers from the call site). Emits, asc / desc:
+    //   $(v1, v2) { return _::less(KEY[x:=v1], KEY[x:=v2]) }    // descending swaps v1 / v2
+    // Returns null when the key isn't inline-peelable (side-effects / multi-stmt) — caller passes the block instead.
     if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
     var mblk = orderKey as ExprMakeBlock
     var blk = mblk._block as ExprBlock
@@ -2464,6 +2594,17 @@ def extract_order_captures(var c : Captures; at : LineInfo; itName : string) : O
 // emit_streaming_min — first[_or_default] with inline-cmp key. Per-walk single-best state, no buffer.
 [macro_function]
 def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — `order_by(K) |> first[_or_default]()` collapses to a single O(n) min/max scan — no sort,
+    // no buffer. Tracks the best element so far; the tail returns it. Generated (via emit_terminator_lane):
+    //   invoke((src…) {
+    //       var best = default<Elem>; var seen = false       // first_or_default also binds `d` once
+    //       for (it in src) {                                // optional upstream where applied by the lane
+    //           if (!seen) { best := it; seen = true } elif (<it beats best by key>) best := it
+    //       }
+    //       if (!seen) panic("…")                            // first; first_or_default → `return d`
+    //       return <select(best) ?? best>
+    //   }, src…)
+    // XML defers: track (bestKey, bestNode) and build the survivor row once at the tail (skips materializing all N).
     let bindName = ctx.src->bind_name(at)
     var oc <- extract_order_captures(c, at, bindName)
     // Distinct without take but with first bails — streaming-min has no dset hook (mirrors imperative final bail).
@@ -2662,9 +2803,12 @@ def private build_surrogate_materialize_loop(var ctx : EmitCtx; bufName, outBufN
     return <- stmts
 }
 
-// emit_bounded_heap — take(N) with inline-cmp key. Heap of size N during walk; distinct gate variant + terminal _select.
-// Deferred-materialization variant (XML): the heap holds `(orderKey, handle)` surrogates and build_xml_row
-// runs only for the K survivors — see linq_fold.md "Deferred materialization".
+// nolint:STYLE014 — `order_by(K) |> take(N)` via a bounded size-N heap kept during the walk (no full sort).
+// Rides emit_fold_array_lane with the heap buffer; distinct gate + terminal _select optional. Per-element:
+//   if (length(buf) < N) { buf |> push_clone(it); spliced_push_heap(buf, cmp) }
+//   elif (<it beats buf[0]>) { spliced_pop_heap(buf, cmp); buf[last] := it; spliced_push_heap(buf, cmp) }
+// Tail: order_inplace(buf, cmp); return <- buf  (or re-project for a terminal _select).
+// XML defers: heap holds (orderKey, handle) surrogates; build the K survivor rows once at the tail.
 [macro_function]
 def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
@@ -2796,7 +2940,12 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     ), ctx.src, at)
 }
 
-// emit_buffer_helper_dispatch — no where, no distinct. Direct call to daslib helpers (order / top_n* / min_max).
+// nolint:STYLE014 — no where / distinct / terminal _select: emit a direct call to the daslib order helper.
+//   bare order               → order(src) / order_by(src, key)
+//   order + take(N)          → top_n[_by](src, N[, key])
+//   order + first            → array: panic-if-empty + min/max(src[, key]); iterator: top_n(_,1) |> first()
+//   order + first_or_default → top_n(_,1) |> first_or_default(d)
+// Iterator results wrap in .to_sequence_move() when the emission is array-shaped.
 [macro_function]
 def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let itName = qn("it", at)
@@ -2877,7 +3026,12 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
     return emission
 }
 
-// emit_fused_prefilter — where+order or distinct+order. Single fused loop: filter (and dset gate) into fresh buf, then sort/min/top_n on buf.
+// nolint:STYLE014 — where+order or distinct+order: one fused loop filters (and distinct-gates) survivors into a
+// fresh buffer, then the tail sorts / min / top_n's that buffer. Rides emit_fold_array_lane:
+//   for (it in src) { if (where) { <distinct gate> buf |> push_clone(it) } }     // perElementPush
+//   tail: bare order → order_inplace(buf); +take → top_n[_by](buf, N);
+//         +first → min/max(buf) (panic if empty); +first_or_default → top_n(buf,1) |> first_or_default(d)
+// XML defers (distinct, no-take, no-first): buffer (orderKey, handle) surrogates, build survivor rows at the tail.
 [macro_function]
 def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
@@ -3066,6 +3220,11 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
 // Ra — counter (reverse is identity for count). Side-effecting projection still fires per match.
 [macro_function]
 def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — `reverse() |> [where] |> [select] |> count()`: reversing doesn't change the count, so just
+    // count survivors forward — no buffer, no reverse. Generated via emit_terminator_lane:
+    //   var cnt = 0
+    //   for (it in src) { [let vfinal = projection;]  cnt ++ }   // vfinal bind only if the projection has side-effects
+    //   return cnt
     let bindName = ctx.src->bind_name(at)
     let cntName = qn("cnt", at)
     var whereCond : Expression?
@@ -3102,8 +3261,12 @@ def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
     ), ctx.src, at)
 }
 
-// Rb — walk + overwrite-last scalar (terminator: first / first_or_default).
-// "first of reversed" = LAST surviving element; walk source, overwrite `last` on each match. No buffer.
+// nolint:STYLE014 — Rb: `reverse() |> first[_or_default]()` = the LAST surviving element. Walk forward, overwrite
+// `last` on every match; no buffer. Generated via emit_terminator_lane:
+//   var found = false; var last : Elem = default<Elem>           // first_or_default also binds `d` once
+//   for (it in src) { last := <projection ?? it>; found = true }
+//   first            → if (!found) panic("…"); return <select(last) ?? last>
+//   first_or_default → return found ? <select(last) ?? last> : d
 [macro_function]
 def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
@@ -3192,9 +3355,14 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
     ), ctx.src, at)
 }
 
-// R6 — backward index walk (bare reverse + take(N) [+ trailing `_select(F)`] + implicit to_array on array source).
-// Visits only the last takeN indices — skips full-source push + O(length) reverse_inplace.
-// When `termsel` is captured, the loop still pushes RAW source elements into a srcElem-typed buffer; the projection runs post-loop via `build_terminal_select_tail`. This matches the decs-side fast path discipline (PR #2915) and R1-R4 catch-all: all source reads complete before any projection-side-effect can observe (or mutate) the source. Cost vs inlined-projection: K extra push_clones into the scratch buf (still O(K), no full-source walk).
+// nolint:STYLE014 — R6: `reverse() |> take(N) [|> _select(F)] |> to_array` on an ARRAY source. Visits only the
+// last N indices backward — no full-source push + O(length) reverse_inplace. Generated:
+//   let len = length(src); let takeN = clamp(<N>, 0, len)
+//   var buf : array<Elem>; buf |> reserve(takeN)
+//   for (k in 0 .. takeN) { buf |> push_clone(src[len - 1 - k]) }
+//   <terminal _select tail>; return <- buf
+// With `termsel` the loop pushes RAW source elements; the projection runs post-loop via build_terminal_select_tail
+// (matches the decs PR #2915 / R1-R4 discipline: all source reads finish before any projection side-effect runs).
 [macro_function]
 def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
@@ -3256,8 +3424,12 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
     return emit_fold_array_lane(spec, ctx.src, at)
 }
 
-// R-2a — backward walk + dset gate (Theme 8 / audit 2a: reverse + distinct[_by] + implicit to_array).
-// Single backward source walk with set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk.
+// nolint:STYLE014 — R-2a: `reverse() |> distinct[_by] |> to_array` on an ARRAY source. One backward source walk
+// with a set-gated push — saves the cascade's reverse_to_array + distinct_by_inplace second walk. Rides
+// emit_fold_array_lane with a customSourceLoop:
+//   let len = length(src)
+//   for (k in 0 .. len) { let it = src[len - 1 - k]; <distinct gate> buf |> push_clone(it) }
+//   return <- buf
 [macro_function]
 def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
@@ -3317,9 +3489,13 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
     return emit_fold_array_lane(spec, ctx.src, at)
 }
 
-// R-2b — reverse + distinct[_by] + to_array over a FORWARD source (XML / decs / iterator). Single-pass
-// keep-last: OVERWRITE tab[key] = (seq, val) per element, sort survivors by descending seq, emit — output-
-// identical to the array backward-index walk; XML defers (table holds the node, build per survivor). See linq_fold.md.
+// nolint:STYLE014 — R-2b: `reverse() |> distinct[_by] |> to_array` over a FORWARD source (XML / decs / iterator).
+// Single-pass keep-last: OVERWRITE `tab[key] = (seq, val)` per element (slot ends at the LAST forward occurrence),
+// sort survivors by descending seq, emit — output-identical to the array backward walk. Generated:
+//   var tab : table<unique_key(<key>); (int, Val)>; var seq = 0
+//   for (it in src) { tab[unique_key(<key>)] = (seq, <it ?? handle>); seq ++ }
+//   pairs <- values(tab); order_inplace(pairs, by descending seq); push each pairs._1 into outBuf; return <- outBuf
+// XML defers (distinct_by only): Val = node handle; build the survivor rows once at the tail.
 [macro_function]
 def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     if (!(c.single |> key_exists("dist"))) return null
@@ -3413,7 +3589,11 @@ def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; 
     ), ctx.src, at)
 }
 
-// R1-R4 — catch-all buffer + reverse_inplace + optional resize + optional terminal _select.
+// nolint:STYLE014 — R1-R4 catch-all reverse: buffer survivors forward, reverse_inplace, optional resize (take),
+// optional terminal _select. Tries faster paths first (the source's skip-into-tail for `reverse |> take`; the XML
+// handle-defer below), else rides emit_fold_array_lane:
+//   var buf : array<Elem>; for (it in src) { if (where) buf |> push_clone(<projection ?? it>) }
+//   reverse_inplace(buf); [buf |> resize(clamp(N, 0, len));] [re-project termsel into outBuf;] return <- buf
 [macro_function]
 def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
@@ -3629,6 +3809,18 @@ def build_reverse_rows {
 // take(N) bounds outer loop with cross-iteration break for true O(N)-source streaming exit.
 [macro_function]
 def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — distinct / distinct_by lane (optional where / select / take / count). One forward pass with
+    // a `seen` set; the first occurrence per key passes. Generated (canonical `distinct |> to_array` shape):
+    //   var inscope seen : table<unique_key(<key>)>; var buf : array<Elem>
+    //   for (it in src) {
+    //       if (where) {
+    //           let k = unique_key(<distinct_by key ?? it>)
+    //           if (!seen |> key_exists(k)) { seen |> insert(k); buf |> push_clone(<projection ?? it>) }
+    //       }
+    //   }
+    //   return <- buf
+    // Variants: + take(N) → stop after N survivors; + count[/long_count][(pred)] → count survivors (acc ++, gated by
+    //   pred on each first occurrence) instead of buffering.
     let bindName = ctx.src->bind_name(at)
     let bufName = qn("buf", at)
     let seenName = qn("seen", at)
@@ -4005,6 +4197,7 @@ def mk_strictly_preferred(workhorse, isMin : bool; var valExpr : Expression?; va
 
 [macro_function, unused_argument(itName)]
 def mk_reducer_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // count per group → (missInit, hitUpdate): first key `entry._slot = 1`; repeat `entry._slot ++`.
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
@@ -4018,6 +4211,7 @@ def mk_reducer_count(spec : ReducerSpec; at : LineInfo; entryName, itName : stri
 
 [macro_function, unused_argument(itName)]
 def mk_reducer_long_count(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // long_count per group → first key `entry._slot = 1l`; repeat `entry._slot ++` (int64 slot).
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
@@ -4031,6 +4225,7 @@ def mk_reducer_long_count(spec : ReducerSpec; at : LineInfo; entryName, itName :
 
 [macro_function]
 def mk_reducer_sum(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // sum per group → first key `entry._slot = it`; repeat `entry._slot += it`.
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
@@ -4044,6 +4239,7 @@ def mk_reducer_sum(spec : ReducerSpec; at : LineInfo; entryName, itName : string
 
 [macro_function, unused_argument(itName)]
 def mk_reducer_sum_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // sum of inner `_select` per group → first key `entry._slot = <inner>`; repeat `entry._slot += <inner>`.
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     var l2 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
@@ -4057,6 +4253,7 @@ def mk_reducer_sum_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : 
 
 [macro_function]
 def mk_reducer_min_max(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // min/max per group → first key `entry._slot := it`; repeat `if (<it beats entry._slot>) entry._slot := it`.
     let workhorse = spec.accType != null && spec.accType.isWorkhorseType
     let isMin = spec.name == "min"
     var lInit = mk_slot_ref(at, entryName, spec.slot)
@@ -4076,6 +4273,7 @@ def mk_reducer_min_max(spec : ReducerSpec; at : LineInfo; entryName, itName : st
 
 [macro_function, unused_argument(itName)]
 def mk_reducer_min_max_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // min/max of inner `_select` → first `entry._slot := <inner>`; repeat `let t = <inner>; if (<t beats entry._slot>) entry._slot := t`.
     let workhorse = spec.accType != null && spec.accType.isWorkhorseType
     let isMin = spec.name == "min_inner_select"
     let tmp = "`vis`{at.line}`{at.column}`{spec.slot}"
@@ -4097,6 +4295,7 @@ def mk_reducer_min_max_inner(spec : ReducerSpec; at : LineInfo; entryName, itNam
 
 [macro_function]
 def mk_reducer_first(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // first per group → first key `entry._slot := it`; no hit update (later same-key elements ignored).
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
         $e(l1) := $i(itName)
@@ -4106,6 +4305,7 @@ def mk_reducer_first(spec : ReducerSpec; at : LineInfo; entryName, itName : stri
 
 [macro_function, unused_argument(itName)]
 def mk_reducer_first_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+    // first of inner `_select` per group → first key `entry._slot := <inner>`; no hit update.
     var l1 = mk_slot_ref(at, entryName, spec.slot)
     let missInit = qmacro_expr() {
         $e(l1) := $e(spec.innerBody)
@@ -4113,8 +4313,12 @@ def mk_reducer_first_inner(spec : ReducerSpec; at : LineInfo; entryName, itName 
     return (missInit, null)
 }
 
-// Deferred first-per-group (XML): build the full row from the source handle INSIDE the miss-branch, so the
-// per-element walk reads only the group key (field-pruned) instead of `slot := it` pinning every row.
+// nolint:STYLE014 — deferred first-per-group (XML): build the full row from the source handle INSIDE the
+// miss-branch, so the per-element walk reads only the group key (field-pruned) instead of `slot := it`
+// pinning every row. Emits missInit (no hit update):
+//   var mat = default<Row>
+//   <materialize current handle → mat>
+//   entry._slot := mat
 [macro_function, unused_argument(itName)]
 def mk_reducer_first_deferred(spec : ReducerSpec; at : LineInfo; entryName, itName : string;
                               var adapter : SourceAdapter?) : tuple<Expression?; Expression?> {
@@ -4130,7 +4334,9 @@ def mk_reducer_first_deferred(spec : ReducerSpec; at : LineInfo; entryName, itNa
     return (missInit, null)
 }
 
-// 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source cast to double once per side.
+// nolint:STYLE014 — average per group, 2-slot acc (`._0` = sum:double, `._1` = count:uint64). Emits:
+//   missInit  → entry._slot = (double(it), 1ul)
+//   hitUpdate → entry._slot._0 += double(it); entry._slot._1 ++
 [macro_function]
 def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     var lInit = mk_slot_ref(at, entryName, spec.slot)
@@ -4146,7 +4352,9 @@ def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : st
     return (missInit, hitUpdate)
 }
 
-// Inner projection evaluated once into a temp per side — matches reference single-eval-per-element.
+// nolint:STYLE014 — average of inner `_select` per group (2-slot acc); inner projection evaluated once into a temp:
+//   missInit  → let t = <inner>; entry._slot = (double(t), 1ul)
+//   hitUpdate → let t = <inner>; entry._slot._0 += double(t); entry._slot._1 ++
 [macro_function, unused_argument(itName)]
 def mk_reducer_average_inner(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
     let tmp = "`vavg`{at.line}`{at.column}`{spec.slot}"
@@ -4465,6 +4673,19 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
                        exprIsIterator : bool;
                        at : LineInfo;
                        var adapter : SourceAdapter?) : Expression? {
+    // nolint:STYLE014 — group_by planner. Phase 1: walk the source into `tab`, running each reducer's missInit
+    // (new key) / hitUpdate (repeat key). Phase 2: emit one output row per group, then optional having / order /
+    // terminator. Generated:
+    //   var tab : table<unique_key(<key>); (KeyT, slot1, …, slotN)>; var dummy : (KeyT, slot1, …)
+    //   for (it in src) {                                        // upstream where/select segments applied here
+    //       let k = <keyBlock>; let uk = unique_key(k)
+    //       var entry & = tab?[uk] ?? dummy                       // one hash-op on hits, two on misses
+    //       if (addr(entry) == addr(dummy)) { <slot missInits>; dummy._0 = k; tab[uk] = dummy; dummy = default }
+    //       else { <slot hitUpdates> }
+    //   }
+    //   var buf : array<OutRow>
+    //   for (kv in values(tab)) { let row = (kv._0, <per-slot output: avg divides, else field ref>); [if (having)] buf |> push_clone(row) }
+    //   [order buf]; [terminator: count/…]; return <- buf
     // Prefix keeps hoisted names per-source distinct ("" array / "decs_" decs / "djoin_" decs-join / "ajoin_" array-join / "xml_" xml). The adapter supplies its own.
     let prefix = adapter->name_prefix()
     let tabName    = qn("{prefix}tab", at)
@@ -4828,6 +5049,9 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
 // builds SourceAdapter per source-shape (Array / Decs / DecsJoin), delegates to plan_group_by_core. Cascades on null bail.
 [macro_function]
 def emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+    // group_by splice entry: extracts captured slots (key / group projection / having / trailing where+order /
+    // terminator / head where+select), reconstructs the head call list, and hands them to plan_group_by_core,
+    // which emits the table-walk + per-group output (see its docstring for the generated shape).
     var gbCall = c.single["gb"]
     var keyBlock = clone_expression(gbCall.arguments[1])
     var groupProjCall = c.single["groupproj"]
@@ -5006,7 +5230,8 @@ def extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
 
 [macro_function]
 def emit_default_bind(name : string; argExpr : Expression?; canCopy : bool) : Expression? {
-    // Bind user-supplied default once. Non-copyable uses `var dv <- clone_to_move(arg)` — fully-owned local so multiple return-default sites can each clone-out without consuming.
+    // Bind a user-supplied default once. canCopy → `let dv = arg`; else `var dv <- clone_to_move(arg)` — a
+    // fully-owned local so multiple return-default sites can each clone-out without consuming the source.
     var out : Expression?
     if (canCopy) {
         out = qmacro_expr() {
@@ -5022,7 +5247,8 @@ def emit_default_bind(name : string; argExpr : Expression?; canCopy : bool) : Ex
 
 [macro_function]
 def emit_default_return(name : string; canCopy : bool) : Expression? {
-    // Non-copyable uses `return <- clone_to_move(name)` (safe repeated calls — clone_to_move does NOT consume).
+    // Return a bound default. canCopy → `return dv`; else `return <- clone_to_move(dv)` (clone_to_move does NOT
+    // consume, so repeated return-default sites stay safe).
     var out : Expression?
     if (canCopy) {
         out = qmacro_expr() {
@@ -5059,7 +5285,15 @@ struct JoinStandalonePieces {
     invokeRetType : TypeDeclPtr
 }
 
-// All 6 shape variants (count-no-where / count-where / no-count {no-bind, bind-no-where {select, no-select}, bind-where {select, no-select}}) live in one place. Caller owns source extraction (decs bridges vs array exprs), tup-bind construction, source-loop wrapping, and the final invoke wrap.
+// nolint:STYLE014 — builds the prelude / probe-bucket / return for a hashed join in all 6 shape variants (caller
+// owns source extraction, tup-bind, source-loop wrapping + the invoke wrap; see emit_array_join / emit_decs_join_impl
+// / emit_xml_join). probeOuter is always `get(hash, keya(a), $(var arr) { <body> })`. By shape:
+//   count, no where  → prelude `var cnt = 0`;         body `cnt += length(arr)`;                                  return `cnt`
+//   count + where    → prelude `var cnt = 0`;         body `for (b in arr) { let res = result(a,b); if (where) cnt ++ }`
+//   to_array, no bind → prelude `var buf : array<R>`; body `for (b in arr) { buf |> push_clone(result(a,b)) }`;    return `<- buf`
+//   + select          → body `for (b in arr) { let res = result(a,b); buf |> push_clone(select(res)) }`
+//   + where           → body `for (b in arr) { let res = result(a,b); if (where) buf |> push_clone(res) }`
+//   + select + where  → body `for (b in arr) { let res = result(a,b); if (where) buf |> push_clone(select(res)) }`
 [macro_function]
 def build_join_standalone_pieces(
                                  var joinCall   : ExprCall?;
@@ -5211,7 +5445,27 @@ def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? 
 
 [macro_function]
 def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    // Array mirror of emit_decs_join_impl: hashed equi-join with collect+probe inline, preserving the count-no-where bucket-length fast path. Two sources bind as invoke parameters (mirrors Zip's 2-source wrap rather than the 1-source Array helper).
+    // nolint:STYLE014 — emits a hashed equi-join as a 2-source invoke (mirrors Zip's 2-source wrap):
+    // build a hash from srcB, probe it with srcA. Generated code (canonical no-count/no-where/no-select shape):
+    //   invoke(
+    //       (srcA, srcB) {
+    //           var buf  : array<Result>
+    //           var hash : table<Key; array<B>>
+    //           for (b in srcB) {                          // build: bucket every B row under its key
+    //               hash[keyb(b)] |> push_clone(b)
+    //           }
+    //           for (a in srcA) {                          // probe: for each A, walk its matching bucket
+    //               get(hash, keya(a), $(var bucket) {
+    //                   for (b in bucket) { buf |> push_clone(result(a, b)) }
+    //               })
+    //           }
+    //           return <- buf
+    //       },
+    //       topSrc, srcbSrc)
+    // Variants (prelude / probe-body / return are supplied by build_join_standalone_pieces):
+    //   count()    → `var cnt = 0`; probe body is `cnt += length(bucket)` (bucket-length fast path, no per-pair loop); `return cnt`
+    //   where(p)   → per pair: `let res = result(a, b); if (p(res)) { ...push/incr... }`
+    //   select(f)  → push `f(res)` instead of `res` (buffer element type = f's return type)
     var joinCall = c.single["join"]
     if (!srcb_is_array_shaped(c, "join")) return null   // srcb must be array/iterator-shaped (formerly the array_join_srcb_is_array requires gate, moved here so the unified pattern asks the adapter)
     var whereLam : Expression?
