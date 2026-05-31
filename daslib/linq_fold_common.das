@@ -3153,6 +3153,23 @@ def mk_reducer_first_inner(spec : ReducerSpec; at : LineInfo; entryName, itName 
     return (missInit, null)
 }
 
+// Deferred first-per-group (XML): build the full row from the source handle INSIDE the miss-branch, so the
+// per-element walk reads only the group key (field-pruned) instead of `slot := it` pinning every row.
+[macro_function, unused_argument(itName)]
+def mk_reducer_first_deferred(spec : ReducerSpec; at : LineInfo; entryName, itName : string;
+                              var adapter : SourceAdapter?) : tuple<Expression?; Expression?> {
+    var l1 = mk_slot_ref(at, entryName, spec.slot)
+    var rowType = strip_const_ref(clone_type(spec.accType))
+    let matName = qn("gbf_mat_{spec.slot}", at)
+    var matStmt = adapter->materialize_handle(adapter->current_handle_expr(at), matName, at)
+    let missInit = qmacro_block() {
+        var $i(matName) = default<$t(rowType)>
+        $e(matStmt)
+        $e(l1) := $i(matName)
+    }
+    return (missInit, null)
+}
+
 // 2-slot acc: ._0 = sum (double), ._1 = count (uint64). Source cast to double once per side.
 [macro_function]
 def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
@@ -3205,8 +3222,13 @@ var reducer_emitters : table<string; ReducerEmitterFn> <- {
 }
 
 [macro_function]
-def emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName : string) : tuple<Expression?; Expression?> {
+def emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName : string;
+                          var adapter : SourceAdapter? = null) : tuple<Expression?; Expression?> {
     // (missInit, hitUpdate); hitUpdate null for first* (subsequent same-key elements ignored).
+    // Whole-element `first` over a deferring source materializes from the handle in the miss-branch.
+    if (spec.name == "first" && adapter != null && adapter->handle_type() != null) {
+        return mk_reducer_first_deferred(spec, at, entryName, itName, adapter)
+    }
     let emitter = reducer_emitters?[spec.name] ?? default<ReducerEmitterFn>
     return (null, null) if (emitter == null)
     return invoke(emitter, spec, at, entryName, itName)
@@ -3621,8 +3643,12 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     // `tab?[uk] ?? dummy` + addr-compare: one hash op/elem on hits, two on misses (insert).
     var missInitStmts : array<Expression?>
     var hitUpdateStmts : array<Expression?>
+    // XML deferral: whole-element `first` pins the full row (`slot := it`) → wrap_source_loop materializes
+    // every element. When the source defers and `it` is the raw element (no upstream select rebound the
+    // bind, so the handle's materialized row equals the reducer's `it`), build from the handle in the miss-branch.
+    var reducerAdapter : SourceAdapter? = (adapter->defers_materialization() && itName == adapter->bind_name(at)) ? adapter : null
     for (s in specs) {
-        let (mi, hu) = emit_reducer_branches(s, at, entryName, itName)
+        let (mi, hu) = emit_reducer_branches(s, at, entryName, itName, reducerAdapter)
         if (mi != null) {
             missInitStmts |> push(clone_expression(mi))
         }

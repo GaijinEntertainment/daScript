@@ -330,3 +330,28 @@ def parity_group_by(t : T?) {
         delete m5f; delete m3f
     }
 }
+
+[test]
+def parity_group_by_first(t : T?) {
+    // group_by + first-per-group — the deferred-materialization shape: the whole row escapes (FirstCar) but
+    // only #brands first-seen rows survive. m5f builds each survivor from the node handle in the miss-branch.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._group_by(_.brand)._select((b = _._0, first = _._1 |> first())).to_array())
+        var m3f <- _fold(each(arr)._group_by(_.brand)._select((b = _._0, first = _._1 |> first())).to_array())
+        t |> equal(length(m5f), length(m3f))
+        var f5 : table<string; int>
+        var ff : table<string; int>
+        for (g in m5f) {
+            f5[g.b] = g.first.id
+            t |> equal(g.first.brand, g.b)   // materialized survivor's own brand must match its group key
+        }
+        for (g in m3f) { ff[g.b] = g.first.id }
+        t |> equal(length(f5), length(ff))
+        for (k, v in keys(f5), values(f5)) {
+            t |> equal(v, ff?[k] ?? -1)
+        }
+        delete m5f; delete m3f
+    }
+}
