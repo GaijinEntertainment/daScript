@@ -79,21 +79,53 @@ def private mock_tool_call_json() : string {
     return sprint_json(r, false)
 }
 
+def private content_chunk(text : string) : string {
+    let chunk = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk",
+        created = 0, model = "mock-model",
+        choices <- [ChunkChoice(index = 0, delta <- ChatMessageDelta(content = text))])
+    return sprint_json(chunk, false)
+}
+
+def private finish_chunk(reason : string) : string {
+    let fin = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk",
+        created = 0, model = "mock-model",
+        choices <- [ChunkChoice(index = 0, delta <- ChatMessageDelta(), finish_reason = reason)])
+    return sprint_json(fin, false)
+}
+
 def private mock_stream_body() : string {
     let words = ["Hello", " from", " the", " mock", " stream."]
     var frames : array<string>
     frames |> reserve(length(words) + 2)
     for (w in words) {
-        let chunk = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk",
-            created = 0, model = "mock-model",
-            choices <- [ChunkChoice(index = 0, delta = ChatMessageDelta(content = w))])
-        frames |> push(sse_frame(sprint_json(chunk, false)))
+        frames |> push(sse_frame(content_chunk(w)))
     }
-    let fin = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk",
-        created = 0, model = "mock-model",
-        choices <- [ChunkChoice(index = 0, delta = ChatMessageDelta(), finish_reason = "stop")])
-    frames |> push(sse_frame(sprint_json(fin, false)))
+    frames |> push(sse_frame(finish_chunk("stop")))
     frames |> push("data: [DONE]\n\n")
+    let body = join(frames, "")
+    delete frames
+    return body
+}
+
+def private tool_call_chunk(td : ToolCallDelta) : string {
+    let chunk = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk",
+        created = 0, model = "mock-model",
+        choices <- [ChunkChoice(index = 0, delta <- ChatMessageDelta(tool_calls <- [td]))])
+    return sprint_json(chunk, false)
+}
+
+// One tool call streamed as fragments: id+name first, then arguments across two frames.
+def private mock_stream_tool_calls_body() : string {
+    var frames <- [
+        sse_frame(tool_call_chunk(ToolCallDelta(index = 0, id = "call_mock_1", _type = "function",
+            _function = ToolCallFunctionDelta(name = "get_weather")))),
+        sse_frame(tool_call_chunk(ToolCallDelta(index = 0,
+            _function = ToolCallFunctionDelta(arguments = "\{\"location\":\"")))),
+        sse_frame(tool_call_chunk(ToolCallDelta(index = 0,
+            _function = ToolCallFunctionDelta(arguments = "Paris\"\}")))),
+        sse_frame(finish_chunk("tool_calls")),
+        "data: [DONE]\n\n"
+    ]
     let body = join(frames, "")
     delete frames
     return body
@@ -138,6 +170,9 @@ class MockOpenAIServer : HvWebServer {
             let body = string(req.body)
             if (find(body, "\"stream\":true") >= 0) {
                 set_header(resp, "Content-Type", "text/event-stream")
+                if (find(body, "\"tools\":") >= 0) {
+                    return resp |> TEXT_PLAIN(mock_stream_tool_calls_body())  // fragmented tool-call stream
+                }
                 return resp |> TEXT_PLAIN(mock_stream_body())
             }
             if (find(body, "\"tools\":") >= 0) {
