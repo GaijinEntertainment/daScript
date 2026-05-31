@@ -67,7 +67,7 @@ class ArrayAdapter : SourceAdapter {
         }
         return clone_type(top._type.firstType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let bindName = qn("it", at)
         let sn = srcName
         return <- qmacro_block() {
@@ -199,7 +199,7 @@ class ZipAdapter : SourceAdapter {
         }
         return wrap_invoke(bodyStmts, null, false, at)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
         return <- qmacro_block() {
@@ -252,7 +252,7 @@ class ArrayJoinAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(shape.resultType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("ajoin_jhash", at)
         let arrName   = qn("ajoin_jarr", at)
         let tupAName  = qn("ajoin_jta", at)

@@ -364,7 +364,7 @@ class XmlAdapter : SourceAdapter {
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }
-        allStmts |> push(wrap_source_loop(pieces.probeOuter, at))
+        allStmts |> push(wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at))
         allStmts |> push(pieces.returnStmt)
         return build_xml_join_invoke(nodeExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, wrapIter, at)
     }
@@ -424,7 +424,7 @@ class XmlAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(elemType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         return build_pruned_dom_walk(srcName, nameArg, elemType, bind_name(at), body, null, at)
     }
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
@@ -506,7 +506,7 @@ class XmlJoinAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(shape.resultType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("xjoin_jhash", at)
         let arrName   = qn("xjoin_jarr", at)
         let tupBName  = qn("xjoin_jtb", at)

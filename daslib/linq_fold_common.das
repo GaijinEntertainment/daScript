@@ -46,7 +46,7 @@ variant LoopDispatch {
 class SourceAdapter {
     def abstract bind_name(at : LineInfo) : string
     def abstract element_type() : TypeDeclPtr
-    def abstract wrap_source_loop(var body : Expression?; at : LineInfo) : Expression?
+    def abstract wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression?
     def abstract wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression?
     // Capability queries — the source answers about itself; no central source enum to extend. Defaults
     // are the conservative answer (no fast path); the owning source overrides.
@@ -135,7 +135,7 @@ class ProjectedSourceAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(projType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let innerBind = inner->bind_name(at)
         var projExpr = peel_lambda_rename_var(selectLam, innerBind)
         let pn = projName
@@ -143,7 +143,7 @@ class ProjectedSourceAdapter : SourceAdapter {
             let $i(pn) = $e(projExpr)
             $e(body)
         }
-        return inner->wrap_source_loop(newBody, at)
+        return inner->wrap_source_loop(loopShape, newBody, at)
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
         return inner->wrap_invoke(stmts, retType, wrapIter, at)
@@ -1155,6 +1155,7 @@ struct TerminatorSpec {
     tailStmts         : array<Expression?>   // post-loop; INCLUDES the return
     outElemType       : TypeDeclPtr           // invoke retType; null = infer
     wrapIter          : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
+    dispatch          : LoopDispatch = LoopDispatch(Each = null)   // loop-framing knob for wrap_source_loop; only nested-callback sources (decs) consume it
 }
 
 [macro_function]
@@ -1172,7 +1173,7 @@ def emit_terminator_lane(var spec : TerminatorSpec; var adapter : SourceAdapter?
     bodyStmts |> reserve(length(spec.prologue) + length(spec.tailStmts) + 5)
     append_ranges_prelude(bodyStmts, spec.skipExpr, spec.takeExpr, spec.skipWhileCond, spec.rangeNames)
     bodyStmts |> push_from(spec.prologue)
-    bodyStmts |> push <| adapter->wrap_source_loop(loopBody, at)
+    bodyStmts |> push <| adapter->wrap_source_loop(spec.dispatch, loopBody, at)
     bodyStmts |> push_from(spec.tailStmts)
     return adapter->wrap_invoke(bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
@@ -1213,6 +1214,7 @@ struct FoldArraySpec {
     outElemType     : TypeDeclPtr           // invoke retType; null = infer
     wrapIter        : bool                  // adapter_wrap_invoke wraps emission with .to_sequence_move()
     customSourceLoop : Expression?          // if non-null, replaces adapter_wrap_source_loop at the source-loop step; caller pre-composes via compose_fold_per_element and wraps in its own outer-loop shape
+    dispatch        : LoopDispatch = LoopDispatch(Each = null)   // loop-framing knob for wrap_source_loop; only nested-callback sources (decs) consume it
 }
 
 // Compose perElement = distinct gate (innermost) → whereCond → preCondStmts.
@@ -1276,7 +1278,7 @@ def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?;
     } else {
         var perElement = compose_fold_per_element(spec)
         if (perElement == null) return null
-        bodyStmts |> push <| adapter->wrap_source_loop(perElement, at)
+        bodyStmts |> push <| adapter->wrap_source_loop(spec.dispatch, perElement, at)
     }
     bodyStmts |> push_from(spec.tailStmts)
     return adapter->wrap_invoke(bodyStmts, spec.outElemType, spec.wrapIter, at)
@@ -3615,7 +3617,7 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         if (dtl == null) return null
         stmts |> push(dtl)
     } else {
-        stmts |> push <| ctx.src->wrap_source_loop(perElement, at)
+        stmts |> push <| ctx.src->wrap_source_loop(LoopDispatch(Each = null), perElement, at)
     }
     if (terminatorName == "count") {
         if (countPred != null) {
@@ -4490,7 +4492,7 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         idx --
     }
     // Adapter-specific source loop emission (for(it in src) for array, for_each_archetype + inner for for decs).
-    stmts |> push(adapter->wrap_source_loop(body, at))
+    stmts |> push(adapter->wrap_source_loop(LoopDispatch(Each = null), body, at))
     // Compute output tuple + bufElemType — needed by to_array always, and by count when trailingWherePred is present (predicate is bound against the constructed output).
     let needOutput = terminatorName != "count" || trailingWherePred != null
     var outputExpr : Expression?

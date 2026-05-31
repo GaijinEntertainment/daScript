@@ -115,7 +115,7 @@ class DecsAdapter : SourceAdapter {
         }
         return clone_type(bridge.elementType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
         let archName = bridge.archName
         let br = bridge
@@ -151,7 +151,7 @@ class DecsJoinAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return clone_type(shape.resultType)
     }
-    def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("djoin_jhash", at)
         let arrName   = qn("djoin_jarr", at)
         let tupAName  = qn("djoin_jta", at)
