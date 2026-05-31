@@ -103,6 +103,15 @@ require daslib/type_traits
 require daslib/typemacro_boost
 require daslib/validate_code
 require dashv/dashv_boost
+require openai/openai_common
+require openai/openai_chat
+require openai/openai_embeddings
+require openai/openai_models
+require openai/openai_completions
+require openai/openai_audio
+require openai/openai_moderations
+require openai/openai_images
+require openai/openai_vision
 require pugixml/PUGIXML_boost
 require stbimage/stbimage_boost
 require stbimage/stbimage_ttf
@@ -247,6 +256,26 @@ def document_module_dashv_boost(_root : string) {
         group_by_regex("HTTP request helpers", mod, %regex~(with_http_request|get_body_bytes)$%%)
     )
     document("High-level HTTP and WebSocket wrappers", mod, "dashv_boost.rst", groups)
+}
+
+def document_module_openai(_root : string) {
+    var mod = [find_module("openai_common"), find_module("openai_chat"),
+        find_module("openai_embeddings"), find_module("openai_models"),
+        find_module("openai_completions"), find_module("openai_audio"),
+        find_module("openai_moderations"), find_module("openai_images"),
+        find_module("openai_vision")]
+    var groups <- array<DocGroup>(
+        group_by_regex("Client and transport", mod, %regex~(openai_client|configure_request|percent_encode|parse_error_body|post_json|get_json|post_for_bytes|post_and_decode|get_and_decode)$%%),
+        group_by_regex("Chat completions", mod, %regex~(chat|chat_text|chat_stream|json_object_format)$%%),
+        group_by_regex("Embeddings", mod, %regex~(embeddings|embed)$%%),
+        group_by_regex("Models", mod, %regex~(list_models|retrieve_model)$%%),
+        group_by_regex("Legacy completions", mod, %regex~(completions|complete)$%%),
+        group_by_regex("Audio (TTS and STT)", mod, %regex~(speech|speak|transcribe|translate)$%%),
+        group_by_regex("Moderations", mod, %regex~(moderations)$%%),
+        group_by_regex("Image generation", mod, %regex~(generate_image)$%%),
+        group_by_regex("Vision", mod, %regex~(chat_vision|vision_request_body)$%%)
+    )
+    documents("OpenAI-compatible API client (chat, embeddings, audio, vision, ...)", mod, "openai.rst", groups)
 }
 
 def document_module_debugapi(_root : string) {
@@ -1622,6 +1651,7 @@ def main {
     document_module_fio(root)
     document_module_network(root)
     document_module_dashv(root)
+    document_module_openai(root)
     document_module_stbimage(root)
     document_module_raster(root)
     document_module_stbtruetype(root)

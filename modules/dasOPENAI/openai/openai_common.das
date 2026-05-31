@@ -21,11 +21,11 @@ require strings public
 
 struct OpenAIClient {
     //! Connection + auth config. Override ``base_url`` to target any OpenAI-compatible server.
-    base_url : string = "https://api.openai.com/v1"
-    api_key : string
-    organization : string
-    timeout_seconds : int = 60
-    default_model : string
+    base_url : string = "https://api.openai.com/v1"   //!< API base URL, no trailing slash.
+    api_key : string                                  //!< Bearer token; empty for servers that need no auth (e.g. local Ollama).
+    organization : string                             //!< Optional ``OpenAI-Organization`` header value; empty to omit.
+    timeout_seconds : int = 60                        //!< Per-request timeout in seconds; 0 disables it.
+    default_model : string                            //!< Optional default model id for convenience helpers.
 }
 
 def openai_client(base_url : string; api_key : string = "") : OpenAIClient {
@@ -37,11 +37,11 @@ def openai_client(base_url : string; api_key : string = "") : OpenAIClient {
 
 struct OpenAIError {
     //! Unified error. ``kind`` is "transport" | "http" | "api" | "decode".
-    kind : string
-    status : int
-    message : string
-    _type : string
-    code : string
+    kind : string       //!< Error category: "transport" | "http" | "api" | "decode"; empty means no error.
+    status : int        //!< HTTP status code, or 0 when the request never completed.
+    message : string    //!< Human-readable error message.
+    _type : string      //!< Provider error ``type``, when the server returned one.
+    code : string       //!< Provider error ``code``, when the server returned one.
 }
 
 struct private OpenAIErrorBody {
@@ -59,9 +59,9 @@ struct private OpenAIErrorEnvelope {
 
 struct Usage {
     //! Token accounting returned with most responses.
-    prompt_tokens : int
-    completion_tokens : int
-    total_tokens : int
+    prompt_tokens : int       //!< Tokens consumed by the prompt.
+    completion_tokens : int   //!< Tokens in the generated completion.
+    total_tokens : int        //!< Prompt + completion tokens.
 }
 
 // ===== Transport =====
@@ -69,18 +69,18 @@ struct Usage {
 
 struct HttpOutcome {
     //! Internal transport result of a JSON request (``post_json`` / ``get_json``).
-    ok : bool
-    status : int
-    body : string
-    error : OpenAIError
+    ok : bool            //!< True on a 2xx response.
+    status : int         //!< HTTP status code.
+    body : string        //!< Raw response body.
+    error : OpenAIError  //!< Populated when ``ok`` is false.
 }
 
 struct BytesOutcome {
     //! Internal transport result of a binary request (``post_for_bytes``).
-    ok : bool
-    status : int
-    bytes : array<uint8>
-    error : OpenAIError
+    ok : bool             //!< True on a 2xx response.
+    status : int          //!< HTTP status code.
+    bytes : array<uint8>  //!< Raw response bytes (e.g. audio).
+    error : OpenAIError   //!< Populated when ``ok`` is false.
 }
 
 def parse_error_body(status : int; body : string) : OpenAIError {

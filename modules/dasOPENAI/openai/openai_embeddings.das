@@ -11,37 +11,39 @@ require openai/openai_common public
 struct EmbeddingRequest {
     //! Request body for ``/embeddings``. ``input`` is always sent as an array of strings
     //! (a single string is just a one-element array).
-    model : string
-    input : array<string>
-    @optional encoding_format : string
-    @optional dimensions : int
-    @optional user : string
+    model : string                 //!< Embedding model id.
+    input : array<string>          //!< Texts to embed, one element per string.
+    @optional encoding_format : string  //!< "float" (default) or "base64".
+    @optional dimensions : int     //!< Optional output dimensionality, for models that support it.
+    @optional user : string        //!< Optional end-user id for abuse monitoring.
 }
 
 struct EmbeddingUsage {
-    prompt_tokens : int
-    total_tokens : int
+    //! Token accounting for an embeddings request.
+    prompt_tokens : int   //!< Tokens in the input.
+    total_tokens : int    //!< Total tokens billed.
 }
 
 struct EmbeddingData {
-    @rename = "object" _object : string
-    index : int
-    embedding : array<float>
+    //! One input's embedding.
+    @rename = "object" _object : string  //!< Object type ("embedding").
+    index : int                          //!< Position in the input array.
+    embedding : array<float>             //!< The embedding vector.
 }
 
 struct EmbeddingResponse {
     //! Response body for ``/embeddings``.
-    @rename = "object" _object : string
-    data : array<EmbeddingData>
-    model : string
-    usage : EmbeddingUsage
+    @rename = "object" _object : string  //!< Object type ("list").
+    data : array<EmbeddingData>          //!< One ``EmbeddingData`` per input, in order.
+    model : string                       //!< Model that produced the embeddings.
+    usage : EmbeddingUsage               //!< Token accounting.
 }
 
 struct EmbeddingResult {
     //! Outcome of ``embeddings``: when ``ok`` is true ``response`` is valid, else inspect ``error``.
-    ok : bool
-    response : EmbeddingResponse
-    error : OpenAIError
+    ok : bool                  //!< True when ``response`` is valid.
+    response : EmbeddingResponse  //!< Decoded response on success.
+    error : OpenAIError        //!< Error detail on failure.
 }
 
 def embeddings(client : OpenAIClient; req : EmbeddingRequest) : EmbeddingResult {

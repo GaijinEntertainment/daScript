@@ -12,18 +12,18 @@ require openai/openai_common public
 
 struct SpeechRequest {
     //! Request body for ``/audio/speech``. The response is raw audio bytes, not JSON.
-    model : string
-    input : string
-    voice : string
-    @optional response_format : string
-    @optional speed : float
+    model : string                       //!< TTS model id.
+    input : string                       //!< Text to synthesize.
+    voice : string                       //!< Voice name (e.g. "alloy").
+    @optional response_format : string   //!< Audio format ("mp3", "wav", ...); server default if empty.
+    @optional speed : float              //!< Playback speed multiplier (1.0 = normal).
 }
 
 struct SpeechResult {
     //! Outcome of ``speech``: ``audio`` holds the raw bytes when ``ok`` is true.
-    ok : bool
-    audio : array<uint8>
-    error : OpenAIError
+    ok : bool             //!< True when ``audio`` holds the result.
+    audio : array<uint8>  //!< Raw audio bytes on success.
+    error : OpenAIError   //!< Error detail on failure.
 }
 
 def speech(client : OpenAIClient; req : SpeechRequest) : SpeechResult {
@@ -54,9 +54,9 @@ def speak(client : OpenAIClient; model, voice, text : string) : array<uint8> {
 
 struct TranscriptionResult {
     //! Outcome of ``transcribe`` / ``translate``: ``text`` valid when ``ok`` is true.
-    ok : bool
-    text : string
-    error : OpenAIError
+    ok : bool            //!< True when ``text`` is valid.
+    text : string        //!< Recognized text on success.
+    error : OpenAIError  //!< Error detail on failure.
 }
 
 struct private TranscriptionResponse {

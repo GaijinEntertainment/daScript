@@ -12,6 +12,7 @@ File I/O, networking, URI parsing, terminal output, and binary serialization.
    generated/network.rst
    generated/dashv.rst
    generated/dashv_boost.rst
+   generated/openai.rst
    generated/uriparser.rst
    generated/uriparser_boost.rst
    generated/ansi_colors.rst

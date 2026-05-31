@@ -14,116 +14,119 @@ require daslib/strings_boost
 
 struct ResponseFormat {
     //! Chat ``response_format``: ``_type`` is "text" | "json_object" | "json_schema".
-    @rename = "type" _type : string
-    @optional @embed json_schema : string
+    @rename = "type" _type : string         //!< "text" | "json_object" | "json_schema".
+    @optional @embed json_schema : string   //!< Raw JSON-schema string, when ``_type`` is "json_schema".
 }
 
 struct FunctionDef {
     //! A tool's function declaration. ``parameters`` is a raw JSON-schema string.
-    name : string
-    @optional description : string
-    @optional @embed parameters : string
+    name : string                       //!< Function name the model may call.
+    @optional description : string      //!< What the function does (helps the model decide when to call it).
+    @optional @embed parameters : string //!< Raw JSON-schema string describing the arguments.
 }
 
 struct Tool {
     //! A tool the model may call. ``_type`` is "function".
-    @rename = "type" _type : string
-    @rename = "function" _function : FunctionDef
+    @rename = "type" _type : string           //!< Tool type ("function").
+    @rename = "function" _function : FunctionDef //!< The function declaration.
 }
 
 struct ToolCallFunction {
-    name : string
-    arguments : string
+    //! The function a tool call targets.
+    name : string       //!< Function name.
+    arguments : string  //!< JSON-encoded argument string.
 }
 
 struct ToolCall {
     //! A tool call requested by the model. ``_function.arguments`` is a JSON string.
-    id : string
-    @rename = "type" _type : string
-    @rename = "function" _function : ToolCallFunction
+    id : string                                  //!< Unique id for this call; echo it back in the tool result.
+    @rename = "type" _type : string              //!< Tool type ("function").
+    @rename = "function" _function : ToolCallFunction //!< The requested function + arguments.
 }
 
 struct ChatMessage {
     //! A single chat message. ``role`` is "system" | "user" | "assistant" | "tool".
-    role : string
-    content : string
-    @optional name : string
-    @optional tool_calls : array<ToolCall>
-    @optional tool_call_id : string
+    role : string                       //!< "system" | "user" | "assistant" | "tool".
+    content : string                    //!< Message text; may be empty when ``tool_calls`` is set.
+    @optional name : string             //!< Optional author name.
+    @optional tool_calls : array<ToolCall> //!< Tool calls the assistant is requesting.
+    @optional tool_call_id : string     //!< For ``role`` "tool": the id of the call this message answers.
 }
 
 struct ChatCompletionRequest {
     //! Request body for ``/chat/completions``. Default-valued optional fields are omitted on send.
-    model : string
-    messages : array<ChatMessage>
-    @optional temperature : float
-    @optional top_p : float
-    @optional n : int
-    @optional stream : bool
-    @optional max_tokens : int
-    @optional max_completion_tokens : int
-    @optional frequency_penalty : float
-    @optional presence_penalty : float
-    @optional seed : int
-    @optional stop : array<string>
-    @optional user : string
-    @optional @embed response_format : string
-    @optional tools : array<Tool>
-    @optional tool_choice : string
+    model : string                       //!< Chat model id.
+    messages : array<ChatMessage>        //!< The conversation, in order.
+    @optional temperature : float        //!< Sampling temperature.
+    @optional top_p : float              //!< Nucleus-sampling probability mass.
+    @optional n : int                    //!< Number of choices to generate.
+    @optional stream : bool              //!< Request a streamed response (set automatically by ``chat_stream``).
+    @optional max_tokens : int           //!< Maximum tokens to generate.
+    @optional max_completion_tokens : int //!< Newer cap on generated tokens.
+    @optional frequency_penalty : float  //!< Penalize tokens by how often they have appeared.
+    @optional presence_penalty : float   //!< Penalize tokens that already appeared at all.
+    @optional seed : int                 //!< Seed for (best-effort) deterministic sampling.
+    @optional stop : array<string>       //!< Stop sequences.
+    @optional user : string              //!< Optional end-user id for abuse monitoring.
+    @optional @embed response_format : string //!< JSON-mode format (see ``json_object_format``).
+    @optional tools : array<Tool>        //!< Tools the model may call.
+    @optional tool_choice : string       //!< Tool selection ("auto", "none", or a specific name).
 }
 
 struct ChatChoice {
-    index : int
-    message : ChatMessage
-    finish_reason : string
+    //! One completion choice.
+    index : int             //!< Index of this choice.
+    message : ChatMessage   //!< The assistant message.
+    finish_reason : string  //!< Why generation stopped ("stop", "length", "tool_calls", ...).
 }
 
 struct ChatCompletionResponse {
     //! Response body for a non-streaming ``/chat/completions`` call.
-    id : string
-    @rename = "object" _object : string
-    created : int64
-    model : string
-    choices : array<ChatChoice>
-    usage : Usage
+    id : string                          //!< Completion id.
+    @rename = "object" _object : string  //!< Object type ("chat.completion").
+    created : int64                      //!< Unix creation time.
+    model : string                       //!< Model that produced the response.
+    choices : array<ChatChoice>          //!< Generated choices.
+    usage : Usage                        //!< Token accounting.
 }
 
 struct ChatResult {
     //! Outcome of ``chat``: when ``ok`` is true ``response`` is valid, else inspect ``error``.
-    ok : bool
-    response : ChatCompletionResponse
-    error : OpenAIError
+    ok : bool                          //!< True when ``response`` is valid.
+    response : ChatCompletionResponse  //!< Decoded response on success.
+    error : OpenAIError                //!< Error detail on failure.
 }
 
 // ===== Streaming chat types =====
 
 struct ChatMessageDelta {
     //! Incremental message fields in a streamed chunk (object == "chat.completion.chunk").
-    @optional role : string
-    @optional content : string
+    @optional role : string     //!< Role, sent on the first delta.
+    @optional content : string  //!< Incremental text content.
 }
 
 struct ChunkChoice {
-    index : int
-    delta : ChatMessageDelta
-    @optional finish_reason : string
+    //! One choice within a streamed chunk.
+    index : int                     //!< Index of this choice.
+    delta : ChatMessageDelta        //!< Incremental message fields for this frame.
+    @optional finish_reason : string //!< Set on the final chunk for this choice.
 }
 
 struct ChatCompletionChunk {
     //! One streamed delta frame.
-    id : string
-    @rename = "object" _object : string
-    created : int64
-    model : string
-    choices : array<ChunkChoice>
+    id : string                          //!< Completion id (stable across chunks).
+    @rename = "object" _object : string  //!< Object type ("chat.completion.chunk").
+    created : int64                      //!< Unix creation time.
+    model : string                       //!< Model producing the stream.
+    choices : array<ChunkChoice>         //!< Incremental choices in this frame.
 }
 
 struct ChatStreamResult {
     //! Outcome of ``chat_stream``: ``content`` is the full accumulated assistant text.
-    ok : bool
-    content : string
-    finish_reason : string
-    error : OpenAIError
+    ok : bool               //!< True on a successful stream.
+    content : string        //!< Full accumulated assistant text.
+    finish_reason : string  //!< Why generation stopped.
+    error : OpenAIError     //!< Error detail on failure.
 }
 
 // ===== Chat =====
