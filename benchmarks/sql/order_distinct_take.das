@@ -75,28 +75,6 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-// m5_xml lane: non-fold baseline. The XML source carries whole Cars, so the brand stream is projected
-// out with a leading _select(_.brand) (the m3f/m4 lanes source a precomputed brand array). Un-fused.
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            unsafe {
-                let rows <- (from_xml_node(doc.document_element, type<Car>) |> _select(_.brand) |> _order_by(_) |> distinct() |> take(TAKE_N) |> to_array())
-                b |> accept(rows)
-                if (empty(rows)) {
-                    b->failNow()
-                }
-            }
-        }
-    }
-}
-
-// m5f_xml_fold lane: fused _fold over from_xml_node, with the same _select(_.brand) projection prefix.
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -129,11 +107,6 @@ def order_distinct_take_m3f(b : B?) {
 [benchmark]
 def order_distinct_take_m4(b : B?) {
     run_m4(b, 100000)
-}
-
-[benchmark]
-def order_distinct_take_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

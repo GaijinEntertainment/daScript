@@ -62,28 +62,6 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            let groups <- (unsafe(from_xml_node(doc.document_element, type<Car>))
-                          |> _group_by(_.brand)
-                          |> _select((Brand = _._0,
-                                      Total = _._1 |> select($(c : Car) => c.price) |> sum()))
-                          |> _where(_.Total > THRESHOLD)
-                          |> to_array())
-            b |> accept(groups)
-            if (empty(groups)) {
-                b->failNow()
-            }
-        }
-    }
-}
-
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -119,11 +97,6 @@ def groupby_having_post_where_m3f(b : B?) {
 [benchmark]
 def groupby_having_post_where_m4(b : B?) {
     run_m4(b, 100000)
-}
-
-[benchmark]
-def groupby_having_post_where_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

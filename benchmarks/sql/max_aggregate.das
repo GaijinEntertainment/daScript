@@ -41,23 +41,6 @@ def run_m4(b : B?; n : int) {
     }
 }
 
-def run_m5(b : B?; n : int) {
-    let xml = fixture_xml_string(n)
-    parse_xml(xml) $(doc, ok) {
-        if (!ok) {
-            b->failNow()
-            return
-        }
-        b |> run("m5_xml/{n}", n) {
-            let m = unsafe(from_xml_node(doc.document_element, type<Car>)) |> _select(_.price) |> max()
-            b |> accept(m)
-            if (m == 0) {
-                b->failNow()
-            }
-        }
-    }
-}
-
 def run_m5f(b : B?; n : int) {
     let xml = fixture_xml_string(n)
     parse_xml(xml) $(doc, ok) {
@@ -88,11 +71,6 @@ def max_aggregate_m3f(b : B?) {
 [benchmark]
 def max_aggregate_m4(b : B?) {
     run_m4(b, 100000)
-}
-
-[benchmark]
-def max_aggregate_m5(b : B?) {
-    run_m5(b, 100000)
 }
 
 [benchmark]

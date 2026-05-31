@@ -2234,16 +2234,6 @@ def build_join_adapter_pieces(
 
 
 [macro_function]
-def finalize_decs_emission(var emission : Expression?; at : LineInfo; wrapToIter : bool) : Expression? {
-    emission.force_at(at)
-    emission.force_generated(true)
-    if (wrapToIter) {
-        emission = qmacro($e(emission).to_sequence_move())
-    }
-    return emission
-}
-
-[macro_function]
 def buffer_return(bufName : string; isIterator : bool) : Expression? {
     if (isIterator) return <- qmacro_expr() {
         return <- $i(bufName).to_sequence_move()

@@ -46,8 +46,8 @@ struct Config {
     help : bool
 }
 
-let LANES = ["m1", "m3f", "m4", "m5", "m5f"]
-let HEADERS = ["SQL (m1)", "Array (m3f)", "Decs (m4)", "XML (m5)", "XML fold (m5f)"]
+let LANES = ["m1", "m3f", "m4", "m5f"]
+let HEADERS = ["SQL (m1)", "Array (m3f)", "Decs (m4)", "XML fold (m5f)"]
 let BEGIN_MARKER = "<!-- BENCH:TABLES BEGIN -->"
 let END_MARKER = "<!-- BENCH:TABLES END -->"
 
@@ -89,7 +89,12 @@ def build_table(cells : table<string; double>; families : array<string>) : strin
             w |> write(" {h} |")
         }
         w |> write("\n")
-        w |> write("|---|---:|---:|---:|---:|---:|\n")
+        // Generate the alignment row from HEADERS so it stays in sync when a lane is added/dropped.
+        w |> write("|---|")
+        for (_h in HEADERS) {
+            w |> write("---:|")
+        }
+        w |> write("\n")
         for (fam in families) {
             w |> write("| `{fam}` |")
             for (lane in LANES) {

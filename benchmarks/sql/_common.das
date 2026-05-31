@@ -70,7 +70,7 @@ def public fixture_array(n : int) : array<Car> {
     return <- arr
 }
 
-// m5_xml lane: same Car schema, rows materialized from XML child elements via
+// XML fold lane (m5f): same Car schema, rows materialized from XML child elements via
 // from_xml_node. Attribute names match Car's fields; same deterministic row
 // generator as fixture_array so the XML lane is directly comparable. Built with
 // a string writer (not `+`) to keep fixture construction O(n).
@@ -112,7 +112,7 @@ struct public DecsDealer {
 
 def public fixture_decs(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, DecsCar(
             id = i + 1,
             name = "Car{i}",
@@ -127,7 +127,7 @@ def public fixture_decs(n : int) {
 // Cars + Dealers together for the decs join lane. Both archetypes co-exist in the same decs world; plan_decs_join builds an in-query hash from the smaller side (dealers) then walks the larger side (cars).
 def public fixture_decs_cars_and_dealers(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, DecsCar(
             id = i + 1,
             name = "Car{i}",
@@ -137,7 +137,7 @@ def public fixture_decs_cars_and_dealers(n : int) {
             dealer_id = (i % DEALER_COUNT) + 1
         ))
     }
-    create_entities(DEALER_COUNT) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(DEALER_COUNT) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, DecsDealer(
             id = i + 1,
             name = "Dealer{i}"
@@ -155,7 +155,7 @@ struct public DecsBrand {
 
 def public fixture_decs_brands(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, DecsBrand(value = i % BRAND_COUNT))
     }
 }
