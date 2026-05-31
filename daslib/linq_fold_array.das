@@ -490,31 +490,72 @@ def emit_early_exit_lane(
         var retType = mut_result_type(projection, elementType)
         let foundName = qn("found", at)
         let lastBindName = qn("lst", at)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(lastBindName) : $t(retType)
-        }
-        perMatchStmts |> push_from <| qmacro_block_to_array() {
-            $i(foundName) = true
-            $i(lastBindName) := $i(valueName)
-        }
-        if (opName == "last") {
-            tailStmts <- qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    panic("sequence contains no elements")
+        // Deferred materialization (XML): a full walk clones the whole row on EVERY match, but only the LAST
+        // survives. Store the node HANDLE per match; build the full row once, at the tail.
+        let deferLast = (adapterOverride != null && adapterOverride->defers_materialization()
+            && projection == null && adapterOverride->handle_type() != null)
+        if (deferLast) {
+            var handleType = adapterOverride->handle_type()
+            let lastNodeName = qn("lst_node", at)
+            let matItName = qn("lst_mat", at)
+            var matStmt = adapterOverride->materialize_handle(qmacro($i(lastNodeName)), matItName, at)
+            preludeStmts |> push_from <| qmacro_block_to_array() {
+                var $i(foundName) = false
+                var $i(lastNodeName) = default<$t(handleType)>
+            }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                $i(foundName) = true
+                $i(lastNodeName) = $e(adapterOverride->current_handle_expr(at))
+            }
+            if (opName == "last") {
+                tailStmts <- qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        panic("sequence contains no elements")
+                    }
+                    var $i(matItName) = default<$t(retType)>
+                    $e(matStmt)
+                    return <- $i(matItName)
                 }
-                return <- $i(lastBindName)
+            } else {
+                let defaultName = qn("dval", at)
+                let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+                preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
+                tailStmts <- qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        $e(emit_default_return(defaultName, dvCanCopy))
+                    }
+                    var $i(matItName) = default<$t(retType)>
+                    $e(matStmt)
+                    return <- $i(matItName)
+                }
             }
         } else {
-            // Bind `d` once at the top (eager, matches linq.das line 2621); copy/move probe matches linq.das can_copy/clone_to_move branch.
-            let defaultName = qn("dval", at)
-            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-            tailStmts <- qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    $e(emit_default_return(defaultName, dvCanCopy))
+            preludeStmts |> push_from <| qmacro_block_to_array() {
+                var $i(foundName) = false
+                var $i(lastBindName) : $t(retType)
+            }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                $i(foundName) = true
+                $i(lastBindName) := $i(valueName)
+            }
+            if (opName == "last") {
+                tailStmts <- qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        panic("sequence contains no elements")
+                    }
+                    return <- $i(lastBindName)
                 }
-                return <- $i(lastBindName)
+            } else {
+                // Bind `d` once at the top (eager, matches linq.das line 2621); copy/move probe matches linq.das can_copy/clone_to_move branch.
+                let defaultName = qn("dval", at)
+                let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+                preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
+                tailStmts <- qmacro_block_to_array() {
+                    if (!$i(foundName)) {
+                        $e(emit_default_return(defaultName, dvCanCopy))
+                    }
+                    return <- $i(lastBindName)
+                }
             }
         }
     } elif (opName == "single" || opName == "single_or_default") {

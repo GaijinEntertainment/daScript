@@ -7,10 +7,11 @@ require dastest/testing_boost
 require strings
 require math               // min
 
-// Micro-bench: the two emit shapes for a buffered-reducer XML chain whose whole row escapes but only
-// a FEW elements survive — `order_by(price) |> take(K)` and `distinct_by(dealer_id) |> order_by(price)
-// |> take(K)`. Validates the "unified gate — buffer surrogates, materialize survivors" design before
-// touching emit_bounded_heap / the distinct gate (profile-hand-coded-before-macro methodology).
+// Micro-bench: the emit shapes for a buffered/bucketed reducer XML chain whose whole row escapes but
+// only a FEW elements survive — `order_by(price) |> take(K)`, `distinct_by(dealer_id) |> order_by(price)
+// |> take(K)`, `where(p) |> last()` (N matches → 1 survivor), and `group_by(brand) |> select(first per
+// group)` (survivors = #brands). Validates the "unified gate — buffer surrogates/handles, materialize
+// survivors" design before touching the emits (profile-hand-coded-before-macro methodology).
 //
 //   C (current)   — the buffer/heap holds the full materialized row. from_xml_node builds the whole Car
 //                   (all 6 attrs incl. the `name` clone) for EVERY source element, then the heap/dedup
@@ -449,4 +450,176 @@ def probe_sort_take_array_R_ref(b : B?) {
 [benchmark]
 def probe_distinct_order_take_array_R_ref(b : B?) {
     run_distinct_order_take_array_ref(b)
+}
+
+// ===== last_match: where(price > THRESHOLD) |> last() — overwrite-last, N matches → ONE survivor =====
+// Validates N→1 handle-defer for the last/last_or_default emit (emit_reverse_walk_overwrite_scalar).
+
+let THRESHOLD = 500
+
+// C — overwrite-last clone. from_xml_node materializes every element; `last := c` clones the full Car
+// (incl. the name string) on EVERY match. N clones for one survivor — the m5f floor.
+def last_match_materialized(de : xml_node) : Car {
+    var last = default<Car>
+    var found = false
+    for (c in from_xml_node(de, type<Car>)) {
+        if (c.price > THRESHOLD) {
+            last := c
+            found = true
+        }
+    }
+    if (!found) { panic("no match") }
+    return last
+}
+
+// A — overwrite-last handle. Reads only `price` per element; remembers the node; build_xml_row runs once,
+// for the single survivor.
+def last_match_deferred(de : xml_node) : Car {
+    let xdef = default<Car>
+    var lastNode : xml_node
+    var found = false
+    var ch = de.first_child
+    while (ch.ok) {
+        let cur = ch
+        ch = ch.next_sibling
+        if (cur._type == xml_node_type.node_element) {
+            let p = read_xml_field(cur, "price", xdef.price)
+            if (p > THRESHOLD) {
+                lastNode = cur
+                found = true
+            }
+        }
+    }
+    if (!found) { panic("no match") }
+    var it = default<Car>
+    build_xml_row(lastNode, it)
+    return it
+}
+
+def run_last_match_C(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("C_last_match_materialized/{N}", N) {
+            let r = last_match_materialized(de)
+            if (empty(r.name)) { b->failNow() }
+        }
+    }
+}
+
+def run_last_match_A(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("A_last_match_deferred/{N}", N) {
+            let r = last_match_deferred(de)
+            if (empty(r.name)) { b->failNow() }
+        }
+    }
+}
+
+[benchmark]
+def probe_last_match_C_materialized(b : B?) {
+    run_last_match_C(b)
+}
+
+[benchmark]
+def probe_last_match_A_deferred(b : B?) {
+    run_last_match_A(b)
+}
+
+// ===== groupby_first: group_by(brand) |> select((brand, first car per group)) — survivors = #brands =====
+// The whole row escapes (FirstCar), but only for the #distinct-brands first-seen rows, not all N.
+
+struct GBResult {
+    brand : int
+    car   : Car
+}
+
+// C — full materialize per element (mimics current m5f: whole-row escape → build_xml_row for every
+// element), then first-per-group miss-insert. N clones for #brands survivors.
+def groupby_first_materialized(de : xml_node) : array<GBResult> {
+    var seen : table<int>
+    var out : array<GBResult>
+    for (c in from_xml_node(de, type<Car>)) {
+        if (!key_exists(seen, c.brand)) {
+            seen |> insert(c.brand)
+            out |> push_clone(GBResult(brand = c.brand, car = c))
+        }
+    }
+    return <- out
+}
+
+// A — read only `brand` per element; remember the first node per group; build_xml_row for the #brands
+// survivors at the tail.
+def groupby_first_deferred(de : xml_node) : array<GBResult> {
+    let xdef = default<Car>
+    var seen : table<int>
+    var firstBrand : array<int>
+    var firstNode : array<xml_node>
+    var ch = de.first_child
+    while (ch.ok) {
+        let cur = ch
+        ch = ch.next_sibling
+        if (cur._type == xml_node_type.node_element) {
+            let br = read_xml_field(cur, "brand", xdef.brand)
+            if (!key_exists(seen, br)) {
+                seen |> insert(br)
+                firstBrand |> push(br)
+                firstNode |> push(cur)
+            }
+        }
+    }
+    var out : array<GBResult>
+    out |> reserve(length(firstBrand))
+    for (i in range(length(firstBrand))) {
+        var it = default<Car>
+        build_xml_row(firstNode[i], it)
+        out |> push_clone(GBResult(brand = firstBrand[i], car = it))
+    }
+    return <- out
+}
+
+def check_gb(rows : array<GBResult>) : int {
+    var acc = 0
+    for (r in rows) {
+        acc += r.car.id + length(r.car.name)
+    }
+    return acc
+}
+
+def run_groupby_first_C(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("C_groupby_first_materialized/{N}", N) {
+            let r <- groupby_first_materialized(de)
+            if (check_gb(r) == 0) { b->failNow() }
+        }
+    }
+}
+
+def run_groupby_first_A(b : B?) {
+    let xml = fixture_xml_string(N)
+    parse_xml(xml) $(doc, ok) {
+        if (!ok) { b->failNow(); return }
+        let de = doc.document_element
+        b |> run("A_groupby_first_deferred/{N}", N) {
+            let r <- groupby_first_deferred(de)
+            if (check_gb(r) == 0) { b->failNow() }
+        }
+    }
+}
+
+[benchmark]
+def probe_groupby_first_C_materialized(b : B?) {
+    run_groupby_first_C(b)
+}
+
+[benchmark]
+def probe_groupby_first_A_deferred(b : B?) {
+    run_groupby_first_A(b)
 }
