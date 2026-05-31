@@ -1054,13 +1054,11 @@ def build_accumulator_perelement_stmts(opName : string;
                                        var valueExpr : Expression?;
                                        workhorse : bool;
                                        isDoubleAccType : bool) : array<Expression?> {
-    // Per-element accumulator update for sum / min / max / average / count / long_count. Shared between emit_accumulator_lane (array side, valueExpr is the cloned projection or `it`) and emit_decs_accumulator (decs side, valueExpr wraps chainInfo.finalBind as a qmacro_expr). Preludes + return-expr stay caller-side because acc types and empty-source guards differ.
+    // Per-element accumulator update for sum / min / max / average — the only ops emit_accumulator_lane
+    // (its sole caller) handles. valueExpr is the cloned projection or the element bind. Preludes +
+    // return-expr stay caller-side because acc types and empty-source guards differ.
     var stmts : array<Expression?>
-    if (opName == "count" || opName == "long_count") {
-        stmts |> push <| qmacro_expr() {
-            $i(accName) ++
-        }
-    } elif (opName == "sum") {
+    if (opName == "sum") {
         stmts |> push <| qmacro_expr() {
             $i(accName) += $e(valueExpr)
         }
@@ -1093,8 +1091,8 @@ def build_accumulator_perelement_stmts(opName : string;
 }
 
 // Per-op accumulator state: prologue var decls + the return-value expr + the invoke retType.
-// Shared by emit_accumulator_lane (array) and emit_decs_accumulator (decs). Array passes retType=null
-// to its lane (inference); decs uses retType explicitly. min/max/sum read accType.
+// Only used by emit_accumulator_lane (sum / min / max / average); it passes retType=null to its lane
+// (inference). min/max/sum read accType.
 struct AccumulatorSpec {
     prologue   : array<Expression?>
     returnExpr : Expression?
@@ -1105,19 +1103,7 @@ struct AccumulatorSpec {
 def build_accumulator_spec(opName : string; accName, cntName, firstName : string;
                            accType : TypeDeclPtr; at : LineInfo) : AccumulatorSpec {
     var sp : AccumulatorSpec
-    if (opName == "long_count") {
-        sp.prologue <- qmacro_block_to_array() {
-            var $i(accName) : int64 = 0l
-        }
-        sp.returnExpr = qmacro_expr() { $i(accName); }
-        sp.retType = new TypeDecl(baseType = Type.tInt64)
-    } elif (opName == "count") {
-        sp.prologue <- qmacro_block_to_array() {
-            var $i(accName) = 0
-        }
-        sp.returnExpr = qmacro_expr() { $i(accName); }
-        sp.retType = new TypeDecl(baseType = Type.tInt)
-    } elif (opName == "sum") {
+    if (opName == "sum") {
         sp.prologue <- qmacro_block_to_array() {
             var $i(accName) : $t(accType) = default<$t(accType)>
         }
@@ -1398,7 +1384,7 @@ def emit_accumulator_lane(
                           var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                           at : LineInfo
                           ) : Expression? {
-    // Ring 1 single-pass accumulator lane: sum / min / max / average / long_count.
+    // Ring 1 single-pass accumulator lane: sum / min / max / average. (count/long_count ride emit_counter_lane.)
     var valueExpr : Expression?
     if (projection != null) {
         valueExpr = clone_expression(projection)
@@ -1418,13 +1404,6 @@ def emit_accumulator_lane(
     var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
     if (spec.returnExpr == null) return null
     var perElementStmts : array<Expression?>
-    // long_count: value is discarded, but bind the projection when it has side effects (keeps the AST visit).
-    if (opName == "long_count" && projection != null && has_sideeffects(projection)) {
-        let finalBindName = qn("vfinal", at)
-        perElementStmts |> push <| qmacro_expr() {
-            var $i(finalBindName) = $e(projection)
-        }
-    }
     perElementStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
     var tailStmts : array<Expression?>
     tailStmts |> push <| qmacro_expr() {
