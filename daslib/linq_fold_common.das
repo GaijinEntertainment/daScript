@@ -32,6 +32,16 @@ struct LinqCall {
 // Abstract base + one subclass per data source. Sources answer capability questions about themselves
 // (can_*/name_prefix) — no central source enum, so a new source only implements the methods.
 
+// Loop-dispatch shape for the terminator seam. Direct-return sources (array/zip/join) ignore it
+// (plain for{}; the body's own return/break exits the invoke); nested-callback sources (decs
+// for_each_archetype{,_find}) map the arms onto find/no-find walk variants (a return there exits only the inner lambda).
+variant LoopDispatch {
+    Each              : void?   // plain walk; tail runs after
+    Find              : void?   // early-stoppable walk, result discarded; tail runs (state-driven answer)
+    FindReturn        : void?   // early-stoppable walk; the stop-bool IS the answer
+    FindReturnNegated : void?   // FindReturn negated — `all` shape (stop on first counterexample)
+}
+
 [macro_interface]
 class SourceAdapter {
     def abstract bind_name(at : LineInfo) : string
@@ -50,6 +60,9 @@ class SourceAdapter {
         return false
     }
     def const can_join() : bool {               // supports the join_general splice (the source-specific emit comes from emit_join_hook, which gates the srcb shape). const: queried from a predicate's const adapter
+        return false
+    }
+    def supports_direct_return() : bool {       // a mid-loop `return X` in the per-element body exits the whole invoke (real for{}); false = nested-callback walk (decs/xml) needs state-var + find-stop + tail. Conservative default false (wrong-true mis-emits an escaping return; wrong-false is merely the slower-but-correct state path)
         return false
     }
     def name_prefix() : string {                // gensym prefix keeping hoisted names per-source distinct in plan_group_by_core
@@ -115,6 +128,9 @@ class ProjectedSourceAdapter : SourceAdapter {
     }
     def override bind_name(at : LineInfo) : string {
         return projName
+    }
+    def override supports_direct_return() : bool {
+        return inner->supports_direct_return()
     }
     def override element_type() : TypeDeclPtr {
         return clone_type(projType)

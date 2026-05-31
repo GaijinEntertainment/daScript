@@ -892,20 +892,12 @@ def decs_range_prelude(rangeInfo : DecsRangeInfo?; names : DecsRangeStateNames) 
     return <- stmts
 }
 
-// 4-way decs walk dispatch: covers every for_each_archetype{,_find} shape across the 5 decs terminator emits.
-variant DecsDispatch {
-    Each              : void?   // for_each_archetype(...); tail runs
-    Find              : void?   // for_each_archetype_find(...) { body; return false } discarded; tail runs (state-driven answer)
-    FindReturn        : void?   // return for_each_archetype_find(...) — bool result IS the answer
-    FindReturnNegated : void?   // return !for_each_archetype_find(...) — `all` shape (no counterexample)
-}
-
 struct DecsTerminatorSpec {
     preludeStmts : array<Expression?>   // hoisted at invoke scope (op-specific state vars + default binds)
     perElement   : Expression?           // OP-specific per-tup work (caller wraps own predicate gates; lane wraps ranges+chain)
     tailStmts    : array<Expression?>   // post-walk; INCLUDES the return — skipped for FindReturn/FindReturnNegated
     retType      : TypeDeclPtr
-    dispatch     : DecsDispatch
+    dispatch     : LoopDispatch
     wrapIter     : bool                  // emission wrapped with .to_sequence_move() — for array-returning shapes in iterator-typed contexts
 }
 
@@ -1031,9 +1023,9 @@ def emit_decs_accumulator(bridge : DecsBridgeShape?;
     }
     var retType = spec.retType
     // Slice 5b: take/take_while produces inner `return true` (terminates iteration globally) so it needs the bool-lambda archetype-find dispatch.
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
+    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? LoopDispatch(Find = null)
+        : LoopDispatch(Each = null))
     return emit_decs_terminator_lane(DecsTerminatorSpec(
         preludeStmts <- preludeStmts,
         perElement = perElement,
@@ -1063,7 +1055,7 @@ def emit_decs_early_exit(bridge : DecsBridgeShape?;
     var perElement : Expression?
     var preludeStmts : array<Expression?>
     var tailStmts : array<Expression?>
-    var dispatch : DecsDispatch = DecsDispatch(Find = null)
+    var dispatch : LoopDispatch = LoopDispatch(Find = null)
     var retType : TypeDeclPtr
     if (opName == "first" || opName == "first_or_default") {
         retType = elemType
@@ -1130,7 +1122,7 @@ def emit_decs_early_exit(bridge : DecsBridgeShape?;
                     return true
                 }
             }
-            dispatch = DecsDispatch(FindReturn = null)
+            dispatch = LoopDispatch(FindReturn = null)
         }
     } elif (opName == "all") {
         retType = new TypeDecl(baseType = Type.tBool)
@@ -1155,7 +1147,7 @@ def emit_decs_early_exit(bridge : DecsBridgeShape?;
                 if (!$e(predExpr)) return true
             }
             // `all` is "no counterexample found" — inner returns true on FAIL, so negate.
-            dispatch = DecsDispatch(FindReturnNegated = null)
+            dispatch = LoopDispatch(FindReturnNegated = null)
         }
     } elif (opName == "contains") {
         retType = new TypeDecl(baseType = Type.tBool)
@@ -1180,7 +1172,7 @@ def emit_decs_early_exit(bridge : DecsBridgeShape?;
             perElement = qmacro_expr() {
                 if ($i(finalBind) == $i(containsValName)) return true
             }
-            dispatch = DecsDispatch(FindReturn = null)
+            dispatch = LoopDispatch(FindReturn = null)
         }
     } else {
         return null
@@ -1218,9 +1210,9 @@ def emit_decs_to_array(bridge : DecsBridgeShape?;
     }
     var retType = new TypeDecl(baseType = Type.tArray)
     retType.firstType = clone_type(elemType)
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
+    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? LoopDispatch(Find = null)
+        : LoopDispatch(Each = null))
     return emit_decs_terminator_lane(DecsTerminatorSpec(
         preludeStmts <- preludeStmts,
         perElement = perElement,
@@ -1274,9 +1266,9 @@ def emit_decs_min_max_by(bridge : DecsBridgeShape?;
     tailStmts |> push <| qmacro_expr() {
         return $i(bestElemName)
     }
-    let dispatch : DecsDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
+    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? LoopDispatch(Find = null)
+        : LoopDispatch(Each = null))
     return emit_decs_terminator_lane(DecsTerminatorSpec(
         preludeStmts <- preludeStmts,
         perElement = perElement,
@@ -1431,9 +1423,9 @@ def emit_decs_walk_lane(bridge : DecsBridgeShape?;
     } else {
         return null
     }
-    let dispatch : DecsDispatch = ((earlyExitFind || rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? DecsDispatch(Find = null)
-        : DecsDispatch(Each = null))
+    let dispatch : LoopDispatch = ((earlyExitFind || rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
+        ? LoopDispatch(Find = null)
+        : LoopDispatch(Each = null))
     return emit_decs_terminator_lane(DecsTerminatorSpec(
         preludeStmts <- preludeStmts,
         perElement = perElement,
@@ -1507,7 +1499,7 @@ def emit_decs_element_at(bridge : DecsBridgeShape?;
         perElement = perElement,
         tailStmts <- tailStmts,
         retType = retType,
-        dispatch = DecsDispatch(Find = null)
+        dispatch = LoopDispatch(Find = null)
     ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
 }
 

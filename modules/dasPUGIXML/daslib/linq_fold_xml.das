@@ -305,6 +305,9 @@ class XmlAdapter : SourceAdapter {
     def override name_prefix() : string {
         return "xml_"
     }
+    def override supports_direct_return() : bool {
+        return true   // single flat DOM while-walk inside the invoke (not decs's 2-level archetype callback)
+    }
     def override const can_group_by() : bool {
         return true
     }
@@ -493,6 +496,9 @@ class XmlJoinAdapter : SourceAdapter {
     shape : XmlJoinShape
     def override name_prefix() : string {
         return "xjoin_"
+    }
+    def override supports_direct_return() : bool {
+        return true   // collect for{} + probe DOM while-walk, both single-level inside the invoke
     }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName
