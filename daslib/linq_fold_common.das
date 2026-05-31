@@ -1173,7 +1173,9 @@ def emit_terminator_lane(var spec : TerminatorSpec; var adapter : SourceAdapter?
     bodyStmts |> reserve(length(spec.prologue) + length(spec.tailStmts) + 5)
     append_ranges_prelude(bodyStmts, spec.skipExpr, spec.takeExpr, spec.skipWhileCond, spec.rangeNames)
     bodyStmts |> push_from(spec.prologue)
-    bodyStmts |> push <| adapter->wrap_source_loop(spec.dispatch, loopBody, at)
+    var srcLoop = adapter->wrap_source_loop(spec.dispatch, loopBody, at)
+    if (srcLoop == null) return null   // adapter declined (e.g. decs chain has an unsupported op) → bail to tier-2
+    bodyStmts |> push(srcLoop)
     bodyStmts |> push_from(spec.tailStmts)
     return adapter->wrap_invoke(bodyStmts, spec.outElemType, spec.wrapIter, at)
 }
@@ -1278,7 +1280,9 @@ def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?;
     } else {
         var perElement = compose_fold_per_element(spec)
         if (perElement == null) return null
-        bodyStmts |> push <| adapter->wrap_source_loop(spec.dispatch, perElement, at)
+        var srcLoop = adapter->wrap_source_loop(spec.dispatch, perElement, at)
+        if (srcLoop == null) return null   // adapter declined (e.g. decs chain has an unsupported op) → bail to tier-2
+        bodyStmts |> push(srcLoop)
     }
     bodyStmts |> push_from(spec.tailStmts)
     return adapter->wrap_invoke(bodyStmts, spec.outElemType, spec.wrapIter, at)

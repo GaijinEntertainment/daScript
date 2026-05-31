@@ -27,6 +27,13 @@ struct DecsJoinShape {
 class DecsAdapter : SourceAdapter {
     bridge : DecsBridgeShape?
     tupName : string
+    // Terminator-path context (null/empty on the group_by/distinct path, where the chain + ranges are
+    // already baked into the body the group_by core hands to wrap_source_loop). When set, wrap_source_loop
+    // owns the decs in-loop ranges + chain-binding + range prelude + for_each{,_find} dispatch.
+    chainInfo : DecsChainInfo?
+    calls : array<tuple<ExprCall?; LinqCall?>>
+    intermediateEnd : int
+    rangeInfo : DecsRangeInfo?
     def override name_prefix() : string {
         return "decs_"
     }
@@ -105,25 +112,67 @@ class DecsAdapter : SourceAdapter {
         return emit_decs_count_archsize(bridge, at)
     }
     def override bind_name(at : LineInfo) : string {
-        // The actual loop bind (wrap_source_loop uses self.tupName) — return it directly rather than
-        // regenerating qn("decs_tup", at), so peeling can't desync from the loop if `at` ever differs.
+        // Terminator path: the post-chain element bind the generic lane's per-element work references
+        // (wrap_source_loop's chain-walk introduces it). Otherwise the raw source-tuple bind. Returned
+        // directly (not a fresh qn) so peeling can't desync from the loop if `at` ever differs.
+        if (chainInfo != null) return chainInfo.finalBind
         return tupName
     }
     def override element_type() : TypeDeclPtr {
         if (bridge == null) {
             return null
         }
+        if (chainInfo != null) return clone_type(chainInfo.finalType)
         return clone_type(bridge.elementType)
     }
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
-        var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
+        // Terminator path (chainInfo set): wrap decs in-loop ranges + chain-binding around the per-element
+        // body, prune unused columns, hoist the range prelude, and frame the walk per loopShape. group_by /
+        // distinct path (chainInfo null): the body is already complete — just prune + a plain for_each.
         let archName = bridge.archName
         let br = bridge
-        return <- qmacro_expr() {
-            for_each_archetype($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
+        var inner = body
+        var prelude : array<Expression?>
+        if (chainInfo != null) {
+            let names <- make_decs_range_names(at)
+            inner = wrap_inner_for_with_decs_ranges(inner, rangeInfo, names)
+            inner = wrap_decs_chain(inner, chainInfo, calls, intermediateEnd, at)
+            if (inner == null) return null
+            prelude <- decs_range_prelude(rangeInfo, names)
         }
+        var forExprNode = build_decs_inner_for_pruned(br, tupName, inner, at)
+        var loopExpr : Expression?
+        if (loopShape is FindReturn) {
+            loopExpr = qmacro_expr() {
+                return for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } elif (loopShape is FindReturnNegated) {
+            loopExpr = qmacro_expr() {
+                return !for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } elif (loopShape is Find) {
+            loopExpr = qmacro_expr() {
+                for_each_archetype_find($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) : bool {
+                    $e(forExprNode)
+                    return false
+                })
+            }
+        } else {
+            loopExpr = qmacro_expr() {
+                for_each_archetype($e(br.reqHashExpr), $e(br.erqExpr), $($i(archName) : Archetype) {
+                    $e(forExprNode)
+                })
+            }
+        }
+        if (empty(prelude)) return loopExpr
+        prelude |> push(loopExpr)
+        return stmts_to_expr(prelude)
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
         var emission : Expression?
@@ -197,7 +246,7 @@ class DecsJoinAdapter : SourceAdapter {
 }
 
 [macro_function]
-def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
     var termName : string
@@ -237,7 +286,7 @@ def emit_loop_or_count_lane_decs(bridge : DecsBridgeShape?; tupName : string; va
     let intermediateEnd = hasTerm ? length(calls) - 1 : length(calls)
     var rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
     if (rangeInfo == null) return null
-    let chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
+    var chainInfo = compute_decs_chain_info(calls, rangeInfo.chainEnd, tupName, bridge, at)
     if (chainInfo == null) return null
     if (c.single |> key_exists("post_take_where")) {
         var ptwArg = c.single["post_take_where"].arguments[1]
@@ -904,64 +953,37 @@ struct DecsTerminatorSpec {
 [macro_function]
 def emit_decs_terminator_lane(
                               var spec : DecsTerminatorSpec;
-                              bridge : DecsBridgeShape?;
-                              chainInfo : DecsChainInfo?;
-                              rangeInfo : DecsRangeInfo?;
+                              var bridge : DecsBridgeShape?;
+                              var chainInfo : DecsChainInfo?;
+                              var rangeInfo : DecsRangeInfo?;
                               var calls : array<tuple<ExprCall?; LinqCall?>>;
                               intermediateEnd : int;
                               at : LineInfo
                               ) : Expression? {
-    let tupName = chainInfo.tupName   // the bind the chain was peeled against — not a fresh qn(), so the inner-for bind can't desync from peeling
-    let names <- make_decs_range_names(at)
-    let archName = bridge.archName
-    var ptwCond : Expression?
+    // Shim over the generic emit_terminator_lane: a DecsAdapter carrying the chain + range context owns the
+    // decs-specific walk (in-loop ranges + chain-binding + pruning + range prelude + for_each{,_find} dispatch)
+    // inside its wrap_source_loop. Lane applies postTakeWhereCond innermost; decs has no whereCond/binds/preCond.
+    var adapter : SourceAdapter? = new DecsAdapter(
+        bridge = bridge,
+        tupName = chainInfo.tupName,
+        chainInfo = chainInfo,
+        calls <- calls,
+        intermediateEnd = intermediateEnd,
+        rangeInfo = rangeInfo)
+    var ptw : Expression?
     if (rangeInfo.postTakeWhereCond != null) {
-        ptwCond = clone_expression(rangeInfo.postTakeWhereCond)
+        ptw = clone_expression(rangeInfo.postTakeWhereCond)
     }
-    var gatedPerElement = wrap_with_condition(spec.perElement, ptwCond)
-    var perElement = wrap_inner_for_with_decs_ranges(gatedPerElement, rangeInfo, names)
-    var body = wrap_decs_chain(perElement, chainInfo, calls, intermediateEnd, at)
-    if (body == null) return null
-    var forExprNode = build_decs_inner_for_pruned(bridge, tupName, body, at)
-    var rangeStmts <- decs_range_prelude(rangeInfo, names)
-    var bodyStmts : array<Expression?>
-    bodyStmts |> reserve(length(spec.preludeStmts) + length(rangeStmts) + length(spec.tailStmts) + 1)
-    bodyStmts |> push_from(spec.preludeStmts)
-    bodyStmts |> push_from(rangeStmts)
-    if (spec.dispatch is FindReturn) {
-        bodyStmts |> push <| qmacro_expr() {
-            return for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-    } elif (spec.dispatch is FindReturnNegated) {
-        bodyStmts |> push <| qmacro_expr() {
-            return !for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-    } elif (spec.dispatch is Find) {
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
-                $e(forExprNode)
-                return false
-            })
-        }
-        bodyStmts |> push_from(spec.tailStmts)
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
-                $e(forExprNode)
-            })
-        }
-        bodyStmts |> push_from(spec.tailStmts)
-    }
-    var emission = qmacro(invoke($() : $t(spec.retType) {
-        $b(bodyStmts)
-    }))
-    return finalize_decs_emission(emission, at, spec.wrapIter)
+    var perStmts : array<Expression?>
+    perStmts |> push(spec.perElement)
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- spec.preludeStmts,
+        perElementStmts <- perStmts,
+        postTakeWhereCond = ptw,
+        tailStmts <- spec.tailStmts,
+        outElemType = spec.retType,
+        wrapIter = spec.wrapIter,
+        dispatch = spec.dispatch), adapter, at)
 }
 
 [macro_function]
@@ -983,10 +1005,10 @@ def emit_decs_count_archsize(bridge : DecsBridgeShape?; at : LineInfo) : Express
 }
 
 [macro_function]
-def emit_decs_accumulator(bridge : DecsBridgeShape?;
+def emit_decs_accumulator(var bridge : DecsBridgeShape?;
                           opName : string;
-                          chainInfo : DecsChainInfo?;
-                          rangeInfo : DecsRangeInfo?;
+                          var chainInfo : DecsChainInfo?;
+                          var rangeInfo : DecsRangeInfo?;
                           var calls : array<tuple<ExprCall?; LinqCall?>>;
                           intermediateEnd : int;
                           terminatorCall : ExprCall?;
@@ -1036,10 +1058,10 @@ def emit_decs_accumulator(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
-def emit_decs_early_exit(bridge : DecsBridgeShape?;
+def emit_decs_early_exit(var bridge : DecsBridgeShape?;
                          opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
+                         var chainInfo : DecsChainInfo?;
+                         var rangeInfo : DecsRangeInfo?;
                          var calls : array<tuple<ExprCall?; LinqCall?>>;
                          intermediateEnd : int;
                          terminatorCall : ExprCall?;
@@ -1187,9 +1209,9 @@ def emit_decs_early_exit(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
-def emit_decs_to_array(bridge : DecsBridgeShape?;
-                       chainInfo : DecsChainInfo?;
-                       rangeInfo : DecsRangeInfo?;
+def emit_decs_to_array(var bridge : DecsBridgeShape?;
+                       var chainInfo : DecsChainInfo?;
+                       var rangeInfo : DecsRangeInfo?;
                        var calls : array<tuple<ExprCall?; LinqCall?>>;
                        intermediateEnd : int;
                        at : LineInfo) : Expression? {
@@ -1223,10 +1245,10 @@ def emit_decs_to_array(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
-def emit_decs_min_max_by(bridge : DecsBridgeShape?;
+def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
                          opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
+                         var chainInfo : DecsChainInfo?;
+                         var rangeInfo : DecsRangeInfo?;
                          var calls : array<tuple<ExprCall?; LinqCall?>>;
                          intermediateEnd : int;
                          terminatorCall : ExprCall?;
@@ -1279,10 +1301,10 @@ def emit_decs_min_max_by(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
-def emit_decs_walk_lane(bridge : DecsBridgeShape?;
+def emit_decs_walk_lane(var bridge : DecsBridgeShape?;
                         opName : string;
-                        chainInfo : DecsChainInfo?;
-                        rangeInfo : DecsRangeInfo?;
+                        var chainInfo : DecsChainInfo?;
+                        var rangeInfo : DecsRangeInfo?;
                         var calls : array<tuple<ExprCall?; LinqCall?>>;
                         intermediateEnd : int;
                         terminatorCall : ExprCall?;
@@ -1436,10 +1458,10 @@ def emit_decs_walk_lane(bridge : DecsBridgeShape?;
 }
 
 [macro_function]
-def emit_decs_element_at(bridge : DecsBridgeShape?;
+def emit_decs_element_at(var bridge : DecsBridgeShape?;
                          opName : string;
-                         chainInfo : DecsChainInfo?;
-                         rangeInfo : DecsRangeInfo?;
+                         var chainInfo : DecsChainInfo?;
+                         var rangeInfo : DecsRangeInfo?;
                          var calls : array<tuple<ExprCall?; LinqCall?>>;
                          intermediateEnd : int;
                          terminatorCall : ExprCall?;
