@@ -159,6 +159,22 @@ def read_xml_field(node : xml_node; name : string; defv : auto(TT)) : TT {
     return read_xml_attr(node[name], defv)
 }
 
+def peek_xml_field(node : xml_node; name : string; defv : auto(TT)) {
+    //! Like ``read_xml_field``, but a ``string`` attribute is returned as a borrowed temp ``string#`` —
+    //! a non-owning view into the document (no ``clone_string``). The ``#`` makes the borrow type-enforced:
+    //! reading / comparing the view compiles, but storing it (``push``, global assign, returning it out)
+    //! is rejected, forcing an explicit ``clone_string`` — so a view can't silently dangle past the
+    //! document's RAII scope. Scalar fields read by value, identical to ``read_xml_field``. linq_fold's
+    //! materialize-under-guard path emits this for where-gate predicate fields.
+    static_if (typeinfo is_string(defv)) {
+        unsafe {
+            return reinterpret<string#>(as_string(node[name], defv))   // borrowed view; return-of-temp needs unsafe
+        }
+    } else {
+        return read_xml_attr(node[name], defv)
+    }
+}
+
 [unsafe_outside_of_for]
 def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT -const> {
     //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading

@@ -134,3 +134,4 @@ Standalone micro-benchmarks — self-contained (no `_common`), kept out of `sql/
 | File | Description |
 |------|-------------|
 | `join_select_shapes.das` | `join \|> select` output shapes over XML: C tier-2 (materialize tuples) vs A fused-materialize vs B streaming generator — A wins in every config; streaming is slower (generator overhead), string clone is a flat orthogonal cost |
+| `single_last_shapes.das` | `where(pred) \|> single/last` over XML: C full-materialize-per-element vs A materialize-under-guard (read predicate field cheaply, build the full row only for matching elements) — A wins (single 6.1× INTERP / 100k→1 clone; last 1.66× / clones only matching rows) |
