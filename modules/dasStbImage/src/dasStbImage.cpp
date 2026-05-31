@@ -9,6 +9,8 @@
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
 
+#include <vector>    // std::vector buffer for stbi write-to-memory callbacks
+
 // stb_image_write config variable wrappers (defined in dasStbImage_impl.cpp)
 void stbi_write_set_png_compression_level ( int level );
 int  stbi_write_get_png_compression_level ( );

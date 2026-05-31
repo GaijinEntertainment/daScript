@@ -947,7 +947,7 @@ extern "C" {
             return false;
         }
 
-        string cmd;
+        std::string cmd;
         #if defined(_WIN32) || defined(_WIN64)
             #if defined(_MSC_VER)
                 // MSVC clang-cl: -DLL marks shared, -link separates link-only
@@ -957,8 +957,8 @@ extern "C" {
                 // Files installs.
                 const auto linkerParam = isShared ? "-DLL" : "";
                 cmd = compilerLibrary.empty()
-                    ? fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, extra, linkerParam, libraryName)
-                    : fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, runtimeLibrary, compilerLibrary, extra, linkerParam, libraryName);
+                    ? fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), extra, linkerParam, libraryName)
+                    : fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), compilerLibrary.c_str(), extra, linkerParam, libraryName);
             #else
                 // mingw clang/gcc: Unix-flavored driver, -shared/-o syntax.
                 // No rpath on Windows (DLLs resolve via PATH / LoadLibrary
@@ -979,9 +979,9 @@ extern "C" {
                 const auto linkerParam = isShared ? "-shared" : "";
                 cmd = compilerLibrary.empty()
                     ? fmt::format(FMT_STRING("\"\"{}\" {} -o \"{}\" \"{}\" \"{}\" {} 2>&1\""),
-                                            linker, linkerParam, libraryName, objFilePath, runtimeLibrary, extra)
+                                            linker.c_str(), linkerParam, libraryName, objFilePath, runtimeLibrary.c_str(), extra)
                     : fmt::format(FMT_STRING("\"\"{}\" {} -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1\""),
-                                            linker, linkerParam, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
+                                            linker.c_str(), linkerParam, libraryName, objFilePath, runtimeLibrary.c_str(), compilerLibrary.c_str(), extra);
             #endif
         #elif defined(__APPLE__)
             const auto linkerParam = isShared ? "-shared " : "";
@@ -991,8 +991,8 @@ extern "C" {
             // sees two distinct -Wl,-rpath flags, not one with an embedded space.
             const auto rpath = "-Wl,-rpath,@executable_path\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             cmd = compilerLibrary.empty()
-                ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, objFilePath, extra)
-                : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker, linkerParam, rpath, libraryName, runtimeLibrary, compilerLibrary, objFilePath, extra);
+                ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker.c_str(), linkerParam, rpath.c_str(), libraryName, runtimeLibrary.c_str(), objFilePath, extra)
+                : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker.c_str(), linkerParam, rpath.c_str(), libraryName, runtimeLibrary.c_str(), compilerLibrary.c_str(), objFilePath, extra);
         #else
             const auto linkerParam = isShared ? "-shared" : "";
             // $ORIGIN first → relocated bundle finds .so next to the exe;
@@ -1003,9 +1003,9 @@ extern "C" {
             const auto rpath = "-Wl,-rpath,\\$ORIGIN\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             cmd = compilerLibrary.empty()
                 ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"),
-                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, extra)
+                                        linker.c_str(), linkerParam, rpath.c_str(), libraryName, objFilePath, runtimeLibrary.c_str(), extra)
                 : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -Wl,--no-as-needed -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"),
-                                        linker, linkerParam, rpath, libraryName, objFilePath, runtimeLibrary, compilerLibrary, extra);
+                                        linker.c_str(), linkerParam, rpath.c_str(), libraryName, objFilePath, runtimeLibrary.c_str(), compilerLibrary.c_str(), extra);
         #endif
         return run_link_cmd(cmd.c_str(), libraryName, "Library", context);
     }
@@ -1050,10 +1050,10 @@ extern "C" {
         // is virtual address space only — lazy paging keeps RSS proportional
         // to actual use. 128MB covers all current playground benchmarks; see
         // #2805.
-        const string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
-        const string cmd = fmt::format(
+        const std::string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
+        const std::string cmd = fmt::format(
             FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB 2>&1"),
-            linker, objFilePath, runtimeArg, wasmPath);
+            linker.c_str(), objFilePath, runtimeArg, wasmPath);
         return run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
     }
 #else
