@@ -44,6 +44,7 @@
 
 namespace das {
 using namespace eastl;
+using std::initializer_list;
 using std::atomic;
 using std::condition_variable;
 using std::lock_guard;
@@ -53,6 +54,8 @@ using std::recursive_mutex;
 using std::stringstream;
 using std::thread;
 using std::unique_lock;
+namespace chrono = std::chrono;
+namespace this_thread = std::this_thread;
 } // namespace das
 
 namespace das {
@@ -73,6 +76,14 @@ template <typename K, typename V, typename H = das::daslang_hash<K>, typename E 
 using das_hash_map = das::daslang_hash_map<K,V,H,E>;
 template <typename K, typename H = das::daslang_hash<K>, typename E = das::equal_to<K>>
 using das_hash_set = das::daslang_hash_set<K,H,E>;
+template <typename K, typename V, typename H = das::daslang_hash<K>, typename E = das::equal_to<K>>
+using das_insert_only_map = das::daslang_insert_only_hash_map<K,V,H,E>;
+template <typename K, typename H = das::daslang_hash<K>, typename E = das::equal_to<K>>
+using das_insert_only_set = das::daslang_insert_only_hash_set<K,H,E>;
+template <typename K, typename V, typename H = das::daslang_hash<K>, typename E = das::equal_to<K>>
+using das_insert_only_hash_map = das::daslang_insert_only_hash_map<K,V,H,E>;
+template <typename K, typename H = das::daslang_hash<K>, typename E = das::equal_to<K>>
+using das_insert_only_hash_set = das::daslang_insert_only_hash_set<K,H,E>;
 template <typename K, typename V>
 using das_safe_map = eastl::map<K,V>;
 template <typename K, typename C=eastl::less<K>>

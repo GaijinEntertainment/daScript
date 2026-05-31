@@ -13,12 +13,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
       - run: sudo apt-get update -y && sudo apt-get install -y bison flex
-      - run: git clone --depth 1 --recurse-submodules https://github.com/electronicarts/EASTL.git eastl
+      - run: git clone --depth 1 https://github.com/electronicarts/EASTL.git eastl
+      - run: git clone --depth 1 https://github.com/electronicarts/EABase.git eabase
+      # EASTL is not header-only: compile its sources + glue into libeastl.a and
+      # link it in. EASTL_EASTDC_VSNPRINTF=0 drops the EAStdC dependency (the glue
+      # supplies Vsnprintf*). The same define must reach daslang's own TUs below.
+      - run: |
+          EAFLAGS="-O2 -fPIC -std=c++17 -DEASTL_EASTDC_VSNPRINTF=0 -isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common"
+          mkdir -p eastl_build
+          for f in eastl/source/*.cpp cmake/das_config_eastl/eastl_glue.cpp; do
+            clang++ $EAFLAGS -c "$f" -o "eastl_build/$(basename "$f").o"
+          done
+          ar rcs eastl_build/libeastl.a eastl_build/*.o
       - run: |
           CC=clang CXX=clang++ cmake -B build -G Ninja \
-            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON \
+            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON \
             -DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON \
             -DDAS_AOT_EXAMPLES_DISABLED=ON \
             -DDAS_CONFIG_INCLUDE_DIR=cmake/das_config_eastl \
-            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eastl/test/packages/EABase/include/Common"
+            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common -DEASTL_EASTDC_VSNPRINTF=0" \
+            -DCMAKE_CXX_STANDARD_LIBRARIES="$PWD/eastl_build/libeastl.a"
       - run: cmake --build build --target daslang --parallel
