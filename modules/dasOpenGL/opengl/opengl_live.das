@@ -72,7 +72,7 @@ struct GlStatsResult {
 }
 
 [live_command(description="OpenGL render statistics for the last frame")]
-def gl_stats(input : JsonValue?) : JsonValue? {
+def gl_stats(_input : JsonValue?) : JsonValue? {
     return JV(GlStatsResult(
         draw_calls = gl_render_stats.draw_calls,
         triangles = gl_render_stats.triangles,
@@ -289,7 +289,7 @@ def private harvest_one_pbo() : bool {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
         return false
     }
-    let ok = unsafe(stbi_apng_frame(recorder.writer, ptr, recorder.width * 4, recorder.pbo_delays_ms[read_idx]))
+    let ok = stbi_apng_frame(recorder.writer, ptr, recorder.width * 4, recorder.pbo_delays_ms[read_idx])
     // glUnmapBuffer returns GL_FALSE if the driver invalidated the buffer
     // contents while it was mapped — count it as a harvest failure so the
     // frame doesn't slip in with junk pixels.
@@ -301,7 +301,7 @@ def private harvest_one_pbo() : bool {
 }
 
 [live_command(description = "Stop APNG recording. Returns saved path + frame count.")]
-def record_stop(input : JsonValue?) : JsonValue? {
+def record_stop(_input : JsonValue?) : JsonValue? {
     return JV((error = "not recording")) if (!recorder_active)
 
     // Drain any PBOs still in flight (frames seen but not yet read back).
@@ -352,7 +352,7 @@ struct RecordStatusResult {
 }
 
 [live_command(description = "Recording status — active state, frame count, elapsed.")]
-def record_status(input : JsonValue?) : JsonValue? {
+def record_status(_input : JsonValue?) : JsonValue? {
     var dropped = 0
     if (recorder_active) {
         unsafe {
@@ -382,12 +382,17 @@ def record_tick() {
         return
     }
     return if (now < recorder.next_capture_t)
-    // Skip-missed scheduling: after a stall (long frame, gc pause, etc.)
-    // resync the deadline to `now + interval` instead of catching up frame
-    // by frame. Derive delay_ms from the actual gap so playback timing
-    // reflects real spacing.
-    let last_capture_t = recorder.next_capture_t - recorder.frame_interval_s
-    let gap_s          = now - last_capture_t
+    // Skip-missed scheduling: after a stall (long frame, gc pause, etc.) resync
+    // the deadline to `now + interval` instead of catching up frame by frame.
+    // Each frame gets the SAME nominal delay (1/fps, quantized to whole ms by the
+    // writer API -- e.g. 33ms at 30fps) instead of the measured gap, so the APNG is
+    // a UNIFORMLY spaced grid. That internal delay is not the playback clock:
+    // convert_recording.das discards it (forces `-r fps_eff` before `-i`, with
+    // fps_eff = frames / wall-clock-duration -- the real effective capture rate,
+    // which the synchronous zlib encode pushes below nominal) and anchors voiceovers
+    // on that same measured grid. The load-bearing properties are uniform spacing +
+    // a synchronous writer that never drops (frames_written exact), which is what
+    // lets fps_eff recover the true timeline; the per-frame ms tag itself is nominal.
     recorder.next_capture_t = now + recorder.frame_interval_s
     let n = length(recorder.pbos)
 
@@ -395,7 +400,7 @@ def record_tick() {
     // with a null pointer + a bound GL_PIXEL_PACK_BUFFER queues the copy on
     // the GPU and returns immediately — no CPU block.
     let write_idx = recorder.frames_seen % n
-    recorder.pbo_delays_ms[write_idx] = int(gap_s * 1000.0f)
+    recorder.pbo_delays_ms[write_idx] = int(recorder.frame_interval_s * 1000.0f)
     glBindBuffer(GL_PIXEL_PACK_BUFFER, recorder.pbos[write_idx])
     glReadPixels(0, 0, recorder.width, recorder.height, GL_RGBA, GL_UNSIGNED_BYTE, null)
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)

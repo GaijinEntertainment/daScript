@@ -14,7 +14,9 @@
 //   int    stbi_apng_dropped(void *writer);
 //
 // Pixel data submitted to stbi_apng_frame is expected to be bottom-up
-// (glReadPixels output). The worker thread flips rows top-down before encoding.
+// (glReadPixels output); the writer flips rows top-down inline before encoding.
+// Encoding is synchronous on the caller's thread — no worker thread, no bounded
+// queue, so frames are never dropped (frame N maps to a known recording time).
 
 #pragma once
 
@@ -109,7 +111,6 @@ public:
     int  dropped();
 
 private:
-    void worker_loop();
     bool emit_frame(Frame &f);
 
     FILE *fp = nullptr;
@@ -117,16 +118,8 @@ private:
     int   w  = 0, h = 0, channels = 0;
     stbi__apng_off_t acTL_body_offset = -1;
 
-    std::mutex              mu;
-    std::condition_variable cv;
-    std::deque<Frame>       queue;
-    int                     max_queue      = 4;
-    int                     drop_count     = 0;
-    bool                    errored        = false;
-    bool                    stop_requested = false;
-
-    std::thread worker;
-    int         frames_written = 0;  // worker-thread-only after begin() returns
+    bool errored        = false;
+    int  frames_written = 0;
 };
 
 inline bool ApngWriter::begin(const char *filename, int W, int H, int CH) {
@@ -163,14 +156,8 @@ inline bool ApngWriter::begin(const char *filename, int W, int H, int CH) {
         acTL_body_offset = before_acTL + 8;
     }
 
-    {
-        std::lock_guard<std::mutex> lk(mu);
-        drop_count     = 0;
-        errored        = false;
-        stop_requested = false;
-        frames_written = 0;
-    }
-    worker = std::thread(&ApngWriter::worker_loop, this);
+    errored        = false;
+    frames_written = 0;
     return true;
 
 fail:
@@ -178,8 +165,13 @@ fail:
     return false;
 }
 
+// Synchronous: encode the frame inline on the caller's thread. No worker thread
+// and no bounded queue, so frames are NEVER dropped — frames_written always
+// equals the number of frames submitted. The caller (the recorder's GL thread)
+// blocks for the zlib compress; that's the intended trade for drop-free,
+// frame-exact tutorial recordings, where APNG-frame N must map to a known time.
 inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_ms) {
-    if (!pixels) return false;
+    if (!pixels || errored) return false;
     size_t row_bytes = (size_t)w * (size_t)channels;
     // Reject strides that would cause OOB reads: must be positive and at
     // least row_bytes. Negative stride (bottom-up) is not supported here;
@@ -188,12 +180,6 @@ inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_
     // Guard size_t multiply: row_bytes * h would wrap on 32-bit hosts for
     // very large frames; under-allocation here means OOB writes below.
     if ((size_t)h != 0 && row_bytes > SIZE_MAX / (size_t)h) return false;
-    std::unique_lock<std::mutex> lk(mu);
-    if (errored) return false;
-    if ((int)queue.size() >= max_queue) {
-        queue.pop_front();
-        drop_count++;
-    }
     Frame f;
     f.pixels.resize(row_bytes * (size_t)h);
     const uint8_t *src = (const uint8_t *)pixels;
@@ -207,29 +193,11 @@ inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_
         }
     }
     f.delay_ms = delay_ms;
-    queue.emplace_back(std::move(f));
-    lk.unlock();
-    cv.notify_one();
-    return true;
-}
-
-inline void ApngWriter::worker_loop() {
-    while (true) {
-        Frame f;
-        {
-            std::unique_lock<std::mutex> lk(mu);
-            cv.wait(lk, [this]{ return !queue.empty() || stop_requested; });
-            if (queue.empty() && stop_requested) return;
-            f = std::move(queue.front());
-            queue.pop_front();
-        }
-        if (!emit_frame(f)) {
-            std::lock_guard<std::mutex> lk(mu);
-            errored = true;
-            queue.clear();
-            return;
-        }
+    if (!emit_frame(f)) {
+        errored = true;
+        return false;
     }
+    return true;
 }
 
 inline bool ApngWriter::emit_frame(Frame &f) {
@@ -312,20 +280,8 @@ inline bool ApngWriter::emit_frame(Frame &f) {
 }
 
 inline bool ApngWriter::end() {
-    {
-        std::lock_guard<std::mutex> lk(mu);
-        stop_requested = true;
-    }
-    cv.notify_one();
-    if (worker.joinable()) worker.join();
-
     if (!fp) return false;
-    bool was_errored;
-    {
-        std::lock_guard<std::mutex> lk(mu);
-        was_errored = errored;
-    }
-    bool result = !was_errored;
+    bool result = !errored;
 
     // Zero-frame close: the file would otherwise contain only IHDR + acTL + IEND,
     // which isn't a valid PNG/APNG (no IDAT/fdAT). Treat as failure and remove
@@ -363,8 +319,8 @@ inline bool ApngWriter::end() {
 }
 
 inline int ApngWriter::dropped() {
-    std::lock_guard<std::mutex> lk(mu);
-    return drop_count;
+    // Synchronous writer never drops; kept for C-API compatibility.
+    return 0;
 }
 
 } // namespace stbi_apng_detail
