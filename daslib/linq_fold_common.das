@@ -1329,12 +1329,19 @@ def mut_result_type(projection : Expression?; elementType : TypeDeclPtr) : TypeD
 [macro_function, unused_argument(itName)]
 def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; names : RangeStateNames;
                       var skipExpr, takeExpr, skipWhileCond : Expression?;
-                      var loopBody : Expression?; at : LineInfo) : Expression? {
+                      var loopBody : Expression?; at : LineInfo; isLong : bool = false) : Expression? {
     // loopBody is caller-pre-wrapped (where/binds/post-take/in-loop ranges); spec only handles prelude+prologue+tail.
+    // isLong → int64 accumulator (long_count); else int (count). Tail `return acc` is width-agnostic.
     var prologue : array<Expression?>
     append_ranges_prelude(prologue, skipExpr, takeExpr, skipWhileCond, names)
-    prologue |> push_from <| qmacro_block_to_array() {
-        var $i(accName) = 0
+    if (isLong) {
+        prologue |> push_from <| qmacro_block_to_array() {
+            var $i(accName) : int64 = 0l
+        }
+    } else {
+        prologue |> push_from <| qmacro_block_to_array() {
+            var $i(accName) = 0
+        }
     }
     var perElementStmts : array<Expression?>
     perElementStmts |> push(loopBody)
@@ -1755,7 +1762,9 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     }
     let lane = hasTerminator ? classify_terminator(lastName) : LinqLane.ARRAY
     if (lane == LinqLane.UNKNOWN) return null
-    let counterLane = lane == LinqLane.COUNTER
+    // count + long_count both ride the counting lane (long_count via an int64 acc); the value reducers
+    // (sum/min/max/average) stay on the accumulator lane. One predicate gates every counting-lane site.
+    let counting = lane == LinqLane.COUNTER || (lane == LinqLane.ACCUMULATOR && lastName == "long_count")
     if (top._type == null || top._type.firstType == null) return null
     var whereCond : Expression?
     var postTakeWhereCond : Expression?
@@ -1773,7 +1782,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             if (seenSelect) {
                 // where-after-select: bind the running projection to a typed local so the
                 if (has_sideeffects(projection)) return null
-                if (lane != LinqLane.COUNTER) {
+                if (!counting) {
                     let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
                     var projType = clone_type(elementType)
                     preCondStmts |> push <| qmacro_expr() {
@@ -1847,7 +1856,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         if (ptwArg == null) return null
         if (seenSelect) {
             if (has_sideeffects(projection)) return null
-            if (lane != LinqLane.COUNTER) {
+            if (!counting) {
                 let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
                 var projType = clone_type(elementType)
                 preCondStmts |> push <| qmacro_expr() {
@@ -1864,13 +1873,11 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         }
     }
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
-    let isCountShaped = (lane == LinqLane.COUNTER
-        || (lane == LinqLane.ACCUMULATOR && lastName == "long_count"))
-    if (isCountShaped && whereCond == null && allProjectionsPure && noLimits) {
+    if (counting && whereCond == null && allProjectionsPure && noLimits) {
         var sc = ctx.src->count_shortcut(lastName, at)   // source owns its O(1) applicability; null → walk
         if (sc != null) return sc
     }
-    if (lane == LinqLane.ACCUMULATOR) {
+    if (lane == LinqLane.ACCUMULATOR && !counting) {     // value reducers only; long_count rides the counter lane
         return emit_accumulator_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
@@ -1886,7 +1893,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     var loopBody : Expression?
-    if (counterLane) {
+    if (counting) {
         var stmts : array<Expression?>
         if (projection != null && has_sideeffects(projection)) {
             let finalBindName = qn("vfinal", at)
@@ -1951,7 +1958,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         ), ctx.src, at)
     }
     return emit_counter_lane(ctx.src, accName, itName, names,
-        skipExpr, takeExpr, skipWhileCond, loopBody, at)
+        skipExpr, takeExpr, skipWhileCond, loopBody, at, lastName == "long_count")
 }
 
 [macro_function]
