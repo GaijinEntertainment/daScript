@@ -125,6 +125,20 @@ def parity_reverse(t : T?) {
 }
 
 [test]
+def parity_reverse_distinct_by(t : T?) {
+    // reverse + distinct_by: keep LAST per brand, output in reverse-discovery order. m5f fuses via the
+    // FORWARD keep-last table-overwrite (R-2b, deferred handles); m3f rides the array backward-index walk.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse()._distinct_by(_.brand).to_array())
+        var m3f <- _fold(each(arr).reverse()._distinct_by(_.brand).to_array())
+        var m3  <- (arr |> reverse() |> _distinct_by(_.brand))
+        check3(t, m5f, m3f, m3)
+    }
+}
+
+[test]
 def parity_reverse_take(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)

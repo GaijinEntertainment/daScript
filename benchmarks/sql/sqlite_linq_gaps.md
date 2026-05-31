@@ -156,16 +156,16 @@ is decs-only by design.
 
 ---
 
-## Decs lane absent (not a SQL gap, but for symmetry)
+## Decs lane (now lit)
 
 ### `reverse_distinct_by` decs
 
 Bench: [`reverse_distinct_by`](reverse_distinct_by.das).
 
-The Theme 8 2a splice arm requires `array_source` (see
-[`daslib/linq_fold.das:3221`](../../daslib/linq_fold.das#L3221)) because the
-backward-index walk (`arr[length-1-k]`) has no natural decs analog —
-archetype walks are forward-only. A decs lane would need a new
-plan_decs_reverse rewrite that collects the forward walk into a temp buffer
-and then back-walks it (defeating the splice's whole "saves cascade's
-reverse_to_array allocation" point). Closed by design.
+The Theme 8 2a splice arm (R-2a, backward index walk `arr[length-1-k]`) requires
+`array_source` — forward-only archetype walks have no random-index analog. **Closed
+2026-05-31** by the complementary R-2b row (`emit_reverse_distinct_forward_keeplast`,
+gated `non_array_source`): a single forward pass that OVERWRITES `table<key; (seq, val)>`
+per element (keep-last) and sorts survivors by descending seq — no back-walk, no temp
+reverse buffer. It's source-generic (one emit covers decs / XML / iterators), so the
+decs `m4` lane is now a real number (≈ the array fast path), not `—`.
