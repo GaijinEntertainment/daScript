@@ -17,6 +17,18 @@ require daslib/macro_boost
 require strings
 require daslib/linq_fold_common public
 
+// Stamp the assembled decs walk with the call-site LineInfo + the generated flag, optionally
+// wrapping it back into an iterator. Decs-only finalizer for the adapter emit paths below.
+[macro_function]
+def finalize_decs_emission(var emission : Expression?; at : LineInfo; wrapToIter : bool) : Expression? {
+    emission.force_at(at)
+    emission.force_generated(true)
+    if (wrapToIter) {
+        emission = qmacro($e(emission).to_sequence_move())
+    }
+    return emission
+}
+
 // Hashed equi-join payload — feeds the per-pair `let resBindName = result(tupA,tupB)` bind used by both GroupBy's decs-join arm and `emit_decs_join_impl`. The 2 consumers differ on whether the per-pair loop is the right granularity (GroupBy: yes; emit_decs_join_impl keeps a bucket-length fast path for count-no-where).
 struct DecsJoinShape {
     bridgeA, bridgeB : DecsBridgeShape?
