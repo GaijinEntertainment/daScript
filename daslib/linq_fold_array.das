@@ -172,6 +172,27 @@ class ZipAdapter : SourceAdapter {
     def override element_type() : TypeDeclPtr {
         return null
     }
+    def override count_shortcut(opName : string; at : LineInfo) : Expression? {
+        // min(len a, len b) when BOTH sources have O(1) length; else null → walk the counter lane.
+        if (!type_has_length(shape.srcAExpr._type) || !type_has_length(shape.srcBExpr._type)) return null
+        let aN = shape.srcAName
+        let bN = shape.srcBName
+        var bodyStmts : array<Expression?>
+        if (opName == "count") {
+            bodyStmts |> push <| qmacro_expr() {
+                return length($i(aN)) < length($i(bN)) ? length($i(aN)) : length($i(bN))
+            }
+        } elif (type_has_long_length(shape.srcAExpr._type) && type_has_long_length(shape.srcBExpr._type)) {
+            bodyStmts |> push <| qmacro_expr() {
+                return long_length($i(aN)) < long_length($i(bN)) ? long_length($i(aN)) : long_length($i(bN))
+            }
+        } else {
+            bodyStmts |> push <| qmacro_expr() {
+                return int64(length($i(aN)) < length($i(bN)) ? length($i(aN)) : length($i(bN)))
+            }
+        }
+        return wrap_invoke(bodyStmts, null, false, at)
+    }
     def override wrap_source_loop(var body : Expression?; at : LineInfo) : Expression? {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
@@ -480,133 +501,100 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             intermediateBinds, preCondStmts, elementType, terminatorCall, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
-    if (noChain && bothHaveLength && isCounter) {
-        var bodyStmts : array<Expression?>
-        let bothLongLength = type_has_long_length(srcAExpr._type) && type_has_long_length(srcBExpr._type)
-        if (lastName == "count") {
-            bodyStmts |> push <| qmacro_expr() {
-                return length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName))
-            }
-        } elif (bothLongLength) {
-            // long_count on array/table pair: long_length avoids the int→int64 truncation if either source > INT_MAX.
-            bodyStmts |> push <| qmacro_expr() {
-                return long_length($i(srcAName)) < long_length($i(srcBName)) ? long_length($i(srcAName)) : long_length($i(srcBName))
-            }
-        } else {
-            bodyStmts |> push <| qmacro_expr() {
-                return int64(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
-            }
-        }
-        return adapter->wrap_invoke(bodyStmts, null, false, at)
-    }
-    var perStmts : array<Expression?>
     if (isCounter) {
+        // count / long_count. O(1) min-length shortcut when both sources have length
+        // (ZipAdapter.count_shortcut); otherwise walk via the shared counter lane (int64 acc for long_count).
+        if (noChain) {
+            var sc = adapter->count_shortcut(lastName, at)
+            if (sc != null) return sc
+        }
+        var stmts : array<Expression?>
         if (bindProjForCounter) {
-            perStmts |> push <| qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 var $i(vprojName) = $e(projection)
             }
         } elif (seenSelect && !allProjectionsPure) {
             let finalBindName = qn("vfinal", at)
-            perStmts |> push <| qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 var $i(finalBindName) = $e(projection)
             }
         }
         if (counterPred != null) {
-            perStmts |> push <| qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 if ($e(counterPred)) {
                     $i(accName) ++
                 }
             }
         } else {
-            perStmts |> push <| qmacro_expr() {
+            stmts |> push <| qmacro_expr() {
                 $i(accName) ++
             }
         }
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
+        var loopBody = wrap_with_condition(stmts_to_expr(stmts), whereCond)
+        let projUsedInBody = projection != null && (!allProjectionsPure || bindProjForCounter)
+        let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null || counterPred != null
+        if (needsItBind) {
+            var preStmts : array<Expression?>
+            preStmts |> reserve(2)
+            preStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+                let $i(itName) = (itA, itB)
+            }
+            preStmts |> push(loopBody)
+            loopBody = stmts_to_expr(preStmts)
+        }
+        return emit_counter_lane(adapter, accName, itName, names,
+            skipExpr, takeExpr, skipWhileCond, loopBody, at, lastName == "long_count")
+    }
+    // Buffer / to_array lane — ride the shared fold-array lane over the ZipAdapter.
+    let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
+    var pushStmts : array<Expression?>
+    if (projection != null) {
+        pushStmts |> push <| qmacro_expr() {
+            $i(bufName) |> push_clone($e(projection))
+        }
+    } elif (needsItBindLocal) {
+        pushStmts |> push <| qmacro_expr() {
+            $i(bufName) |> push_clone($i(itName))
+        }
     } else {
-        let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
-        if (projection != null) {
-            perStmts |> push <| qmacro_expr() {
-                $i(bufName) |> push_clone($e(projection))
-            }
-        } elif (needsItBindLocal) {
-            perStmts |> push <| qmacro_expr() {
-                $i(bufName) |> push_clone($i(itName))
-            }
-        } else {
-            perStmts |> push <| qmacro_expr() {
-                $i(bufName) |> push_clone((itA, itB))
-            }
+        pushStmts |> push <| qmacro_expr() {
+            $i(bufName) |> push_clone((itA, itB))
         }
     }
-    wrap_with_ranges(perStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
-    var perBody = wrap_with_condition(stmts_to_expr(perStmts), whereCond)
-    let projUsedInBody = projection != null && (!isCounter || !allProjectionsPure || bindProjForCounter)
-    let needsItBind = whereCond != null || projUsedInBody || skipWhileCond != null || takeWhileCond != null || counterPred != null
-    if (needsItBind) {
-        var preStmts : array<Expression?>
-        preStmts |> reserve(2)
-        preStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+    wrap_with_ranges(pushStmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
+    var perElementPush = stmts_to_expr(pushStmts)
+    var preCondStmts : array<Expression?>
+    if (needsItBindLocal) {
+        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
             let $i(itName) = (itA, itB)
         }
-        preStmts |> push(perBody)
-        perBody = stmts_to_expr(preStmts)
     }
-    var bodyStmts : array<Expression?>
-    if (isCounter) {
-        if (lastName == "count") {
-            bodyStmts |> push <| qmacro_expr() {
-                var $i(accName) = 0
-            }
-        } else {
-            bodyStmts |> push <| qmacro_expr() {
-                var $i(accName) : int64 = 0l
-            }
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            var $i(bufName) : array<$t(elementType)>
-        }
-        if (noChain && bothHaveLength) {
-            bodyStmts |> push <| qmacro_expr() {
-                $i(bufName) |> reserve(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
-            }
+    var prologueStmts : array<Expression?>
+    append_ranges_prelude(prologueStmts, skipExpr, takeExpr, skipWhileCond, names)
+    var reserveStmts : array<Expression?>
+    if (noChain && bothHaveLength) {
+        reserveStmts |> push <| qmacro_expr() {
+            $i(bufName) |> reserve(length($i(srcAName)) < length($i(srcBName)) ? length($i(srcAName)) : length($i(srcBName)))
         }
     }
-    append_ranges_prelude(bodyStmts, skipExpr, takeExpr, skipWhileCond, names)
-    let bodyReferencesIterVars = needsItBind || !isCounter
-    if (isCounter && !bodyReferencesIterVars) {
-        bodyStmts |> push <| qmacro_expr() {
-            for (_itA, _itB in $i(srcAName), $i(srcBName)) {
-                $e(perBody)
-            }
-        }
-    } else {
-        bodyStmts |> push <| qmacro_expr() {
-            for (itA, itB in $i(srcAName), $i(srcBName)) {
-                $e(perBody)
-            }
+    var tailStmts : array<Expression?>
+    if (seenReverse) {
+        tailStmts |> push <| qmacro_expr() {
+            _::reverse_inplace($i(bufName))
         }
     }
-    if (isCounter) {
-        bodyStmts |> push <| qmacro_expr() {
-            return $i(accName)
-        }
-    } else {
-        if (seenReverse) {
-            bodyStmts |> push <| qmacro_expr() {
-                _::reverse_inplace($i(bufName))
-            }
-        }
-        if (ctx.expr_is_iterator) {
-            bodyStmts |> push <| qmacro_expr() {
-                return <- $i(bufName).to_sequence_move()
-            }
-        } else {
-            bodyStmts |> push <| qmacro_expr() {
-                return <- $i(bufName)
-            }
-        }
-    }
-    return adapter->wrap_invoke(bodyStmts, null, false, at)
+    tailStmts |> push(buffer_return(bufName, ctx.expr_is_iterator))
+    return emit_fold_array_lane(FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = elementType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        preCondStmts <- preCondStmts,
+        whereCond = whereCond,
+        perElementPush = perElementPush,
+        tailStmts <- tailStmts,
+        wrapIter = false
+    ), adapter, at)
 }
 
