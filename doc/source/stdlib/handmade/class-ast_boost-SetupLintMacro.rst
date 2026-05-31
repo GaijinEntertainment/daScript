@@ -1,1 +1,2 @@
 Base class for creating lint pass macros via the ``[lint_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the lint pass.
+Name of the builtin function used to register this annotation with the compiler.

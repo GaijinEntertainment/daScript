@@ -731,7 +731,7 @@ def topic(mod : Module?) {
 }
 
 def document_topic(doc_file : file; topic, content : string implicit) {
-    document_topic(doc_file, topic, content) $(txt) {
+    document_topic(doc_file, topic, content) $(txt; _handmade) {
         return txt
     }
 }
@@ -741,7 +741,7 @@ def document_function_topic(doc_file : file; resType : TypeDecl?&; topic, conten
     var paramsIdx = -1
     var returnsIdx = -1
     let header = "Arguments"
-    document_topic(doc_file, topic, content) $(txt) {
+    document_topic(doc_file, topic, content) $(txt; _handmade) {
 
         var addDescription = false
         var lines <- txt |> replace("\r\n", "\n") |> split("\n")
@@ -813,7 +813,7 @@ def document_function_topic(doc_file : file; resType : TypeDecl?&; topic, conten
 }
 
 def document_topic(header : string; doc_file : file; topic, content : string implicit; var tab : array<array<string>>) {
-    document_topic(doc_file, topic, content) $(txt) {
+    document_topic(doc_file, topic, content) $(txt; handmade) {
         if (add_stub_header && txt |> starts_with(STUB)) {
             if (length(tab) > 1) {
                 fwrite(doc_file, make_table(header, tab))
@@ -828,9 +828,12 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
                 got--
             }
             let expected = length(tab) - 1
-            if (got < expected) {
+            // Handmade docs lead with a type description line, then one per field (got == expected + 1).
+            // Auto-generated (from das //!) docs have one line per field and no type line (got == expected).
+            let minLines = handmade ? expected + 1 : expected
+            if (got < minLines) {
                 if (strict_struct_fields) {
-                    error("{topic} has less documentation than values. Expected at least {expected} lines ({[for (i in range(1, length(tab))); tab[i][0]]}), got {got}\n")
+                    error("{topic} has less documentation than values. Expected at least {minLines} lines ({[for (i in range(1, length(tab))); tab[i][0]]}), got {got}\n")
                     PANIC("invalid documentation")
                 }
 
@@ -880,7 +883,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
     }
 }
 
-def document_topic(doc_file : file; topic, content : string implicit; cb : block<(text : string) : string>) {
+def document_topic(doc_file : file; topic, content : string implicit; cb : block<(text : string; handmade : bool) : string>) {
     let is_handmade_topic = topic |> starts_with("|handmade/")
     let base_root = is_handmade_topic ? handmade_root : topic_root
     let topic_file_name = "{base_root}/{slice(topic,1,-1)}.rst"
@@ -905,7 +908,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
     if (stat(topic_file_name, st)) {
         fopen(topic_file_name, "rb") $(topic_file) {
             if (topic_file != null) {
-                let instxt = cb |> invoke(fread(topic_file))
+                let instxt = cb |> invoke(fread(topic_file), is_handmade_topic)
                 fwrite(doc_file, instxt)
                 fwrite(doc_file, "\n\n")
             } else {

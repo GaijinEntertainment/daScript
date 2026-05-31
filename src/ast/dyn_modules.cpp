@@ -33,7 +33,9 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
         if (debug) {
             tout << "file found: " << mod_filename << ".\n";
         }
-        auto program = compileDaScript(mod_filename, fa, tout, dummyGroup);
+        CodeOfPolicies policies;
+        policies.no_init_check = true;
+        auto program = compileDaScript(mod_filename, fa, tout, dummyGroup, policies);
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
