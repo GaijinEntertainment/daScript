@@ -257,7 +257,7 @@ def replace_multiple(source : string; replaces : array<tuple<text : string; repl
     }
 }
 
-def public contains(str, sub : string) : bool {
+def public contains(str, sub : string | string#) : bool {
     //! Returns true if ``sub`` is found anywhere within ``str``.
     return find(str, sub) >= 0
 }

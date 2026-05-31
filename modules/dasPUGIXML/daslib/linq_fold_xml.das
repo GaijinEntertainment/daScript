@@ -133,7 +133,7 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
     inner |> reserve(length(inner) + length(condFields) + 1)
     for (f in condFields) {
         let local = fieldToLocal[f]
-        // peek, not read: a string guard field stays a non-owning view (no clone) — consumed only by the cond, never stored.
+        // peek, not read: string guard fields come back as borrowed string# (no clone); the cond reads them, storing one is a compile error.
         inner |> push <| qmacro_expr() {
             let $i(local) = peek_xml_field($i(chName), $v(f), $i(defName).$f(f))
         }
