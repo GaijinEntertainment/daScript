@@ -354,7 +354,35 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
     if (isElementAt) return emit_decs_element_at(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
     // Implicit to_array: only when outer expr was array-typed (caller wrote `.to_array()`, peeled by linqCalls skip=true). Iterator-typed chains cascade to tier-2 here, matches imperative plan_decs_unroll line 5813.
     if (ctx.expr_is_iterator) return null
-    return emit_decs_to_array(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, at)
+    // to_array → the shared fold-array lane: buf decl + push_clone(finalBind), tail moves it out.
+    let finalBind = chainInfo.finalBind
+    var elemType = clone_type(chainInfo.finalType)
+    let bufName = qn("decs_buf", at)
+    var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
+    var pushExpr : Expression? = qmacro_expr() {
+        $i(bufName) |> push_clone($i(finalBind))
+    }
+    pushExpr = wrap_with_condition(pushExpr, clone_expression(rangeInfo.postTakeWhereCond))
+    var prologueStmts : array<Expression?>
+    var reserveStmts : array<Expression?>
+    var preCondStmts : array<Expression?>
+    var tailStmts : array<Expression?>
+    tailStmts |> push <| qmacro_expr() {
+        return <- $i(bufName)
+    }
+    var retType = new TypeDecl(baseType = Type.tArray)
+    retType.firstType = clone_type(elemType)
+    return emit_fold_array_lane(FoldArraySpec(
+        prologueStmts <- prologueStmts,
+        bufElemType = elemType,
+        bufName = bufName,
+        reserveStmts <- reserveStmts,
+        preCondStmts <- preCondStmts,
+        perElementPush = pushExpr,
+        tailStmts <- tailStmts,
+        outElemType = retType,
+        wrapIter = false,
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))), adapter, at)
 }
 
 // Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
@@ -1182,42 +1210,6 @@ def emit_decs_early_exit(var bridge : DecsBridgeShape?;
     } else {
         return null
     }
-    return emit_decs_terminator_lane(DecsTerminatorSpec(
-        preludeStmts <- preludeStmts,
-        perElement = perElement,
-        tailStmts <- tailStmts,
-        retType = retType,
-        dispatch = dispatch
-    ), bridge, chainInfo, rangeInfo, calls, intermediateEnd, at)
-}
-
-[macro_function]
-def emit_decs_to_array(var bridge : DecsBridgeShape?;
-                       var chainInfo : DecsChainInfo?;
-                       var rangeInfo : DecsRangeInfo?;
-                       var calls : array<tuple<ExprCall?; LinqCall?>>;
-                       intermediateEnd : int;
-                       at : LineInfo) : Expression? {
-    // Slice 3c/4 to_array: shape is a thin DecsTerminatorSpec — prelude declares the buf, per-element push_clones the post-chain value at chainInfo.finalBind, tail moves it out. take/take_while → Find dispatch (else Each).
-    let bufName = qn("decs_buf", at)
-    var elemType = clone_type(chainInfo.finalType)
-    var preludeStmts : array<Expression?>
-    preludeStmts |> push <| qmacro_expr() {
-        var $i(bufName) : array<$t(elemType)>
-    }
-    let finalBind = chainInfo.finalBind
-    var perElement : Expression? = qmacro_expr() {
-        $i(bufName) |> push_clone($i(finalBind))
-    }
-    var tailStmts : array<Expression?>
-    tailStmts |> push <| qmacro_expr() {
-        return <- $i(bufName)
-    }
-    var retType = new TypeDecl(baseType = Type.tArray)
-    retType.firstType = clone_type(elemType)
-    let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? LoopDispatch(Find = null)
-        : LoopDispatch(Each = null))
     return emit_decs_terminator_lane(DecsTerminatorSpec(
         preludeStmts <- preludeStmts,
         perElement = perElement,
