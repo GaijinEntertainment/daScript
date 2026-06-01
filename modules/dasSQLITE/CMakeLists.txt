@@ -91,6 +91,7 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
 
     ADD_MODULE_DAS(sqlite daslib sqlite_boost)
     ADD_MODULE_DAS(sqlite daslib sqlite_linq)
+    ADD_MODULE_DAS(sqlite daslib linq_fold_sql)
 
     INSTALL(TARGETS sqlite_shell
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}

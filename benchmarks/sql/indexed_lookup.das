@@ -15,7 +15,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         let key = n / 2
         b |> run("m1_sql/{n}") {
-            let c = _sql(db |> select_from(type<Car>) |> _where(_.id == key) |> count())
+            let c = _fold(db |> select_from(type<Car>) |> _where(_.id == key) |> count())
             b |> accept(c)
             if (c == 0) {
                 b->failNow()

@@ -36,6 +36,7 @@ require daslib/linq_fold_common public
 require daslib/linq_fold_array public
 require daslib/linq_fold_decs public
 require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — loaded only when pugixml is linked
+require ?sqlite sqlite/linq_fold_sql         // optional SQL source pass-through — loaded only when sqlite is linked
 
 [macro_function]
 def private fold_linq_default(var expr : Expression?) : Expression? {
@@ -163,7 +164,16 @@ def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; v
 [macro_function]
 def private try_splice_patterns(var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
-    if (empty(calls) || expr._type == null) return null
+    if (expr._type == null) return null
+    // SQL pass-through (static_if drops it pre name-resolution when sqlite is absent). A `[sql_table]` `select_from` source means the whole chain is SQL-mappable — hand the pristine `expr` (before any chain normalization, and even with no chain ops) to `_sql`, which re-expands on the next infer pass. Walks `expr` itself (not flattened `top`): the SQL DSL ops aren't `linqCalls`, so flatten stops before the source.
+    static_if (typeinfo builtin_module_exists(sqlite)) {
+        if (extract_sql_source(expr) != null) {
+            var sqlCall = make_call(expr.at, "_sql")
+            (sqlCall as ExprCallMacro).arguments |> emplace_new <| clone_expression(expr)
+            return sqlCall
+        }
+    }
+    if (empty(calls)) return null
     normalize_order_reverse(calls)
     collapse_chained_selects(calls)
     collapse_chained_wheres(calls)
