@@ -162,12 +162,12 @@ def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; v
 }
 
 [macro_function]
-def private try_splice_patterns(var expr : Expression?) : Expression? {
+def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (expr._type == null) return null
-    // SQL pass-through (static_if drops it pre name-resolution when sqlite is absent). A `[sql_table]` `select_from` source means the whole chain is SQL-mappable — hand the pristine `expr` (before any chain normalization, and even with no chain ops) to `_sql`, which re-expands on the next infer pass. Walks `expr` itself (not flattened `top`): the SQL DSL ops aren't `linqCalls`, so flatten stops before the source.
+    // SQL pass-through (static_if drops it pre name-resolution when sqlite is absent). A `[sql_table]` `select_from` source means the whole chain is SQL-mappable — hand the pristine `expr` (before any chain normalization, and even with no chain ops) to `_sql`, which re-expands on the next infer pass. Walks `expr` itself (not flattened `top`): the SQL DSL ops aren't `linqCalls`, so flatten stops before the source. `sqlite_linq_loaded()` gates on `_sql` actually being in this program (a consumer may have `select_from` via `sqlite_boost` but not `sqlite_linq`) — if absent, fall through to the in-memory array path.
     static_if (typeinfo builtin_module_exists(sqlite)) {
-        if (extract_sql_source(expr) != null) {
+        if (extract_sql_source(expr) != null && sqlite_linq_loaded(prog)) {
             var sqlCall = make_call(expr.at, "_sql")
             (sqlCall as ExprCallMacro).arguments |> emplace_new <| clone_expression(expr)
             return sqlCall
@@ -208,7 +208,7 @@ class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var res = try_splice_patterns(call.arguments[0])
+        var res = try_splice_patterns(prog, call.arguments[0])
         if (res != null) return res
         // Theme 6 — warn when an adapter source (today: `from_decs_template`) survives every splice arm with a
         // non-empty chain, so the bridge materializes a temp `res` array before the cascade. Suppress: `options _no_linq_perf_warn = true`.

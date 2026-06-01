@@ -14,6 +14,21 @@ module linq_fold_sql shared public
 
 require daslib/linq_fold_common public   // get_call_short_name + AST types
 require daslib/ast_boost
+require daslib/ast
+
+// True iff `sqlite_linq` (which defines the `_sql` macro) is in the current program. A consumer may
+// require `sqlite_boost` (for `select_from`) without `sqlite_linq`; then we must NOT rewrite to `_sql`
+// (it wouldn't resolve) — `_fold` falls back to the in-memory array path instead.
+[macro_function]
+def sqlite_linq_loaded(prog : ProgramPtr) : bool {
+    var found = false
+    program_for_each_module(prog) $(mod) {
+        if (mod.name == "sqlite_linq") {
+            found = true
+        }
+    }
+    return found
+}
 
 def private is_sql_table_select(c : ExprCall?) : bool {
     // Gate on a SQL-table annotation so an unrelated `select_from`-named function is never mistaken for SQL.
