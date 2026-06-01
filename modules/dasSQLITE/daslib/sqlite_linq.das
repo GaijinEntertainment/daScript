@@ -3,6 +3,9 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
+// The SQL chain analyzer recurses deeply at macro time (analyze_chain <-> pred_to_sql <->
+// analyze_subquery); 4x the default 16KB macro-context stack for headroom (via getContextStackSize).
+options stack = 65536
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
 options _comment_hygiene = true
@@ -1604,12 +1607,9 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
     return 0
 }
 
-// `to_array` is a no-op terminal on a SQL chain — the result is already an array — so
-// `_fold(sqlchain |> to_array())` ≡ `_fold(sqlchain)`. Lets source-agnostic emitters (linq_das)
-// always append `|> to_array()`. Both the `_to_array` (sqlite_linq compat) qmatch form and the
-// builtin-name `to_array` are accepted; returns the peeled inner expr, or null on no match. Kept out
-// of `analyze_chain`'s body so its recursive stack frame stays minimal (this path runs at every
-// chain level and the `_create_view` nested-subquery error path is near the macro-context stack limit).
+// `to_array` is a no-op terminal on a SQL chain (result is already an array) — lets source-agnostic
+// emitters (linq_das) always append `|> to_array()`. Kept OUT of analyze_chain's recursive body: it
+// runs per chain level and the `_create_view` nested-subquery error path sits near the macro stack limit.
 [macro_function]
 def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
     var inner : ExpressionPtr
@@ -4349,12 +4349,9 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     return qmacro(_::_sql_read_row(_sql_stmt, type<$t(rootType)>))
 }
 
-// nolint:STYLE015 Single-source row-var normalization. `_sql` resolves a single source against the
-// placeholder name `_` (see is_nullable_column_ref / analyze_projection). Source-agnostic emitters
-// (linq_das splices the C# range variable verbatim) produce `$(c) => c.field` lambdas; rename a
-// single-param op lambda's bound var to `_` (param + body refs) so those chains resolve. Gated on the
-// chain being PURE single-source — multi-source ops (join/set-op) carry single-param key lambdas bound
-// to distinct named sources that must NOT collapse to `_`; those are left for the join/set-op machinery.
+// nolint:STYLE015 Single-source row-var normalization: `_sql` resolves one source against placeholder `_`,
+// but linq_das splices the C# range var verbatim (`$(c) => c.field`) — rename a single-param op lambda's
+// bound var to `_`. Gated on PURE single-source; join/set-op key lambdas bind distinct sources, left alone.
 [macro_function]
 def private chain_has_multi_source(var node : ExpressionPtr) : bool {
     var e = node
