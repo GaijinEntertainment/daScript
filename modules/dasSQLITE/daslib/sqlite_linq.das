@@ -31,6 +31,15 @@ def _to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
     return <- arr
 }
 
+[unused_argument(arr)]
+def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
+    //! Builtin-name `to_array` overload over an `array` (a SQL chain is already array-typed because
+    //! `select_from` returns an array). Makes `_fold(sqlchain |> to_array())` type-check and be a
+    //! no-op — so source-agnostic emitters (linq_das) can always append `|> to_array()`. `_sql`
+    //! intercepts it the same as `_to_array` (see analyze_chain); this body only runs in compat mode.
+    return <- arr
+}
+
 def _first_opt(arr : array<auto(TT)>) : Option<TT -const -#> {
     //! Compat-mode fallback: returns ``some(arr[0])`` if non-empty, ``none`` otherwise.
     //! Inside `_sql(...)` the macro intercepts this call before evaluation
@@ -1606,7 +1615,21 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     // ---- Terminals: one per chain, must precede _select / _where peel; _to_array sets materializer flag.
     {
         var inner : ExpressionPtr
-        if (qmatch(node, _to_array($e(inner))).matched) {
+        var matched = qmatch(node, _to_array($e(inner))).matched
+        if (!matched) {
+            // `to_array` is a no-op terminal on a SQL chain — the result is already an array — so
+            // `_fold(sqlchain |> to_array())` ≡ `_fold(sqlchain)`. Lets source-agnostic emitters
+            // (linq_das) always append `|> to_array()`. The array-typed SQL chain resolves to the
+            // `sqlite_linq` overload above; the `builtin` form is matched too for safety. Mirrors the
+            // `first`/`_first` dual-match below.
+            var taCall = match_call_in_module(node, "to_array", "sqlite_linq")
+            if (taCall == null) { taCall = match_call_in_module(node, "to_array", "builtin") }
+            if (taCall != null && taCall.arguments |> length == 1) {
+                matched = true
+                inner = taCall.arguments[0]
+            }
+        }
+        if (matched) {
             if (q.seenToArray || q.seenTerminal) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
                 return false
@@ -4328,11 +4351,59 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     return qmacro(_::_sql_read_row(_sql_stmt, type<$t(rootType)>))
 }
 
+// nolint:STYLE015 Single-source row-var normalization. `_sql` resolves a single source against the
+// placeholder name `_` (see is_nullable_column_ref / analyze_projection). Source-agnostic emitters
+// (linq_das splices the C# range variable verbatim) produce `$(c) => c.field` lambdas; rename a
+// single-param op lambda's bound var to `_` (param + body refs) so those chains resolve. Gated on the
+// chain being PURE single-source — multi-source ops (join/set-op) carry single-param key lambdas bound
+// to distinct named sources that must NOT collapse to `_`; those are left for the join/set-op machinery.
+[macro_function]
+def private chain_has_multi_source(var node : ExpressionPtr) : bool {
+    var e = node
+    while (e != null && e is ExprCall) {
+        let nm = get_call_short_name(e as ExprCall)
+        if (nm == "join" || nm == "left_join" || nm == "right_join" || nm == "full_outer_join"
+                || nm == "cross_join" || nm == "group_join"
+                || nm == "union" || nm == "intersect" || nm == "except" || nm == "concat") return true
+        var c = e as ExprCall
+        if (empty(c.arguments)) break
+        e = c.arguments[0]
+    }
+    return false
+}
+
+[macro_function]
+def private normalize_chain_blocks(var node : ExpressionPtr) {
+    if (node == null || !(node is ExprCall)) return
+    var call = node as ExprCall
+    for (a in call.arguments) {
+        if (a is ExprMakeBlock) {
+            var mblk = a as ExprMakeBlock
+            var blk = mblk._block as ExprBlock
+            if (blk != null && blk.arguments |> length == 1 && blk.arguments[0].name != "_") {
+                let pname = string(blk.arguments[0].name)
+                blk.arguments[0].name := "_"
+                var rules : Template
+                rules |> renameVariable(pname, "_")
+                apply_template(rules, blk.at, blk)
+            }
+        }
+    }
+    if (!empty(call.arguments)) { normalize_chain_blocks(call.arguments[0]) }
+}
+
+[macro_function]
+def private normalize_single_source_arg_names(var node : ExpressionPtr) {
+    if (chain_has_multi_source(node)) return
+    normalize_chain_blocks(node)
+}
+
 [macro_function]
 def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; isTry : bool) : ExpressionPtr {
     var argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_sql/_try_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
+    normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
@@ -4399,6 +4470,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     var argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_each_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
+    normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // Reject terminals (iterator, not scalar/row/array). Order matters: aggregates set both Aggregate+One, so dispatch on proj first.

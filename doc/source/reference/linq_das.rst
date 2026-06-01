@@ -26,53 +26,103 @@ The macro lives in the lexer's inline reader-macro slot (``%name!``), so a
 query is an ordinary expression — it can be assigned, passed as an argument, or
 embedded in a larger expression.
 
-Clauses (v1)
-------------
+Clauses
+-------
 
-Version 1 supports ``from`` / ``where`` / ``select`` over an array source:
+A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] select <proj> [ iterator ]``:
 
-- ``from <var> in <source>`` — ``<source>`` is any expression evaluating to an
-  ``array<T>``. The element bind ``<var>`` names the per-row value.
-- ``where <predicate>`` — optional. Omitted when absent.
+- ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
+  value. With no type annotation, ``<source>`` is an ``array<T>``.
+- ``where <predicate>`` — optional. Omitted from the chain when absent.
 - ``select <projection>`` — required. ``select <var>`` (the identity
-  projection) returns the filtered elements unchanged; any other projection is
-  emitted as ``_select(...)``.
+  projection) returns the rows unchanged; any other projection emits
+  ``_select(...)``.
 
-The clauses may span multiple lines inside the ``%linq! … %%`` body.
+Clauses may span multiple lines inside the ``%linq! … %%`` body.
+
+Sources
+-------
+
+An **untyped** ``from c in <arr>`` is an array source. A **typed** range
+variable ``from c : Row in <src>`` selects a non-array source — the row type
+``Row`` is supplied on the range variable (C#-faithful ``from Type c in src``)
+because the source value alone does not carry it:
+
+.. code-block:: das
+
+    // array (untyped) — `each(arr)`
+    var a <- %linq! from c in cars where c.price > 100 select c.name %%
+
+    // decs — the `decs` keyword marker → `from_decs_template(type<CarComp>)`
+    var d <- %linq! from c : CarComp in decs where c.price > 100 select c.name %%
+
+    // SQL — a SqlRunner value → `select_from`, pushed down by `_sql`
+    var s <- %linq! from c : Car in db where c.price > 100 select c.name %%
+
+    // XML — an xml_node value → `from_xml_node`, fused by the XmlAdapter
+    var x <- %linq! from c : Car in doc.document_element where c.price > 100.0 select c.brand %%
+
+For value sources (SQL, XML, and later JSON) the reader emits
+``from_in(<src>, type<Row>)``; the ``from_in`` call macro dispatches on the
+source value's type to the concrete builder (so a new backend is a new
+``from_in`` branch, never a parser change). ``decs`` has no source value, so it
+is emitted directly as ``from_decs_template`` and never goes through
+``from_in``. The row type's required annotation depends on the source —
+``[decs_template]`` for decs, ``[sql_table]`` / ``[sql_view]`` for SQL, a plain
+struct for XML.
 
 Range variable
 --------------
 
 The range variable is spliced **verbatim** as the lambda parameter — the
 predicate becomes ``_where($(c) => …)`` and the projection ``_select($(c) =>
-…)``, keeping the C# variable name. The predicate and projection text is passed
-through unchanged (no token rewriting). Any identifier name works, and it may
-appear any number of times.
+…)``, keeping the C# variable name; the predicate and projection text is passed
+through unchanged. Any identifier name works.
 
 The ``_fold`` operator DSL accepts a named-variable ``$(x) => …`` block
-directly: ``_where`` / ``_select`` (and the rest of the placeholder operators)
-inject the element type onto the parameter and pass the block through. The
-``_`` placeholder form (``_where(_ < 5)``) remains available for hand-written
-chains.
+directly. For the SQL source, ``_sql`` resolves a single source against the
+placeholder ``_``; the macro normalizes the single-source lambda parameter to
+``_`` internally, so the C# variable name is still spliced verbatim at the
+surface.
 
-Result
-------
-
-The query materializes to an ``array<T>`` (via ``to_array()``), where ``T`` is
-the projection type — or the source element type for an identity ``select``.
-
-Current limitations (v1)
+Iterator vs array output
 ------------------------
 
-The following are not yet supported and produce a compile error:
+By default a query materializes to an ``array<T>`` (via ``to_array()``). A
+trailing ``iterator`` keyword yields a lazy ``iterator<T>`` instead (via
+``to_sequence()``), for feeding a ``for`` loop or another pipeline without a
+stored array:
 
-- **Typed sources** — ``from c : Car in db`` (the annotated range variable that
-  selects a non-array source such as SQL, decs, or JSON).
+.. code-block:: das
+
+    // array (default)
+    var names <- %linq! from c in cars where c.price > 100 select c.name %%
+
+    // iterator — consume lazily
+    for (nm in %linq! from c in cars where c.price > 100 select c.name iterator %%) {
+        print("{nm}\n")
+    }
+
+The ``iterator`` form is an iterator over the optimized (fused / pushed-down)
+result — it preserves each source's fusion, not lazy per-element streaming.
+``T`` is the projection type, or the source element type for an identity
+``select``.
+
+Comments in the body
+--------------------
+
+Line (``// …``) and block (``/* … */``) comments inside the query body are
+stripped before parsing (replaced with spaces, newlines preserved), so a
+keyword or the range variable mentioned inside a comment never confuses the
+clause splitter and never leaks into the spliced chain. String literals are not
+treated as comments.
+
+Current limitations
+-------------------
+
+The following are not yet supported:
+
+- **JSON** as a source (the planned 5th adapter).
 - **Additional clauses** — ``orderby`` / ``group by`` / ``join``.
 - **Multiple ``from``** (SelectMany), ``let`` bindings, and ``into``
-  continuations.
-
-v1 parses a single ``from``, so a query has one range variable. The operator
-DSL now accepts named-variable blocks (so multiple range variables are
-mechanically expressible), but the multi-variable query forms — joins and
-multiple ``from`` — are not yet parsed by the reader macro.
+  continuations — a query parses a single ``from`` (one range variable).
