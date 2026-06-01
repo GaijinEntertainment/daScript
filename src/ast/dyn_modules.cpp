@@ -11,6 +11,10 @@ das::FileAccessPtr get_file_access( char * pak );
 
 namespace das {
 
+// Defined in module_builtin_fio.cpp — re-attempts modules whose dlopen was
+// deferred during the folder scan (sibling-module dependency loaded out of order).
+void retry_pending_dynamic_modules();
+
 static constexpr const char *MODULE_SUFFIX = ".das_module";
 static constexpr const char *INIT_NAME = "initialize";
 
@@ -240,6 +244,12 @@ bool require_dynamic_modules(FileAccessPtr file_access,
     for (const auto &p : load_modules) {
         all_good &= (Result::OK == init_dyn_modules(file_access, p, tout));
     }
+    // Module .so's may carry DT_NEEDED on sibling-module .so's (e.g. node-editor ->
+    // dasModuleImgui) that live in modules/<dep>/ and aren't on RUNPATH. Directory
+    // enumeration order is unsorted on Linux (readdir), so a dependent can be visited
+    // before its dependency — its register_dynamic_module dlopen then fails and is
+    // deferred. Retry the deferred set in fixed-point passes so order stops mattering.
+    retry_pending_dynamic_modules();
     return all_good;
 }
 
