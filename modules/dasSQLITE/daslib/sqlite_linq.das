@@ -505,9 +505,7 @@ def private projection_alias_list(q : SqlQuery) : string {
 // nolint:STYLE015 Renders a join's `into`-projection alias as a fully-qualified SQL column fragment. Computed slots (e.g. LEFT JOIN's `is_some` probe at analyze_projection's named-tuple branch) carry a pre-rendered fragment in `q.joinSelectColSqlFragments[i]`; simple field projections rebuild it from `(alias, srcRootType, srcField)`. Returns `""` if the alias's source can't be resolved (defensive — should not happen for joins that v1 supports).
 [macro_function]
 def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : string {
-    if (!empty(q.joinSelectColSqlFragments[aliasIdx])) {
-        return q.joinSelectColSqlFragments[aliasIdx]
-    }
+    if (!empty(q.joinSelectColSqlFragments[aliasIdx])) return q.joinSelectColSqlFragments[aliasIdx]
     let alias = q.joinSelectColAliases[aliasIdx]
     let rootT = source_rootType_for_alias(q, alias)
     if (rootT == null) return ""
@@ -1606,6 +1604,22 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
     return 0
 }
 
+// `to_array` is a no-op terminal on a SQL chain — the result is already an array — so
+// `_fold(sqlchain |> to_array())` ≡ `_fold(sqlchain)`. Lets source-agnostic emitters (linq_das)
+// always append `|> to_array()`. Both the `_to_array` (sqlite_linq compat) qmatch form and the
+// builtin-name `to_array` are accepted; returns the peeled inner expr, or null on no match. Kept out
+// of `analyze_chain`'s body so its recursive stack frame stays minimal (this path runs at every
+// chain level and the `_create_view` nested-subquery error path is near the macro-context stack limit).
+[macro_function]
+def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
+    var inner : ExpressionPtr
+    if (qmatch(node, _to_array($e(inner))).matched) return inner
+    var taCall = match_call_in_module(node, "to_array", "sqlite_linq")
+    if (taCall == null) { taCall = match_call_in_module(node, "to_array", "builtin") }
+    if (taCall != null && taCall.arguments |> length == 1) return taCall.arguments[0]
+    return null
+}
+
 [macro_function]
 def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (node == null) {
@@ -1614,22 +1628,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // ---- Terminals: one per chain, must precede _select / _where peel; _to_array sets materializer flag.
     {
-        var inner : ExpressionPtr
-        var matched = qmatch(node, _to_array($e(inner))).matched
-        if (!matched) {
-            // `to_array` is a no-op terminal on a SQL chain — the result is already an array — so
-            // `_fold(sqlchain |> to_array())` ≡ `_fold(sqlchain)`. Lets source-agnostic emitters
-            // (linq_das) always append `|> to_array()`. The array-typed SQL chain resolves to the
-            // `sqlite_linq` overload above; the `builtin` form is matched too for safety. Mirrors the
-            // `first`/`_first` dual-match below.
-            var taCall = match_call_in_module(node, "to_array", "sqlite_linq")
-            if (taCall == null) { taCall = match_call_in_module(node, "to_array", "builtin") }
-            if (taCall != null && taCall.arguments |> length == 1) {
-                matched = true
-                inner = taCall.arguments[0]
-            }
-        }
-        if (matched) {
+        var inner = peel_to_array_terminal(node)
+        if (inner != null) {
             if (q.seenToArray || q.seenTerminal) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
                 return false
@@ -3069,9 +3069,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 // Post-join `_` refers to the joined-tuple row whose fields are projection aliases, not base-table columns. Consult the `into` projection registry; this single hook transitively enables alias references in _having / _order_by / computed-expression keys / try_translate_group_aggregate (all of which call pred_to_sql). On miss, reject loudly — `push_group_key` / `collect_order_keys` / `try_translate_group_aggregate` all reject the same way; falling through to base-table resolution here would leak the unqualified base-table namespace into post-join `_having` / computed-key predicates inconsistently with the bare-`_.Field` fast paths (Copilot R1 #2910).
                 if (argName == "_" && q.seenJoin && !empty(q.joinProjRecordNames)) {
                     let aliasIdx = find_projection_alias(q, fieldName)
-                    if (aliasIdx < 0) {
-                        return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
-                    }
+                    if (aliasIdx < 0) return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
                     let frag = render_projection_alias_sql(q, aliasIdx)
                     if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
                     return frag
