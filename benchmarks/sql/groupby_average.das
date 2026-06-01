@@ -12,7 +12,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let groups <- _sql(db |> select_from(type<Car>)
+            let groups <- _fold(db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               AvgPrice = _._1 |> select($(c : Car) => c.price) |> average())))

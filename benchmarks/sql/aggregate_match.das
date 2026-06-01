@@ -14,7 +14,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let total = _sql(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD)
+            let total = _fold(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD)
                                 |> _select(_.price) |> sum())
             b |> accept(total)
             if (total == 0) {

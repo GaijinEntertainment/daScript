@@ -15,7 +15,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let groups <- _sql(db |> select_from(type<Car>)
+            let groups <- _fold(db |> select_from(type<Car>)
                                   |> _group_by(_.price % 100)
                                   |> _select((K = _._0, S = _._1 |> select($(c : Car) => c.price) |> sum())))
             b |> accept(groups)

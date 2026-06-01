@@ -17,7 +17,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let c = _sql(db |> select_from(type<Car>) |> _join(db |> select_from(type<Dealer>),
+            let c = _fold(db |> select_from(type<Car>) |> _join(db |> select_from(type<Dealer>),
                                                                $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                                                $(c : Car, d : Dealer) => (CarName = c.name, DealerName = d.name))
                                                       |> count())

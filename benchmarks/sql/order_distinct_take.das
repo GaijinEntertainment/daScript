@@ -40,7 +40,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db_brands(db, n)
         b |> run("m1_sql/{n}", n) {
-            let rows <- _sql(db |> select_from(type<Brand>) |> _select((value = _.value)) |> distinct() |> _order_by(_.value) |> take(TAKE_N))
+            let rows <- _fold(db |> select_from(type<Brand>) |> _select((value = _.value)) |> distinct() |> _order_by(_.value) |> take(TAKE_N))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()

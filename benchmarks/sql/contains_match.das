@@ -14,7 +14,7 @@ def run_m1(b : B?; n : int) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
             // SQL doesn't have a direct CONTAINS for arbitrary values; use _any with _where.
-            let opt = _sql(db |> select_from(type<Car>) |> _where(_.id == TARGET_ID) |> _first_opt())
+            let opt = _fold(db |> select_from(type<Car>) |> _where(_.id == TARGET_ID) |> _first_opt())
             b |> accept(opt)
             if (!is_some(opt)) {
                 b->failNow()

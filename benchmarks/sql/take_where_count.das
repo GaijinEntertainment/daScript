@@ -19,7 +19,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let c = _sql(db |> select_from(type<Car>) |> take(TAKE_N) |> _where(_.price > THRESHOLD) |> count())
+            let c = _fold(db |> select_from(type<Car>) |> take(TAKE_N) |> _where(_.price > THRESHOLD) |> count())
             b |> accept(c)
             if (c == 0) {
                 b->failNow()

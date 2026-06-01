@@ -13,7 +13,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let row = _sql(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD)
+            let row = _fold(db |> select_from(type<Car>) |> _where(_.price > THRESHOLD)
                               |> _order_by_descending(_.id) |> _first())
             b |> accept(row)
             if (row.price == 0) {

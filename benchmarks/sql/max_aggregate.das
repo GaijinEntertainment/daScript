@@ -10,7 +10,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let m = _sql(db |> select_from(type<Car>) |> _select(_.price) |> max())
+            let m = _fold(db |> select_from(type<Car>) |> _select(_.price) |> max())
             b |> accept(m)
             if (m == 0) {
                 b->failNow()

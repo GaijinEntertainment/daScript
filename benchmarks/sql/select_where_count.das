@@ -17,7 +17,7 @@ def run_m1(b : B?; n : int) {
         b |> run("m1_sql/{n}", n) {
             // SQL form folds projection into the WHERE filter — the engine evaluates
             // ``price * 2 > T`` per row and counts matches.
-            let c = _sql(db |> select_from(type<Car>) |> _where(_.price * 2 > THRESHOLD) |> count())
+            let c = _fold(db |> select_from(type<Car>) |> _where(_.price * 2 > THRESHOLD) |> count())
             b |> accept(c)
             if (c == 0) {
                 b->failNow()

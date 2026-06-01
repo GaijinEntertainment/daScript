@@ -14,7 +14,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let rows <- _sql(db |> select_from(type<Car>) |> _select(_.brand) |> distinct())
+            let rows <- _fold(db |> select_from(type<Car>) |> _select(_.brand) |> distinct())
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()

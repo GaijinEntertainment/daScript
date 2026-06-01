@@ -11,7 +11,7 @@ def run_m1(b : B?; n : int) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, n)
         b |> run("m1_sql/{n}", n) {
-            let row = _sql(db |> select_from(type<Car>) |> _order_by(_.price) |> _first())
+            let row = _fold(db |> select_from(type<Car>) |> _order_by(_.price) |> _first())
             b |> accept(row)
             if (row.id == 0) {
                 b->failNow()
