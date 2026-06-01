@@ -3,6 +3,9 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
+// The SQL chain analyzer recurses deeply at macro time (analyze_chain <-> pred_to_sql <->
+// analyze_subquery); 4x the default 16KB macro-context stack for headroom (via getContextStackSize).
+options stack = 65536
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
 options _comment_hygiene = true
@@ -28,6 +31,15 @@ def _to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
     //! Passthrough terminal. In compat mode `select_from` has already materialized
     //! the array; this just yields it. Inside `_sql(...)` the macro recognizes
     //! the call and treats it as a no-op terminal.
+    return <- arr
+}
+
+[unused_argument(arr)]
+def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
+    //! Builtin-name `to_array` overload over an `array` (a SQL chain is already array-typed because
+    //! `select_from` returns an array). Makes `_fold(sqlchain |> to_array())` type-check and be a
+    //! no-op — so source-agnostic emitters (linq_das) can always append `|> to_array()`. `_sql`
+    //! intercepts it the same as `_to_array` (see analyze_chain); this body only runs in compat mode.
     return <- arr
 }
 
@@ -496,9 +508,7 @@ def private projection_alias_list(q : SqlQuery) : string {
 // nolint:STYLE015 Renders a join's `into`-projection alias as a fully-qualified SQL column fragment. Computed slots (e.g. LEFT JOIN's `is_some` probe at analyze_projection's named-tuple branch) carry a pre-rendered fragment in `q.joinSelectColSqlFragments[i]`; simple field projections rebuild it from `(alias, srcRootType, srcField)`. Returns `""` if the alias's source can't be resolved (defensive — should not happen for joins that v1 supports).
 [macro_function]
 def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : string {
-    if (!empty(q.joinSelectColSqlFragments[aliasIdx])) {
-        return q.joinSelectColSqlFragments[aliasIdx]
-    }
+    if (!empty(q.joinSelectColSqlFragments[aliasIdx])) return q.joinSelectColSqlFragments[aliasIdx]
     let alias = q.joinSelectColAliases[aliasIdx]
     let rootT = source_rootType_for_alias(q, alias)
     if (rootT == null) return ""
@@ -1597,6 +1607,19 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
     return 0
 }
 
+// `to_array` is a no-op terminal on a SQL chain (result is already an array) — lets source-agnostic
+// emitters (linq_das) always append `|> to_array()`. Kept OUT of analyze_chain's recursive body: it
+// runs per chain level and the `_create_view` nested-subquery error path sits near the macro stack limit.
+[macro_function]
+def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
+    var inner : ExpressionPtr
+    if (qmatch(node, _to_array($e(inner))).matched) return inner
+    var taCall = match_call_in_module(node, "to_array", "sqlite_linq")
+    if (taCall == null) { taCall = match_call_in_module(node, "to_array", "builtin") }
+    if (taCall != null && taCall.arguments |> length == 1) return taCall.arguments[0]
+    return null
+}
+
 [macro_function]
 def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (node == null) {
@@ -1605,8 +1628,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
     // ---- Terminals: one per chain, must precede _select / _where peel; _to_array sets materializer flag.
     {
-        var inner : ExpressionPtr
-        if (qmatch(node, _to_array($e(inner))).matched) {
+        var inner = peel_to_array_terminal(node)
+        if (inner != null) {
             if (q.seenToArray || q.seenTerminal) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
                 return false
@@ -3046,9 +3069,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 // Post-join `_` refers to the joined-tuple row whose fields are projection aliases, not base-table columns. Consult the `into` projection registry; this single hook transitively enables alias references in _having / _order_by / computed-expression keys / try_translate_group_aggregate (all of which call pred_to_sql). On miss, reject loudly — `push_group_key` / `collect_order_keys` / `try_translate_group_aggregate` all reject the same way; falling through to base-table resolution here would leak the unqualified base-table namespace into post-join `_having` / computed-key predicates inconsistently with the bare-`_.Field` fast paths (Copilot R1 #2910).
                 if (argName == "_" && q.seenJoin && !empty(q.joinProjRecordNames)) {
                     let aliasIdx = find_projection_alias(q, fieldName)
-                    if (aliasIdx < 0) {
-                        return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
-                    }
+                    if (aliasIdx < 0) return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
                     let frag = render_projection_alias_sql(q, aliasIdx)
                     if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
                     return frag
@@ -4328,11 +4349,56 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     return qmacro(_::_sql_read_row(_sql_stmt, type<$t(rootType)>))
 }
 
+// nolint:STYLE015 Single-source row-var normalization: `_sql` resolves one source against placeholder `_`,
+// but linq_das splices the C# range var verbatim (`$(c) => c.field`) — rename a single-param op lambda's
+// bound var to `_`. Gated on PURE single-source; join/set-op key lambdas bind distinct sources, left alone.
+[macro_function]
+def private chain_has_multi_source(var node : ExpressionPtr) : bool {
+    var e = node
+    while (e != null && e is ExprCall) {
+        let nm = get_call_short_name(e as ExprCall)
+        if (nm == "join" || nm == "left_join" || nm == "right_join" || nm == "full_outer_join"
+                || nm == "cross_join" || nm == "group_join"
+                || nm == "union" || nm == "intersect" || nm == "except" || nm == "concat") return true
+        var c = e as ExprCall
+        if (empty(c.arguments)) break
+        e = c.arguments[0]
+    }
+    return false
+}
+
+[macro_function]
+def private normalize_chain_blocks(var node : ExpressionPtr) {
+    if (node == null || !(node is ExprCall)) return
+    var call = node as ExprCall
+    for (a in call.arguments) {
+        if (a is ExprMakeBlock) {
+            var mblk = a as ExprMakeBlock
+            var blk = mblk._block as ExprBlock
+            if (blk != null && blk.arguments |> length == 1 && blk.arguments[0].name != "_") {
+                let pname = string(blk.arguments[0].name)
+                blk.arguments[0].name := "_"
+                var rules : Template
+                rules |> renameVariable(pname, "_")
+                apply_template(rules, blk.at, blk)
+            }
+        }
+    }
+    if (!empty(call.arguments)) { normalize_chain_blocks(call.arguments[0]) }
+}
+
+[macro_function]
+def private normalize_single_source_arg_names(var node : ExpressionPtr) {
+    if (chain_has_multi_source(node)) return
+    normalize_chain_blocks(node)
+}
+
 [macro_function]
 def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; isTry : bool) : ExpressionPtr {
     var argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_sql/_try_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
+    normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
@@ -4399,6 +4465,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     var argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_each_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
+    normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
     // Reject terminals (iterator, not scalar/row/array). Order matters: aggregates set both Aggregate+One, so dispatch on proj first.
