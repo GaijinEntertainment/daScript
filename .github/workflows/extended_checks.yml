@@ -56,7 +56,7 @@ jobs:
           - target: windows
             runner: windows-latest-fat
             build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+            cmake_generator: Ninja
             architecture_string: x64
 
         exclude:
@@ -74,11 +74,28 @@ jobs:
         # Full history so the lint step can `git diff` against the PR base branch.
         fetch-depth: 0
 
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Real-time Defender scans every .obj/.exe/.dll the build writes and every
+      # process + DLL load at test time; excluding the workspace cuts Windows CI
+      # wall-time. continue-on-error: a managed-Defender runner must not fail CI.
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionProcess "daslang.exe"
+        Add-MpPreference -ExclusionProcess "daslang_static.exe"
+
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
     - if: runner.os == 'Windows'
       uses: ilammy/setup-nasm@v1
+
+    - if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
 
     - name: "Install: Required Dev Packages"
       run: |
@@ -126,9 +143,12 @@ jobs:
         ACTIVE_MODULES=$(grep -v "^#" ci/release_modules.txt | cut -d':' -f2 | sed 's|^|-D|' | xargs)
         case "${{ matrix.target }}" in
           windows)
-            echo "BIN=./bin/Release" >> $GITHUB_ENV
+            # Ninja single-config: binaries land in ./bin (not ./bin/Release);
+            # cl.exe is on PATH via the msvc-dev-cmd step; OpenSSL comes from
+            # vcpkg so dasHV skips its perl+nmake source build.
+            echo "BIN=./bin" >> $GITHUB_ENV
             export PATH="/c/Strawberry/perl/bin:$PATH"
-            cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} \
+            cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
             cmake --build ./build --config Release --target daslang das-fmt daslang_static --parallel
             ;;
