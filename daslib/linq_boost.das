@@ -41,7 +41,21 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         macro_verify(!arg0type.firstType.isAutoOrAlias, prog, call.at, "iterable type cannot be auto or alias")
         // replacing function
         var iterType = clone_iterator_type(arg0type)
-        var res = qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
+        var res : ExpressionPtr
+        if (call.arguments[1] is ExprMakeBlock) {
+            // named-variable form: the argument is already a `$(x) => …` block (e.g. emitted by linq_das).
+            // Inject the element type onto the user's parameter and pass the block through, instead of
+            // wrapping a bare expression in `$(_ : iterType) => …`. The C# range variable thus survives verbatim.
+            var blk = call.arguments[1] as ExprMakeBlock
+            var inner = blk._block as ExprBlock
+            macro_verify(length(inner.arguments) == 1, prog, call.at, "{predName}: block argument must take exactly one parameter")
+            if (inner.arguments[0]._type == null || inner.arguments[0]._type.isAutoOrAlias) {
+                inner.arguments[0]._type = clone_type(iterType)
+            }
+            res = qmacro($c(predName)($e(arg0), $e(call.arguments[1])))
+        } else {
+            res = qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
+        }
         // allow inner `_` to shadow an outer `_` when chains nest
         // (e.g. `_where(_.x._in(arr |> _select(_.y)))`)
         (((res as ExprCall).arguments[1] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
@@ -304,7 +318,20 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
         macro_verify(!call.arguments[0]._type.firstType.isAutoOrAlias, prog, call.at, "iterator or array type cannot be auto or alias")
         // replacing function
         var iterType = clone_iterator_type(call.arguments[0]._type)
-        var res = qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
+        var res : ExpressionPtr
+        if (call.arguments[2] is ExprMakeBlock) {
+            // named-variable form: the argument is already a `$(x) => …` block — inject the element type
+            // onto the user's parameter and pass it through (see AstCallMacro_LinqPred2 for rationale).
+            var blk = call.arguments[2] as ExprMakeBlock
+            var inner = blk._block as ExprBlock
+            macro_verify(length(inner.arguments) == 1, prog, call.at, "{predName}: block argument must take exactly one parameter")
+            if (inner.arguments[0]._type == null || inner.arguments[0]._type.isAutoOrAlias) {
+                inner.arguments[0]._type = clone_type(iterType)
+            }
+            res = qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $e(call.arguments[2])))
+        } else {
+            res = qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
+        }
         // allow inner `_` to shadow an outer `_` when chains nest
         (((res as ExprCall).arguments[2] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
         res.force_at(call.at)

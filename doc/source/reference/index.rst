@@ -28,4 +28,5 @@ THE SOFTWARE.
    utils.rst
    tutorials.rst
    linq_fold_patterns.rst
+   linq_das.rst
    strudel_vs_strudel_cc.rst

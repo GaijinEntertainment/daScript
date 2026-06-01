@@ -285,6 +285,9 @@ FILE(GLOB AOT_READER_MACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPEND
 # Anchor on '/' so this does not also drop test_inline_reader.das (which ends in inline_reader.das).
 list(FILTER AOT_READER_MACRO_FILES EXCLUDE REGEX "/inline_reader\\.das$")
 
+# AOT for linq_das test files (the %linq! reader macro lives in daslib/linq_das, required transitively)
+FILE(GLOB AOT_LINQ_DAS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/linq_das/*.das")
+
 # AOT for macro_call test files
 FILE(GLOB AOT_MACRO_CALL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/macro_call/*.das")
 # Exclude helpers (files prefixed with `_`); they are required transitively
@@ -648,6 +651,10 @@ add_custom_target(test_aot_reader_macro)
 SET(READER_MACRO_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_READER_MACRO_FILES}" READER_MACRO_AOT_GENERATED_SRC test_aot_reader_macro daslang)
 
+add_custom_target(test_aot_linq_das)
+SET(LINQ_DAS_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_LINQ_DAS_FILES}" LINQ_DAS_AOT_GENERATED_SRC test_aot_linq_das daslang)
+
 add_custom_target(test_aot_safe_addr)
 SET(SAFE_ADDR_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_SAFE_ADDR_FILES}" SAFE_ADDR_AOT_GENERATED_SRC test_aot_safe_addr daslang)
@@ -776,6 +783,7 @@ SOURCE_GROUP_FILES("aot generated" MODULE_TESTS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" OPTION_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" REGEX_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" READER_MACRO_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" LINQ_DAS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SAFE_ADDR_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DELEGATE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SOA_AOT_GENERATED_SRC)
@@ -850,6 +858,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${OPTION_AOT_GENERATED_SRC}
     ${REGEX_AOT_GENERATED_SRC}
     ${READER_MACRO_AOT_GENERATED_SRC}
+    ${LINQ_DAS_AOT_GENERATED_SRC}
     ${SAFE_ADDR_AOT_GENERATED_SRC}
     ${DELEGATE_AOT_GENERATED_SRC}
     ${SOA_AOT_GENERATED_SRC}
@@ -902,7 +911,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
     test_aot_option
-    test_aot_regex test_aot_reader_macro
+    test_aot_regex test_aot_reader_macro test_aot_linq_das
     test_aot_delegate test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
     test_aot_lint test_aot_promote test_aot_rtti
     test_aot_template test_aot_type_traits test_aot_uri
