@@ -278,6 +278,55 @@ Visit vs Suffix
 +------------------+--------------------------+---------------------------+
 
 
+Inline suffix (expression level)
+================================
+
+The ``suffix`` pattern above injects text at **module level** — ``%basic~ … %%`` generates a
+top-level function.  The same ``suffix`` hook can also rewrite **in expression position** when
+invoked with a ``!`` separator instead of ``~``.  ``InlineSumReader`` (``[reader_macro(name=sum)]``)
+demonstrates this — ``%sum! a, b, c %%`` rewrites to ``( a + b + c )``:
+
+.. code-block:: das
+
+    [reader_macro(name=sum)]
+    class InlineSumReader : AstReaderMacro {
+        def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool {
+            append(expr.sequence, ch)
+            if ( ends_with(expr.sequence, "%%") ) {
+                resize(expr.sequence, length(expr.sequence) - 2)
+                return false
+            } else {
+                return true
+            }
+        }
+        def override suffix ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; info:LineInfo;
+                              var outLine:int&; var outFile:FileInfo?& ) : string {
+            return build_string() $(var w) {
+                w |> write("( ")
+                var first = true
+                for ( term in split(string(expr.sequence), ",") ) {
+                    if ( !first ) { w |> write(" + ") }
+                    w |> write(strip(term))
+                    first = false
+                }
+                w |> write(" )")
+            }
+        }
+    }
+
+Used inline, the macro is itself an expression:
+
+.. code-block:: das
+
+    let total = %sum! 1, 2, 3, 4 %%   // ( 1 + 2 + 3 + 4 ) == 10
+    let scaled = %sum! 10, 20 %% * 2  // ( 10 + 20 ) * 2 == 60
+
+The collected body is handed to ``suffix`` and the returned source is spliced back exactly where
+``%sum! … %%`` appears.  The rewrite must be a single, complete (parenthesized) expression so the
+surrounding code keeps parsing.  The ``~`` form cannot do this — in expression position its
+discarded ``ExprReader`` node would strand the host statement; the ``!`` form is the inline variant.
+
+
 Real-world usage
 ================
 

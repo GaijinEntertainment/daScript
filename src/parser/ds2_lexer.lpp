@@ -28,6 +28,7 @@
 
     void das2_yyfatalerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
     LineInfo tokAt ( yyscan_t scanner, const struct DAS2_YYLTYPE & li );
+    void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info );
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = \
@@ -248,6 +249,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             yyextra->das_already_include.insert(incFileName);
             yyextra->g_FileAccessStack.push_back(info);
             yyextra->das_line_no.push_back(yylineno);
+            yyextra->das_column_no.push_back(yyextra->das_yycolumn);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
             const char * src = nullptr;
@@ -710,6 +712,54 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\-\="                              return SUBEQU;
 <normal>"\/\="                              return DIVEQU;
 <normal>"\*\="                              return MULEQU;
+<normal>"%"[_[:alpha:]][_[:alnum:]\`]*"!"([^%]|"%"[^%])*"%%" {
+    // inline (expression-level) reader macro:  %name! <body> %%
+    // The whole construct is captured here (body = up to the first %%); the body is handed to the
+    // macro's accept(), and suffix()'s rewrite is pushed back into the lexer (das2_accept_sequence)
+    // so its tokens flow into the parser exactly where %name! appeared. Reuses the same accept/suffix
+    // hooks as the %name~ path; no parser production, and no ExprReader node survives into the AST.
+    // YY_USER_ACTION assumes single-line tokens; a multi-line body needs its line/column corrected so
+    // the macro's own location and every following diagnostic stay aligned (das_yycolumn is then saved
+    // by das2_accept_sequence and restored when the rewrite buffer pops).
+    int macroNlines = 0; const char * macroLastNl = nullptr;
+    for ( int i = 0; i < yyleng; ++i ) if ( yytext[i] == '\n' ) { ++macroNlines; macroLastNl = yytext + i; }
+    if ( macroNlines ) {
+        yylloc_param->first_line = yylineno - macroNlines;                      // opening line of %name!
+        yylloc_param->last_column = int(yytext + yyleng - (macroLastNl + 1));   // column past the closing %%
+        YYCOLUMN(yyextra->das_yycolumn = yylloc_param->last_column, "inline reader macro newline");
+    }
+    const char * bang = strchr(yytext + 1, '!');
+    string macroName(yytext + 1, size_t(bang - (yytext + 1)));
+    auto macros = yyextra->g_Program->getReaderMacro(macroName);
+    if ( macros.size()==0 ) {
+        das2_yyfatalerror(yylloc_param,yyscanner,"reader macro " + macroName + " not found", CompilationError::lookup_macro);
+        return LEXER_ERROR;
+    } else if ( macros.size()>1 ) {
+        string options;
+        for ( auto & x : macros ) options += "\t" + x->module->name + "::" + x->name + "\n";
+        das2_yyfatalerror(yylloc_param,yyscanner,"too many options for the reader macro " + macroName + "\n" + options, CompilationError::ambiguous_macro);
+        return LEXER_ERROR;
+    }
+    auto at = tokAt(yyscanner,*yylloc_param);
+    yyextra->g_ReaderMacro = macros.back();
+    // ExprReader is a gc_node; it is used only to drive accept()/suffix() and is never linked into the
+    // AST, so it is reclaimed by gc sweep — like the %name~ top-level path (ds2_parser.ypp:601). No delete.
+    yyextra->g_ReaderExpr = new ExprReader(at, yyextra->g_ReaderMacro);
+    for ( const char * c = bang + 1; *c; ++c ) {
+        if ( !yyextra->g_ReaderMacro->accept(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, int((unsigned char)*c), at) ) break;
+    }
+    int thisLine = 0;
+    FileInfo * info = nullptr;
+    char * seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, info, at);
+    yyextra->g_ReaderMacro = nullptr;
+    yyextra->g_ReaderExpr = nullptr;
+    if ( !seqt ) {
+        das2_yyfatalerror(yylloc_param,yyscanner,"inline reader macro " + macroName + " must produce a rewrite (suffix)", CompilationError::invalid_macro);
+        return LEXER_ERROR;
+    }
+    das2_accept_sequence(yyscanner, seqt, strlen(seqt), thisLine, info);
+    // no return: keep scanning, now from the pushed rewrite buffer
+}
 <normal>"\%\="                              return MODEQU;
 <normal>"\&\&\="                            return ANDANDEQU;
 <normal>"\|\|\="                            return OROREQU;
@@ -797,6 +847,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         yyextra->g_FileAccessStack.pop_back();
         yylineno = yyextra->das_line_no.back();
         yyextra->das_line_no.pop_back();
+        YYCOLUMN(yyextra->das_yycolumn = yyextra->das_column_no.back(), "buffer pop");
+        yyextra->das_column_no.pop_back();
     }
 }
 <eof_done><<EOF>>       { YYCOLUMN(yyextra->das_yycolumn = 0,"EOF"); return 0; }
@@ -814,6 +866,7 @@ void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen,
     auto infoPtr = info ? info : yyextra->g_FileAccessStack.back();
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
+    yyextra->das_column_no.push_back(yyextra->das_yycolumn);
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
     yy_scan_bytes(seq, (int)seqLen, yyscanner);
     yylineno = lineNo;
@@ -871,6 +924,7 @@ void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     das2_yydebug = 0;
 #endif
     yyextra->das_line_no.clear();
+    yyextra->das_column_no.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
     yyextra->das_indent_char = DAS_EMIT_SEMICOLON;
     yyextra->das_emit_semi_before_curly = false;
