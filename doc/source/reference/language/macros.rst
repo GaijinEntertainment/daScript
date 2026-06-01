@@ -404,6 +404,20 @@ and the suffix text is the only output.  ``SpoofInstanceReader`` in ``daslib/spo
 The ``outLine`` and ``outFile`` parameters allow remapping line information for error reporting in the
 injected code.
 
+Reader macros are normally invoked with the ``~`` separator (``%name~ ... %%``). There is a second,
+**inline** form that uses a ``!`` separator (``%name! ... %%``) and runs ``suffix`` **in expression
+position**:
+
+.. code-block:: das
+
+    var total = %sum! 1, 2, 3 %%   // rewrites to ( 1 + 2 + 3 ), re-parsed in place
+
+With ``%name!`` the collected body is handed to ``suffix`` and the returned source is spliced back
+exactly where the macro appears, so the macro is itself an expression. The rewrite must be a single,
+complete (parenthesized) expression. This is the basis for source-to-source DSLs embedded in
+expressions. The ``~`` form's ``suffix`` only works at module level — used inline its discarded
+``ExprReader`` node would strand the host statement, which is why the ``!`` form exists.
+
 .. seealso::
 
    :ref:`Tutorial: Reader Macros <tutorial_macro_reader_macro>` — step-by-step example

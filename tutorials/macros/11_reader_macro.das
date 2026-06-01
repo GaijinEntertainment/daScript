@@ -14,16 +14,20 @@ options gen2
 //               reader macros (the "visit" pattern).
 //   suffix()  — called immediately after accept() during parsing;
 //               returns daScript source text that the parser re-parses.
-//               Used for MODULE-LEVEL reader macros (the "suffix" pattern).
+//               %name~ uses it at MODULE LEVEL; %name! uses it INLINE,
+//               in expression position (the "inline suffix" form).
 //
 // The companion module (reader_macro_mod) defines:
-//   CsvReader   — [reader_macro(name=csv)]   visit pattern
-//   BasicReader — [reader_macro(name=basic)]  suffix pattern
+//   CsvReader       — [reader_macro(name=csv)]   visit pattern
+//   BasicReader     — [reader_macro(name=basic)] suffix pattern (module level)
+//   InlineSumReader — [reader_macro(name=sum)]   suffix pattern (inline)
 //
 // Section 1 shows the visit pattern: %csv~ embeds a compile-time
 //   string array from comma-separated text.
 // Section 2 shows the suffix pattern: %basic~ transpiles a toy BASIC
 //   program into a daScript function at parse time.
+// Section 3 shows the inline suffix form: %sum! a, b, c %% rewrites to
+//   ( a + b + c ) directly in expression position.
 
 require reader_macro_mod
 
@@ -64,11 +68,26 @@ DEF basic_hello
 30 PRINT x
 %%
 
+// ---- Section 3: inline sum reader (suffix pattern, expression level) --------
+// %sum! a, b, c %% rewrites to ( a + b + c ) and is re-parsed in place, so it is
+// itself an expression — usable in assignments, arguments, and larger expressions.
+
+def section3() {
+    print("--- Section 3: inline sum reader (suffix, expression level) ---\n")
+    let total = %sum! 1, 2, 3, 4 %%
+    print("  sum of 1,2,3,4 = {total}\n")
+    // used directly inside a larger expression
+    let scaled = %sum! 10, 20 %% * 2
+    print("  (10+20) * 2 = {scaled}\n")
+}
+
 [export]
 def main() {
     section1()
     print("\n--- Section 2: BASIC transpiler (suffix pattern) ---\n")
     basic_hello()
+    print("\n")
+    section3()
 }
 
 // output:
@@ -85,3 +104,7 @@ def main() {
 // --- Section 2: BASIC transpiler (suffix pattern) ---
 // Hello from BASIC
 // 42
+//
+// --- Section 3: inline sum reader (suffix, expression level) ---
+//   sum of 1,2,3,4 = 10
+//   (10+20) * 2 = 60
