@@ -89,16 +89,16 @@ Iterator vs array output
 ------------------------
 
 By default a query materializes to an ``array<T>`` (via ``to_array()``). A
-trailing ``iterator`` keyword yields a lazy ``iterator<T>`` instead (via
-``to_sequence()``), for feeding a ``for`` loop or another pipeline without a
-stored array:
+trailing ``iterator`` keyword yields an ``iterator<T>`` instead (via
+``to_sequence()``), for feeding a ``for`` loop or another pipeline without
+binding a stored array (the chain still materializes internally — see below):
 
 .. code-block:: das
 
     // array (default)
     var names <- %linq! from c in cars where c.price > 100 select c.name %%
 
-    // iterator — consume lazily
+    // iterator — consume without binding a stored array
     for (nm in %linq! from c in cars where c.price > 100 select c.name iterator %%) {
         print("{nm}\n")
     }

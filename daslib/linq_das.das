@@ -18,8 +18,8 @@ require daslib/linq_boost public
 // An untyped `from c in <arr>` is an array source. A typed `from c : Row in <src>` selects a non-array
 // source: `decs` (a keyword marker → `from_decs_template`), or any value whose type the `from_in` call
 // macro dispatches (a SQL runner → `select_from`, an XML node → `from_xml_node`). The range variable is
-// spliced verbatim as the block parameter. A trailing `iterator` keyword yields a lazy `iterator<T>`
-// (via `to_sequence()`) instead of the default materialized `array<T>`.
+// spliced verbatim as the block parameter. A trailing `iterator` keyword yields an `iterator<T>` over
+// the materialized (fused) result (via `to_sequence()`) instead of the default `array<T>` — not lazy streaming.
 
 def private is_ident_byte(c : int) : bool {
     return is_alnum(c) || c == '_'
@@ -117,7 +117,7 @@ def private read_ident(q : string; from : int) : tuple<string; int> {
 }
 
 // If the projection ends with a standalone `iterator` keyword (preceded by whitespace, so a member
-// access like `c.iterator` is not matched), strip it and request lazy iterator output.
+// access like `c.iterator` is not matched), strip it and request iterator output.
 def private strip_trailing_iterator(proj : string) : tuple<string; bool> {
     let p = strip(proj)
     let kw = "iterator"
@@ -260,8 +260,8 @@ class FromInMacro : AstCallMacro {
 class LinqDasReader : AstReaderMacro {
     //! C#-style LINQ query reader macro. ``%linq! from c [: Row] in src [where <pred>] select <proj> [iterator] %%``
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
-    //! ``from c : Row in src`` over decs / SQL / XML. A trailing ``iterator`` keyword yields a lazy
-    //! ``iterator<T>`` instead of a materialized ``array<T>``. Single range variable, spliced verbatim.
+    //! ``from c : Row in src`` over decs / SQL / XML. A trailing ``iterator`` keyword yields an
+    //! ``iterator<T>`` over the materialized result instead of the ``array<T>``. Single range variable, spliced verbatim.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         append(expr.sequence, ch)
         if (ends_with(expr.sequence, "%%")) {
