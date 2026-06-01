@@ -13,6 +13,7 @@
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/string_writer.h"   // LOG / LogLevel — env-gated module-load trace
 
 #include <sstream>
 #include <chrono>
@@ -1320,6 +1321,22 @@ namespace das {
 
     static vector<tuple<string,string,string>> g_registered_dynamic_modules; // path, cpp_class_name, daslang_name
     static vector<tuple<string,string,string>> g_registered_native_paths;
+    // Modules whose dlopen failed in Quiet mode — typically a sibling-module
+    // DT_NEEDED dependency (e.g. node-editor -> dasModuleImgui) not yet loaded.
+    // retry_pending_dynamic_modules() re-attempts these in fixed-point passes
+    // after the folder scan, so module enumeration order stops mattering.
+    static vector<tuple<string,string>> g_pending_dynamic_modules; // path, cpp_class_name
+
+    // Env-gated per-attempt module-load trace (default off). Set
+    // DAS_TRACE_MODULE_LOAD=1 to surface each dlopen — turns a swallowed
+    // 'missing prerequisite' into a visible "FAILED — <dlerror>" line.
+    static bool trace_module_load() {
+        static const bool on = []{
+            const char * e = getenv("DAS_TRACE_MODULE_LOAD");
+            return e && e[0] && e[0] != '0';
+        }();
+        return on;
+    }
 
     // Returns DLL handle.
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
@@ -1333,15 +1350,26 @@ namespace das {
         }
 #endif
         auto lib = loadDynamicLibrary(actualPath.c_str());
+        // Capture the dlopen error once, before anything else can clear it.
+        string dlErr = lib ? string() : getDynamicLibraryError();
+        if ( trace_module_load() ) {
+            LOG(LogLevel::info) << "[module] " << (mod_name ? mod_name : "(null)") << " <- " << actualPath
+                << " : " << (lib ? "loaded" : ("FAILED — " + dlErr)) << "\n";
+        }
         if (!lib) {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
-                auto dlErr = getDynamicLibraryError();
                 auto err_msg = "dynamic module `" + string(mod_name) + "` — failed to load: " + actualPath
                     + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
                 context->to_err(at, err_msg.c_str());
                 if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                     context->throw_error(err_msg.c_str());
                 }
+            } else {
+                // Quiet: a sibling-module DT_NEEDED dependency may not be loaded yet
+                // (module .so's live in modules/<dep>/, not on RUNPATH, so a dependent
+                // enumerated before its dependency fails dlopen). Defer; the post-scan
+                // retry_pending_dynamic_modules() re-attempts once deps are loaded.
+                g_pending_dynamic_modules.emplace_back(string(path), string(mod_name));
             }
             return nullptr;
         }
@@ -1349,8 +1377,8 @@ namespace das {
         auto rawFn = getFunctionAddress(lib, regName.c_str());
         if (!rawFn) {
             auto err_msg = "dynamic module `" + string(mod_name) + "` — function `" + regName + "` not found in `" + path + "`\n";
-            context->to_err(at, err_msg.c_str());
-            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+            if (context) context->to_err(at, err_msg.c_str());
+            if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                 context->throw_error(err_msg.c_str());
             }
             closeLibrary(lib);
@@ -1360,8 +1388,8 @@ namespace das {
         auto mod = fn(DAS_BUILD_ID);
         if (!mod) {
             auto err_msg = "dynamic module `" + string(mod_name) + "` — build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
-            context->to_err(at, err_msg.c_str());
-            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+            if (context) context->to_err(at, err_msg.c_str());
+            if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                 context->throw_error(err_msg.c_str());
             }
             closeLibrary(lib);
@@ -1373,6 +1401,28 @@ namespace das {
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
         return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Quiet), context, at);
+    }
+
+    // Re-attempt modules whose dlopen was deferred (Quiet failure during the
+    // module-folder scan — usually a sibling-module DT_NEEDED dep not yet loaded
+    // because directory enumeration visited the dependent before its dependency).
+    // Fixed-point: each pass retries every deferred module; one whose deps loaded
+    // in a prior pass now succeeds and may unblock others. Keep iterating while a
+    // pass loads at least one; stop when a pass makes no progress (remaining
+    // entries have genuinely-missing .so files — left silent, matching Quiet).
+    void retry_pending_dynamic_modules() {
+        bool progress = true;
+        while (progress && !g_pending_dynamic_modules.empty()) {
+            progress = false;
+            vector<tuple<string,string>> pending;
+            pending.swap(g_pending_dynamic_modules); // drain; failures re-push into the now-empty global
+            for (auto & pr : pending) {
+                if (register_dynamic_module(get<0>(pr).c_str(), get<1>(pr).c_str(),
+                        static_cast<int>(RegisterOnError::Quiet), nullptr, nullptr) != nullptr) {
+                    progress = true;
+                }
+            }
+        }
     }
 
     void register_native_path(const char *mod_name, const char *src_path, const char *dst_path, Context * /*context*/, LineInfoArg * /*at*/ ) {
