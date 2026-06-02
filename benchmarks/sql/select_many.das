@@ -20,7 +20,10 @@ let SM_N = 100000
 def run_m3f(b : B?; n : int) {
     let orders <- fixture_orders_nested(n)
     b |> run("m3f_array_fold/{n}", n) {
-        let rows <- select_many(orders, $(o : OrderWithLines) => o.lines |> to_sequence(), $(l : Line) => l.sku)
+        // collection-selector yields a zero-copy view of o.lines via `each` — NOT `to_sequence`, whose
+        // const-array overload clones the array per order (linq.das `var b := a`); that clone is not part of
+        // select_many and would skew the baseline. This is also the shape the correlated reader should emit.
+        let rows <- select_many(orders, $(o : OrderWithLines) => unsafe(each(o.lines)), $(l : Line) => l.sku)
         let c = length(rows)
         b |> accept(c)
         if (c != n * LINES_PER_ORDER) {

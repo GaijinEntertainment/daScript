@@ -116,7 +116,7 @@ DOM-parse + per-element attribute reads + `string` clones the in-memory lanes ne
 | `reverse_take` | 0.1 | 0.0 | 9.2 | 89.7 |
 | `reverse_take_select` | 0.0 | 0.0 | 9.2 | 89.8 |
 | `select_count` | 0.1 | 0.0 | 2.2 | 68.7 |
-| `select_many` | — | 532.5 | — | — |
+| `select_many` | — | 156.0 | — | — |
 | `select_where` | 196.6 | 11.2 | 19.6 | 224.5 |
 | `select_where_count` | 32.9 | 5.2 | 7.5 | 61.9 |
 | `select_where_order_take` | 36.9 | 12.6 | 15.1 | 70.3 |
@@ -196,7 +196,7 @@ DOM-parse + per-element attribute reads + `string` clones the in-memory lanes ne
 | `reverse_take` | 0.0 | 0.0 | 1.1 | 69.3 |
 | `reverse_take_select` | 0.0 | 0.0 | 1.1 | 69.8 |
 | `select_count` | 0.1 | 0.0 | 0.0 | 64.4 |
-| `select_many` | — | 146.5 | — | — |
+| `select_many` | — | 51.6 | — | — |
 | `select_where` | 108.3 | 4.1 | 5.6 | 97.3 |
 | `select_where_count` | 32.7 | 0.3 | 0.6 | 16.4 |
 | `select_where_order_take` | 36.7 | 0.7 | 1.4 | 17.4 |
