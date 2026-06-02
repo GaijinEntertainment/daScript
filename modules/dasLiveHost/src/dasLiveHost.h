@@ -12,11 +12,16 @@ namespace das {
         bool exit_requested = false;
         bool reload_requested = false;
         bool full_reload = false;
+        bool reset_requested = false;   // re-simulate the compiled program, no recompile (clean-slate)
 
         // Flags (set by host, read by script)
         bool live_mode = false;
         bool is_reload = false;
         bool paused = false;
+
+        // Bumped by host after every completed reload/reset. Clients poll /status and
+        // wait for this to change for a deterministic "reload/reset done" signal.
+        uint64_t reload_generation = 0;
 
         // Timing (set by host, or computed internally)
         float dt = 0.0f;
@@ -57,6 +62,8 @@ namespace das {
     void live_request_exit();
     bool live_exit_requested();
     void live_request_reload(bool full);
+    void live_request_reset();
+    uint64_t live_get_reload_generation();
     bool live_is_reload();
     float live_get_dt();
     float live_get_uptime();
