@@ -847,7 +847,6 @@ src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
-src/misc/lexer_alloc_track.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -1111,6 +1110,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_unused.cpp
     src/ast/ast_lint.cpp
     src/ast/dyn_modules.cpp
+    src/misc/lexer_alloc_track.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp
     src/ast/ast_infer_type.cpp

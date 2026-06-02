@@ -308,7 +308,7 @@ namespace das {
 
     DAS_API AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
 
-    class PassVisitor : public Visitor {
+    class DAS_API PassVisitor : public Visitor {
     public:
         explicit PassVisitor(int32_t round) : round(round) {}
         using Visitor::preVisit;
@@ -337,7 +337,7 @@ namespace das {
         Function *  func = nullptr;
     };
 
-    class FoldingVisitor : public PassVisitor {
+    class DAS_API FoldingVisitor : public PassVisitor {
     public:
         FoldingVisitor(const ProgramPtr & prog, int32_t round = 0)
             : PassVisitor(round), ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
