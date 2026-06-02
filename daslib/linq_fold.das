@@ -74,7 +74,12 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
             var newCall = qmacro($c(callName)($e(topValue)))
             let numArgs = cll._0.arguments |> length
             for (i in 1..numArgs) {
-                (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
+                var argClone = clone_expression(cll._0.arguments[i])
+                // A bare `each(arr)` srcB arg (join/zip/set-op) lands as a call argument, not a for-source — mark safe or it trips error[31013].
+                if (match_call_in_module(argClone, "each", "builtin") != null) {
+                    argClone.genFlags.alwaysSafe = true
+                }
+                (newCall as ExprCall).arguments |> emplace_new <| argClone
             }
             if (inplace) {
                 blk.list |> emplace(newCall)
