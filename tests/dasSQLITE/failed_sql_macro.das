@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:22
+expect 30341, 30928:2, 50503:24
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -46,10 +46,12 @@ def main() {
     // (bad5 removed: a computed scalar `_select(_.Price * 2)` now lowers to `SELECT ("Price") * ?`
     //  via pred_to_sql + push_computed_proj_slot. Coverage moved to test_99_computed_select_subquery.das.)
 
-    // (bad6 removed: pred_to_sql no longer has an "unsupported expression"
-    //  catch-all — unrecognized AST shapes fall through to a `?`-bind, and
-    //  the typer produces the user-facing error if the bind type isn't
-    //  supported by the `sql_bind` adapter rail.)
+    // 6. Expressions over a column that pred_to_sql can't translate reject cleanly (rather than binding
+    //    `?` and failing at bind time with `can't locate variable '_'`): bitwise XOR has no SQLite
+    //    operator, and an unhandled function/cast over a column is unsupported. (A captured runtime value
+    //    with no column reference still binds — see test_99 / the broader suite.)
+    let bad6a <- _sql(db |> select_from(type<Car>) |> _select((V = _.Id ^ 1)))
+    let bad6b <- _sql(db |> select_from(type<Car>) |> _where(double(_.Price) > 1.0lf))
 
     // 7. _sql_text with non-chain
     let bad7 = _sql_text(42)

@@ -2943,6 +2943,41 @@ def private is_string_typed(e : ExpressionPtr) : bool {
     return e != null && e._type != null && e._type.baseType == Type.tString
 }
 
+// True if `node` references a source column anywhere — a bare `_` / join-arg ExprVar, or a field/operator/
+// call tree containing one. The bind fallthrough binds unrecognized nodes as `?` (correct for captured
+// runtime values); a node that touches a column instead means "we can't translate this expression" and
+// must reject cleanly rather than bind (which would fail at bind time with `can't locate variable '_'`).
+def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery) : bool {
+    if (node == null) return false
+    if (node is ExprRef2Value) {
+        var rv = node as ExprRef2Value
+        return mentions_source_arg(rv.subexpr, q)
+    }
+    if (node is ExprVar) {
+        let nm = string((node as ExprVar).name)
+        return nm == "_" || lookup_arg_source(q, nm) >= 0
+    }
+    if (node is ExprField) {
+        var ef = node as ExprField
+        return mentions_source_arg(ef.value, q)
+    }
+    if (node is ExprOp1) {
+        var o1 = node as ExprOp1
+        return mentions_source_arg(o1.subexpr, q)
+    }
+    if (node is ExprOp2) {
+        var o2 = node as ExprOp2
+        return mentions_source_arg(o2.left, q) || mentions_source_arg(o2.right, q)
+    }
+    if (node is ExprCall) {
+        var c = node as ExprCall
+        for (a in c.arguments) {
+            if (mentions_source_arg(a, q)) return true
+        }
+    }
+    return false
+}
+
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
     if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
@@ -3066,6 +3101,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         if (opName == "&" || opName == "|" || opName == "<<" || opName == ">>") {
             return "({pred_to_sql(op2.left, q, prog, at)}) {opName} ({pred_to_sql(op2.right, q, prog, at)})"
         }
+        if (opName == "^") return pred_fail(q, prog, at, "_sql: bitwise XOR (^) has no SQLite operator; rewrite as `(a | b) & ~(a & b)`, or compute it in daslang / raw SQL.")
     }
     // Unary minus / bitwise NOT — SQLite supports `-x` and `~x` (logical `!` is handled at the top).
     if (node is ExprOp1) {
@@ -3320,7 +3356,13 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         if (node is ExprConstBool) return (node as ExprConstBool).value ? "1" : "0"
         if (node is ExprConstString) return sql_quote_lit(string((node as ExprConstString).value))
     }
-    // Bind fallthrough: unrecognized exprs become `?`; sql_bind catch-all + concept_assert error if not bindable.
+    // A node that reaches here while referencing a source column is an expression we don't know how to
+    // translate — binding it as `?` would fail at bind time (`can't locate variable '_'`). Reject cleanly.
+    if (mentions_source_arg(node, q)) {
+        return pred_fail(q, prog, at, "_sql: expression over a column is not translatable to SQL: {describe(node)}. Compute it in daslang after the query, or use raw SQL.")
+    }
+    // Bind fallthrough: a captured runtime value (no column reference) becomes `?`; sql_bind catch-all +
+    // concept_assert error if not bindable.
     if (q.inHaving) {
         q.havingBindExprs |> push <| clone_expression(node)
     } else {

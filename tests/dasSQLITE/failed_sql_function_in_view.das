@@ -8,11 +8,11 @@ options gen2
 //      that `q.inView` propagates into `analyze_subquery`'s sub-`SqlQuery`.
 //   3. as a SQL-side computation in `_select` projection — verifies that the
 //      directonly+inView guard fires from `try_recognize_sql_function_proj` too.
-// Each case is a separate top-level `def` so that `macro_error` from one
-// doesn't cascade into the other and inflate the count.
-// 30305: free `_` reference in the un-replaced AST after the `_create_view` call_macro
-// returns null on the directonly check. The 40104 messages above are the actionable ones.
-expect 30838, 50503:2
+// Each case is a separate top-level `def` so that `macro_error` from one doesn't cascade into the
+// other and inflate the count. Each surfaces the actionable directonly reject (50503). The free-`_`
+// residual left in the AST after `_create_view` returns null is now rejected cleanly by pred_to_sql's
+// source-arg guard, instead of leaking a confusing `30838 can't locate variable '_'` cascade.
+expect 50503:3
 
 require daslib/sql
 require sqlite/sqlite_boost
