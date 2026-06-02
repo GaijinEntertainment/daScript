@@ -199,3 +199,34 @@ def public fixture_decs_capture_mid(n : int) : EntityId {
     }
     return target_eid
 }
+
+// Nested-collection fixture for the correlated select_many benches: an Order carrying an `array<Line>`
+// field, so `from o in orders from l in o.lines` flattens the per-order lines. LINES_PER_ORDER lines each,
+// so the flattened count is n * LINES_PER_ORDER.
+let public LINES_PER_ORDER = 3
+let public CUST_COUNT = 50
+
+struct public Line {
+    sku : string
+    qty : int
+}
+
+struct public OrderWithLines {
+    id       : int
+    customer : string
+    lines    : array<Line>
+}
+
+def public fixture_orders_nested(n : int) : array<OrderWithLines> {
+    var arr : array<OrderWithLines>
+    arr |> resize(n)
+    for (i in range(n)) {
+        arr[i].id = i + 1
+        arr[i].customer = "Cust{i % CUST_COUNT}"
+        arr[i].lines |> resize(LINES_PER_ORDER)
+        for (j in range(LINES_PER_ORDER)) {
+            arr[i].lines[j] = Line(sku = "S{i}_{j}", qty = j + 1)
+        }
+    }
+    return <- arr
+}

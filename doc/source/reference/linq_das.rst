@@ -31,7 +31,9 @@ Clauses
 
 A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ join <var2>
 [ : <Row2> ] in <src2> on <keyA> equals <keyB> ] [ where <pred> ] [ orderby
-<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``:
+<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``
+— at most one of the two ``where`` slots may appear (before *or* after
+``join``, never both):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
@@ -94,6 +96,39 @@ directly. For the SQL source, ``_sql`` resolves a single source against the
 placeholder ``_``; the macro normalizes the single-source lambda parameter to
 ``_`` internally, so the C# variable name is still spliced verbatim at the
 surface.
+
+.. _linq_das_projections:
+
+Projections
+-----------
+
+The ``select`` clause projects each (joined) row into the result element. Four
+projection forms are supported:
+
+- **Scalar** — a single field or expression: ``select c.name`` →
+  ``array<string>``; ``select c.price * 2`` → ``array<int>``.
+- **Named tuple** — the C# ``select new { … }`` analog, and the way to return
+  more than one column: ``select (Name = c.name, City = c.city)`` → an array of
+  ``tuple<Name:string; City:string>``; read fields by name (``row.Name``).
+- **Whole-row / identity** — ``select c`` returns the rows unchanged
+  (``array<Row>``); it emits no ``_select`` stage. Over a join it yields the left
+  row. Over a **SQL** source whole-row ``select c`` is **in-memory only** — a row
+  has no column form, so project columns (scalar or named tuple) to push down.
+- **String interpolation** — ``select "{c.name}:{b.country}"`` →
+  ``array<string>``. The range variables are rewritten **inside** the ``{ … }``
+  interpolation (so both ``c`` and ``b`` resolve), letting you format a row to a
+  string in one step.
+
+.. code-block:: das
+
+    // scalar
+    var names  <- %linq! from c in cars select c.name %%
+    // named tuple — two columns, read row.Name / row.Price
+    var rows   <- %linq! from c in cars select (Name = c.name, Price = c.price) %%
+    // whole row (identity) — the filtered structs, unchanged
+    var kept   <- %linq! from c in cars where c.price > 100 select c %%
+    // string interpolation — range vars rewritten inside {…}
+    var labels <- %linq! from c in cars select "{c.name} @ {c.price}" %%
 
 .. _linq_das_ordering:
 
@@ -163,7 +198,9 @@ textually):
 
 **Select-terminal** — no post-join ``where`` / ``orderby``, terminal is
 ``select``. The ``select`` projection *is* the join's result row (both range
-variables are in scope), so it splices verbatim and **pushes down to SQL**:
+variables are in scope), so it splices verbatim. A scalar or named-tuple
+projection **pushes down to SQL**; a whole-row ``select c`` is in-memory only
+(over SQL it has no column form — project columns instead):
 
 .. code-block:: das
 
