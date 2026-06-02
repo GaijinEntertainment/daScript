@@ -3058,6 +3058,23 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) % $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
     }
+    // Bitwise — match by operator string (qmatch can't parse a `>>` pattern). SQLite has `& | << >>`;
+    // `^` / `<<<` / `>>>` have no SQLite operator and fall through to the unsupported-expression guard.
+    if (node is ExprOp2) {
+        var op2 = node as ExprOp2
+        let opName = string(op2.op)
+        if (opName == "&" || opName == "|" || opName == "<<" || opName == ">>") {
+            return "({pred_to_sql(op2.left, q, prog, at)}) {opName} ({pred_to_sql(op2.right, q, prog, at)})"
+        }
+    }
+    // Unary minus / bitwise NOT — SQLite supports `-x` and `~x` (logical `!` is handled at the top).
+    if (node is ExprOp1) {
+        var op1 = node as ExprOp1
+        let opName = string(op1.op)
+        if (opName == "-" || opName == "~") {
+            return "{opName}({pred_to_sql(op1.subexpr, q, prog, at)})"
+        }
+    }
     // Multi-level field chain `<arg>.Col.path…` — descends @sql_json via json_extract; @sql_blob is a compile error.
     if (node is ExprField) {
         var ef0 = node as ExprField

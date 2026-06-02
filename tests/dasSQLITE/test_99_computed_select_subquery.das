@@ -14,6 +14,7 @@ require sqlite/sqlite_linq
 //   B3 — string `+` (daslang concatenation) lowers to SQL `||`, not `+` (SQLite `+` is numeric: 'a'+'b'==0).
 //   C  — computed `_order_by(_.Price/10)` keys (single + tuple entry) render with constants inlined, like
 //        _group_by computed keys (previously rejected: "_.Field or string only").
+//   D  — bitwise `& | << >>` and unary `- ~` lower to the matching SQLite operators.
 //   A  — take(n)/skip(n) BEFORE an aggregate wraps the pre-aggregate chain into an inner subquery
 //        (LIMIT/OFFSET stay inner) and renders the aggregate on the outer SELECT (previously rejected).
 
@@ -244,6 +245,52 @@ def test_computed_order_by_tuple_entry_runtime(t : T?) {
         t |> equal(rows[0], "Lada")
         t |> equal(rows[1], "BMW")
         t |> equal(rows[4], "Lambo")
+    }
+}
+
+// ===== D — bitwise (& | << >>) and unary (- ~) operators =====
+
+[test]
+def test_bitwise_and_emits(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _select((V = _.Price & 96)) |> to_array())
+    t |> success(sql == "SELECT (\"Price\") & (?) FROM \"Cars\"", "bitwise & lowers to SQL &; SQL: {sql}")
+}
+
+[test]
+def test_bitwise_and_shift_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // BMW Price=100: 100&96=96, 100>>2=25, 100<<1=200, 100|3=103
+        let a <- _sql(db |> select_from(type<Car>) |> _select((V = _.Price & 96)) |> to_array())
+        t |> equal(a[0].V, 96, "Price & 96")
+        let r <- _sql(db |> select_from(type<Car>) |> _select((V = _.Price >> 2)) |> to_array())
+        t |> equal(r[0].V, 25, "Price >> 2")
+        let l <- _sql(db |> select_from(type<Car>) |> _select((V = _.Price << 1)) |> to_array())
+        t |> equal(l[0].V, 200, "Price << 1")
+        let o <- _sql(db |> select_from(type<Car>) |> _select((V = _.Price | 3)) |> to_array())
+        t |> equal(o[0].V, 103, "Price | 3")
+    }
+}
+
+[test]
+def test_unary_minus_and_not_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let neg <- _sql(db |> select_from(type<Car>) |> _select((V = -_.Price)) |> to_array())
+        t |> equal(neg[0].V, -100, "-Price")
+        let bn <- _sql(db |> select_from(type<Car>) |> _select((V = ~_.Id)) |> to_array())
+        t |> equal(bn[0].V, -2, "~Id (two's complement)")
+    }
+}
+
+[test]
+def test_bitwise_in_where_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // Price & 4 == 4 -> BMW(100), Tesla(300), Lambo(999)
+        let c = _sql(db |> select_from(type<Car>) |> _where((_.Price & 4) == 4) |> count())
+        t |> equal(c, 3, "count where Price & 4 == 4")
     }
 }
 
