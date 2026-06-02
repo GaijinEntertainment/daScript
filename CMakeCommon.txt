@@ -244,9 +244,12 @@ MACRO(SETUP_COMPILER)
 			# /Z7 (debug info embedded in each .obj) instead of /Zi (a single
 			# shared .pdb): /Zi serializes parallel cl.exe through mspdbsrv and
 			# cannot be cached by the sccache compiler launcher. /Z7 is valid on
-			# every generator (the linker still emits a .pdb via /DEBUG). Debug
-			# inherits CMake's default /Zi, so rewrite it; RelWithDebInfo below
-			# sets it explicitly.
+			# every generator (the linker still emits a .pdb via /DEBUG). Must
+			# cover BOTH languages: C TUs (uriparser, sqlite3, ...) inherit
+			# CMake's default /Zi for Debug AND RelWithDebInfo; CXX Debug inherits
+			# the default too while CXX RelWithDebInfo is set explicitly below.
+			STRING(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+			STRING(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 			STRING(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 			SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /EHa")
 			SET(CMAKE_CXX_FLAGS_RELEASE "${MSVC_STD_LIB_FLAG} /Ot /Ox /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
