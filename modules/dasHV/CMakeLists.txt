@@ -74,6 +74,12 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 
 
 	SET(HV_CMAKE_FLAGS
+		# Pin the libhv sub-build's config. Multi-config generators (VS) honor
+		# the --config in BUILD/INSTALL_COMMAND below; single-config ones (Ninja)
+		# ignore --config, so without this libhv defaults to Debug and its
+		# debug-CRT hv_static.lib fails to link into Release dasModuleHV on MSVC
+		# (unresolved __imp__CrtDbgReport).
+		-DCMAKE_BUILD_TYPE=$<CONFIG>
 		-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
 		-DCMAKE_INSTALL_PREFIX=${DAS_HV_DIR}/hv/Release
 		-DBUILD_EXAMPLES=OFF
