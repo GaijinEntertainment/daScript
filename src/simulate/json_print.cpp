@@ -308,6 +308,11 @@ namespace das {
                         return;
                     }
                 }
+                // No enumerator matches this value (e.g. an OR-combined flag enum like
+                // `OpenOnArrow | DefaultOpen`). Emit the number rather than nothing — emitting
+                // nothing produced invalid JSON ({"flags": ,...}) and dropped the whole object.
+                // The numeric form round-trips: scanEnum already accepts a bare integer.
+                ss << value;
             }
         }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
