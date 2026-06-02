@@ -31,7 +31,9 @@ Clauses
 
 A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ join <var2>
 [ : <Row2> ] in <src2> on <keyA> equals <keyB> ] [ where <pred> ] [ orderby
-<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``:
+<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``
+— at most one of the two ``where`` slots may appear (before *or* after
+``join``, never both):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
@@ -163,7 +165,9 @@ textually):
 
 **Select-terminal** — no post-join ``where`` / ``orderby``, terminal is
 ``select``. The ``select`` projection *is* the join's result row (both range
-variables are in scope), so it splices verbatim and **pushes down to SQL**:
+variables are in scope), so it splices verbatim. A scalar or named-tuple
+projection **pushes down to SQL**; a whole-row ``select c`` is in-memory only
+(over SQL it has no column form — project columns instead):
 
 .. code-block:: das
 

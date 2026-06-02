@@ -29,10 +29,11 @@ require daslib/linq_boost public
 //
 // `join <d> [: RowB] in <B> on <keyA> equals <keyB>` is a single inner equi-join (see transpile_join). A
 // `where` before `join` filters the left source (single range var, pushes down to SQL). A plain `join …
-// select <proj>` is select-terminal — the `select` becomes the join's result row (scalar, tuple, or
-// whole-row, both `c` and `d` in scope), pushing down to SQL. Post-join `where`/`orderby`, and a `group`
-// terminal, carry both `c` and `d` past the join as a `(c, d)` pair (transparent identifier) and run
-// in-memory (over SQL the carried whole-row tuple errors — project columns in a select-terminal join).
+// select <proj>` is select-terminal — the `select` becomes the join's result row, both `c` and `d` in
+// scope. A scalar or named-tuple projection pushes down to SQL; a whole-row `select c` is in-memory only
+// (over SQL it has no column form). Post-join `where`/`orderby`, and a `group` terminal, carry both `c`
+// and `d` past the join as a `(c, d)` pair (transparent identifier) and run in-memory (over SQL the
+// carried whole-row tuple errors — project columns in a select-terminal join).
 
 def private is_ident_byte(c : int) : bool {
     return is_alnum(c) || c == '_'
@@ -640,10 +641,11 @@ class LinqDasReader : AstReaderMacro {
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
     //! ``from c : Row in src`` over decs / SQL / XML. ``orderby`` is a single sort key; ``group c by <key>``
     //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). ``join`` is a
-    //! single inner equi-join whose ``select`` must project a tuple; post-join ``where``/``orderby`` and a
-    //! ``group`` terminal carry the ``(c, d)`` pair (in-memory), while a plain ``join … select <tuple>``
-    //! pushes down to SQL. A trailing ``iterator`` keyword yields an ``iterator<T>`` over the materialized
-    //! result instead of the ``array<T>``.
+    //! single inner equi-join; a select-terminal ``join … select <proj>`` projects the join's result row
+    //! (scalar or named-tuple pushes down to SQL; whole-row ``select c`` is in-memory only), while a
+    //! post-join ``where``/``orderby`` or a ``group`` terminal carries the ``(c, d)`` pair (in-memory). A
+    //! trailing ``iterator`` keyword yields an ``iterator<T>`` over the materialized result instead of the
+    //! ``array<T>``.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         append(expr.sequence, ch)
         if (ends_with(expr.sequence, "%%")) {
