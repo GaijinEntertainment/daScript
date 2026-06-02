@@ -2939,6 +2939,10 @@ def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg :
 }
 
 [macro_function]
+def private is_string_typed(e : ExpressionPtr) : bool {
+    return e != null && e._type != null && e._type.baseType == Type.tString
+}
+
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
     if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
@@ -3032,7 +3036,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     // Arithmetic — parens preserve precedence in emitted SQL.
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) + $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) + ({pred_to_sql(rhs, q, prog, at)})"
+        if (qmatch(node, $e(lhs) + $e(rhs)).matched) {
+            // daslang `+` on strings is concatenation → SQL `||` (SQLite `+` is numeric: 'a' + 'b' == 0).
+            let op = (is_string_typed(node) || is_string_typed(lhs) || is_string_typed(rhs)) ? "||" : "+"
+            return "({pred_to_sql(lhs, q, prog, at)}) {op} ({pred_to_sql(rhs, q, prog, at)})"
+        }
     }
     {
         var lhs, rhs : ExpressionPtr

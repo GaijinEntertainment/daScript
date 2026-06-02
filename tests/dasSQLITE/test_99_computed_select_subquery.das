@@ -11,6 +11,7 @@ require sqlite/sqlite_linq
 //        slot, so `sum/min/max/average/count` over it works (previously rejected: "_.Field only").
 //   B2 — computed COLUMNS in a named-tuple `_select((N=_.Name, Bonus=_.Price/10))` lower to `<frag> AS N`
 //        via the same pred_to_sql + push_computed_proj_slot path (previously rejected: "_.Field only").
+//   B3 — string `+` (daslang concatenation) lowers to SQL `||`, not `+` (SQLite `+` is numeric: 'a'+'b'==0).
 //   C  — computed `_order_by(_.Price/10)` keys (single + tuple entry) render with constants inlined, like
 //        _group_by computed keys (previously rejected: "_.Field or string only").
 //   A  — take(n)/skip(n) BEFORE an aggregate wraps the pre-aggregate chain into an inner subquery
@@ -155,6 +156,35 @@ def test_bare_named_tuple_select_unchanged(t : T?) {
         t |> equal(length(rows), 5)
         t |> equal(rows[1].N, "Audi")
         t |> equal(rows[1].P, 200)
+    }
+}
+
+// ===== B3 — string concatenation (`+` → SQL `||`) =====
+
+[test]
+def test_string_concat_column_emits_pipe(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _select((G = _.Name + "!")) |> to_array())
+    t |> success(sql == "SELECT (\"Name\") || (?) FROM \"Cars\"", "string `+` lowers to SQL `||`; SQL: {sql}")
+}
+
+[test]
+def test_string_concat_column_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // SQLite `+` would coerce both strings to 0; `||` concatenates.
+        let rows <- _sql(db |> select_from(type<Car>) |> _select((G = _.Name + "!")) |> to_array())
+        t |> equal(rows[0].G, "BMW!", "string concat returns text, not 0")
+        t |> equal(rows[1].G, "Audi!")
+    }
+}
+
+[test]
+def test_string_concat_in_where_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let c = _sql(db |> select_from(type<Car>) |> _where(_.Name + "!" == "BMW!") |> count())
+        t |> equal(c, 1, "string concat in WHERE matches via ||")
     }
 }
 
