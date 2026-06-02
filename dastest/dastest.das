@@ -237,7 +237,10 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
 // file in the batch to outputChannel.
 def private run_iso_batch(input : IsoInput#; t : int; perTestTimeout : float; outputChannel : Channel?) {
     let nFiles = length(input.uris)
-    let widx = " --worker-index {t}"
+    // 1-based: clients deriving a port from the worker index (e.g. imgui_playwright
+    // maps worker-index N to live-API port 9090+N) start at 9091, leaving 9090 free
+    // for a dev/attached host.
+    let widx = " --worker-index {t + 1}"
     // Batch timeout: per-test budget scaled by batch size (<=0 means none).
     let batchTimeout = perTestTimeout <= 0.0 ? perTestTimeout : perTestTimeout * float(nFiles)
     var br : BatchRun
