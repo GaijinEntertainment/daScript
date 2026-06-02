@@ -297,12 +297,12 @@ jobs:
     # matrix config. The GHA backend writes one cache item per TU (~40k items,
     # quota fragmentation, ~74% concurrent-write failures); local disk keeps
     # all objects in $SCCACHE_DIR and we persist it as a single tarball.
-    # Skip on Windows: VS/MSBuild generator ignores CMAKE_*_COMPILER_LAUNCHER,
-    # so sccache does nothing there, and its post-cleanup errors on the runner.
+    # Windows is on Ninja now (honors CMAKE_*_COMPILER_LAUNCHER); its MSVC
+    # compiles are made cacheable by forcing /Z7 (the Build step passes
+    # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded) so debug info lands in the
+    # .obj — sccache refuses to cache /Zi separate-PDB output.
     - uses: mozilla-actions/sccache-action@v0.0.10
-      if: runner.os != 'Windows'
-    - if: runner.os != 'Windows'
-      run: |
+    - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
@@ -313,7 +313,6 @@ jobs:
     # existing key is a no-op, so we delete first). PRs read-only. Bounded
     # footprint: N configs × one tarball, no run_id pileup.
     - name: "Restore sccache objects"
-      if: runner.os != 'Windows'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -339,12 +338,16 @@ jobs:
                 ;;
               windows32)
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                # /Z7 (Embedded) instead of /Zi so sccache can cache MSVC compiles;
+                # CMP0141=NEW required because cmake_minimum_required is 3.17 (< 3.25).
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               windows64)
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                # /Z7 (Embedded) instead of /Zi so sccache can cache MSVC compiles;
+                # CMP0141=NEW required because cmake_minimum_required is 3.17 (< 3.25).
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               linux_arm*)
@@ -363,13 +366,13 @@ jobs:
         esac
 
     - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master' && runner.os != 'Windows'
+      if: github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master' && runner.os != 'Windows'
+      if: github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
