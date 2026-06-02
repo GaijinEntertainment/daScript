@@ -1129,6 +1129,8 @@ def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; var ctx : 
         selectLam = selCall.arguments[1]
         if (selectLam == null) return null
     }
+    var leadWhereLam = extract_join_lead_where(c)
+    if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
     let countOnly = c.single |> key_exists("term")
     // Iterator-typed implicit-to-array: emission returns array<elemType> uniformly; iterator sink would need a wrap that's not applied here. Cascade.
     if (!countOnly && ctx.expr_is_iterator) return null
@@ -1150,7 +1152,7 @@ def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; var ctx : 
     var tupBindB = build_decs_tup_bind(bridgeB, tupBName, at)
     if (tupBindA == null || tupBindB == null) return null
     let tupBType = strip_const_ref(clone_type(bridgeB.elementType))
-    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, countOnly, keyaBody, tupAName, hashName, tupBType, "decs", at)
+    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "decs", at)
     if (pieces == null) return null
     var collectBody <- qmacro_block_to_array() {
         // nolint:PERF006 per-key bucket size unknown ahead of time

@@ -386,6 +386,9 @@ primitive (``int*`` / ``uint*`` / ``float`` / ``double`` / ``bool`` /
    * - ``from_decs_template(A) |> _join(...) |> _where(P) |> count() / to_array()``
      - pattern ``decs_join_general`` (trailing ``_where``)
      - Bind join result, evaluate predicate, gate ``count++`` / ``push_clone``. Composes with the trailing ``_select`` form (filter then project, single bind per pair).
+   * - ``from_decs_template(A) |> _where(P) |> _join(...)`` (leading ``_where``)
+     - pattern ``decs_join_general`` (leading ``_where`` slot)
+     - Pre-join filter on srcA, fused into the per-archetype probe as ``if (P(a)) { <probe> }`` — no intermediate filtered array. Same shared wrap as the array side (``build_join_standalone_pieces``).
    * - ``from_decs_template(A) |> _join(...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
      - ``plan_decs_group_by`` (``isDecsJoin`` adapter, Theme 3 C3)
      - Cross-arm composition. ``plan_decs_group_by`` recognizes a trailing
@@ -441,6 +444,15 @@ equi-key gate as the decs side; non-primitive keys cascade to
      - Bind join result, evaluate predicate, gate ``count++`` /
        ``push_clone``. Composes with the trailing ``_select`` form
        (filter then project, single bind per pair).
+   * - ``arrA |> _where(P) |> _join(arrB, ...)`` (leading ``_where``)
+     - pattern ``array_join_general`` (leading ``_where`` slot)
+     - Pre-join filter on srcA, **fused into the probe loop** as
+       ``if (P(a)) { <probe> }`` — no intermediate filtered-srcA array
+       (vs. the tier-2 fallback, which materializes one). The optional
+       ``lead_where`` slot precedes the ``join`` slot; a ``where`` after
+       ``join`` is the separate trailing slot. Composes with the trailing
+       ``_where`` / ``_select`` forms. Wrapping lives in the shared
+       ``build_join_standalone_pieces``, so decs / XML inherit it.
    * - ``arrA |> _join(arrB, ...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
      - ``plan_group_by_core`` via ``SourceAdapter.ArrayJoin`` (chunk N+2)
      - Cross-arm composition. ``emit_group_by``'s Array branch

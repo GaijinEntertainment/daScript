@@ -265,3 +265,148 @@ def test_decs_group_by(t : T?) {
         if (g._0 == "b") { t |> equal(length(g._1), 1, "bucket b: car2") }
     }
 }
+
+// ===== join … on … equals … (single inner equi-join) =====
+// Select-terminal pushes both range vars into the result selector; post-join where/orderby/group carries
+// `(c, d)` as a transparent identifier. A `where` before `join` filters the left source. (See linq_das.rst.)
+
+struct BrandHQ {
+    brand   : string
+    country : string
+}
+
+def private mk_brands() : array<BrandHQ> {
+    return <- [BrandHQ(brand = "eco", country = "USA"),
+               BrandHQ(brand = "lux", country = "Italy")]
+}
+
+[test]
+def test_join_select_terminal_scalar(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let names <- %linq! from c in cars join b in brands on c.brand equals b.brand select c.name %%
+    t |> equal(length(names), 3, "all 3 cars match a brand HQ")
+    t |> equal(names[0], "cheap")
+    t |> equal(names[2], "lux")
+}
+
+[test]
+def test_join_select_terminal_tuple(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let rows <- %linq! from c in cars join b in brands on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
+    t |> equal(length(rows), 3)
+    t |> equal(rows[0].Name, "cheap")
+    t |> equal(rows[0].Country, "USA")
+    t |> equal(rows[2].Country, "Italy")
+}
+
+[test]
+def test_join_select_terminal_whole_row(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let rows <- %linq! from c in cars join b in brands on c.brand equals b.brand select c %%
+    t |> equal(length(rows), 3, "whole-row select yields the left rows")
+    t |> equal(rows[1].name, "mid")
+}
+
+[test]
+def test_join_pre_join_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // `where` before `join` filters cars (price>=150 → mid, lux), then joins — pushes down to SQL too.
+    let rows <- %linq! from c in cars where c.price >= 150 join b in brands on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
+    t |> equal(length(rows), 2, "pre-join where filters the left source")
+    t |> equal(rows[0].Name, "mid")
+    t |> equal(rows[0].Country, "USA")
+    t |> equal(rows[1].Country, "Italy")
+}
+
+[test]
+def test_join_post_join_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // `where` after the join references `b` (transparent identifier) — keep USA brands.
+    let names <- %linq! from c in cars join b in brands on c.brand equals b.brand where b.country == "USA" select c.name %%
+    t |> equal(length(names), 2, "post-join where sees the joined row")
+    t |> equal(names[0], "cheap")
+    t |> equal(names[1], "mid")
+}
+
+[test]
+def test_join_orderby(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let names <- %linq! from c in cars join b in brands on c.brand equals b.brand orderby c.price descending select c.name %%
+    t |> equal(names[0], "lux")
+    t |> equal(names[1], "mid")
+    t |> equal(names[2], "cheap")
+}
+
+[test]
+def test_join_group_after(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // group the joined pairs by the right-side country (IGrouping of (c, b) pairs).
+    let groups <- %linq! from c in cars join b in brands on c.brand equals b.brand group c by b.country %%
+    t |> equal(length(groups), 2, "USA + Italy buckets")
+    for (g in groups) {
+        if (g._0 == "USA") { t |> equal(length(g._1), 2, "USA: cheap+mid") }
+        if (g._0 == "Italy") { t |> equal(length(g._1), 1, "Italy: lux") }
+    }
+}
+
+[test]
+def test_join_string_interpolation_select(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // string interpolation in a transparent-id projection references both range vars inside `{…}`.
+    let labels <- %linq! from c in cars join b in brands on c.brand equals b.brand orderby c.price select "{c.name}:{b.country}" %%
+    t |> equal(labels[0], "cheap:USA")
+    t |> equal(labels[2], "lux:Italy")
+}
+
+[test]
+def test_join_iterator_output(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    var n = 0
+    for (_nm in %linq! from c in cars join b in brands on c.brand equals b.brand select c.name iterator %%) { n++ }
+    t |> equal(n, 3)
+}
+
+[decs_template(prefix = "lr_")]
+struct DealerComp {
+    brand  : string
+    region : string
+}
+
+def private seed_decs_join() {
+    restart()
+    for (i in range(3)) {
+        create_entity() @(eid, cmp) {
+            cmp.eid := eid
+            cmp.ld_name := "car{i}"
+            cmp.ld_price := 100 * (i + 1)
+            cmp.ld_brand := i < 2 ? "a" : "b"
+        }
+    }
+    create_entity() @(eid, cmp) { cmp.eid := eid; cmp.lr_brand := "a"; cmp.lr_region := "north" }
+    create_entity() @(eid, cmp) { cmp.eid := eid; cmp.lr_brand := "b"; cmp.lr_region := "south" }
+    commit()
+}
+
+[test]
+def test_decs_join_select_terminal(t : T?) {
+    seed_decs_join()
+    let rows <- %linq! from c : CarComp in decs join d : DealerComp in decs on c.brand equals d.brand select (Name = c.name, Region = d.region) %%
+    t |> equal(length(rows), 3, "car0,car1 (a→north), car2 (b→south)")
+    var north = 0
+    var south = 0
+    for (r in rows) {
+        if (r.Region == "north") { north++ }
+        if (r.Region == "south") { south++ }
+    }
+    t |> equal(north, 2)
+    t |> equal(south, 1)
+}
