@@ -762,7 +762,6 @@ src/ast/ast_export.cpp
 src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
-src/ast/dyn_modules.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
@@ -854,6 +853,7 @@ src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
+src/misc/lexer_alloc_track.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -1096,7 +1096,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${PARSER_SRC}
     ${DASCRIPT_FMT_SRC}
     src/ast/ast_parse.cpp
-    src/misc/lexer_alloc_track.cpp
+    src/ast/dyn_modules.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp
     src/ast/ast_infer_type.cpp
