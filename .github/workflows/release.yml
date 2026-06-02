@@ -86,7 +86,7 @@ jobs:
 
           - target: windows
             build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+            cmake_generator: Ninja
 
           - target: darwin15
             build_system: cmake
@@ -151,11 +151,33 @@ jobs:
       - name: "SCM Checkout"
         uses: actions/checkout@v4
 
+      - name: "Exclude workspace from Windows Defender"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        # Real-time Defender scans every .obj/.exe/.dll the build writes;
+        # excluding the workspace cuts Windows CI wall-time. continue-on-error:
+        # a managed-Defender runner must not fail the job.
+        run: |
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+          Add-MpPreference -ExclusionProcess "daslang.exe"
+          Add-MpPreference -ExclusionProcess "test_aot.exe"
+
       - name: "Install CMake and Ninja"
         uses: lukka/get-cmake@latest
 
       - if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1 # need nasm for openssl
+
+      - name: "Set up MSVC environment (Windows)"
+        if: runner.os == 'Windows'
+        # cl.exe on PATH so the bash build step drives Ninja with MSVC. MUST run
+        # BEFORE the vcpkg openssl step: msvc-dev-cmd's vcvars sets VCPKG_ROOT to
+        # the VS-bundled vcpkg, so the openssl step has to write our VCPKG_ROOT
+        # last. (release.yml Windows is x64 only.)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: "Install: Required Dev Packages"
         run: |
@@ -243,7 +265,9 @@ jobs:
           ACTIVE_MODULES=$(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f2 | sed 's|^|-D|' | xargs)
           case "${{ matrix.build_system }}" in
             cmake)
-              cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
+              # Ninja is single-config: -DCMAKE_BUILD_TYPE replaces the VS
+              # generator's -T host / -A arch (cl arch comes from msvc-dev-cmd).
+              cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
                 $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
               cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
               ;;
@@ -253,8 +277,8 @@ jobs:
         if: matrix.architecture_string != 'Win32'
         run: |
           if [[ "${{ matrix.target }}" == windows* ]]; then
-            cd "bin/${{ matrix.cmake_preset }}"
-            TEST_PATH="../../tests"
+            cd bin
+            TEST_PATH="../tests"
             EXEC=".exe"
           else
             cd bin
