@@ -3314,6 +3314,11 @@ def select_many_to_array(var src : iterator<auto(TT)>; result_selector) : array<
 def private select_many_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&>
+    // Lower-bound reserve when the outer source is length-bearing — flat-map produces ≥ length(src) elements
+    // for non-degenerate inner sequences; reduces realloc count even when the actual output is larger.
+    static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
+        buffer |> reserve(length(src))
+    }
     for (it in src) {
         for (innerIt in collection_selector(it)) {
             buffer.push_clone(result_selector(innerIt))

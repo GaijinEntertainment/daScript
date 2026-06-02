@@ -97,6 +97,39 @@ placeholder ``_``; the macro normalizes the single-source lambda parameter to
 ``_`` internally, so the C# variable name is still spliced verbatim at the
 surface.
 
+.. _linq_das_projections:
+
+Projections
+-----------
+
+The ``select`` clause projects each (joined) row into the result element. Four
+projection forms are supported:
+
+- **Scalar** — a single field or expression: ``select c.name`` →
+  ``array<string>``; ``select c.price * 2`` → ``array<int>``.
+- **Named tuple** — the C# ``select new { … }`` analog, and the way to return
+  more than one column: ``select (Name = c.name, City = c.city)`` → an array of
+  ``tuple<Name:string; City:string>``; read fields by name (``row.Name``).
+- **Whole-row / identity** — ``select c`` returns the rows unchanged
+  (``array<Row>``); it emits no ``_select`` stage. Over a join it yields the left
+  row. Over a **SQL** source whole-row ``select c`` is **in-memory only** — a row
+  has no column form, so project columns (scalar or named tuple) to push down.
+- **String interpolation** — ``select "{c.name}:{b.country}"`` →
+  ``array<string>``. The range variables are rewritten **inside** the ``{ … }``
+  interpolation (so both ``c`` and ``b`` resolve), letting you format a row to a
+  string in one step.
+
+.. code-block:: das
+
+    // scalar
+    var names  <- %linq! from c in cars select c.name %%
+    // named tuple — two columns, read row.Name / row.Price
+    var rows   <- %linq! from c in cars select (Name = c.name, Price = c.price) %%
+    // whole row (identity) — the filtered structs, unchanged
+    var kept   <- %linq! from c in cars where c.price > 100 select c %%
+    // string interpolation — range vars rewritten inside {…}
+    var labels <- %linq! from c in cars select "{c.name} @ {c.price}" %%
+
 .. _linq_das_ordering:
 
 Ordering
