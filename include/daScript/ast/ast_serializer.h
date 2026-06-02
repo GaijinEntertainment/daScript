@@ -82,9 +82,9 @@ namespace das {
     template <>
     struct daslang_hash<SerializeNodeId, void> {
         size_t operator () ( const SerializeNodeId & s ) const noexcept {
-            const size_t pmix = (reinterpret_cast<size_t>(s.ptr) >> 4)
-                              * size_t(0x9E3779B97F4A7C15ull);
-            return pmix ^ (s.epoch * size_t(0xBF58476D1CE4E5B9ull));
+            const uint64_t pmix = (uint64_t(reinterpret_cast<uintptr_t>(s.ptr)) >> 4)
+                                * uint64_t(0x9E3779B97F4A7C15ull);
+            return size_t(pmix ^ (uint64_t(s.epoch) * uint64_t(0xBF58476D1CE4E5B9ull)));
         }
     };
 

@@ -82,6 +82,7 @@ namespace das {
     DAS_API int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
+    DAS_API char * builtin_resolve_this_module_dir ( const char * baked_path, Context * context );
     DAS_API bool builtin_remove_file ( const char * path );
     DAS_API bool builtin_rename_file ( const char * old_path, const char * new_path );
     DAS_API bool builtin_rmdir ( const char * path );

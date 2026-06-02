@@ -264,6 +264,13 @@ class LintVisitor : AstVisitor {
         validate_argument(arg, "LINT013", "block argument")
     }
 
+    // `assume name = <block>` keeps a template block at the alias-definition site; every use of
+    // `name` is replaced with a *clone* of that block.
+    // The template is never invoked directly, so its block arguments keep isAccessUnused == true and
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
+        return false
+    }
+
     def override preVisitExprLet(expr : ExprLet?) : void {
         for (v in expr.variables) {
             validate_var(v, true)
