@@ -72,6 +72,11 @@ A tuple key may mix computed entries and plain columns
 ASC, "Name" ASC``). A key referencing a runtime value (not a constant)
 is rejected --- inline a literal or drop to raw SQL.
 
+A string-returning expression over the row is a computed key too ---
+``_order_by(to_lower(_.Name))`` → ``ORDER BY LOWER("Name")`` for a
+case-insensitive sort. (A plain ``string`` *variable* with no column
+reference is instead treated as a dynamic column **name**.)
+
 Mixed ASC/DESC
 ==============
 
