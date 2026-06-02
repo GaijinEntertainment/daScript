@@ -50,3 +50,40 @@ def test_xml_iterator_output(t : T?) {
         t |> equal(length(brands), 2, "xml iterator output")
     }
 }
+
+[test]
+def test_xml_orderby(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // ORDER BY price ASC → 50, 100, 300 → ids 3, 1, 2
+        let ids <- %linq! from c : Car in doc.document_element orderby c.price select c.id %%
+        t |> equal(length(ids), 3)
+        t |> equal(ids[0], 3)
+        t |> equal(ids[1], 1)
+        t |> equal(ids[2], 2)
+    }
+}
+
+[test]
+def test_xml_orderby_descending(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let ids <- %linq! from c : Car in doc.document_element orderby c.price descending select c.id %%
+        t |> equal(ids[0], 2)   // 300
+        t |> equal(ids[2], 3)   // 50
+    }
+}
+
+[test]
+def test_xml_group_by(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // Ford: car1+car3, Honda: car2 → 2 buckets
+        let groups <- %linq! from c : Car in doc.document_element group c by c.brand %%
+        t |> equal(length(groups), 2, "xml group buckets Ford/Honda")
+        for (g in groups) {
+            if (g._0 == "Ford")  { t |> equal(length(g._1), 2) }
+            if (g._0 == "Honda") { t |> equal(length(g._1), 1) }
+        }
+    }
+}

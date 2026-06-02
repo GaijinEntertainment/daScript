@@ -56,3 +56,29 @@ def test_sql_iterator_output(t : T?) {
         t |> equal(length(names), 2, "sql iterator output")
     }
 }
+
+[test]
+def test_sql_orderby_ascending(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // ORDER BY price ASC over the SQL source
+        let names <- %linq! from c : Car in db orderby c.price select c.name %%
+        let ref <- _fold(db |> select_from(type<Car>) |> _order_by(_.price) |> _select(_.name))
+        t |> equal(length(names), 3)
+        t |> equal(names[0], "BMW")     // 100
+        t |> equal(names[2], "Tesla")   // 300
+        t |> equal(length(names), length(ref), "linq_das orderby ≡ hand-written _sql chain")
+    }
+}
+
+[test]
+def test_sql_orderby_descending_with_where(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // WHERE price >= 200 then ORDER BY price DESC → Tesla(300), Audi(200)
+        let names <- %linq! from c : Car in db where c.price >= 200 orderby c.price descending select c.name %%
+        t |> equal(length(names), 2, "sql where + order by desc")
+        t |> equal(names[0], "Tesla")
+        t |> equal(names[1], "Audi")
+    }
+}

@@ -4393,6 +4393,18 @@ def private normalize_single_source_arg_names(var node : ExpressionPtr) {
     normalize_chain_blocks(node)
 }
 
+// A `_group_by` with no projecting `_select` falls through to the default full-row projection, which
+// emits `SELECT * ... GROUP BY k` — one arbitrary row per group, NOT the `(key, [rows])` IGrouping an
+// in-memory `_group_by` yields. Reject so the silent shape divergence surfaces at compile time.
+[macro_function]
+def private reject_bare_group_by(q : SqlQuery; prog : ProgramPtr; at : LineInfo) : bool {
+    if (q.seenGroupBy && !q.seenSelect && q.proj == ProjectionShape.FullRow) {
+        macro_error(prog, at, "_sql: `_group_by` requires a following `_select` with aggregates (e.g. `|> _select((K = _._0, N = _._1 |> count()))`) — a bare `_group_by` over a SQL source has no meaningful translation (SQLite would return one arbitrary row per group). For IGrouping-style `(key, [rows])` groups use an in-memory source (array / decs / XML).")
+        return false
+    }
+    return true
+}
+
 [macro_function]
 def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; isTry : bool) : ExpressionPtr {
     var argT = call.arguments[0]._type
@@ -4400,7 +4412,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
     normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
-    if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
+    if (!analyze_chain(call.arguments[0], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)) return null
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
     if (q.proj == ProjectionShape.Aggregate && q.distinctFlag) {
         macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
@@ -4467,7 +4479,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
     normalize_single_source_arg_names(call.arguments[0])
     var q = SqlQuery()
-    if (!analyze_chain(call.arguments[0], q, prog, call.at)) return null
+    if (!analyze_chain(call.arguments[0], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)) return null
     // Reject terminals (iterator, not scalar/row/array). Order matters: aggregates set both Aggregate+One, so dispatch on proj first.
     if (q.seenToArray) {
         macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` — _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
