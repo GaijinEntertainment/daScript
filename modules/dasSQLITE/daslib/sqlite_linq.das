@@ -588,7 +588,8 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
     var srcIdx = -1
     if (!empty(q.rootAlias)) {
         srcIdx = lookup_arg_source(q, argName)
-        if (srcIdx < 0 && argName == "_") {
+        // Pre-join `_where` single-source: resolve the named param to t0 while no join is seen yet (see column-ref branch).
+        if (srcIdx < 0 && (argName == "_" || !q.seenJoin)) {
             srcIdx = 0
         }
     } elif (argName == "_") {
@@ -2235,7 +2236,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
     }
     // Bare-var (identity / whole-row `$(x)=>x`) projection has no SQL column form — reject cleanly (else the computed-scalar `pred_to_sql` path below null-derefs on the whole-row var → SIGSEGV).
     if (body is ExprVar) {
-        macro_error(prog, at, "_sql: identity / whole-row `_select` (e.g. `$(x) => x`) is not supported — project columns, e.g. `_select((Name = c.name, City = d.city))`")
+        macro_error(prog, at, "_sql: identity / whole-row `_select` (e.g. `$(x) => x`) is not supported — project named columns off the row, e.g. `_select($(x) => (Name = x.name, City = x.city))`")
         return false
     }
     // Multi-level field chain `<arg>.Col.path…` — descends via json_extract for @sql_json.
@@ -3035,7 +3036,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 var srcIdx = -1
                 if (!empty(q.rootAlias)) {
                     srcIdx = lookup_arg_source(q, argName)
-                    if (srcIdx < 0 && argName == "_") {
+                    // Pre-join `_where` JSON-path on the single source: resolve the named param to t0 while no join is seen yet (see column-ref branch).
+                    if (srcIdx < 0 && (argName == "_" || !q.seenJoin)) {
                         srcIdx = 0
                     }
                 } elif (argName == "_") {
@@ -3080,8 +3082,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     return frag
                 }
                 var srcIdx = lookup_arg_source(q, argName)
-                // Pre-join `_where` references root through `_` — arg-binding stack only populated inside `into` projection.
-                if (srcIdx < 0 && argName == "_") {
+                // Pre-join `_where`: argNames is empty until the join's `into`, so resolve any unbound param to t0 while no join is seen (only t0 exists).
+                if (srcIdx < 0 && (argName == "_" || !q.seenJoin)) {
                     srcIdx = 0
                 }
                 if (srcIdx >= 0) {

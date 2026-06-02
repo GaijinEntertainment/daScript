@@ -331,6 +331,8 @@ class XmlAdapter : SourceAdapter {
             selectLam = selCall.arguments[1]
             if (selectLam == null) return null
         }
+        var leadWhereLam = extract_join_lead_where(c)
+        if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
         let countOnly = c.single |> key_exists("term")
         // Iterator-typed result (no count terminator): the fused single-pass build is the measured
         // winner over a streaming generator (benchmarks/micro/join_select_shapes.das) — materialize
@@ -351,7 +353,7 @@ class XmlAdapter : SourceAdapter {
         var keybBody = peel_lambda_rename_var(keybLam, tupBName)
         if (keyaBody == null || keybBody == null) return null
         let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-        var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, countOnly, keyaBody, tupAName, hashName, tupBType, "xjoin", at)
+        var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "xjoin", at)
         if (pieces == null) return null
         var allStmts : array<Expression?>
         allStmts |> push_from(pieces.preludeStmts)

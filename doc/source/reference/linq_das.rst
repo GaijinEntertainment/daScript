@@ -29,12 +29,17 @@ embedded in a larger expression.
 Clauses
 -------
 
-A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ orderby <expr>
-[descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``:
+A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ join <var2>
+[ : <Row2> ] in <src2> on <keyA> equals <keyB> ] [ where <pred> ] [ orderby
+<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``:
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
-- ``where <predicate>`` — optional. Omitted from the chain when absent.
+- ``where <predicate>`` — optional. A ``where`` **before** ``join`` filters the
+  left source (single range var); a ``where`` **after** the join sees both range
+  variables. At most one ``where`` per query.
+- ``join <var2> in <src2> on <keyA> equals <keyB>`` — optional, a single inner
+  equi-join introducing a second range variable (see :ref:`linq_das_join`).
 - ``orderby <expr> [descending]`` — optional, a **single** sort key (see
   :ref:`linq_das_ordering`). Omitted when absent.
 - ``select <projection>`` — ``select <var>`` (the identity projection) returns
@@ -142,6 +147,60 @@ only aggregates. Use the aggregate pipe form for SQL grouping —
 ``orderby`` / ``group`` chains currently materialize rather than fuse — correct,
 but a ``_fold`` perf advisory fires; a decs-adapter gap, not a query-syntax one.)
 
+.. _linq_das_join:
+
+Join
+----
+
+``join <var2> [ : <Row2> ] in <src2> on <keyA> equals <keyB>`` adds a single
+**inner equi-join** — one new range variable, one equality key. The second
+source is built exactly like the first (untyped → array, typed → the
+``from_in`` dispatch), so it may be a different kind of source than the left.
+
+The reader picks one of two emit shapes from the **post-join** clauses (it
+transpiles before type inference and cannot see the source, so it decides
+textually):
+
+**Select-terminal** — no post-join ``where`` / ``orderby``, terminal is
+``select``. The ``select`` projection *is* the join's result row (both range
+variables are in scope), so it splices verbatim and **pushes down to SQL**:
+
+.. code-block:: das
+
+    var rows <- %linq! from c in cars join b in brands on c.brand equals b.brand
+                       select (Name = c.name, Country = b.country) %%
+
+A ``where`` *before* the ``join`` filters the left source (single range var) and
+also pushes down — over an array/decs/XML source it fuses into the join's probe
+loop (no intermediate filtered array):
+
+.. code-block:: das
+
+    var rows <- %linq! from c in cars where c.price >= 150 join b in brands
+                       on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
+
+**Transparent identifier** — a post-join ``where`` / ``orderby``, or a ``group``
+terminal. The join carries ``(c, b)`` as a pair so the later clauses can address
+both variables; the reader rewrites ``c`` / ``b`` to the carried fields. This is
+**in-memory only** (array / decs / XML) — over a SQL source the carried
+whole-row tuple has no column form and ``_sql`` rejects it (project columns in a
+select-terminal join, or filter pre-join, to push down):
+
+.. code-block:: das
+
+    // post-join where sees the joined row (both c and b)
+    var usa <- %linq! from c in cars join b in brands on c.brand equals b.brand
+                      where b.country == "USA" select c.name %%
+
+    // group the joined pairs by the right-side key → IGrouping whose elements
+    // are the (c, b) pairs (read g._0 = key, g._1 = array of pairs)
+    var byCountry <- %linq! from c in cars join b in brands on c.brand equals b.brand
+                            group c by b.country %%
+
+Only a **single equi-key** is supported — composite keys (``a equals b && c
+equals d``), group-joins (``join … into g``), multiple joins, and ``orderby``
+before ``group`` are rejected at compile time.
+
 Iterator vs array output
 ------------------------
 
@@ -180,10 +239,16 @@ Current limitations
 The following are not yet supported:
 
 - **JSON** as a source (the planned 5th adapter).
-- ``join`` — joining a second source (introduces a second range variable).
 - **Multi-key ``orderby``** (``orderby a, b descending``) — a single sort key
   only, for now.
 - **``group … by`` over a SQL source**, and the ``group … into`` aggregate
   continuation (SQL grouping rides ``into``).
+- **Composite / multiple / group joins** — ``join`` is a single inner equi-join
+  with one key; composite keys (``a equals b && c equals d``), ``join … into``
+  group-joins, and more than one ``join`` per query are rejected.
+- **Post-join ``where`` / ``orderby`` / ``group`` over a SQL source** — these use
+  the transparent-identifier carry, which is in-memory only; select-terminal
+  joins and pre-join ``where`` push down.
 - **Multiple ``from``** (SelectMany), ``let`` bindings, and ``into``
-  continuations — a query parses a single ``from`` (one range variable).
+  continuations — a query parses a single ``from`` (one range variable, plus a
+  ``join``'s second).

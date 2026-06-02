@@ -87,3 +87,68 @@ def test_xml_group_by(t : T?) {
         }
     }
 }
+
+// ===== join: XML left source ⋈ in-memory array right source =====
+
+struct BrandHQ {
+    brand   : string
+    country : string
+}
+
+def private mk_brands() : array<BrandHQ> {
+    return <- [BrandHQ(brand = "Ford",  country = "USA"),
+               BrandHQ(brand = "Honda", country = "Japan")]
+}
+
+[test]
+def test_xml_join_select_terminal(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let rows <- %linq! from c : Car in doc.document_element join b in brands on c.brand equals b.brand select (Id = c.id, Country = b.country) %%
+        t |> equal(length(rows), 3, "all 3 cars match a brand HQ")
+        var usa = 0
+        for (r in rows) {
+            if (r.Country == "USA") { usa++ }
+        }
+        t |> equal(usa, 2, "two Fords → USA")
+    }
+}
+
+[test]
+def test_xml_join_pre_join_where(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // pre-join where filters the XML rows (price > 99 → car1 Ford, car2 Honda) before the join
+        let rows <- %linq! from c : Car in doc.document_element where c.price > 99.0 join b in brands on c.brand equals b.brand select (Id = c.id, Country = b.country) %%
+        t |> equal(length(rows), 2, "pre-join where prunes the DOM walk")
+    }
+}
+
+[test]
+def test_xml_join_orderby(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // post-join orderby → transparent-id carry; sort the joined pairs by price
+        let ids <- %linq! from c : Car in doc.document_element join b in brands on c.brand equals b.brand orderby c.price select c.id %%
+        t |> equal(length(ids), 3)
+        t |> equal(ids[0], 3, "car3 price 50 first")
+        t |> equal(ids[2], 2, "car2 price 300 last")
+    }
+}
+
+[test]
+def test_xml_join_group_after(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let groups <- %linq! from c : Car in doc.document_element join b in brands on c.brand equals b.brand group c by b.country %%
+        t |> equal(length(groups), 2, "USA + Japan buckets")
+        for (g in groups) {
+            if (g._0 == "USA")   { t |> equal(length(g._1), 2, "two Fords") }
+            if (g._0 == "Japan") { t |> equal(length(g._1), 1, "one Honda") }
+        }
+    }
+}

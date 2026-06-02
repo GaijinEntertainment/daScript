@@ -5294,11 +5294,21 @@ struct JoinStandalonePieces {
 //   + select          → body `for (b in arr) { let res = result(a,b); buf |> push_clone(select(res)) }`
 //   + where           → body `for (b in arr) { let res = result(a,b); if (where) buf |> push_clone(res) }`
 //   + select + where  → body `for (b in arr) { let res = result(a,b); if (where) buf |> push_clone(select(res)) }`
+// The optional leading `_where` of join_general — the predicate lambda filtering srcA before the join.
+// Returns null when absent OR malformed; callers that need to bail on a malformed slot re-check key_exists.
+[macro_function]
+def extract_join_lead_where(var c : Captures) : Expression? {
+    if (!(c.single |> key_exists("lead_where"))) return null
+    var call = c.single["lead_where"]
+    return call != null ? call.arguments[1] : null
+}
+
 [macro_function]
 def build_join_standalone_pieces(
                                  var joinCall   : ExprCall?;
                                  var whereLam   : Expression?;
                                  var selectLam  : Expression?;
+                                 var leadWhereLam : Expression?;
                                  countOnly      : bool;
                                  var keyaBody   : Expression?;
                                  tupAName       : string;
@@ -5413,6 +5423,19 @@ def build_join_standalone_pieces(
             $b(probeInnerStmts)
         })
     }
+    // Leading `where` (filters srcA before the join): wrap the per-A probe in the predicate so the filter
+    // fuses into the probe loop — no intermediate filtered-srcA array. References tupAName, bound per-A by
+    // every adapter's source loop (array `for`, decs archetype walk, xml DOM walk).
+    if (leadWhereLam != null) {
+        var leadPred = peel_lambda_rename_var(leadWhereLam, tupAName)
+        if (leadPred == null) return null
+        var probeInner = probeOuter
+        probeOuter = qmacro_expr() {
+            if ($e(leadPred)) {
+                $e(probeInner)
+            }
+        }
+    }
     return <- new JoinStandalonePieces(
         preludeStmts <- preludeStmts,
         probeOuter <- probeOuter,
@@ -5430,6 +5453,7 @@ def build_join_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "join_general",
         chain <- [
+            Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "lead_where", arity = 2),
             Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
             Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
             Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
@@ -5483,6 +5507,8 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
         selectLam = selCall.arguments[1]
         if (selectLam == null) return null
     }
+    var leadWhereLam = extract_join_lead_where(c)
+    if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
     let countOnly = c.single |> key_exists("term")
     if (!countOnly && ctx.expr_is_iterator) return null
     var topSrc = ctx.src->arrayTop()
@@ -5503,7 +5529,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     var keybBody = peel_lambda_rename_var(keybLam, tupBName)
     if (keyaBody == null || keybBody == null) return null
     let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, countOnly, keyaBody, tupAName, hashName, tupBType, "ajoin", at)
+    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "ajoin", at)
     if (pieces == null) return null
     var allStmts : array<Expression?>
     allStmts |> push_from(pieces.preludeStmts)

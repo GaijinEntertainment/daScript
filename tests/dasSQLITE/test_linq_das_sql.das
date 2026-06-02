@@ -82,3 +82,62 @@ def test_sql_orderby_descending_with_where(t : T?) {
         t |> equal(names[1], "Audi")
     }
 }
+
+// ===== join over SQL — select-terminal + pre-join where push down (post-join transparent-id is the
+// documented boundary: it would carry a whole-row tuple `_sql` rejects; see failed_linq_das_sql.das) =====
+
+[sql_table(name = "JCars")]
+struct JCar {
+    @sql_primary_key id : int
+    name  : string
+    brand : string
+    price : int
+}
+
+[sql_table(name = "JBrands")]
+struct JBrand {
+    @sql_primary_key brand : string
+    country : string
+}
+
+def private join_fixture(db : SqlRunner) {
+    db |> create_table(type<JCar>)
+    db |> create_table(type<JBrand>)
+    db |> insert(JCar(id = 1, name = "BMW",   brand = "de", price = 100))
+    db |> insert(JCar(id = 2, name = "Audi",  brand = "de", price = 200))
+    db |> insert(JCar(id = 3, name = "Tesla", brand = "us", price = 300))
+    db |> insert(JBrand(brand = "de", country = "Germany"))
+    db |> insert(JBrand(brand = "us", country = "USA"))
+}
+
+[test]
+def test_sql_join_select_terminal_tuple(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        let rows <- %linq! from c : JCar in db join b : JBrand in db on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
+        // parity with the hand-written _sql join (select-terminal, both range vars in the result selector)
+        let ref <- _fold(db |> select_from(type<JCar>)
+            |> _join(db |> select_from(type<JBrand>), $(c, b) => c.brand == b.brand, $(c, b) => (Name = c.name, Country = b.country)))
+        t |> equal(length(rows), 3, "3 cars each match a brand HQ")
+        t |> equal(length(rows), length(ref), "linq_das ≡ hand-written _sql join")
+    }
+}
+
+[test]
+def test_sql_join_select_terminal_scalar(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        let names <- %linq! from c : JCar in db join b : JBrand in db on c.brand equals b.brand select c.name %%
+        t |> equal(length(names), 3, "scalar select-terminal pushes down")
+    }
+}
+
+[test]
+def test_sql_join_pre_join_where(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        // `where` before `join` filters JCars (price >= 200 → Audi, Tesla), then joins — all pushed to SQL.
+        let rows <- %linq! from c : JCar in db where c.price >= 200 join b : JBrand in db on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
+        t |> equal(length(rows), 2, "pre-join where pushes down to a SQL WHERE")
+    }
+}
