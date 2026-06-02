@@ -20,7 +20,6 @@
 #include "daScript/misc/gc_node.h"
 #include "daScript/ast/ast_typedecl.h"
 #include <inttypes.h>
-#include <filesystem>
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 

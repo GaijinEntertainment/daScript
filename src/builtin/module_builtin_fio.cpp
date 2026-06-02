@@ -213,9 +213,12 @@ namespace das {
     bool builtin_mkdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
     bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
     bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
+    void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
+    void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
+    void retry_pending_dynamic_modules () GENERATE_IO_STUB
+
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
-
 
     class Module_FIO : public Module {
     public:

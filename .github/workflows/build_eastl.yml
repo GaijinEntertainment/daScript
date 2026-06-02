@@ -34,3 +34,16 @@ jobs:
             -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common -DEASTL_EASTDC_VSNPRINTF=0" \
             -DCMAKE_CXX_STANDARD_LIBRARIES="$PWD/eastl_build/libeastl.a"
       - run: cmake --build build --target daslang --parallel
+      # No-fileio coverage: filesystem is a fio-only dependency. The shadow
+      # cmake/das_config_eastl/filesystem header #errors on any <filesystem>
+      # include under DAS_NO_FILEIO, so this build fails if a stray dependency
+      # creeps in.
+      - run: |
+          CC=clang CXX=clang++ cmake -B build_nofileio -G Ninja \
+            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON \
+            -DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON \
+            -DDAS_AOT_EXAMPLES_DISABLED=ON \
+            -DDAS_CONFIG_INCLUDE_DIR=cmake/das_config_eastl \
+            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common -DEASTL_EASTDC_VSNPRINTF=0 -DDAS_NO_FILEIO=1" \
+            -DCMAKE_CXX_STANDARD_LIBRARIES="$PWD/eastl_build/libeastl.a"
+      - run: cmake --build build_nofileio --target daslang --parallel

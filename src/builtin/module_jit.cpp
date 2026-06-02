@@ -33,7 +33,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <cstdlib>
+#if !DAS_NO_FILEIO
 #include <filesystem>
+#endif
 
 // MSVC ships popen/pclose under _popen/_pclose; alias once for the whole TU.
 #if defined(_WIN32) || defined(_WIN64)
@@ -1235,47 +1238,16 @@ extern "C" {
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Jit,das);
 
-extern "C" {
-DAS_API void das_ensure_environment () {
-    das::daScriptEnvironment::ensure();
-}
-
-DAS_API void jit_initialize_modules () {
-    // No need to initialize modules. JIT will generate required calls.
-    das::daScriptEnvironment::ensure();
-}
-
-DAS_API void jit_initialize_modules_done () {
-    das::Module::Initialize();
-}
-
-// Standalone-exe teardown. Emitted by inject_main right before main returns,
-// so debug agents and modules drain while the runtime is alive. Without this,
-// the static g_DebugAgents map dtor races ref_count_mutex during
-// __cxa_finalize_ranges and terminate() fires (issue #2583).
-DAS_API void jit_shutdown () {
-    das::Module::ShutdownStandalone();
-}
-
-DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
-    return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
-}
-
 // Test seam: unit tests override the exe-path source so resolution can be
 // exercised with synthetic layouts. nullptr = use real getExecutableFileName.
 // Returned char* must remain valid for the duration of one resolve call.
 static const char * (*g_jit_exe_file_for_test)() = nullptr;
-DAS_API void jit_set_exe_file_for_test_( const char * (*fn)() ) {
-    g_jit_exe_file_for_test = fn;
-}
 
 // Test predicate "does this path exist?" (default: real filesystem). Tests
 // can swap in a mock predicate to exercise resolution without touching disk.
 static bool (*g_jit_path_exists_for_test)(const char *) = nullptr;
-DAS_API void jit_set_path_exists_for_test_( bool (*fn)(const char *) ) {
-    g_jit_path_exists_for_test = fn;
-}
 
+#if !DAS_NO_FILEIO
 static bool jit_path_exists ( const char * p ) {
     return g_jit_path_exists_for_test ? g_jit_path_exists_for_test(p) : das::builtin_fexist(p);
 }
@@ -1335,6 +1307,48 @@ static das::string resolve_dynamic_module_path ( const char * rel_path, const ch
     }
     // tier 3 — baked absolute (legacy fallback)
     return fallback_abs_path ? fallback_abs_path : "";
+}
+#else
+// No file IO (DAS_NO_FILEIO): there is no filesystem to resolve a dynamic
+// module against, and a build with no fio can't dlopen one anyway. Calling
+// this is a logic error on such a platform, so abort loudly.
+static das::string resolve_dynamic_module_path ( const char *, const char * ) {
+    std::abort();
+}
+#endif
+
+extern "C" {
+DAS_API void das_ensure_environment () {
+    das::daScriptEnvironment::ensure();
+}
+
+DAS_API void jit_initialize_modules () {
+    // No need to initialize modules. JIT will generate required calls.
+    das::daScriptEnvironment::ensure();
+}
+
+DAS_API void jit_initialize_modules_done () {
+    das::Module::Initialize();
+}
+
+// Standalone-exe teardown. Emitted by inject_main right before main returns,
+// so debug agents and modules drain while the runtime is alive. Without this,
+// the static g_DebugAgents map dtor races ref_count_mutex during
+// __cxa_finalize_ranges and terminate() fires (issue #2583).
+DAS_API void jit_shutdown () {
+    das::Module::ShutdownStandalone();
+}
+
+DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
+    return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
+}
+
+DAS_API void jit_set_exe_file_for_test_( const char * (*fn)() ) {
+    g_jit_exe_file_for_test = fn;
+}
+
+DAS_API void jit_set_path_exists_for_test_( bool (*fn)(const char *) ) {
+    g_jit_path_exists_for_test = fn;
 }
 
 // Test entry point: invoke pure resolution and return the chosen path via
