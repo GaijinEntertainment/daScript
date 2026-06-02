@@ -41,8 +41,9 @@ from pathlib import Path
 
 try:
     import markdown
+    from markdown.inlinepatterns import SimpleTagInlineProcessor
 except ImportError as e:
-    sys.exit(f"build_blog.py requires `markdown`: pip install markdown  ({e})")
+    sys.exit(f"build_blog.py requires markdown >= 3.0: pip install -U markdown  ({e})")
 
 
 # ─── Front matter ────────────────────────────────────────────────────
@@ -216,12 +217,22 @@ def split_excerpt(md_body: str) -> tuple[str, str]:
 
 # ─── Markdown renderer ───────────────────────────────────────────────
 
+class StrikethroughExtension(markdown.extensions.Extension):
+    """GFM `~~text~~` → `<del>text</del>`. Python-Markdown ships no
+    strikethrough; registered below the backtick processor so code spans
+    and fences are stashed first and never struck through."""
+    def extendMarkdown(self, md):
+        md.inlinePatterns.register(
+            SimpleTagInlineProcessor(r'(~~)(.+?)~~', 'del'), 'strikethrough', 175)
+
+
 def make_md():
     # No codehilite — daslang isn't in pygments. We emit standard
     # CommonMark `<pre><code class="language-X">` and let
     # site/files/highlight.js tokenize daslang blocks client-side.
     return markdown.Markdown(
-        extensions=['fenced_code', 'tables', 'def_list', 'attr_list'],
+        extensions=['fenced_code', 'tables', 'def_list', 'attr_list',
+                    StrikethroughExtension()],
     )
 
 
