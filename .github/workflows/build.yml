@@ -156,6 +156,10 @@ jobs:
             architecture_string: x64
 
           # RelWithDebInfo only on Windows x64
+          # jit_disabled: skip the JIT prewarm + JIT test sweep here. JIT on
+          # win64-MSVC stays covered by the Release cell below and by the full
+          # clang JIT sweep in build_windows_mingw — running it on all three
+          # win64 presets just triples the slowest jobs in the matrix.
           - target: windows
             architecture: 64
             cmake_preset: RelWithDebInfo
@@ -167,6 +171,13 @@ jobs:
             release_target: windows
             release_arch: x86_64
             architecture_string: x64
+            jit_disabled: 'ON'
+
+          # Debug win64 also skips JIT (same rationale as RelWithDebInfo above).
+          - target: windows
+            architecture: 64
+            cmake_preset: Debug
+            jit_disabled: 'ON'
 
         exclude:
           # macOS Intel (darwin15 x86_64) prebuilt LLVM.dll isn't shipped by
@@ -392,7 +403,7 @@ jobs:
         key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
 
     - name: "Prewarm JIT cache"
-      if: env.das_llvm_disabled != 'ON'
+      if: env.das_llvm_disabled != 'ON' && matrix.jit_disabled != 'ON'
       run: |
         set -eux
         cmake --build ./build --config ${{ matrix.cmake_preset }} --target jit_cache_all_tests
@@ -453,7 +464,7 @@ jobs:
             ;;
            windows*)
             cd bin
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --timeout 900 --color --failures-only --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.jit_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --timeout 900 --color --failures-only --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
             ;;
            linux_arm64)
