@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 
+require strings
 require daslib/sql
 require sqlite/sqlite_boost
 require sqlite/sqlite_linq
@@ -13,7 +14,9 @@ require sqlite/sqlite_linq
 //        via the same pred_to_sql + push_computed_proj_slot path (previously rejected: "_.Field only").
 //   B3 — string `+` (daslang concatenation) lowers to SQL `||`, not `+` (SQLite `+` is numeric: 'a'+'b'==0).
 //   C  — computed `_order_by(_.Price/10)` keys (single + tuple entry) render with constants inlined, like
-//        _group_by computed keys (previously rejected: "_.Field or string only").
+//        _group_by computed keys (previously rejected: "_.Field or string only"). A row-referencing string
+//        key (`to_lower(_.Name)`, `_.a + _.b`) routes to the computed path; a captured column-name string
+//        stays a dynamic runtime identifier.
 //   D  — bitwise `& | << >>` and unary `- ~` lower to the matching SQLite operators.
 //   A  — take(n)/skip(n) BEFORE an aggregate wraps the pre-aggregate chain into an inner subquery
 //        (LIMIT/OFFSET stay inner) and renders the aggregate on the outer SELECT (previously rejected).
@@ -246,6 +249,35 @@ def test_computed_order_by_tuple_entry_runtime(t : T?) {
         t |> equal(rows[1], "BMW")
         t |> equal(rows[4], "Lambo")
     }
+}
+
+[test]
+def test_order_by_string_concat_key_emits(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _order_by(_.Name + "!") |> _select(_.Id) |> to_array())
+    t |> success(sql == "SELECT \"Id\" FROM \"Cars\" ORDER BY (\"Name\") || ('!') ASC",
+        "row-referencing string order key routes to computed ||; SQL: {sql}")
+}
+
+[test]
+def test_order_by_lower_key_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // case-insensitive sort via LOWER(Name): audi, bmw, lada, lambo, tesla
+        let r <- _sql(db |> select_from(type<Car>) |> _order_by(to_lower(_.Name)) |> _select(_.Name) |> to_array())
+        t |> equal(r[0], "Audi", "lower(Name) asc, first")
+        t |> equal(r[4], "Tesla", "lower(Name) asc, last")
+    }
+}
+
+[test]
+def test_order_by_dynamic_column_name(t : T?) {
+    // a captured string (no row reference) is still a dynamic column NAME, not a computed expression
+    var _db = SqlRunner()
+    let colName = "Price"
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _order_by(colName) |> _select(_.Id) |> to_array())
+    t |> success(sql == "SELECT \"Id\" FROM \"Cars\" ORDER BY \"Price\" ASC",
+        "captured column-name string stays a runtime identifier; SQL: {sql}")
 }
 
 // ===== D — bitwise (& | << >>) and unary (- ~) operators =====

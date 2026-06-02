@@ -2791,7 +2791,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
                 }
                 let sqlCol = field_to_column_name(q.rootType, fieldName)
                 q.orderByCols |> push("\"{sqlCol}\" {direction}")
-            } elif (val._type != null && val._type.baseType == Type.tString) {
+            } elif (val._type != null && val._type.baseType == Type.tString && !mentions_source_arg(val, q)) {
                 q.orderByInlineExprs |> push <| clone_expression(val)
                 q.orderByCols |> push("\x01 {direction}")
             } elif (is_sql_renderable_scalar(val._type)) {
@@ -2806,8 +2806,8 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         }
         return true
     }
-    // Runtime form: string-typed expression naming the column; quoted via sql_quote_id at emission.
-    if (body._type != null && body._type.baseType == Type.tString) {
+    // A string key NOT referencing the row is a dynamic column NAME (quoted at emission); one that DOES (`to_lower(_.Name)`) falls to the computed arm below.
+    if (body._type != null && body._type.baseType == Type.tString && !mentions_source_arg(body, q)) {
         q.orderByInlineExprs |> push <| clone_expression(body)
         q.orderByCols |> push("\x01 {direction}")
         return true
@@ -2943,10 +2943,8 @@ def private is_string_typed(e : ExpressionPtr) : bool {
     return e != null && e._type != null && e._type.baseType == Type.tString
 }
 
-// True if `node` references a source column anywhere — a bare `_` / join-arg ExprVar, or a field/operator/
-// call tree containing one. The bind fallthrough binds unrecognized nodes as `?` (correct for captured
-// runtime values); a node that touches a column instead means "we can't translate this expression" and
-// must reject cleanly rather than bind (which would fail at bind time with `can't locate variable '_'`).
+// True if `node` references a source column (a bare `_` / join-arg ExprVar, or a field/op/call tree holding
+// one) — so the bind fallthrough rejects column expressions it can't translate instead of binding them.
 def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery) : bool {
     if (node == null) return false
     if (node is ExprRef2Value) {
@@ -3093,8 +3091,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) % $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
     }
-    // Bitwise — match by operator string (qmatch can't parse a `>>` pattern). SQLite has `& | << >>`;
-    // `^` / `<<<` / `>>>` have no SQLite operator and fall through to the unsupported-expression guard.
+    // Bitwise by operator string (qmatch can't parse `>>`). `^` / `<<<` / `>>>` fall through to the guard.
     if (node is ExprOp2) {
         var op2 = node as ExprOp2
         let opName = string(op2.op)
@@ -3356,13 +3353,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         if (node is ExprConstBool) return (node as ExprConstBool).value ? "1" : "0"
         if (node is ExprConstString) return sql_quote_lit(string((node as ExprConstString).value))
     }
-    // A node that reaches here while referencing a source column is an expression we don't know how to
-    // translate — binding it as `?` would fail at bind time (`can't locate variable '_'`). Reject cleanly.
+    // Reaches here referencing a column = an expression we can't translate; reject (binding `?` would fail with `can't locate '_'`).
     if (mentions_source_arg(node, q)) {
         return pred_fail(q, prog, at, "_sql: expression over a column is not translatable to SQL: {describe(node)}. Compute it in daslang after the query, or use raw SQL.")
     }
-    // Bind fallthrough: a captured runtime value (no column reference) becomes `?`; sql_bind catch-all +
-    // concept_assert error if not bindable.
+    // Bind fallthrough: a captured runtime value (no column reference) becomes `?`.
     if (q.inHaving) {
         q.havingBindExprs |> push <| clone_expression(node)
     } else {
