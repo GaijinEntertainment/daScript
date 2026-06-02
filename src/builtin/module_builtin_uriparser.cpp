@@ -112,22 +112,17 @@ char * unix_file_name_to_uri ( char * uristr, Context * context, LineInfoArg * a
 char * windows_file_name_to_uri ( char * uristr, Context * context, LineInfoArg * at ) {
     if ( !uristr ) return nullptr;
     int len = stringLength(*context,uristr);
-    // uriWindowsFilenameToUriStringA only treats '\\' as a path separator and
-    // only percent-escapes per segment. daslang normalizes paths to '/', so a
-    // '/'-only path collapses into a single "first segment" that is copied
-    // verbatim (unescaped) — producing an invalid URI (e.g. a literal space)
-    // that normalize_uri/parse then rejects. Normalize '/' -> '\\' first so each
-    // segment is escaped (the converter turns '\\' back into '/' in the URI).
-    auto tmp = new char[len + 1];
-    for ( int i = 0; i < len; ++i ) tmp[i] = (uristr[i] == '/') ? '\\' : uristr[i];
-    tmp[len] = 0;
+    // Normalize '/' -> '\\' so each path segment is percent-escaped; otherwise a
+    // '/'-only path yields an invalid URI (see windowsFileNameSlashesToBackslashes
+    // in uric.h). No allocation when the path has no '/'.
+    string slashStorage;
+    const char * winName = windowsFileNameSlashesToBackslashes(uristr, slashStorage);
     auto buf = new char[8 + 3 * len + 1];
     char * result = nullptr;
-    if ( uriWindowsFilenameToUriStringA(tmp, buf) == URI_SUCCESS ) {
+    if ( uriWindowsFilenameToUriStringA(winName, buf) == URI_SUCCESS ) {
         result = context->allocateString(buf, uint32_t(strlen(buf)), at);
     }
     delete [] buf;
-    delete [] tmp;
     return result;
 }
 

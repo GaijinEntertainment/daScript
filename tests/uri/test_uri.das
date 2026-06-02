@@ -120,6 +120,7 @@ def test_file_name_to_uri_escapes_reserved(t : T?) {
         let uri = unix_file_name_to_uri(p)
         t |> success(!empty(uri), "unix_file_name_to_uri returned empty for {p}")
         t |> success(uri |> contains("%20"), "space not percent-encoded: {uri}")
+        t |> success(!(uri |> contains(" ")), "literal space left in uri: {uri}")
         let norm = uri |> normalize_uri()
         t |> success(!empty(norm), "normalize_uri rejected {uri}")
         let back = norm |> uri_to_file_name()
