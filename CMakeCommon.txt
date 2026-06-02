@@ -241,11 +241,17 @@ MACRO(SETUP_COMPILER)
 			ELSE()
 				SET(MSVC_STD_LIB_FLAG "/MD")
 			ENDIF()
-			#SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /EHa")
+			# /Z7 (debug info embedded in each .obj) instead of /Zi (a single
+			# shared .pdb): /Zi serializes parallel cl.exe through mspdbsrv and
+			# cannot be cached by the sccache compiler launcher. /Z7 is valid on
+			# every generator (the linker still emits a .pdb via /DEBUG). Debug
+			# inherits CMake's default /Zi, so rewrite it; RelWithDebInfo below
+			# sets it explicitly.
+			STRING(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 			SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /EHa")
 			SET(CMAKE_CXX_FLAGS_RELEASE "${MSVC_STD_LIB_FLAG} /Ot /Ox /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
 			SET(CMAKE_CXX_FLAGS_MINSIZEREL "${MSVC_STD_LIB_FLAG} /Os /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
-			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Zi ${MSVC_STD_LIB_FLAG} /Ot /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa")
+			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Z7 ${MSVC_STD_LIB_FLAG} /Ot /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa")
 
 			# HUGE LINKER HEAP
 			set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /HEAP:536870912")
