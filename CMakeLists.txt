@@ -1,5 +1,11 @@
 cmake_minimum_required (VERSION 3.17)
 project (DAS VERSION 0.6.2)
+
+# Set build type to Debug by default. If not set it will break
+# dependencies for modules.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+endif()
 # enable_testing() must live at the top-level scope of the top-level
 # CMakeLists.txt for `ninja test` / ctest to work from the build root.
 # The actual add_test() calls live under tests-cpp/.
