@@ -29,15 +29,20 @@ embedded in a larger expression.
 Clauses
 -------
 
-A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] select <proj> [ iterator ]``:
+A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ orderby <expr>
+[descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``:
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
 - ``where <predicate>`` — optional. Omitted from the chain when absent.
-- ``select <projection>`` — required. ``select <var>`` (the identity
-  projection) returns the rows unchanged; any other projection emits
-  ``_select(...)``.
+- ``orderby <expr> [descending]`` — optional, a **single** sort key (see
+  :ref:`linq_das_ordering`). Omitted when absent.
+- ``select <projection>`` — ``select <var>`` (the identity projection) returns
+  the rows unchanged; any other projection emits ``_select(...)``.
+- ``group <var> by <key>`` — the alternative terminal to ``select`` (see
+  :ref:`linq_das_grouping`).
 
+A query ends with **either** ``select`` **or** ``group … by`` — exactly one.
 Clauses may span multiple lines inside the ``%linq! … %%`` body.
 
 Sources
@@ -85,6 +90,58 @@ placeholder ``_``; the macro normalizes the single-source lambda parameter to
 ``_`` internally, so the C# variable name is still spliced verbatim at the
 surface.
 
+.. _linq_das_ordering:
+
+Ordering
+--------
+
+``orderby <expr> [descending]`` sorts by a **single** key, emitting
+``_order_by($(c) => <expr>)`` (or ``_order_by_descending(...)``) between the
+``where`` and the ``select``. ``descending`` (and the default-explicit
+``ascending``) are recognized as trailing keywords:
+
+.. code-block:: das
+
+    // ascending (default)
+    var byPrice <- %linq! from c in cars orderby c.price select c.name %%
+
+    // descending, after a where
+    var top <- %linq! from c in cars where c.price > 100 orderby c.price descending select c.name %%
+
+Works over all four sources (SQL emits ``ORDER BY … [DESC]``; array / decs / XML
+sort the materialized rows). **Multi-key** ordering (``orderby a, b descending``)
+is not yet supported — there is no ``_then_by`` operator; use a single key for
+now.
+
+.. _linq_das_grouping:
+
+Grouping
+--------
+
+``group <var> by <key>`` is a terminal (it replaces ``select``). It emits
+``_group_by_lazy($(c) => <key>)`` and yields one ``tuple<key; array<elem>>``
+bucket per distinct key — the C# *IGrouping* shape. Read the key as ``._0`` and
+the group's elements as ``._1``:
+
+.. code-block:: das
+
+    var byBrand <- %linq! from c in cars group c by c.brand %%
+    for (g in byBrand) {
+        print("{g._0}: {g._1 |> length} cars\n")   // key, then count of that bucket
+    }
+
+A ``where`` may precede the ``group``; ``orderby`` may not (ordering the groups
+needs the deferred ``into`` continuation). The group element must be the range
+variable (``group c by …``) — element selectors are not yet supported.
+
+**Grouping is an in-memory feature** (array / decs / XML). Over a **SQL** source
+it is rejected at compile time: SQL ``GROUP BY`` has no all-rows-per-group form,
+only aggregates. Use the aggregate pipe form for SQL grouping —
+``db |> select_from(type<Car>) |> _group_by(_.brand) |> _select((B = _._0, N = _._1 |> count())) |> _sql()``
+— until the ``group … into`` continuation lands. (Over decs these minimal
+``orderby`` / ``group`` chains currently materialize rather than fuse — correct,
+but a ``_fold`` perf advisory fires; a decs-adapter gap, not a query-syntax one.)
+
 Iterator vs array output
 ------------------------
 
@@ -123,6 +180,10 @@ Current limitations
 The following are not yet supported:
 
 - **JSON** as a source (the planned 5th adapter).
-- **Additional clauses** — ``orderby`` / ``group by`` / ``join``.
+- ``join`` — joining a second source (introduces a second range variable).
+- **Multi-key ``orderby``** (``orderby a, b descending``) — a single sort key
+  only, for now.
+- **``group … by`` over a SQL source**, and the ``group … into`` aggregate
+  continuation (SQL grouping rides ``into``).
 - **Multiple ``from``** (SelectMany), ``let`` bindings, and ``into``
   continuations — a query parses a single ``from`` (one range variable).

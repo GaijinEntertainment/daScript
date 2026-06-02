@@ -8,18 +8,22 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/linq_boost public
 
-// ===== C#-style LINQ query syntax (linq_das) — from/where/select over any _fold source =====
+// ===== C#-style LINQ query syntax (linq_das) — from/where/orderby/select|group over any _fold source =====
 //
 // The `%linq! … %%` inline reader macro rewrites a C#-like query into a `_fold(...)` chain:
 //
-//     %linq! from c in cars where c.price > 100 select c.name %%
-//        →   ( _fold( each(cars) |> _where($(c) => c.price > 100) |> _select($(c) => c.name) |> to_array() ) )
+//     %linq! from c in cars where c.price > 100 orderby c.price select c.name %%
+//        →   ( _fold( each(cars) |> _where($(c) => c.price > 100) |> _order_by($(c) => c.price) |> _select($(c) => c.name) |> to_array() ) )
+//     %linq! from c in cars group c by c.brand %%
+//        →   ( _fold( each(cars) |> _group_by_lazy($(c) => c.brand) |> to_array() ) )
 //
 // An untyped `from c in <arr>` is an array source. A typed `from c : Row in <src>` selects a non-array
 // source: `decs` (a keyword marker → `from_decs_template`), or any value whose type the `from_in` call
 // macro dispatches (a SQL runner → `select_from`, an XML node → `from_xml_node`). The range variable is
-// spliced verbatim as the block parameter. A trailing `iterator` keyword yields an `iterator<T>` over
-// the materialized (fused) result (via `to_sequence()`) instead of the default `array<T>` — not lazy streaming.
+// spliced verbatim as the block parameter. `orderby <expr> [descending]` is a single sort key. `group c
+// by <key>` is a terminal yielding `tuple<key; array<elem>>` per bucket — IGrouping, in-memory sources
+// only (over SQL it errors: SQL needs an aggregating projection). A trailing `iterator` keyword yields an
+// `iterator<T>` over the materialized (fused) result (via `to_sequence()`) instead of the default `array<T>`.
 
 def private is_ident_byte(c : int) : bool {
     return is_alnum(c) || c == '_'
@@ -116,11 +120,10 @@ def private read_ident(q : string; from : int) : tuple<string; int> {
     return (slice(q, s, e), e)
 }
 
-// If the projection ends with a standalone `iterator` keyword (preceded by whitespace, so a member
-// access like `c.iterator` is not matched), strip it and request iterator output.
-def private strip_trailing_iterator(proj : string) : tuple<string; bool> {
-    let p = strip(proj)
-    let kw = "iterator"
+// If `text` ends with a standalone `kw` keyword (preceded by whitespace, so a member access like
+// `c.iterator` / `c.descending` is not matched), strip it and return (remainder, true).
+def private strip_trailing_keyword(text : string; kw : string) : tuple<string; bool> {
+    let p = strip(text)
     let m = length(kw)
     let n = length(p)
     if (n <= m || !ends_with(p, kw)) { return (p, false) }
@@ -167,14 +170,31 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
         macro_error(prog, at, "linq: unexpected '{between}' between range variable and 'in'")
         return "(0)"
     }
+    // Clauses in C# order, each searched after the previous so positions stay ordered:
+    //   from … [where <pred>] [orderby <expr> [descending]] ( select <proj> | group <var> by <key> ) [iterator]
     let srcStart = inPos + 2
     let wherePos = find_kw_depth0(q, "where", srcStart)
-    let selectPos = find_kw_depth0(q, "select", wherePos >= 0 ? wherePos + 5 : srcStart)
-    if (selectPos < 0) {
-        macro_error(prog, at, "linq: query must end with a 'select' clause")
+    let afterWhere = wherePos >= 0 ? wherePos + 5 : srcStart
+    let orderByPos = find_kw_depth0(q, "orderby", afterWhere)
+    let afterOrderBy = orderByPos >= 0 ? orderByPos + 7 : afterWhere
+    let selectPos = find_kw_depth0(q, "select", afterOrderBy)
+    let groupPos = find_kw_depth0(q, "group", afterOrderBy)
+    if (selectPos < 0 && groupPos < 0) {
+        macro_error(prog, at, "linq: query must end with a 'select' or 'group … by …' clause")
         return "(0)"
     }
-    let srcEnd = wherePos >= 0 ? wherePos : selectPos
+    if (selectPos >= 0 && groupPos >= 0) {
+        macro_error(prog, at, "linq: query cannot have both 'select' and 'group' — they are alternative terminals")
+        return "(0)"
+    }
+    let isGroup = groupPos >= 0
+    let termPos = isGroup ? groupPos : selectPos
+    // `orderby` before `group` would emit `_order_by |> _group_by_lazy`, which `_fold` does not fuse.
+    if (isGroup && orderByPos >= 0) {
+        macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
+        return "(0)"
+    }
+    let srcEnd = wherePos >= 0 ? wherePos : (orderByPos >= 0 ? orderByPos : termPos)
     let srcText = strip(slice(q, srcStart, srcEnd))
     if (srcText == "") {
         macro_error(prog, at, "linq: empty source expression after 'in'")
@@ -183,22 +203,67 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     let hasWhere = wherePos >= 0
     var predText = ""
     if (hasWhere) {
-        predText = strip(slice(q, wherePos + 5, selectPos))
+        predText = strip(slice(q, wherePos + 5, orderByPos >= 0 ? orderByPos : termPos))
         if (predText == "") {
             macro_error(prog, at, "linq: empty 'where' predicate")
             return "(0)"
         }
     }
-    let rawProj = strip(slice(q, selectPos + 6, nq))
-    let pj = strip_trailing_iterator(rawProj)
-    let projText = pj._0
-    let wantIterator = pj._1
-    if (projText == "") {
-        macro_error(prog, at, "linq: empty 'select' projection")
-        return "(0)"
+    // orderby clause (select-terminated only): `<expr> [descending|ascending]`.
+    let hasOrderBy = orderByPos >= 0
+    var orderKey = ""
+    var orderDesc = false
+    if (hasOrderBy) {
+        let rawOrder = strip(slice(q, orderByPos + 7, termPos))
+        let od = strip_trailing_keyword(rawOrder, "descending")
+        if (od._1) {
+            orderKey = od._0; orderDesc = true
+        } else {
+            // a trailing `ascending` is the default — strip it if present
+            orderKey = strip_trailing_keyword(rawOrder, "ascending")._0
+        }
+        if (orderKey == "") {
+            macro_error(prog, at, "linq: empty 'orderby' expression")
+            return "(0)"
+        }
     }
-    // `select c` (the range variable alone) is the identity projection — no `_select` is emitted.
-    let identitySelect = (projText == varName)
+    // Terminal: select projection, or group element/key.
+    var projText = ""
+    var identitySelect = false
+    var groupKey = ""
+    var wantIterator = false
+    if (isGroup) {
+        // `group <elem> by <key> [iterator]` — element must be the range variable (identity; element
+        // selectors are deferred). The group yields `tuple<key; array<elem>>` per bucket (IGrouping).
+        let groupBody = strip(slice(q, termPos + 5, nq))
+        let byPos = find_kw_depth0(groupBody, "by", 0)
+        if (byPos < 0) {
+            macro_error(prog, at, "linq: 'group' requires a 'by' clause (e.g. `group {varName} by {varName}.field`)")
+            return "(0)"
+        }
+        let elem = strip(slice(groupBody, 0, byPos))
+        if (elem != varName) {
+            macro_error(prog, at, "linq: 'group' element must be the range variable '{varName}' — element selectors are not yet supported (write `group {varName} by …`)")
+            return "(0)"
+        }
+        let gk = strip_trailing_keyword(strip(slice(groupBody, byPos + 2, length(groupBody))), "iterator")
+        groupKey = gk._0
+        wantIterator = gk._1
+        if (groupKey == "") {
+            macro_error(prog, at, "linq: empty 'group … by' key expression")
+            return "(0)"
+        }
+    } else {
+        let pj = strip_trailing_keyword(strip(slice(q, termPos + 6, nq)), "iterator")
+        projText = pj._0
+        wantIterator = pj._1
+        if (projText == "") {
+            macro_error(prog, at, "linq: empty 'select' projection")
+            return "(0)"
+        }
+        // `select c` (the range variable alone) is the identity projection — no `_select` is emitted.
+        identitySelect = (projText == varName)
+    }
     // Source builder: array (untyped) → each(...); decs (keyword marker) → from_decs_template;
     // any other typed value source → from_in (dispatches by the source value's type).
     var srcBuild = ""
@@ -214,8 +279,15 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
         if (hasWhere) {
             writer |> write(" |> _where($({varName}) => {predText})")
         }
-        if (!identitySelect) {
-            writer |> write(" |> _select($({varName}) => {projText})")
+        if (isGroup) {
+            writer |> write(" |> _group_by_lazy($({varName}) => {groupKey})")
+        } else {
+            if (hasOrderBy) {
+                writer |> write(" |> {orderDesc ? "_order_by_descending" : "_order_by"}($({varName}) => {orderKey})")
+            }
+            if (!identitySelect) {
+                writer |> write(" |> _select($({varName}) => {projText})")
+            }
         }
         writer |> write(" |> to_array() )")
         if (wantIterator) {
@@ -258,10 +330,13 @@ class FromInMacro : AstCallMacro {
 
 [reader_macro(name=linq)]
 class LinqDasReader : AstReaderMacro {
-    //! C#-style LINQ query reader macro. ``%linq! from c [: Row] in src [where <pred>] select <proj> [iterator] %%``
+    //! C#-style LINQ query reader macro.
+    //! ``%linq! from c [: Row] in src [where <pred>] [orderby <expr> [descending]] ( select <proj> | group c by <key> ) [iterator] %%``
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
-    //! ``from c : Row in src`` over decs / SQL / XML. A trailing ``iterator`` keyword yields an
-    //! ``iterator<T>`` over the materialized result instead of the ``array<T>``. Single range variable, spliced verbatim.
+    //! ``from c : Row in src`` over decs / SQL / XML. ``orderby`` is a single sort key; ``group c by <key>``
+    //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). A trailing
+    //! ``iterator`` keyword yields an ``iterator<T>`` over the materialized result instead of the
+    //! ``array<T>``. Single range variable, spliced verbatim.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         append(expr.sequence, ch)
         if (ends_with(expr.sequence, "%%")) {
