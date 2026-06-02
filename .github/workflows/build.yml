@@ -125,7 +125,7 @@ jobs:
 
           - target: windows
             build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+            cmake_generator: Ninja
 
           - target: darwin15
             build_system: cmake
@@ -163,7 +163,7 @@ jobs:
             runner: windows-latest-fat
             archive_ext: zip
             build_system: cmake
-            cmake_generator: Visual Studio 17 2022
+            cmake_generator: Ninja
             release_target: windows
             release_arch: x86_64
             architecture_string: x64
@@ -203,11 +203,33 @@ jobs:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
 
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Real-time Defender scans every .obj/.exe/.dll the build writes and every
+      # test process/DLL load; excluding the workspace cuts Windows CI wall-time.
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionProcess "daslang.exe"
+        Add-MpPreference -ExclusionProcess "test_aot.exe"
+
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
     - if: runner.os == 'Windows'
       uses: ilammy/setup-nasm@v1 # need nasm for openssl
+
+    - name: "Set up MSVC environment (Windows)"
+      if: runner.os == 'Windows'
+      # cl.exe on PATH so the bash build step drives Ninja with MSVC. arch
+      # follows the matrix (x86 for the 32-bit job). MUST run BEFORE the vcpkg
+      # openssl step: msvc-dev-cmd's vcvars sets VCPKG_ROOT to the VS-bundled
+      # vcpkg, so the openssl step has to write our VCPKG_ROOT last.
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.architecture == 32 && 'x86' || 'x64' }}
 
     - name: "Cache vcpkg + openssl"
       if: runner.os == 'Windows'
@@ -317,12 +339,12 @@ jobs:
                 ;;
               windows32)
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               windows64)
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               linux_arm*)
@@ -410,11 +432,11 @@ jobs:
             fi
             ;;
            windows32)
-            cd bin/"${{ matrix.cmake_preset }}"
+            cd bin
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
             ;;
            windows*)
-            cd bin/"${{ matrix.cmake_preset }}"
+            cd bin
             [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --timeout 900 --color --failures-only --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
             ;;
@@ -460,7 +482,7 @@ jobs:
             echo "Skipping AOT tests on 32-bit Windows"
             ;;
            windows*)
-            cd bin/"${{ matrix.cmake_preset }}"
+            cd bin
             ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test _dasroot_/tests
             ;;
            *)
