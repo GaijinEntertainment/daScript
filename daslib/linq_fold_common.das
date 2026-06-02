@@ -5358,7 +5358,10 @@ def build_join_standalone_pieces(
             if (selBody == null || selBody._type == null) return null
             resultType = strip_const_ref(clone_type(selBody._type))
         } else {
-            resultType = clone_type(resultLam._type.firstType)
+            // strip_const_ref: a scalar/field result (`$(c,d)=>c.name`, `string const&`) would make the buffer
+            // `array<string const>` and push_clone fail (error[30913]). A named-tuple result is already a
+            // fresh non-const value (no-op there) — which is why only bare-scalar join projections tripped it.
+            resultType = strip_const_ref(clone_type(resultLam._type.firstType))
         }
         if (resultType == null) return null
         invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)

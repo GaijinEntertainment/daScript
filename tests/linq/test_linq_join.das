@@ -858,3 +858,76 @@ def test_array_join_splice(t : T?) {
         t |> equal(n, 3)
     }
 }
+
+// Regression — `_join` followed by a materializing op (`_order_by` / `_group_by_lazy`), and a
+// scalar `_join` result, over `each(...)` sources. These fall to the tier-2 `fold_linq_default`
+// fallback: the bare `each(srcB)` argument used to trip error[31013] ("each unsafe outside a
+// for-loop"), and a scalar join result used to build a const buffer tripping error[30913].
+[test]
+def test_join_fused_regressions(t : T?) {
+    t |> run("each |> _join |> _order_by — was error[31013]") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let rows <- _fold(each(cars) |> _join(each(dealers),
+                                              $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                              $(c : AJCar, d : AJDealer) => (Name = c.name, Price = c.price))
+                                     |> _order_by($(r) => r.Price)
+                                     |> to_array())
+        t |> equal(length(rows), 4, "4 matched pairs (orphan dropped)")
+        t |> equal(rows[0].Name, "C1")   // 1000
+        t |> equal(rows[3].Name, "C4")   // 4000
+    }
+    t |> run("each |> _join |> _order_by_descending |> _select") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let names <- _fold(each(cars) |> _join(each(dealers),
+                                               $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                               $(c : AJCar, d : AJDealer) => (Name = c.name, Price = c.price))
+                                      |> _order_by_descending($(r) => r.Price)
+                                      |> _select($(r) => r.Name)
+                                      |> to_array())
+        t |> equal(length(names), 4)
+        t |> equal(names[0], "C4")
+        t |> equal(names[3], "C1")
+    }
+    t |> run("each |> _join |> _group_by_lazy — IGrouping after join, was error[31013]") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        // brands: D10=Acme(C1,C2), D20=Beta(C3), D30=Acme(C4) → Acme:3, Beta:1
+        let groups <- _fold(each(cars) |> _join(each(dealers),
+                                                $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                                $(c : AJCar, d : AJDealer) => (Brand = d.brand, Name = c.name))
+                                       |> _group_by_lazy($(r) => r.Brand)
+                                       |> to_array())
+        t |> equal(length(groups), 2, "Acme + Beta buckets")
+        for (g in groups) {
+            if (g._0 == "Acme") { t |> equal(length(g._1), 3, "Acme: C1,C2,C4") }
+            if (g._0 == "Beta") { t |> equal(length(g._1), 1, "Beta: C3") }
+        }
+    }
+    t |> run("each |> _join scalar result |> to_array — was error[30913] const push") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let names <- _fold(each(cars) |> _join(each(dealers),
+                                               $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                               $(c : AJCar, d : AJDealer) => c.name)
+                                      |> to_array())
+        t |> equal(length(names), 4, "scalar (string) join result materializes")
+        var hasC1 = false
+        for (nm in names) {
+            if (nm == "C1") { hasC1 = true }
+        }
+        t |> success(hasC1)
+    }
+    t |> run("each |> _join scalar result |> _order_by — scalar + materializing op") @(t : T?) {
+        let cars <- aj_cars()
+        let dealers <- aj_dealers()
+        let names <- _fold(each(cars) |> _join(each(dealers),
+                                               $(c : AJCar, d : AJDealer) => c.dealer_id == d.id,
+                                               $(c : AJCar, d : AJDealer) => c.name)
+                                      |> _order_by($(n) => n)
+                                      |> to_array())
+        t |> equal(length(names), 4)
+        t |> equal(names[0], "C1")
+    }
+}

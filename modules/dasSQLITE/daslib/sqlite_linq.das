@@ -2233,6 +2233,11 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
             return false
         }
     }
+    // Bare-var (identity / whole-row `$(x)=>x`) projection has no SQL column form — reject cleanly (else the computed-scalar `pred_to_sql` path below null-derefs on the whole-row var → SIGSEGV).
+    if (body is ExprVar) {
+        macro_error(prog, at, "_sql: identity / whole-row `_select` (e.g. `$(x) => x`) is not supported — project columns, e.g. `_select((Name = c.name, City = d.city))`")
+        return false
+    }
     // Multi-level field chain `<arg>.Col.path…` — descends via json_extract for @sql_json.
     {
         var frag : string
