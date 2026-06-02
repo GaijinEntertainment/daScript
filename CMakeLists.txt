@@ -747,16 +747,12 @@ src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_program.cpp
-src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
-src/ast/ast_const_folding.cpp
-src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_gc_report.cpp
 src/ast/ast_inscope_pod.cpp
 src/ast/ast_escape_analysis.cpp
-src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
 src/ast/ast_validate.cpp
@@ -1096,6 +1092,11 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${PARSER_SRC}
     ${DASCRIPT_FMT_SRC}
     src/ast/ast_parse.cpp
+    src/ast/ast_optimize.cpp
+    src/ast/ast_const_folding.cpp
+    src/ast/ast_block_folding.cpp
+    src/ast/ast_unused.cpp
+    src/ast/ast_lint.cpp
     src/ast/dyn_modules.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp

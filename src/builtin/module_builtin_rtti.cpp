@@ -972,7 +972,7 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
-    vector<pair<string,Type>> getCodeOfPolicyOptions() {
+    DAS_API vector<pair<string,Type>> getCodeOfPolicyOptions() {
         vector<pair<string,Type>> options;
         Module dummyMod;
         ModuleLibrary dummy(&dummyMod);

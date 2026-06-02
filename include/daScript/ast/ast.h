@@ -1121,7 +1121,7 @@ namespace das
         verifyAll = 0xffffffff
     };
 
-    bool isValidBuiltinName ( const string & name, bool canPunkt = false );
+    DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
     class DAS_API Module {
     public:
@@ -1167,7 +1167,7 @@ namespace das
             if ( objModule->visibleEverywhere ) return true;
             return requireModule.find(objModule) != requireModule.end();
         }
-        bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
+        friend bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted, const string & expectedFileName = string() );
         static void Initialize();
@@ -1707,7 +1707,6 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void validateAst();
-        void optimize(TextWriter & logs, ModuleGroup & libGroup);
         bool inScopePodAnalysis(TextWriter & logs);
         bool escapeAnalysis(TextWriter & logs);             // pure analysis: sets Variable::does_not_escape
         bool scopeFreeOptimization(TextWriter & logs);      // consumes the analysis result: emits scope-exit frees
@@ -1827,6 +1826,12 @@ namespace das
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+
+    // optimization pass (compiler lib); runs after type inference
+    void optimizeProgram ( Program * program, TextWriter & logs, ModuleGroup & libGroup );
+
+    // compile an embedded builtin module's source into `module` (compiler lib)
+    DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
 
     // collect script prerequisits
     DAS_API bool getPrerequisits ( const string & fileName,

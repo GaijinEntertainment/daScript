@@ -28,6 +28,23 @@ int das2_yyparse(yyscan_t yyscanner);
 
 namespace das {
 
+    // defined in ast_module.cpp (runtime); appends a parsed builtin module's content
+    bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName );
+
+    bool compileBuiltinModule ( Module * module, const string & modName, const unsigned char * const str, unsigned int str_len ) {
+        TextWriter issues;
+        auto access = make_smart<FileAccess>();
+        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
+        access->setFileInfo(modName, das::move(fileInfo));
+        ModuleGroup dummyLibGroup;
+        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
+        module->ownFileInfo = access->letGoOfFileInfo(modName);
+        DAS_ASSERTF(module->ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
+        auto result = appendBuiltinModuleContent(module, program, modName);
+        program->thisModule->module_gc_root.gc_dump_to_thread_root();
+        return result;
+    }
+
     bool isUtf8Text ( const char * src, uint32_t length ) {
         if ( length>=3  ) {
             auto usrc = (const uint8_t *)src;
@@ -894,7 +911,7 @@ namespace das {
                 if (!program->failed()) {
                     if (program->getOptimize()) {
                         callCompilationCallback(moduleName, fileName, "optimize");
-                        program->optimize(logs,libGroup);
+                        optimizeProgram(program.get(),logs,libGroup);
                     } else {
                         program->buildAccessFlags(logs);
                     }

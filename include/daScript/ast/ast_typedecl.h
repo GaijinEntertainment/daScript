@@ -767,7 +767,7 @@ namespace das {
     DAS_API bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
     DAS_API bool isCircularType ( const TypeDeclPtr & type );
-    bool hasImplicit ( const TypeDeclPtr & type );
+    DAS_API bool hasImplicit ( const TypeDeclPtr & type );
     bool isMatchingArgumentType ( const TypeDeclPtr & argType, const TypeDeclPtr & passType );
 
     enum class CpptSubstitureRef { no, yes };
