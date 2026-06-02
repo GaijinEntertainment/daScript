@@ -34,15 +34,6 @@ def _to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
     return <- arr
 }
 
-[unused_argument(arr)]
-def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
-    //! Builtin-name `to_array` overload over an `array` (a SQL chain is already array-typed because
-    //! `select_from` returns an array). Makes `_fold(sqlchain |> to_array())` type-check and be a
-    //! no-op — so source-agnostic emitters (linq_das) can always append `|> to_array()`. `_sql`
-    //! intercepts it the same as `_to_array` (see analyze_chain); this body only runs in compat mode.
-    return <- arr
-}
-
 def _first_opt(arr : array<auto(TT)>) : Option<TT -const -#> {
     //! Compat-mode fallback: returns ``some(arr[0])`` if non-empty, ``none`` otherwise.
     //! Inside `_sql(...)` the macro intercepts this call before evaluation
@@ -1615,8 +1606,7 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
 def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
     var inner : ExpressionPtr
     if (qmatch(node, _to_array($e(inner))).matched) return inner
-    var taCall = match_call_in_module(node, "to_array", "sqlite_linq")
-    if (taCall == null) { taCall = match_call_in_module(node, "to_array", "builtin") }
+    var taCall = match_call_in_module(node, "to_array", "builtin")
     if (taCall != null && taCall.arguments |> length == 1) return taCall.arguments[0]
     return null
 }

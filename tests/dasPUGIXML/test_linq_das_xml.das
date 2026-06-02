@@ -152,3 +152,28 @@ def test_xml_join_group_after(t : T?) {
         }
     }
 }
+
+// ===== multiple `from`: XML left source × in-memory array right source (uncorrelated cross product).
+// The XML source is the unfused `_cross_join` chain head — `from_xml_node` is passed as a raw argument
+// (not a fused for-loop source), so it relies on the unsafe wrap surviving from_in's `$c` expansion. =====
+
+[test]
+def test_xml_multifrom_tuple(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let rows <- %linq! from c : Car in doc.document_element from b in brands select (Id = c.id, Country = b.country) %%
+        t |> equal(length(rows), 6, "3 XML cars × 2 brands cartesian product")
+    }
+}
+
+[test]
+def test_xml_multifrom_pre_where(t : T?) {
+    let brands <- mk_brands()
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // pre-from where prunes the DOM walk (price > 99 → car1, car2) before the cross
+        let rows <- %linq! from c : Car in doc.document_element where c.price > 99.0 from b in brands select (Id = c.id, Country = b.country) %%
+        t |> equal(length(rows), 4, "2 filtered XML cars × 2 brands")
+    }
+}

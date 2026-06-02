@@ -8,7 +8,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/linq_boost public
 
-// ===== C#-style LINQ query syntax (linq_das) — from/where/orderby/join/select|group over any _fold source =====
+// ===== C#-style LINQ query syntax (linq_das) — from/where/orderby/join/from/select|group over any _fold source =====
 //
 // The `%linq! … %%` inline reader macro rewrites a C#-like query into a `_fold(...)` chain:
 //
@@ -18,6 +18,8 @@ require daslib/linq_boost public
 //        →   ( _fold( each(cars) |> _group_by_lazy($(c) => c.brand) |> to_array() ) )
 //     %linq! from c in cars join d in dealers on c.brand equals d.brand select (N = c.name, City = d.city) %%
 //        →   ( _fold( each(cars) |> _join(each(dealers), $(c, d) => c.brand == d.brand, $(c, d) => (N = c.name, City = d.city)) |> to_array() ) )
+//     %linq! from c in cars from d in dealers select (N = c.name, City = d.city) %%
+//        →   ( _fold( (cars) |> _cross_join((dealers), $(c, d) => (N = c.name, City = d.city)) |> to_array() ) )
 //
 // An untyped `from c in <arr>` is an array source. A typed `from c : Row in <src>` selects a non-array
 // source: `decs` (a keyword marker → `from_decs_template`), or any value whose type the `from_in` call
@@ -34,6 +36,12 @@ require daslib/linq_boost public
 // (over SQL it has no column form). Post-join `where`/`orderby`, and a `group` terminal, carry both `c`
 // and `d` past the join as a `(c, d)` pair (transparent identifier) and run in-memory (over SQL the
 // carried whole-row tuple errors — project columns in a select-terminal join).
+//
+// A second `from <d> [: RowB] in <B>` is the uncorrelated SelectMany (cross product, see transpile_cross)
+// — the same clause grammar and dual emit as `join`, minus the `on … equals` key, emitting `_cross_join`.
+// `B` must be independent of `c`; a CORRELATED `from d in c.items` is rejected (lands with correlated
+// SelectMany). join and cross share the post-source tail (emit_two_source). Over SQL the cross pushes down
+// to a CROSS JOIN. One extra `from` only; `from … from` + `join` in one query is rejected.
 
 def private is_ident_byte(c : int) : bool {
     return is_alnum(c) || c == '_'
@@ -145,10 +153,14 @@ def private strip_trailing_keyword(text : string; kw : string) : tuple<string; b
     return (p, false)
 }
 
-// Source builder for a clause: array (untyped) → each(...); decs (keyword marker) → from_decs_template;
-// any other typed value source → from_in (dispatches by the source value's type).
-def private build_src(rowType : string; srcText : string) : string {
-    if (rowType == "") { return "each({srcText})" }
+// Source builder for a clause. `fused` distinguishes a source that will be a fused `_fold` chain head /
+// fused-op source (single-`from`, `join` — keep `each` so the fusion picks the array up as a loop source)
+// from an UNFUSED operator argument (the uncorrelated multiple-`from`, whose `_cross_join` runs at tier-3
+// passthrough — pass the bare array so `each`'s `[unsafe_outside_of_for]` does not trip and the array×array
+// cross_join overload is selected). array (untyped) → each(...) / bare; decs (keyword marker) →
+// from_decs_template; any other typed value source → from_in (dispatches by the source value's type).
+def private build_src(rowType : string; srcText : string; fused : bool) : string {
+    if (rowType == "") { return fused ? "each({srcText})" : "({srcText})" }
     if (srcText == "decs") { return "from_decs_template(type<{rowType}>)" }
     return "from_in({srcText}, type<{rowType}>)"
 }
@@ -225,92 +237,111 @@ def private rewrite_idents(text : string; names : array<string>; prefix : string
     }
 }
 
-// Synthetic single parameter that carries the joined `(c, d)` pair past the join (transparent
-// identifier). Post-join clauses are rewritten to address the carried fields `linq_join_ti.c` /
+// Does `text` reference the whole-word identifier `name` in **code** position? A word right after `.`
+// (member access) is ignored, plain ``"…"`` string content is skipped, but a string INTERPOLATION
+// (``"…{expr}…"``) is code, so ``{…}`` bodies ARE scanned (same string/interp model as rewrite_idents).
+// Used to detect a CORRELATED second `from` (``from x in o.items``) and to decide whether a projection
+// uses a range variable (so the generated lambda can underscore the ones it doesn't — no spurious LINT013).
+def private mentions_ident(text : string; name : string) : bool {
+    var found = false
+    let m = length(name)
+    peek_data(text) $(arr) {
+        let n = length(arr)
+        var i = 0
+        var inStr = false   // inside a "…" literal (plain content portion)
+        var interp = 0      // brace depth inside a string interpolation (>0 ⇒ code mode within the string)
+        var prevSig = 0
+        while (i < n && !found) {
+            let c = int(arr[i])
+            // Plain string content (not in an interpolation): skip; `{` opens interpolation, `"` closes.
+            if (inStr && interp == 0) {
+                if (c == '\\' && i + 1 < n) { i += 2; continue }
+                if (c == '"') { inStr = false; prevSig = c }
+                elif (c == '{') { interp = 1; prevSig = 0 }
+                i++
+                continue
+            }
+            // Code mode — top-level, or inside an interpolation.
+            if (c == '"') {
+                if (interp > 0) {   // nested string inside interpolation — skip its content
+                    i++
+                    while (i < n) {
+                        let cc = int(arr[i])
+                        if (cc == '\\' && i + 1 < n) { i += 2; continue }
+                        i++
+                        if (cc == '"') break
+                    }
+                    prevSig = '"'
+                    continue
+                }
+                inStr = true; prevSig = c; i++
+                continue
+            }
+            if (interp > 0 && c == '{') { interp++; prevSig = c; i++; continue }
+            if (interp > 0 && c == '}') {
+                interp--
+                prevSig = interp == 0 ? '"' : c
+                i++
+                continue
+            }
+            let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.'
+            if (atWordStart && i + m <= n && slice(text, i, i + m) == name
+                    && (i + m == n || !is_ident_byte(int(arr[i + m])))) {
+                found = true
+            }
+            if (!is_white_space(c)) { prevSig = c }
+            i++
+        }
+    }
+    return found
+}
+
+// Synthetic single parameter that carries the joined `(c, d)` pair past a two-source op (transparent
+// identifier). Post-source clauses are rewritten to address the carried fields `linq_join_ti.c` /
 // `linq_join_ti.d`. Reserved — a range variable may not use this name (`__`-prefixed names are
 // reserved by the compiler, so this stays single-token).
 let JOIN_TI = "linq_join_ti"
 
-// Emit the rewrite for a query that contains a `join … on … equals …` clause:
-//   from <c> [: RowA] in <A> [where <pred>] join <d> [: RowB] in <B> on <keyA> equals <keyB>
-//      [where <pred>] [orderby <key> [descending]] ( select <proj> | group <c> by <key> ) [iterator]
-// Single inner equi-join. A `where` before `join` filters the left source (single range var `c`, no
-// rewrite). Two emit shapes, decided by the post-join clauses (the reader transpiles before type
-// inference and cannot know the source, so it picks textually):
-//   - select-terminal (no post-join where/orderby, terminal = select): the `select` projection IS the
-//     `_join` result selector — both `c`,`d` in scope, spliced verbatim. Works on all 4 sources
-//     (incl. SQL pushdown).
-//   - transparent-identifier (post-join where/orderby, or a group terminal): the join carries
-//     `(c = c, d = d)`; post-join clauses rewrite `c`/`d` to the carried fields and stream/sort/group
-//     the pairs directly. In-memory only (over a SQL source the carried whole-row tuple trips `_sql`'s
-//     column-ref check — the documented boundary). group yields `(key, array<pair>)` per bucket.
-def private transpile_join(q : string; nq : int; varName : string; rowType : string;
-                           srcStart : int; joinPos : int; prog : ProgramPtr; at : LineInfo) : string {
-    if (find_kw_depth0(q, "join", joinPos + 4) >= 0) {
-        macro_error(prog, at, "linq: only one 'join' per query is supported (nested joins are not yet supported)")
-        return "(0)"
-    }
+// Shared tail for the two-range-variable forms — `join … on … equals …` (transpile_join) and the
+// uncorrelated multiple-`from` / SelectMany (transpile_cross). Given the first source (already built),
+// the second range variable, and `tailStart` (the offset where the variable-length "tail" begins — the
+// join key B for `join`, the second source expression for the second `from`), it parses the post-source
+// clauses (a pre- or post-source `where`, one `orderby`, the `select`|`group` terminal, a trailing
+// `iterator`) and emits the `_fold(...)` chain. Two emit shapes, decided textually (the reader runs
+// before type inference and cannot know the source):
+//   - select-terminal (no post-source where/orderby, terminal = select): the projection IS the op's
+//     result selector — both range vars in scope, spliced verbatim. Works on all 4 sources (SQL pushdown).
+//   - transparent-identifier (post-source where/orderby, or a group terminal): the op carries
+//     `(c = c, d = d)`; post-source clauses rewrite `c`/`d` to the carried fields and stream/sort/group
+//     the pairs directly. In-memory only (over SQL the carried whole-row tuple trips `_sql`'s column-ref
+//     check — the documented boundary). group yields `(key, array<pair>)` per bucket.
+// `isJoin` selects `_join` (with the `keyA equals <tail>` predicate lambda) vs `_cross_join` (no key);
+// for cross the second source is built from `tail` here, after a correlation check.
+def private emit_two_source(q : string; nq : int; varName : string; var2Name : string; srcA : string;
+                            isJoin : bool; keyA : string; srcBForJoin : string; rowType2 : string;
+                            secondIntroPos : int; tailStart : int; firstWhere : int;
+                            prog : ProgramPtr; at : LineInfo) : string {
     if (varName == JOIN_TI) {
         macro_error(prog, at, "linq: range variable name '{JOIN_TI}' is reserved")
         return "(0)"
     }
-    // At most one `where` — its position (before `join` vs after `equals`) decides pre- vs post-join.
-    let firstWhere = find_kw_depth0(q, "where", srcStart)
+    if (var2Name == JOIN_TI || var2Name == varName) {
+        macro_error(prog, at, "linq: second range variable '{var2Name}' must differ from '{varName}' and the reserved '{JOIN_TI}'")
+        return "(0)"
+    }
+    // At most one `where` — its position (before vs after the second source intro) decides pre- vs post.
     if (firstWhere >= 0 && find_kw_depth0(q, "where", firstWhere + 5) >= 0) {
         macro_error(prog, at, "linq: at most one 'where' per query is supported")
         return "(0)"
     }
-    // Join clause: join <d> [: RowB] in <B> on <keyA> equals <keyB>
-    let v2 = read_ident(q, joinPos + 4)
-    let var2Name = v2._0
-    if (var2Name == "") {
-        macro_error(prog, at, "linq: expected a range variable after 'join'")
-        return "(0)"
-    }
-    if (var2Name == JOIN_TI || var2Name == varName) {
-        macro_error(prog, at, "linq: join range variable '{var2Name}' must differ from '{varName}' and the reserved '{JOIN_TI}'")
-        return "(0)"
-    }
-    let in2 = find_kw_depth0(q, "in", v2._1)
-    if (in2 < 0) {
-        macro_error(prog, at, "linq: expected 'in' after the join range variable '{var2Name}'")
-        return "(0)"
-    }
-    let between2 = strip(slice(q, v2._1, in2))
-    var rowType2 = ""
-    if (starts_with(between2, ":")) {
-        rowType2 = strip(slice(between2, 1, length(between2)))
-        if (rowType2 == "") {
-            macro_error(prog, at, "linq: expected a row type after ':' in the join clause (e.g. `join d : Dealer in db`)")
-            return "(0)"
-        }
-    } elif (between2 != "") {
-        macro_error(prog, at, "linq: unexpected '{between2}' between the join range variable and 'in'")
-        return "(0)"
-    }
-    let onPos = find_kw_depth0(q, "on", in2 + 2)
-    if (onPos < 0) {
-        macro_error(prog, at, "linq: join requires an 'on <keyA> equals <keyB>' clause")
-        return "(0)"
-    }
-    let src2Text = strip(slice(q, in2 + 2, onPos))
-    if (src2Text == "") {
-        macro_error(prog, at, "linq: empty join source after 'in'")
-        return "(0)"
-    }
-    let equalsPos = find_kw_depth0(q, "equals", onPos + 2)
-    if (equalsPos < 0) {
-        macro_error(prog, at, "linq: join 'on' requires 'equals' (e.g. `on c.id equals d.cid`)")
-        return "(0)"
-    }
     // `join … into g` (group-join) and `select … into` continuations are not yet supported.
-    if (find_kw_depth0(q, "into", equalsPos + 6) >= 0) {
-        macro_error(prog, at, "linq: 'join … into' (group-join) and 'into' continuations are not yet supported")
+    if (find_kw_depth0(q, "into", tailStart) >= 0) {
+        macro_error(prog, at, "linq: 'into' continuations (group-join `join … into`, query continuation) are not yet supported")
         return "(0)"
     }
-    let orderByPos = find_kw_depth0(q, "orderby", equalsPos + 6)
-    let selectPos = find_kw_depth0(q, "select", equalsPos + 6)
-    let groupPos = find_kw_depth0(q, "group", equalsPos + 6)
+    let orderByPos = find_kw_depth0(q, "orderby", tailStart)
+    let selectPos = find_kw_depth0(q, "select", tailStart)
+    let groupPos = find_kw_depth0(q, "group", tailStart)
     if (selectPos < 0 && groupPos < 0) {
         macro_error(prog, at, "linq: query must end with a 'select' or 'group … by …' clause")
         return "(0)"
@@ -325,41 +356,57 @@ def private transpile_join(q : string; nq : int; varName : string; rowType : str
         macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
         return "(0)"
     }
-    // Single equi-key only — a second depth-0 `equals` before the terminal is a composite key.
-    let equals2 = find_kw_depth0(q, "equals", equalsPos + 6)
-    if (equals2 >= 0 && equals2 < termPos) {
-        macro_error(prog, at, "linq: join 'on' supports a single equi-key only — composite keys (`a equals b && c equals d`) need raw SQL")
-        return "(0)"
+    // Single equi-key only (join) — a second depth-0 `equals` before the terminal is a composite key.
+    if (isJoin) {
+        let equals2 = find_kw_depth0(q, "equals", tailStart)
+        if (equals2 >= 0 && equals2 < termPos) {
+            macro_error(prog, at, "linq: join 'on' supports a single equi-key only — composite keys (`a equals b && c equals d`) need raw SQL")
+            return "(0)"
+        }
     }
-    // A `where` is valid before `join` (filters c, single var, no rewrite — pushes to SQL) or after
-    // `equals` (filters the carried pair, transparent-id rewrite); inside the join clause is a grammar
-    // error. Position decides pre- vs post-join emit.
+    // A `where` is valid before the second source (filters c, single var, no rewrite — pushes to SQL) or
+    // after the tail start (filters the carried pair, transparent-id rewrite). Anywhere else is a grammar
+    // error. Position decides pre- vs post-emit.
     let hasWhere = firstWhere >= 0
-    let preWhere = hasWhere && firstWhere < joinPos
-    if (hasWhere && !preWhere && firstWhere < equalsPos) {
-        macro_error(prog, at, "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')")
+    let preWhere = hasWhere && firstWhere < secondIntroPos
+    if (hasWhere && !preWhere && firstWhere < tailStart) {
+        if (isJoin) {
+            macro_error(prog, at, "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')")
+        } else {
+            macro_error(prog, at, "linq: 'where' cannot appear between the second range variable and 'in'")
+        }
         return "(0)"
     }
-    // keyB ends at the first post-join clause keyword after `equals` (a post-join where, or orderby/term).
-    let postWhere = (hasWhere && firstWhere > equalsPos) ? firstWhere : -1
-    var keyBEnd = termPos
-    if (orderByPos >= 0 && orderByPos < keyBEnd) { keyBEnd = orderByPos }
-    if (postWhere >= 0 && postWhere < keyBEnd) { keyBEnd = postWhere }
-    let keyA = strip(slice(q, onPos + 2, equalsPos))
-    let keyB = strip(slice(q, equalsPos + 6, keyBEnd))
-    if (keyA == "" || keyB == "") {
-        macro_error(prog, at, "linq: empty join key — expected `on <keyA> equals <keyB>`")
-        return "(0)"
-    }
-    let srcAEnd = preWhere ? firstWhere : joinPos
-    let srcAText = strip(slice(q, srcStart, srcAEnd))
-    if (srcAText == "") {
-        macro_error(prog, at, "linq: empty source expression after 'in'")
-        return "(0)"
+    let postWhere = (hasWhere && !preWhere) ? firstWhere : -1
+    // The tail (key B / second source expr) ends at the first post clause: orderby, a post-where, or term.
+    var tailEnd = termPos
+    if (orderByPos >= 0 && orderByPos < tailEnd) { tailEnd = orderByPos }
+    if (postWhere >= 0 && postWhere < tailEnd) { tailEnd = postWhere }
+    let tail = strip(slice(q, tailStart, tailEnd))
+    var srcB = srcBForJoin
+    var onLambda = ""
+    if (isJoin) {
+        if (keyA == "" || tail == "") {
+            macro_error(prog, at, "linq: empty join key — expected `on <keyA> equals <keyB>`")
+            return "(0)"
+        }
+        onLambda = "$({varName}, {var2Name}) => {keyA} == {tail}"
+    } else {
+        if (tail == "") {
+            macro_error(prog, at, "linq: empty source expression after the second 'in'")
+            return "(0)"
+        }
+        // CORRELATED second source (references the first range variable) → flatten, not cross product.
+        // Rejected for now; the correlated-SelectMany release adds it.
+        if (mentions_ident(tail, varName)) {
+            macro_error(prog, at, "linq: correlated 'from … from' (the second source '{tail}' references '{varName}', e.g. `from {var2Name} in {varName}.items`) is not yet supported — use 'join', or wait for the correlated-SelectMany release")
+            return "(0)"
+        }
+        srcB = build_src(rowType2, tail, false)
     }
     var wherePred = ""
     if (hasWhere) {
-        let wEnd = preWhere ? joinPos : (orderByPos >= 0 ? orderByPos : termPos)
+        let wEnd = preWhere ? secondIntroPos : (orderByPos >= 0 ? orderByPos : termPos)
         wherePred = strip(slice(q, firstWhere + 5, wEnd))
         if (wherePred == "") {
             macro_error(prog, at, "linq: empty 'where' predicate")
@@ -412,25 +459,28 @@ def private transpile_join(q : string; nq : int; varName : string; rowType : str
             return "(0)"
         }
     }
-    let srcA = build_src(rowType, srcAText)
-    let srcB = build_src(rowType2, src2Text)
-    let onLambda = "$({varName}, {var2Name}) => {keyA} == {keyB}"
     let carryLambda = "$({varName}, {var2Name}) => ({varName} = {varName}, {var2Name} = {var2Name})"
     let names <- [varName, var2Name]
     let hasOrderBy = orderByPos >= 0
-    // A pre-join `where` (single range var `c`) filters the left source — emitted before `_join`, no
-    // rewrite; pushes down to SQL. Only a POST-join where/orderby/group forces the transparent-id carry.
+    // A pre-source `where` (single range var `c`) filters the left source — emitted before the op, no
+    // rewrite; pushes down to SQL. Only a POST-source where/orderby/group forces the transparent-id carry.
     let preWhereClause = preWhere ? " |> _where($({varName}) => {wherePred})" : ""
     let useTI = postWhere >= 0 || hasOrderBy || isGroup
+    let opName = isJoin ? "_join" : "_cross_join"
+    let onLambdaPart = isJoin ? "{onLambda}, " : ""
     return build_string() $(var w) {
         w |> write("( _fold( {srcA}{preWhereClause}")
         if (!useTI) {
-            // Select-terminal: the `select` projection IS the `_join` result selector (both c, d in scope).
-            w |> write(" |> _join({srcB}, {onLambda}, $({varName}, {var2Name}) => {projText})")
+            // Select-terminal: the `select` projection IS the op's result selector (both c, d in scope).
+            // Underscore-prefix a range var the projection doesn't reference (e.g. a scalar `select c.name`
+            // over a cross leaves `b` unused) so the generated lambda is LINT013-clean for the user.
+            let p1 = mentions_ident(projText, varName) ? varName : "_{varName}"
+            let p2 = mentions_ident(projText, var2Name) ? var2Name : "_{var2Name}"
+            w |> write(" |> {opName}({srcB}, {onLambdaPart}$({p1}, {p2}) => {projText})")
         } else {
-            // Transparent-id: carry (c, d); post-join clauses rewrite c/d to the carried fields and
+            // Transparent-id: carry (c, d); post-source clauses rewrite c/d to the carried fields and
             // stream/sort/group the pairs directly (single stage — no pre-materialize).
-            w |> write(" |> _join({srcB}, {onLambda}, {carryLambda})")
+            w |> write(" |> {opName}({srcB}, {onLambdaPart}{carryLambda})")
             if (postWhere >= 0) { w |> write(" |> _where($({JOIN_TI}) => {rewrite_idents(wherePred, names, JOIN_TI)})") }
             if (hasOrderBy) { w |> write(" |> {orderDesc ? "_order_by_descending" : "_order_by"}($({JOIN_TI}) => {rewrite_idents(orderKey, names, JOIN_TI)})") }
             if (isGroup) {
@@ -443,6 +493,117 @@ def private transpile_join(q : string; nq : int; varName : string; rowType : str
         if (wantIterator) { w |> write(" |> to_sequence()") }
         w |> write(" )")
     }
+}
+
+// `join <d> [: RowB] in <B> on <keyA> equals <keyB>` — single inner equi-join. Parses the join intro and
+// the left source (a pre-join `where` filters it, single var, pushes to SQL), then delegates the
+// post-source clauses + emit to emit_two_source. See it for the two emit shapes.
+def private transpile_join(q : string; nq : int; varName : string; rowType : string;
+                           srcStart : int; joinPos : int; prog : ProgramPtr; at : LineInfo) : string {
+    if (find_kw_depth0(q, "join", joinPos + 4) >= 0) {
+        macro_error(prog, at, "linq: only one 'join' per query is supported (nested joins are not yet supported)")
+        return "(0)"
+    }
+    let v2 = read_ident(q, joinPos + 4)
+    let var2Name = v2._0
+    if (var2Name == "") {
+        macro_error(prog, at, "linq: expected a range variable after 'join'")
+        return "(0)"
+    }
+    let in2 = find_kw_depth0(q, "in", v2._1)
+    if (in2 < 0) {
+        macro_error(prog, at, "linq: expected 'in' after the join range variable '{var2Name}'")
+        return "(0)"
+    }
+    let between2 = strip(slice(q, v2._1, in2))
+    var rowType2 = ""
+    if (starts_with(between2, ":")) {
+        rowType2 = strip(slice(between2, 1, length(between2)))
+        if (rowType2 == "") {
+            macro_error(prog, at, "linq: expected a row type after ':' in the join clause (e.g. `join d : Dealer in db`)")
+            return "(0)"
+        }
+    } elif (between2 != "") {
+        macro_error(prog, at, "linq: unexpected '{between2}' between the join range variable and 'in'")
+        return "(0)"
+    }
+    let onPos = find_kw_depth0(q, "on", in2 + 2)
+    if (onPos < 0) {
+        macro_error(prog, at, "linq: join requires an 'on <keyA> equals <keyB>' clause")
+        return "(0)"
+    }
+    let src2Text = strip(slice(q, in2 + 2, onPos))
+    if (src2Text == "") {
+        macro_error(prog, at, "linq: empty join source after 'in'")
+        return "(0)"
+    }
+    let equalsPos = find_kw_depth0(q, "equals", onPos + 2)
+    if (equalsPos < 0) {
+        macro_error(prog, at, "linq: join 'on' requires 'equals' (e.g. `on c.id equals d.cid`)")
+        return "(0)"
+    }
+    let keyA = strip(slice(q, onPos + 2, equalsPos))
+    let firstWhere = find_kw_depth0(q, "where", srcStart)
+    let preWhere = firstWhere >= 0 && firstWhere < joinPos
+    let srcAEnd = preWhere ? firstWhere : joinPos
+    let srcAText = strip(slice(q, srcStart, srcAEnd))
+    if (srcAText == "") {
+        macro_error(prog, at, "linq: empty source expression after 'in'")
+        return "(0)"
+    }
+    let srcA = build_src(rowType, srcAText, true)
+    let srcB = build_src(rowType2, src2Text, true)
+    return emit_two_source(q, nq, varName, var2Name, srcA, true, keyA, srcB, rowType2,
+                           joinPos, equalsPos + 6, firstWhere, prog, at)
+}
+
+// Uncorrelated multiple-`from` (SelectMany over a cross product):
+//   from <c> [: RowA] in <A> [where <pred>] from <d> [: RowB] in <B>
+//      [where <pred>] [orderby <key> [descending]] ( select <proj> | group <c> by <key> ) [iterator]
+// The second source `<B>` must be independent of `<c>` (a CORRELATED `from d in c.items` is rejected here
+// and lands with correlated SelectMany). Parses the second-from intro and the left source, then delegates
+// the post-source clauses + emit to emit_two_source with the `_cross_join` op (no `on … equals`).
+def private transpile_cross(q : string; nq : int; varName : string; rowType : string;
+                            srcStart : int; secondFromPos : int; prog : ProgramPtr; at : LineInfo) : string {
+    if (find_kw_depth0(q, "from", secondFromPos + 4) >= 0) {
+        macro_error(prog, at, "linq: only two 'from' clauses are supported (N-ary SelectMany is not yet supported)")
+        return "(0)"
+    }
+    let v2 = read_ident(q, secondFromPos + 4)
+    let var2Name = v2._0
+    if (var2Name == "") {
+        macro_error(prog, at, "linq: expected a range variable after the second 'from'")
+        return "(0)"
+    }
+    let in2 = find_kw_depth0(q, "in", v2._1)
+    if (in2 < 0) {
+        macro_error(prog, at, "linq: expected 'in' after the second range variable '{var2Name}'")
+        return "(0)"
+    }
+    let between2 = strip(slice(q, v2._1, in2))
+    var rowType2 = ""
+    if (starts_with(between2, ":")) {
+        rowType2 = strip(slice(between2, 1, length(between2)))
+        if (rowType2 == "") {
+            macro_error(prog, at, "linq: expected a row type after ':' in the second from clause (e.g. `from d : Dealer in db`)")
+            return "(0)"
+        }
+    } elif (between2 != "") {
+        macro_error(prog, at, "linq: unexpected '{between2}' between the second range variable and 'in'")
+        return "(0)"
+    }
+    let firstWhere = find_kw_depth0(q, "where", srcStart)
+    let preWhere = firstWhere >= 0 && firstWhere < secondFromPos
+    let srcAEnd = preWhere ? firstWhere : secondFromPos
+    let srcAText = strip(slice(q, srcStart, srcAEnd))
+    if (srcAText == "") {
+        macro_error(prog, at, "linq: empty source expression after the first 'in'")
+        return "(0)"
+    }
+    let srcA = build_src(rowType, srcAText, false)
+    // srcB is built inside emit_two_source from the tail (after the correlation check).
+    return emit_two_source(q, nq, varName, var2Name, srcA, false, "", "", rowType2,
+                           secondFromPos, in2 + 2, firstWhere, prog, at)
 }
 
 // Parse the query and emit the `_fold(...)` rewrite text. On a malformed query, register a macro error
@@ -483,8 +644,17 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     // Clauses in C# order, each searched after the previous so positions stay ordered:
     //   from … [where <pred>] [orderby <expr> [descending]] ( select <proj> | group <var> by <key> ) [iterator]
     let srcStart = inPos + 2
-    // A `join` clause introduces a second range variable — its own grammar and emit (see transpile_join).
+    // A `join` or a second `from` introduces a second range variable — each has its own grammar and emit
+    // (transpile_join / transpile_cross). Combining the two in one query is not yet supported.
     let joinPos = find_kw_depth0(q, "join", srcStart)
+    let secondFromPos = find_kw_depth0(q, "from", srcStart)
+    if (joinPos >= 0 && secondFromPos >= 0) {
+        macro_error(prog, at, "linq: combining 'join' with a second 'from' (SelectMany) in one query is not yet supported")
+        return "(0)"
+    }
+    if (secondFromPos >= 0) {
+        return transpile_cross(q, nq, varName, rowType, srcStart, secondFromPos, prog, at)
+    }
     if (joinPos >= 0) {
         return transpile_join(q, nq, varName, rowType, srcStart, joinPos, prog, at)
     }
@@ -579,7 +749,7 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
         // `select c` (the range variable alone) is the identity projection — no `_select` is emitted.
         identitySelect = (projText == varName)
     }
-    let srcBuild = build_src(rowType, srcText)
+    let srcBuild = build_src(rowType, srcText, true)
     return build_string() $(var writer) {
         writer |> write("( _fold( {srcBuild}")
         if (hasWhere) {
@@ -637,13 +807,15 @@ class FromInMacro : AstCallMacro {
 [reader_macro(name=linq)]
 class LinqDasReader : AstReaderMacro {
     //! C#-style LINQ query reader macro.
-    //! ``%linq! from c [: Row] in src [where <pred>] [join d [: RowB] in B on <kA> equals <kB>] [orderby <expr> [descending]] ( select <proj> | group c by <key> ) [iterator] %%``
+    //! ``%linq! from c [: Row] in src [where <pred>] [ join d [: RowB] in B on <kA> equals <kB> | from d [: RowB] in B ] [orderby <expr> [descending]] ( select <proj> | group c by <key> ) [iterator] %%``
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
     //! ``from c : Row in src`` over decs / SQL / XML. ``orderby`` is a single sort key; ``group c by <key>``
-    //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). ``join`` is a
-    //! single inner equi-join; a select-terminal ``join … select <proj>`` projects the join's result row
+    //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). A second range
+    //! variable comes from either a ``join`` (single inner equi-join) or a second ``from`` (uncorrelated
+    //! cross product / SelectMany — emits ``_cross_join``, pushes down to a SQL CROSS JOIN; a correlated
+    //! ``from d in c.items`` is rejected for now). A select-terminal projects the joined/crossed result row
     //! (scalar or named-tuple pushes down to SQL; whole-row ``select c`` is in-memory only), while a
-    //! post-join ``where``/``orderby`` or a ``group`` terminal carries the ``(c, d)`` pair (in-memory). A
+    //! post-source ``where``/``orderby`` or a ``group`` terminal carries the ``(c, d)`` pair (in-memory). A
     //! trailing ``iterator`` keyword yields an ``iterator<T>`` over the materialized result instead of the
     //! ``array<T>``.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {

@@ -1611,6 +1611,14 @@ def to_array(a : auto(TT)[]) : array<TT -const> {
     return <- arr
 }
 
+[unused_argument(arr)]
+def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
+    //! No-op identity over an `array` — moves it through unchanged. Lets source-agnostic linq
+    //! emitters (e.g. linq_das) always append `|> to_array()` regardless of whether the chain is
+    //! already array-typed. `_sql(...)` intercepts this call as a no-op terminal (see analyze_chain).
+    return <- arr
+}
+
 def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>

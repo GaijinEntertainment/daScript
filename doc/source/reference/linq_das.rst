@@ -29,19 +29,23 @@ embedded in a larger expression.
 Clauses
 -------
 
-A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ join <var2>
-[ : <Row2> ] in <src2> on <keyA> equals <keyB> ] [ where <pred> ] [ orderby
-<expr> [descending] ] ( select <proj> | group <var> by <key> ) [ iterator ]``
-— at most one of the two ``where`` slots may appear (before *or* after
-``join``, never both):
+A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
+[ : <Row2> ] in <src2> on <keyA> equals <keyB> | from <var2> [ : <Row2> ] in
+<src2> ) ] [ where <pred> ] [ orderby <expr> [descending] ] ( select <proj> |
+group <var> by <key> ) [ iterator ]`` — a second range variable comes from
+**either** a ``join`` **or** a second ``from`` (never both), and at most one of
+the two ``where`` slots may appear (before *or* after that clause, never both):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
-- ``where <predicate>`` — optional. A ``where`` **before** ``join`` filters the
-  left source (single range var); a ``where`` **after** the join sees both range
-  variables. At most one ``where`` per query.
+- ``where <predicate>`` — optional. A ``where`` **before** the ``join`` / second
+  ``from`` filters the left source (single range var); a ``where`` **after** it
+  sees both range variables. At most one ``where`` per query.
 - ``join <var2> in <src2> on <keyA> equals <keyB>`` — optional, a single inner
   equi-join introducing a second range variable (see :ref:`linq_das_join`).
+- ``from <var2> in <src2>`` — optional, a second ``from`` introducing a second
+  range variable over an **independent** source — the cross product / SelectMany
+  (see :ref:`linq_das_multifrom`).
 - ``orderby <expr> [descending]`` — optional, a **single** sort key (see
   :ref:`linq_das_ordering`). Omitted when absent.
 - ``select <projection>`` — ``select <var>`` (the identity projection) returns
@@ -238,6 +242,57 @@ Only a **single equi-key** is supported — composite keys (``a equals b && c
 equals d``), group-joins (``join … into g``), multiple joins, and ``orderby``
 before ``group`` are rejected at compile time.
 
+.. _linq_das_multifrom:
+
+Multiple ``from`` (SelectMany)
+------------------------------
+
+A second ``from`` introduces a second range variable over an **independent**
+source — the cross product, C#'s *SelectMany*::
+
+    from c in cars from b in brands select …
+
+is every ``(c, b)`` pair. It shares the whole post-source clause grammar with
+``join`` (pre/post ``where``, ``orderby``, ``select`` / ``group``, transparent
+identifier, ``iterator``) — it is exactly a ``join`` with no ``on … equals`` key,
+and emits ``_cross_join`` instead of ``_join``. The same two emit shapes apply:
+
+**Select-terminal** — the ``select`` projection *is* the cross's result row (both
+range variables in scope). Over a SQL source it **pushes down to a SQL CROSS
+JOIN**; a scalar / named-tuple projection has a column form, a whole-row
+``select c`` is in-memory only:
+
+.. code-block:: das
+
+    // 3 cars × 2 brands = 6 rows
+    var rows <- %linq! from c in cars from b in brands
+                       select (Name = c.name, Country = b.country) %%
+
+A ``where`` *before* the second ``from`` filters the left source (single range
+var) and pushes down; cross-then-filter on a key equality is the equi-join
+subset:
+
+.. code-block:: das
+
+    // pre-from where filters cars, then crosses
+    var rows <- %linq! from c in cars where c.price >= 150 from b in brands
+                       select (Name = c.name, Country = b.country) %%
+
+    // post-from where sees both vars (transparent identifier) — cross-then-filter
+    var matched <- %linq! from c in cars from b in brands
+                          where c.brand == b.brand select c.name %%
+
+**Transparent identifier** — a post-from ``where`` / ``orderby`` or a ``group``
+terminal carries ``(c, b)`` as a pair, in-memory only (same SQL boundary as
+``join``).
+
+The second source must be **independent** of the first range variable. A
+**correlated** second ``from`` (``from b in c.items`` — the second source is a
+field of the first element) is the *flattening* SelectMany; it is **rejected for
+now** with a clear message, and lands in a later release. Only one extra ``from``
+is supported (no N-ary ``from … from … from``), and ``from … from`` cannot be
+combined with ``join`` in the same query.
+
 Iterator vs array output
 ------------------------
 
@@ -286,6 +341,9 @@ The following are not yet supported:
 - **Post-join ``where`` / ``orderby`` / ``group`` over a SQL source** — these use
   the transparent-identifier carry, which is in-memory only; select-terminal
   joins and pre-join ``where`` push down.
-- **Multiple ``from``** (SelectMany), ``let`` bindings, and ``into``
-  continuations — a query parses a single ``from`` (one range variable, plus a
-  ``join``'s second).
+- **Correlated multiple ``from``** — the *flattening* SelectMany where the second
+  source is a field of the first element (``from b in c.items``) is rejected for
+  now; the **uncorrelated** form (an independent second source → cross product) is
+  supported (see :ref:`linq_das_multifrom`). N-ary ``from … from … from`` and
+  ``from … from`` combined with ``join`` are also rejected.
+- **``let`` bindings** and ``into`` continuations — not yet supported.

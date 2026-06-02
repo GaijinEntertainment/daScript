@@ -664,6 +664,23 @@ class private LinqCrossJoin : AstCallMacro {
         macro_verify(srcbType.isIterator || srcbType.isGoodArrayType, prog, call.at, "second argument must be an iterator or array")
         macro_verify(!srcaType.firstType.isAutoOrAlias, prog, call.at, "first argument element type cannot be auto or alias")
         macro_verify(!srcbType.firstType.isAutoOrAlias, prog, call.at, "second argument element type cannot be auto or alias")
+        // Auto-type the result lambda's args when untyped — symmetric with _join's result lambda. Lets the
+        // linq_das reader (and users) write `_cross_join(a, b, $(x, y) => ...)` without spelling element types.
+        var iterTypeA = clone_iterator_type(srcaType)
+        var iterTypeB = clone_iterator_type(srcbType)
+        var resultArg = call.arguments[2]
+        if (resultArg != null && resultArg is ExprMakeBlock) {
+            var rblk = (resultArg as ExprMakeBlock)._block
+            if (rblk != null && rblk is ExprBlock) {
+                var rb = rblk as ExprBlock
+                if (rb.arguments |> length == 2
+                        && (rb.arguments[0]._type == null || rb.arguments[0]._type.isAutoOrAlias)
+                        && (rb.arguments[1]._type == null || rb.arguments[1]._type.isAutoOrAlias)) {
+                    rb.arguments[0]._type = clone_type(iterTypeA)
+                    rb.arguments[1]._type = clone_type(iterTypeB)
+                }
+            }
+        }
         var res = qmacro(cross_join(
             $e(call.arguments[0]),
             $e(call.arguments[1]),
