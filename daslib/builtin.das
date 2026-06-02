@@ -1597,7 +1597,7 @@ def nothing(var it : iterator<auto(TT)>) : iterator<TT> {
 def to_array(var it : iterator<auto(TT)>) : array<TT -const -&> {
     var arr : array<TT -const -&>
     for (x in it) {
-        push_clone(arr, x)
+        push_clone(arr, x) // nolint:PERF006 iterator length is unknown ahead of time — cannot reserve
     }
     return <- arr
 }

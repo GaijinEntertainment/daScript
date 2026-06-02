@@ -37,11 +37,12 @@ require daslib/linq_boost public
 // and `d` past the join as a `(c, d)` pair (transparent identifier) and run in-memory (over SQL the
 // carried whole-row tuple errors — project columns in a select-terminal join).
 //
-// A second `from <d> [: RowB] in <B>` is the uncorrelated SelectMany (cross product, see transpile_cross)
-// — the same clause grammar and dual emit as `join`, minus the `on … equals` key, emitting `_cross_join`.
-// `B` must be independent of `c`; a CORRELATED `from d in c.items` is rejected (lands with correlated
-// SelectMany). join and cross share the post-source tail (emit_two_source). Over SQL the cross pushes down
-// to a CROSS JOIN. One extra `from` only; `from … from` + `join` in one query is rejected.
+// A second `from <d> [: RowB] in <B>` is SelectMany (see transpile_cross) — the same clause grammar and
+// dual emit as `join`, minus the `on … equals` key. Two flavors by whether `B` references `c`: uncorrelated
+// (`B` independent) is the cross product, emitting `_cross_join` (pushes down to a SQL CROSS JOIN);
+// correlated (`from d in c.items`) is the flatten, emitting `_select_many` (in-memory; rejected over SQL —
+// the inner collection is a per-row value, not a table). join and both crosses share the post-source tail
+// (emit_two_source). One extra `from` only; `from … from` + `join` in one query is rejected.
 
 def private is_ident_byte(c : int) : bool {
     return is_alnum(c) || c == '_'
@@ -385,6 +386,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     let tail = strip(slice(q, tailStart, tailEnd))
     var srcB = srcBForJoin
     var onLambda = ""
+    var correlated = false
     if (isJoin) {
         if (keyA == "" || tail == "") {
             macro_error(prog, at, "linq: empty join key — expected `on <keyA> equals <keyB>`")
@@ -396,13 +398,15 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             macro_error(prog, at, "linq: empty source expression after the second 'in'")
             return "(0)"
         }
-        // CORRELATED second source (references the first range variable) → flatten, not cross product.
-        // Rejected for now; the correlated-SelectMany release adds it.
-        if (mentions_ident(tail, varName)) {
-            macro_error(prog, at, "linq: correlated 'from … from' (the second source '{tail}' references '{varName}', e.g. `from {var2Name} in {varName}.items`) is not yet supported — use 'join', or wait for the correlated-SelectMany release")
-            return "(0)"
+        // A CORRELATED second source (references the first range variable) is SelectMany flatten, not a
+        // cross product: the second source is a per-row collection (`from {var2Name} in {varName}.items`).
+        // Its collection-selector `srcB` is built below — after the `where` is known, so an inner-only
+        // post-`from` `where` can be pushed into the collection (filter before flattening). The inner
+        // element type is inferred (a `: RowB` annotation on a correlated second from is ignored).
+        correlated = mentions_ident(tail, varName)
+        if (!correlated) {
+            srcB = build_src(rowType2, tail, false)
         }
-        srcB = build_src(rowType2, tail, false)
     }
     var wherePred = ""
     if (hasWhere) {
@@ -459,14 +463,43 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             return "(0)"
         }
     }
+    // Correlated SelectMany: the outer row is non-copyable (it holds the very collection being flattened),
+    // so the transparent-identifier carry can't hold it. Build the collection selector here (deferred from
+    // the source-shape branch so an inner-only post-`where` can be pushed into it). `orderby` / `group` over
+    // the flattened pairs need the carry → rejected; an inner-only post-`where` is pushed into the collection
+    // (filter before flattening — identical semantics); an outer-referencing post-`where` would need the carry.
+    if (correlated) {
+        if (orderByPos >= 0) {
+            macro_error(prog, at, "linq: 'orderby' over a correlated 'from … from' (flatten) is not supported — the outer row '{varName}' is non-copyable, so the ordered pairs can't be carried; materialize the result then sort, or restructure as a 'join'")
+            return "(0)"
+        }
+        if (isGroup) {
+            macro_error(prog, at, "linq: 'group' over a correlated 'from … from' (flatten) is not supported — the outer row '{varName}' is non-copyable; 'select' the fields you need instead")
+            return "(0)"
+        }
+        if (postWhere >= 0 && mentions_ident(wherePred, varName)) {
+            macro_error(prog, at, "linq: a post-'from' 'where' over a correlated 'from … from' may reference only the inner range variable '{var2Name}' (it is pushed into the collection before flattening) — referencing the outer '{varName}' would require carrying the non-copyable outer row; filter the outer with a pre-'from' 'where', or restructure")
+            return "(0)"
+        }
+        // Zero-copy collection selector: `each` borrows the outer's collection — no per-row clone (unlike
+        // `to_sequence`, whose const-array overload clones) and no per-row materialize (unlike `where_`'s
+        // array overload). An inner-only post-`where` fuses onto the borrowed iterator (the iterator overload
+        // of `where_` stays lazy). `each` outside a for-loop needs the `unsafe` wrap.
+        if (postWhere >= 0) {
+            srcB = "$({varName}) => unsafe(each({tail})) |> _where($({var2Name}) => {wherePred})"
+        } else {
+            srcB = "$({varName}) => unsafe(each({tail}))"
+        }
+    }
     let carryLambda = "$({varName}, {var2Name}) => ({varName} = {varName}, {var2Name} = {var2Name})"
     let names <- [varName, var2Name]
     let hasOrderBy = orderByPos >= 0
     // A pre-source `where` (single range var `c`) filters the left source — emitted before the op, no
     // rewrite; pushes down to SQL. Only a POST-source where/orderby/group forces the transparent-id carry.
+    // Correlated never uses the carry (rejections + push-down above), so it always emits select-terminal.
     let preWhereClause = preWhere ? " |> _where($({varName}) => {wherePred})" : ""
-    let useTI = postWhere >= 0 || hasOrderBy || isGroup
-    let opName = isJoin ? "_join" : "_cross_join"
+    let useTI = !correlated && (postWhere >= 0 || hasOrderBy || isGroup)
+    let opName = isJoin ? "_join" : (correlated ? "_select_many" : "_cross_join")
     let onLambdaPart = isJoin ? "{onLambda}, " : ""
     return build_string() $(var w) {
         w |> write("( _fold( {srcA}{preWhereClause}")
@@ -557,12 +590,14 @@ def private transpile_join(q : string; nq : int; varName : string; rowType : str
                            joinPos, equalsPos + 6, firstWhere, prog, at)
 }
 
-// Uncorrelated multiple-`from` (SelectMany over a cross product):
+// Multiple-`from` (SelectMany):
 //   from <c> [: RowA] in <A> [where <pred>] from <d> [: RowB] in <B>
 //      [where <pred>] [orderby <key> [descending]] ( select <proj> | group <c> by <key> ) [iterator]
-// The second source `<B>` must be independent of `<c>` (a CORRELATED `from d in c.items` is rejected here
-// and lands with correlated SelectMany). Parses the second-from intro and the left source, then delegates
-// the post-source clauses + emit to emit_two_source with the `_cross_join` op (no `on … equals`).
+// Two flavors, decided in emit_two_source by whether `<B>` references `<c>`:
+//   - uncorrelated (`<B>` independent of `<c>`): cross product → `_cross_join` (pushes down to SQL CROSS JOIN);
+//   - correlated (`from <d> in <c>.items`): flatten → `_select_many` (in-memory; rejected over SQL).
+// Parses the second-from intro and the left source (a pre-`from` `where` filters it), then delegates the
+// post-source clauses + dual emit to emit_two_source.
 def private transpile_cross(q : string; nq : int; varName : string; rowType : string;
                             srcStart : int; secondFromPos : int; prog : ProgramPtr; at : LineInfo) : string {
     if (find_kw_depth0(q, "from", secondFromPos + 4) >= 0) {
@@ -811,9 +846,10 @@ class LinqDasReader : AstReaderMacro {
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
     //! ``from c : Row in src`` over decs / SQL / XML. ``orderby`` is a single sort key; ``group c by <key>``
     //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). A second range
-    //! variable comes from either a ``join`` (single inner equi-join) or a second ``from`` (uncorrelated
-    //! cross product / SelectMany — emits ``_cross_join``, pushes down to a SQL CROSS JOIN; a correlated
-    //! ``from d in c.items`` is rejected for now). A select-terminal projects the joined/crossed result row
+    //! variable comes from either a ``join`` (single inner equi-join) or a second ``from`` (SelectMany):
+    //! uncorrelated (``from d in B``) is the cross product, emitting ``_cross_join`` (pushes down to a SQL
+    //! CROSS JOIN); correlated (``from d in c.items``) is the flatten, emitting ``_select_many`` (in-memory;
+    //! rejected over SQL). A select-terminal projects the joined/crossed result row
     //! (scalar or named-tuple pushes down to SQL; whole-row ``select c`` is in-memory only), while a
     //! post-source ``where``/``orderby`` or a ``group`` terminal carries the ``(c, d)`` pair (in-memory). A
     //! trailing ``iterator`` keyword yields an ``iterator<T>`` over the materialized result instead of the

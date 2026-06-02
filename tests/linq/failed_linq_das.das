@@ -14,10 +14,12 @@ expect 50503   // join: `join … into` (group-join) unsupported
 expect 50503   // join: `where` inside the join clause (between join and equals)
 expect 50503   // join: two `where` clauses (one pre-join, one post-join)
 expect 50503   // join: range var collides with the reserved transparent-id name
-expect 50503   // multiple-from: correlated 2nd source (references the 1st range var) — lands with correlated SelectMany
 expect 50503   // multiple-from: three `from` clauses (N-ary SelectMany unsupported)
 expect 50503   // multiple-from: `from … from` combined with `join`
 expect 50503   // multiple-from: range var collides with the reserved transparent-id name
+expect 50503   // correlated: `orderby` over a correlated `from … from` (non-copyable outer can't ride the carry)
+expect 50503   // correlated: `group` over a correlated `from … from` (non-copyable outer can't ride the carry)
+expect 50503   // correlated: post-`from` `where` references the OUTER range var (only inner-only is pushed down)
 
 require daslib/linq_das
 require strings
@@ -30,6 +32,23 @@ struct Car {
 
 def private one_car() {
     return <- [Car(name = "a", price = 50, brand = "x")]
+}
+
+struct Line {
+    sku : string
+    qty : int
+}
+
+struct Order {
+    id       : int
+    customer : string
+    lines    : array<Line>
+}
+
+def private one_order() {
+    var o <- Order(id = 1, customer = "Acme")
+    o.lines |> emplace(Line(sku = "a", qty = 2))
+    return <- [o]
 }
 
 def trigger_bad_keyword() {
@@ -104,10 +123,23 @@ def trigger_join_reserved_var_name() {
     unused(x)
 }
 
-def trigger_multifrom_correlated() {
-    var cars <- one_car()
-    // the 2nd source references the 1st range var `c` → correlated (flatten), rejected for now
-    let x <- %linq! from c in cars from b in c.name select b %%
+def trigger_correlated_orderby() {
+    var orders <- one_order()
+    // `orderby` over a correlated `from … from` — the non-copyable outer can't ride the transparent-id carry
+    let x <- %linq! from o in orders from l in o.lines orderby l.qty select l.sku %%
+    unused(x)
+}
+
+def trigger_correlated_group() {
+    var orders <- one_order()
+    let x <- %linq! from o in orders from l in o.lines group o by o.customer %%
+    unused(x)
+}
+
+def trigger_correlated_outer_where() {
+    var orders <- one_order()
+    // a post-`from` `where` that references the OUTER `o` (only inner-only predicates are pushed down)
+    let x <- %linq! from o in orders from l in o.lines where o.id > 0 select l.sku %%
     unused(x)
 }
 

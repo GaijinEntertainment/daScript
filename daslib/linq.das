@@ -2126,6 +2126,7 @@ def private group_by_lazy_impl(var source; tt : auto(TT); key)  {
         }
     }
     var buffer : array<ResultType -const -&>
+    buffer |> reserve(length(tab))   // one bucket tuple per distinct key
     for (it in values(tab)) {
         buffer.push_clone(it)
     }
@@ -3345,6 +3346,45 @@ def select_many(src : array<auto(TT)>; collection_selector; result_selector) : a
 def select_many_to_array(var src : iterator<auto(TT)>; collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     return <- select_many_impl(src, type<TT -const -&>, collection_selector, result_selector)
+}
+
+// ===== select_many_pair — like select_many(src, collection_selector, result_selector) above, but the
+// result selector receives BOTH the outer element and each flattened inner element. C# correlated
+// `from o in O from x in o.coll select f(o, x)`; the 3-arg select_many passes only the inner element. =====
+
+[unused_argument(tt)]
+def private select_many_pair_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
+    var buffer : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&>
+    // Lower-bound reserve when the outer source is length-bearing — flat-map produces ≥ length(src) elements.
+    static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
+        buffer |> reserve(length(src))
+    }
+    for (it in src) {
+        for (innerIt in collection_selector(it)) {
+            buffer.push_clone(result_selector(it, innerIt))
+        }
+    }
+    return <- buffer
+}
+
+[unused_argument(tt)]
+def private select_many_pair_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
+    return <- select_many_pair_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
+}
+
+def select_many_pair(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! SelectMany whose result selector receives both the outer element and each flattened inner element — C# `from o … from x in o.coll select f(o, x)`. Iterator source, iterator result.
+    return <- select_many_pair_impl(src, type<TT -const -&>, collection_selector, result_selector).to_sequence_move()
+}
+
+def select_many_pair(src : array<auto(TT)>; collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! SelectMany whose result selector receives both the outer element and each flattened inner element — C# `from o … from x in o.coll select f(o, x)`. Array source, array result.
+    return <- select_many_pair_impl_const(src, type<TT -const -&>, collection_selector, result_selector)
+}
+
+def select_many_pair_to_array(var src : iterator<auto(TT)>; collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! `select_many_pair` returning an array (the iterator source is materialized).
+    return <- select_many_pair_impl(src, type<TT -const -&>, collection_selector, result_selector)
 }
 
 [unused_argument(tt, uu)]

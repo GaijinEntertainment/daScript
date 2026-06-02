@@ -691,6 +691,72 @@ class private LinqCrossJoin : AstCallMacro {
     }
 }
 
+def private inject_block_param_type(var arg : ExpressionPtr; idx : int; ty : TypeDeclPtr) {
+    //! Set the `idx`-th parameter type of a `$(…) => …` block argument to `ty`, when that parameter is
+    //! still untyped (null / auto). Shared by the `_select_many` two-stage expansion (see below).
+    if (arg == null || !(arg is ExprMakeBlock)) return
+    var blk = (arg as ExprMakeBlock)._block
+    if (blk == null || !(blk is ExprBlock)) return
+    var b = blk as ExprBlock
+    if (idx < (b.arguments |> length) && (b.arguments[idx]._type == null || b.arguments[idx]._type.isAutoOrAlias)) {
+        b.arguments[idx]._type = clone_type(ty)
+    }
+}
+
+[call_macro(name="_select_many")]
+class private LinqSelectMany : AstCallMacro {
+    //! Stage 1 of the correlated SelectMany sugar — `_select_many(src, $(o) => coll, $(o, x) => result)`.
+    //! Injects the outer element type onto the collection selector's parameter and the result selector's
+    //! FIRST parameter, then defers to `_select_many_2`. Two stages are required because the inner element
+    //! type is only knowable after the collection selector's body is inferred — which cannot happen within
+    //! a single macro pass (injecting a parameter type does not re-run inference on the block body).
+    //! for example::
+    //!
+    //!   each(orders)._select_many($(o) => o.lines |> to_sequence(), $(o, x) => (id = o.id, sku = x.sku))
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _select_many(src, collection_selector, result_selector) — 3 arguments")
+        assume srcaType = call.arguments[0]._type
+        macro_verify(srcaType != null, prog, call.at, "first argument is not inferred yet")
+        macro_verify(srcaType.isIterator || srcaType.isGoodArrayType, prog, call.at, "first argument must be an iterator or array")
+        macro_verify(!srcaType.firstType.isAutoOrAlias, prog, call.at, "first argument element type cannot be auto or alias")
+        var iterTypeA = clone_iterator_type(srcaType)
+        inject_block_param_type(call.arguments[1], 0, iterTypeA)
+        inject_block_param_type(call.arguments[2], 0, iterTypeA)
+        // make_call (not qmacro) so the deferred stage dispatches as a call-macro, not a plain function.
+        var res = make_call(call.at, "_select_many_2")
+        var rc = res as ExprCallMacro
+        rc.arguments |> emplace <| call.arguments[0]
+        rc.arguments |> emplace <| call.arguments[1]
+        rc.arguments |> emplace <| call.arguments[2]
+        res.force_at(call.at)
+        return res
+    }
+}
+
+[call_macro(name="_select_many_2")]
+class private LinqSelectMany2 : AstCallMacro {
+    //! Stage 2 of `_select_many` (see above). The collection selector's parameter is now typed, so its
+    //! body — and hence its element type — is inferred. Read that element type, inject it onto the result
+    //! selector's SECOND parameter, and expand into `select_many_pair`.
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _select_many_2(src, collection_selector, result_selector) — 3 arguments")
+        assume collType = call.arguments[1]._type
+        macro_verify(collType != null && collType.firstType != null, prog, call.at, "collection selector is not inferred yet")
+        var collReturn = collType.firstType
+        macro_verify(collReturn.isIterator || collReturn.isGoodArrayType, prog, call.at, "collection selector must return an iterator or array")
+        macro_verify(!collReturn.firstType.isAutoOrAlias, prog, call.at, "collection element type cannot be auto or alias")
+        var iterTypeB = clone_iterator_type(collReturn)
+        inject_block_param_type(call.arguments[2], 1, iterTypeB)
+        var res = qmacro(select_many_pair(
+            $e(call.arguments[0]),
+            $e(call.arguments[1]),
+            $e(call.arguments[2])
+        ))
+        res.force_at(call.at)
+        return res
+    }
+}
+
 [call_macro(name="_group_by_lazy")]
 class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
     //! implements _group_by_lazy(iterator, key) shorthand notation that

@@ -538,3 +538,99 @@ def test_multifrom_decs(t : T?) {
     let rows <- %linq! from c : CarComp in decs from d : DealerComp in decs select (Name = c.name, Region = d.region) %%
     t |> equal(length(rows), 6, "3 cars × 2 dealers")
 }
+
+// ===== correlated multiple `from` (SelectMany flatten) =====
+// `from o in O from l in o.lines …` — the second source is a per-row collection of the first, so it
+// flattens (≠ the uncorrelated cross above) and emits `_select_many`. In-memory array source only: the
+// outer row holds the flattened collection (non-copyable), which SQL can't model and `from_xml_node`
+// can't materialize. Supported: select-terminal (both/inner), pre-`from` `where`, an inner-only post-`from`
+// `where` (pushed into the collection before flattening), and `iterator`. orderby/group/outer-`where` over
+// the flatten are rejected (see failed_linq_das.das) — the non-copyable outer can't ride the carry.
+
+struct Line {
+    sku : string
+    qty : int
+}
+
+struct Order {
+    id       : int
+    customer : string
+    lines    : array<Line>
+}
+
+def private mk_orders() : array<Order> {
+    var o1 <- Order(id = 1, customer = "Acme")
+    o1.lines |> emplace(Line(sku = "a", qty = 2))
+    o1.lines |> emplace(Line(sku = "b", qty = 1))
+    var o2 <- Order(id = 2, customer = "Acme")
+    o2.lines |> emplace(Line(sku = "c", qty = 5))
+    var o3 <- Order(id = 3, customer = "Globex")
+    o3.lines |> emplace(Line(sku = "d", qty = 3))
+    return <- [o1, o2, o3]
+}
+
+[test]
+def test_select_many_pair_untyped_fold(t : T?) {
+    let orders <- mk_orders()
+    // UNTYPED lambdas — proves the two-stage `_select_many` op-macro injects (o : Order) then (x : Line),
+    // and `select_many_pair` runs at tier-3. 2+1+1 lines flattened across 3 orders.
+    let rows <- _fold(orders
+        |> _select_many($(o) => o.lines |> to_sequence(), $(o, x) => (id = o.id, sku = x.sku))
+        |> to_array())
+    t |> equal(length(rows), 4, "flattened line count")
+    t |> equal(rows[0].id, 1)
+    t |> equal(rows[0].sku, "a")
+    t |> equal(rows[3].id, 3)
+    t |> equal(rows[3].sku, "d")
+}
+
+[test]
+def test_correlated_project_both(t : T?) {
+    let orders <- mk_orders()
+    // headline correlated case — the result selector references BOTH the outer and inner range vars.
+    let rows <- %linq! from o in orders from l in o.lines select (Id = o.id, Sku = l.sku) %%
+    t |> equal(length(rows), 4)
+    t |> equal(rows[0].Id, 1)
+    t |> equal(rows[0].Sku, "a")
+    t |> equal(rows[2].Id, 2)
+    t |> equal(rows[2].Sku, "c")
+}
+
+[test]
+def test_correlated_project_inner(t : T?) {
+    let orders <- mk_orders()
+    let skus <- %linq! from o in orders from l in o.lines select l.sku %%
+    t |> equal(length(skus), 4)
+    t |> equal(skus[0], "a")
+    t |> equal(skus[3], "d")
+}
+
+[test]
+def test_correlated_push_where(t : T?) {
+    let orders <- mk_orders()
+    // inner-only post-`from` `where` — pushed into the collection (filter o.lines before flattening).
+    // qty>1 keeps a(2), c(5), d(3); drops b(1).
+    let rows <- %linq! from o in orders from l in o.lines where l.qty > 1 select (Id = o.id, Sku = l.sku) %%
+    t |> equal(length(rows), 3, "qty>1 drops the single qty=1 line")
+    t |> equal(rows[0].Sku, "a")
+    t |> equal(rows[1].Sku, "c")
+    t |> equal(rows[2].Sku, "d")
+}
+
+[test]
+def test_correlated_pre_where(t : T?) {
+    let orders <- mk_orders()
+    // pre-`from` `where` filters the OUTER (orders 2, 3) before flattening.
+    let skus <- %linq! from o in orders where o.id >= 2 from l in o.lines select l.sku %%
+    t |> equal(length(skus), 2)
+    t |> equal(skus[0], "c")
+    t |> equal(skus[1], "d")
+}
+
+[test]
+def test_correlated_iterator_output(t : T?) {
+    let orders <- mk_orders()
+    var n = 0
+    for (_s in %linq! from o in orders from l in o.lines select l.sku iterator %%) { n++ }
+    t |> equal(n, 4)
+}
