@@ -305,8 +305,17 @@ jobs:
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
-        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
-        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        # Non-Windows: export the launcher via env (also wraps the GLFW/libhv
+        # ExternalProject sub-builds — harmless on gcc/clang). Windows must NOT
+        # export it: CMake seeds CMAKE_<LANG>_COMPILER_LAUNCHER from the env
+        # into the sub-cmakes, where sccache + MSVC /Zi (those sub-builds keep
+        # /Zi) + parallel Ninja collide on the shared glfw.pdb (C1041). Windows
+        # instead passes the launcher as -D on the MAIN configure only (Build
+        # step), scoping sccache to daslang's own /Z7 TUs.
+        if [ "$RUNNER_OS" != "Windows" ]; then
+          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        fi
     # Stable per-config key, one fixed slot. Restore always; on master,
     # delete + re-save the same key after Build so the slot is overwritten
     # with fresh objects (GHA caches are immutable — plain save under an
@@ -340,14 +349,18 @@ jobs:
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
                 # /Z7 (Embedded) instead of /Zi so sccache can cache MSVC compiles;
                 # CMP0141=NEW required because cmake_minimum_required is 3.17 (< 3.25).
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                # Launcher passed as -D here (not env) so it scopes to daslang's
+                # own targets and does NOT leak into the GLFW/libhv sub-builds.
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               windows64)
                 export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
                 # /Z7 (Embedded) instead of /Zi so sccache can cache MSVC compiles;
                 # CMP0141=NEW required because cmake_minimum_required is 3.17 (< 3.25).
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                # Launcher passed as -D here (not env) so it scopes to daslang's
+                # own targets and does NOT leak into the GLFW/libhv sub-builds.
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                 ;;
               linux_arm*)
