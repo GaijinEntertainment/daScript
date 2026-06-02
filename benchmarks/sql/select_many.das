@@ -3,12 +3,13 @@ options persistent_heap
 
 require _common public
 
-// select_many(src, collection_selector, result_selector) — flatten each order's `lines` (the correlated
+// select_many_pair(src, collection_selector, result_selector) — flatten each order's `lines` (the correlated
 // SelectMany: the inner collection is a field of the outer element). Flattened count = n * LINES_PER_ORDER.
 //
-// PR1 uses the EXISTING 1-arg-result form: result_selector sees ONLY the inner `Line`, so the projection is
-// inner-only (`l.sku`). The both-vars `(outer, inner) => …` form — C#'s `select (o.id, l.sku)` — arrives in
-// the correlated select_many engine PR; this file is swapped to it then and re-measured.
+// The both-vars form: result_selector sees BOTH the outer `o` and the inner `l`, so the projection is C#'s
+// `select (o.id, l.sku)`. This is the engine op the correlated `%linq! from o … from l in o.lines select
+// (o.id, l.sku)` reader emits. (PR1 measured the existing 1-arg-result `select_many` with an inner-only
+// projection; this is the same flatten with a both-vars result selector.)
 //
 // ARRAY lane only (m3f). No other lane has a nested-collection source: SQL has no nested-collection flatten
 // (correlated select_many over SQL is rejected); a decs component has no `array<…>` field; and the XML linq
@@ -22,8 +23,9 @@ def run_m3f(b : B?; n : int) {
     b |> run("m3f_array_fold/{n}", n) {
         // collection-selector yields a zero-copy view of o.lines via `each` — NOT `to_sequence`, whose
         // const-array overload clones the array per order (linq.das `var b := a`); that clone is not part of
-        // select_many and would skew the baseline. This is also the shape the correlated reader should emit.
-        let rows <- select_many(orders, $(o : OrderWithLines) => unsafe(each(o.lines)), $(l : Line) => l.sku)
+        // select_many and would skew the baseline. This is the shape the correlated reader emits.
+        let rows <- select_many_pair(orders, $(o : OrderWithLines) => unsafe(each(o.lines)),
+            $(o : OrderWithLines; l : Line) => (id = o.id, sku = l.sku))
         let c = length(rows)
         b |> accept(c)
         if (c != n * LINES_PER_ORDER) {

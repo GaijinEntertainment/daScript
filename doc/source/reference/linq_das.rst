@@ -44,8 +44,9 @@ the two ``where`` slots may appear (before *or* after that clause, never both):
 - ``join <var2> in <src2> on <keyA> equals <keyB>`` — optional, a single inner
   equi-join introducing a second range variable (see :ref:`linq_das_join`).
 - ``from <var2> in <src2>`` — optional, a second ``from`` introducing a second
-  range variable over an **independent** source — the cross product / SelectMany
-  (see :ref:`linq_das_multifrom`).
+  range variable — SelectMany: an **independent** source is the cross product, a
+  source that is a field of the first range variable (``from l in o.lines``) is
+  the correlated flatten (see :ref:`linq_das_multifrom`).
 - ``orderby <expr> [descending]`` — optional, a **single** sort key (see
   :ref:`linq_das_ordering`). Omitted when absent.
 - ``select <projection>`` — ``select <var>`` (the identity projection) returns
@@ -286,12 +287,43 @@ subset:
 terminal carries ``(c, b)`` as a pair, in-memory only (same SQL boundary as
 ``join``).
 
-The second source must be **independent** of the first range variable. A
-**correlated** second ``from`` (``from b in c.items`` — the second source is a
-field of the first element) is the *flattening* SelectMany; it is **rejected for
-now** with a clear message, and lands in a later release. Only one extra ``from``
-is supported (no N-ary ``from … from … from``), and ``from … from`` cannot be
-combined with ``join`` in the same query.
+Correlated ``from`` (flatten)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When the second source is a **field of the first** range variable
+(``from l in o.lines``), the ``from … from`` *flattens* each outer row's
+collection — C#'s correlated *SelectMany* — and emits ``_select_many`` (rather
+than the cross's ``_cross_join``)::
+
+    // one row per (order, line) pair across all orders
+    var rows <- %linq! from o in orders from l in o.lines
+                       select (Id = o.id, Sku = l.sku) %%
+
+The result selector sees **both** range variables. A ``where`` after the second
+``from`` that references **only the inner** variable is pushed into the
+collection before flattening (identical semantics, no carry)::
+
+    var rows <- %linq! from o in orders from l in o.lines where l.qty > 1
+                       select (Id = o.id, Sku = l.sku) %%
+
+A pre-``from`` ``where`` filters the outer rows, and ``iterator`` output works as
+elsewhere.
+
+Correlated flatten is an **in-memory array** feature: the outer row holds the
+very collection being flattened, so it is non-copyable. A SQL source rejects it
+(the inner collection is a per-row value, not a ``[sql_table]`` — use a ``join``
+on a related table), an XML source cannot materialize nested collections
+(``from_xml_node`` reads scalar attributes only), and decs rows have no nested
+collection. Because the non-copyable outer cannot ride the transparent-identifier
+carry, ``orderby`` / ``group`` over a correlated flatten, and a post-``from``
+``where`` that references the **outer** variable, are rejected with a clear
+message — project the fields you need in the ``select``, filter the outer with a
+pre-``from`` ``where``, or restructure as a ``join``.
+
+The second source of an **uncorrelated** ``from`` must be independent of the
+first range variable. Only one extra ``from`` is supported (no N-ary
+``from … from … from``), and ``from … from`` cannot be combined with ``join`` in
+the same query.
 
 Iterator vs array output
 ------------------------
@@ -341,9 +373,14 @@ The following are not yet supported:
 - **Post-join ``where`` / ``orderby`` / ``group`` over a SQL source** — these use
   the transparent-identifier carry, which is in-memory only; select-terminal
   joins and pre-join ``where`` push down.
-- **Correlated multiple ``from``** — the *flattening* SelectMany where the second
-  source is a field of the first element (``from b in c.items``) is rejected for
-  now; the **uncorrelated** form (an independent second source → cross product) is
-  supported (see :ref:`linq_das_multifrom`). N-ary ``from … from … from`` and
+- **Correlated multiple ``from`` over a non-array source** — the *flattening*
+  SelectMany (``from l in o.lines``) is supported for **in-memory array** sources;
+  a SQL source rejects it (no table for the per-row collection), and XML / decs
+  have no nested-collection shape. ``orderby`` / ``group`` over a correlated
+  flatten, and a post-``from`` ``where`` referencing the **outer** variable, are
+  rejected (the non-copyable outer can't ride the transparent-identifier carry);
+  an inner-only post-``from`` ``where`` is pushed into the collection. The
+  **uncorrelated** form (independent second source → cross product) is supported
+  on all sources (see :ref:`linq_das_multifrom`). N-ary ``from … from … from`` and
   ``from … from`` combined with ``join`` are also rejected.
 - **``let`` bindings** and ``into`` continuations — not yet supported.

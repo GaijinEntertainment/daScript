@@ -2046,6 +2046,16 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var cxCall = match_call_in_linq(node, "cross_join")
         if (cxCall != null) return process_cross_join_call(cxCall, q, prog, at)
     }
+    // Reject select_many_pair — correlated `from … from x in <field>` flattens a per-row collection, which
+    // has no SQL table to map to. The `_select_many` reader op expands to `select_many_pair` before `_sql`
+    // sees the chain, so match the expanded name (mirrors how `cross_join` / `join` are matched above).
+    {
+        var smCall = match_call_in_linq(node, "select_many_pair")
+        if (smCall != null) {
+            macro_error(prog, at, "_sql: correlated `from … from x in <expr>` (SelectMany over a SQL source) is not translatable to SQL — the inner collection is a per-row value, not a `[sql_table]`. Use an explicit `join` on a related table, or materialize the SQL rows with `to_array()` first and flatten in memory.")
+            return false
+        }
+    }
     // Bottom: select_from(db, type<T>) — plain function in sqlite_boost.
     {
         var dbE : ExpressionPtr
