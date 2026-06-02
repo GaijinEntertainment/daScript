@@ -741,19 +741,12 @@ src/ast/ast_dispatch.cpp
 src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
-src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_program.cpp
-src/ast/ast_infer_type.cpp
-src/ast/ast_infer_type_report.cpp
-src/ast/ast_infer_type_function.cpp
-src/ast/ast_infer_type_helper.cpp
-src/ast/ast_infer_type_op.cpp
-src/ast/ast_infer_type_make.cpp
 src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
@@ -766,7 +759,6 @@ src/ast/ast_escape_analysis.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
-src/ast/ast_parse.cpp
 src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
@@ -862,7 +854,6 @@ src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
-src/misc/lexer_alloc_track.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -1094,16 +1085,27 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
 ENDMACRO()
 
 SET(LIBDASCRIPT_RUNTIME_SRC
-    ${PARSER_GENERATED_SRC}
-    ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+    ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${MAIN_SRC}
-    ${DAGOR_NOISE_SRC} ${DAS_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
+    ${DAGOR_NOISE_SRC} ${DAS_HASH_MAP_SRC} ${FAST_FLOAT_SRC}
 )
 
 SET(LIBDASCRIPT_COMPILER_SRC
     ${SIMULATE_FUSION_SRC}
+    ${PARSER_GENERATED_SRC}
+    ${PARSER_SRC}
+    ${DASCRIPT_FMT_SRC}
+    src/ast/ast_parse.cpp
+    src/misc/lexer_alloc_track.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp
+    src/ast/ast_infer_type.cpp
+    src/ast/ast_infer_type_report.cpp
+    src/ast/ast_infer_type_function.cpp
+    src/ast/ast_infer_type_helper.cpp
+    src/ast/ast_infer_type_op.cpp
+    src/ast/ast_infer_type_make.cpp
+    src/ast/ast_generate.cpp
 )
 
 # Eventually libDaScript_runtime will contain only minimal subset of sources

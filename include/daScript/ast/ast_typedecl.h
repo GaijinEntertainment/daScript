@@ -308,7 +308,7 @@ namespace das {
         TypeDeclPtr option2 = nullptr;
     };
 
-    void findMatchingOptions ( const TypeDeclPtr & type, vector<MatchingOptionError> & matching );
+    DAS_API void findMatchingOptions ( const TypeDeclPtr & type, vector<MatchingOptionError> & matching );
 
     template <typename TT> struct ToBasicType {
         enum { type = Type::none };
@@ -764,9 +764,9 @@ namespace das {
 
     das::TypeDeclPtr DAS_API makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
-    bool splitTypeName ( const string & name, string & moduleName, string & funcName );
+    DAS_API bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
-    bool isCircularType ( const TypeDeclPtr & type );
+    DAS_API bool isCircularType ( const TypeDeclPtr & type );
     bool hasImplicit ( const TypeDeclPtr & type );
     bool isMatchingArgumentType ( const TypeDeclPtr & argType, const TypeDeclPtr & passType );
 

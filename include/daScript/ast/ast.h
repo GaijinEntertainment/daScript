@@ -74,8 +74,8 @@ namespace das
     typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
-    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
-    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
 
@@ -640,7 +640,7 @@ namespace das
         Expression(const LineInfo & a) : at(a) { gc_magic = GC_MAGIC_EXPRESSION; }
         string describe() const;
         virtual ~Expression() {}
-        friend StringWriter& operator<< (StringWriter& stream, const Expression & func);
+        friend DAS_API StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
         static ExpressionPtr autoDereference ( ExpressionPtr expr );
@@ -744,8 +744,6 @@ namespace das
         return expr ? static_cast<ExprType*>(expr) : new ExprType();
     }
 
-    bool isLocalOrGlobal ( ExpressionPtr expr );
-
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324)
@@ -836,7 +834,7 @@ namespace das
     public:
         Function() { gc_magic = GC_MAGIC_FUNCTION; }
         virtual ~Function() {}
-        friend StringWriter& operator<< (StringWriter& stream, const Function & func);
+        friend DAS_API StringWriter& operator<< (StringWriter& stream, const Function & func);
         void getMangledName(TextWriter & ss) const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
@@ -1696,8 +1694,6 @@ namespace das
         bool patchAnnotations();
         void fixupAnnotations();
         void normalizeOptionTypes ();
-        void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
-        void inferTypesDirty(TextWriter & logs, bool verbose);
         bool relocatePotentiallyUninitialized(TextWriter & logs);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
         void inferLint(TextWriter & logs);
@@ -1823,13 +1819,13 @@ namespace das
     DAS_API Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 
     // this one works for single module only
-    DAS_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // this one collectes dependencies and compiles with modules
-    DAS_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
-    DAS_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
 
     // collect script prerequisits

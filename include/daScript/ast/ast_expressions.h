@@ -786,8 +786,8 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    int64_t getConstExprIntOrUInt ( ExpressionPtr expr );
-    pair<int64_t,bool> tryGetConstExprIntOrUInt ( ExpressionPtr expr );
+    DAS_API int64_t getConstExprIntOrUInt ( ExpressionPtr expr );
+    DAS_API pair<int64_t,bool> tryGetConstExprIntOrUInt ( ExpressionPtr expr );
 
     struct DAS_API ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())
@@ -1351,7 +1351,7 @@ namespace das
     struct MakeFieldDecl;
     typedef MakeFieldDecl *   MakeFieldDeclPtr;
 
-    struct MakeFieldDecl : gc_node {
+    struct DAS_API MakeFieldDecl : gc_node {
         LineInfo        at;
         string          name;
         ExpressionPtr   value = nullptr;

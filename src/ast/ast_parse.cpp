@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_gc_report.h"
@@ -866,7 +867,7 @@ namespace das {
             restartInfer:
             {
                 auto timeI = ref_time_ticks();
-                program->inferTypes(logs, libGroup);
+                inferTypes(program.get(), logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 uint64_t inferLegT = get_time_usec(timeI);
                 myInferT += inferLegT;
