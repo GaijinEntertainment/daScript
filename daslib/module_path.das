@@ -51,6 +51,7 @@ module module_path shared public
 //! The same call works fine inside any function body. Also affects
 //! ``let X = get_das_root()`` and ``let X = dir_name(get_module_file_name(M))``.
 
+require fio_core public
 require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost

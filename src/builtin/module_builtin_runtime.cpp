@@ -1557,81 +1557,6 @@ namespace das
         return context->allocateString(getDasRoot(), at);
     }
 
-    // 3-tier directory resolver mirroring the shared-module resolution policy
-    // from PR #2579 (module_jit.cpp::resolve_dynamic_module_path), but for
-    // source-side asset directories.  Given a baked source-file path captured
-    // at macro expansion (e.g. ".../modules/das-cards/cards/card_mesh.das"),
-    // returns the directory where that module's runtime assets currently live:
-    //   1. <exe_dir>/<rel>            — daspkg-release standalone bundle
-    //   2. <das_root>/<rel>           — SDK / cmake install layout
-    //   3. dir_name(baked_path)       — dev (interpreted from source tree)
-    // <rel> is the substring of dir_name(baked) starting at the last
-    // "/modules/" segment.  Tiers 1+2 are skipped when baked has no /modules/
-    // segment (e.g. project-local code outside the package layout); when the
-    // baked dir has also gone missing on the target machine (relocated bundle),
-    // tier 3's fallback is <exe_dir> rather than the dead dev path.
-    char * builtin_resolve_this_module_dir ( const char * baked_path, Context * context ) {
-        namespace fs = std::filesystem;
-        if ( !baked_path || !*baked_path ) return context->allocateString("", nullptr);
-        // generic_string() (here and at every other path-to-string conversion
-        // in this function) emits forward-slash separators on every platform,
-        // matching getDasRoot() and the rest of daslang's path conventions.
-        // Without it Windows would return native backslashes that break string
-        // compares against `/`-formed paths from script-side daslang code.
-        fs::path baked(baked_path);
-        fs::path baked_dir = baked.parent_path();
-        std::string baked_dir_str = baked_dir.generic_string();
-        // Find the last "/modules/" boundary; everything from that segment
-        // onward is the bundle/SDK-relative suffix (e.g.
-        // "modules/das-cards/cards"). rfind, not find — for nested layouts
-        // like "<root>/modules/A/modules/B/x.das" the right answer is "B"'s
-        // package, not "A". Mirrors compute_modules_relative_suffix in
-        // modules/dasLLVM/daslib/llvm_exe.das.
-        const std::string sep = "/modules/";
-        std::string canon = baked_dir_str;
-        for ( char & c : canon ) if ( c == '\\' ) c = '/';
-        std::string rel;
-        size_t pos = canon.rfind(sep);
-        if ( pos != std::string::npos ) {
-            rel = canon.substr(pos + 1);  // drop leading '/' to keep it relative
-        }
-        // Tier 1 — exe_dir
-        if ( !rel.empty() ) {
-            das::string exeFile = das::getExecutableFileName();
-            if ( !exeFile.empty() ) {
-                fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
-                if ( exeDir.empty() ) exeDir = ".";
-                fs::path candidate = exeDir / rel;
-                std::error_code ec;
-                if ( fs::is_directory(candidate, ec) ) {
-                    return context->allocateString(candidate.generic_string().c_str(), nullptr);
-                }
-            }
-            // Tier 2 — das_root
-            fs::path candidate = fs::path(das::getDasRoot().c_str()) / rel;
-            std::error_code ec;
-            if ( fs::is_directory(candidate, ec) ) {
-                return context->allocateString(candidate.generic_string().c_str(), nullptr);
-            }
-        }
-        // Tier 3 — baked dir as fallback. Special case: project-local code
-        // (rel empty so tiers 1+2 were skipped) running from a relocated
-        // bundle where the dev-time baked dir no longer exists — fall back
-        // to <exe_dir> so assets shipped next to the exe are findable.
-        if ( rel.empty() ) {
-            std::error_code ec;
-            if ( !fs::is_directory(baked_dir, ec) ) {
-                das::string exeFile = das::getExecutableFileName();
-                if ( !exeFile.empty() ) {
-                    fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
-                    if ( exeDir.empty() ) exeDir = ".";
-                    return context->allocateString(exeDir.generic_string().c_str(), nullptr);
-                }
-            }
-        }
-        return context->allocateString(baked_dir_str.c_str(), nullptr);
-    }
-
     char * builtin_shared_module_extension ( Context * context, LineInfoArg * at ) {
 #ifdef NDEBUG
         return context->allocateString(".shared_module", at);
@@ -1953,9 +1878,6 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
                 ->args({"context","at"});
-        addExtern<DAS_BIND_FUN(builtin_resolve_this_module_dir)>(*this, lib, "__builtin_resolve_this_module_dir",
-            SideEffects::accessExternal,"builtin_resolve_this_module_dir")
-                ->args({"baked_path","context"});
         addExtern<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
             SideEffects::none,"builtin_shared_module_extension")
                 ->args({"context","at"});
