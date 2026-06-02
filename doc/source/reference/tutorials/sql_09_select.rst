@@ -13,7 +13,7 @@ SQL-09 --- ``_select`` Projections
     single: Tutorial; tuple recordNames
 
 ``_select(...)`` controls *what* columns the SQL emits and *what shape*
-the result has. Three forms are supported:
+the result has. The supported forms:
 
 ==============================================================  ==========================================================
 Form                                                            Result shape
@@ -21,6 +21,7 @@ Form                                                            Result shape
 default (no ``_select``)                                        ``array<Car>`` --- all columns, source struct
 ``_select(_.FieldName)``                                        ``array<FieldType>`` --- one column, that column's type
 ``_select((Name=_.Name, Price=_.Price))``                       ``array<tuple<Name:string;Price:int>>`` --- named tuple
+``_select((Name=_.Name, Bonus=_.Price/10))``                    named tuple with a computed column
 ==============================================================  ==========================================================
 
 Default projection: full row
@@ -90,6 +91,25 @@ match the domain language better than the SQL column names do:
         to_log(LOG_INFO, "  Identifier={r.Identifier} Label={r.Label}\n")
     }
 
+Computed columns
+================
+
+A named-tuple value can be any computed expression over the row's
+columns, not just a bare column reference. It is rendered into the
+``SELECT`` list by the same translator that powers ``_where``
+predicates, so anything legal in a predicate works as a column. Result
+fields map by position, so no SQL alias is emitted:
+
+.. code-block:: das
+
+    let bonuses <- _sql(db |> select_from(type<Car>)
+                          |> _select((Name=_.Name, Bonus=_.Price / 10)))
+    // emits:  SELECT "Name", ("Price") / (?) FROM "Cars"
+    // result: array<tuple<Name:string;Bonus:int>>
+
+A computed column composes with a computed ``_where`` --- the predicate
+and projection binds are emitted in SQL-clause order.
+
 Combining with terminals
 ========================
 
@@ -124,6 +144,7 @@ default (no ``_select``)                                        Full row; ``arra
 ``_select(_.Field)``                                            Single column; ``array<FieldType>``
 ``_select((Name=_.X, Other=_.Y))``                              Named tuple; ``array<tuple<Name:..;Other:..>>``
 ``_select((Renamed=_.Id, ...))``                                Result fields can rename source columns
+``_select((N=_.Name, Bonus=_.Price/10))``                       Computed column; rendered via the predicate translator
 ==============================================================  ==========================================================
 
 .. seealso::
