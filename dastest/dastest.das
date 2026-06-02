@@ -166,7 +166,12 @@ def private build_iso_cmd(filesList : array<string>; prefix, suffix : string) : 
     return build_string() $(var w) {
         w |> write(prefix)
         for (f in filesList) {
-            w |> write(" --run {f}")
+            // Always quote the path: popen runs this through cmd.exe / /bin/sh,
+            // so a test path with a space (or other shell-significant char) would
+            // otherwise split into multiple argv entries. The shell strips the
+            // quotes, so the child sees the clean path. Mirrors the launchPrefix
+            // quoting in the dispatch loop.
+            w |> write(" --run \"{f}\"")
         }
         w |> write(suffix)
     }
@@ -251,6 +256,13 @@ def private run_iso_batch(input : IsoInput#; t : int; perTestTimeout : float; ou
         // The process died (crash or timeout) on file k: the batch's trailing
         // log belongs to it. Mark it failed, then re-run the rest as singles so
         // a second crash can only sink itself.
+        // The shared accounting loop reports timeouts using the per-test budget;
+        // in a batch the effective deadline is batchTimeout (perTestTimeout x
+        // nFiles), so spell out the real number here to avoid a misleading
+        // "timed out after {perTestTimeout}s".
+        if (br.exitCode == popen_timed_out && nFiles > 1) {
+            br.err |> push("batch of {nFiles} files timed out after {batchTimeout}s (per-test budget {perTestTimeout}s x {nFiles}); re-running the remainder individually")
+        }
         let cr = IsolatedResult(
             uri = clone_string(input.uris[k]),
             cmd = clone_string("{input.singleCmds[k]}{widx}"),
