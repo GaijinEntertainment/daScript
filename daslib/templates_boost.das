@@ -696,6 +696,15 @@ def private generatedVariable(var svar : VariablePtr) : VariablePtr {
     return <- svar
 }
 
+// Carry an `unsafe(...)` wrap from a $-tag node onto its substituted result. The parser sets alwaysSafe /
+// userSaidItsSafe on the ExprTag, but $c substitution returns the inner node — so without this an
+// `unsafe($c(name)(...))` (e.g. from_in's `unsafe($c("from_xml_node")(...))`) loses its safety and trips
+// [unsafe_outside_of_for] wherever the result is used unfused.
+def private carry_tag_safe_flags(var node : ExpressionPtr; tag : ExprTag?) {
+    if (tag.genFlags.alwaysSafe) { node.genFlags.alwaysSafe = true }
+    if (tag.genFlags.userSaidItsSafe) { node.genFlags.userSaidItsSafe = true }
+}
+
 class private QRulesVisitor : AstVisitor {
     //! Visitor that processes type tags and variable tags in a block, generating replacement rules.
     tag_index : int = 0                 //! Index for generating unique tag names.
@@ -967,6 +976,7 @@ class private QRulesVisitor : AstVisitor {
                     ))
                 var ccall = clone_expression(expr.value)
                 (ccall as ExprCall).name := new_tag_name
+                carry_tag_safe_flags(ccall, expr)
                 return ccall
             } elif (expr.value is ExprAddr) {
                 rblock.list |> emplace_new <| new ExprCall(at = expr.at,
@@ -978,6 +988,7 @@ class private QRulesVisitor : AstVisitor {
                     ))
                 var ccall = clone_expression(expr.value)
                 (ccall as ExprAddr).target := new_tag_name
+                carry_tag_safe_flags(ccall, expr)
                 return ccall
             } else {
                 compiling_program() |> macro_error(expr.at, "expecting $c(name)(...), got {expr.value.__rtti}")

@@ -141,3 +141,41 @@ def test_sql_join_pre_join_where(t : T?) {
         t |> equal(length(rows), 2, "pre-join where pushes down to a SQL WHERE")
     }
 }
+
+// ===== multiple `from` over SQL (uncorrelated → CROSS JOIN pushdown) — same select-terminal / pre-from
+// where boundary as join; a post-from where carries the (c, d) tuple in-memory (the documented boundary) =====
+
+[test]
+def test_sql_multifrom_tuple(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        let rows <- %linq! from c : JCar in db from b : JBrand in db select (Name = c.name, Country = b.country) %%
+        // parity with the hand-written _sql cross (projection in the _cross_join `into` lambda)
+        let ref <- _fold(db |> select_from(type<JCar>)
+            |> _cross_join(db |> select_from(type<JBrand>), $(c, b) => (Name = c.name, Country = b.country)))
+        t |> equal(length(rows), 6, "3 cars × 2 brands cartesian product")
+        t |> equal(length(rows), length(ref), "linq_das ≡ hand-written _sql cross")
+    }
+}
+
+[test]
+def test_sql_multifrom_emits_cross_join(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        // the reader's SQL emit shape — confirm it pushes down to a CROSS JOIN, not an in-memory product
+        let sqlText = _sql_text(db |> select_from(type<JCar>)
+            |> _cross_join(db |> select_from(type<JBrand>), $(c, b) => (Name = c.name, Country = b.country))
+            |> to_array())
+        t |> success(sqlText |> find("CROSS JOIN") >= 0, "SQL: {sqlText}")
+    }
+}
+
+[test]
+def test_sql_multifrom_pre_where(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        // pre-from `where` filters JCars (price >= 200 → Audi, Tesla), then crosses — all pushed to SQL.
+        let rows <- %linq! from c : JCar in db where c.price >= 200 from b : JBrand in db select (Name = c.name, Country = b.country) %%
+        t |> equal(length(rows), 4, "2 filtered cars × 2 brands")
+    }
+}

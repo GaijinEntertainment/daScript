@@ -8,6 +8,7 @@ options _no_linq_perf_warn = true
 require dastest/testing_boost public
 require daslib/linq_das
 require daslib/decs_boost
+require daslib/linq_fold
 
 // linq_das: C#-style `%linq! from c [: Row] in src [where <pred>] [orderby <expr> [descending]]
 // ( select <proj> | group c by <key> ) [iterator] %%` reader macro. Array source (untyped) and decs
@@ -409,4 +410,131 @@ def test_decs_join_select_terminal(t : T?) {
     }
     t |> equal(north, 2)
     t |> equal(south, 1)
+}
+
+// ===== cross_join engine (plain `_fold`, no reader) — the ops the uncorrelated multiple-`from` rides =====
+
+[test]
+def test_to_array_array_noop(t : T?) {
+    // to_array(array<T>) is a move-through no-op (moved sqlite_linq → builtin so source-agnostic emitters
+    // can append `|> to_array()` over any source). Consumes a temporary — the cross_join result the reader
+    // actually feeds it.
+    let r <- to_array([10, 20, 30])
+    t |> equal(length(r), 3)
+    t |> equal(r[0], 10)
+    t |> equal(r[2], 30)
+}
+
+[test]
+def test_cross_join_untyped_lambda_fold(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // UNTYPED result lambda — proves LinqCrossJoin injects (c : Car, b : BrandHQ). 3 × 2 = 6 pairs.
+    let rows <- _fold(cars |> _cross_join(brands, $(c, b) => (N = c.name, Co = b.country)) |> to_array())
+    t |> equal(length(rows), 6, "cartesian product of 3 cars × 2 brands")
+}
+
+// ===== multiple `from` (uncorrelated SelectMany → cross product) =====
+// `from c in A from b in B …` with B independent of `c`. Same clause grammar as `join` (pre/post `where`,
+// `orderby`, `select`/`group`, transparent-id carry, `iterator`) minus the `on … equals`. (See linq_das.rst.)
+
+[test]
+def test_multifrom_scalar(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let names <- %linq! from c in cars from b in brands select c.name %%
+    t |> equal(length(names), 6, "3 cars × 2 brands")
+}
+
+[test]
+def test_multifrom_tuple(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let rows <- %linq! from c in cars from b in brands select (Name = c.name, Country = b.country) %%
+    t |> equal(length(rows), 6)
+    t |> equal(rows[0].Name, "cheap")
+    t |> equal(rows[0].Country, "USA")     // cross is srcA-outer / srcB-inner: cheap×eco first
+    t |> equal(rows[1].Country, "Italy")   // cheap×lux second
+}
+
+[test]
+def test_multifrom_whole_row(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let rows <- %linq! from c in cars from b in brands select c %%
+    t |> equal(length(rows), 6, "each car appears once per brand")
+    t |> equal(rows[0].name, "cheap")
+    t |> equal(rows[2].name, "mid")
+}
+
+[test]
+def test_multifrom_pre_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // `where` before the 2nd `from` filters cars (price>=150 → mid, lux), then crosses — pushes to SQL too.
+    let names <- %linq! from c in cars where c.price >= 150 from b in brands select c.name %%
+    t |> equal(length(names), 4, "2 filtered cars × 2 brands")
+    t |> equal(names[0], "mid")
+    t |> equal(names[3], "lux")
+}
+
+[test]
+def test_multifrom_post_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // `where` after the 2nd `from` sees both range vars (transparent id). Cross-then-filter on equal brand
+    // == the equi-join subset.
+    let names <- %linq! from c in cars from b in brands where c.brand == b.brand select c.name %%
+    t |> equal(length(names), 3)
+    t |> equal(names[0], "cheap")
+    t |> equal(names[1], "mid")
+    t |> equal(names[2], "lux")
+}
+
+[test]
+def test_multifrom_orderby(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let names <- %linq! from c in cars from b in brands orderby c.price descending select c.name %%
+    t |> equal(length(names), 6)
+    t |> equal(names[0], "lux")    // price 300
+    t |> equal(names[5], "cheap")  // price 50
+}
+
+[test]
+def test_multifrom_group_after(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // group the crossed pairs by the right-side country (IGrouping of (c, b) pairs).
+    let groups <- %linq! from c in cars from b in brands group c by b.country %%
+    t |> equal(length(groups), 2, "USA + Italy buckets")
+    for (g in groups) {
+        t |> equal(length(g._1), 3, "each country pairs with all 3 cars")
+    }
+}
+
+[test]
+def test_multifrom_string_interpolation(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let labels <- %linq! from c in cars from b in brands orderby c.price select "{c.name}:{b.country}" %%
+    t |> equal(length(labels), 6)
+    t |> equal(labels[0], "cheap:USA")   // lowest price, cheap×eco first
+}
+
+[test]
+def test_multifrom_iterator_output(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    var n = 0
+    for (_nm in %linq! from c in cars from b in brands select c.name iterator %%) { n++ }
+    t |> equal(n, 6)
+}
+
+[test]
+def test_multifrom_decs(t : T?) {
+    seed_decs_join()
+    // decs × decs cross — from_decs_template field-tuples + the LinqCrossJoin injection. 3 cars × 2 dealers.
+    let rows <- %linq! from c : CarComp in decs from d : DealerComp in decs select (Name = c.name, Region = d.region) %%
+    t |> equal(length(rows), 6, "3 cars × 2 dealers")
 }

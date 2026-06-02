@@ -14,6 +14,10 @@ expect 50503   // join: `join … into` (group-join) unsupported
 expect 50503   // join: `where` inside the join clause (between join and equals)
 expect 50503   // join: two `where` clauses (one pre-join, one post-join)
 expect 50503   // join: range var collides with the reserved transparent-id name
+expect 50503   // multiple-from: correlated 2nd source (references the 1st range var) — lands with correlated SelectMany
+expect 50503   // multiple-from: three `from` clauses (N-ary SelectMany unsupported)
+expect 50503   // multiple-from: `from … from` combined with `join`
+expect 50503   // multiple-from: range var collides with the reserved transparent-id name
 
 require daslib/linq_das
 require strings
@@ -97,5 +101,30 @@ def trigger_join_two_wheres() {
 def trigger_join_reserved_var_name() {
     var cars <- one_car()
     let x <- %linq! from linq_join_ti in cars join b in cars on linq_join_ti.brand equals b.brand select linq_join_ti.name %%
+    unused(x)
+}
+
+def trigger_multifrom_correlated() {
+    var cars <- one_car()
+    // the 2nd source references the 1st range var `c` → correlated (flatten), rejected for now
+    let x <- %linq! from c in cars from b in c.name select b %%
+    unused(x)
+}
+
+def trigger_multifrom_three_froms() {
+    var cars <- one_car()
+    let x <- %linq! from a in cars from b in cars from d in cars select a.name %%
+    unused(x)
+}
+
+def trigger_multifrom_with_join() {
+    var cars <- one_car()
+    let x <- %linq! from a in cars from b in cars join d in cars on a.brand equals d.brand select a.name %%
+    unused(x)
+}
+
+def trigger_multifrom_reserved_var_name() {
+    var cars <- one_car()
+    let x <- %linq! from linq_join_ti in cars from b in cars select linq_join_ti.name %%
     unused(x)
 }
