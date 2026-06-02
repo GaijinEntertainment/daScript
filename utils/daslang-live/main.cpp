@@ -61,6 +61,7 @@ typedef void (*SetBoolFn)(bool);
 static BoolFn  dll_exit_requested = nullptr;
 static BoolFn  dll_reload_requested = nullptr;
 static BoolFn  dll_full_reload = nullptr;
+static BoolFn  dll_reset_requested = nullptr;
 static BoolFn  dll_is_paused = nullptr;
 static BoolFn  dll_files_changed = nullptr;
 static SetFloatFn dll_set_dt = nullptr;
@@ -69,6 +70,7 @@ static SetFloatFn dll_set_fps = nullptr;
 static SetBoolFn  dll_set_is_reload = nullptr;
 static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
+static VoidFn  dll_bump_reload_generation = nullptr;
 static VoidFn  dll_clear_live_vars = nullptr;
 static VoidFn  dll_clear_store = nullptr;
 static VoidFn  dll_clear_error = nullptr;
@@ -99,6 +101,7 @@ static bool load_live_host_functions() {
     dll_exit_requested    = (BoolFn)get_dll_symbol("live_host_exit_requested");
     dll_reload_requested  = (BoolFn)get_dll_symbol("live_host_reload_requested");
     dll_full_reload       = (BoolFn)get_dll_symbol("live_host_full_reload");
+    dll_reset_requested   = (BoolFn)get_dll_symbol("live_host_reset_requested");
     dll_is_paused         = (BoolFn)get_dll_symbol("live_host_is_paused");
     dll_files_changed     = (BoolFn)get_dll_symbol("live_host_files_changed");
     dll_set_dt            = (SetFloatFn)get_dll_symbol("live_host_set_dt");
@@ -107,6 +110,7 @@ static bool load_live_host_functions() {
     dll_set_is_reload     = (SetBoolFn)get_dll_symbol("live_host_set_is_reload");
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
+    dll_bump_reload_generation = (VoidFn)get_dll_symbol("live_host_bump_reload_generation");
     dll_clear_live_vars   = (VoidFn)get_dll_symbol("live_host_clear_live_vars");
     dll_clear_store       = (VoidFn)get_dll_symbol("live_host_clear_store");
     dll_clear_error       = (VoidFn)get_dll_symbol("live_host_clear_error");
@@ -439,11 +443,21 @@ static int run_lifecycle(const string & fn) {
         // Auto-tick debug agents
         auto_tick_agents();
 
-        // Check for reload
-        bool needsReload = (dll_reload_requested && dll_reload_requested())
-                        || (dll_files_changed && dll_files_changed());
+        // Check for reload / reset. A recompile (file change / POST /reload) supersedes
+        // a reset: it produces a fresh context too, plus new code — so if both are
+        // pending in one tick, take the recompile and let the reset be absorbed.
+        // Otherwise clear_reload_flags below would drop the pending files_changed
+        // silently and leave stale code running.
+        bool reloadPending = (dll_reload_requested && dll_reload_requested())
+                          || (dll_files_changed && dll_files_changed());
+        bool isReset = !reloadPending && dll_reset_requested && dll_reset_requested();
+        bool needsReload = reloadPending || isReset;
         if (needsReload) {
-            tout << "daslang-live: reloading...\n";
+            tout << (isReset ? "daslang-live: resetting...\n" : "daslang-live: reloading...\n");
+            // reload_generation must advance on EVERY terminal outcome (success or
+            // failure) so clients polling /status get a deterministic signal even when
+            // a reload/reset fails (they then read has_error). Bump at each block exit.
+            auto bumpGen = [&]{ if (dll_bump_reload_generation) dll_bump_reload_generation(); };
 
             // Set reload flag BEFORE shutdown so is_reload() returns true
             if (dll_set_is_reload) dll_set_is_reload(true);
@@ -465,28 +479,53 @@ static int run_lifecycle(const string & fn) {
                 }
             }
 
-            // Recompile
-            auto newCr = compile_script(fn);
-            if (!newCr.ctx) {
-                tout << "daslang-live: reload FAILED, keeping old context (paused)\n";
-                if (dll_set_last_error) dll_set_last_error(newCr.errors.c_str());
-                if (dll_set_paused) dll_set_paused(true);
-                if (dll_clear_reload_flags) dll_clear_reload_flags();
-                // Re-init old context if we have one (shutdown was already called)
-                if (ctx && !ctx_had_exception) {
-                    if (dll_set_is_reload) dll_set_is_reload(true);
-                    ctx->restart();
-                    call_annotated_list(ctx, g_annotated.after_reload);
-                    if (fnInit) {
-                        ctx->evalWithCatch(fnInit, nullptr);
-                    }
+            // Reset (POST /reset): re-simulate the already-compiled program into a
+            // fresh context — no parse / no infer. simulate is ~1/10th of compile, so
+            // this turns a ~10s reload into ~1s; used to reset state between subtests
+            // without respawning the host. A fresh context zeroes globals; clear the
+            // live-var store too so [after_reload] can't restore prior-subtest state
+            // (clean-slate). Reload (file change / POST /reload) still recompiles below.
+            if (isReset && cr.program) {
+                tout << "daslang-live: reset (re-simulate, no recompile)\n";
+                auto newCtx = SimulateWithErrReport(cr.program, tout);
+                if (!newCtx) {
+                    tout << "daslang-live: reset FAILED (simulate), paused\n";
+                    if (dll_set_last_error) dll_set_last_error("reset: simulate failed");
+                    if (dll_set_paused) dll_set_paused(true);
+                    if (dll_clear_reload_flags) dll_clear_reload_flags();
+                    ctx_had_exception = true;
+                    bumpGen();
+                    continue;
                 }
-                continue;
-            }
+                if (dll_clear_live_vars) dll_clear_live_vars();
+                if (dll_clear_store) dll_clear_store();
+                cr.ctx = das::move(newCtx);   // swap only the context; program/moduleGroup/access stay alive
+                ctx = cr.ctx.get();
+            } else {
+                // Recompile
+                auto newCr = compile_script(fn);
+                if (!newCr.ctx) {
+                    tout << "daslang-live: reload FAILED, keeping old context (paused)\n";
+                    if (dll_set_last_error) dll_set_last_error(newCr.errors.c_str());
+                    if (dll_set_paused) dll_set_paused(true);
+                    if (dll_clear_reload_flags) dll_clear_reload_flags();
+                    // Re-init old context if we have one (shutdown was already called)
+                    if (ctx && !ctx_had_exception) {
+                        if (dll_set_is_reload) dll_set_is_reload(true);
+                        ctx->restart();
+                        call_annotated_list(ctx, g_annotated.after_reload);
+                        if (fnInit) {
+                            ctx->evalWithCatch(fnInit, nullptr);
+                        }
+                    }
+                    bumpGen();
+                    continue;
+                }
 
-            // Swap to new context
-            cr = das::move(newCr);
-            ctx = cr.ctx.get();
+                // Swap to new context
+                cr = das::move(newCr);
+                ctx = cr.ctx.get();
+            }
 
             // Re-find functions
             fnInit = find_void_function(ctx, "init");
@@ -497,6 +536,7 @@ static int run_lifecycle(const string & fn) {
                 tout << "ERROR: reloaded script missing init() or update()\n";
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_reload_flags) dll_clear_reload_flags();
+                bumpGen();
                 continue;
             }
 
@@ -531,6 +571,7 @@ static int run_lifecycle(const string & fn) {
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_store) dll_clear_store();
                 ctx_had_exception = true;
+                bumpGen();
                 continue;
             }
 
@@ -545,7 +586,8 @@ static int run_lifecycle(const string & fn) {
                 ctx_had_exception = true;
             }
 
-            tout << "daslang-live: reload complete\n";
+            bumpGen();
+            tout << (isReset ? "daslang-live: reset complete\n" : "daslang-live: reload complete\n");
         }
     }
 

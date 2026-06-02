@@ -102,6 +102,7 @@ struct LiveStatus {
     paused : bool
     dt : float
     has_error : bool
+    generation : int    // bumped on every completed reload/reset; poll for a deterministic "done" signal
 }
 
 // --- Compilation error guard ---
@@ -124,10 +125,11 @@ def compilation_error_response(resp : HttpResponse?) : http_status {
 def live_api_help_json() : string {
     //! Returns JSON help listing all endpoints with descriptions and curl examples.
     var endpoints : array<JsonValue?>  // nolint:STYLE012 — values reference cmd_desc/cmd_curl defined later; literal would break decl order
-    endpoints |> push(JV({ "method" => "GET", "path" => "/status", "description" => "JSON with fps, uptime, paused, dt, has_error", "curl" => "curl http://localhost:{live_api_port}/status" }))
+    endpoints |> push(JV({ "method" => "GET", "path" => "/status", "description" => "JSON with fps, uptime, paused, dt, has_error, generation", "curl" => "curl http://localhost:{live_api_port}/status" }))
     endpoints |> push(JV({ "method" => "GET", "path" => "/error", "description" => "Last compilation error (plain text, or null)", "curl" => "curl http://localhost:{live_api_port}/error" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/reload", "description" => "Trigger incremental reload", "curl" => "curl -X POST http://localhost:{live_api_port}/reload" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/reload/full", "description" => "Trigger full recompile", "curl" => "curl -X POST http://localhost:{live_api_port}/reload/full" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/reset", "description" => "Reset to a fresh context (re-simulate, no recompile; clears @live vars)", "curl" => "curl -X POST http://localhost:{live_api_port}/reset" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/pause", "description" => "Pause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/pause" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/unpause", "description" => "Unpause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/unpause" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/shutdown", "description" => "Graceful shutdown", "curl" => "curl -X POST http://localhost:{live_api_port}/shutdown" }))
@@ -158,7 +160,8 @@ class LiveApiServer : HvWebServer {
                 uptime = get_uptime(),
                 paused = is_paused(),
                 dt = get_dt(),
-                has_error = !empty(get_last_error())
+                has_error = !empty(get_last_error()),
+                generation = int(get_reload_generation())
             )
             return resp |> JSON(write_json(JV(status)), http_status.OK)
         }
@@ -178,6 +181,11 @@ class LiveApiServer : HvWebServer {
 
         POST("/reload/full") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             request_reload(true)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
+        }
+
+        POST("/reset") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            request_reset()
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
@@ -299,6 +307,7 @@ class LiveApiAgent : DapiDebugAgent {
     }
 }
 
+[unused_argument(ctx)]
 def debug_agent(ctx : Context) {
     assert(this_context().category.debug_context)
     install_new_debug_agent(new LiveApiAgent(), "live_api")

@@ -37,6 +37,7 @@ extern "C" {
     DAS_EXPORT_DLL bool live_host_exit_requested()      { return g_state.exit_requested; }
     DAS_EXPORT_DLL bool live_host_reload_requested()    { return g_state.reload_requested; }
     DAS_EXPORT_DLL bool live_host_full_reload()         { return g_state.full_reload; }
+    DAS_EXPORT_DLL bool live_host_reset_requested()     { return g_state.reset_requested; }
     DAS_EXPORT_DLL bool live_host_is_paused()           { return g_state.paused; }
     DAS_EXPORT_DLL bool live_host_files_changed()       { return g_state.files_changed; }
 
@@ -47,10 +48,12 @@ extern "C" {
     DAS_EXPORT_DLL void live_host_set_fps(float v)      { g_state.fps = v; }
     DAS_EXPORT_DLL void live_host_set_is_reload(bool v) { g_state.is_reload = v; }
     DAS_EXPORT_DLL void live_host_set_paused(bool v)    { g_state.paused = v; }
+    DAS_EXPORT_DLL void live_host_bump_reload_generation() { g_state.reload_generation++; }
 
     DAS_EXPORT_DLL void live_host_clear_reload_flags() {
         g_state.reload_requested = false;
         g_state.full_reload = false;
+        g_state.reset_requested = false;
         g_state.files_changed = false;
     }
     DAS_EXPORT_DLL void live_host_clear_live_vars() {
@@ -127,6 +130,14 @@ bool live_exit_requested() {
 void live_request_reload(bool full) {
     g_state.reload_requested = true;
     if (full) g_state.full_reload = true;
+}
+
+void live_request_reset() {
+    g_state.reset_requested = true;
+}
+
+uint64_t live_get_reload_generation() {
+    return g_state.reload_generation;
 }
 
 bool live_is_reload() {
@@ -373,6 +384,10 @@ public:
         addExtern<DAS_BIND_FUN(live_request_reload)>(*this, lib, "request_reload",
             SideEffects::modifyExternal, "das::live_request_reload")
                 ->args({"full"});
+        addExtern<DAS_BIND_FUN(live_request_reset)>(*this, lib, "request_reset",
+            SideEffects::modifyExternal, "das::live_request_reset");
+        addExtern<DAS_BIND_FUN(live_get_reload_generation)>(*this, lib, "get_reload_generation",
+            SideEffects::accessGlobal, "das::live_get_reload_generation");
         addExtern<DAS_BIND_FUN(live_is_reload)>(*this, lib, "is_reload",
             SideEffects::accessGlobal, "das::live_is_reload");
 
