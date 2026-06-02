@@ -187,12 +187,16 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
                 let st = fgets(f)
                 if (st == jsonResultPrefix) {
                     if (readJson) {
-                        // closing marker: parse the blob into one file result
+                        // Closing marker: this file completed (the --run handler
+                        // writes its report after running), so emit EXACTLY one
+                        // result whether or not the JSON parses. Dropping it on a
+                        // parse error would shorten the batch prefix and make the
+                        // parent misattribute a later crash and re-dispatch
+                        // already-run files; `pending` is moved out either way.
                         var jsErr : string
                         var js = jsonAccum |> read_json(jsErr)
-                        if (!empty(jsErr)) {
-                            br.err |> push("Internal error: failed to parse json result {jsErr}")
-                        } elif (js != null) {
+                        jsonAccum = ""
+                        if (empty(jsErr) && js != null) {
                             let obj & = unsafe(js as _object)
                             var r = IsolatedResult(
                                 parsedResult = true,
@@ -202,8 +206,12 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
                             )
                             parse_test_results(js, r.tests)
                             br.results |> emplace(r)
+                        } else {
+                            var perr : array<string>
+                            perr |> push("Internal error: failed to parse json result {jsErr}")
+                            var r = IsolatedResult(parsedResult = false, log <- pending, err <- perr)
+                            br.results |> emplace(r)
                         }
-                        jsonAccum = ""
                     }
                     readJson = !readJson
                     continue
