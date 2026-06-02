@@ -76,10 +76,12 @@ namespace das {
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
         if ( ms < 0 ) ms += 1000;
         struct tm utc;
-#ifdef _WIN32
-        gmtime_s(&utc, &t);
+#if defined(__linux__) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
+        gmtime_r(&t, &utc);          // desktop POSIX / wasm
+#elif _WIN32
+        gmtime_s(&utc, &t);          // MSVC: (tm*, time_t*)
 #else
-        gmtime_r(&t, &utc);
+        gmtime_s(&t, &utc);          // consoles (PS4/PS5): POSIX-style gmtime_s(time_t*, tm*)
 #endif
         char buf[32];
         int n = snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
