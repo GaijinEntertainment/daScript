@@ -127,9 +127,13 @@ def private get_int_arg(args : array<string>; name : string; def_val : int) : in
     return idx >= 0 && idx + 1 < length(args) ? int(args[idx + 1]) : def_val
 }
 
+// One unit of work pulled by a worker thread: a batch of test files run by a
+// single subprocess. uris/singleCmds are parallel arrays (one per file, in run
+// order); batchCmd runs all files at once. The worker appends --worker-index.
 struct IsoInput {
-    uri : string
-    cmd : string
+    uris : array<string>         // display names, one per file, in batch order
+    batchCmd : string            // runs every file in the batch (one subprocess)
+    singleCmds : array<string>   // singleCmds[i] runs only file i (crash re-dispatch)
 }
 
 struct IsolatedResult {
@@ -142,6 +146,136 @@ struct IsolatedResult {
     fileDt : int
     err : array<string>
     log : array<string>
+}
+
+// Result of running ONE subprocess (a batch or a single file). The subprocess
+// streams one ##dastest## JSON report per file as it finishes, so results[]
+// holds one IsolatedResult per REPORTED file in run order (a prefix of the
+// batch). If the process dies mid-batch, results is short and pendingLog holds
+// the log of the file that was running when it died.
+struct BatchRun {
+    results : array<IsolatedResult>
+    exitCode : int
+    pendingLog : array<string>
+    err : array<string>
+}
+
+// prefix = "<launch> -jit -- " ; suffix = " --bench --color --headless".
+// Worker-index is appended by the caller, not here.
+def private build_iso_cmd(filesList : array<string>; prefix, suffix : string) : string {
+    return build_string() $(var w) {
+        w |> write(prefix)
+        for (f in filesList) {
+            w |> write(" --run {f}")
+        }
+        w |> write(suffix)
+    }
+}
+
+// Run one subprocess and parse its streamed per-file JSON reports.
+def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchRun) {
+    var pending : array<string>
+    unsafe {
+        br.exitCode = popen_timeout(cmd, timeoutSec) $(f) {
+            if (f == null) {
+                br.err |> push("Internal error: Failed to execute cmd > {cmd}")
+                return
+            }
+            var readJson = false
+            var jsonAccum = ""
+            while (!feof(f)) {
+                let st = fgets(f)
+                if (st == jsonResultPrefix) {
+                    if (readJson) {
+                        // closing marker: parse the blob into one file result
+                        var jsErr : string
+                        var js = jsonAccum |> read_json(jsErr)
+                        if (!empty(jsErr)) {
+                            br.err |> push("Internal error: failed to parse json result {jsErr}")
+                        } elif (js != null) {
+                            let obj & = unsafe(js as _object)
+                            var r = IsolatedResult(
+                                parsedResult = true,
+                                status = SuiteResult(js),
+                                fileDt = from_JV(obj?["time_usec"] ?? JV(0), type<int>), // nolint:STYLE020 — `?? defV` doesn't typecheck on _object indexing; suite_result.das pattern
+                                log <- pending
+                            )
+                            parse_test_results(js, r.tests)
+                            br.results |> emplace(r)
+                        }
+                        jsonAccum = ""
+                    }
+                    readJson = !readJson
+                    continue
+                }
+                if (readJson) {
+                    jsonAccum += st
+                } else {
+                    pending |> push(st)
+                }
+            }
+        }
+    }
+    br.pendingLog <- pending
+}
+
+// Worker entry: run one batch, attribute results, and on a mid-batch crash
+// re-run the remainder one-process-per-file. Pushes exactly one result per
+// file in the batch to outputChannel.
+def private run_iso_batch(input : IsoInput#; t : int; perTestTimeout : float; outputChannel : Channel?) {
+    let nFiles = length(input.uris)
+    let widx = " --worker-index {t}"
+    // Batch timeout: per-test budget scaled by batch size (<=0 means none).
+    let batchTimeout = perTestTimeout <= 0.0 ? perTestTimeout : perTestTimeout * float(nFiles)
+    var br : BatchRun
+    run_iso_subprocess("{input.batchCmd}{widx}", batchTimeout, br)
+    let k = min(length(br.results), nFiles)
+    // Reported files (a prefix of the batch). The per-file JSON is authoritative,
+    // so exitCode is 0 even if the batch returned non-zero for other failures.
+    for (j in range(k)) {
+        br.results[j].uri = clone_string(input.uris[j])
+        br.results[j].cmd = clone_string("{input.singleCmds[j]}{widx}")
+        br.results[j].exitCode = 0
+        outputChannel |> push_clone(br.results[j])
+        outputChannel |> notify()
+    }
+    if (k < nFiles) {
+        // The process died (crash or timeout) on file k: the batch's trailing
+        // log belongs to it. Mark it failed, then re-run the rest as singles so
+        // a second crash can only sink itself.
+        let cr = IsolatedResult(
+            uri = clone_string(input.uris[k]),
+            cmd = clone_string("{input.singleCmds[k]}{widx}"),
+            exitCode = br.exitCode,
+            parsedResult = false,
+            log <- br.pendingLog,
+            err <- br.err
+        )
+        outputChannel |> push_clone(cr)
+        outputChannel |> notify()
+        for (i in range(k + 1, nFiles)) {
+            var brs : BatchRun
+            run_iso_subprocess("{input.singleCmds[i]}{widx}", perTestTimeout, brs)
+            if (!empty(brs.results)) {
+                brs.results[0].uri = clone_string(input.uris[i])
+                brs.results[0].cmd = clone_string("{input.singleCmds[i]}{widx}")
+                brs.results[0].exitCode = 0
+                outputChannel |> push_clone(brs.results[0])
+                outputChannel |> notify()
+            } else {
+                let r2 = IsolatedResult(
+                    uri = clone_string(input.uris[i]),
+                    cmd = clone_string("{input.singleCmds[i]}{widx}"),
+                    exitCode = brs.exitCode,
+                    parsedResult = false,
+                    log <- brs.pendingLog,
+                    err <- brs.err
+                )
+                outputChannel |> push_clone(r2)
+                outputChannel |> notify()
+            }
+        }
+    }
 }
 
 def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
@@ -199,7 +333,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
     return res
 }
 
-def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string) : SuiteResult {
+def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : string) : SuiteResult {
     var res : SuiteResult
     fopen(in_file, "rb") $(f) {
         if (f == null) {
@@ -221,7 +355,7 @@ def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string
         fread(f, data)
         log::info("Deserializing {count:d} programs from {in_file}")
         var ser = create_ast_deserializer(data)
-        using() $(var mg : ModuleGroup) {
+        using() $(var _mg : ModuleGroup) {
             for (i in range(count)) {
                 deserialize_program(ser) $(ok, program, error) {
                     if (!ok) {
@@ -270,23 +404,32 @@ def main() : int {
     var test_args <- parse_result |> move_unwrap
 
     if (!empty(test_args.run)) {
-        // Isolated-mode single-file: --run=<file> covers both `--run X` and
-        // `--run=X` forms because parse_args has already populated the field.
-        let res = suite::test_file(test_args.run, SuiteCtx(test_args))
-        // Send full report with per-test details for isolated mode JSON collection
-        let report = JsonTestReport(
-            file = test_args.run,
-            total = res.total,
-            passed = res.passed,
-            failed = res.failed,
-            errors = res.errors,
-            skipped = res.skipped,
-            success = res.failed + res.errors == 0,
-            time_usec = 0,
-            tests <- suite::test_results
-        )
-        log::info_raw("\n{jsonResultPrefix}{sprint_json(report, false)}\n{jsonResultPrefix}")
-        return res.failed + res.errors
+        // Isolated/semi-isolated worker subprocess: run each --run file in this
+        // one process, emitting a ##dastest## JSON report PER FILE as it
+        // finishes (streamed) so the parent can attribute results and detect
+        // exactly which file was running if the process dies mid-batch.
+        var rctx <- SuiteCtx(test_args)
+        var rc = 0
+        for (rf in test_args.run) {
+            suite::clear_test_results()
+            let t0 = ref_time_ticks()
+            let res = suite::test_file(rf, rctx)
+            let dt = get_time_usec(t0)
+            let report = JsonTestReport(
+                file = rf,
+                total = res.total,
+                passed = res.passed,
+                failed = res.failed,
+                errors = res.errors,
+                skipped = res.skipped,
+                success = res.failed + res.errors == 0,
+                time_usec = dt,
+                tests <- suite::test_results
+            )
+            log::info_raw("\n{jsonResultPrefix}{sprint_json(report, false)}\n{jsonResultPrefix}")
+            rc += res.failed + res.errors
+        }
+        return rc
     }
 
     log::failuresOnly = test_args.failures_only
@@ -412,61 +555,48 @@ def main() : int {
                 if (needs_quote) w |> write("\"")
             }
         }
-        log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
-        with_channel(totalFiles) $(inputChannel) {
+        let jitstr = jit_enabled() ? "-jit" : ""
+        let aotstr = is_in_aot() ? "-use-aot" : ""
+        let benchstr = ctx.bench_enabled ? "--bench" : ""
+        let cmdPrefix = "{launchPrefix} {jitstr} {aotstr} --"
+        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}"
+        let batchSize = max(1, test_args.batch)
+        // Group files into batches of batchSize. Each batch is run by one worker
+        // subprocess (batchCmd); per-file singleCmds are kept so a crash can be
+        // re-dispatched one-process-per-file.
+        var batches : array<IsoInput>
+        var bidx = 0
+        while (bidx < totalFiles) {
+            let hi = min(bidx + batchSize, totalFiles)
+            let bn = hi - bidx
+            var bUris : array<string>
+            var bFiles : array<string>
+            var bSingles : array<string>
+            bUris |> reserve(bn)
+            bFiles |> reserve(bn)
+            bSingles |> reserve(bn)
+            for (j in range(bidx, hi)) {
+                let file = files[j]
+                let uri = ctx.uriPaths ? file_name_to_uri(file) : file
+                bUris |> push(clone_string(uri))
+                bFiles |> push(clone_string(file))
+                bSingles |> push(build_iso_cmd([clone_string(file)], cmdPrefix, cmdSuffix))
+            }
+            let bCmd = build_iso_cmd(bFiles, cmdPrefix, cmdSuffix)
+            unsafe { delete bFiles }
+            batches |> emplace(IsoInput(uris <- bUris, batchCmd = clone_string(bCmd), singleCmds <- bSingles))
+            bidx = hi
+        }
+        let numBatches = length(batches)
+        log::info("Running {totalFiles} tests in isolated mode: {totalThreads} threads, batch {batchSize} ({numBatches} worker subprocess(es))\n")
+        with_channel(numBatches) $(inputChannel) {
             with_channel(totalFiles) $(outputChannel) {
                 with_job_status(totalThreads) $(completion) {
 
                     for (t in range(totalThreads)) {
                         new_thread <| @capture(= t) {
                             for_each_clone(inputChannel) $(input : IsoInput#) {
-                                var isoRes : IsolatedResult
-                                isoRes.uri = clone_string(input.uri)
-                                // Append --worker-index at pull time, not push time: the
-                                // worker that pulls a task gets to brand the cmd with its
-                                // own t. Tests read --worker-index from get_user_args() to
-                                // pick per-worker resources (e.g. unique TCP ports).
-                                let workerCmd = "{input.cmd} --worker-index {t}"
-                                isoRes.cmd = clone_string(workerCmd)
-                                let fileTime = ref_time_ticks()
-                                unsafe {
-                                    isoRes.exitCode = popen_timeout(workerCmd, testTimeout) $(f) {
-                                        if (f == null) {
-                                            // log::error("Internal error: Failed to execute cmd > {workerCmd}")
-                                            isoRes.err |> push("Internal error: Failed to execute cmd > {workerCmd}")
-                                            return
-                                        }
-                                        var readJson = false
-                                        var jsonResult = ""
-                                        while (!feof(f)) {
-                                            let st = fgets(f)
-                                            if (st == jsonResultPrefix) {
-                                                readJson = !readJson
-                                                continue
-                                            }
-                                            if (readJson) {
-                                                jsonResult += st
-                                            } else {
-                                                // log::info_raw(st)
-                                                isoRes.log |> push(st)
-                                            }
-                                        }
-                                        var jsError : string
-                                        var js = jsonResult |> read_json(jsError)
-                                        if (!empty(jsError)) {
-                                            // log::error("Internal error: failed to parse json result {jsError}")
-                                            isoRes.err |> push("Internal error: failed to parse json result {jsError}")
-                                        } elif (js != null) {
-                                            isoRes.parsedResult = true
-                                            isoRes.status = SuiteResult(js)
-                                            parse_test_results(js, isoRes.tests)
-                                        }
-                                    }
-                                }
-                                isoRes.fileDt = get_time_usec(fileTime)
-
-                                outputChannel |> push_clone(isoRes)
-                                outputChannel |> notify()
+                                run_iso_batch(input, t, testTimeout, outputChannel)
                             }
 
                             inputChannel |> release()
@@ -475,13 +605,8 @@ def main() : int {
                         }
                     }
 
-                    for (file in files) {
-                        let uri = ctx.uriPaths ? file_name_to_uri(file) : file
-                        let jitstr = jit_enabled() ? "-jit" : ""
-                        let aotstr = is_in_aot() ? "-use-aot" : ""
-                        let benchstr = ctx.bench_enabled ? "--bench" : ""
-                        let singleTest = "{launchPrefix} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}{headlessFlag}"
-                        inputChannel |> push_clone(IsoInput(uri = clone_string(uri), cmd = clone_string(singleTest)))
+                    for (b in batches) {
+                        inputChannel |> push_clone(b)
                         inputChannel |> notify()
                     }
 
