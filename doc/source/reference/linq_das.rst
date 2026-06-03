@@ -34,10 +34,16 @@ A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
 <src2> ) ] [ where <pred> ] [ orderby <expr> [descending] ] ( select <proj> |
 group <var> by <key> ) [ iterator ]`` — a second range variable comes from
 **either** a ``join`` **or** a second ``from`` (never both), and at most one of
-the two ``where`` slots may appear (before *or* after that clause, never both):
+the two ``where`` slots may appear (before *or* after that clause, never both).
+Separately, a ``let <name> = <expr>`` binding may appear **any number of times
+between body clauses** — it is inlined away before the rest is parsed (see
+:ref:`linq_das_let`):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
+- ``let <name> = <expr>`` — optional, repeatable, and free to appear between any
+  body clauses; binds a computed value reused in the clauses that follow it (see
+  :ref:`linq_das_let`).
 - ``where <predicate>`` — optional. A ``where`` **before** the ``join`` / second
   ``from`` filters the left source (single range var); a ``where`` **after** it
   sees both range variables. At most one ``where`` per query.
@@ -101,6 +107,46 @@ directly. For the SQL source, ``_sql`` resolves a single source against the
 placeholder ``_``; the macro normalizes the single-source lambda parameter to
 ``_`` internally, so the C# variable name is still spliced verbatim at the
 surface.
+
+.. _linq_das_let:
+
+Let bindings
+------------
+
+``let <name> = <expr>`` introduces a computed value (a new range variable in C#)
+that is reused in the clauses that follow it:
+
+.. code-block:: das
+
+    var rows <- %linq! from c in cars
+        let net = c.price - tax(c)
+        where net < 100
+        orderby net
+        select (Name = c.name, Net = net) %%
+
+The binding is **inlined textually**: every later reference to ``net`` is
+replaced with ``(c.price - tax(c))``, so the query is exactly equivalent to
+writing the expression out at each use site. Bindings are repeatable and chain —
+a later ``let`` may reference an earlier one — and they may appear in any body
+context (a single ``from``, after a ``join`` referencing both range variables,
+or in a ``from … from`` SelectMany):
+
+.. code-block:: das
+
+    // chained — `net` uses the earlier `disc`
+    var rows <- %linq! from c in cars
+        let disc = c.price / 10
+        let net  = c.price - disc
+        orderby net descending select (N = c.name, Net = net) %%
+
+Because the binding is inlined, a ``let`` over a **SQL** source pushes its
+computed expression down: a binding used in ``where`` / ``orderby`` / ``select``
+becomes the computed predicate / key / column ``_sql`` renders directly (the
+whole query stays a single ``SELECT``). The binding name must differ from every
+range variable (including a second one from a ``join`` / second ``from``) and
+from any earlier binding, a ``let`` must precede the ``select`` / ``group``
+terminal, and an inlined expression is re-evaluated at each use site (a textual
+inline, not a cached temporary).
 
 .. _linq_das_projections:
 
@@ -383,4 +429,5 @@ The following are not yet supported:
   **uncorrelated** form (independent second source → cross product) is supported
   on all sources (see :ref:`linq_das_multifrom`). N-ary ``from … from … from`` and
   ``from … from`` combined with ``join`` are also rejected.
-- **``let`` bindings** and ``into`` continuations — not yet supported.
+- **``into`` continuations** — not yet supported (``let`` bindings *are*
+  supported; see :ref:`linq_das_let`).

@@ -166,12 +166,13 @@ def private build_src(rowType : string; srcText : string; fused : bool) : string
     return "from_in({srcText}, type<{rowType}>)"
 }
 
-// Rewrite whole-word identifiers named in `names` to `prefix.<name>` (the transparent-identifier
-// substitution after a join). A word immediately following `.` (a member access) is left alone, and
-// depth is irrelevant — refs at any paren depth are rewritten. Plain string content is copied verbatim,
-// but a string INTERPOLATION (`"…{expr}…"`) is daslang code, so its `{…}` body is rewritten too (with
-// one level of nested string literal inside the interpolation copied verbatim). Refs at any paren depth.
-def private rewrite_idents(text : string; names : array<string>; prefix : string) : string {
+// Whole-word identifier substitution over query-clause text: a word found as a key in `subs` is replaced
+// with its mapped string, anything else is copied verbatim. A word immediately following `.` (a member
+// access) is left alone, and depth is irrelevant — refs at any paren depth are substituted. Plain string
+// content is copied verbatim, but a string INTERPOLATION (`"…{expr}…"`) is daslang code, so its `{…}` body
+// is substituted too (with one level of nested string literal inside the interpolation copied verbatim).
+// Backs both the transparent-identifier rewrite (rewrite_idents) and `let`-binding inlining (extract_lets).
+def private substitute_idents(text : string; subs : table<string; string>) : string {
     return build_string() $(var w) {
         peek_data(text) $(arr) {
             let n = length(arr)
@@ -219,13 +220,7 @@ def private rewrite_idents(text : string; names : array<string>; prefix : string
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(text, i, j)
-                    var hit = false
-                    if (prevSig != '.') {
-                        for (nm in names) {
-                            if (nm == word) { hit = true; break }
-                        }
-                    }
-                    w |> write(hit ? "{prefix}.{word}" : word)
+                    w |> write(prevSig != '.' ? (subs?[word] ?? word) : word)
                     prevSig = int(arr[j - 1])
                     i = j
                     continue
@@ -236,6 +231,13 @@ def private rewrite_idents(text : string; names : array<string>; prefix : string
             }
         }
     }
+}
+
+// Rewrite whole-word identifiers named in `names` to `prefix.<name>` (the transparent-identifier
+// substitution after a join). Thin wrapper over substitute_idents — see it for the string/interp rules.
+def private rewrite_idents(text : string; names : array<string>; prefix : string) : string {
+    let subs <- {for (nm in names); nm => "{prefix}.{nm}"}
+    return substitute_idents(text, subs)
 }
 
 // Does `text` reference the whole-word identifier `name` in **code** position? A word right after `.`
@@ -641,11 +643,107 @@ def private transpile_cross(q : string; nq : int; varName : string; rowType : st
                            secondFromPos, in2 + 2, firstWhere, prog, at)
 }
 
+// Offset of the next depth-0 query-body clause keyword at/after `from`, or `length(q)` if none. The set is
+// every clause that can follow a `let` (and so bounds a `let` RHS) or begin the body after the source.
+def private next_clause_kw(q : string; from : int) : int {
+    var best = length(q)
+    for (kw in ["let", "where", "orderby", "select", "group", "join", "from", "into"]) {
+        let p = find_kw_depth0(q, kw, from)
+        if (p >= 0 && p < best) { best = p }
+    }
+    return best
+}
+
+// Extract C# `let` bindings (Approach A — textual inlining). `let n = <expr>` introduces a computed range
+// variable; every downstream reference is replaced with `(<expr>)`, yielding a `let`-free query the rest of
+// the reader handles unchanged — in every context (single / join / second-`from`), and inlined computed
+// columns/keys push down to SQL. Chained lets resolve in order (a later RHS inlines the earlier bindings).
+// `bodyStart` is the offset just past the source's `in` (lets only follow the source). A binding inlines
+// only into the clauses that FOLLOW it (C# forward-only `let` scoping): the source expression and any text
+// before a binding are left untouched, so an identifier that legitimately precedes a same-named binding
+// (an outer/global) is not clobbered. Returns (ok, rewritten-query); a malformed binding reports a
+// macro_error and returns ok=false.
+def private extract_lets(q : string; bodyStart : int; rangeVar : string;
+                         prog : ProgramPtr; at : LineInfo) : tuple<bool; string> {
+    var subs : table<string; string>        // binding name → fully-resolved "(<expr>)"
+    var cuts : array<tuple<int; int; string>>   // (start, end, name) of each `let` clause, in order
+    let srcEnd = next_clause_kw(q, bodyStart)   // first clause keyword = end of the source expression
+    // A second range variable (after `join` or a second `from`) is also off-limits for a `let` name —
+    // reusing it would shadow it (a `let` after the clause) or rewrite its declaration (a `let` before it).
+    let joinPos = find_kw_depth0(q, "join", bodyStart)
+    let secondFromPos = find_kw_depth0(q, "from", bodyStart)
+    let var2j = joinPos >= 0 ? read_ident(q, joinPos + 4)._0 : ""
+    let var2f = secondFromPos >= 0 ? read_ident(q, secondFromPos + 4)._0 : ""
+    var searchFrom = bodyStart
+    while (true) {
+        let lp = find_kw_depth0(q, "let", searchFrom)
+        if (lp < 0) break
+        let np = read_ident(q, lp + 3)
+        let name = np._0
+        if (name == "") {
+            macro_error(prog, at, "linq: 'let' requires a binding name (e.g. `let n = <expr>`)")
+            return (false, "")
+        }
+        if (name == rangeVar || name == var2j || name == var2f) {
+            macro_error(prog, at, "linq: 'let {name}' shadows the range variable '{name}'")
+            return (false, "")
+        }
+        if (key_exists(subs, name)) {
+            macro_error(prog, at, "linq: 'let {name}' is already bound earlier in the query")
+            return (false, "")
+        }
+        // Expect a single '=' (not '==') after the binding name.
+        var eq = -1
+        peek_data(q) $(arr) {
+            let n2 = length(arr)
+            var i = np._1
+            while (i < n2 && is_white_space(int(arr[i]))) { i++ }
+            if (i < n2 && int(arr[i]) == '=' && (i + 1 >= n2 || int(arr[i + 1]) != '=')) { eq = i }
+        }
+        if (eq < 0) {
+            macro_error(prog, at, "linq: expected '=' after 'let {name}'")
+            return (false, "")
+        }
+        let rhsStart = eq + 1
+        let rhsEnd = next_clause_kw(q, rhsStart)   // RHS runs to the next clause keyword (or end)
+        var rhs = strip(slice(q, rhsStart, rhsEnd))
+        if (rhs == "") {
+            macro_error(prog, at, "linq: empty 'let {name}' expression")
+            return (false, "")
+        }
+        // A `let` with no following clause has nothing to inline into — it would be silently dropped,
+        // turning an invalid query (e.g. `… select … let n = …`) into a valid one. Reject it: a `let`
+        // must precede the `select`/`group` terminal.
+        if (rhsEnd >= length(q)) {
+            macro_error(prog, at, "linq: 'let {name}' has no following clause — a 'let' must precede the 'select'/'group' terminal")
+            return (false, "")
+        }
+        if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }   // chain earlier lets in
+        subs[name] = "({rhs})"
+        cuts |> push((lp, rhsEnd, name))
+        searchFrom = rhsEnd
+    }
+    if (empty(subs)) { return (true, q) }
+    // Rebuild: source region (< srcEnd) verbatim; each `let` span dropped (replaced by a space); each clause
+    // segment inlined with only the bindings introduced BEFORE it, so a reference preceding a binding stays.
+    let body = build_string() $(var w) {
+        var active : table<string; string>
+        var pos = srcEnd
+        for (c in cuts) {
+            w |> write(substitute_idents(slice(q, pos, c._0), active))
+            w |> write(" ")
+            active[c._2] = subs[c._2]
+            pos = c._1
+        }
+        w |> write(substitute_idents(slice(q, pos, length(q)), active))
+    }
+    return (true, "{slice(q, 0, srcEnd)}{body}")
+}
+
 // Parse the query and emit the `_fold(...)` rewrite text. On a malformed query, register a macro error
 // and emit a benign `(0)` so the surrounding statement still parses (the error is the real signal).
 def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : string {
-    let q = strip(strip_query_comments(query))
-    let nq = length(q)
+    var q = strip(strip_query_comments(query))
     let fromWord = read_ident(q, 0)
     if (fromWord._0 != "from") {
         macro_error(prog, at, "linq: query must start with the 'from' keyword (got: {q})")
@@ -677,8 +775,14 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
         return "(0)"
     }
     // Clauses in C# order, each searched after the previous so positions stay ordered:
-    //   from … [where <pred>] [orderby <expr> [descending]] ( select <proj> | group <var> by <key> ) [iterator]
+    //   from … [let <n> = <expr>]* [where <pred>] [orderby <expr> [descending]] ( select <proj> | group <var> by <key> ) [iterator]
     let srcStart = inPos + 2
+    // `let` bindings are inlined away first, so the rest of the reader sees a `let`-free query in every
+    // context (the substitution rewrites the whole body, including a join/second-`from` tail).
+    let lets = extract_lets(q, srcStart, varName, prog, at)
+    if (!lets._0) { return "(0)" }
+    q = lets._1
+    let nq = length(q)
     // A `join` or a second `from` introduces a second range variable — each has its own grammar and emit
     // (transpile_join / transpile_cross). Combining the two in one query is not yet supported.
     let joinPos = find_kw_depth0(q, "join", srcStart)

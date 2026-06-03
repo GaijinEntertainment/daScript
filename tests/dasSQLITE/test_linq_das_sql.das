@@ -179,3 +179,40 @@ def test_sql_multifrom_pre_where(t : T?) {
         t |> equal(length(rows), 4, "2 filtered cars × 2 brands")
     }
 }
+
+// ===== let bindings over SQL — the inlined computed expression pushes down (no in-memory step) =====
+// `let` is textual inlining, so `let net = c.price - 10` reused in where/orderby/select becomes the
+// computed column / key forms `_sql` renders directly (see test_99_computed_select_subquery for the
+// pushdown machinery). The whole query stays a single SELECT.
+
+[test]
+def test_sql_let_pushdown(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let rows <- %linq! from c : Car in db let net = c.price - 10 where net < 250 orderby net
+            select (Name = c.name, Net = net) %%
+        // parity with the hand-written chain (the form `let` inlines to)
+        let ref <- _fold(db |> select_from(type<Car>)
+            |> _where((_.price - 10) < 250) |> _order_by(_.price - 10)
+            |> _select((Name = _.name, Net = _.price - 10)))
+        t |> equal(length(rows), 2, "BMW(90), Audi(190) — Tesla(290) excluded")
+        t |> equal(length(rows), length(ref), "linq_das let ≡ hand-written _sql chain")
+        t |> equal(rows[0].Name, "BMW")
+        t |> equal(rows[0].Net, 90)
+        t |> equal(rows[1].Name, "Audi")
+        t |> equal(rows[1].Net, 190)
+    }
+}
+
+[test]
+def test_sql_let_emits_computed_pushdown(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // confirm the reader's emit shape pushes the inlined `let` arithmetic into the SQL itself
+        let sqlText = _sql_text(db |> select_from(type<Car>)
+            |> _where((_.price - 10) < 250) |> _order_by(_.price - 10)
+            |> _select((Name = _.name, Net = _.price - 10)) |> to_array())
+        t |> success(sqlText |> find("ORDER BY (\"price\") - (10)") >= 0, "computed key pushed down: {sqlText}")
+        t |> success(sqlText |> find("WHERE (\"price\") - (?)") >= 0, "computed predicate pushed down: {sqlText}")
+    }
+}
