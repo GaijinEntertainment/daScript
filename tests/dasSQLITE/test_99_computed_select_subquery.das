@@ -10,8 +10,9 @@ require sqlite/sqlite_linq
 // Features exercised here — all "computed expression pushdown" via pred_to_sql:
 //   B1 — a computed scalar `_select(_.a + _.b)` lowers to `<frag>` via pred_to_sql + a computed projection
 //        slot, so `sum/min/max/average/count` over it works (previously rejected: "_.Field only").
-//   B2 — computed COLUMNS in a named-tuple `_select((N=_.Name, Bonus=_.Price/10))` lower to `<frag> AS N`
-//        via the same pred_to_sql + push_computed_proj_slot path (previously rejected: "_.Field only").
+//   B2 — computed COLUMNS in a named-tuple `_select((N=_.Name, Bonus=_.Price/10))` lower to `<frag>`
+//        via the same pred_to_sql + push_computed_proj_slot path (result tuple fields map by position,
+//        so no SQL alias unless force_aliases is set; previously rejected: "_.Field only").
 //   B3 — string `+` (daslang concatenation) lowers to SQL `||`, not `+` (SQLite `+` is numeric: 'a'+'b'==0).
 //   C  — computed `_order_by(_.Price/10)` keys (single + tuple entry) render with constants inlined, like
 //        _group_by computed keys (previously rejected: "_.Field or string only"). A row-referencing string

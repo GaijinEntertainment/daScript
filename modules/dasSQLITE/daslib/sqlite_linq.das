@@ -2943,21 +2943,23 @@ def private is_string_typed(e : ExpressionPtr) : bool {
     return e != null && e._type != null && e._type.baseType == Type.tString
 }
 
-// True if `node` references a source column (a bare `_` / join-arg ExprVar, or a field/op/call tree holding
-// one) — so the bind fallthrough rejects column expressions it can't translate instead of binding them.
-def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery) : bool {
+// True if `node` references a source column — so the bind fallthrough rejects untranslatable column
+// expressions instead of binding them. `asReceiver` (set when recursing into `<var>.field`) mirrors the
+// column-ref resolver's pre-join t0 fallback (rootAlias set, !seenJoin) for a named LHS param like `c`.
+def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {
     if (node == null) return false
     if (node is ExprRef2Value) {
         var rv = node as ExprRef2Value
-        return mentions_source_arg(rv.subexpr, q)
+        return mentions_source_arg(rv.subexpr, q, asReceiver)
     }
     if (node is ExprVar) {
         let nm = string((node as ExprVar).name)
-        return nm == "_" || lookup_arg_source(q, nm) >= 0
+        if (nm == "_" || lookup_arg_source(q, nm) >= 0) return true
+        return asReceiver && !empty(q.rootAlias) && !q.seenJoin
     }
     if (node is ExprField) {
         var ef = node as ExprField
-        return mentions_source_arg(ef.value, q)
+        return mentions_source_arg(ef.value, q, true)
     }
     if (node is ExprOp1) {
         var o1 = node as ExprOp1

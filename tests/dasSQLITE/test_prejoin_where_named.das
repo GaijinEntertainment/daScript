@@ -9,6 +9,7 @@ options gen2
 
 require dastest/testing_boost public
 
+require strings
 require daslib/sql
 require daslib/linq_boost
 require daslib/linq_fold
@@ -93,6 +94,22 @@ def test_prejoin_where_named_jsonpath(t : T?) {
             t |> equal(r.City, "NY", "both red cars join to NY dealers")
         }
     }
+}
+
+[test]
+def test_prejoin_order_by_named_string_key_emits_computed(t : T?) {
+    // Mirror site 4 (mentions_source_arg): a row-referencing STRING key in a pre-join `_order_by` with a
+    // named param must route to the computed-key path (`LOWER("t0"."name")`), NOT the dynamic-column-NAME
+    // path. Pre-fix, mentions_source_arg missed the named receiver `c` → mis-routed to `ORDER BY <runtime>`.
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>)
+                          |> _order_by($(c : Car) => to_lower(c.name))
+                          |> _join(_db |> select_from(type<Dealer>),
+                                   $(c : Car, d : Dealer) => c.did == d.id,
+                                   $(c : Car, d : Dealer) => (N = c.name, City = d.city)))
+    t |> equal(sql,
+        "SELECT \"t0\".\"name\", \"t1\".\"city\" FROM \"Cars\" AS \"t0\" INNER JOIN \"Dealers\" AS \"t1\" ON \"t0\".\"did\" = \"t1\".\"id\" ORDER BY LOWER(\"t0\".\"name\") ASC",
+        "named-param pre-join _order_by(to_lower(c.name)) lowers to ORDER BY LOWER(t0.name)")
 }
 
 [test]
