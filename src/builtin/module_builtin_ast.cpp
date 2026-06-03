@@ -10,42 +10,18 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
+#include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/gc_node.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 #include "module_builtin_ast.h"
+
+// get_file_access lives in the compiler lib (ast_parse.cpp); it compiles the pak.
+das::FileAccessPtr get_file_access ( char * pak );
+
 namespace das {
-
-    int adapt_field_offset ( const char * fName, const StructInfo * info ) {
-        for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
-            if ( strcmp(info->fields[i]->name,fName)==0 ) {
-                return info->fields[i]->offset;
-            }
-        }
-        DAS_VERIFYF(0,"mapping %s not found. not fully implemented derived class %s", fName, info->name);
-        return 0;
-    }
-
-    int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i ) {
-        for ( uint32_t is=info->count; i!=is; ++i ) {
-            if ( strcmp(info->fields[i]->name,fName)==0 ) {
-                return info->fields[i]->offset;
-            }
-        }
-        DAS_VERIFYF(0,"mapping %s not found. not fully implemented derived class %s", fName, info->name);
-        return 0;
-    }
-
-    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info ) {
-        return pClass + adapt_field_offset(fName,info);
-    }
-
-    Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
-        char * field = adapt_field(funcName, pClass, info);
-        return field ? *(Func*)field : Func((void *)nullptr);
-    }
 
     bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
@@ -1136,6 +1112,102 @@ namespace das {
         return mod->findFunctionByMangledNameHash(mnh);
     }
 
+    // compile-from-source builtins. The impl calls the compiler entry points
+    // (parseDaScript/compileDaScript) which live in the compiler lib, so these
+    // and their bindings live here in the ast module (compiler) rather than in
+    // the rtti module (runtime).
+    void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        return rtti_builtin_compile_ex(modName, str, cop, true, block, context, at);
+    }
+
+    void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        str = str ? str : ((char *)"");
+        TextWriter issues;
+        uint32_t str_len = stringLengthSafe(*context, str);
+        auto access = make_smart<FileAccess>();
+        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
+        access->setFileInfo(modName, das::move(fileInfo));
+        ModuleGroup dummyLibGroup;
+        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, exportAll, false, cop);
+        if ( program ) {
+            if (program->failed()) {
+                for (auto & err : program->errors) {
+                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+                }
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(false),
+                    cast<smart_ptr<Program>>::from(program),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr, at);
+            } else {
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(true),
+                    cast<smart_ptr<Program>>::from(program),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr, at);
+            }
+        } else {
+            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
+        }
+    }
+
+#if !DAS_NO_FILEIO
+    void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        TextWriter issues;
+        if ( !access ) access = make_smart<FsFileAccess>();
+        auto program = compileDaScript(modName, access, issues, *module_group, cop);
+        if ( program ) {
+            if (program->failed()) {
+                for (auto & err : program->errors) {
+                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+                }
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(false),
+                    cast<smart_ptr<Program>>::from(program),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr, at);
+            } else {
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(true),
+                    cast<smart_ptr<Program>>::from(program),
+                    cast<string *>::from(&istr)
+                };
+                daScriptEnvironment::getBound()->g_Program = program;
+                context->invoke(block, args, nullptr, at);
+                daScriptEnvironment::getBound()->g_Program.reset();
+            }
+        } else {
+            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
+        }
+    }
+#else
+    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+#endif
+
+#if !DAS_NO_FILEIO
+    smart_ptr<FileAccess> makeFileAccess( char * pak, Context *, LineInfoArg * ) {
+        return ::get_file_access(pak);
+    }
+#else
+    smart_ptr<FileAccess> makeFileAccess( char *, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
+#endif
+
     Module_Ast::Module_Ast() : Module("ast_core") {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
@@ -1153,6 +1225,18 @@ namespace das {
     }
 
     void Module_Ast::registerFunctions(ModuleLibrary & lib){
+        addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
+            SideEffects::modifyExternal, "makeFileAccess")
+                ->args({"project","context","at"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
+            SideEffects::modifyExternal, "rtti_builtin_compile")
+                ->args({"module_name","codeText","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_compile_ex)>(*this, lib, "compile",
+            SideEffects::modifyExternal, "rtti_builtin_compile_ex")
+                ->args({"module_name","codeText","codeOfPolicies","exportAll","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
+            SideEffects::modifyExternal, "rtti_builtin_compile_file")
+                ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
         addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
             SideEffects::accessExternal, "thisProgram")
                 ->arg("context");

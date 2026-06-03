@@ -194,7 +194,7 @@ namespace das {
         das_hash_set<const Variable *> variables;
     };
 
-    void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
+    DAS_API void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program ) context->throw_error_at(line, "Can't collect dependencies outside of compilation.");
         program->markExecutableSymbolUse();

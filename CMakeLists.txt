@@ -789,23 +789,15 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
+src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
-src/builtin/module_builtin_ast.cpp
-src/builtin/module_builtin_ast_serialize.cpp
-src/builtin/module_builtin_ast_flags.cpp
-src/builtin/module_builtin_ast_annotations.cpp
-src/builtin/module_builtin_ast_annotations_1.cpp
-src/builtin/module_builtin_ast_annotations_2.cpp
-src/builtin/module_builtin_ast_annotations_3.cpp
-src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
 src/builtin/module_jit.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
-src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
@@ -1107,6 +1099,14 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_infer_type_op.cpp
     src/ast/ast_infer_type_make.cpp
     src/ast/ast_generate.cpp
+    src/builtin/module_builtin_ast.cpp
+    src/builtin/module_builtin_ast_flags.cpp
+    src/builtin/module_builtin_ast_annotations.cpp
+    src/builtin/module_builtin_ast_annotations_1.cpp
+    src/builtin/module_builtin_ast_annotations_2.cpp
+    src/builtin/module_builtin_ast_annotations_3.cpp
+    src/builtin/module_builtin_ast_adapters.cpp
+    src/builtin/module_builtin_network.cpp
 )
 
 # Eventually libDaScript_runtime will contain only minimal subset of sources

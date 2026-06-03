@@ -1017,10 +1017,10 @@ namespace das
 
     };
 
-    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
+    DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    uint64_t getFunctionAotHash ( Function * fun );
-    string getAotHashComment ( const Function * fun );
+    DAS_API uint64_t getFunctionAotHash ( Function * fun );
+    DAS_API string getAotHashComment ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
@@ -1167,7 +1167,7 @@ namespace das
             if ( objModule->visibleEverywhere ) return true;
             return requireModule.find(objModule) != requireModule.end();
         }
-        friend bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
+        friend DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted, const string & expectedFileName = string() );
         static void Initialize();
