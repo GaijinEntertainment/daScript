@@ -299,6 +299,56 @@ class private LinqOrderByDescendingToArray : AstCallMacro_LinqPred2 {
     override predName = "order_by_descending_to_array"
 }
 
+class private AstCallMacro_LinqOrderByKeys : AstCallMacro {
+    //! Base call macro for the multi-key order operator. The key argument is already a
+    //! `$(x) => (k1, k2, …)` block (tuple of keys); the third argument is a compile-time `uint`
+    //! descMask (bit i → key i descending). Injects the element type onto the key block parameter,
+    //! then passes all three through to `order_by_keys` / `order_by_keys_to_array`.
+    predName = "order_by_keys"
+
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting {predName}(iterator, key-lambda, descMask)")
+        assume arg0 = call.arguments[0]
+        assume arg0type = call.arguments[0]._type
+        macro_verify(arg0type != null, prog, call.at, "input argument is not inferred yet")
+        macro_verify(arg0type.isIterator || arg0type.isGoodArrayType, prog, call.at, "expecting iterator or array")
+        macro_verify(!arg0type.firstType.isAutoOrAlias, prog, call.at, "iterable type cannot be auto or alias")
+        var iterType = clone_iterator_type(arg0type)
+        var res : ExpressionPtr
+        if (call.arguments[1] is ExprMakeBlock) {
+            // named-variable form (e.g. emitted by linq_das): inject the element type onto the user's
+            // parameter and pass the `$(x) => (k1, k2, …)` block through verbatim.
+            var blk = call.arguments[1] as ExprMakeBlock
+            var inner = blk._block as ExprBlock
+            macro_verify(length(inner.arguments) == 1, prog, call.at, "{predName}: key block must take exactly one parameter")
+            if (inner.arguments[0]._type == null || inner.arguments[0]._type.isAutoOrAlias) {
+                inner.arguments[0]._type = clone_type(iterType)
+            }
+            res = qmacro($c(predName)($e(arg0), $e(call.arguments[1]), $e(call.arguments[2])))
+        } else {
+            // bare-expression form: wrap `(_.a, _.b)` into `$(_ : iterType) => (_.a, _.b)`.
+            res = qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1]), $e(call.arguments[2])))
+        }
+        (((res as ExprCall).arguments[1] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
+        res.force_at(call.at)
+        return res
+    }
+}
+
+[call_macro(name="_order_by_keys")]
+class private LinqOrderByKeys : AstCallMacro_LinqOrderByKeys {
+    //! implements _order_by_keys(iterator, $(x) => (k1, k2, …), descMask) — multi-key order with
+    //! per-key direction. Expands into order_by_keys(iterator, key-lambda, descMask).
+    override predName = "order_by_keys"
+}
+
+[call_macro(name="_order_by_keys_to_array")]
+class private LinqOrderByKeysToArray : AstCallMacro_LinqOrderByKeys {
+    //! implements _order_by_keys_to_array(iterator, $(x) => (k1, k2, …), descMask) shorthand notation
+    //! that expands into order_by_keys_to_array(iterator, key-lambda, descMask).
+    override predName = "order_by_keys_to_array"
+}
+
 class private AstCallMacro_LinqPredII2 : AstCallMacro {
     //! Base call macro for LINQ-style two-iterator two-argument predicate operators.
     predName = "sequence_equal_by"
@@ -511,13 +561,8 @@ def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at 
 }
 
 def private rename_var_in_expr(var src : Expression?; from_name, to_name : string) : Expression? {
-    //! Clone ``src`` and rename every ``ExprVar`` named ``from_name``
-    //! to ``to_name``. Same approach as fold_linq_cond.
-    var res = clone_expression(src)
-    var rules : Template
-    rules |> renameVariable(from_name, to_name)
-    apply_template(rules, res.at, res)
-    return res
+    // Clone ``src`` and rename every ``ExprVar`` named ``from_name`` to ``to_name``.
+    return clone_and_rename_var(src, from_name, to_name)
 }
 
 class private AstCallMacro_LinqJoinBase : AstCallMacro {

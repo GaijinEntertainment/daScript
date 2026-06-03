@@ -222,6 +222,75 @@ def test_decs_orderby(t : T?) {
     t |> equal(names[2], "car0")   // price 100
 }
 
+// ===== multi-key orderby (per-key direction; >1 key → _order_by_keys composite stable sort) =====
+
+def private mk_cars_ties() : array<Car> {
+    // duplicate (brand, price) pairs exercise secondary keys + stability of equal composite keys
+    return <- [Car(name = "a", price = 100, brand = "eco"),
+               Car(name = "b", price = 200, brand = "eco"),
+               Car(name = "c", price = 100, brand = "lux"),
+               Car(name = "d", price = 100, brand = "eco"),
+               Car(name = "e", price = 200, brand = "lux")]
+}
+
+[test]
+def test_array_orderby_multi_asc(t : T?) {
+    let cars <- mk_cars_ties()
+    let rows <- %linq! from c in cars orderby c.brand, c.price select c.name %%
+    t |> equal(length(rows), 5)
+    // brand asc (eco<lux), then price asc; equal (eco, 100) keeps input order: a before d
+    t |> equal(rows[0], "a")
+    t |> equal(rows[1], "d")
+    t |> equal(rows[2], "b")
+    t |> equal(rows[3], "c")
+    t |> equal(rows[4], "e")
+}
+
+[test]
+def test_array_orderby_mixed_dir(t : T?) {
+    let cars <- mk_cars_ties()
+    let rows <- %linq! from c in cars orderby c.brand, c.price descending select c.name %%
+    // brand asc, price desc; equal (eco, 100) stable: a before d
+    t |> equal(rows[0], "b")
+    t |> equal(rows[1], "a")
+    t |> equal(rows[2], "d")
+    t |> equal(rows[3], "e")
+    t |> equal(rows[4], "c")
+}
+
+[test]
+def test_array_orderby_3key(t : T?) {
+    // all tie on (brand, price); the 3rd key (name asc) reorders vs input order z, a, m
+    let cars <- [Car(name = "z", price = 100, brand = "eco"),
+                 Car(name = "a", price = 100, brand = "eco"),
+                 Car(name = "m", price = 100, brand = "eco")]
+    let rows <- %linq! from c in cars orderby c.brand, c.price, c.name select c.name %%
+    t |> equal(rows[0], "a")
+    t |> equal(rows[1], "m")
+    t |> equal(rows[2], "z")
+}
+
+[test]
+def test_array_orderby_keys_op_direct(t : T?) {
+    // hand-written fold-op form (brand asc, price desc) — exercises _order_by_keys directly
+    let cars <- mk_cars_ties()
+    let rows <- _fold(each(cars)._order_by_keys((_.brand, _.price), 2u).to_array())
+    t |> equal(length(rows), 5)
+    t |> equal(rows[0].name, "b")
+    t |> equal(rows[4].name, "c")
+}
+
+[test]
+def test_decs_orderby_multi(t : T?) {
+    seed_decs()
+    // brand asc, price desc; decs: car0(100,a) car1(200,a) car2(300,b)
+    let names <- %linq! from c : CarComp in decs orderby c.brand, c.price descending select c.name %%
+    t |> equal(length(names), 3)
+    t |> equal(names[0], "car1")   // brand a, price 200
+    t |> equal(names[1], "car0")   // brand a, price 100
+    t |> equal(names[2], "car2")   // brand b
+}
+
 // ===== group … by (terminal; IGrouping `(key, [elems])` per bucket; in-memory sources) =====
 
 [test]

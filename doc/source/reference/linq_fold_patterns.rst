@@ -201,6 +201,9 @@ Array-source patterns
    * - ``._order_by(K).to_array()`` / ``.order_by_descending(K).to_array()`` / ``.order(K).to_array()`` / ``.order_descending(K).to_array()``
      - ``plan_order_family`` (full-sort fallback)
      - Materializes + sorts. No bounded-heap shortcut.
+   * - ``._order_by_keys((K1, K2, …), descMask).to_array()`` / ``._where(P)._order_by_keys((K1, K2), m).to_array()``
+     - ``plan_order_family`` (multi-key composite stable sort)
+     - Multi-key orderby with per-key direction (``descMask`` bit *i* → key *i* DESC; LSB = first key). With an inline-able tuple key + an upstream ``where`` (no ``take``/``first``/``distinct``), ``emit_fused_prefilter`` builds one composite if-chain comparator (``try_make_inline_cmp_keys``) and emits a **single** ``stable_sort(buf, cmp)`` on the fused buffer — C# ``OrderBy`` / ``ThenBy`` parity, stable on full ties. Bare ``order_by_keys`` (no ``where``) cascades to the eager ``order_by_keys`` op (also ``stable_sort``-backed). **Single-key ``_order_by`` is unchanged** — it keeps the unstable ``order_inplace`` / ``sort`` path (no regression). ``take`` / ``first`` over a multi-key chain cascade to the eager op (multi-key is gated out of the bounded-heap and streaming-min rows, whose min/max-by-first-key collapse is wrong for a composite key). Capped at 4 keys (eager ``less_masked`` ≤ 4-arity).
    * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count()`` / ``.to_array()``
      - ``plan_distinct``
      - Single-hash set lane; ``count`` reads ``length(set)``.

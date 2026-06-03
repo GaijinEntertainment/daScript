@@ -203,7 +203,7 @@ class ZipAdapter : SourceAdapter {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
         return <- qmacro_block() {
-            for (itA, itB in $i(srcAName), $i(srcBName)) {
+            for (itA, itB in $i(srcAName), $i(srcBName)) { // nolint:LINT002 parallel-for must bind both vars; emit_zip body reads them only when needsItBind
                 $e(body)
             }
         }

@@ -298,7 +298,7 @@ var alias_table : table<string; array<string>> <- {
     // Narrow to the terminators emit_hashtable_dedup actually handles — first[_or_default] would be over-matched then cascade.
     "distinct_terminator_family" => ["count", "long_count", "sum"],
     // PR B additions:
-    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending"],
+    "order_family"               => ["order", "order_descending", "order_by", "order_by_descending", "order_by_keys"],
     "range_op_family"            => ["skip", "skip_while", "take_while", "take"],
     // accum_family: all reducing terminators routed via emit_accumulator_lane in plan_loop_or_count.
     "accum_family"               => ["sum", "min", "max", "average", "aggregate",
@@ -543,6 +543,8 @@ var linqCalls = {
     "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
     "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
+    "order_by_keys" => LinqCall(name = "order_by_keys", inplace = true),
+    "order_by_keys_to_array" => LinqCall(name = "order_by_keys", inplace = true),
 // top-N terminal forms — always return array regardless of input shape, so no
     "top_n" => LinqCall(name = "top_n", noToArrayVariant = true),
     "top_n_by" => LinqCall(name = "top_n_by", noToArrayVariant = true),
@@ -2447,6 +2449,76 @@ def make_inline_less_call(orderKey : Expression?; orderName : string;
 
 
 [macro_function]
+def private renamed_key_clone(body : Expression?; argName, newName : string) : Expression? {
+    // Clone a key-element body and rename its single block param (the C# range var) to v1 / v2.
+    return clone_and_rename_var(body, argName, newName)
+}
+
+[macro_function, unused_argument(elemType, at)]
+def try_make_inline_cmp_keys(orderKey : Expression?; descMask : uint;
+                             elemType : TypeDeclPtr; at : LineInfo) : Expression? {
+    // nolint:STYLE014 — composite N-key comparator from a `$(x) => (k1, k2, …)` tuple-key block. Per key i
+    // (ascending unless bit i of descMask; LSB = first key): emit the tie-break pair
+    //   if (_::less(ki[v1], ki[v2])) { return true }; if (_::less(ki[v2], ki[v1])) { return false }
+    // with the final key a bare `return _::less(…)`; descending flips the operand order. Bit-order matches
+    // the SQL peel + the reader's mask. Returns null when a key body has side-effects or the body isn't a tuple.
+    if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
+    var mblk = orderKey as ExprMakeBlock
+    var blk = mblk._block as ExprBlock
+    if (blk.arguments |> length != 1 || blk.list |> length != 1 || !(blk.list[0] is ExprReturn)) return null
+    var ret = blk.list[0] as ExprReturn
+    var sub = ret.subexpr
+    if (sub != null && sub is ExprRef2Value) {
+        sub = (sub as ExprRef2Value).subexpr
+    }
+    if (sub == null || !(sub is ExprMakeTuple)) return null
+    var mt = sub as ExprMakeTuple
+    let n = mt.values |> length
+    // cap = 4 keys (eager less_masked tops out at 4-arity; keeps the bit-shift < 32). >4 bails here →
+    // cascades to the eager order_by_keys op, which rejects via the missing overload — same limit as the reader.
+    if (n < 1 || n > 4) return null
+    for (kv in mt.values) {
+        if (kv == null || has_sideeffects(kv)) return null
+    }
+    let argName = string(blk.arguments[0].name)
+    var stmts : array<Expression?>
+    for (i in range(n)) {
+        let desc = (descMask & (1u << uint(i))) != 0u
+        if (i == n - 1) {
+            var v1e = renamed_key_clone(mt.values[i], argName, "v1")
+            var v2e = renamed_key_clone(mt.values[i], argName, "v2")
+            let cmp = desc ? qmacro(_::less($e(v2e), $e(v1e))) : qmacro(_::less($e(v1e), $e(v2e)))
+            stmts |> push <| qmacro_expr() {
+                return $e(cmp)
+            }
+        } else {
+            var a1 = renamed_key_clone(mt.values[i], argName, "v1")
+            var a2 = renamed_key_clone(mt.values[i], argName, "v2")
+            let cmpLt = desc ? qmacro(_::less($e(a2), $e(a1))) : qmacro(_::less($e(a1), $e(a2)))
+            stmts |> push <| qmacro_expr() {
+                if ($e(cmpLt)) {
+                    return true
+                }
+            }
+            var b1 = renamed_key_clone(mt.values[i], argName, "v1")
+            var b2 = renamed_key_clone(mt.values[i], argName, "v2")
+            let cmpGt = desc ? qmacro(_::less($e(b1), $e(b2))) : qmacro(_::less($e(b2), $e(b1)))
+            stmts |> push <| qmacro_expr() {
+                if ($e(cmpGt)) {
+                    return false
+                }
+            }
+        }
+    }
+    var cmp = qmacro($(v1, v2) {})
+    var cblk = (cmp as ExprMakeBlock)._block as ExprBlock
+    for (s in stmts) {
+        cblk.list |> push(s)
+    }
+    return cmp
+}
+
+[macro_function]
 def build_order_family_rows {
     // Row 1 — streaming_min: inline-cmp + first[_or_default]; no distinct (final imperative bail).
     splice_patterns |> emplace <| SplicePattern(
@@ -2533,7 +2605,9 @@ struct OrderCaptures {
     firstDefaultExpr    : Expression?        // only for first_or_default
     selectLam           : Expression?
     selectElemType      : TypeDeclPtr
-    hasKey              : bool               // orderName == "order_by" or "order_by_descending"
+    hasKey              : bool               // orderName == "order_by" / "order_by_descending" / "order_by_keys"
+    isMultiKey          : bool               // orderName == "order_by_keys" — orderKey is a tuple-of-keys lambda
+    orderDescMask       : uint               // multi-key per-key direction bitmask (bit i → key i descending)
     ok                  : bool               // false on extraction failure (caller bails to cascade)
 }
 
@@ -2548,9 +2622,20 @@ def extract_order_captures(var c : Captures; at : LineInfo; itName : string) : O
     let argCount = orderCall.arguments |> length
     // order(arr, cmp) / order_descending(arr, cmp): user-supplied comparator can't splice through min/max/top_n helpers.
     if ((oc.orderName == "order" || oc.orderName == "order_descending") && argCount >= 2) return oc
-    oc.hasKey = oc.orderName == "order_by" || oc.orderName == "order_by_descending"
+    oc.isMultiKey = oc.orderName == "order_by_keys"
+    oc.hasKey = oc.orderName == "order_by" || oc.orderName == "order_by_descending" || oc.isMultiKey
     if (oc.hasKey && argCount >= 2) {
         oc.orderKey = clone_expression(orderCall.arguments[1])
+    }
+    if (oc.isMultiKey) {
+        // order_by_keys(src, $(x) => (k1, k2, …), descMask) — descMask is a compile-time uint literal.
+        if (argCount < 3) return oc
+        var maskArg = orderCall.arguments[2]
+        if (maskArg != null && maskArg is ExprRef2Value) {
+            maskArg = (maskArg as ExprRef2Value).subexpr
+        }
+        if (maskArg == null || !(maskArg is ExprConstUInt)) return oc
+        oc.orderDescMask = (maskArg as ExprConstUInt).value
     }
     if (orderCall._type == null || orderCall._type.firstType == null) return oc
     oc.orderElemType = clone_type(orderCall._type.firstType)
@@ -2950,12 +3035,14 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
 def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let itName = qn("it", at)
     var oc <- extract_order_captures(c, at, itName)
-    // Buffer-helper is the no-prefilter, no-terminal-_select path; anything richer routes to fused_prefilter or streaming/heap.
-    if (!oc.ok || oc.whereCond != null || oc.distinctName != "" || oc.selectLam != null) return null
+    // Buffer-helper is the no-prefilter, no-terminal-_select path; anything richer routes to fused_prefilter or
+    // streaming/heap. Multi-key (order_by_keys) rides only its bare branch — take/first cascade to the eager op.
+    if (!oc.ok || oc.whereCond != null || oc.distinctName != "" || oc.selectLam != null
+            || (oc.isMultiKey && (oc.takeExpr != null || oc.firstName != ""))) return null
     var top = ctx.top
     var topExpr = clone_expression(top)
     topExpr.genFlags.alwaysSafe = true
-    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    var inlineCmp = (oc.hasKey && !oc.isMultiKey) ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
     let topNName = order_top_n_call_name(oc.orderName)
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
     let needIterWrap = ctx.expr_is_iterator
@@ -3000,7 +3087,9 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
         emission = qmacro(_::first_or_default($e(topNCall), $e(oc.firstDefaultExpr)))
     } elif (oc.takeExpr == null) {
         // Bare order — direct call.
-        if (inlineCmp != null) {
+        if (oc.isMultiKey) {
+            emission = qmacro($c(oc.orderName)($e(topExpr), $e(oc.orderKey), $v(oc.orderDescMask)))
+        } elif (inlineCmp != null) {
             emission = qmacro(_::order($e(topExpr), $e(inlineCmp)))
         } elif (oc.hasKey) {
             emission = qmacro($c(oc.orderName)($e(topExpr), $e(oc.orderKey)))
@@ -3036,15 +3125,20 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
 def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
     var oc <- extract_order_captures(c, at, bindName)
-    // Fused-prefilter requires where OR distinct upstream (buffer_helper covers the bare case); distinct+first without take bails (no per-element min-state).
+    // Fused-prefilter requires where OR distinct upstream (buffer_helper covers the bare case); distinct+first
+    // without take bails (no per-element min-state). Multi-key (order_by_keys) rides only the bare full-sort
+    // path here — take/first/distinct cascade to the eager order_by_keys op.
     if (!oc.ok
             || (oc.whereCond == null && oc.distinctName == "")
-            || (oc.distinctName != "" && oc.takeExpr == null && oc.firstName != "")) return null
+            || (oc.distinctName != "" && oc.takeExpr == null && oc.firstName != "")
+            || (oc.isMultiKey && (oc.takeExpr != null || oc.firstName != "" || oc.distinctName != ""))) return null
     let bufName = qn("buf", at)
     let dsetName = qn("order_dset", at)
     let dkeyName = qn("order_dkey", at)
     var bufElemType = clone_type(oc.orderElemType)
-    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    var inlineCmp = (oc.isMultiKey
+        ? try_make_inline_cmp_keys(oc.orderKey, oc.orderDescMask, oc.orderElemType, at)
+        : (oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null))
     let topNName = order_top_n_call_name(oc.orderName)
     let inplaceName = "{oc.orderName}_inplace"
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
@@ -3154,7 +3248,13 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         }
     } elif (oc.takeExpr == null) {
         var sortCall : Expression?
-        if (inlineCmp != null) {
+        if (oc.isMultiKey) {
+            if (inlineCmp != null) {
+                sortCall = qmacro(stable_sort($i(bufName), $e(inlineCmp)))
+            } else {
+                sortCall = qmacro($c(inplaceName)($i(bufName), $e(oc.orderKey), $v(oc.orderDescMask)))
+            }
+        } elif (inlineCmp != null) {
             sortCall = qmacro(_::order_inplace($i(bufName), $e(inlineCmp)))
         } elif (oc.hasKey) {
             sortCall = qmacro($c(inplaceName)($i(bufName), $e(oc.orderKey)))

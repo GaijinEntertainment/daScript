@@ -83,6 +83,29 @@ def test_sql_orderby_descending_with_where(t : T?) {
     }
 }
 
+[test]
+def test_sql_orderby_multi_key(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<Car>)
+        db |> insert(Car(id = 1, name = "BMW", price = 100))
+        db |> insert(Car(id = 2, name = "Audi", price = 100))
+        db |> insert(Car(id = 3, name = "Tesla", price = 200))
+        db |> insert(Car(id = 4, name = "Acura", price = 100))
+        // price asc, name desc → ORDER BY "price" ASC, "name" DESC
+        let names <- %linq! from c : Car in db orderby c.price, c.name descending select c.name %%
+        t |> equal(length(names), 4)
+        t |> equal(names[0], "BMW")     // price 100, name desc: BMW > Audi > Acura
+        t |> equal(names[1], "Audi")
+        t |> equal(names[2], "Acura")
+        t |> equal(names[3], "Tesla")   // price 200
+        // parity with the hand-written _order_by_keys chain (mask bit 1 ⇒ key 1 = name DESC)
+        let ref <- _fold(db |> select_from(type<Car>) |> _order_by_keys((_.price, _.name), 2u) |> _select(_.name))
+        t |> equal(length(names), length(ref), "linq_das multi-key orderby ≡ hand-written _order_by_keys chain")
+        t |> equal(names[0], ref[0])
+        t |> equal(names[2], ref[2])
+    }
+}
+
 // ===== join over SQL — select-terminal + pre-join where push down (post-join transparent-id is the
 // documented boundary: it would carry a whole-row tuple `_sql` rejects; see failed_linq_das_sql.das) =====
 

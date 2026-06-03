@@ -31,7 +31,7 @@ Clauses
 
 A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
 [ : <Row2> ] in <src2> on <keyA> equals <keyB> | from <var2> [ : <Row2> ] in
-<src2> ) ] [ where <pred> ] [ orderby <expr> [descending] ] ( select <proj> |
+<src2> ) ] [ where <pred> ] [ orderby <expr> [ascending|descending] (, <expr> [ascending|descending])* ] ( select <proj> |
 group <var> by <key> ) [ iterator ]`` — a second range variable comes from
 **either** a ``join`` **or** a second ``from`` (never both), and at most one of
 the two ``where`` slots may appear (before *or* after that clause, never both).
@@ -53,8 +53,8 @@ between body clauses** — it is inlined away before the rest is parsed (see
   range variable — SelectMany: an **independent** source is the cross product, a
   source that is a field of the first range variable (``from l in o.lines``) is
   the correlated flatten (see :ref:`linq_das_multifrom`).
-- ``orderby <expr> [descending]`` — optional, a **single** sort key (see
-  :ref:`linq_das_ordering`). Omitted when absent.
+- ``orderby <expr> [descending], …`` — optional; one or more comma-separated sort
+  keys, each with its own direction (see :ref:`linq_das_ordering`). Omitted when absent.
 - ``select <projection>`` — ``select <var>`` (the identity projection) returns
   the rows unchanged; any other projection emits ``_select(...)``.
 - ``group <var> by <key>`` — the alternative terminal to ``select`` (see
@@ -186,23 +186,30 @@ projection forms are supported:
 Ordering
 --------
 
-``orderby <expr> [descending]`` sorts by a **single** key, emitting
-``_order_by($(c) => <expr>)`` (or ``_order_by_descending(...)``) between the
-``where`` and the ``select``. ``descending`` (and the default-explicit
-``ascending``) are recognized as trailing keywords:
+``orderby <expr> [descending|ascending], …`` sorts by one **or more** keys, each
+with its own direction. A single key emits ``_order_by($(c) => <expr>)`` (or
+``_order_by_descending(...)``); **multiple** comma-separated keys emit one
+``_order_by_keys($(c) => (k1, k2, …), <descMask>)`` — a single composite **stable**
+sort, where ``descMask`` bit *i* (LSB = first key) marks key *i* descending.
+``descending`` (and the default-explicit ``ascending``) are recognized as trailing
+keywords per key:
 
 .. code-block:: das
 
-    // ascending (default)
+    // single key, ascending (default)
     var byPrice <- %linq! from c in cars orderby c.price select c.name %%
 
-    // descending, after a where
+    // single key, descending, after a where
     var top <- %linq! from c in cars where c.price > 100 orderby c.price descending select c.name %%
 
-Works over all four sources (SQL emits ``ORDER BY … [DESC]``; array / decs / XML
-sort the materialized rows). **Multi-key** ordering (``orderby a, b descending``)
-is not yet supported — there is no ``_then_by`` operator; use a single key for
-now.
+    // multi-key with mixed directions: brand ascending, then price descending
+    var rows <- %linq! from c in cars orderby c.brand, c.price descending select c %%
+
+Works over all four sources: SQL emits ``ORDER BY c1, c2 DESC, …``; array / decs / XML
+sort the materialized rows. Multi-key ordering is **stable** (C# ``OrderBy`` / ``ThenBy``
+parity — rows equal on every key keep input order) and supports **at most four keys**.
+Single-key ordering is unchanged — it keeps its existing (unstable) sort, so there is
+no performance regression on the common single-key case.
 
 .. _linq_das_grouping:
 
