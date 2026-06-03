@@ -32,9 +32,12 @@ Clauses
 A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
 [ : <Row2> ] in <src2> on <keyA> equals <keyB> | from <var2> [ : <Row2> ] in
 <src2> ) ] [ where <pred> ] [ orderby <expr> [ascending|descending] (, <expr> [ascending|descending])* ] ( select <proj> |
-group <var> by <key> ) [ iterator ]`` — a second range variable comes from
-**either** a ``join`` **or** a second ``from`` (never both), and at most one of
-the two ``where`` slots may appear (before *or* after that clause, never both).
+group <var> by <key> ) [ into <var> <continuation> ] [ iterator ]`` — a second
+range variable comes from **either** a ``join`` **or** a second ``from`` (never
+both), and at most one of the two ``where`` slots may appear (before *or* after
+that clause, never both). A trailing ``into <var>`` rebinds the stage's output to
+a new range variable and the query continues from there (see
+:ref:`linq_das_into`); ``into`` is supported on **single-source** queries.
 Separately, a ``let <name> = <expr>`` binding may appear **any number of times
 between body clauses** — it is inlined away before the rest is parsed (see
 :ref:`linq_das_let`):
@@ -59,8 +62,11 @@ between body clauses** — it is inlined away before the rest is parsed (see
   the rows unchanged; any other projection emits ``_select(...)``.
 - ``group <var> by <key>`` — the alternative terminal to ``select`` (see
   :ref:`linq_das_grouping`).
+- ``into <var>`` — optional query continuation after the terminal: rebinds the
+  prior stage's output to ``<var>`` and continues with more clauses, all on the
+  same fused chain (see :ref:`linq_das_into`).
 
-A query ends with **either** ``select`` **or** ``group … by`` — exactly one.
+Each stage ends with **either** ``select`` **or** ``group … by`` — exactly one.
 Clauses may span multiple lines inside the ``%linq! … %%`` body.
 
 Sources
@@ -228,17 +234,65 @@ the group's elements as ``._1``:
         print("{g._0}: {g._1 |> length} cars\n")   // key, then count of that bucket
     }
 
-A ``where`` may precede the ``group``; ``orderby`` may not (ordering the groups
-needs the deferred ``into`` continuation). The group element must be the range
-variable (``group c by …``) — element selectors are not yet supported.
+A ``where`` may precede the ``group``; ``orderby`` may not directly (order the
+groups in an ``into`` continuation instead — see :ref:`linq_das_into`). The group
+element must be the range variable (``group c by …``) — element selectors are not
+yet supported.
 
-**Grouping is an in-memory feature** (array / decs / XML). Over a **SQL** source
-it is rejected at compile time: SQL ``GROUP BY`` has no all-rows-per-group form,
-only aggregates. Use the aggregate pipe form for SQL grouping —
-``db |> select_from(type<Car>) |> _group_by(_.brand) |> _select((B = _._0, N = _._1 |> count())) |> _sql()``
-— until the ``group … into`` continuation lands. (Over decs these minimal
-``orderby`` / ``group`` chains currently materialize rather than fuse — correct,
-but a ``_fold`` perf advisory fires; a decs-adapter gap, not a query-syntax one.)
+A **bare** ``group … by`` (no continuation) keeps the whole ``(key, [rows])``
+group, so it is an **in-memory feature** (array / decs / XML); over a **SQL**
+source it is rejected (SQL ``GROUP BY`` has no all-rows-per-group form). To
+aggregate per group — the common case — add an ``into`` continuation
+(``group c by k into g select (…, g |> length, g |> select(…) |> sum)``), which
+**does** push down to SQL ``GROUP BY`` (see :ref:`linq_das_into`). (Over decs
+these minimal ``orderby`` / ``group`` chains currently materialize rather than
+fuse — correct, but a ``_fold`` perf advisory fires; a decs-adapter gap, not a
+query-syntax one.)
+
+.. _linq_das_into:
+
+Query continuation (``into``)
+-----------------------------
+
+``into <var>`` rebinds the prior stage's output to a new range variable and
+continues the query with more clauses — all on the **same** fused ``_fold``
+chain, with no materialization between stages. It is supported on single-source
+queries. C# uses it for grouped aggregation and to chain query stages.
+
+**Group continuation** — after ``group c by k into g``, the new range variable
+``g`` is the group. With the *A2* convention, ``g.key`` is the key and a bare
+``g`` is the member collection:
+
+.. code-block:: das
+
+    var report <- %linq! from c in cars
+                         group c by c.brand into g
+                         select (brand = g.key,
+                                 count = g |> length,
+                                 total = g |> select($(u : Car) => u.price) |> sum) %%
+
+A continuation may itself contain ``where`` / ``orderby`` / ``select`` / ``group``
+over the groups — e.g. ``where g |> length > 1`` (drop singleton buckets) or
+``orderby g |> select($(u : Car) => u.price) |> sum descending`` (order buckets by
+total).
+
+**Select continuation** — ``select <proj> into n`` rebinds the projected value to
+``n`` and continues:
+
+.. code-block:: das
+
+    var kept <- %linq! from c in cars select c.price into p where p > 100 select p %%
+
+Continuations chain (``… into x … into y …``), so a query can group, aggregate,
+then filter/order the aggregated rows in one fused pass.
+
+**SQL pushdown.** A group continuation whose select is **aggregate-only** —
+``g.key`` plus ``g |> length`` (→ ``COUNT(*)``), ``g |> select(…) |> sum/average/min/max``
+(→ ``SUM/AVG/MIN/MAX``), or ``g |> first()`` — pushes down to a SQL ``GROUP BY``
+over a SQL source, exactly like the hand-written ``_group_by`` pipe form. A
+**member-keeping** continuation (identity ``select g``, which keeps the whole
+``(key, [rows])`` group) has no SQL form and is **in-memory only** (array / decs /
+XML) — over a SQL source it is rejected, like a bare ``group … by``.
 
 .. _linq_das_join:
 

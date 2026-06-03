@@ -106,8 +106,10 @@ def test_sql_orderby_multi_key(t : T?) {
     }
 }
 
-// ===== join over SQL — select-terminal + pre-join where push down (post-join transparent-id is the
-// documented boundary: it would carry a whole-row tuple `_sql` rejects; see failed_linq_das_sql.das) =====
+// ===== group … into g … select (grouped aggregation) over SQL — the reader emits the canonical
+// `_group_by_lazy |> _select((_._0, _._1 |> agg))` shape, which `_sql` pushes down to GROUP BY +
+// aggregate columns (no in-memory step). Member-keeping / non-SQL aggregates reject (see
+// failed_linq_das_sql.das). The fixture reuses JCar below — brand "de" repeats. =====
 
 [sql_table(name = "JCars")]
 struct JCar {
@@ -116,6 +118,44 @@ struct JCar {
     brand : string
     price : int
 }
+
+[test]
+def test_sql_group_into_aggregate(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        // group by brand: de {BMW 100, Audi 200} → n=2 total=300 ; us {Tesla 300} → n=1 total=300
+        let rep <- %linq! from c : JCar in db
+                          group c by c.brand into g
+                          select (brand = g.key, n = g |> length, total = g |> select($(u : JCar) => u.price) |> sum) %%
+        // parity with the hand-written grouped-aggregate _sql chain
+        let ref <- _fold(db |> select_from(type<JCar>)
+            |> _group_by(_.brand)
+            |> _select((brand = _._0, n = _._1 |> length, total = _._1 |> select($(u : JCar) => u.price) |> sum)))
+        t |> equal(length(rep), 2, "two brand buckets")
+        t |> equal(length(rep), length(ref), "linq_das group-into ≡ hand-written grouped-aggregate _sql chain")
+        for (r in rep) {
+            if (r.brand == "de") { t |> equal(r.n, 2); t |> equal(r.total, 300) }
+            if (r.brand == "us") { t |> equal(r.n, 1); t |> equal(r.total, 300) }
+        }
+    }
+}
+
+[test]
+def test_sql_group_into_emits_group_by(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        join_fixture(db)
+        // confirm the reader's emit shape pushes down to a SQL GROUP BY (not an in-memory group)
+        let sqlText = _sql_text(db |> select_from(type<JCar>)
+            |> _group_by(_.brand)
+            |> _select((brand = _._0, n = _._1 |> length, total = _._1 |> select($(u : JCar) => u.price) |> sum)) |> to_array())
+        t |> success(sqlText |> find("GROUP BY") >= 0, "SQL: {sqlText}")
+        t |> success(sqlText |> find("COUNT(*)") >= 0, "COUNT pushed down: {sqlText}")
+        t |> success(sqlText |> find("SUM(\"price\")") >= 0, "SUM pushed down: {sqlText}")
+    }
+}
+
+// ===== join over SQL — select-terminal + pre-join where push down (post-join transparent-id is the
+// documented boundary: it would carry a whole-row tuple `_sql` rejects; see failed_linq_das_sql.das) =====
 
 [sql_table(name = "JBrands")]
 struct JBrand {
