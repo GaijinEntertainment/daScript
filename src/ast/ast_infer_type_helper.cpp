@@ -69,6 +69,10 @@ namespace das {
     string InferTypes::describeType(const TypeDecl *decl) const {
         return verbose ? decl->describe() : "";
     }
+    string InferTypes::describeType(const TypeDeclPtr &decl, AliasDefs * aliasDefs) const {
+        return verbose ? decl->describe(TypeDecl::DescribeExtra::yes, TypeDecl::DescribeContracts::yes,
+                                        TypeDecl::DescribeModule::yes, aliasDefs) : "";
+    }
     string InferTypes::describeFunction(const FunctionPtr &fun) const {
         return verbose ? fun->describe() : "";
     }

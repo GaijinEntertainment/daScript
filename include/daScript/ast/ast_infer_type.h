@@ -106,6 +106,7 @@ namespace das {
         virtual void reportFolding() override;
         string describeType(const TypeDeclPtr &decl) const;
         string describeType(const TypeDecl *decl) const;
+        string describeType(const TypeDeclPtr &decl, AliasDefs * aliasDefs) const;
         string describeFunction(const FunctionPtr &fun) const;
         string describeFunction(const Function *fun) const;
 
