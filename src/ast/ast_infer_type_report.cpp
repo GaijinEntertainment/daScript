@@ -94,8 +94,19 @@ namespace das {
     }
     string InferTypes::describeMismatchingArgument(const string &argName, const TypeDeclPtr &passType, const TypeDeclPtr &argType, int argIndex) const {
         TextWriter ss;
+        AliasDefs aliasDefs;
         ss << "\t\tinvalid argument '" << argName << "' (" << argIndex << "). expecting '"
-           << describeType(argType) << "', passing '" << describeType(passType) << "'\n";
+           << describeType(argType, &aliasDefs) << "', passing '" << describeType(passType, &aliasDefs) << "'\n";
+        if ( !aliasDefs.empty() ) {
+            ss << "\t\twhere ";
+            bool first = true;
+            for ( auto & kv : aliasDefs ) {
+                if ( !first ) ss << "; ";
+                ss << "'" << kv.first << " = " << kv.second << "'";
+                first = false;
+            }
+            ss << "\n";
+        }
         if (passType->isAlias()) {
             ss << "\t\t" << reportAliasError(passType) << "\n";
         }

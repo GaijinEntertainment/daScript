@@ -29,6 +29,7 @@ namespace das {
 
     typedef das_map<string,TypeDeclPtr> AliasMap;
     typedef das_map<TypeDecl *,int> OptionsMap;
+    typedef vector<pair<string,string>> AliasDefs;
 
     class Visitor;
 
@@ -151,7 +152,7 @@ namespace das {
         int getVariantFieldOffset ( int index ) const;
         int getVariantUniqueFieldIndex ( const TypeDeclPtr & uniqueType ) const;
         int getVectorFieldOffset ( int index ) const;
-        string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes) const;
+        string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes, AliasDefs * aliasDefs = nullptr, bool topAlias = true ) const;
         bool canCloneFromConst() const;
         __forceinline bool canCopy() const { return canCopy(false); }
         bool canCopy(bool tempMatters) const;
