@@ -34,6 +34,10 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -130,12 +134,54 @@ jobs:
             ;;
         esac
 
+    - name: "Cache vcpkg + openssl"
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        # Whole vcpkg/ dir: bootstrapped vcpkg.exe + installed/<triplet>/openssl.
+        # On hit, install step skips clone + bootstrap + openssl build. Key is
+        # shared with build.yml so this reads build.yml's master-seeded slot.
+        path: vcpkg
+        key: vcpkg-x64-windows-v1
+
     - name: "Install openssl (Windows)"
       if: runner.os == 'Windows'
       run: |
-        git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+            git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        fi
         ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
         echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+
+    # sccache with LOCAL-DISK backend, wrapped in ONE actions/cache entry per
+    # matrix config — mirrors build.yml. The GHA backend writes one cache item
+    # per TU (quota fragmentation, frequent concurrent-write failures); local
+    # disk keeps all objects in $SCCACHE_DIR persisted as a single tarball.
+    # Windows MSVC compiles are cacheable because daslang builds /Z7
+    # (CMakeCommon.txt) — debug info embedded in the .obj; sccache refuses /Zi.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+    - run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        # Non-Windows: export the launcher via env (also wraps the GLFW/libhv
+        # ExternalProject sub-builds — harmless on gcc/clang). Windows must NOT
+        # export it: the env leaks into the sub-cmakes where sccache + MSVC /Zi
+        # (those sub-builds keep /Zi) + parallel Ninja collide on the shared
+        # glfw.pdb (C1041). Windows passes the launcher as -D on the main
+        # configure only (Build step), scoping sccache to daslang's /Z7 TUs.
+        if [ "$RUNNER_OS" != "Windows" ]; then
+          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        fi
+    # Stable per-config key in its own `sccache-extended-*` namespace so it never
+    # clobbers build.yml's slots. Restore always; save only on master (delete
+    # first — GHA caches are immutable, so a plain save under an existing key is
+    # a no-op). PRs read-only.
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
 
     - name: "Build: Daslang (Release)"
       run: |
@@ -148,7 +194,10 @@ jobs:
             # vcpkg so dasHV skips its perl+nmake source build.
             echo "BIN=./bin" >> $GITHUB_ENV
             export PATH="/c/Strawberry/perl/bin:$PATH"
+            # Launcher passed as -D here (not env) so it scopes to daslang's own
+            # /Z7 targets and does NOT leak into the GLFW/libhv /Zi sub-builds.
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
+              -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
             cmake --build ./build --config Release --target daslang das-fmt daslang_static --parallel
             ;;
@@ -179,6 +228,19 @@ jobs:
             cmake --build ./build --config Release --target daslang daslang_static
             ;;
         esac
+
+    - name: "Refresh sccache slot"
+      if: github.ref == 'refs/heads/master'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: github.ref == 'refs/heads/master'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
 
     - name: "Install ast-grep"
       run: npm install -g @ast-grep/cli
