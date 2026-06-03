@@ -48,10 +48,10 @@ def main() {
 
     // 6. Expressions over a column that pred_to_sql can't translate reject cleanly (rather than binding
     //    `?` and failing at bind time with `can't locate variable '_'`): bitwise XOR has no SQLite
-    //    operator, and an unhandled function/cast over a column is unsupported. (A captured runtime value
-    //    with no column reference still binds — see test_99 / the broader suite.)
+    //    operator. (A captured runtime value with no column reference still binds — see test_99.)
+    // (bad6b removed: `_where(double(_.Price) > 1.0)` now lowers to `CAST("Price" AS REAL) > ?` via the
+    //  workhorse-cast rendering in fn_call_to_sql. Coverage moved to test_99_computed_select_subquery.das.)
     let bad6a <- _sql(db |> select_from(type<Car>) |> _select((V = _.Id ^ 1)))
-    let bad6b <- _sql(db |> select_from(type<Car>) |> _where(double(_.Price) > 1.0lf))
 
     // 7. _sql_text with non-chain
     let bad7 = _sql_text(42)
@@ -159,6 +159,10 @@ def main() {
     //     re-use of the key fragment (SELECT, GROUP BY, ORDER BY positions).
     let runtimeOffset = 5
     let bad25 <- _sql(db |> select_from(type<Car>) |> _group_by(_.Price - runtimeOffset) |> _select((K = _._0, N = _._1 |> length)))
+
+    // 26. `string(_.Col, true)` — the hex-formatting overload. The decimal form lowers to `CAST(... AS TEXT)`,
+    //     but SQLite CAST always formats decimal, so the hex form rejects rather than silently mistranslating.
+    let bad26 <- _sql(db |> select_from(type<Car>) |> _select(string(_.Id, true)))
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees

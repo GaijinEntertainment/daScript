@@ -4,13 +4,11 @@ options persistent_heap
 require _common public
 
 // zip(a, b) |> select(t => int64(t._0) * int64(t._1)) |> sum — dot product of two int sequences.
-// SQL (m1) deferred: the degenerate same-row form `_select(_.price * _.year) |> sum()` lowers, but
-// `SUM(price*year)` over n=100k is ~1e11 and the computed-projection result is read back as the
-// expression's daslang type (int), which truncates. A faithful lane needs an int64-typed computed
-// projection (`int64(_.price) * int64(_.year)`), which currently fails inference — deferred to the
-// computed-cast follow-up at the end of the linq work. Splice mode fuses zip + select + sum into a
-// single accumulator loop. The Decs lane is the intra-archetype analogue: two int components on the
-// same DecsCar entity (price * year), summed over all entities, with int64 casts avoiding overflow.
+// SQL (m1) is the degenerate same-row form `_select(int64(_.price) * int64(_.year)) |> sum()`: the int64
+// cast renders `CAST("price" AS INTEGER) * CAST("year" AS INTEGER)` and drives the result read-back type,
+// so the 64-bit `SUM(price*year)` (~1e11 at n=100k) reads back faithfully — without the cast the int
+// projection truncates. Splice mode fuses zip + select + sum into a single accumulator loop. The Decs
+// lane is the intra-archetype analogue: price * year on the same DecsCar entity, summed with int64 casts.
 
 def make_ints(n : int) : array<int> {
     var a : array<int>
@@ -19,6 +17,19 @@ def make_ints(n : int) : array<int> {
         a[i] = i
     }
     return <- a
+}
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let s = _fold(db |> select_from(type<Car>) |> _select(int64(_.price) * int64(_.year)) |> sum())
+            b |> accept(s)
+            if (s == 0l) {
+                b->failNow()
+            }
+        }
+    }
 }
 
 def run_m3f(b : B?; n : int) {
@@ -62,6 +73,11 @@ def run_m5f(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def zip_dot_product_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]
