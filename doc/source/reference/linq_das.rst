@@ -29,18 +29,21 @@ embedded in a larger expression.
 Clauses
 -------
 
-A query is ``from <var> [ : <Row> ] in <src> [ let <name> = <expr> ]* [ where
-<pred> ] [ ( join <var2> [ : <Row2> ] in <src2> on <keyA> equals <keyB> | from
-<var2> [ : <Row2> ] in <src2> ) ] [ let <name> = <expr> ]* [ where <pred> ]
-[ orderby <expr> [descending] ] ( select <proj> | group <var> by <key> )
-[ iterator ]`` — a second range variable comes from **either** a ``join``
-**or** a second ``from`` (never both), and at most one of the two ``where``
-slots may appear (before *or* after that clause, never both):
+A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
+[ : <Row2> ] in <src2> on <keyA> equals <keyB> | from <var2> [ : <Row2> ] in
+<src2> ) ] [ where <pred> ] [ orderby <expr> [descending] ] ( select <proj> |
+group <var> by <key> ) [ iterator ]`` — a second range variable comes from
+**either** a ``join`` **or** a second ``from`` (never both), and at most one of
+the two ``where`` slots may appear (before *or* after that clause, never both).
+Separately, a ``let <name> = <expr>`` binding may appear **any number of times
+between body clauses** — it is inlined away before the rest is parsed (see
+:ref:`linq_das_let`):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
   value. With no type annotation, ``<source>`` is an ``array<T>``.
-- ``let <name> = <expr>`` — optional, repeatable: binds a computed value reused
-  downstream (see :ref:`linq_das_let`).
+- ``let <name> = <expr>`` — optional, repeatable, and free to appear between any
+  body clauses; binds a computed value reused in the clauses that follow it (see
+  :ref:`linq_das_let`).
 - ``where <predicate>`` — optional. A ``where`` **before** the ``join`` / second
   ``from`` filters the left source (single range var); a ``where`` **after** it
   sees both range variables. At most one ``where`` per query.
@@ -139,9 +142,11 @@ or in a ``from … from`` SelectMany):
 Because the binding is inlined, a ``let`` over a **SQL** source pushes its
 computed expression down: a binding used in ``where`` / ``orderby`` / ``select``
 becomes the computed predicate / key / column ``_sql`` renders directly (the
-whole query stays a single ``SELECT``). The binding name must differ from the
-range variable and from any earlier binding, and an inlined expression is
-re-evaluated at each use site (a textual inline, not a cached temporary).
+whole query stays a single ``SELECT``). The binding name must differ from every
+range variable (including a second one from a ``join`` / second ``from``) and
+from any earlier binding, a ``let`` must precede the ``select`` / ``group``
+terminal, and an inlined expression is re-evaluated at each use site (a textual
+inline, not a cached temporary).
 
 .. _linq_das_projections:
 

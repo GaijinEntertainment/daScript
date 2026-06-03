@@ -25,6 +25,8 @@ expect 50503   // let: missing `=` after the binding name
 expect 50503   // let: empty right-hand-side expression
 expect 50503   // let: same binding name bound twice
 expect 50503   // let: trailing `let` after the `select` terminal (no clause uses it)
+expect 50503   // let: binding reuses the second range variable (a `let` after the join)
+expect 50503   // let: binding reuses the second range variable (a `let` before the join)
 
 require daslib/linq_das
 require strings
@@ -194,5 +196,19 @@ def trigger_let_after_terminal() {
     var cars <- one_car()
     // a `let` after the `select` terminal has no clause to use it — must not be silently dropped
     let x <- %linq! from c in cars select c.name let n = c.price %%
+    unused(x)
+}
+
+def trigger_let_reuses_join_var_after() {
+    var cars <- one_car()
+    // a `let` reusing the join's range variable 'b' (after the join) would silently shadow it
+    let x <- %linq! from c in cars join b in cars on c.brand equals b.brand let b = c.price select b %%
+    unused(x)
+}
+
+def trigger_let_reuses_join_var_before() {
+    var cars <- one_car()
+    // a `let` reusing the join's range variable 'b' (before the join) would rewrite its declaration
+    let x <- %linq! from c in cars let b = c.price join b in cars on c.brand equals b.brand select c.name %%
     unused(x)
 }

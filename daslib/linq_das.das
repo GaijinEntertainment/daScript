@@ -668,6 +668,12 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
     var subs : table<string; string>        // binding name → fully-resolved "(<expr>)"
     var cuts : array<tuple<int; int; string>>   // (start, end, name) of each `let` clause, in order
     let srcEnd = next_clause_kw(q, bodyStart)   // first clause keyword = end of the source expression
+    // A second range variable (after `join` or a second `from`) is also off-limits for a `let` name —
+    // reusing it would shadow it (a `let` after the clause) or rewrite its declaration (a `let` before it).
+    let joinPos = find_kw_depth0(q, "join", bodyStart)
+    let secondFromPos = find_kw_depth0(q, "from", bodyStart)
+    let var2j = joinPos >= 0 ? read_ident(q, joinPos + 4)._0 : ""
+    let var2f = secondFromPos >= 0 ? read_ident(q, secondFromPos + 4)._0 : ""
     var searchFrom = bodyStart
     while (true) {
         let lp = find_kw_depth0(q, "let", searchFrom)
@@ -678,8 +684,8 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
             macro_error(prog, at, "linq: 'let' requires a binding name (e.g. `let n = <expr>`)")
             return (false, "")
         }
-        if (name == rangeVar) {
-            macro_error(prog, at, "linq: 'let {name}' shadows the range variable '{rangeVar}'")
+        if (name == rangeVar || name == var2j || name == var2f) {
+            macro_error(prog, at, "linq: 'let {name}' shadows the range variable '{name}'")
             return (false, "")
         }
         if (key_exists(subs, name)) {
