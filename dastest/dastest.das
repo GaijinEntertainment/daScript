@@ -263,7 +263,7 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
                 }
             }
             if (!empty(folded)) {
-                let header = "----- subprocess stderr (abnormal exit {br.exitCode}) -----\n"
+                let header = "----- worker subprocess stderr (abnormal exit {br.exitCode}; batch>1 may include other files in the worker) -----\n"
                 // A caught panic emits a JSON result, so `pending` was already moved into
                 // that result's log above — fold the captured stderr into the last result's
                 // log so the at-throw stack (--stack-on-exception) surfaces under the
