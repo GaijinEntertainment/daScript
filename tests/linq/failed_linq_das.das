@@ -20,6 +20,10 @@ expect 50503   // multiple-from: range var collides with the reserved transparen
 expect 50503   // correlated: `orderby` over a correlated `from … from` (non-copyable outer can't ride the carry)
 expect 50503   // correlated: `group` over a correlated `from … from` (non-copyable outer can't ride the carry)
 expect 50503   // correlated: post-`from` `where` references the OUTER range var (only inner-only is pushed down)
+expect 50503   // let: binding name shadows the range variable
+expect 50503   // let: missing `=` after the binding name
+expect 50503   // let: empty right-hand-side expression
+expect 50503   // let: same binding name bound twice
 
 require daslib/linq_das
 require strings
@@ -158,5 +162,29 @@ def trigger_multifrom_with_join() {
 def trigger_multifrom_reserved_var_name() {
     var cars <- one_car()
     let x <- %linq! from linq_join_ti in cars from b in cars select linq_join_ti.name %%
+    unused(x)
+}
+
+def trigger_let_shadows_range_var() {
+    var cars <- one_car()
+    let x <- %linq! from c in cars let c = c.price + 1 select c %%
+    unused(x)
+}
+
+def trigger_let_missing_equals() {
+    var cars <- one_car()
+    let x <- %linq! from c in cars let n c.price select n %%
+    unused(x)
+}
+
+def trigger_let_empty_rhs() {
+    var cars <- one_car()
+    let x <- %linq! from c in cars let n = select c.name %%
+    unused(x)
+}
+
+def trigger_let_duplicate_binding() {
+    var cars <- one_car()
+    let x <- %linq! from c in cars let n = c.price let n = c.name select n %%
     unused(x)
 }

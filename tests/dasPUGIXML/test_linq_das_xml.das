@@ -177,3 +177,21 @@ def test_xml_multifrom_pre_where(t : T?) {
         t |> equal(length(rows), 4, "2 filtered XML cars × 2 brands")
     }
 }
+
+// ===== let bindings over an XML source (inlined computed expression over the row attributes) =====
+
+[test]
+def test_xml_let(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // half = price/2 → 50, 150, 25 → orderby asc → ids 3, 1, 2; the `let` is inlined into both
+        // the order key and the projection.
+        let rows <- %linq! from c : Car in doc.document_element let half = c.price / 2.0
+            orderby half select (Id = c.id, Half = half) %%
+        t |> equal(length(rows), 3)
+        t |> equal(rows[0].Id, 3)         // 25
+        t |> equal(rows[0].Half, 25.0)
+        t |> equal(rows[2].Id, 2)         // 150
+        t |> equal(rows[2].Half, 150.0)
+    }
+}
