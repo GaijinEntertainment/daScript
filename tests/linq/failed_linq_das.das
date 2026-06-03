@@ -27,6 +27,8 @@ expect 50503   // let: same binding name bound twice
 expect 50503   // let: trailing `let` after the `select` terminal (no clause uses it)
 expect 50503   // let: binding reuses the second range variable (a `let` after the join)
 expect 50503   // let: binding reuses the second range variable (a `let` before the join)
+expect 50503   // orderby: more than 4 keys (eager less_masked caps at 4-arity)
+expect 50503   // orderby: a direction-only segment (no key expression)
 
 require daslib/linq_das
 require strings
@@ -210,5 +212,19 @@ def trigger_let_reuses_join_var_before() {
     var cars <- one_car()
     // a `let` reusing the join's range variable 'b' (before the join) would rewrite its declaration
     let x <- %linq! from c in cars let b = c.price join b in cars on c.brand equals b.brand select c.name %%
+    unused(x)
+}
+
+def trigger_orderby_too_many_keys() {
+    var cars <- one_car()
+    // 5 order keys exceeds the 4-key cap (eager less_masked / tuple `less` are ≤4-arity)
+    let x <- %linq! from c in cars orderby c.price, c.name, c.brand, c.price, c.name select c %%
+    unused(x)
+}
+
+def trigger_orderby_direction_only_segment() {
+    var cars <- one_car()
+    // a comma segment that is only a direction keyword has no key expression
+    let x <- %linq! from c in cars orderby c.price, descending select c %%
     unused(x)
 }

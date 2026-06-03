@@ -106,6 +106,7 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `long_count_aggregate.das` | `long_count()` — int64 counter |
 | `max_aggregate.das` | `max(_.price)` — streaming max |
 | `min_aggregate.das` | `min(_.price)` — streaming min |
+| `order_by_multi_key.das` | `_where + _order_by_keys((_.brand, _.price), mask)` — multi-key composite stable_sort, no take (single-key stays unstable; SQL pushes `ORDER BY c1, c2`) |
 | `order_take_desc.das` | `_order_by_descending(_.price) + take(N)` — top-N largest |
 | `reverse_take.das` | `reverse + take(N)` — tail N rows |
 | `select_count.das` | `_select + count` — projection then counter (DCE'd in some lanes) |

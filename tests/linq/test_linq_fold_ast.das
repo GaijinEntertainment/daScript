@@ -2059,6 +2059,18 @@ def target_where_order_by_take_splices_fold() : array<int> {
     return <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).take(2).to_array())
 }
 
+struct private MkRec {
+    a : int
+    b : int
+}
+
+[export, marker(no_coverage)]
+def target_where_order_by_keys_splices_fold() : array<MkRec> {
+    // where + multi-key order_by_keys (a asc, b desc) over pure field keys → fused buffer + one composite stable_sort
+    return <- _fold(each([MkRec(a = 2, b = 1), MkRec(a = 1, b = 2), MkRec(a = 1, b = 1), MkRec(a = 3, b = 0)])
+        ._where(_.a >= 0)._order_by_keys((_.a, _.b), 2u).to_array())
+}
+
 [test]
 def test_order_by_take_emits_top_n_by_with_cmp(t : T?) {
     // `order_by(key) |> take(K)` with an inlineable key now splices to the bounded-heap
@@ -2164,6 +2176,44 @@ def test_where_order_by_take_emits_fused_top_n_with_cmp(t : T?) {
         t |> equal(0, count_call(body_expr, "top_n_by_with_cmp"), "bounded-heap supersedes top_n_by_with_cmp")
         t |> equal(0, count_call(body_expr, "top_n_by"), "should not emit non-cmp top_n_by")
         t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the heap during fill")
+    }
+}
+
+[test]
+def test_where_order_by_keys_emits_stable_sort(t : T?) {
+    // where + multi-key order_by_keys with an inlineable tuple key → fused prefilter loop + a SINGLE
+    // composite stable_sort(buf, cmp). It must NOT use the unstable single-key order_inplace path, and
+    // an inlineable key must splice (no cascade to the eager order_by_keys_inplace).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_order_by_keys_splices_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected invoke wrapper for fused emission")
+        t |> equal(1, count_inner_for_loops(body_expr), "single fused prefilter loop")
+        t |> equal(1, count_call(body_expr, "stable_sort"), "exactly one composite stable_sort on the fused buffer")
+        t |> equal(0, count_call(body_expr, "order_inplace"), "multi-key must NOT use the unstable order_inplace")
+        t |> equal(0, count_call(body_expr, "order_by_keys_inplace"), "inlineable key splices — no eager cascade")
+        t |> success(count_call(body_expr, "push_clone") >= 1, "should push_clone into the buffer")
+    }
+}
+
+[test]
+def test_single_key_order_by_stays_unstable(t : T?) {
+    // Regression guard: single-key order_by keeps the unstable sort/order_inplace path. The multi-key
+    // stable_sort change must NOT leak into single-key orderby (no perf regression on the common case).
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_order_by_splices_fold)
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched, "should have return expression")
+        t |> success(count_call(body_expr, "order_inplace") >= 1, "single-key uses order_inplace")
+        t |> equal(0, count_call(body_expr, "stable_sort"), "single-key must NOT emit stable_sort")
     }
 }
 

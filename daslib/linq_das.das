@@ -3,6 +3,7 @@ options gen2
 module linq_das
 
 require strings
+require daslib/strings_boost
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
@@ -120,6 +121,78 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
         }
     }
     return found
+}
+
+// Split `text` on top-level `,` (paren/bracket/brace depth 0, outside string literals) and return the
+// stripped segments. Used to parse a multi-key `orderby k1, k2 desc, k3` without splitting inside f(x,y)/(a,b).
+def private split_depth0(text : string) : array<string> {
+    var segs : array<string>
+    peek_data(text) $(arr) {
+        let n = length(arr)
+        segs |> reserve(4)   // orderby clauses are short (≤4 keys); avoids realloc on the common path
+        var depth = 0
+        var inStr = false
+        var segStart = 0
+        var i = 0
+        while (i < n) {
+            let c = int(arr[i])
+            if (inStr) {
+                if (c == '\\') { i += 2; continue }
+                if (c == '"') { inStr = false }
+                i++
+                continue
+            }
+            if (c == '"') { inStr = true; i++; continue }
+            if (c == '(' || c == '[' || c == '{') { depth++; i++; continue }
+            if (c == ')' || c == ']' || c == '}') { depth--; i++; continue }
+            if (depth == 0 && c == ',') {
+                segs |> push(strip(slice(text, segStart, i)))
+                segStart = i + 1
+            }
+            i++
+        }
+        segs |> push(strip(slice(text, segStart, n)))
+    }
+    return <- segs
+}
+
+struct private OrderKeys {
+    keys     : array<string>
+    descMask : uint           // bit i → key i descending (LSB = first key)
+    ok       : bool           // false on an empty / direction-only segment
+}
+
+// Parse an orderby clause body — `k1 [asc|desc], k2 [asc|desc], …` — into keys + per-key descending mask.
+def private parse_orderby(rawOrder : string) : OrderKeys {
+    var r : OrderKeys
+    r.ok = true
+    let segs <- split_depth0(rawOrder)
+    r.keys |> reserve(length(segs))
+    var idx = 0u
+    for (seg in segs) {
+        let dseg = strip_trailing_keyword(seg, "descending")
+        let keyText = dseg._1 ? dseg._0 : strip_trailing_keyword(seg, "ascending")._0
+        if (keyText == "" || keyText == "descending" || keyText == "ascending") {
+            r.ok = false
+            return <- r
+        }
+        r.keys |> push(keyText)
+        // idx < 32u guards the shift on absurd key counts; the caller rejects > 4 keys with a clean message.
+        if (dseg._1 && idx < 32u) { r.descMask = r.descMask | (1u << idx) }
+        idx++
+    }
+    if (empty(r.keys)) { r.ok = false }
+    return <- r
+}
+
+// Build the order pipe fragment. `ti` is the lambda parameter name; `keys` are already rewritten for the
+// emit context. Single key → `_order_by` / `_order_by_descending`; multi-key → `_order_by_keys((…), mask)`.
+def private emit_order_op(keys : array<string>; descMask : uint; ti : string) : string {
+    if (length(keys) == 1) {
+        let op = (descMask & 1u) != 0u ? "_order_by_descending" : "_order_by"
+        return " |> {op}($({ti}) => {keys[0]})"
+    }
+    return " |> _order_by_keys($({ti}) => ({join(keys, ", ")}), {descMask}u)"
 }
 
 // Read the identifier at/after `from` (skipping leading whitespace); returns (name, endOffset).
@@ -419,20 +492,21 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             return "(0)"
         }
     }
-    var orderKey = ""
-    var orderDesc = false
+    var orderKeys : array<string>
+    var orderDescMask = 0u
     if (orderByPos >= 0) {
         let rawOrder = strip(slice(q, orderByPos + 7, termPos))
-        let od = strip_trailing_keyword(rawOrder, "descending")
-        if (od._1) {
-            orderKey = od._0; orderDesc = true
-        } else {
-            orderKey = strip_trailing_keyword(rawOrder, "ascending")._0
-        }
-        if (orderKey == "") {
+        var op <- parse_orderby(rawOrder)
+        if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
             return "(0)"
         }
+        if (length(op.keys) > 4) {
+            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
+            return "(0)"
+        }
+        orderKeys <- op.keys
+        orderDescMask = op.descMask
     }
     var projText = ""
     var groupKey = ""
@@ -517,7 +591,10 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             // stream/sort/group the pairs directly (single stage — no pre-materialize).
             w |> write(" |> {opName}({srcB}, {onLambdaPart}{carryLambda})")
             if (postWhere >= 0) { w |> write(" |> _where($({JOIN_TI}) => {rewrite_idents(wherePred, names, JOIN_TI)})") }
-            if (hasOrderBy) { w |> write(" |> {orderDesc ? "_order_by_descending" : "_order_by"}($({JOIN_TI}) => {rewrite_idents(orderKey, names, JOIN_TI)})") }
+            if (hasOrderBy) {
+                let rkeys <- [for (k in orderKeys); rewrite_idents(k, names, JOIN_TI)]
+                w |> write(emit_order_op(rkeys, orderDescMask, JOIN_TI))
+            }
             if (isGroup) {
                 w |> write(" |> _group_by_lazy($({JOIN_TI}) => {rewrite_idents(groupKey, names, JOIN_TI)})")
             } else {
@@ -835,21 +912,21 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     }
     // orderby clause (select-terminated only): `<expr> [descending|ascending]`.
     let hasOrderBy = orderByPos >= 0
-    var orderKey = ""
-    var orderDesc = false
+    var orderKeys : array<string>
+    var orderDescMask = 0u
     if (hasOrderBy) {
         let rawOrder = strip(slice(q, orderByPos + 7, termPos))
-        let od = strip_trailing_keyword(rawOrder, "descending")
-        if (od._1) {
-            orderKey = od._0; orderDesc = true
-        } else {
-            // a trailing `ascending` is the default — strip it if present
-            orderKey = strip_trailing_keyword(rawOrder, "ascending")._0
-        }
-        if (orderKey == "") {
+        var op <- parse_orderby(rawOrder)
+        if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
             return "(0)"
         }
+        if (length(op.keys) > 4) {
+            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
+            return "(0)"
+        }
+        orderKeys <- op.keys
+        orderDescMask = op.descMask
     }
     // Terminal: select projection, or group element/key.
     var projText = ""
@@ -898,7 +975,7 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
             writer |> write(" |> _group_by_lazy($({varName}) => {groupKey})")
         } else {
             if (hasOrderBy) {
-                writer |> write(" |> {orderDesc ? "_order_by_descending" : "_order_by"}($({varName}) => {orderKey})")
+                writer |> write(emit_order_op(orderKeys, orderDescMask, varName))
             }
             if (!identitySelect) {
                 writer |> write(" |> _select($({varName}) => {projText})")

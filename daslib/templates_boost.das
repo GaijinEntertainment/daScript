@@ -605,6 +605,18 @@ def apply_template(var expr : Expression?&; blk : block<(var rules : Template) :
     }
 }
 
+def clone_and_rename_var(src : Expression?; from_name, to_name : string) : Expression? {
+    //! Clones ``src`` and renames every ``ExprVar`` named ``from_name`` to ``to_name``. One-shot
+    //! ``clone_expression`` + ``renameVariable`` + ``apply_template`` — the common idiom for safely reusing
+    //! a captured sub-expression under a fresh variable name. A null ``src`` returns null (null-in, null-out).
+    if (src == null) return null
+    var res = clone_expression(src)
+    var rules : Template
+    rules |> renameVariable(from_name, to_name)
+    apply_template(rules, res.at, res)
+    return res
+}
+
 class private RemoveDerefVisitor : AstVisitor {
     //! Visitor that removes dereferences of a specific variable.
     vname : string //! Name of the variable to remove dereferences for.

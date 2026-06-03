@@ -1765,7 +1765,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
-                macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering: `_order_by((_.k1, _.k2))`)")
+                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, or `_order_by((_.k1, _.k2))` for all-ascending multi-column)")
                 return false
             }
             var body = peel_lambda_single_return(obCall.arguments[1])
@@ -1786,7 +1786,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
-                macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering)")
+                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, or `_order_by((_.k1, _.k2))` for all-ascending multi-column)")
                 return false
             }
             var body = peel_lambda_single_return(odCall.arguments[1])
@@ -1796,6 +1796,40 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
             if (!analyze_chain(odCall.arguments[0], q, prog, at)
                     || !collect_order_keys(body, q, "DESC", prog, at)) return false
+            q.seenOrderBy = true
+            return true
+        }
+    }
+    // Peel order_by_keys(prev, $(x) => (k1, k2, …), descMask) — multi-key with per-key direction → ORDER BY c1, c2 DESC, …
+    {
+        var okCall = match_call_in_linq(node, "order_by_keys")
+        if (okCall != null) {
+            let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
+            if (dr != 0) return dr > 0
+            if (q.seenOrderBy) {
+                macro_error(prog, at, "_sql: ordering (_order_by / _order_by_descending / _order_by_keys) can appear at most once in the chain")
+                return false
+            }
+            if (okCall.arguments |> length != 3) {
+                macro_error(prog, at, "_sql: _order_by_keys expects (source, key-lambda, descMask)")
+                return false
+            }
+            var body = peel_lambda_single_return(okCall.arguments[1])
+            if (body == null) {
+                macro_error(prog, at, "_sql: _order_by_keys key lambda has unexpected shape")
+                return false
+            }
+            var maskArg = okCall.arguments[2]
+            if (maskArg != null && maskArg is ExprRef2Value) {
+                maskArg = (maskArg as ExprRef2Value).subexpr
+            }
+            if (maskArg == null || !(maskArg is ExprConstUInt)) {
+                macro_error(prog, at, "_sql: _order_by_keys descMask must be a compile-time uint literal")
+                return false
+            }
+            let descMask = (maskArg as ExprConstUInt).value
+            if (!analyze_chain(okCall.arguments[0], q, prog, at)
+                    || !collect_order_by_keys(body, q, descMask, prog, at)) return false
             q.seenOrderBy = true
             return true
         }
@@ -2680,6 +2714,48 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
 // ===== Predicate analysis (_where) =====
 
 [macro_function]
+def private collect_one_order_key(var val : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {
+    // One order-key entry → one `q.orderByCols` "col DIR" push with its own direction (field / post-join alias / dynamic-string / computed).
+    var fieldName : string
+    if (qmatch(val, _.$f(fieldName)).matched) {
+        // Post-join: `_.<alias>` resolves through the join's projection registry → qualified column.
+        if (q.seenJoin && !empty(q.joinProjRecordNames)) {
+            let aliasIdx = find_projection_alias(q, fieldName)
+            if (aliasIdx < 0) {
+                macro_error(prog, at, "_sql: order-by key _.{fieldName}: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
+                return false
+            }
+            let frag = render_projection_alias_sql(q, aliasIdx)
+            if (empty(frag)) {
+                macro_error(prog, at, "_sql: order-by key _.{fieldName}: cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                return false
+            }
+            q.orderByCols |> push("{frag} {direction}")
+            return true
+        }
+        let sqlCol = field_to_column_name(q.rootType, fieldName)
+        q.orderByCols |> push("\"{sqlCol}\" {direction}")
+        return true
+    }
+    // A string key NOT referencing the row is a dynamic column NAME (quoted at emission); one that DOES (`to_lower(_.Name)`) falls to the computed arm below.
+    if (val._type != null && val._type.baseType == Type.tString && !mentions_source_arg(val, q)) {
+        q.orderByInlineExprs |> push <| clone_expression(val)
+        q.orderByCols |> push("\x01 {direction}")
+        return true
+    }
+    // Computed key (`_.price / 10`) — render with constants inlined (key context, no binds), like _group_by.
+    if (is_sql_renderable_scalar(val._type)) {
+        let frag = render_inlined_key_sql(val, q, "order-by", prog, at)
+        if (q.hadError) return false
+        if (!empty(frag)) {
+            q.orderByCols |> push("{frag} {direction}")
+            return true
+        }
+    }
+    macro_error(prog, at, "_sql: order-by key: must be `_.Field`, a computed expression (`_.a + _.b`), a `string` expression, or a tuple of either; got: {describe(val)}")
+    return false
+}
+
 def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {
     if (body == null) {
         macro_error(prog, at, "_sql: _order_by: missing key expression")
@@ -2740,89 +2816,53 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
             }
         }
     }
-    // Single-column form: _.FieldName
-    {
-        var fieldName : string
-        if (qmatch(body, _.$f(fieldName)).matched) {
-            // Post-join: `_.<alias>` resolves through the join's projection registry → qualified column.
-            if (q.seenJoin && !empty(q.joinProjRecordNames)) {
-                let aliasIdx = find_projection_alias(q, fieldName)
-                if (aliasIdx < 0) {
-                    macro_error(prog, at, "_sql: _order_by(_.{fieldName}): '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
-                    return false
-                }
-                let frag = render_projection_alias_sql(q, aliasIdx)
-                if (empty(frag)) {
-                    macro_error(prog, at, "_sql: _order_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
-                    return false
-                }
-                q.orderByCols |> push("{frag} {direction}")
-                return true
-            }
-            let sqlCol = field_to_column_name(q.rootType, fieldName)
-            q.orderByCols |> push("\"{sqlCol}\" {direction}")
-            return true
-        }
-    }
-    // Multi-column tuple `(_.k1, _.k2)` — each entry picks compile-time `_.Field` or runtime string column.
+    // Multi-column tuple `(_.k1, _.k2)` — uniform direction across entries (mixed directions go through _order_by_keys).
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
         if (empty(mkTup.values)) {
             macro_error(prog, at, "_sql: _order_by: empty tuple key")
             return false
         }
-        for (i in range(length(mkTup.values))) {
-            var val = mkTup.values[i]
-            var fieldName : string
-            if (qmatch(val, _.$f(fieldName)).matched) {
-                if (q.seenJoin && !empty(q.joinProjRecordNames)) {
-                    let aliasIdx = find_projection_alias(q, fieldName)
-                    if (aliasIdx < 0) {
-                        macro_error(prog, at, "_sql: _order_by(_.{fieldName}): '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
-                        return false
-                    }
-                    let frag = render_projection_alias_sql(q, aliasIdx)
-                    if (empty(frag)) {
-                        macro_error(prog, at, "_sql: _order_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
-                        return false
-                    }
-                    q.orderByCols |> push("{frag} {direction}")
-                    continue
-                }
-                let sqlCol = field_to_column_name(q.rootType, fieldName)
-                q.orderByCols |> push("\"{sqlCol}\" {direction}")
-            } elif (val._type != null && val._type.baseType == Type.tString && !mentions_source_arg(val, q)) {
-                q.orderByInlineExprs |> push <| clone_expression(val)
-                q.orderByCols |> push("\x01 {direction}")
-            } elif (is_sql_renderable_scalar(val._type)) {
-                // Computed key entry (`_.price / 10`) — inlined constants, like _group_by.
-                let frag = render_inlined_key_sql(val, q, "_order_by", prog, at)
-                if (empty(frag)) return false
-                q.orderByCols |> push("{frag} {direction}")
-            } else {
-                macro_error(prog, at, "_sql: _order_by: tuple-key entries must be `_.Field`, a computed expression (`_.a + _.b`), or a `string` expression; got: {describe(val)}")
-                return false
-            }
+        for (val in mkTup.values) {
+            if (!collect_one_order_key(val, q, direction, prog, at)) return false
         }
         return true
     }
-    // A string key NOT referencing the row is a dynamic column NAME (quoted at emission); one that DOES (`to_lower(_.Name)`) falls to the computed arm below.
-    if (body._type != null && body._type.baseType == Type.tString && !mentions_source_arg(body, q)) {
-        q.orderByInlineExprs |> push <| clone_expression(body)
-        q.orderByCols |> push("\x01 {direction}")
-        return true
+    // Single key — field / dynamic-string / computed.
+    return collect_one_order_key(body, q, direction, prog, at)
+}
+
+def private collect_order_by_keys(var body : ExpressionPtr; var q : SqlQuery&; descMask : uint; prog : ProgramPtr; at : LineInfo) : bool {
+    // _order_by_keys: one orderByCols entry per tuple element with its own direction from descMask (bit i → key i DESC; LSB = first key).
+    if (body == null) {
+        macro_error(prog, at, "_sql: _order_by_keys: missing key expression")
+        return false
     }
-    // Computed key (`_.price / 10`) — render with constants inlined (key context, no binds), like _group_by.
-    if (is_sql_renderable_scalar(body._type)) {
-        let frag = render_inlined_key_sql(body, q, "_order_by", prog, at)
-        if (q.hadError) return false
-        if (!empty(frag)) {
-            q.orderByCols |> push("{frag} {direction}")
-            return true
+    if (body is ExprRef2Value) {
+        body = (body as ExprRef2Value).subexpr
+        if (body == null) {
+            macro_error(prog, at, "_sql: _order_by_keys: ExprRef2Value with null subexpr")
+            return false
         }
     }
-    macro_error(prog, at, "_sql: _order_by: key must be `_.Field`, a computed expression (`_.a + _.b`), a `string` expression, or a tuple of either; got: {describe(body)}")
-    return false
+    if (body is ExprMakeTuple) {
+        var mkTup = body as ExprMakeTuple
+        if (empty(mkTup.values)) {
+            macro_error(prog, at, "_sql: _order_by_keys: empty key tuple")
+            return false
+        }
+        var i = 0u
+        for (val in mkTup.values) {
+            // i < 32u guards the shift; keys past bit 31 default ASC (SQL allows many ORDER BY columns; the reader caps at 4).
+            let dir = (i < 32u && (descMask & (1u << i)) != 0u) ? "DESC" : "ASC"
+            if (!collect_one_order_key(val, q, dir, prog, at)) return false
+            i++
+        }
+        return true
+    }
+    // Degenerate single-key body (no tuple) — direction is bit 0.
+    let dir = (descMask & 1u) != 0u ? "DESC" : "ASC"
+    return collect_one_order_key(body, q, dir, prog, at)
 }
 
 // Render a computed group_by / order_by key with literals inlined (no `?` binds — key fragments are re-used

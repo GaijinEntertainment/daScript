@@ -651,7 +651,7 @@ def document_module_templates_boost(_root : string) {
     var mod = find_module("templates_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Template rules", mod, %regex~(kaboomVarField|replaceVariable|renameVariable|replaceType|replaceAnnotationArgument|replaceBlockArgument|replaceVarTag|replaceArgumentWithList|replaceVariableWithList|renameField|replaceStructWithTypeDecl|replaceTypeWithTypeDecl|renameCall)$%%),
-        group_by_regex("Template application", mod, %regex~(apply_template)$%%),
+        group_by_regex("Template application", mod, %regex~(apply_template|clone_and_rename_var)$%%),
         group_by_regex("Expression helpers", mod, %regex~(remove_deref|visit_expression|expression_at)$%%),
         group_by_regex("Expression generation", mod, %regex~(make_expression_block)$%%),
         group_by_regex("Block helpers", mod, %regex~(unquote_block|move_unquote_block|push_block_list)$%%),

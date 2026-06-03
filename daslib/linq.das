@@ -417,6 +417,46 @@ def less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
     return a._3 < b._3
 }
 
+// One-key compare with direction: desc flips the operand order. Backs less_masked / the order_by_keys
+// eager fallback; the fold inline path builds an if-chain with scalar _::less instead and never calls this.
+def private key_less(a, b; desc : bool) : bool {
+    return desc ? b < a : a < b
+}
+
+def private less_masked(a, b : tuple<auto(TT)>; mask : uint) : bool {
+    return key_less(a._0, b._0, (mask & 1u) != 0u)
+}
+
+def private less_masked(a, b : tuple<auto(TT), auto(UU)>; mask : uint) : bool {
+    let d0 = (mask & 1u) != 0u
+    return true if (key_less(a._0, b._0, d0))
+    return false if (key_less(b._0, a._0, d0))
+    return key_less(a._1, b._1, (mask & 2u) != 0u)
+}
+
+def private less_masked(a, b : tuple<auto(TT), auto(UU), auto(VV)>; mask : uint) : bool {
+    let d0 = (mask & 1u) != 0u
+    return true if (key_less(a._0, b._0, d0))
+    return false if (key_less(b._0, a._0, d0))
+    let d1 = (mask & 2u) != 0u
+    return true if (key_less(a._1, b._1, d1))
+    return false if (key_less(b._1, a._1, d1))
+    return key_less(a._2, b._2, (mask & 4u) != 0u)
+}
+
+def private less_masked(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>; mask : uint) : bool {
+    let d0 = (mask & 1u) != 0u
+    return true if (key_less(a._0, b._0, d0))
+    return false if (key_less(b._0, a._0, d0))
+    let d1 = (mask & 2u) != 0u
+    return true if (key_less(a._1, b._1, d1))
+    return false if (key_less(b._1, a._1, d1))
+    let d2 = (mask & 4u) != 0u
+    return true if (key_less(a._2, b._2, d2))
+    return false if (key_less(b._2, a._2, d2))
+    return key_less(a._3, b._3, (mask & 8u) != 0u)
+}
+
 def order_by_inplace(var buffer : array<auto(TT)>; key) {
     //! Sorts an array in place
     sort(buffer, $(v1, v2) => _::less(key(v1), key(v2)))
@@ -466,6 +506,32 @@ def order_by_descending_to_array(var a : iterator<auto(TT)>; key) : array<TT -co
     //! Sorts an iterator in descending order and returns an array
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => _::less(key(v2), key(v1)))
+    return <- arr
+}
+
+def order_by_keys_inplace(var buffer : array<auto(TT)>; key; mask : uint) {
+    //! Sorts an array in place by a composite (tuple) key; bit ``i`` of ``mask`` → key ``i`` descending. Stable.
+    stable_sort(buffer, $(v1, v2) => less_masked(key(v1), key(v2), mask))
+}
+
+def order_by_keys(var a : iterator<auto(TT)>; key; mask : uint) : iterator<TT -const -&> {
+    //! Sorts an iterator by a composite (tuple) key with per-key direction (``mask``). Stable.
+    var arr <- to_array(a)
+    stable_sort(arr, $(v1, v2) => less_masked(key(v1), key(v2), mask))
+    return to_sequence_move(arr)
+}
+
+def order_by_keys(a : array<auto(TT)>; key; mask : uint) : array<TT -const -&> {
+    //! Sorts an array by a composite (tuple) key with per-key direction (``mask``). Stable.
+    var b := a
+    stable_sort(b, $(v1, v2) => less_masked(key(v1), key(v2), mask))
+    return <- b
+}
+
+def order_by_keys_to_array(var a : iterator<auto(TT)>; key; mask : uint) : array<TT -const -&> {
+    //! Sorts an iterator by a composite (tuple) key with per-key direction (``mask``); returns an array. Stable.
+    var arr <- to_array(a)
+    stable_sort(arr, $(v1, v2) => less_masked(key(v1), key(v2), mask))
     return <- arr
 }
 

@@ -75,6 +75,19 @@ def test_xml_orderby_descending(t : T?) {
 }
 
 [test]
+def test_xml_orderby_multi_key(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // brand asc, price desc → Ford(id1@100, id3@50) then Honda(id2@300) → ids 1, 3, 2
+        let ids <- %linq! from c : Car in doc.document_element orderby c.brand, c.price descending select c.id %%
+        t |> equal(length(ids), 3)
+        t |> equal(ids[0], 1)   // Ford, 100
+        t |> equal(ids[1], 3)   // Ford, 50
+        t |> equal(ids[2], 2)   // Honda, 300
+    }
+}
+
+[test]
 def test_xml_group_by(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
