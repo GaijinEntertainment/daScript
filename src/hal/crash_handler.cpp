@@ -169,7 +169,15 @@ namespace das {
     }
 
     void install_crash_handler() {
-        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        // EXPERIMENT (not for master): SEM_NOGPFAULTERRORBOX suppresses Windows
+        // Error Reporting, which hides otherwise-silent /GS fast-fails
+        // (0xC0000409) that bypass our SetUnhandledExceptionFilter. Setting
+        // DAS_NO_WER_SUPPRESS in the environment skips the suppression so WER
+        // LocalDumps can capture a postmortem dump. Default (unset) = unchanged.
+        char werEnvBuf[8];
+        if ( GetEnvironmentVariableA("DAS_NO_WER_SUPPRESS", werEnvBuf, sizeof(werEnvBuf)) == 0 ) {
+            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        }
         ULONG stackGuarantee = 32 * 1024;
         SetThreadStackGuarantee(&stackGuarantee);
         SetUnhandledExceptionFilter(crash_handler_callback);
