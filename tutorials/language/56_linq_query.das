@@ -13,6 +13,7 @@ require daslib/linq_fold
 //   - group … by (IGrouping) and the `into` group-continuation (grouped aggregation)
 //   - select … into (projection continuation) and multi-stage chains
 //   - let bindings and a single inner join
+//   - join … into g (group join — C# GroupJoin, outer)
 //
 // `%linq!` is a purely compile-time rewrite into a fused `_fold(...)` chain — it costs nothing over the
 // hand-written pipe form, and the same query works over arrays, decs, SQL and XML (the typed `: Row` form).
@@ -124,4 +125,22 @@ def main {
     let located <- %linq! from c in cars join h in hqs on c.brand equals h.brand select (car = c.name, country = h.country) %%
     print("car → country:\n")
     for (r in located) { print("  {r.car}: {r.country}\n") }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Section 7 — join … into g  (group join, C# GroupJoin / outer)
+    // ──────────────────────────────────────────────────────────────────────────
+    //
+    // `join … equals … into g` binds `g` to the array of *matching right rows* alongside the left variable —
+    // the terminal `select` reads both. It is OUTER: every left row surfaces, an unmatched one with an empty
+    // group. Here we group the cars under each brand HQ; "tesla" has no cars, so it surfaces with count 0.
+    let hqs2 <- [BrandHQ(brand = "bmw", country = "DE"), BrandHQ(brand = "audi", country = "DE"),
+                 BrandHQ(brand = "kia", country = "KR"), BrandHQ(brand = "tesla", country = "US")]
+    let perHq <- %linq! from h in hqs2
+                        join c in cars on h.brand equals c.brand into g
+                        select (brand = h.brand,
+                                country = h.country,
+                                n     = g |> length,
+                                total = g |> select($(u : Car) => u.price) |> sum) %%
+    print("cars per brand HQ (outer — tesla has none):\n")
+    for (r in perHq) { print("  {r.brand} ({r.country}): n={r.n} total={r.total}\n") }
 }

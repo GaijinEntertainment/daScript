@@ -1115,7 +1115,9 @@ def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
 [macro_function]
 def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // PR D2-A: keep collect+probe inline (not via adapter_wrap_source_loop) to preserve the count-no-where bucket-length fast path.
-    if (bridgeA == null) return null    // both sides must be from_decs_template eager bridges
+    // Bail to tier-2 unless both sides are from_decs_template eager bridges and it's a plain join — group join
+    // over a decs source isn't spliced yet (the array adapter handles group joins).
+    if (bridgeA == null || (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join")) return null
     var joinCall = c.single["join"]
     var whereLam : Expression?
     if (c.single |> key_exists("trailing_where")) {
@@ -1152,7 +1154,7 @@ def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; var ctx : 
     var tupBindB = build_decs_tup_bind(bridgeB, tupBName, at)
     if (tupBindA == null || tupBindB == null) return null
     let tupBType = strip_const_ref(clone_type(bridgeB.elementType))
-    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "decs", at)
+    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "decs", at)
     if (pieces == null) return null
     var collectBody <- qmacro_block_to_array() {
         // nolint:PERF006 per-key bucket size unknown ahead of time

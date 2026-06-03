@@ -5414,6 +5414,7 @@ def build_join_standalone_pieces(
                                  tupAName       : string;
                                  hashName       : string;
                                  tupBType       : TypeDeclPtr;
+                                 isGroupJoin    : bool;
                                  namePrefix     : string;
                                  at             : LineInfo
                                  ) : JoinStandalonePieces? {
@@ -5422,10 +5423,12 @@ def build_join_standalone_pieces(
     let cntName     = qn(namePrefix + "_cnt", at)
     let bufName     = qn(namePrefix + "_buf", at)
     let resBindName = qn(namePrefix + "_res", at)
+    let emptyArrName = qn(namePrefix + "_empty", at)   // group-join: empty bucket for an unmatched left row
     var preludeStmts : array<Expression?>
     var probeInnerStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
+    var groupEmptyExpr : Expression?   // group-join only: the `buf |> push_clone(result(a, <empty>))` for the outer branch
     if (countOnly) {
         invokeRetType = new TypeDecl(baseType = Type.tInt, at = at)
         preludeStmts |> push <| qmacro_expr() {
@@ -5455,6 +5458,30 @@ def build_join_standalone_pieces(
         }
         returnStmt = qmacro_expr() {
             return $i(cntName)
+        }
+    } elif (isGroupJoin) {
+        // group join: the result's 2nd param is the WHOLE bucket (the group), so we emit one buffer row per
+        // left row (no per-match inner loop). emit_*_join guarantees no trailing where/select/count reaches here.
+        var resultLam = joinCall.arguments[4]
+        if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
+        var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, arrName)   // 2nd var → the match bucket
+        if (resultBody == null) return null
+        let resultType = strip_const_ref(clone_type(resultLam._type.firstType))
+        if (resultType == null) return null
+        invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(resultType)>
+        }
+        probeInnerStmts |> push <| qmacro_expr() {
+            $i(bufName) |> push_clone($e(resultBody))
+        }
+        // Outer branch (unmatched left → empty group): a second, independent peel binding the result's 2nd
+        // var to a fresh empty bucket (`emptyArrName`). Spliced into the `if (!get(...))` arm below.
+        var resultBodyEmpty = peel_lambda_rename_2vars(resultLam, tupAName, emptyArrName)
+        if (resultBodyEmpty == null) return null
+        groupEmptyExpr = qmacro($i(bufName) |> push_clone($e(resultBodyEmpty)))
+        returnStmt = qmacro_expr() {
+            return <- $i(bufName)
         }
     } else {
         var resultLam = joinCall.arguments[4]
@@ -5523,6 +5550,18 @@ def build_join_standalone_pieces(
             $b(probeInnerStmts)
         })
     }
+    // group join is OUTER (C# GroupJoin): every left row surfaces. `get` returns false on a key miss — then
+    // emit the result with an empty group, mirroring group_join_impl. Wrapped before the lead-`where` so a
+    // filtered-out left row produces no row at all.
+    if (isGroupJoin) {
+        var getProbe = probeOuter
+        probeOuter = qmacro_expr() {
+            if (!$e(getProbe)) {
+                var $i(emptyArrName) : array<$t(tupBType)>
+                $e(groupEmptyExpr)
+            }
+        }
+    }
     // Leading `where` (filters srcA before the join): wrap the per-A probe in the predicate so the filter
     // fuses into the probe loop — no intermediate filtered-srcA array. References tupAName, bound per-A by
     // every adapter's source loop (array `for`, decs archetype walk, xml DOM walk).
@@ -5554,7 +5593,7 @@ def build_join_rows {
         name = "join_general",
         chain <- [
             Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "lead_where", arity = 2),
-            Slot(matcher = m_literal("join"),    cardinality = c_one(), capture_name = "join", arity = 5),
+            Slot(matcher = SlotMatcher(one_of <- ["join", "group_join"]), cardinality = c_one(), capture_name = "join", arity = 5),
             Slot(matcher = m_literal("where_"),  cardinality = c_opt(), capture_name = "trailing_where", arity = 2),
             Slot(matcher = m_literal("select"),  cardinality = c_opt(), capture_name = "trailing_select"),
             Slot(matcher = m_literal("count"),   cardinality = c_opt(), capture_name = "term", arity = 1)
@@ -5595,6 +5634,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     //   select(f)  → push `f(res)` instead of `res` (buffer element type = f's return type)
     var joinCall = c.single["join"]
     if (!srcb_is_array_shaped(c, "join")) return null   // srcb must be array/iterator-shaped (formerly the array_join_srcb_is_array requires gate, moved here so the unified pattern asks the adapter)
+    let isGroupJoin = c.single_name |> key_exists("join") && c.single_name["join"] == "group_join"
     var whereLam : Expression?
     if (c.single |> key_exists("trailing_where")) {
         whereLam = joinCall != null && c.single["trailing_where"] != null ? c.single["trailing_where"].arguments[1] : null
@@ -5610,7 +5650,10 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     var leadWhereLam = extract_join_lead_where(c)
     if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
     let countOnly = c.single |> key_exists("term")
-    if (!countOnly && ctx.expr_is_iterator) return null
+    // Bail to tier-2 when this splice can't handle the shape: a group join with a trailing where/select/count
+    // (only the result projection + an optional lead `where` splice for group joins), or any non-count
+    // iterator-typed context.
+    if ((isGroupJoin && (countOnly || whereLam != null || selectLam != null)) || (!countOnly && ctx.expr_is_iterator)) return null
     var topSrc = ctx.src->arrayTop()
     if (topSrc == null || topSrc._type == null || topSrc._type.firstType == null) return null
     var srcbSrc = joinCall.arguments[1]
@@ -5629,7 +5672,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     var keybBody = peel_lambda_rename_var(keybLam, tupBName)
     if (keyaBody == null || keybBody == null) return null
     let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "ajoin", at)
+    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, isGroupJoin, "ajoin", at)
     if (pieces == null) return null
     var allStmts : array<Expression?>
     allStmts |> push_from(pieces.preludeStmts)

@@ -605,8 +605,14 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         let lb_fresh = "__lb__"
         var keya_body = rename_var_in_expr(parts.keya_body, parts.larg_name, la_fresh)
         var keyb_body = rename_var_in_expr(parts.keyb_body, parts.rarg_name, lb_fresh)
-        // Auto-type the result lambda's args when untyped — symmetric with `on`, which accepts `(l,r)=>...` without types. Lets users write `_join(..., $(l,r)=>l.id==r.id, $(l,r)=>(l.x,r.y))` against any source — including from_decs_template(type<T>) where the iterator element is a tuple<...> that's painful to spell out by hand. Plain `_join` only: `_left_join` / `_right_join` / `_full_outer_join` need Option<T> on one or both sides, so their untyped result lambdas must stay user-spelled.
-        if (fnName == "join") {
+        // Auto-type the result lambda's args when untyped — symmetric with `on`, which accepts `(l,r)=>...`
+        // without types. Lets users write `_join(..., $(l,r)=>l.id==r.id, $(l,r)=>(l.x,r.y))` against any source
+        // — including from_decs_template(type<T>) where the iterator element is a tuple<...> painful to spell by
+        // hand. param0 is always TA; param1 comes from `result_param1_type`: plain `_join` → TB; `_group_join` →
+        // array<TB>. `_left_join` / `_right_join` / `_full_outer_join` need Option<T> on one or both sides, so they
+        // return null and their untyped result lambdas stay user-spelled.
+        var p1type = self.result_param1_type(iterTypeB, call.at)
+        if (p1type != null) {
             var resultArg = call.arguments[3]
             if (resultArg != null && resultArg is ExprMakeBlock) {
                 var rblk = (resultArg as ExprMakeBlock)._block
@@ -616,7 +622,7 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
                             && (rb.arguments[0]._type == null || rb.arguments[0]._type.isAutoOrAlias)
                             && (rb.arguments[1]._type == null || rb.arguments[1]._type.isAutoOrAlias)) {
                         rb.arguments[0]._type = clone_type(iterTypeA)
-                        rb.arguments[1]._type = clone_type(iterTypeB)
+                        rb.arguments[1]._type = p1type
                     }
                 }
             }
@@ -631,6 +637,11 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         res.force_at(call.at)
         return res
     }
+    // param1 element type for an untyped 2-arg result lambda, or null to leave it user-spelled (the Option-side
+    // outer joins). param0 is always TA. Plain join → TB; group join → array<TB>.
+    def result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
+        return null
+    }
 }
 
 [call_macro(name="_join")]
@@ -644,6 +655,30 @@ class private LinqJoin : AstCallMacro_LinqJoinBase {
     //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
     //!       $(p : Person, pet : Pet) => (p.name, pet.name))
     override fnName = "join"
+    def override result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
+        return clone_type(iterTypeB)
+    }
+}
+
+[call_macro(name="_group_join")]
+class private LinqGroupJoin : AstCallMacro_LinqJoinBase {
+    //! implements _group_join(srca, srcb, on, result) shorthand — C# GroupJoin (outer).
+    //! Same `on` equi-key shape as _join, but `result`'s right-side parameter is
+    //! `array<TB>`: every TA surfaces, paired with the array of matching TB
+    //! (empty when none match).
+    //! for example::
+    //!
+    //!   each(persons)._group_join(each(pets),
+    //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
+    //!       $(p : Person, pets : array<Pet>) => (p.name, pets |> length))
+    override fnName = "group_join"
+    def override result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
+        // array<TB> — the match collection. Clear const/ref so it's a bare element array, matching the bucket type.
+        var elemB = clone_type(iterTypeB)
+        elemB.flags.constant = false
+        elemB.flags.ref = false
+        return new TypeDecl(baseType = Type.tArray, at = at, firstType = elemB)
+    }
 }
 
 [call_macro(name="_left_join")]

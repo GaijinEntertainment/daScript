@@ -69,7 +69,7 @@ Partitioning data (*)
      chunk, chunk_to_array - Splits an iterable into chunks of a specified size
 Join and group operations (*)
      join, join_to_array - Joins two iterables based on a key (inner join)
-     group_join, group_join_to_array - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
+     group_join, group_join_to_array - Group-joins two iterables on a key (C# GroupJoin / outer): every left element surfaces, paired with the sequence of matching right elements — an empty sequence when none match
      group_by, group_by_to_array - Groups elements in an iterable by a key
 Querying data (*)
      any - Returns true if the iterable has at least one element (or at least one element which satisfies the predicate)
@@ -1826,9 +1826,14 @@ def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
     var buffer : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&>
     for (ita in srca) {
         let k = _::unique_key(keya(ita))
-        tableb.get(k, $(var arr){
+        // C# GroupJoin semantics: every left row surfaces. `get` returns false when the key is absent — then
+        // the left row pairs with an empty group (matching LEFT JOIN … GROUP BY, not an inner join).
+        if (!tableb.get(k, $(var arr){
             buffer.push_clone(result(ita, arr))
-        })
+        })) {
+            var empty : array<TB -const -&>
+            buffer.push_clone(result(ita, empty))
+        }
     }
     return <- buffer
 }
@@ -1839,7 +1844,7 @@ def private group_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : a
 }
 
 def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    //! we pass TA, and sequence of TB to 'result'
+    //! C# GroupJoin (outer): `result` receives every TA paired with the array of matching TB — an empty array when none match.
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
@@ -1854,12 +1859,12 @@ def group_join(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; keya
 }
 
 def group_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    //! we pass TA, and sequence of TB to 'result'
+    //! C# GroupJoin (outer): `result` receives every TA paired with the array of matching TB — empty when none match.
     return <- group_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
 def group_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    //! we pass TA, and sequence of TB to 'result'
+    //! C# GroupJoin (outer), returning an array: every TA paired with the array of matching TB — empty when none match.
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 

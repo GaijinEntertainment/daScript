@@ -317,6 +317,8 @@ class XmlAdapter : SourceAdapter {
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         // XML standalone join: hashed equi-join collecting srcB into a table, then probing from the
         // field-pruned DOM walk (mirrors emit_array_join, but srcA is the XML node, not an array param).
+        // group join over an XML source isn't spliced yet — defer to tier-2 (the array adapter handles it).
+        if (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join") return null
         var joinCall = c.single["join"]
         if (!srcb_is_array_shaped(c, "join")) return null
         var whereLam : Expression?
@@ -353,7 +355,7 @@ class XmlAdapter : SourceAdapter {
         var keybBody = peel_lambda_rename_var(keybLam, tupBName)
         if (keyaBody == null || keybBody == null) return null
         let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-        var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, "xjoin", at)
+        var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "xjoin", at)
         if (pieces == null) return null
         var allStmts : array<Expression?>
         allStmts |> push_from(pieces.preludeStmts)
