@@ -17,7 +17,10 @@ def test_worker_index_round_trip(tt : T?) {
         if (idx + 1 >= length(args)) {
             return
         }
+        // Worker indices are 1-based (dastest passes --worker-index t+1, so a client
+        // can map index N -> live-API port 9090+N and leave 9090 free); with the 4
+        // threads test_isolated_mode launches, they span [1, 4].
         let val = to_int(args[idx + 1])
-        t |> success(val >= 0 && val < 4, "worker_index {val} out of range [0, 4)")
+        t |> success(val >= 1 && val <= 4, "worker_index {val} out of range [1, 4]")
     }
 }

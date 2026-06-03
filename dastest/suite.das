@@ -36,6 +36,7 @@ struct SuiteCtx {
     cov_path : string = ""
     debugger : bool = false
     keep_alive : bool = false
+    stackOnException : bool = false
 
     // Testing-related options.
     testNames : array<string>
@@ -91,6 +92,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.bench_enabled = args.bench
     ctx.keep_alive = args.keep_alive
     ctx.debugger = args.debugger
+    ctx.stackOnException = args.stack_on_exception
     let bench_format = args.bench_format
     if (bench_format == "go") {
         ctx.bench_format = BenchmarkOutputFormat.go_export
@@ -107,7 +109,7 @@ struct FileCtx {
     uriPaths : bool = false
     indenting : string = ""
     verbose : bool = false
-    stackOnRecover : bool = true
+    stackOnException : bool = false
     expectFailure : bool = false
 }
 
@@ -122,7 +124,7 @@ def FileCtx(ctx : SuiteCtx) : FileCtx {
 
 
 def private internalFileCtx(ctx : SuiteCtx) : FileCtx {
-    return <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose)
+    return <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose, stackOnException = ctx.stackOnException)
 }
 
 
@@ -308,6 +310,11 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         fileCtx.context = addr(context)
         modPtr = addr(mod)
     }
+    // Walk the call stack at throw time (stack intact → real frames) rather than after
+    // the panic unwinds (the old post-unwind walk reported sp=0 with no frames).
+    if (fileCtx.stackOnException) {
+        context.alwaysStackWalkOnException = true
+    }
     modPtr |> module_for_each_function() $(f) {
         if (f.hash == 0ul) return
         let func = context |> get_function_by_mnh(f.hash)
@@ -490,9 +497,6 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
                 if (empty(testLocation)) {
                     testLocation = "{loc}"
                 }
-            }
-            if (context.stackOnRecover) {
-                *context.context |> stackwalk(context.context.exceptionAt)
             }
         }
     }

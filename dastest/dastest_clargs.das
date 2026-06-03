@@ -86,6 +86,9 @@ struct DastestArgs {
     @clarg_doc = "Set cop.keep_alive so _KeepAlive SimNode variants get dispatched"
     keep_alive : bool = false
 
+    @clarg_doc = "On a test panic, walk the call stack at throw time (real frames + line info, args via context settings) instead of the post-unwind walk that reports sp=0 with no frames. Sets the test context's alwaysStackWalkOnException. Off by default: a test that swallows a panic via try/recover would also emit a walk — enable for debugging a failing/crashing test"
+    stack_on_exception : bool = false
+
     // Could use an enum here, but the strings would
     // be different from the original ones, so may
     // not be worth it.
