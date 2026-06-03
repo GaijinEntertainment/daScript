@@ -820,19 +820,53 @@ static inline void das_stable_insertion_run_r(unsigned char *data, size_t lo, si
     }
 }
 
+// Threshold for switching one-at-a-time merge → galloping (batched) mode. Below 7
+// consecutive wins from one side we stay one-at-a-time (no extra comparisons, no
+// memcpy-call overhead on random data); a longer streak triggers a bulk run copy
+// (the case that dominates on partially-ordered input). Classic timsort constant.
+static constexpr int DAS_STABLE_MIN_GALLOP = 7;
+
 // Merge sorted runs [l,m) and [m,r) from src into dst. Stable: takes the left
-// element on a tie (right < left false).
+// element on a tie (right < left false). Galloping batches whole-run copies once
+// one side wins a streak — turns the per-element copy loop into bulk memcpy on
+// structured data, where the element-wise copy would otherwise dominate.
 template <typename Compare>
 static inline void das_stable_merge_runs_r(const unsigned char *src, unsigned char *dst,
                                            size_t l, size_t m, size_t r, size_t width, Compare cmp)
 {
     size_t i = l, j = m, k = l;
     while (i < m && j < r) {
-        if (cmp(src + j * width, src + i * width)) { sized_memcpy(dst + (k++) * width, src + j * width, width); j++; }
-        else                                       { sized_memcpy(dst + (k++) * width, src + i * width, width); i++; }
+        int cl = 0, cr = 0;
+        for (;;) {                                                          // one-at-a-time
+            if (cmp(src + j * width, src + i * width)) {                     // right < left
+                sized_memcpy(dst + k * width, src + j * width, width); k++; j++;
+                cr++; cl = 0;
+                if (j >= r) goto done;
+                if (cr >= DAS_STABLE_MIN_GALLOP) break;
+            } else {                                                        // left <= right (stable)
+                sized_memcpy(dst + k * width, src + i * width, width); k++; i++;
+                cl++; cr = 0;
+                if (i >= m) goto done;
+                if (cl >= DAS_STABLE_MIN_GALLOP) break;
+            }
+        }
+        for (;;) {                                                          // galloping
+            size_t is = i;                                                  // left run: src[i..] <= src[j]
+            while (i < m && !cmp(src + j * width, src + i * width)) i++;
+            size_t lenL = i - is;
+            if (lenL) { memcpy(dst + k * width, src + is * width, lenL * width); k += lenL; if (i >= m) goto done; }
+            sized_memcpy(dst + k * width, src + j * width, width); k++; j++; if (j >= r) goto done;
+            size_t js = j;                                                  // right run: src[j..] < src[i]
+            while (j < r && cmp(src + j * width, src + i * width)) j++;
+            size_t lenR = j - js;
+            if (lenR) { memcpy(dst + k * width, src + js * width, lenR * width); k += lenR; if (j >= r) goto done; }
+            sized_memcpy(dst + k * width, src + i * width, width); k++; i++; if (i >= m) goto done;
+            if (lenL < size_t(DAS_STABLE_MIN_GALLOP) && lenR < size_t(DAS_STABLE_MIN_GALLOP)) break;
+        }
     }
-    if (i < m) { memcpy(dst + k * width, src + i * width, (m - i) * width); k += (m - i); }
-    if (j < r) { memcpy(dst + k * width, src + j * width, (r - j) * width); }
+done:
+    if (i < m) memcpy(dst + k * width, src + i * width, (m - i) * width);
+    if (j < r) memcpy(dst + k * width, src + j * width, (r - j) * width);
 }
 
 // Byte-pointer stable sort — the daslang interp any-cblock binding path.
@@ -932,10 +966,36 @@ static inline void das_stable_merge_runs_t(const T *src, T *dst, size_t l, size_
 {
     size_t i = l, j = m, k = l;
     while (i < m && j < r) {
-        if (cmp(src[j], src[i])) { memcpy(&dst[k++], &src[j++], sizeof(T)); }
-        else                     { memcpy(&dst[k++], &src[i++], sizeof(T)); }
+        int cl = 0, cr = 0;
+        for (;;) {                                                          // one-at-a-time
+            if (cmp(src[j], src[i])) {                                       // right < left
+                memcpy(&dst[k++], &src[j++], sizeof(T));
+                cr++; cl = 0;
+                if (j >= r) goto done;
+                if (cr >= DAS_STABLE_MIN_GALLOP) break;
+            } else {                                                        // left <= right (stable)
+                memcpy(&dst[k++], &src[i++], sizeof(T));
+                cl++; cr = 0;
+                if (i >= m) goto done;
+                if (cl >= DAS_STABLE_MIN_GALLOP) break;
+            }
+        }
+        for (;;) {                                                          // galloping
+            size_t is = i;                                                  // left run: src[i..] <= src[j]
+            while (i < m && !cmp(src[j], src[i])) i++;
+            size_t lenL = i - is;
+            if (lenL) { memcpy(&dst[k], &src[is], lenL * sizeof(T)); k += lenL; if (i >= m) goto done; }
+            memcpy(&dst[k++], &src[j++], sizeof(T)); if (j >= r) goto done;
+            size_t js = j;                                                  // right run: src[j..] < src[i]
+            while (j < r && cmp(src[j], src[i])) j++;
+            size_t lenR = j - js;
+            if (lenR) { memcpy(&dst[k], &src[js], lenR * sizeof(T)); k += lenR; if (j >= r) goto done; }
+            memcpy(&dst[k++], &src[i++], sizeof(T)); if (i >= m) goto done;
+            if (lenL < size_t(DAS_STABLE_MIN_GALLOP) && lenR < size_t(DAS_STABLE_MIN_GALLOP)) break;
+        }
     }
-    if (i < m) { memcpy(&dst[k], &src[i], (m - i) * sizeof(T)); k += (m - i); }
+done:
+    if (i < m) { memcpy(&dst[k], &src[i], (m - i) * sizeof(T)); }
     if (j < r) { memcpy(&dst[k], &src[j], (r - j) * sizeof(T)); }
 }
 
