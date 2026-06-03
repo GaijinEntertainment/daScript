@@ -183,8 +183,15 @@ Callback reference
      - Return ``true`` if the module ``mod`` may use ``unsafe`` blocks.
        When absent, ``unsafe`` is allowed everywhere.
    * - ``option_allowed(opt, from : string) : bool``
-     - Return ``true`` if the ``options`` directive ``opt`` is accepted.
-       When absent, all options are allowed.
+     - Return ``true`` if the ``options`` directive ``opt`` is permitted to appear.
+       A permitted option is applied unless ``option_blocked`` also returns
+       ``true`` for it. When absent, all options are allowed.
+   * - ``option_blocked(opt, from : string) : bool``
+     - Return ``true`` if the ``options`` directive ``opt`` is *tolerated but
+       ignored* — it may appear in source without error, but is not applied.
+       Only consulted for options that ``option_allowed`` already accepted; a
+       not-allowed option is always a hard error. When absent, no allowed
+       option is blocked.
    * - ``annotation_allowed(ann, from : string) : bool``
      - Return ``true`` if the annotation ``ann`` is accepted.
        When absent, all annotations are allowed.
@@ -248,7 +255,12 @@ A project file can lock down the scripting environment by combining
 
    [export]
    def option_allowed(opt, from : string) : bool {
-       return opt == "gen2" || opt == "indenting"
+       return opt == "gen2" || opt == "indenting" || opt == "persistent_heap"
+   }
+
+   [export]
+   def option_blocked(opt, from : string) : bool {
+       return opt == "persistent_heap"    // allowed in source, but ignored
    }
 
    [export]
@@ -258,6 +270,8 @@ A project file can lock down the scripting environment by combining
 
 With this project file, user scripts cannot ``require daslib/fio``, use ``unsafe``
 blocks, enable ``options rtti``, or apply annotations like ``[function_macro]``.
+An ``options persistent_heap`` directive compiles without error but is silently
+ignored (it is allowed, then blocked), whereas any un-allowed option is rejected.
 
 .. seealso::
 

@@ -227,6 +227,7 @@ namespace das
         virtual void serialize ( AstSerializer & ser );
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const;
         virtual bool isOptionAllowed ( const string & /*opt*/, const string & /*from*/ ) const { return true; }
+        virtual bool isOptionBlocked ( const string & /*opt*/, const string & /*from*/ ) const { return false; }
         virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const { return true; }
         // must stop at word boundary
         virtual bool parseCustomRequire(const char *& /*src*/, const char * /*srcEnd*/,
@@ -270,6 +271,7 @@ namespace das
         virtual void serialize ( AstSerializer & ser ) override;
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const override;
         virtual bool isOptionAllowed ( const string & opt, const string & from ) const override;
+        virtual bool isOptionBlocked ( const string & opt, const string & from ) const override;
         virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const override;
         virtual bool isPodInScopeAllowed ( const string & /*moduleName*/, const string & /*fileName*/ ) const override;
     protected:
@@ -281,6 +283,7 @@ namespace das
         SimFunction *       canModuleBeRequired = nullptr;
         SimFunction *       sameFileName = nullptr;
         SimFunction *       optionAllowed = nullptr;
+        SimFunction *       optionBlocked = nullptr;
         SimFunction *       annotationAllowed = nullptr;
         SimFunction *       podInScopeAllowed = nullptr;
         SimFunction *       dynModulesFolderGet = nullptr;
