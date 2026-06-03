@@ -341,6 +341,29 @@ def test_groupjoin(t : T?) {
             }
         }
     }
+    t |> run("group join — unmatched left row surfaces an empty group (C# GroupJoin / outer)") @(t : T?) {
+        // Orphan has no pets. Outer GroupJoin keeps every left row — Orphan must surface with an empty group.
+        let all_persons <- [magnus, terry, charlotte, Person(name = "Orphan", age = 99)]
+        var query = group_join(
+            all_persons,
+            pets,
+            $(p : Person) => p.name,
+            $(pet : Pet) => pet.owner.name,
+            $(p : Person, var pets : array<Pet>) => (p.name, length(pets))
+        )
+        t |> equal(query |> length, 4, "every left row surfaces, including the orphan")
+        var found_orphan = false
+        for (row in query) {
+            if (row._0 == "Hedlund, Magnus") { t |> equal(row._1, 1) }
+            if (row._0 == "Adams, Terry")    { t |> equal(row._1, 2) }
+            if (row._0 == "Weiss, Charlotte"){ t |> equal(row._1, 1) }
+            if (row._0 == "Orphan") {
+                t |> equal(row._1, 0, "unmatched left → empty group, count 0")
+                found_orphan = true
+            }
+        }
+        t |> success(found_orphan)
+    }
 }
 
 [test]

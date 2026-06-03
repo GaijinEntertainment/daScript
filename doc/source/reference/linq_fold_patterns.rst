@@ -456,6 +456,19 @@ equi-key gate as the decs side; non-primitive keys cascade to
        ``join`` is the separate trailing slot. Composes with the trailing
        ``_where`` / ``_select`` forms. Wrapping lives in the shared
        ``build_join_standalone_pieces``, so decs / XML inherit it.
+   * - ``arrA |> _group_join(arrB, on, into)`` (+ optional leading ``_where``)
+     - pattern ``join_general`` with the ``group_join`` literal (``isGroupJoin``)
+     - C# GroupJoin (**outer**): one result row per srcA row — ``result(a,
+       bucket)`` pushed once (no per-pair loop), plus ``if (!get(...)) { var
+       empty; push result(a, empty) }`` so an unmatched srcA still surfaces
+       (empty group). The join slot matcher is ``one_of ["join",
+       "group_join"]``; ``isGroupJoin`` threads through
+       ``build_join_standalone_pieces``, which rebinds the result lambda's 2nd
+       param to the whole bucket (``array<TUPB>``) so the per-group aggregate
+       runs inside the result. **Array sources only** — decs / XML group joins
+       defer to tier-2 (their ``emit_join_hook`` returns ``null`` for
+       ``group_join``); a trailing ``where`` / ``select`` / ``count`` over the
+       group rows also defers.
    * - ``arrA |> _join(arrB, ...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
      - ``plan_group_by_core`` via ``SourceAdapter.ArrayJoin`` (chunk N+2)
      - Cross-arm composition. ``emit_group_by``'s Array branch

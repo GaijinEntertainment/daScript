@@ -115,6 +115,29 @@ range variable.
     let located <- %linq! from c in cars join h in hqs on c.brand equals h.brand
                           select (car = c.name, country = h.country) %%
 
+group join (join ... into g)
+============================
+
+``join ... equals ... into g`` is C# ``GroupJoin``: ``g`` binds the array of
+*matching right rows* alongside the left variable, and the terminal ``select``
+reads both. It is **outer** -- every left row surfaces, an unmatched one with an
+empty group. Below, the cars are grouped under each brand HQ; ``"tesla"`` has no
+cars, so it still appears with count 0.
+
+.. code-block:: das
+
+    let perHq <- %linq! from h in hqs2
+                        join c in cars on h.brand equals c.brand into g
+                        select (brand = h.brand,
+                                country = h.country,
+                                n     = g |> length,
+                                total = g |> select($(u : Car) => u.price) |> sum) %%
+    // output (one row per HQ; tesla has n=0 total=0)
+
+It is array-source, select-terminal only (a pre-join ``where`` is allowed); over
+a SQL source the group join is in-memory only. See :ref:`linq_das_join` for the
+exact scope.
+
 .. seealso::
 
    :ref:`linq_das` — the full ``%linq!`` clause grammar, the four sources, and

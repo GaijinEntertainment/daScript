@@ -30,14 +30,16 @@ Clauses
 -------
 
 A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
-[ : <Row2> ] in <src2> on <keyA> equals <keyB> | from <var2> [ : <Row2> ] in
+[ : <Row2> ] in <src2> on <keyA> equals <keyB> [ into <g> ] | from <var2> [ : <Row2> ] in
 <src2> ) ] [ where <pred> ] [ orderby <expr> [ascending|descending] (, <expr> [ascending|descending])* ] ( select <proj> |
 group <var> by <key> ) [ into <var> <continuation> ] [ iterator ]`` — a second
 range variable comes from **either** a ``join`` **or** a second ``from`` (never
 both), and at most one of the two ``where`` slots may appear (before *or* after
-that clause, never both). A trailing ``into <var>`` rebinds the stage's output to
-a new range variable and the query continues from there (see
-:ref:`linq_das_into`); ``into`` is supported on **single-source** queries.
+that clause, never both). ``into`` has two forms: ``join … equals … into <g>`` is
+a **group join** (``g`` = the array of matching right rows, in scope with the
+left variable — see :ref:`linq_das_join`), while a trailing ``into <var>`` after
+the terminal is a **query continuation** that rebinds the stage's output and
+continues from there (single-source only — see :ref:`linq_das_into`).
 Separately, a ``let <name> = <expr>`` binding may appear **any number of times
 between body clauses** — it is inlined away before the rest is parsed (see
 :ref:`linq_das_let`):
@@ -346,9 +348,35 @@ select-terminal join, or filter pre-join, to push down):
     var byCountry <- %linq! from c in cars join b in brands on c.brand equals b.brand
                             group c by b.country %%
 
+**Group join** (``join … equals … into <g>``) — C# ``GroupJoin``. ``into g``
+binds ``g`` to the *array of matching right rows* alongside the left range
+variable; the terminal ``select`` reads both. It is **outer** — every left row
+surfaces, an unmatched one paired with an **empty** group. The reader emits
+``_group_join``, which fuses through the same join splice (a pre-join ``where``
+included), so the per-group aggregate runs in one hash-build + probe with no
+intermediate:
+
+.. code-block:: das
+
+    // every brand with how many cars it has — a carless brand surfaces with 0
+    var perBrand <- %linq! from b in brands join c in cars on b.brand equals c.brand into g
+                           select (Brand = b.brand, N = g |> length) %%
+
+    // aggregate over the group (sum of the matching cars' prices)
+    var totals <- %linq! from b in brands join c in cars on b.brand equals c.brand into g
+                         select (Brand = b.brand, Total = g |> select($(c : Car) => c.price) |> sum) %%
+
+``join … into`` is **select-terminal + a pre-join ``where`` + a trailing
+``iterator``** only, and **array sources only**: ``_group_join`` has no SQL
+push-down (over a SQL source it rejects — write the aggregate in raw SQL
+instead), and decs / XML group-joins are not yet fused. A post-``into`` ``where``
+/ ``orderby`` / ``group`` over the ``(left, g)`` pair is rejected — ``g`` is a
+non-copyable array that can't ride the transparent-identifier carry; materialize
+then transform, or drop to the pipe-form ``_group_join``.
+
 Only a **single equi-key** is supported — composite keys (``a equals b && c
-equals d``), group-joins (``join … into g``), multiple joins, and ``orderby``
-before ``group`` are rejected at compile time.
+equals d``), multiple joins, and ``orderby`` before ``group`` are rejected at
+compile time.
 
 .. _linq_das_multifrom:
 

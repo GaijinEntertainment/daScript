@@ -426,6 +426,72 @@ def test_join_group_after(t : T?) {
     }
 }
 
+// ===== join … into g (group-join, C# GroupJoin / outer) =====
+// `into g` binds the array of matching right rows alongside the left row; the terminal `select` reads both.
+// Outer: every left row surfaces — an unmatched left pairs with an empty group. Select-terminal + a pre-join
+// `where` (filters the left source); post-`into` where/orderby/group is rejected (see failed_linq_das). SQL
+// sources reject (group-join is in-memory). brands has a carless "sport" to exercise the empty group.
+
+def private mk_brands3() : array<BrandHQ> {
+    return <- [BrandHQ(brand = "eco", country = "USA"),
+               BrandHQ(brand = "lux", country = "Italy"),
+               BrandHQ(brand = "sport", country = "Germany")]   // no car → outer empty group
+}
+
+[test]
+def test_join_into_group_count(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands3()
+    let rows <- %linq! from b in brands
+                       join c in cars on b.brand equals c.brand into g
+                       select (brand = b.brand, n = g |> length) %%
+    t |> equal(length(rows), 3, "every brand surfaces, including the carless one (outer GroupJoin)")
+    for (r in rows) {
+        if (r.brand == "eco") { t |> equal(r.n, 2, "cheap + mid") }
+        if (r.brand == "lux") { t |> equal(r.n, 1) }
+        if (r.brand == "sport") { t |> equal(r.n, 0, "unmatched left → empty group") }
+    }
+}
+
+[test]
+def test_join_into_group_sum(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    let rows <- %linq! from b in brands
+                       join c in cars on b.brand equals c.brand into g
+                       select (brand = b.brand, total = g |> select($(c : Car) => c.price) |> sum) %%
+    t |> equal(length(rows), 2)
+    for (r in rows) {
+        if (r.brand == "eco") { t |> equal(r.total, 200, "cheap 50 + mid 150") }
+        if (r.brand == "lux") { t |> equal(r.total, 300) }
+    }
+}
+
+[test]
+def test_join_into_pre_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands3()
+    // pre-join `where` filters the left source (brands) before the group-join fuses.
+    let rows <- %linq! from b in brands
+                       where b.country != "Germany"
+                       join c in cars on b.brand equals c.brand into g
+                       select (brand = b.brand, n = g |> length) %%
+    t |> equal(length(rows), 2, "the carless German brand is filtered out before the join")
+    for (r in rows) {
+        if (r.brand == "eco") { t |> equal(r.n, 2) }
+        if (r.brand == "lux") { t |> equal(r.n, 1) }
+    }
+}
+
+[test]
+def test_join_into_iterator(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands3()
+    var n = 0
+    for (_r in %linq! from b in brands join c in cars on b.brand equals c.brand into g select (brand = b.brand, k = g |> length) iterator %%) { n++ }
+    t |> equal(n, 3, "iterator over every brand (outer)")
+}
+
 [test]
 def test_join_string_interpolation_select(t : T?) {
     let cars <- mk_cars()

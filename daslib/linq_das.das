@@ -416,10 +416,12 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         macro_error(prog, at, "linq: at most one 'where' per query is supported")
         return "(0)"
     }
-    // `into` continuations are supported only on single-source queries in this release. Over a `join` /
-    // second-`from` they are not yet supported (group-join `join … into` is coming).
-    if (find_kw_depth0(q, "into", tailStart) >= 0) {
-        macro_error(prog, at, "linq: 'into' continuations over a 'join' / second 'from' are not yet supported — they work on single-source queries (`from … group … into g select …`); 'join … into' group-join is coming")
+    // `into` after a `join … on … equals …` is a group-join (C# GroupJoin) — bound below once the terminal is
+    // located. Over a second `from` (cross / SelectMany) it is not supported; single-source query-continuation
+    // `into` lives in transpile_query.
+    let intoPos = find_kw_depth0(q, "into", tailStart)
+    if (intoPos >= 0 && !isJoin) {
+        macro_error(prog, at, "linq: 'into' over a second 'from' is not supported — group-join 'into' works after a 'join … on … equals …' clause; query-continuation 'into' works on single-source queries")
         return "(0)"
     }
     let orderByPos = find_kw_depth0(q, "orderby", tailStart)
@@ -438,6 +440,37 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     if (isGroup && orderByPos >= 0) {
         macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
         return "(0)"
+    }
+    // `join … into <g>`: group-join. `g` binds the array of matches, in scope with the outer range variable in
+    // the terminal `select`. This release is SELECT-TERMINAL only (a pre-join `where` still filters the left
+    // source); a post-`into` where/orderby/group over the (outer, g) pair needs the non-copyable match-array
+    // carry — not yet supported (use the pipe-form `_group_join`). An `into` past the terminal is plain text in
+    // the `select` projection, not a group-join.
+    var groupIntoVar = ""
+    let groupInto = intoPos >= 0 && intoPos < termPos
+    if (groupInto) {
+        if (isGroup) {
+            macro_error(prog, at, "linq: 'group' after 'join … into' is not yet supported — 'select' the group (e.g. `select (key, g |> length)`), or use the pipe form")
+            return "(0)"
+        }
+        if (orderByPos >= 0) {
+            macro_error(prog, at, "linq: 'orderby' after 'join … into g' is not yet supported — the (outer, g) pair can't be carried (g is a non-copyable array); materialize then sort, or use the pipe form")
+            return "(0)"
+        }
+        let iv = read_ident(q, intoPos + 4)
+        if (iv._0 == "") {
+            macro_error(prog, at, "linq: 'join … into' requires a group variable (e.g. `join b in B on … equals … into g select …`)")
+            return "(0)"
+        }
+        if (iv._0 == JOIN_TI || iv._0 == varName || iv._0 == var2Name) {
+            macro_error(prog, at, "linq: group variable '{iv._0}' must differ from '{varName}', '{var2Name}', and the reserved '{JOIN_TI}'")
+            return "(0)"
+        }
+        if (strip(slice(q, iv._1, termPos)) != "") {
+            macro_error(prog, at, "linq: a 'where' after 'join … into g' is not yet supported — the (outer, g) pair can't be carried; filter with a pre-'join' 'where', or use the pipe form")
+            return "(0)"
+        }
+        groupIntoVar = iv._0
     }
     // Single equi-key only (join) — a second depth-0 `equals` before the terminal is a composite key.
     if (isJoin) {
@@ -465,6 +498,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     var tailEnd = termPos
     if (orderByPos >= 0 && orderByPos < tailEnd) { tailEnd = orderByPos }
     if (postWhere >= 0 && postWhere < tailEnd) { tailEnd = postWhere }
+    if (groupInto && intoPos < tailEnd) { tailEnd = intoPos }   // join key B ends at `into`, before the group var
     let tail = strip(slice(q, tailStart, tailEnd))
     var srcB = srcBForJoin
     var onLambda = ""
@@ -585,16 +619,21 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     // Correlated never uses the carry (rejections + push-down above), so it always emits select-terminal.
     let preWhereClause = preWhere ? " |> _where($({varName}) => {wherePred})" : ""
     let useTI = !correlated && (postWhere >= 0 || hasOrderBy || isGroup)
-    let opName = isJoin ? "_join" : (correlated ? "_select_many" : "_cross_join")
+    // group-join emits `_group_join` (result's 2nd param is the match ARRAY `g`, not a single row); the on-key
+    // lambda is identical to `_join`. In-memory only — `_group_join` is not a SQL-pushable op (over a SQL source
+    // `_sql` rejects it, the documented boundary).
+    let opName = groupInto ? "_group_join" : (isJoin ? "_join" : (correlated ? "_select_many" : "_cross_join"))
     let onLambdaPart = isJoin ? "{onLambda}, " : ""
     return build_string() $(var w) {
         w |> write("( _fold( {srcA}{preWhereClause}")
         if (!useTI) {
-            // Select-terminal: the `select` projection IS the op's result selector (both c, d in scope).
-            // Underscore-prefix a range var the projection doesn't reference (e.g. a scalar `select c.name`
-            // over a cross leaves `b` unused) so the generated lambda is LINT013-clean for the user.
+            // Select-terminal: the `select` projection IS the op's result selector (both range vars in scope —
+            // for a group-join the 2nd is the match array `g`). Underscore-prefix a range var the projection
+            // doesn't reference (e.g. a scalar `select c.name` over a cross leaves `b` unused) so the generated
+            // lambda is LINT013-clean for the user.
+            let rv2 = groupInto ? groupIntoVar : var2Name
             let p1 = mentions_ident(projText, varName) ? varName : "_{varName}"
-            let p2 = mentions_ident(projText, var2Name) ? var2Name : "_{var2Name}"
+            let p2 = mentions_ident(projText, rv2) ? rv2 : "_{rv2}"
             w |> write(" |> {opName}({srcB}, {onLambdaPart}$({p1}, {p2}) => {projText})")
         } else {
             // Transparent-id: carry (c, d); post-source clauses rewrite c/d to the carried fields and

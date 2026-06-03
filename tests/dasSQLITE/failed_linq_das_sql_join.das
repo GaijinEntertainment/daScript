@@ -35,3 +35,4 @@ def trigger_join_transparent_id() {
         unused(r)
     }
 }
+
