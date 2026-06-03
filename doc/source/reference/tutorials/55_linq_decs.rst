@@ -153,3 +153,5 @@ live in ``benchmarks/sql/results.md`` in the source tree.
    Full source: :download:`tutorials/language/55_linq_decs.das <../../../../tutorials/language/55_linq_decs.das>`
 
    Previous tutorial: :ref:`tutorial_glob`
+
+   Next tutorial: :ref:`tutorial_linq_query`

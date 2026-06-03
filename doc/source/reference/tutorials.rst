@@ -84,6 +84,7 @@ introduced in earlier tutorials.
    tutorials/53_clargs.rst
    tutorials/54_glob.rst
    tutorials/55_linq_decs.rst
+   tutorials/56_linq_query.rst
 
 .. _tutorials_building_from_sdk:
 

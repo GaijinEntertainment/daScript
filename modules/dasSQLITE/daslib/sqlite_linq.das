@@ -1765,7 +1765,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
-                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, or `_order_by((_.k1, _.k2))` for all-ascending multi-column)")
+                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, `_order_by((_.k1, _.k2))` for all-ascending, or `_order_by_descending((_.k1, _.k2))` for all-descending multi-column)")
                 return false
             }
             var body = peel_lambda_single_return(obCall.arguments[1])
@@ -1786,7 +1786,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             let dr = maybe_divert(q, PHASE_ORDER_BY, node, prog, at)
             if (dr != 0) return dr > 0
             if (q.seenOrderBy) {
-                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, or `_order_by((_.k1, _.k2))` for all-ascending multi-column)")
+                macro_error(prog, at, "_sql: ordering can appear at most once in the chain (use `_order_by_keys((_.k1, _.k2), mask)` for mixed directions, `_order_by((_.k1, _.k2))` for all-ascending, or `_order_by_descending((_.k1, _.k2))` for all-descending multi-column)")
                 return false
             }
             var body = peel_lambda_single_return(odCall.arguments[1])

@@ -29,6 +29,10 @@ expect 50503   // let: binding reuses the second range variable (a `let` after t
 expect 50503   // let: binding reuses the second range variable (a `let` before the join)
 expect 50503   // orderby: more than 4 keys (eager less_masked caps at 4-arity)
 expect 50503   // orderby: a direction-only segment (no key expression)
+expect 50503   // into: missing continuation range variable
+expect 50503   // into: `into <id>` with no following clause (continuation is empty)
+expect 50503   // into: continuation range var collides with the reserved transparent-id name
+expect 50503   // into: trailing `iterator` cannot precede an `into` continuation
 
 require daslib/linq_das
 require strings
@@ -226,5 +230,32 @@ def trigger_orderby_direction_only_segment() {
     var cars <- one_car()
     // a comma segment that is only a direction keyword has no key expression
     let x <- %linq! from c in cars orderby c.price, descending select c %%
+    unused(x)
+}
+
+def trigger_into_missing_var() {
+    var cars <- one_car()
+    // `into` with no continuation range variable
+    let x <- %linq! from c in cars select c.name into %%
+    unused(x)
+}
+
+def trigger_into_no_continuation() {
+    var cars <- one_car()
+    // `into n` with nothing after it — the continuation is empty
+    let x <- %linq! from c in cars select c.name into n %%
+    unused(x)
+}
+
+def trigger_into_reserved_var_name() {
+    var cars <- one_car()
+    let x <- %linq! from c in cars select c.name into linq_join_ti select linq_join_ti %%
+    unused(x)
+}
+
+def trigger_into_iterator_before_into() {
+    var cars <- one_car()
+    // a trailing `iterator` must be the final clause, not before an `into`
+    let x <- %linq! from c in cars select c.name iterator into n select n %%
     unused(x)
 }

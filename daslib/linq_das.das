@@ -109,8 +109,10 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
             if (c == '"') { inStr = true; prevSig = c; i++; continue }
             if (c == '(' || c == '[' || c == '{') { depth++; prevSig = c; i++; continue }
             if (c == ')' || c == ']' || c == '}') { depth--; prevSig = c; i++; continue }
-            // a clause keyword is a depth-0 whole word NOT preceded (ignoring whitespace) by `.`
-            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.'
+            // A clause keyword is a depth-0 whole word NOT preceded (ignoring whitespace) by `.` (member
+            // access) or `>` (the tail of a pipe `|>`, lambda arrow `=>`, or `->`) — so an aggregate like
+            // `g |> select(...) |> sum` inside an orderby/where body is not mistaken for a `select` clause.
+            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.' && prevSig != '>'
             if (depth == 0 && atWordStart && i + m <= n && slice(q, i, i + m) == kw) {
                 if (i + m == n || !is_ident_byte(int(arr[i + m]))) {
                     found = i
@@ -410,9 +412,10 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         macro_error(prog, at, "linq: at most one 'where' per query is supported")
         return "(0)"
     }
-    // `join … into g` (group-join) and `select … into` continuations are not yet supported.
+    // `into` continuations are supported only on single-source queries in this release. Over a `join` /
+    // second-`from` they are not yet supported (group-join `join … into` is coming).
     if (find_kw_depth0(q, "into", tailStart) >= 0) {
-        macro_error(prog, at, "linq: 'into' continuations (group-join `join … into`, query continuation) are not yet supported")
+        macro_error(prog, at, "linq: 'into' continuations over a 'join' / second 'from' are not yet supported — they work on single-source queries (`from … group … into g select …`); 'join … into' group-join is coming")
         return "(0)"
     }
     let orderByPos = find_kw_depth0(q, "orderby", tailStart)
@@ -560,7 +563,10 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         // Zero-copy collection selector: `each` borrows the outer's collection — no per-row clone (unlike
         // `to_sequence`, whose const-array overload clones) and no per-row materialize (unlike `where_`'s
         // array overload). An inner-only post-`where` fuses onto the borrowed iterator (the iterator overload
-        // of `where_` stays lazy). `each` outside a for-loop needs the `unsafe` wrap.
+        // of `where_` stays lazy). `each` outside a for-loop needs the `unsafe` wrap. Borrowing a TEMPORARY
+        // tail (e.g. `from x in [c.id]` or a func result) is still safe: daslang heap-allocates arrays and
+        // does NOT auto-finalize on scope exit, so the backing storage outlives the borrow (it is reclaimed
+        // by GC, not at the end of the enclosing expression) — no use-after-free.
         if (postWhere >= 0) {
             srcB = "$({varName}) => unsafe(each({tail})) |> _where($({var2Name}) => {wherePred})"
         } else {
@@ -817,6 +823,226 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
     return (true, "{slice(q, 0, srcEnd)}{body}")
 }
 
+// A2 rewrite for a `group … into g` continuation: the group is a `tuple<key; array<members>>`, so `g.key`
+// addresses the key (`g._0`) and a bare `g` is the member collection (`g._1`). Scans like substitute_idents
+// (string/interpolation aware, member access after `.` skipped), but specialised: a standalone `g` followed
+// by `.key` (a full word) becomes `g._0` (consuming the `.key`); any other standalone `g` becomes `g._1`.
+def private rewrite_group_var(text : string; gname : string) : string {
+    return build_string() $(var w) {
+        peek_data(text) $(arr) {
+            let n = length(arr)
+            var i = 0
+            var inStr = false   // inside a "…" literal (plain content portion)
+            var interp = 0      // brace depth inside a string interpolation (>0 ⇒ code mode within the string)
+            var prevSig = 0     // last significant (non-whitespace) byte, 0 = none
+            while (i < n) {
+                let c = int(arr[i])
+                if (inStr && interp == 0) {
+                    if (c == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
+                    w |> write(slice(text, i, i + 1))
+                    if (c == '"') { inStr = false; prevSig = c }
+                    elif (c == '{') { interp = 1; prevSig = 0 }
+                    i++
+                    continue
+                }
+                if (c == '"') {
+                    if (interp > 0) {
+                        w |> write(slice(text, i, i + 1)); i++
+                        while (i < n) {
+                            let cc = int(arr[i])
+                            if (cc == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
+                            w |> write(slice(text, i, i + 1)); i++
+                            if (cc == '"') break
+                        }
+                        prevSig = '"'
+                        continue
+                    }
+                    inStr = true; prevSig = c; w |> write(slice(text, i, i + 1)); i++
+                    continue
+                }
+                if (interp > 0 && c == '{') { interp ++; w |> write(slice(text, i, i + 1)); prevSig = c; i++; continue }
+                if (interp > 0 && c == '}') {
+                    interp --
+                    w |> write(slice(text, i, i + 1))
+                    prevSig = interp == 0 ? '"' : c
+                    i++
+                    continue
+                }
+                let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1])))
+                if (atWordStart) {
+                    var j = i
+                    while (j < n && is_ident_byte(int(arr[j]))) { j++ }
+                    let word = slice(text, i, j)
+                    if (prevSig != '.' && word == gname) {
+                        // bare `g` (→ `g._1`) unless followed by `.key` (→ `g._0`).
+                        var keyEnd = -1
+                        if (j < n && int(arr[j]) == '.') {
+                            var k = j + 1
+                            while (k < n && is_ident_byte(int(arr[k]))) { k++ }
+                            if (slice(text, j + 1, k) == "key") { keyEnd = k }
+                        }
+                        if (keyEnd >= 0) {
+                            w |> write("{gname}._0")
+                            i = keyEnd
+                        } else {
+                            w |> write("{gname}._1")
+                            i = j
+                        }
+                        prevSig = '_'   // last emitted token is identifier-like, not a `.`
+                        continue
+                    }
+                    w |> write(word)
+                    prevSig = int(arr[j - 1])
+                    i = j
+                    continue
+                }
+                w |> write(slice(text, i, i + 1))
+                if (!is_white_space(c)) { prevSig = c }
+                i++
+            }
+        }
+    }
+}
+
+// One query stage: `[where] [orderby] (select <proj> | group <var> by <key>) [iterator]`, optionally followed
+// by `into <var>` which begins the next stage (C# query continuation). `rangeVar` binds this stage's rows;
+// `isGroupVar` is true when `rangeVar` came from a prior `group … into` (so its clause text gets the A2 rewrite).
+struct private QueryStage {
+    rangeVar : string = ""
+    isGroupVar : bool = false
+    hasWhere : bool = false
+    predText : string = ""
+    hasOrderBy : bool = false
+    orderKeys : array<string>
+    orderDescMask : uint = 0u
+    isGroup : bool = false
+    groupKey : string = ""
+    projText : string = ""
+    identitySelect : bool = false
+    wantIterator : bool = false
+    intoVar : string = ""       // continuation range variable, "" if this is the terminal stage
+    nextStart : int = 0         // offset just past `into <var>` (start of the next stage)
+}
+
+// Parse one stage of a single-source query starting at `start`, binding `rangeVar`. Fills `stage` (incl. the
+// optional `into` continuation). Returns false (after a macro_error) on a malformed stage.
+def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string; isGroupVar : bool;
+                            prog : ProgramPtr; at : LineInfo; var stage : QueryStage) : bool {
+    stage.rangeVar = rangeVar
+    stage.isGroupVar = isGroupVar
+    // The terminal is the earliest select/group from `start` — found FIRST, independent of where/orderby, so
+    // a LATER stage's `where` (after this stage's `into`) cannot hijack this stage's terminal lookup.
+    let selectPos = find_kw_depth0(q, "select", start)
+    let groupPos = find_kw_depth0(q, "group", start)
+    if (selectPos < 0 && groupPos < 0) {
+        macro_error(prog, at, "linq: query must end with a 'select' or 'group … by …' clause")
+        return false
+    }
+    let isGroup = groupPos >= 0 && (selectPos < 0 || groupPos < selectPos)
+    let termPos = isGroup ? groupPos : selectPos
+    let otherPos = isGroup ? selectPos : groupPos
+    let termKwEnd = isGroup ? termPos + 5 : termPos + 6
+    // An `into` after the terminal ends this stage and begins the next.
+    let intoPos = find_kw_depth0(q, "into", termKwEnd)
+    let termEnd = intoPos >= 0 ? intoPos : nq
+    if (otherPos >= 0 && otherPos < termEnd) {
+        macro_error(prog, at, "linq: query cannot have both 'select' and 'group' — they are alternative terminals")
+        return false
+    }
+    stage.isGroup = isGroup
+    // where / orderby belong to THIS stage only when they precede its terminal (in C# clause order).
+    let wherePos = find_kw_depth0(q, "where", start)
+    stage.hasWhere = wherePos >= 0 && wherePos < termPos
+    let orderByPos = find_kw_depth0(q, "orderby", stage.hasWhere ? wherePos + 5 : start)
+    stage.hasOrderBy = orderByPos >= 0 && orderByPos < termPos
+    if (isGroup && stage.hasOrderBy) {
+        macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
+        return false
+    }
+    if (stage.hasWhere) {
+        let predText = strip(slice(q, wherePos + 5, stage.hasOrderBy ? orderByPos : termPos))
+        if (predText == "") {
+            macro_error(prog, at, "linq: empty 'where' predicate")
+            return false
+        }
+        stage.predText = isGroupVar ? rewrite_group_var(predText, rangeVar) : predText
+    }
+    if (stage.hasOrderBy) {
+        let rawOrder = strip(slice(q, orderByPos + 7, termPos))
+        var op <- parse_orderby(rawOrder)
+        if (!op.ok) {
+            macro_error(prog, at, "linq: empty 'orderby' expression")
+            return false
+        }
+        if (length(op.keys) > 4) {
+            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
+            return false
+        }
+        if (isGroupVar) {
+            stage.orderKeys <- [for (k in op.keys); rewrite_group_var(k, rangeVar)]
+        } else {
+            stage.orderKeys <- op.keys
+        }
+        stage.orderDescMask = op.descMask
+    }
+    if (isGroup) {
+        let groupBody = strip(slice(q, termPos + 5, termEnd))
+        let byPos = find_kw_depth0(groupBody, "by", 0)
+        if (byPos < 0) {
+            macro_error(prog, at, "linq: 'group' requires a 'by' clause (e.g. `group {rangeVar} by {rangeVar}.field`)")
+            return false
+        }
+        let elem = strip(slice(groupBody, 0, byPos))
+        if (elem != rangeVar) {
+            macro_error(prog, at, "linq: 'group' element must be the range variable '{rangeVar}' — element selectors are not yet supported (write `group {rangeVar} by …`)")
+            return false
+        }
+        let gk = strip_trailing_keyword(strip(slice(groupBody, byPos + 2, length(groupBody))), "iterator")
+        let groupKey = gk._0
+        stage.wantIterator = gk._1
+        if (groupKey == "") {
+            macro_error(prog, at, "linq: empty 'group … by' key expression")
+            return false
+        }
+        stage.groupKey = isGroupVar ? rewrite_group_var(groupKey, rangeVar) : groupKey
+    } else {
+        let pj = strip_trailing_keyword(strip(slice(q, termPos + 6, termEnd)), "iterator")
+        let projText = pj._0
+        stage.wantIterator = pj._1
+        if (projText == "") {
+            macro_error(prog, at, "linq: empty 'select' projection")
+            return false
+        }
+        stage.identitySelect = (projText == rangeVar)
+        stage.projText = (isGroupVar && !stage.identitySelect) ? rewrite_group_var(projText, rangeVar) : projText
+    }
+    if (intoPos >= 0) {
+        if (stage.wantIterator) {
+            macro_error(prog, at, "linq: 'iterator' must be the final clause — it cannot precede an 'into' continuation")
+            return false
+        }
+        let iv = read_ident(q, intoPos + 4)
+        if (iv._0 == "") {
+            macro_error(prog, at, "linq: 'into' requires a continuation range variable (e.g. `… into g select …`)")
+            return false
+        }
+        if (iv._0 == JOIN_TI) {
+            macro_error(prog, at, "linq: continuation range variable '{JOIN_TI}' is reserved")
+            return false
+        }
+        if (strip(slice(q, iv._1, nq)) == "") {
+            macro_error(prog, at, "linq: 'into {iv._0}' has no continuation — add a 'where'/'orderby'/'select'/'group' after it")
+            return false
+        }
+        stage.intoVar = iv._0
+        stage.nextStart = iv._1
+    } else {
+        stage.intoVar = ""
+        stage.nextStart = nq
+    }
+    return true
+}
+
 // Parse the query and emit the `_fold(...)` rewrite text. On a malformed query, register a macro error
 // and emit a benign `(0)` so the surrounding statement still parses (the error is the real signal).
 def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : string {
@@ -874,111 +1100,48 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     if (joinPos >= 0) {
         return transpile_join(q, nq, varName, rowType, srcStart, joinPos, prog, at)
     }
-    let wherePos = find_kw_depth0(q, "where", srcStart)
-    let afterWhere = wherePos >= 0 ? wherePos + 5 : srcStart
-    let orderByPos = find_kw_depth0(q, "orderby", afterWhere)
-    let afterOrderBy = orderByPos >= 0 ? orderByPos + 7 : afterWhere
-    let selectPos = find_kw_depth0(q, "select", afterOrderBy)
-    let groupPos = find_kw_depth0(q, "group", afterOrderBy)
-    if (selectPos < 0 && groupPos < 0) {
-        macro_error(prog, at, "linq: query must end with a 'select' or 'group … by …' clause")
-        return "(0)"
-    }
-    if (selectPos >= 0 && groupPos >= 0) {
-        macro_error(prog, at, "linq: query cannot have both 'select' and 'group' — they are alternative terminals")
-        return "(0)"
-    }
-    let isGroup = groupPos >= 0
-    let termPos = isGroup ? groupPos : selectPos
-    // `orderby` before `group` would emit `_order_by |> _group_by_lazy`, which `_fold` does not fuse.
-    if (isGroup && orderByPos >= 0) {
-        macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
-        return "(0)"
-    }
-    let srcEnd = wherePos >= 0 ? wherePos : (orderByPos >= 0 ? orderByPos : termPos)
+    let srcEnd = next_clause_kw(q, srcStart)
     let srcText = strip(slice(q, srcStart, srcEnd))
     if (srcText == "") {
         macro_error(prog, at, "linq: empty source expression after 'in'")
         return "(0)"
     }
-    let hasWhere = wherePos >= 0
-    var predText = ""
-    if (hasWhere) {
-        predText = strip(slice(q, wherePos + 5, orderByPos >= 0 ? orderByPos : termPos))
-        if (predText == "") {
-            macro_error(prog, at, "linq: empty 'where' predicate")
-            return "(0)"
-        }
-    }
-    // orderby clause (select-terminated only): `<expr> [descending|ascending]`.
-    let hasOrderBy = orderByPos >= 0
-    var orderKeys : array<string>
-    var orderDescMask = 0u
-    if (hasOrderBy) {
-        let rawOrder = strip(slice(q, orderByPos + 7, termPos))
-        var op <- parse_orderby(rawOrder)
-        if (!op.ok) {
-            macro_error(prog, at, "linq: empty 'orderby' expression")
-            return "(0)"
-        }
-        if (length(op.keys) > 4) {
-            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
-            return "(0)"
-        }
-        orderKeys <- op.keys
-        orderDescMask = op.descMask
-    }
-    // Terminal: select projection, or group element/key.
-    var projText = ""
-    var identitySelect = false
-    var groupKey = ""
-    var wantIterator = false
-    if (isGroup) {
-        // `group <elem> by <key> [iterator]` — element must be the range variable (identity; element
-        // selectors are deferred). The group yields `tuple<key; array<elem>>` per bucket (IGrouping).
-        let groupBody = strip(slice(q, termPos + 5, nq))
-        let byPos = find_kw_depth0(groupBody, "by", 0)
-        if (byPos < 0) {
-            macro_error(prog, at, "linq: 'group' requires a 'by' clause (e.g. `group {varName} by {varName}.field`)")
-            return "(0)"
-        }
-        let elem = strip(slice(groupBody, 0, byPos))
-        if (elem != varName) {
-            macro_error(prog, at, "linq: 'group' element must be the range variable '{varName}' — element selectors are not yet supported (write `group {varName} by …`)")
-            return "(0)"
-        }
-        let gk = strip_trailing_keyword(strip(slice(groupBody, byPos + 2, length(groupBody))), "iterator")
-        groupKey = gk._0
-        wantIterator = gk._1
-        if (groupKey == "") {
-            macro_error(prog, at, "linq: empty 'group … by' key expression")
-            return "(0)"
-        }
-    } else {
-        let pj = strip_trailing_keyword(strip(slice(q, termPos + 6, nq)), "iterator")
-        projText = pj._0
-        wantIterator = pj._1
-        if (projText == "") {
-            macro_error(prog, at, "linq: empty 'select' projection")
-            return "(0)"
-        }
-        // `select c` (the range variable alone) is the identity projection — no `_select` is emitted.
-        identitySelect = (projText == varName)
-    }
     let srcBuild = build_src(rowType, srcText, true)
+    // Parse the stage chain. Each stage ends in select/group; an `into <var>` continuation rebinds a new
+    // range variable to that stage's output and appends more clauses on the SAME `_fold` chain (no
+    // inter-stage materialization — fusion and the SQL single-statement pushdown are preserved).
+    var stages : array<QueryStage>
+    var curVar = varName
+    var curIsGroup = false
+    var pstart = srcEnd
+    while (true) {
+        var stage <- QueryStage()
+        if (!parse_one_stage(q, nq, pstart, curVar, curIsGroup, prog, at, stage)) { return "(0)" }
+        let contVar = stage.intoVar
+        let contStart = stage.nextStart
+        let contIsGroup = stage.isGroup
+        stages |> emplace(stage)
+        if (contVar == "") { break }
+        curVar = contVar
+        curIsGroup = contIsGroup
+        pstart = contStart
+    }
+    let wantIterator = stages[length(stages) - 1].wantIterator
     return build_string() $(var writer) {
         writer |> write("( _fold( {srcBuild}")
-        if (hasWhere) {
-            writer |> write(" |> _where($({varName}) => {predText})")
-        }
-        if (isGroup) {
-            writer |> write(" |> _group_by_lazy($({varName}) => {groupKey})")
-        } else {
-            if (hasOrderBy) {
-                writer |> write(emit_order_op(orderKeys, orderDescMask, varName))
+        for (s in stages) {
+            if (s.hasWhere) {
+                writer |> write(" |> _where($({s.rangeVar}) => {s.predText})")
             }
-            if (!identitySelect) {
-                writer |> write(" |> _select($({varName}) => {projText})")
+            if (s.isGroup) {
+                writer |> write(" |> _group_by_lazy($({s.rangeVar}) => {s.groupKey})")
+            } else {
+                if (s.hasOrderBy) {
+                    writer |> write(emit_order_op(s.orderKeys, s.orderDescMask, s.rangeVar))
+                }
+                if (!s.identitySelect) {
+                    writer |> write(" |> _select($({s.rangeVar}) => {s.projText})")
+                }
             }
         }
         writer |> write(" |> to_array() )")
