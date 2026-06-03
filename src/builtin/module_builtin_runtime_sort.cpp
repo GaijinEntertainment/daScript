@@ -101,6 +101,77 @@ namespace das
     }
 
     // ==========================================================================
+    // stable_sort any-path runtime wrappers — mirror of the builtin_sort_*_any_*
+    // surface above, routing through the byte-pointer das_stable_sort_r (adaptive
+    // natural-run merge, stable). Interp path only; AOT uses the typed _T
+    // templates (das_stable_sort<T>) in aot.h.
+    // ==========================================================================
+
+    void builtin_stable_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
+        if ( length<=1 ) return;
+        vec4f bargs[2];
+        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+            das_stable_sort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+              bargs[0] = cast<void *>::from(x);
+              bargs[1] = cast<void *>::from(y);
+              return code->evalBool(*context);
+            });
+        }, at);
+    }
+
+    void builtin_stable_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
+        if ( length<=1 ) return;
+        vec4f bargs[2];
+        if ( elementSize <= 4 ) {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_stable_sort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu_x((const float *)x);
+                    bargs[1] = v_ldu_x((const float *)y);
+                    return code->evalBool(*context);
+                });
+            },at);
+        } else if ( elementSize <= 8 ) {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_stable_sort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu_half(x);
+                    bargs[1] = v_ldu_half(y);
+                    return code->evalBool(*context);
+                });
+            }, at);
+        } else {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_stable_sort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu((const float *)x);
+                    bargs[1] = v_ldu((const float *)y);
+                    return code->evalBool(*context);
+                });
+            }, at);
+        }
+    }
+
+    void builtin_stable_sort_dim_any_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
+        builtin_stable_sort_any_cblock(cast<void *>::to(anything), elementSize, length, cmp, context, at);
+    }
+
+    void builtin_stable_sort_dim_any_ref_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
+        builtin_stable_sort_any_ref_cblock(cast<void *>::to(anything), elementSize, length, cmp, context, at);
+    }
+
+    void builtin_stable_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "stable_sort");
+        array_lock(*context,arr,at);
+        builtin_stable_sort_any_cblock(arr.data, elementSize, len, cmp, context, at);
+        array_unlock(*context,arr,at);
+    }
+
+    void builtin_stable_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+        int32_t len = sort_array_size_or_panic(arr, context, at, "stable_sort");
+        array_lock(*context,arr,at);
+        builtin_stable_sort_any_ref_cblock(arr.data, elementSize, len, cmp, context, at);
+        array_unlock(*context,arr,at);
+    }
+
+    // ==========================================================================
     // partial_sort / nth_element / heap-op any-path runtime wrappers.
     //
     // Mirrors the builtin_sort_*_any_cblock surface but routes through the
@@ -525,6 +596,27 @@ namespace das
                 ->args({"array","stride","length","block","context","line"})->setAotTemplate()->setAnyTemplate();
         addExtern<DAS_BIND_FUN(builtin_sort_dim_any_ref_cblock)>(*this, lib, "__builtin_sort_dim_any_ref_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_ref_cblock_T")
+                ->args({"array","stride","length","block","context","line"})->setAotTemplate()->setAnyTemplate();
+
+        // stable_sort — any-path only (no numeric/string fast-path; always comparator-based).
+        // Interp: byte das_stable_sort_r. AOT: typed das_stable_sort<T> via the _T templates.
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_any_cblock)>(*this, lib, "__builtin_stable_sort_any_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_any_cblock")
+                ->args({"array","stride","length","block","context","line"});
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_any_ref_cblock)>(*this, lib, "__builtin_stable_sort_any_ref_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_any_ref_cblock")
+                ->args({"array","stride","length","block","context","line"});
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_array_any_cblock)>(*this, lib, "__builtin_stable_sort_array_any_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_array_any_cblock_T")
+                ->args({"array","stride","length","block","context","line"})->setAotTemplate();
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_array_any_ref_cblock)>(*this, lib, "__builtin_stable_sort_array_any_ref_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_array_any_ref_cblock_T")
+                ->args({"array","stride","length","block","context","line"})->setAotTemplate();
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_dim_any_cblock)>(*this, lib, "__builtin_stable_sort_dim_any_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_dim_any_cblock_T")
+                ->args({"array","stride","length","block","context","line"})->setAotTemplate()->setAnyTemplate();
+        addExtern<DAS_BIND_FUN(builtin_stable_sort_dim_any_ref_cblock)>(*this, lib, "__builtin_stable_sort_dim_any_ref_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_stable_sort_dim_any_ref_cblock_T")
                 ->args({"array","stride","length","block","context","line"})->setAotTemplate()->setAnyTemplate();
 
         // ==================================================================

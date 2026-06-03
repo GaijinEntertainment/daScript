@@ -3502,6 +3502,137 @@ namespace das {
     }
 
     // ==========================================================================
+    // stable_sort cblock templates — mirror of scblk / scblk_array above but
+    // routing through the typed das_stable_sort<T> (adaptive natural-run merge).
+    // ==========================================================================
+
+    template <typename CompareFn, typename TT>
+    struct sscblk;
+
+    template <typename CompareFn, typename TT>
+    struct sscblk {
+        template <int dimSize>
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context *, LineInfoArg * ) {
+            das_stable_sort(arr.data, arr.data + dimSize, cmp);
+        }
+        template <int dimSize>
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            srt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct sscblk < const Block &,TT > {
+        template <int dimSize>
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_stable_sort ( data, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            },lineinfo);
+        }
+        template <int dimSize>
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_stable_sort ( data, data+length, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            },lineinfo);
+        }
+    };
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_stable_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        sscblk<CompareFn,TT>::srt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_stable_sort_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        sscblk<CompareFn,TT>::srtr(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    struct sscblk_array;
+
+    template <typename CompareFn, typename TT>
+    struct sscblk_array {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            array_lock(*context, arr, at);
+            auto sdata = (TT *) arr.data;
+            das_stable_sort (sdata, sdata + arr.size, cmp);
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            srt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
+        }
+    };
+
+    template <typename TT>
+    struct sscblk_array < const Block &,TT > {
+        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool,TT, TT,const Block &,Context *>;
+                das_stable_sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction, x,y,cmp,context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das_stable_sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                        bargs[0] = cast<TT>::from(x);
+                        bargs[1] = cast<TT>::from(y);
+                        return code->evalBool(*context);
+                    });
+                },at);
+            }
+            array_unlock(*context, arr, at);
+        }
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
+            if ( arr.size<=1 ) return;
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr, at);
+            if ( cmp.jitFunction ) {
+                using CmpFn = CallJitFn<bool,const TT &,const TT &,const Block &,Context *>;
+                das_stable_sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
+                    return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
+                });
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das_stable_sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
+                        bargs[0] = cast<const TT &>::from(x);
+                        bargs[1] = cast<const TT &>::from(y);
+                        return code->evalBool(*context);
+                    });
+                },at);
+            }
+            array_unlock(*context, arr, at);
+        }
+    };
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_stable_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        sscblk_array<CompareFn,TT>::srt(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_stable_sort_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        sscblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,das::forward<CompareFn>(cmp),context,lineinfo);
+    }
+
+    // ==========================================================================
     // partial_sort / nth_element / heap-op cblock templates (Phase 0 expansion).
     // Same scblk / scblk_array shape as builtin_sort_cblock above, parameterized
     // on the algorithm being invoked. partial_sort and nth_element take an extra

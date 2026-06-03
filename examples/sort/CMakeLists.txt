@@ -17,13 +17,18 @@ endif()
 add_executable(example_sort_bench bench_sort_family.cpp)
 target_include_directories(example_sort_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../include)
 
+add_executable(example_stable_sort_bench bench_stable_sort.cpp)
+target_include_directories(example_stable_sort_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../include)
+
 add_executable(example_byte_swap_bench bench_byte_swap.cpp)
 
 if(MSVC)
     target_compile_options(example_sort_bench PRIVATE /O2 /W4)
+    target_compile_options(example_stable_sort_bench PRIVATE /O2 /W4)
     target_compile_options(example_byte_swap_bench PRIVATE /O2 /W4)
 else()
     target_compile_options(example_sort_bench PRIVATE -O3 -Wall -Wextra)
+    target_compile_options(example_stable_sort_bench PRIVATE -O3 -Wall -Wextra)
     target_compile_options(example_byte_swap_bench PRIVATE -O3 -Wall -Wextra)
 endif()
 
@@ -49,4 +54,18 @@ if(EXAMPLE_SORT_BENCH_GXX)
         COMMENT "Building example_sort_bench_libstdcxx with ${EXAMPLE_SORT_BENCH_GXX}"
         VERBATIM)
     add_custom_target(example_sort_bench_libstdcxx ALL DEPENDS ${_libstdcxx_out})
+
+    set(_stable_libstdcxx_out ${CMAKE_CURRENT_BINARY_DIR}/example_stable_sort_bench_libstdcxx)
+    add_custom_command(
+        OUTPUT ${_stable_libstdcxx_out}
+        COMMAND ${EXAMPLE_SORT_BENCH_GXX}
+                -std=c++17 -O3 -Wall -Wextra
+                -I ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+                ${CMAKE_CURRENT_SOURCE_DIR}/bench_stable_sort.cpp
+                -o ${_stable_libstdcxx_out}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/bench_stable_sort.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../include/daScript/simulate/das_qsort_r.h
+        COMMENT "Building example_stable_sort_bench_libstdcxx with ${EXAMPLE_SORT_BENCH_GXX}"
+        VERBATIM)
+    add_custom_target(example_stable_sort_bench_libstdcxx ALL DEPENDS ${_stable_libstdcxx_out})
 endif()

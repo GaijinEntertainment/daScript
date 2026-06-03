@@ -2,7 +2,8 @@
 //
 // This tutorial covers:
 //   - Searching sorted arrays: lower_bound, upper_bound, binary_search, equal_range
-//   - Sorting: sort (full sort), partial_sort (first N), nth_element (kth-smallest)
+//   - Sorting: sort (full sort), stable_sort (equal elements keep input order),
+//     partial_sort (first N), nth_element (kth-smallest)
 //   - Deduplication: sort_unique, unique
 //   - Heap operations: make_heap, push_heap, pop_heap (binary max-heap)
 //   - Top-N selection: top_n / top_n_by (N smallest via partial-sort or bounded heap)
@@ -82,6 +83,21 @@ def sort_demo() {
         return x > y
     }
     print("sort desc: {b}\n")  // [9, 8, 5, 2, 1]
+
+    // stable_sort: like sort, but elements that compare equal keep their input
+    // order. `sort` may reorder equal elements; `stable_sort` never does. Here we
+    // sort by price only — items with the same price stay in their original order.
+    var items <- [PricePoint(item_id = 1, price = 50), PricePoint(item_id = 2, price = 20),
+                  PricePoint(item_id = 3, price = 50), PricePoint(item_id = 4, price = 20),
+                  PricePoint(item_id = 5, price = 50)]
+    stable_sort(items) $(x, y : PricePoint) : bool {
+        return x.price < y.price
+    }
+    print("stable_sort by price: ")
+    for (it in items) {
+        print("({it.item_id}@{it.price}) ")  // (2@20) (4@20) (1@50) (3@50) (5@50)
+    }
+    print("\n")
 
     // Today's sort is full O(n log n) on the whole array. If you only need
     // the first N sorted, use partial_sort. If you only need the k-th element,
