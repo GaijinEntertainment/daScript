@@ -1544,6 +1544,22 @@ def test_lint_compile_error(t : T?) {
 }
 
 [test]
+def test_lint_skip_expect(t : T?) {
+    t |> run("file with `expect` directive is skipped via a VALID result envelope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // Regression: the single-file SKIP path used to return a raw "SKIP ..." string, not a
+        // make_tool_result envelope — so the JSON-RPC `result` was invalid and the client hung.
+        // parse_result returning false (unparseable) is the pre-fix signature.
+        let ok = parse_result(do_lint(fixture_path("_fixture_expect.das")), text, is_error)
+        t |> success(ok, "SKIP result must be a valid envelope (was a raw string => invalid JSON-RPC)")
+        t |> success(!is_error, "skip is not an error")
+        t |> success(find(text, "SKIP") >= 0, "should report SKIP")
+        t |> success(find(text, "intentional compile errors") >= 0, "should explain the skip reason")
+    }
+}
+
+[test]
 def test_lint_no_match(t : T?) {
     t |> run("no files matched reports error") <| @(t : T?) {
         var text : string

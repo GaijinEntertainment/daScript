@@ -30,6 +30,9 @@ Source shape                                  Lowered SQL
 ``==``, ``!=``                                ``=``, ``<>``
 ``<``, ``<=``, ``>``, ``>=``                  same operators
 ``&&``, ``||``, ``!``                         ``AND``, ``OR``, ``NOT``
+``+`` ``-`` ``*`` ``/`` ``%`` (numeric)       same operators
+``a + b`` (strings)                           ``(a) || (b)``  (SQL string concatenation)
+``&`` ``|`` ``<<`` ``>>``, unary ``-`` ``~``  same operators
 ``s |> starts_with(p)``                       ``s LIKE ? || '%'``        (``p`` bound)
 ``s |> ends_with(p)``                         ``s LIKE '%' || ?``        (``p`` bound)
 ``s |> contains(p)``                          ``s LIKE '%' || ? || '%'`` (``p`` bound)
@@ -75,6 +78,27 @@ parentheses to disambiguate precedence:
     let cheap_or_F <- _sql(db |> select_from(type<Car>)
                              |> _where(_.Price < 100
                                        || (_.Name |> starts_with("F"))))
+
+Arithmetic, bitwise, and string concatenation
+==============================================
+
+Numeric ``+ - * / %`` and bitwise ``& | << >>`` (plus unary ``-`` / ``~``)
+lower to the matching SQLite operators. daslang ``+`` on **strings** is
+concatenation, so it lowers to SQLite's ``||`` (not ``+``, which is numeric
+in SQLite). The same expressions are allowed as computed ``_select`` columns
+and ``_order_by`` keys (see :ref:`tutorial_sql_select`,
+:ref:`tutorial_sql_order_by`).
+
+.. code-block:: das
+
+    let pricey <- _sql(db |> select_from(type<Car>)
+                         |> _where(_.Price * 2 > 400))
+    // ... WHERE ("Price") * (?) > ?
+
+An expression over a column that has no SQL translation --- bitwise ``^``
+(no SQLite operator), or an unhandled function/cast on a column --- is
+rejected at compile time with a clear message, rather than silently
+mistranslating. Compute it in daslang after the query, or drop to raw SQL.
 
 String-tests via ``LIKE``
 =========================

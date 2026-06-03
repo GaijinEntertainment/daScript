@@ -2046,9 +2046,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         var cxCall = match_call_in_linq(node, "cross_join")
         if (cxCall != null) return process_cross_join_call(cxCall, q, prog, at)
     }
-    // Reject select_many_pair — correlated `from … from x in <field>` flattens a per-row collection, which
-    // has no SQL table to map to. The `_select_many` reader op expands to `select_many_pair` before `_sql`
-    // sees the chain, so match the expanded name (mirrors how `cross_join` / `join` are matched above).
+    // Reject select_many_pair (correlated flatten — a per-row collection, no SQL table). Match the expanded reader-op name, like cross_join/join above.
     {
         var smCall = match_call_in_linq(node, "select_many_pair")
         if (smCall != null) {
@@ -2191,6 +2189,17 @@ def private try_recognize_sql_function_proj(val : ExpressionPtr; var q : SqlQuer
     outFrag = frag
     outLeafType = call.func.result
     return 1
+}
+
+// True when a computed _select column / _order_by key renders to a SQL scalar. Gates the computed arms so
+// a whole-row carry var (transparent-identifier `(c=c,b=b)`) falls through to the clean row-object reject
+// instead of reaching pred_to_sql (which deref-crashes on a bare struct receiver).
+def private is_sql_renderable_scalar(td : TypeDecl?) : bool {
+    if (td == null || td.isAutoOrAlias || !empty(td.dim)) return false
+    let bt = td.baseType
+    return (bt == Type.tInt  || bt == Type.tInt8  || bt == Type.tInt16  || bt == Type.tInt64
+        || bt == Type.tUInt || bt == Type.tUInt8 || bt == Type.tUInt16 || bt == Type.tUInt64
+        || bt == Type.tFloat || bt == Type.tDouble || bt == Type.tBool || bt == Type.tString)
 }
 
 [macro_function]
@@ -2371,7 +2380,16 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                         }
                     }
                 }
-                macro_error(prog, at, "_sql: _select named-tuple values must be `<arg>.Field` (column ref) or, after `_left_join`, `<arg> |> is_some` / `<arg> |> is_none` on the Option<TB> arg; got: {describe(val)}")
+                // Computed scalar column (`Bonus = _.price / 10`) — render via pred_to_sql, alias by position.
+                if (is_sql_renderable_scalar(val._type)) {
+                    let frag = pred_to_sql(val, q, prog, at)
+                    if (q.hadError) return false
+                    if (!empty(frag)) {
+                        push_computed_proj_slot(q, frag, clone_type(val._type), string(tupT.argNames[i]))
+                        continue
+                    }
+                }
+                macro_error(prog, at, "_sql: _select named-tuple values must be `<arg>.Field` (column ref), a computed expression (`_.a + _.b`), or, after `_left_join`, `<arg> |> is_some` / `<arg> |> is_none` on the Option<TB> arg; got: {describe(val)}")
                 return false
             }
             q.proj = ProjectionShape.NamedTuple
@@ -2773,24 +2791,57 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
                 }
                 let sqlCol = field_to_column_name(q.rootType, fieldName)
                 q.orderByCols |> push("\"{sqlCol}\" {direction}")
-            } elif (val._type != null && val._type.baseType == Type.tString) {
+            } elif (val._type != null && val._type.baseType == Type.tString && !mentions_source_arg(val, q)) {
                 q.orderByInlineExprs |> push <| clone_expression(val)
                 q.orderByCols |> push("\x01 {direction}")
+            } elif (is_sql_renderable_scalar(val._type)) {
+                // Computed key entry (`_.price / 10`) — inlined constants, like _group_by.
+                let frag = render_inlined_key_sql(val, q, "_order_by", prog, at)
+                if (empty(frag)) return false
+                q.orderByCols |> push("{frag} {direction}")
             } else {
-                macro_error(prog, at, "_sql: _order_by: tuple-key entries must be `_.Field` or a `string` expression; got: {describe(val)}")
+                macro_error(prog, at, "_sql: _order_by: tuple-key entries must be `_.Field`, a computed expression (`_.a + _.b`), or a `string` expression; got: {describe(val)}")
                 return false
             }
         }
         return true
     }
-    // Runtime form: string-typed expression naming the column; quoted via sql_quote_id at emission.
-    if (body._type != null && body._type.baseType == Type.tString) {
+    // A string key NOT referencing the row is a dynamic column NAME (quoted at emission); one that DOES (`to_lower(_.Name)`) falls to the computed arm below.
+    if (body._type != null && body._type.baseType == Type.tString && !mentions_source_arg(body, q)) {
         q.orderByInlineExprs |> push <| clone_expression(body)
         q.orderByCols |> push("\x01 {direction}")
         return true
     }
-    macro_error(prog, at, "_sql: _order_by: key must be `_.Field`, a `string` expression, or a tuple of either; got: {describe(body)}")
+    // Computed key (`_.price / 10`) — render with constants inlined (key context, no binds), like _group_by.
+    if (is_sql_renderable_scalar(body._type)) {
+        let frag = render_inlined_key_sql(body, q, "_order_by", prog, at)
+        if (q.hadError) return false
+        if (!empty(frag)) {
+            q.orderByCols |> push("{frag} {direction}")
+            return true
+        }
+    }
+    macro_error(prog, at, "_sql: _order_by: key must be `_.Field`, a computed expression (`_.a + _.b`), a `string` expression, or a tuple of either; got: {describe(body)}")
     return false
+}
+
+// Render a computed group_by / order_by key with literals inlined (no `?` binds — key fragments are re-used
+// across SELECT/GROUP BY/ORDER BY, where a bind can't be re-pushed). Returns "" on failure; `ctx` = clause name.
+[macro_function]
+def private render_inlined_key_sql(var body : ExpressionPtr; var q : SqlQuery&; ctx : string; prog : ProgramPtr; at : LineInfo) : string {
+    let savedInlineFlag = q.inlineConstants
+    let beforeBinds = length(q.bindExprs)
+    q.inlineConstants = true
+    let frag = pred_to_sql(body, q, prog, at)
+    q.inlineConstants = savedInlineFlag
+    if (q.hadError || empty(frag)) return ""
+    if (length(q.bindExprs) > beforeBinds) {
+        q.bindExprs |> resize(beforeBinds)
+        macro_error(prog, at, "_sql: {ctx} expression key references a runtime value — only column refs (`_.X`) and constant literals (`100`, `0.5`) are allowed inside the key expression; got: {describe(body)}")
+        q.hadError = true
+        return ""
+    }
+    return frag
 }
 
 [macro_function]
@@ -2822,20 +2873,9 @@ def private push_group_key(var entry : ExpressionPtr; var q : SqlQuery&; prog : 
         q.groupByKeyTypes |> push(null)
         return true
     }
-    // nolint:STYLE015 Render with constants inlined so the fragment carries no binds and can be re-used in SELECT/GROUP BY/ORDER BY positions.
-    let savedInlineFlag = q.inlineConstants
-    let beforeBinds = length(q.bindExprs)
-    q.inlineConstants = true
-    let exprSql = pred_to_sql(entry, q, prog, at)
-    q.inlineConstants = savedInlineFlag
-    if (q.hadError || empty(exprSql)) return false
-    if (length(q.bindExprs) > beforeBinds) {
-        // nolint:STYLE015 Runtime bind in a key fragment would have to be re-pushed at each use site (SELECT/GROUP BY/ORDER BY); reject loud instead.
-        q.bindExprs |> resize(beforeBinds)
-        macro_error(prog, at, "_sql: _group_by expression key references a runtime value — only column refs (`_.X`) and constant literals (`100`, `0.5`) are allowed inside the key expression; got: {describe(entry)}")
-        q.hadError = true
-        return false
-    }
+    // Computed key (`_.a % _.b`) — render with constants inlined (no binds) via the shared key-context helper.
+    let exprSql = render_inlined_key_sql(entry, q, "_group_by", prog, at)
+    if (empty(exprSql)) return false
     q.groupByCols |> push("({exprSql})")
     q.groupByKeyExprs |> push <| clone_expression(entry)
     q.groupByKeyTypes |> push(entry._type)
@@ -2899,6 +2939,45 @@ def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg :
 }
 
 [macro_function]
+def private is_string_typed(e : ExpressionPtr) : bool {
+    return e != null && e._type != null && e._type.baseType == Type.tString
+}
+
+// True if `node` references a source column — so the bind fallthrough rejects untranslatable column
+// expressions instead of binding them. `asReceiver` (set when recursing into `<var>.field`) mirrors the
+// column-ref resolver's pre-join t0 fallback (rootAlias set, !seenJoin) for a named LHS param like `c`.
+def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {
+    if (node == null) return false
+    if (node is ExprRef2Value) {
+        var rv = node as ExprRef2Value
+        return mentions_source_arg(rv.subexpr, q, asReceiver)
+    }
+    if (node is ExprVar) {
+        let nm = string((node as ExprVar).name)
+        if (nm == "_" || lookup_arg_source(q, nm) >= 0) return true
+        return asReceiver && !empty(q.rootAlias) && !q.seenJoin
+    }
+    if (node is ExprField) {
+        var ef = node as ExprField
+        return mentions_source_arg(ef.value, q, true)
+    }
+    if (node is ExprOp1) {
+        var o1 = node as ExprOp1
+        return mentions_source_arg(o1.subexpr, q)
+    }
+    if (node is ExprOp2) {
+        var o2 = node as ExprOp2
+        return mentions_source_arg(o2.left, q) || mentions_source_arg(o2.right, q)
+    }
+    if (node is ExprCall) {
+        var c = node as ExprCall
+        for (a in c.arguments) {
+            if (mentions_source_arg(a, q)) return true
+        }
+    }
+    return false
+}
+
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
     if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
@@ -2992,7 +3071,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     // Arithmetic — parens preserve precedence in emitted SQL.
     {
         var lhs, rhs : ExpressionPtr
-        if (qmatch(node, $e(lhs) + $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) + ({pred_to_sql(rhs, q, prog, at)})"
+        if (qmatch(node, $e(lhs) + $e(rhs)).matched) {
+            // daslang `+` on strings is concatenation → SQL `||` (SQLite `+` is numeric: 'a' + 'b' == 0).
+            let op = (is_string_typed(node) || is_string_typed(lhs) || is_string_typed(rhs)) ? "||" : "+"
+            return "({pred_to_sql(lhs, q, prog, at)}) {op} ({pred_to_sql(rhs, q, prog, at)})"
+        }
     }
     {
         var lhs, rhs : ExpressionPtr
@@ -3009,6 +3092,23 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) % $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
+    }
+    // Bitwise by operator string (qmatch can't parse `>>`). `^` / `<<<` / `>>>` fall through to the guard.
+    if (node is ExprOp2) {
+        var op2 = node as ExprOp2
+        let opName = string(op2.op)
+        if (opName == "&" || opName == "|" || opName == "<<" || opName == ">>") {
+            return "({pred_to_sql(op2.left, q, prog, at)}) {opName} ({pred_to_sql(op2.right, q, prog, at)})"
+        }
+        if (opName == "^") return pred_fail(q, prog, at, "_sql: bitwise XOR (^) has no SQLite operator; rewrite as `(a | b) & ~(a & b)`, or compute it in daslang / raw SQL.")
+    }
+    // Unary minus / bitwise NOT — SQLite supports `-x` and `~x` (logical `!` is handled at the top).
+    if (node is ExprOp1) {
+        var op1 = node as ExprOp1
+        let opName = string(op1.op)
+        if (opName == "-" || opName == "~") {
+            return "{opName}({pred_to_sql(op1.subexpr, q, prog, at)})"
+        }
     }
     // Multi-level field chain `<arg>.Col.path…` — descends @sql_json via json_extract; @sql_blob is a compile error.
     if (node is ExprField) {
@@ -3255,7 +3355,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         if (node is ExprConstBool) return (node as ExprConstBool).value ? "1" : "0"
         if (node is ExprConstString) return sql_quote_lit(string((node as ExprConstString).value))
     }
-    // Bind fallthrough: unrecognized exprs become `?`; sql_bind catch-all + concept_assert error if not bindable.
+    // Reaches here referencing a column = an expression we can't translate; reject (binding `?` would fail with `can't locate '_'`).
+    if (mentions_source_arg(node, q)) {
+        return pred_fail(q, prog, at, "_sql: expression over a column is not translatable to SQL: {describe(node)}. Compute it in daslang after the query, or use raw SQL.")
+    }
+    // Bind fallthrough: a captured runtime value (no column reference) becomes `?`.
     if (q.inHaving) {
         q.havingBindExprs |> push <| clone_expression(node)
     } else {
