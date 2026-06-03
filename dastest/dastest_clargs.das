@@ -6,8 +6,8 @@ require daslib/clargs public
 
 [CommandLineArgs]
 struct DastestArgs {
-    @clarg_doc = "Path to the single script file to run tests in isolated mode"
-    run : string
+    @clarg_doc = "Script file(s) to run tests for in a single subprocess (repeatable). Used internally by isolated/semi-isolated mode to dispatch a batch to one worker subprocess"
+    run : array<string>
 
     @clarg_doc = "Only print output for failed tests, suppressing successful ones"
     failures_only : bool
@@ -35,6 +35,9 @@ struct DastestArgs {
 
     @clarg_doc = "Number of threads to use in isolated mode; defaults to 2x the number of hardware threads when 0"
     isolated_mode_threads : int
+
+    @clarg_doc = "Files per worker subprocess in isolated mode (semi-isolated sharding). 1 (default) = one process per test (full isolation). >1 amortizes process/compile cold-start across a batch; a crash in a batch is auto-recovered by re-running the remainder one-per-process"
+    batch : int = 1
 
     @clarg_doc = "Stable worker index passed by parent dastest in isolated mode; tests read it from get_user_args() to derive per-worker ports/paths"
     worker_index : int = 0
