@@ -425,6 +425,10 @@ def test_cast_string_select_emits_text(t : T?) {
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select(string(_.Id)))
     t |> success(sql == "SELECT CAST(\"Id\" AS TEXT) FROM \"Cars\"",
         "string cast renders CAST(... AS TEXT); SQL: {sql}")
+    // the explicit decimal form `string(_.Id, false)` lowers identically; the hex form `string(_.Id, true)`
+    // rejects instead of silently formatting decimal (see failed_sql_macro bad26).
+    let sqlFalse = _sql_text(_db |> select_from(type<Car>) |> _select(string(_.Id, false)))
+    t |> equal(sqlFalse, sql, "explicit hex=false lowers identically to the bare string cast")
 }
 
 [test]

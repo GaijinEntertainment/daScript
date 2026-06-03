@@ -3563,10 +3563,18 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     }
     // ---- Workhorse type casts → CAST(x AS INTEGER/REAL/TEXT); also drives the int64 result read-back.
     let castType = WORKHORSE_CAST_SQL?[fname] ?? ""
-    if (!empty(castType) && argc >= 1) {   // string(v, humanReadable) is 2-arg; the value is always args[0]
-        let inner = pred_to_sql(call.arguments[0], q, prog, at)
-        return "" if (q.hadError)
-        return "CAST({inner} AS {castType})"
+    if (!empty(castType)) {
+        // numeric + the float `string` overload are 1-arg; integer `string(value, hex)` lowers only its
+        var lowerable = argc == 1
+        if (!lowerable && fname == "string" && argc == 2) {   // decimal form — hex=true (or runtime) rejects (SQLite CAST can't format hex)
+            let hexArg = call.arguments[1]
+            lowerable = hexArg is ExprConstBool && !(hexArg as ExprConstBool).value
+        }
+        if (lowerable) {
+            let inner = pred_to_sql(call.arguments[0], q, prog, at)
+            return "" if (q.hadError)
+            return "CAST({inner} AS {castType})"
+        }
     }
     // ---- Option<T> nullability — left/right/full-outer join: bare ExprVar of Option<T> arg probes the join key NULL.
     if (fname == "is_some" && argc == 1) {

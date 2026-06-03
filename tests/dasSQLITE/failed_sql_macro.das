@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:23
+expect 30341, 30928:2, 50503:24
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -159,6 +159,10 @@ def main() {
     //     re-use of the key fragment (SELECT, GROUP BY, ORDER BY positions).
     let runtimeOffset = 5
     let bad25 <- _sql(db |> select_from(type<Car>) |> _group_by(_.Price - runtimeOffset) |> _select((K = _._0, N = _._1 |> length)))
+
+    // 26. `string(_.Col, true)` — the hex-formatting overload. The decimal form lowers to `CAST(... AS TEXT)`,
+    //     but SQLite CAST always formats decimal, so the hex form rejects rather than silently mistranslating.
+    let bad26 <- _sql(db |> select_from(type<Car>) |> _select(string(_.Id, true)))
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees
