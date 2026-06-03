@@ -969,9 +969,13 @@ def build_package(pkg_dir : string) : bool {
     let build_dir = "{pkg_dir}/_build"
     let das_root = get_das_root()
 
-    // Configure — pass DASLANG_DIR so the package can find headers and libs
+    // Configure — pass DASLANG_DIR so the package can find headers and libs.
+    // DASPKG_EXTRA_CMAKE_FLAGS (env) is appended verbatim to the configure — an
+    // experiment hook, e.g. -DCMAKE_CXX_FLAGS=/fsanitize=address to ASan-build a
+    // module. Empty/unset (the default) leaves the command unchanged.
     var output : string
-    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" -DCMAKE_BUILD_TYPE=Release", output)
+    let extraFlags = has_env_variable("DASPKG_EXTRA_CMAKE_FLAGS") ? get_env_variable("DASPKG_EXTRA_CMAKE_FLAGS") : ""
+    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" -DCMAKE_BUILD_TYPE=Release {extraFlags}", output)
     if (exit_code != 0) {
         log("  CMake configure FAILED:\n{output}\n")
         return false
