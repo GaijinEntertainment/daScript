@@ -24,6 +24,7 @@ expect 50503   // let: binding name shadows the range variable
 expect 50503   // let: missing `=` after the binding name
 expect 50503   // let: empty right-hand-side expression
 expect 50503   // let: same binding name bound twice
+expect 50503   // let: trailing `let` after the `select` terminal (no clause uses it)
 
 require daslib/linq_das
 require strings
@@ -186,5 +187,12 @@ def trigger_let_empty_rhs() {
 def trigger_let_duplicate_binding() {
     var cars <- one_car()
     let x <- %linq! from c in cars let n = c.price let n = c.name select n %%
+    unused(x)
+}
+
+def trigger_let_after_terminal() {
+    var cars <- one_car()
+    // a `let` after the `select` terminal has no clause to use it — must not be silently dropped
+    let x <- %linq! from c in cars select c.name let n = c.price %%
     unused(x)
 }

@@ -705,6 +705,13 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
             macro_error(prog, at, "linq: empty 'let {name}' expression")
             return (false, "")
         }
+        // A `let` with no following clause has nothing to inline into — it would be silently dropped,
+        // turning an invalid query (e.g. `… select … let n = …`) into a valid one. Reject it: a `let`
+        // must precede the `select`/`group` terminal.
+        if (rhsEnd >= length(q)) {
+            macro_error(prog, at, "linq: 'let {name}' has no following clause — a 'let' must precede the 'select'/'group' terminal")
+            return (false, "")
+        }
         if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }   // chain earlier lets in
         subs[name] = "({rhs})"
         cuts |> push((lp, rhsEnd, name))
