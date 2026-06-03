@@ -788,7 +788,11 @@ options_declaration
         }
         for ( auto & opt : *$list ) {
             if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModule->fileName) ) {
-                yyextra->g_Program->options.push_back(opt);
+                if ( yyextra->g_Access->isOptionBlocked(opt.name, yyextra->g_Program->thisModule->fileName) ) {
+                    // blocked: ok to write, silently ignored (not applied)
+                } else {
+                    yyextra->g_Program->options.push_back(opt);
+                }
             } else {
                 das_yyerror(scanner,"option " + opt.name + " is not allowed here",
                     tokAt(scanner,@list), CompilationError::invalid_option);
