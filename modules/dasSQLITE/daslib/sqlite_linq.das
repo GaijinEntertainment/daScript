@@ -3465,6 +3465,14 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
     return sql
 }
 
+// Workhorse type casts → SQLite CAST target. Exact names only (excludes vector ctors int2/float3/…).
+let private WORKHORSE_CAST_SQL : table<string; string> <- {
+    "int"    => "INTEGER", "int64"  => "INTEGER", "int8"  => "INTEGER", "int16" => "INTEGER",
+    "uint"   => "INTEGER", "uint64" => "INTEGER", "uint8" => "INTEGER", "uint16" => "INTEGER",
+    "float"  => "REAL",    "double" => "REAL",
+    "string" => "TEXT"
+}
+
 [macro_function]
 def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
     if (call == null) return ""
@@ -3552,6 +3560,13 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
         return "ABS({inner})"
+    }
+    // ---- Workhorse type casts → CAST(x AS INTEGER/REAL/TEXT); also drives the int64 result read-back.
+    let castType = WORKHORSE_CAST_SQL?[fname] ?? ""
+    if (!empty(castType) && argc >= 1) {   // string(v, humanReadable) is 2-arg; the value is always args[0]
+        let inner = pred_to_sql(call.arguments[0], q, prog, at)
+        return "" if (q.hadError)
+        return "CAST({inner} AS {castType})"
     }
     // ---- Option<T> nullability — left/right/full-outer join: bare ExprVar of Option<T> arg probes the join key NULL.
     if (fname == "is_some" && argc == 1) {

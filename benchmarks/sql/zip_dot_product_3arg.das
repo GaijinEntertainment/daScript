@@ -7,10 +7,11 @@ require _common public
 // The 3-arg form `zip(a, b, sel)` is pre-lowered by plan_zip to
 // `zip(a, b) |> _select(sel-as-tuple)` so the standard zip+select fusion fires —
 // this bench measures the natural dot-product idiom that previously cascaded.
-// SQL (m1) deferred for the same reason as zip_dot_product: the degenerate `SUM(price*year*brand)`
-// overflows int and needs an int64-typed computed projection (cast follow-up). No decs form (no zip
-// on archetype walks). Companion to zip_dot_product.das which uses the explicit 2-arg + _select form.
-// int64 cast in the selector avoids int32 overflow for n=100k.
+// SQL (m1) is the degenerate same-row form `_select(int64(_.price) * int64(_.year)) |> sum()` — the int64
+// cast renders `CAST(... AS INTEGER)` and drives the int64 read-back, so the 64-bit `SUM(price*year)`
+// (~1e11 at n=100k) is faithful (without the cast the int projection truncates). Same SQL lane as
+// zip_dot_product (SQL has no positional zip, so both 2-arg+_select and 3-arg forms degenerate to it).
+// No decs form (no zip on archetype walks). int64 cast in the selector avoids int32 overflow for n=100k.
 
 def make_ints(n : int) : array<int> {
     var a : array<int>
@@ -19,6 +20,19 @@ def make_ints(n : int) : array<int> {
         a[i] = i
     }
     return <- a
+}
+
+def run_m1(b : B?; n : int) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db, n)
+        b |> run("m1_sql/{n}", n) {
+            let s = _fold(db |> select_from(type<Car>) |> _select(int64(_.price) * int64(_.year)) |> sum())
+            b |> accept(s)
+            if (s == 0l) {
+                b->failNow()
+            }
+        }
+    }
 }
 
 def run_m3f(b : B?; n : int) {
@@ -50,6 +64,11 @@ def run_m5f(b : B?; n : int) {
             }
         }
     }
+}
+
+[benchmark]
+def zip_dot_product_3arg_m1(b : B?) {
+    run_m1(b, 100000)
 }
 
 [benchmark]

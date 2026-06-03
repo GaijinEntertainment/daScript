@@ -21,6 +21,9 @@ require sqlite/sqlite_linq
 //   D  — bitwise `& | << >>` and unary `- ~` lower to the matching SQLite operators.
 //   A  — take(n)/skip(n) BEFORE an aggregate wraps the pre-aggregate chain into an inner subquery
 //        (LIMIT/OFFSET stay inner) and renders the aggregate on the outer SELECT (previously rejected).
+//   E  — workhorse type casts lower to SQLite `CAST(x AS INTEGER/REAL/TEXT)` (int*/uint*, float/double,
+//        string). The cast also drives the result read-back type, so `int64(_.a)*int64(_.b) |> sum()`
+//        reads the 64-bit SUM back faithfully (the plain int projection truncates at scale).
 
 [sql_table(name = "Cars")]
 struct Car {
@@ -394,5 +397,71 @@ def test_computed_select_take_sum_runtime(t : T?) {
         // first 2 rows: (100+1)+(200+2) = 303
         let s = _sql(db |> select_from(type<Car>) |> _select(_.Price + _.Id) |> take(2) |> sum())
         t |> equal(s, 303, "computed projection summed over the first 2 rows")
+    }
+}
+
+// ===== E — workhorse type casts → SQLite CAST (int*/uint*→INTEGER, float/double→REAL, string→TEXT) =====
+
+[test]
+def test_cast_int64_select_emits_cast(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _select(int64(_.Price) * int64(_.Id)) |> sum())
+    t |> success(sql == "SELECT SUM((CAST(\"Price\" AS INTEGER)) * (CAST(\"Id\" AS INTEGER))) FROM \"Cars\"",
+        "int64 cast renders CAST(... AS INTEGER) into the aggregate argument; SQL: {sql}")
+}
+
+[test]
+def test_cast_double_where_emits_real(t : T?) {
+    // the retired failed_sql_macro bad6b case (`_where(double(_.Price) > 1.0)`) now lowers
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _where(double(_.Price) > 1.0lf))
+    t |> success(sql == "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE CAST(\"Price\" AS REAL) > ?",
+        "double cast renders CAST(... AS REAL); SQL: {sql}")
+}
+
+[test]
+def test_cast_string_select_emits_text(t : T?) {
+    var _db = SqlRunner()
+    let sql = _sql_text(_db |> select_from(type<Car>) |> _select(string(_.Id)))
+    t |> success(sql == "SELECT CAST(\"Id\" AS TEXT) FROM \"Cars\"",
+        "string cast renders CAST(... AS TEXT); SQL: {sql}")
+}
+
+[test]
+def test_cast_int64_avoids_int32_truncation(t : T?) {
+    // SQLite computes SUM(Price*Id) in 64-bit; without int64(...) the projection's daslang type is int,
+    // so the result column reads back int32-truncated. The cast makes the projection int64 → faithful.
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<Car>)
+        var ref = 0l
+        for (i in range(200)) {
+            let p = 100000 + i * 137
+            db |> insert(Car(Id = i + 1, Name = "c{i}", Price = p))
+            ref += int64(p) * int64(i + 1)
+        }
+        let casted = _sql(db |> select_from(type<Car>) |> _select(int64(_.Price) * int64(_.Id)) |> sum())
+        let plain  = _sql(db |> select_from(type<Car>) |> _select(_.Price * _.Id) |> sum())
+        t |> equal(casted, ref, "int64 cast SUM is faithful at scale")
+        t |> success(int64(plain) != ref, "int projection truncates at scale (why the cast is needed)")
+    }
+}
+
+[test]
+def test_cast_double_forces_real_division(t : T?) {
+    // double(_.Price)/2.0 → REAL division; the no-cast _.Price/2 would be integer division.
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // Prices 100,200,300,50,999 → halves 50,100,150,25,499.5 → 824.5 (exact in IEEE-754)
+        let s = _sql(db |> select_from(type<Car>) |> _select(double(_.Price) / 2.0lf) |> sum())
+        t |> success(s == 824.5lf, "REAL division keeps the .5 (no integer truncation)")
+    }
+}
+
+[test]
+def test_cast_double_where_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let c = _sql(db |> select_from(type<Car>) |> _where(double(_.Price) > 1.0lf) |> count())
+        t |> equal(c, 5, "double-cast predicate pushes down and matches all rows")
     }
 }

@@ -11,9 +11,10 @@ missing** rather than by bench. Each gap is either:
   nothing equivalent today but each could land independently. (`_select`
   after `_join`, LIMIT-before-aggregate, and computed-scalar `_select` are
   now **closed** — see below.)
-- **deferred (computed cast)** — computed projections containing a type
-  cast (`int64(...)`) fail inference, so the wide-result dot-product sum
-  lanes stay `—` until the cast follow-up.
+- ~~**deferred (computed cast)**~~ — **closed.** Workhorse casts
+  (`int*`/`uint*`/`float`/`double`/`string`) now lower to SQLite
+  `CAST(x AS INTEGER/REAL/TEXT)` in `fn_call_to_sql`, so the wide-result
+  dot-product sum lanes are lit (see "Computed-cast projection" below).
 - **by design** — the chain has no faithful SQL form (zip is positional,
   not relational; `reverse()` has no SQL order key).
 
@@ -114,13 +115,22 @@ existing take/where phase divert. All three have `m1` lanes.
 
 `_select(_.a + _.b)` (and any expression `pred_to_sql` can render) now
 lowers into a single computed projection slot, so `sum`/`min`/`max`/
-`average`/`count` over a computed value work. **Caveat:** a computed
-projection containing a type cast (`int64(_.a) * int64(_.b)`) fails
-inference (the `_` placeholder + cast interaction in linq's `_select`),
-so the wide-result dot-product **sum** lanes (`zip_dot_product`,
-`zip_dot_product_3arg`) stay `—` — their `SUM(price*year)` overflows
-int32 at n=100k and needs an int64-typed projection. Deferred to the
-computed-cast follow-up.
+`average`/`count` over a computed value work.
+
+## Computed-cast projection — closed
+
+A computed projection containing a workhorse type cast
+(`int64(_.a) * int64(_.b)`, `double(_.x) / 2`, `string(_.id)`) used to
+reject with `_sql: expression over a column is not translatable to SQL:
+int64(_.price)`. (The earlier note here blamed linq's `_select`
+inference — that was wrong: the in-memory `_fold` lanes handled the cast
+fine; the gap was purely that `fn_call_to_sql` had no entry for the cast
+functions.) Now the workhorse casts lower to SQLite
+`CAST(x AS INTEGER/REAL/TEXT)`, and — critically — the daslang cast drives
+the **result read-back type**, so `int64(_.price) * int64(_.year) |> sum()`
+reads the 64-bit `SUM` back faithfully (without the cast the int
+projection truncates at n=100k, ~1e11 ≫ int32). This lit the
+`zip_dot_product` / `zip_dot_product_3arg` SQL `m1` lanes.
 
 ---
 
@@ -138,8 +148,9 @@ SQL has no positional pairing (joins are key-based). The decs/SQL lanes
 instead measure the degenerate **same-row** interpretation (two columns
 of one row). `zip_count_pred` gets an `m1` on that basis (count of
 `price*year > T`, product pushed into `_where` — the per-row product fits
-int32). The dot-product **sum** lanes need an int64-typed projection
-(see "Computed-scalar `_select`" above) — deferred.
+int32). The dot-product **sum** lanes (`zip_dot_product` /
+`zip_dot_product_3arg`) are now lit too, via the int64-cast projection
+(see "Computed-cast projection" above).
 `zip_reverse_to_array` stays `—`: `reverse()` has no SQL order key.
 
 ### `decs_count_bare_pred` — decs-specific Theme 4 root-cause fix
