@@ -658,13 +658,15 @@ def private next_clause_kw(q : string; from : int) : int {
 // variable; every downstream reference is replaced with `(<expr>)`, yielding a `let`-free query the rest of
 // the reader handles unchanged — in every context (single / join / second-`from`), and inlined computed
 // columns/keys push down to SQL. Chained lets resolve in order (a later RHS inlines the earlier bindings).
-// `bodyStart` is the offset just past the source's `in` (lets only follow the source); substitution is
-// confined to the clause region (after the source expression), so a let name never rewrites the source.
-// Returns (ok, rewritten-query); a malformed binding reports a macro_error and returns ok=false.
+// `bodyStart` is the offset just past the source's `in` (lets only follow the source). A binding inlines
+// only into the clauses that FOLLOW it (C# forward-only `let` scoping): the source expression and any text
+// before a binding are left untouched, so an identifier that legitimately precedes a same-named binding
+// (an outer/global) is not clobbered. Returns (ok, rewritten-query); a malformed binding reports a
+// macro_error and returns ok=false.
 def private extract_lets(q : string; bodyStart : int; rangeVar : string;
                          prog : ProgramPtr; at : LineInfo) : tuple<bool; string> {
-    var subs : table<string; string>     // binding name → fully-resolved "(<expr>)"
-    var cuts : array<tuple<int; int>>    // [start, end) spans of the `let` clauses to drop
+    var subs : table<string; string>        // binding name → fully-resolved "(<expr>)"
+    var cuts : array<tuple<int; int; string>>   // (start, end, name) of each `let` clause, in order
     let srcEnd = next_clause_kw(q, bodyStart)   // first clause keyword = end of the source expression
     var searchFrom = bodyStart
     while (true) {
@@ -705,22 +707,24 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
         }
         if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }   // chain earlier lets in
         subs[name] = "({rhs})"
-        cuts |> push((lp, rhsEnd))
+        cuts |> push((lp, rhsEnd, name))
         searchFrom = rhsEnd
     }
     if (empty(subs)) { return (true, q) }
-    // Rebuild once: source region (< srcEnd) verbatim, clause region with the `let` spans dropped and the
-    // binding names inlined. A space replaces each dropped span so adjacent tokens stay separated.
-    let clauses = build_string() $(var w) {
+    // Rebuild: source region (< srcEnd) verbatim; each `let` span dropped (replaced by a space); each clause
+    // segment inlined with only the bindings introduced BEFORE it, so a reference preceding a binding stays.
+    let body = build_string() $(var w) {
+        var active : table<string; string>
         var pos = srcEnd
         for (c in cuts) {
-            w |> write(slice(q, pos, c._0))
+            w |> write(substitute_idents(slice(q, pos, c._0), active))
             w |> write(" ")
+            active[c._2] = subs[c._2]
             pos = c._1
         }
-        w |> write(slice(q, pos, length(q)))
+        w |> write(substitute_idents(slice(q, pos, length(q)), active))
     }
-    return (true, "{slice(q, 0, srcEnd)}{substitute_idents(clauses, subs)}")
+    return (true, "{slice(q, 0, srcEnd)}{body}")
 }
 
 // Parse the query and emit the `_fold(...)` rewrite text. On a malformed query, register a macro error

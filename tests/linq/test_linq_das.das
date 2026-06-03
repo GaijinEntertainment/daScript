@@ -724,3 +724,15 @@ def test_let_correlated(t : T?) {
     t |> equal(labels[0], "1-a")
     t |> equal(labels[3], "3-d")
 }
+
+[test]
+def test_let_forward_scope_no_clobber(t : T?) {
+    let cars <- mk_cars()
+    let lux = "eco"   // OUTER var; the `where` references it BEFORE the same-named `let` is introduced
+    // C# forward-only `let` scoping: the `where`'s `lux` is the outer ("eco") — it must NOT be rewritten
+    // to the later binding. So the filter keeps the two eco cars, then `select lux` uses the let (c.brand).
+    let brands <- %linq! from c in cars where c.brand == lux let lux = c.brand select lux %%
+    t |> equal(length(brands), 2, "where uses OUTER lux (eco), not the let")
+    t |> equal(brands[0], "eco")
+    t |> equal(brands[1], "eco")
+}
