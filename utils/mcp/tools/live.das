@@ -281,7 +281,7 @@ def do_live_launch(file, project, project_root : string; port : string = ""; loa
         sleep(500u)
         if (live_is_running(p)) {
             let status = live_get("/status", p)
-            return make_tool_result("daslang-live started successfully on port {p}.\n{status}")
+            return make_tool_result("daslang-live started successfully on port {p}.\nReminder: to drive synthetic mouse/keyboard input, first post set_user_control with enabled=false, or the real OS cursor races GLFW's poll and clobbers synth IO (gestures miss; snapshots read the OS cursor). with_recording_app / the dastest harness do this for you; a manual probe host does not.\n{status}")
         }
     }
     return make_tool_result("daslang-live launched but did not respond on port {p} within 10 seconds. Check the console for errors.", true)
