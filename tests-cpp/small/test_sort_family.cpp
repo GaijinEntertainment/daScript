@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <random>
 #include <vector>
 
 using namespace das;
@@ -458,4 +459,100 @@ TEST_CASE("bounded-N streaming heap (top_n_by usage pattern)") {
     CHECK(buf[0] == 0);
     CHECK(buf[1] == 1);
     CHECK(buf[2] == 2);
+}
+
+// ============================================================================
+// das_stable_sort_r (byte) + das_stable_sort<T> (typed) — adaptive natural-run
+// merge. Verifies sorted + STABLE (equal keys keep input order) + permutation.
+// ============================================================================
+
+namespace {
+
+    // key drives the sort; idx records original position so stability is observable.
+    struct Keyed { int32_t key; int32_t idx; };
+
+    bool keyed_byte_less(const void * a, const void * b) {
+        return static_cast<const Keyed*>(a)->key < static_cast<const Keyed*>(b)->key;
+    }
+    struct KeyedLess { bool operator()(const Keyed & a, const Keyed & b) const { return a.key < b.key; } };
+
+    // Sorted by key, stable within equal-key groups, and a permutation of the input.
+    bool keyed_sorted_stable_perm(const std::vector<Keyed> & out, const std::vector<Keyed> & in) {
+        if (out.size() != in.size()) return false;
+        std::vector<char> seen(out.size(), 0);
+        for (size_t i = 0; i < out.size(); i++) {
+            int32_t ix = out[i].idx;
+            if (ix < 0 || size_t(ix) >= out.size() || seen[ix]) return false;       // permutation
+            seen[ix] = 1;
+            if (out[i].key != in[size_t(ix)].key) return false;                      // element integrity
+            if (i && out[i].key < out[i-1].key) return false;                        // sorted
+            if (i && out[i].key == out[i-1].key && out[i].idx < out[i-1].idx) return false; // stable
+        }
+        return true;
+    }
+
+    enum class KPat { Random, Dups, Sorted, Reverse, AllEqual };
+    std::vector<Keyed> keyed_pattern(KPat p, size_t n, uint32_t seed) {
+        std::mt19937 rng(seed);
+        std::vector<Keyed> v(n);
+        for (size_t i = 0; i < n; i++) {
+            v[i].idx = int32_t(i);
+            switch (p) {
+                case KPat::Random:   v[i].key = int32_t(rng() & 0x3FFF); break;
+                case KPat::Dups:     v[i].key = int32_t(rng() % 8); break;       // heavy duplicates
+                case KPat::Sorted:   v[i].key = int32_t(i); break;
+                case KPat::Reverse:  v[i].key = int32_t(n - i); break;
+                case KPat::AllEqual: v[i].key = 42; break;
+            }
+        }
+        return v;
+    }
+
+} // namespace
+
+TEST_CASE("das_stable_sort_r — byte path: sorted + stable + permutation") {
+    const KPat pats[] = { KPat::Random, KPat::Dups, KPat::Sorted, KPat::Reverse, KPat::AllEqual };
+    // sizes around the MINRUN=32 cutoff plus larger to exercise galloping + multi-pass merge.
+    const size_t ns[] = { 0, 1, 2, 3, 31, 32, 33, 100, 1000, 5000 };
+    for (uint32_t seed = 1; seed <= 3; seed++) {
+        for (KPat p : pats) {
+            for (size_t n : ns) {
+                auto in = keyed_pattern(p, n, seed * 101u);
+                auto out = in;
+                das_stable_sort_r(out.data(), out.size(), sizeof(Keyed), keyed_byte_less);
+                CHECK(keyed_sorted_stable_perm(out, in));
+            }
+        }
+    }
+}
+
+TEST_CASE("das_stable_sort<T> — typed path: sorted + stable + permutation") {
+    const KPat pats[] = { KPat::Random, KPat::Dups, KPat::Sorted, KPat::Reverse, KPat::AllEqual };
+    const size_t ns[] = { 0, 1, 2, 3, 31, 32, 33, 100, 1000, 5000 };
+    for (uint32_t seed = 1; seed <= 3; seed++) {
+        for (KPat p : pats) {
+            for (size_t n : ns) {
+                auto in = keyed_pattern(p, n, seed * 101u);
+                auto out = in;
+                das_stable_sort(out.data(), out.data() + out.size(), KeyedLess());
+                CHECK(keyed_sorted_stable_perm(out, in));
+            }
+        }
+    }
+}
+
+TEST_CASE("das_stable_sort — adaptivity (already-sorted / reverse use O(N) comparisons)") {
+    // The adaptive natural-run path must produce N-1 comparisons on monotone input.
+    const size_t n = 1000;
+    auto count_byte = [&](KPat p) {
+        auto v = keyed_pattern(p, n, 1u);
+        uint64_t cmps = 0;
+        das_stable_sort_r(v.data(), v.size(), sizeof(Keyed), [&](const void * a, const void * b) {
+            cmps++;
+            return static_cast<const Keyed*>(a)->key < static_cast<const Keyed*>(b)->key;
+        });
+        return cmps;
+    };
+    CHECK(count_byte(KPat::Sorted) == n - 1);   // one ascending run, zero merges
+    CHECK(count_byte(KPat::Reverse) == n - 1);  // one descending run → reversed, zero merges
 }

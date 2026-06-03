@@ -136,6 +136,8 @@ namespace das {
     DAS_API void builtin_sort_string ( void * data, int32_t length );
     DAS_API void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_stable_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    DAS_API void builtin_stable_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
 
     // Sort-family extensions: partial_sort / nth_element / heap ops.
     // Mirrors builtin_sort<TT> for the typed default-comparator path; uses

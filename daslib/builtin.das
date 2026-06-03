@@ -1859,6 +1859,39 @@ def sort(var a : array<auto(TT)> | #; cmp : block<(x, y : TT) : bool>) {
     }
 }
 
+def stable_sort(var a : array<auto(TT)> | #; cmp : block<(x, y : TT) : bool>) {
+    //! Sorts an array in place using `cmp`, preserving the input order of elements that compare equal (stable).
+    if (length(a) <= 1) return
+    unsafe {
+        static_if (typeinfo is_ref_type(type<TT>)) {
+            __builtin_stable_sort_array_any_cblock(a, typeinfo sizeof(a[0]), length(a), cmp)
+        } else {
+            __builtin_stable_sort_array_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a), cmp)
+        }
+    }
+}
+
+def stable_sort(var a : auto(TT)[] | #; cmp : block<(x, y : TT) : bool>) {
+    //! Sorts a fixed array in place using `cmp`, preserving the input order of elements that compare equal (stable).
+    unsafe {
+        static_if (typeinfo is_ref_type(type<TT>)) {
+            __builtin_stable_sort_dim_any_cblock(a, typeinfo sizeof(a[0]), length(a), cmp)
+        } else {
+            __builtin_stable_sort_dim_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a), cmp)
+        }
+    }
+}
+
+def stable_sort(var a : array<auto(TT)> | #) {
+    //! Sorts an array in place ascending, preserving the input order of equal elements (stable).
+    stable_sort(a) $(x, y : TT) : bool { return x < y; }
+}
+
+def stable_sort(var a : auto(TT)[] | #) {
+    //! Sorts a fixed array in place ascending, preserving the input order of equal elements (stable).
+    stable_sort(a) $(x, y : TT) : bool { return x < y; }
+}
+
 def lock(var a : array<auto(TT)> ==const | #; blk : block<(var x : array<TT>#)>) {
     __builtin_array_lock(a)
     invoke(blk, unsafe(reinterpret<array<auto(TT)> -const#> a))
