@@ -32,6 +32,21 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
     IF (DAS_LLVM_REFETCH)
         find_package(LLVM ${DAS_LLVM_TARGET_VERSION})
+        # A system LLVM is only usable here if it ships the prebuilt-release
+        # layout we copy from. On Windows that means bin/clang-cl.exe +
+        # bin/LLVM-C.dll. msys2/mingw clang64 provides LLVMConfig.cmake but lays
+        # the binaries out differently (libLLVM-NN.dll, no LLVM-C.dll); a
+        # 2026-06 msys2 package update started reporting a matching version so
+        # find_package now succeeds where it used to fail the version match.
+        # Treat that as not-found and fall through to the prebuilt download.
+        IF (LLVM_FOUND AND WIN32 AND
+            ((NOT EXISTS "${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe") OR
+             (NOT EXISTS "${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll")))
+            MESSAGE(STATUS "dasLlvm: system LLVM at ${LLVM_INSTALL_PREFIX} lacks "
+                "Windows-release clang-cl.exe/LLVM-C.dll (msys2/mingw layout); "
+                "using prebuilt download")
+            SET(LLVM_FOUND FALSE)
+        ENDIF()
         IF (LLVM_FOUND)
             MESSAGE(STATUS "LLVM found at: ${LLVM_INSTALL_PREFIX}")
             IF(WIN32)
