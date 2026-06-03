@@ -6,6 +6,7 @@
 #include <daScript/misc/sysos.h>
 #include <daScript/misc/string_writer.h>       // TextWriter
 #include <cctype>                              // tolower (case-insensitive basename normalize)
+#include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
 
 das::FileAccessPtr get_file_access( char * pak );
 
@@ -163,7 +164,9 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
                 continue;
             }
             if (skip_set && skip_set->count(normalize_module_name(das::string(c_file.name)))) {
-                tout << "Warning: local '" << c_file.name << "' shadows global — using local\n";
+                // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
+                // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
+                fprintf(stderr, "Warning: local '%s' shadows global — using local\n", c_file.name);
                 continue;
             }
             all_good &= Result::OK == init_dyn_modules(fa, modules_path + c_file.name, tout, false);
@@ -179,7 +182,9 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
                 continue;
             }
             if (skip_set && skip_set->count(normalize_module_name(das::string(ent->d_name)))) {
-                tout << "Warning: local '" << ent->d_name << "' shadows global — using local\n";
+                // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
+                // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
+                fprintf(stderr, "Warning: local '%s' shadows global — using local\n", ent->d_name);
                 continue;
             }
             all_good &= Result::OK == init_dyn_modules(fa, modules_path + ent->d_name, tout, false);

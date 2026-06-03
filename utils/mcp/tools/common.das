@@ -384,6 +384,18 @@ def run_mcp_subtool(subtool_name : string; args : array<string>;
     let exit_code = run_and_capture(argv, output, timeout_sec)
     if (exit_code == popen_timed_out) return make_tool_result("MCP subtool '{subtool_name}' timed out after {timeout_sec}s:\n{output}", true)
     if (exit_code != 0) return make_tool_result("MCP subtool '{subtool_name}' failed (exit {exit_code}):\n{output}", true)
+    // The subtool emits a single-line ToolResult JSON object on stdout, but run_and_capture merges in any
+    // compiler / dyn-module diagnostics printed before it — e.g. `Warning: local 'X' shadows global — using
+    // local` from a `-load_module` shadow, or a loaded module's compile-error report (which contains daslang
+    // source snippets with `{`). Both print at the child's startup, before the subtool's `main`, and a broken
+    // module does NOT abort the run (require_dynamic_modules continues), so the subtool still exits 0.
+    // The server splices this return value verbatim into the `result` field, so a stray preamble desyncs the
+    // JSON-RPC stream (same class as the 776c10658 GC-leak-dump fix). Anchor on the ToolResult envelope marker
+    // (`content` is its first field) rather than the first `{`, which a source-snippet preamble would match.
+    let envStart = find(output, "\{\"content")
+    if (envStart > 0) {
+        output = strip(slice(output, envStart))
+    }
     return output
 }
 
