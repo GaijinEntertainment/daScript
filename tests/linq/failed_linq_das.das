@@ -13,6 +13,7 @@ expect 50503   // join: composite key (second `equals` before the terminal)
 expect 50503   // join … into: post-`into` `where` over the (outer, g) pair (needs the carry — not yet)
 expect 50503   // join … into: post-`into` `orderby` over the (outer, g) pair (needs the carry — not yet)
 expect 50503   // join … into: `group` terminal after `into` (select the group instead — not yet)
+expect 50503   // join: a query-continuation `into` AFTER the terminal (single-source only; group-join `into` precedes it)
 expect 50503   // join: `where` inside the join clause (between join and equals)
 expect 50503   // join: two `where` clauses (one pre-join, one post-join)
 expect 50503   // join: range var collides with the reserved transparent-id name
@@ -129,6 +130,14 @@ def trigger_join_into_post_orderby() {
 def trigger_join_into_group_terminal() {
     var cars <- one_car()
     let x <- %linq! from c in cars join b in cars on c.brand equals b.brand into g group c by c.brand %%
+    unused(x)
+}
+
+def trigger_join_into_post_terminal_continuation() {
+    var cars <- one_car()
+    // a continuation `into` AFTER the join's `select` terminal — single-source only (the (outer, g) carry
+    // can't rebind); must reject clearly, not let `into n select n` fall into the projection text
+    let x <- %linq! from c in cars join b in cars on c.brand equals b.brand select c.name into n select n %%
     unused(x)
 }
 

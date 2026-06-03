@@ -437,6 +437,15 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     }
     let isGroup = groupPos >= 0
     let termPos = isGroup ? groupPos : selectPos
+    // A query-continuation `into` AFTER the terminal (`select … into x …`) is single-source only — a join /
+    // multiple-`from` carry can't rebind the (outer, inner) pair. Reject it clearly instead of letting the
+    // `into …` text fall into the projection (it otherwise mis-parses as a low-level syntax error). This also
+    // catches a trailing continuation `into` after a valid pre-terminal group-join `into g`.
+    let postTermInto = find_kw_depth0(q, "into", isGroup ? groupPos + 5 : selectPos + 6)
+    if (postTermInto >= 0) {
+        macro_error(prog, at, "linq: query-continuation 'into' after the 'select'/'group' terminal is not supported on a 'join' or multiple-'from' query — it works on single-source queries; a group-join 'into' goes before the terminal (`join … equals … into g select …`)")
+        return "(0)"
+    }
     if (isGroup && orderByPos >= 0) {
         macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
         return "(0)"
