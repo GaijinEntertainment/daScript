@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -785,6 +786,219 @@ inline void das_partial_sort_r(void *base, size_t nel, size_t n, size_t width, C
         byte_swap(data, data + (len - 1) * width, width);
         das_sift_down_r(data, 0, len - 1, width, cmp);
     }
+}
+
+// ============================================================================
+// Stable sort — adaptive natural-run merge (timsort-lite, no galloping).
+//
+// Detects ascending / strictly-descending(→reversed-in-place) natural runs,
+// extends short runs to MINRUN via stable insertion, then bottom-up pairwise-
+// merges runs with a ping-pong buffer. STABLE (equal elements keep input order).
+// O(N) on already-sorted / reverse input (exactly N-1 comparisons), O(N log N)
+// otherwise. Allocates N-element scratch via malloc (mirrors std::stable_sort's
+// get_temporary_buffer); on OOM falls back to the unstable das_qsort_r / das_sort
+// (only under genuine allocation failure). Won a bake-off vs std::stable_sort and
+// two alternatives (bottom-up merge, index-decoration) — examples/sort/bench_stable_sort.cpp.
+// ============================================================================
+
+static constexpr size_t DAS_STABLE_MINRUN = 32;
+
+// Stable insertion sort over the element range [lo, hi). Shifts only elements
+// strictly greater than the held value, so equal elements never reorder.
+template <typename Compare>
+static inline void das_stable_insertion_run_r(unsigned char *data, size_t lo, size_t hi, size_t width, Compare cmp, unsigned char *tmp)
+{
+    for (size_t i = lo + 1; i < hi; i++) {
+        if (!cmp(data + i * width, data + (i - 1) * width)) continue;   // data[i] >= data[i-1]
+        sized_memcpy(tmp, data + i * width, width);
+        size_t j = i;
+        do {
+            sized_memcpy(data + j * width, data + (j - 1) * width, width);
+            j--;
+        } while (j > lo && cmp(tmp, data + (j - 1) * width));
+        sized_memcpy(data + j * width, tmp, width);
+    }
+}
+
+// Merge sorted runs [l,m) and [m,r) from src into dst. Stable: takes the left
+// element on a tie (right < left false).
+template <typename Compare>
+static inline void das_stable_merge_runs_r(const unsigned char *src, unsigned char *dst,
+                                           size_t l, size_t m, size_t r, size_t width, Compare cmp)
+{
+    size_t i = l, j = m, k = l;
+    while (i < m && j < r) {
+        if (cmp(src + j * width, src + i * width)) { sized_memcpy(dst + (k++) * width, src + j * width, width); j++; }
+        else                                       { sized_memcpy(dst + (k++) * width, src + i * width, width); i++; }
+    }
+    if (i < m) { memcpy(dst + k * width, src + i * width, (m - i) * width); k += (m - i); }
+    if (j < r) { memcpy(dst + k * width, src + j * width, (r - j) * width); }
+}
+
+// Byte-pointer stable sort — the daslang interp any-cblock binding path.
+template <typename Compare>
+inline void das_stable_sort_r(void *base, size_t nel, size_t width, Compare cmp)
+{
+    if (nel <= 1) return;
+    unsigned char *data = (unsigned char *)base;
+    unsigned char *buf = (unsigned char *)malloc(nel * width);
+    if (!buf) { das_qsort_r(base, nel, width, cmp); return; }   // OOM → unstable fallback
+    unsigned char tmpStack[256];
+    unsigned char *tmp = width <= sizeof(tmpStack) ? tmpStack : (unsigned char *)malloc(width);
+    size_t maxRuns = nel / DAS_STABLE_MINRUN + 2;
+    size_t *bndA = (size_t *)malloc((maxRuns + 1) * sizeof(size_t));
+    size_t *bndB = (size_t *)malloc((maxRuns + 1) * sizeof(size_t));
+    if (!tmp || !bndA || !bndB) {
+        if (tmp && tmp != tmpStack) free(tmp);
+        free(bndA); free(bndB); free(buf);
+        das_qsort_r(base, nel, width, cmp);
+        return;
+    }
+
+    // 1. Detect natural runs (ascending, or strictly-descending then reversed),
+    //    each extended to MINRUN via stable insertion. Collect run boundaries.
+    size_t *cur = bndA, *nxt = bndB;
+    size_t nb = 0;
+    cur[nb++] = 0;
+    size_t i = 0;
+    while (i < nel) {
+        size_t runStart = i, j = i + 1;
+        if (j < nel) {
+            if (cmp(data + j * width, data + i * width)) {                  // strictly descending
+                j++;
+                while (j < nel && cmp(data + j * width, data + (j - 1) * width)) j++;
+                for (size_t a = runStart, b = j - 1; a < b; a++, b--)        // reverse → ascending (stable: strict)
+                    byte_swap(data + a * width, data + b * width, width);
+            } else {                                                        // non-decreasing
+                j++;
+                while (j < nel && !cmp(data + j * width, data + (j - 1) * width)) j++;
+            }
+        }
+        if (j - runStart < DAS_STABLE_MINRUN) {
+            size_t hi = (runStart + DAS_STABLE_MINRUN < nel) ? runStart + DAS_STABLE_MINRUN : nel;
+            das_stable_insertion_run_r(data, runStart, hi, width, cmp, tmp);
+            j = hi;
+        }
+        cur[nb++] = j;
+        i = j;
+    }
+
+    // 2. Bottom-up pairwise merge over the run list, ping-pong data <-> buf.
+    unsigned char *src = data, *dst = buf;
+    while (nb - 1 > 1) {                                                    // > 1 run
+        size_t R = nb - 1, nn = 0, t = 0;
+        nxt[nn++] = 0;
+        for (; t + 1 < R; t += 2) {
+            das_stable_merge_runs_r(src, dst, cur[t], cur[t + 1], cur[t + 2], width, cmp);
+            nxt[nn++] = cur[t + 2];
+        }
+        if (t < R) {                                                       // lone last run
+            memcpy(dst + cur[t] * width, src + cur[t] * width, (cur[t + 1] - cur[t]) * width);
+            nxt[nn++] = cur[t + 1];
+        }
+        unsigned char *ts = src; src = dst; dst = ts;
+        size_t *tb = cur; cur = nxt; nxt = tb;
+        nb = nn;
+    }
+    if (src != data) memcpy(data, src, nel * width);
+
+    if (tmp != tmpStack) free(tmp);
+    free(bndA); free(bndB); free(buf);
+}
+
+// ---- Typed twins (the AOT path) ----
+// Element moves go through memcpy(sizeof(T)) — a compile-time size the compiler
+// inlines, unlike the runtime-width byte path — while comparisons use the typed
+// comparator. Requires trivially-relocatable T (the daslang array-element model,
+// same assumption as das_sort<T>).
+
+template <typename T, typename Compare>
+static inline void das_stable_insertion_run_t(T *data, size_t lo, size_t hi, Compare cmp)
+{
+    for (size_t i = lo + 1; i < hi; i++) {
+        if (!cmp(data[i], data[i - 1])) continue;
+        T held = data[i];                                                  // value copy for the comparisons
+        size_t j = i;
+        do {
+            memcpy(&data[j], &data[j - 1], sizeof(T));
+            j--;
+        } while (j > lo && cmp(held, data[j - 1]));
+        memcpy(&data[j], &held, sizeof(T));
+    }
+}
+
+template <typename T, typename Compare>
+static inline void das_stable_merge_runs_t(const T *src, T *dst, size_t l, size_t m, size_t r, Compare cmp)
+{
+    size_t i = l, j = m, k = l;
+    while (i < m && j < r) {
+        if (cmp(src[j], src[i])) { memcpy(&dst[k++], &src[j++], sizeof(T)); }
+        else                     { memcpy(&dst[k++], &src[i++], sizeof(T)); }
+    }
+    if (i < m) { memcpy(&dst[k], &src[i], (m - i) * sizeof(T)); k += (m - i); }
+    if (j < r) { memcpy(&dst[k], &src[j], (r - j) * sizeof(T)); }
+}
+
+// Typed stable sort — the AOT _T binding path. Same algorithm as das_stable_sort_r
+// with compile-time element size + typed comparator.
+template <typename T, typename Compare>
+inline void das_stable_sort(T *first, T *last, Compare cmp)
+{
+    if (last - first <= 1) return;
+    size_t nel = size_t(last - first);
+    T *data = first;
+    T *buf = (T *)malloc(nel * sizeof(T));
+    if (!buf) { das_sort(first, last, cmp); return; }                      // OOM → unstable fallback
+    size_t maxRuns = nel / DAS_STABLE_MINRUN + 2;
+    size_t *bndA = (size_t *)malloc((maxRuns + 1) * sizeof(size_t));
+    size_t *bndB = (size_t *)malloc((maxRuns + 1) * sizeof(size_t));
+    if (!bndA || !bndB) { free(bndA); free(bndB); free(buf); das_sort(first, last, cmp); return; }
+
+    size_t *cur = bndA, *nxt = bndB;
+    size_t nb = 0;
+    cur[nb++] = 0;
+    size_t i = 0;
+    while (i < nel) {
+        size_t runStart = i, j = i + 1;
+        if (j < nel) {
+            if (cmp(data[j], data[i])) {                                   // strictly descending
+                j++;
+                while (j < nel && cmp(data[j], data[j - 1])) j++;
+                using std::swap;
+                for (size_t a = runStart, b = j - 1; a < b; a++, b--) swap(data[a], data[b]);
+            } else {                                                       // non-decreasing
+                j++;
+                while (j < nel && !cmp(data[j], data[j - 1])) j++;
+            }
+        }
+        if (j - runStart < DAS_STABLE_MINRUN) {
+            size_t hi = (runStart + DAS_STABLE_MINRUN < nel) ? runStart + DAS_STABLE_MINRUN : nel;
+            das_stable_insertion_run_t(data, runStart, hi, cmp);
+            j = hi;
+        }
+        cur[nb++] = j;
+        i = j;
+    }
+
+    T *src = data, *dst = buf;
+    while (nb - 1 > 1) {
+        size_t R = nb - 1, nn = 0, t = 0;
+        nxt[nn++] = 0;
+        for (; t + 1 < R; t += 2) {
+            das_stable_merge_runs_t(src, dst, cur[t], cur[t + 1], cur[t + 2], cmp);
+            nxt[nn++] = cur[t + 2];
+        }
+        if (t < R) {
+            memcpy(&dst[cur[t]], &src[cur[t]], (cur[t + 1] - cur[t]) * sizeof(T));
+            nxt[nn++] = cur[t + 1];
+        }
+        T *ts = src; src = dst; dst = ts;
+        size_t *tb = cur; cur = nxt; nxt = tb;
+        nb = nn;
+    }
+    if (src != data) memcpy(data, src, nel * sizeof(T));
+
+    free(bndA); free(bndB); free(buf);
 }
 
 }
