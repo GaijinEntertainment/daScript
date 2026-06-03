@@ -25,7 +25,7 @@ def has_expect_directive(file : string) : bool {
 
 def lint_single(file : string; project : string;
                 disabled_codes, enabled_codes : table<string>) : string {
-    return "SKIP {file} (intentional compile errors via `expect`)" if (has_expect_directive(file))
+    return make_tool_result("SKIP {file} (intentional compile errors via `expect`)") if (has_expect_directive(file))
     return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
         if (!empty(issues)) {
