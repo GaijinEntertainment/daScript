@@ -96,29 +96,33 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
         let n = length(arr)
         var depth = 0
         var inStr = false
-        var prevSig = 0   // last significant (non-whitespace) byte, 0 = none
+        var prevSig = 0    // last significant (non-whitespace) byte, 0 = none
+        var prevSig2 = 0   // significant byte before prevSig — disambiguates a `>` tail
         var i = from
         while (i < n && found < 0) {
             let c = int(arr[i])
             if (inStr) {
                 if (c == '\\') { i += 2; continue }
-                if (c == '"') { inStr = false; prevSig = c }
+                if (c == '"') { inStr = false; prevSig2 = prevSig; prevSig = c }
                 i++
                 continue
             }
-            if (c == '"') { inStr = true; prevSig = c; i++; continue }
-            if (c == '(' || c == '[' || c == '{') { depth++; prevSig = c; i++; continue }
-            if (c == ')' || c == ']' || c == '}') { depth--; prevSig = c; i++; continue }
-            // A clause keyword is a depth-0 whole word NOT preceded (ignoring whitespace) by `.` (member
-            // access) or `>` (the tail of a pipe `|>`, lambda arrow `=>`, or `->`) — so an aggregate like
-            // `g |> select(...) |> sum` inside an orderby/where body is not mistaken for a `select` clause.
-            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.' && prevSig != '>'
+            if (c == '"') { inStr = true; prevSig2 = prevSig; prevSig = c; i++; continue }
+            if (c == '(' || c == '[' || c == '{') { depth++; prevSig2 = prevSig; prevSig = c; i++; continue }
+            if (c == ')' || c == ']' || c == '}') { depth--; prevSig2 = prevSig; prevSig = c; i++; continue }
+            // A clause keyword is a depth-0 whole word NOT preceded (ignoring whitespace) by `.` (member access)
+            // or by a `>` that is the tail of a pipe `|>` / lambda arrow `=>` / `->` — so an aggregate like
+            // `g |> select(...) |> sum` inside an orderby/where body is not mistaken for a `select` clause. A `>`
+            // from a type/generic bracket (`default<int>`, `type<Foo>`) or comparison is NOT excluded, so a
+            // clause keyword that legitimately follows one (e.g. `let d = default<int> select …`) still matches.
+            let afterPipeTail = prevSig == '>' && (prevSig2 == '|' || prevSig2 == '=' || prevSig2 == '-')
+            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.' && !afterPipeTail
             if (depth == 0 && atWordStart && i + m <= n && slice(q, i, i + m) == kw) {
                 if (i + m == n || !is_ident_byte(int(arr[i + m]))) {
                     found = i
                 }
             }
-            if (!is_white_space(c)) { prevSig = c }
+            if (!is_white_space(c)) { prevSig2 = prevSig; prevSig = c }
             i++
         }
     }

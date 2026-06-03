@@ -186,6 +186,23 @@ def test_group_into_iterator_output(t : T?) {
     t |> equal(n, 2, "iterator over the aggregated buckets")
 }
 
+// ===== type-bracket clause body (find_kw_depth0 regression) =====
+
+[test]
+def test_type_bracket_body_before_keyword(t : T?) {
+    let cars <- mk_cars()
+    // A clause body that ends in a type/generic bracket `>` at depth 0 (`default<int>`) must NOT swallow the
+    // following clause keyword. The `>` suppression only fires for the tail of `|>` / `=>` / `->`, never a
+    // type bracket — see find_kw_depth0. (Was: error[50503] "'let z' has no following clause".)
+    let rep <- %linq! from c in cars
+                      let z = default<int>
+                      where c.price + z > 100
+                      select c.price + z %%
+    t |> equal(length(rep), 2, "prices 150,300 survive (z = 0)")
+    t |> equal(rep[0], 150)
+    t |> equal(rep[1], 300)
+}
+
 // ===== decs source =====
 
 [test]
