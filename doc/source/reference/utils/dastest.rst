@@ -104,6 +104,14 @@ Command-line arguments
    * - ``--test-timeout <seconds>``
      - Per-test-file timeout in isolated mode (seconds).
        ``0`` disables.  Default: ``0`` (no per-file timeout).
+   * - ``--stack-on-exception``
+     - On a test panic, walk the call stack *at throw time* (frames intact)
+       and print a real ``CALL STACK`` trace, instead of the default which
+       reports only the panic message and location.  Off by default — a test
+       that swallows a panic via ``try``/``recover`` would also emit a walk.
+       Enable for one-iteration debugging of a failing or crashing test;
+       works in isolated mode too (the trace is folded under the failing
+       test's log).
    * - ``--timing-outliers <n>``
      - After all tests pass, print the *n* slowest test files
        (timing outliers above 2 standard deviations).
