@@ -115,6 +115,24 @@ def test_group_into_orderby_on_groups(t : T?) {
 }
 
 [test]
+def test_group_into_explicit_tuple_access(t : T?) {
+    let cars <- mk_cars()
+    // The group `g` is a `tuple<key; members>`; explicit `g._0` (key) / `g._1` (members array) must pass
+    // through the A2 rewrite untouched — only `g.key` → `g._0` and bare `g` → `g._1` are rewritten, never
+    // `g._0` → `g._1._0`. Mix all three forms in one projection.
+    let rep <- %linq! from c in cars
+                      group c by c.brand into g
+                      select (k = g._0, viaKey = g.key, n = g._1 |> length, total = g |> length) %%
+    t |> equal(length(rep), 2)
+    for (r in rep) {
+        t |> equal(r.k, r.viaKey, "g._0 and g.key are the same key")
+        t |> equal(r.n, r.total, "g._1 and bare g are the same members array")
+        if (r.k == "eco") { t |> equal(r.n, 2) }
+        if (r.k == "lux") { t |> equal(r.n, 1) }
+    }
+}
+
+[test]
 def test_group_into_member_keeping_identity(t : T?) {
     let cars <- mk_cars()
     // `select g` is the identity continuation — yields the group tuples (key, members) unchanged.

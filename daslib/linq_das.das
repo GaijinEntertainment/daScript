@@ -878,9 +878,12 @@ def private rewrite_group_var(text : string; gname : string) : string {
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(text, i, j)
                     if (prevSig != '.' && word == gname) {
-                        // bare `g` (→ `g._1`) unless followed by `.key` (→ `g._0`).
+                        // `g.key` → `g._0`; truly bare `g` → `g._1` (the members array). Any other `g.<member>`
+                        // (explicit `g._0` / `g._1`, or an invalid `g.foo`) is left untouched so raw tuple access
+                        // keeps working and invalid members error naturally — never rewrite `g._0` into `g._1._0`.
+                        let dotFollows = j < n && int(arr[j]) == '.'
                         var keyEnd = -1
-                        if (j < n && int(arr[j]) == '.') {
+                        if (dotFollows) {
                             var k = j + 1
                             while (k < n && is_ident_byte(int(arr[k]))) { k++ }
                             if (slice(text, j + 1, k) == "key") { keyEnd = k }
@@ -888,12 +891,15 @@ def private rewrite_group_var(text : string; gname : string) : string {
                         if (keyEnd >= 0) {
                             w |> write("{gname}._0")
                             i = keyEnd
-                        } else {
+                            prevSig = '_'   // last emitted token is identifier-like, not a `.`
+                            continue
+                        } elif (!dotFollows) {
                             w |> write("{gname}._1")
                             i = j
+                            prevSig = '_'
+                            continue
                         }
-                        prevSig = '_'   // last emitted token is identifier-like, not a `.`
-                        continue
+                        // g.<member> other than .key: fall through, leave the explicit access intact.
                     }
                     w |> write(word)
                     prevSig = int(arr[j - 1])
