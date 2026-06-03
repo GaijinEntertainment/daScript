@@ -19,5 +19,9 @@ def private deep_panic(n : int) {
 [test]
 def test_panic_emits_stack(t : T?) {
     deep_panic(3)
-    t |> success(true)
+    // deep_panic always panics, so this is unreachable. Fail loudly if a future
+    // change ever lets it return — otherwise the fixture would pass silently and
+    // test_isolated_mode's "no walk without the flag" assertion could go green for
+    // the wrong reason (a fixture that never panicked).
+    t |> success(false, "deep_panic returned without panicking")
 }

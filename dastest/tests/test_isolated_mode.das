@@ -94,16 +94,25 @@ def test_isolated_mode(tt : T?) {
         var output : string
         var exit_code : int
         run_dastest(cmd, output, exit_code)
+        // Positive proof the fixture actually ran and panicked (so an absent CALL
+        // STACK below is meaningful, not a subprocess that never ran).
+        t |> success(exit_code != 0, "expected non-zero exit from the panicking fixture, got {exit_code}\n{output}")
+        t |> success(output |> contains("intentional panic"),
+            "expected the fixture's panic message in output, got:\n{output}")
         t |> success(output |> contains("CALL STACK"),
             "expected the at-throw CALL STACK in output, got:\n{output}")
         t |> success(output |> contains("deep_panic"),
             "expected the panicking call chain (deep_panic) in the walk, got:\n{output}")
 
-        // WITHOUT the flag: no stack walk at all — just the panic message + location.
+        // WITHOUT the flag: the fixture still panics (non-zero exit + message), but
+        // no stack walk is emitted.
         let cmd2 = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir_panic()} --isolated-mode --isolated-mode-threads 1"
         var output2 : string
         var exit_code2 : int
         run_dastest(cmd2, output2, exit_code2)
+        t |> success(exit_code2 != 0, "expected non-zero exit from the panicking fixture, got {exit_code2}\n{output2}")
+        t |> success(output2 |> contains("intentional panic"),
+            "expected the fixture's panic message in output, got:\n{output2}")
         t |> success(!(output2 |> contains("CALL STACK")),
             "without --stack-on-exception there must be no stack walk, got:\n{output2}")
     }
