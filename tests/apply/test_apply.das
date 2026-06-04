@@ -102,8 +102,68 @@ def test_apply_tuple(t : T?) {
 def test_apply_named_tuple(t : T?) {
     var foo = (a = 1, b = "hello")
     apply(foo) $(name, field) {
-        if (name != "a" && name != "b") {
+        static_if (name == "a") {
+            t |> equal(field, 1)
+        } static_elif (name == "b") {
+            t |> equal(field, "hello")
+        } else {
             t->fatal("unknown field")
+        }
+    }
+}
+
+[test]
+def test_apply_imm_struct(t : T?) {
+    t |> run("contents") @(t : T?) {
+        let foo = Foo(a = 1, b = "hello")
+        apply_imm(foo) $(name, field) {
+            if (name != "a" && name != "b") {
+                t->fatal("unknown field")
+            }
+            static_if (typeinfo stripped_typename(field) == "int") {
+                t |> equal(field, 1)
+            } static_elif (typeinfo stripped_typename(field) == "string") {
+                t |> equal(field, "hello")
+            }
+        }
+    }
+    t |> run("assign") @(t : T?) {
+        var foo = Foo(a = 1, b = "hello")
+        apply_imm(foo) $(name, field) {
+            static_if (typeinfo stripped_typename(field) == "int") {
+                field = 13
+            } static_elif (typeinfo stripped_typename(field) == "string") {
+                field = "13"
+            }
+        }
+        apply_imm(foo) $(name, field) {
+            t |> equal("{field}", "13")
+        }
+    }
+}
+
+struct FooAnn {
+    @min = 0 @max = 3 a : int = 1
+    b : string
+}
+
+[test]
+def test_apply_imm_annotations(t : T?) {
+    let foo = FooAnn(a = 2, b = "hi")
+    apply_imm(foo) $(name; field; annotations) {
+        static_if (name == "a") {
+            t |> equal(field, 2)
+            t |> equal(length(annotations), 2)
+            for (ann in annotations) {
+                if (ann.name == "min" && ann.data is tInt) {
+                    t |> equal(ann.data as tInt, 0)
+                } elif (ann.name == "max" && ann.data is tInt) {
+                    t |> equal(ann.data as tInt, 3)
+                }
+            }
+        } else {
+            t |> equal(field, "hi")
+            t |> equal(length(annotations), 0)
         }
     }
 }
@@ -124,7 +184,7 @@ variant Foov {
 }
 
 [test]
-def test_static_assert_on_name(t : T?) {
+def test_static_assert_on_name(_t : T?) {
     var f = Foos(a = 1, b = 2.0)
     apply(f) $(name, value) {
         static_if (name == "a") {
