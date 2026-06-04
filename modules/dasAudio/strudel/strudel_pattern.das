@@ -2149,8 +2149,11 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
             delete shaps
             // wrap the slice index into [0, n-1] so out-of-range values cycle (live-coding: never crash)
             let i = ((int(ih.value.note) % n) + n) % n
-            ev.begin = float(i) * nfinv
-            ev.end_pos = float(i + 1) * nfinv
+            // subdivide the sample's existing [begin, end_pos] window (composes like chop)
+            let b0 = ev.begin
+            let win = ev.end_pos - b0
+            ev.begin = b0 + float(i) * nfinv * win
+            ev.end_pos = b0 + float(i + 1) * nfinv * win
             result |> push(Hap( // nolint:PERF006
                 whole = ih.whole,
                 part = ih.part,
