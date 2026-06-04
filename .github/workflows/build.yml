@@ -679,3 +679,9 @@ jobs:
         git diff --exit-code -- modules/dasClangBind/src/ \
           || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
 
+    - name: "Run cbind const-gen regression test"
+      # Exercises collectActiveDefines (preprocessor-active constant generation);
+      # main returns non-zero on failure. Lives on the mingw worker because that
+      # is where libclang/cbind is available (same reason as the self-binder).
+      run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
+
