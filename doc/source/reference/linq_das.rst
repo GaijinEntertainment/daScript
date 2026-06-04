@@ -274,7 +274,7 @@ element must be the range variable (``group c by …``) — element selectors ar
 yet supported.
 
 A **bare** ``group … by`` (no continuation) keeps the whole ``(key, [rows])``
-group, so it is an **in-memory feature** (array / decs / XML); over a **SQL**
+group, so it is an **in-memory feature** (array / decs / XML / JSON); over a **SQL**
 source it is rejected (SQL ``GROUP BY`` has no all-rows-per-group form). To
 aggregate per group — the common case — add an ``into`` continuation
 (``group c by k into g select (…, g |> length, g |> select(…) |> sum)``), which
@@ -326,7 +326,7 @@ then filter/order the aggregated rows in one fused pass.
 over a SQL source, exactly like the hand-written ``_group_by`` pipe form. A
 **member-keeping** continuation (identity ``select g``, which keeps the whole
 ``(key, [rows])`` group) has no SQL form and is **in-memory only** (array / decs /
-XML) — over a SQL source it is rejected, like a bare ``group … by``.
+XML / JSON) — over a SQL source it is rejected, like a bare ``group … by``.
 
 .. _linq_das_join:
 
@@ -354,7 +354,7 @@ projection **pushes down to SQL**; a whole-row ``select c`` is in-memory only
                        select (Name = c.name, Country = b.country) %%
 
 A ``where`` *before* the ``join`` filters the left source (single range var) and
-also pushes down — over an array/decs/XML source it fuses into the join's probe
+also pushes down — over an array/decs/XML/JSON source it fuses into the join's probe
 loop (no intermediate filtered array). Several pre-join ``where``\ s AND-fold
 (see :ref:`linq_das_filtering`):
 
@@ -367,7 +367,7 @@ loop (no intermediate filtered array). Several pre-join ``where``\ s AND-fold
 or a ``group`` terminal. The join carries ``(c, b)`` as a pair so the later
 clauses can address both variables; the reader rewrites ``c`` / ``b`` to the
 carried fields, and each post-join ``where`` becomes its own filter. This is
-**in-memory only** (array / decs / XML) — over a SQL source the carried
+**in-memory only** (array / decs / XML / JSON) — over a SQL source the carried
 whole-row tuple has no column form and ``_sql`` rejects it (project columns in a
 select-terminal join, or filter pre-join, to push down):
 
@@ -403,7 +403,7 @@ intermediate:
 ``join … into`` is **select-terminal + a pre-join ``where`` + a trailing
 ``iterator``** only, and **array sources only**: ``_group_join`` has no SQL
 push-down (over a SQL source it rejects — write the aggregate in raw SQL
-instead), and decs / XML group-joins are not yet fused. A post-``into`` ``where``
+instead), and decs / XML / JSON group-joins are not yet fused. A post-``into`` ``where``
 / ``orderby`` / ``group`` over the ``(left, g)`` pair is rejected — ``g`` is a
 non-copyable array that can't ride the transparent-identifier carry; materialize
 then transform, or drop to the pipe-form ``_group_join``.

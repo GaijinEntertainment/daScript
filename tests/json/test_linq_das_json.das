@@ -75,3 +75,82 @@ def query_iterator_keyword(t : T?) {
     let ai <- [for (x in %linq! from c in arr where c.qty > 3 select c.id iterator %%); x]
     t |> equal(ji, ai)
 }
+
+// ===== join: JSON left source ⋈ in-memory array right source =====
+
+struct BrandHQ {
+    brand   : string
+    country : string
+}
+
+def private mk_brands() : array<BrandHQ> {
+    return <- [BrandHQ(brand = "Ford",  country = "USA"),
+               BrandHQ(brand = "Honda", country = "Japan")]
+}
+
+[test]
+def query_join_select_terminal(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    // Ford ×3 → USA, Honda ×2 → Japan; the two Ferraris are unmatched (inner join) → 5 rows.
+    let rows <- %linq! from c : Car in jv join b in brands on c.brand equals b.brand select (Id = c.id, Country = b.country) %%
+    t |> equal(length(rows), 5, "5 cars match a brand HQ")
+    var usa = 0
+    for (r in rows) {
+        if (r.Country == "USA") { usa++ }
+    }
+    t |> equal(usa, 3, "three Fords → USA")
+}
+
+[test]
+def query_join_pre_join_where(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    // pre-join where filters the JSON rows (price > 199 → id2,3,5,6) before the join; only Hondas id3,id6 match.
+    let rows <- %linq! from c : Car in jv where c.price > 199 join b in brands on c.brand equals b.brand select (Id = c.id, Country = b.country) %%
+    t |> equal(length(rows), 2, "pre-join where prunes the array walk")
+}
+
+[test]
+def query_join_orderby(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    // post-join orderby → transparent-id carry; sort the joined pairs by price asc.
+    let ids <- %linq! from c : Car in jv join b in brands on c.brand equals b.brand orderby c.price select c.id %%
+    t |> equal(length(ids), 5)
+    t |> equal(ids[0], 4, "Ford id4 price 50 first")
+    t |> equal(ids[4], 6, "Honda id6 price 300 last")
+}
+
+[test]
+def query_join_group_after(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    let groups <- %linq! from c : Car in jv join b in brands on c.brand equals b.brand group c by b.country %%
+    t |> equal(length(groups), 2, "USA + Japan buckets")
+    for (g in groups) {
+        if (g._0 == "USA")   { t |> equal(length(g._1), 3, "three Fords") }
+        if (g._0 == "Japan") { t |> equal(length(g._1), 2, "two Hondas") }
+    }
+}
+
+// ===== multiple `from`: JSON left source × in-memory array right source (uncorrelated cross product).
+// The JSON source is the unfused `_cross_join` chain head — `from_json` is passed as a raw argument (not a
+// fused for-loop source), so it relies on the unsafe wrap surviving from_in's `$c` expansion. =====
+
+[test]
+def query_multifrom_tuple(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    let rows <- %linq! from c : Car in jv from b in brands select (Id = c.id, Country = b.country) %%
+    t |> equal(length(rows), 14, "7 JSON cars × 2 brands cartesian product")
+}
+
+[test]
+def query_multifrom_pre_where(t : T?) {
+    let jv = fixture_json()
+    let brands <- mk_brands()
+    // pre-from where prunes the array walk (price > 199 → id2,3,5,6) before the cross.
+    let rows <- %linq! from c : Car in jv where c.price > 199 from b in brands select (Id = c.id, Country = b.country) %%
+    t |> equal(length(rows), 8, "4 filtered JSON cars × 2 brands")
+}
