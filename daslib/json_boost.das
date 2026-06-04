@@ -716,16 +716,69 @@ def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9; val10) : JsonValue?
 
 // ===== linq_fold JSON source =====
 
+// By-name materialize of one JSON object into a struct TT: read each top-level field by name (the
+// from_json query contract — like from_xml_node), so it never calls an overridable whole-row from_JV.
+// Field VALUES still go through from_JV (nested structs / custom scalars honor their own overrides);
+// only a from_JV(TT) override for the row type itself is bypassed — by design (convert to an array for
+// that). Non-struct TT (e.g. a scalar array element) has no fields to read by name, so it uses from_JV.
+[unused_argument(t)]
+def from_json_row(jv : JsonValue const explicit?; t : auto(TT)) : TT {
+    //! Materialize one JSON object into *TT* **by name** — the per-element worker behind ``from_json``.
+    //! A struct reads each field by name (recursively); the basic value types (string / bool / numeric)
+    //! are read straight off the ``JsValue`` variant here, skipping the ``from_JV`` scalar wrapper that
+    //! every fused field read would otherwise pay per element. Only enum / array / tuple / variant / custom
+    //! handled types still delegate to ``from_JV``. Never invokes a whole-struct ``from_JV`` override.
+    //! Precondition: *jv* is a non-null pointer (a JSON ``null`` value is fine — that is a non-null pointer
+    //! with a ``_null`` tag); both callers (``read_json_field`` / the ``from_json`` generator) guarantee it,
+    //! so the inline reads skip the null-pointer guard. *t* is a type witness (unused).
+    static_if (typeinfo is_struct(type<TT>)) {
+        var ret <- default<TT -const>
+        if (jv.value is _object) {
+            apply_imm(ret) $(name : string; var field) {
+                field = read_json_field(jv, name, field)
+            }
+        }
+        return <- ret
+    } static_elif (typeinfo is_string(type<TT>)) {
+        return jv.value ?as _string ?? default<TT -const>   // ?as: one .value access, payload type == TT
+    } static_elif (typeinfo stripped_typename(type<TT>) == "bool") {
+        return jv.value ?as _bool ?? default<TT -const>
+    } static_elif (typeinfo is_enum(type<TT>)) {
+        return from_JV(jv, type<TT>)   // enum: string-name or ordinal dispatch lives in from_JV
+    } static_elif (typeinfo is_numeric(type<TT>)) {
+        // jv is non-null here (read_json_field / the from_json generator both guarantee it), so read the
+        // number straight off the variant with no null guard — inlines null_coalescing[_with_string].
+        // JSON ints land in _longint (JV(int) => _longint), reals in _number; probe the tag that matches
+        // TT first so the common case hits on the first check (static_if => zero runtime branch cost).
+        static_if (typeinfo is_float(type<TT>) || typeinfo is_double(type<TT>)) {
+            if (jv.value is _number) return TT(jv.value as _number)    // nolint:PERF020 redundant for TT=double
+            if (jv.value is _longint) return TT(jv.value as _longint)
+        } else {
+            if (jv.value is _longint) return TT(jv.value as _longint)  // nolint:PERF020 redundant for TT=int64/uint64
+            if (jv.value is _number) return TT(jv.value as _number)
+            static_if (typeinfo stripped_typename(type<TT>) == "int64" || typeinfo stripped_typename(type<TT>) == "uint64") {
+                if (jv.value is _string) return TT(jv.value as _string)  // 64-bit ints also accept a numeric string
+            }
+        }
+        return default<TT -const>
+    } else {
+        return from_JV(jv, type<TT>)   // dim / array / tuple / variant / custom handled types
+    }
+}
+
 [unsafe_outside_of_for]
 def from_json(jv : JsonValue const?; t : type<auto(TT)>) : iterator<TT -const> {
-    //! Lazily walks the elements of a JSON array *jv*, materializing each into a *TT* via ``from_JV``.
-    //! A non-array (or null) *jv* yields nothing. Yields owned values — rows collected via ``to_array``
-    //! or a comprehension stay valid. The JSON counterpart of ``from_xml_node``, for ``for`` loops and
-    //! LINQ chains: ``for (car in from_json(jv, type<Car>)) { ... }``.
+    //! Lazily walks the elements of a JSON array *jv*, reading each element's top-level fields **by name**
+    //! into a *TT* — the JSON counterpart of ``from_xml_node``, for ``for`` loops and LINQ chains:
+    //! ``for (car in from_json(jv, type<Car>)) { ... }``. A non-array (or null) *jv* yields nothing; rows
+    //! collected via ``to_array`` or a comprehension stay valid. It is a flat-object query source: it
+    //! reads fields by name and does **not** honor a custom whole-row ``from_JV`` override for *TT* (field
+    //! values still convert via ``from_JV``). If you need a row-level ``from_JV`` override, materialize to
+    //! an array first — ``[for (e in jv.value as _array); from_JV(e, type<TT>)]`` — and query that.
     return <- generator<TT -const> {
         if (jv != null && jv.value is _array) {
             for (elem in jv.value as _array) {
-                yield from_JV(elem, type<TT>)
+                yield from_json_row(elem, type<TT>)
             }
         }
         return false
@@ -734,12 +787,13 @@ def from_json(jv : JsonValue const?; t : type<auto(TT)>) : iterator<TT -const> {
 
 def read_json_field(jv : JsonValue const?; key : string; defv : auto(TT)) : TT {
     //! Reads one same-named key of the JSON object *jv* into a *TT* — the field-pruned counterpart of
-    //! a full ``from_JV(jv, type<Row>)``, emitted by linq_fold's fused JSON lane. A missing key keeps
-    //! *defv* (pass the struct field's declared default), matching the full-row per-field semantics.
+    //! a full by-name materialize, emitted by linq_fold's fused JSON lane. A missing key keeps *defv*
+    //! (pass the struct field's declared default). The value is converted by name via ``from_json_row``,
+    //! so a struct field reads *its* fields by name too — never an overridable whole-struct ``from_JV``.
     //! *jv* is const so the fused loop's ``jsrc as _array`` elements (const) bind without a copy.
     let sub = jv?[key]   // operator ?[] above: the value, or JVNull() for a missing key / non-object jv
     if (!(sub.value is _null)) {
-        return from_JV(sub, type<TT>)
+        return from_json_row(sub, type<TT>)
     }
     return defv
 }
