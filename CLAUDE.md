@@ -120,6 +120,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **`==const`** on a parameter type — propagates the caller's constness (NOT "always non-const"): `def foo(self : MyStruct ==const)` accepts either `MyStruct` or `MyStruct const`, and inside the body `self`'s constness matches what the caller passed. Use plain `Foo?` for non-const-only, `Foo const?` for const-only, `Foo? ==const` when you want the callee to accept either and inherit the caller's view
 - **`-const`** strips constness in type expressions — used with `reinterpret` for interior mutability: `unsafe(reinterpret<MyStruct? -const>(addr(self)))`
 - **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
+- **OR types in params** (`T1 | T2 | …`) — a parameter may list alternative accepted types: `int | float | double`, or heterogeneous forms like `array<int> | table<auto> | auto(NT)`. This is a **generic "OR" type, NOT a runtime tagged variant** — the function is monomorphized per the concrete argument type that matches one alternative, so each instantiation sees that concrete type with no per-call dispatch or unpacking cost. Don't "hoist the union cast out of the loop" — there is no union value; a cast like `float(n)` inside the body is just a trivial concrete cast in each instantiation. Use it to widen an overload set in one signature (e.g. `def fast(n : int | float | double)` accepting bare ints, floats, and doubles at the same call site)
 
 ### Important defaults
 
