@@ -103,12 +103,14 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 			"-DCMAKE_CXX_FLAGS=${_HV_ASAN_FLAG}"
 		)
 	ENDIF()
-	# daslang compiles its modules with the static CRT (/MT, /MTd); libhv's
-	# ExternalProject otherwise defaults to /MD and the resulting hv_static.lib
-	# fails to link into dasModuleHV on MSVC (LNK2038 RuntimeLibrary mismatch +
-	# unresolved __imp_* dynamic-CRT imports). BUILD_FOR_MT is libhv's own knob
-	# to switch its sub-build to /MT (Release) / /MTd (Debug) and match daslang.
-	IF(MSVC)
+	# libhv's ExternalProject picks its own CRT; if it disagrees with daslang's,
+	# hv_static.lib fails to link into dasModuleHV (LNK2038 RuntimeLibrary
+	# mismatch: MT_StaticRelease vs MD_DynamicRelease). daslang uses the dynamic
+	# CRT (/MD) by default and switches to the static CRT (/MT) only when
+	# DAS_USE_STATIC_STD_LIBS is ON (see CMakeCommon.txt). Mirror that exact knob
+	# into libhv's own BUILD_FOR_MT so the two always agree; when it is OFF,
+	# libhv's /MD default already matches and we leave it alone.
+	IF(MSVC AND DAS_USE_STATIC_STD_LIBS)
 		LIST(APPEND HV_CMAKE_FLAGS -DBUILD_FOR_MT=ON)
 	ENDIF()
 	ExternalProject_Add(
