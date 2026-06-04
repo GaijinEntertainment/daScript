@@ -29,13 +29,13 @@ embedded in a larger expression.
 Clauses
 -------
 
-A query is ``from <var> [ : <Row> ] in <src> [ where <pred> ] [ ( join <var2>
+A query is ``from <var> [ : <Row> ] in <src> ( where <pred> )* [ ( join <var2>
 [ : <Row2> ] in <src2> on <keyA> equals <keyB> [ into <g> ] | from <var2> [ : <Row2> ] in
-<src2> ) ] [ where <pred> ] [ orderby <expr> [ascending|descending] (, <expr> [ascending|descending])* ] ( select <proj> |
+<src2> ) ] ( where <pred> )* [ orderby <expr> [ascending|descending] (, <expr> [ascending|descending])* ] ( select <proj> |
 group <var> by <key> ) [ into <var> <continuation> ] [ iterator ]`` — a second
 range variable comes from **either** a ``join`` **or** a second ``from`` (never
-both), and at most one of the two ``where`` slots may appear (before *or* after
-that clause, never both). ``into`` has two forms: ``join … equals … into <g>`` is
+both); each ``where`` slot accepts any number of predicates (each AND-folds in
+source order). ``into`` has two forms: ``join … equals … into <g>`` is
 a **group join** (``g`` = the array of matching right rows, in scope with the
 left variable — see :ref:`linq_das_join`), while a trailing ``into <var>`` after
 the terminal is a **query continuation** that rebinds the stage's output and
@@ -49,9 +49,13 @@ between body clauses** — it is inlined away before the rest is parsed (see
 - ``let <name> = <expr>`` — optional, repeatable, and free to appear between any
   body clauses; binds a computed value reused in the clauses that follow it (see
   :ref:`linq_das_let`).
-- ``where <predicate>`` — optional. A ``where`` **before** the ``join`` / second
-  ``from`` filters the left source (single range var); a ``where`` **after** it
-  sees both range variables. At most one ``where`` per query.
+- ``where <predicate>`` — optional and **repeatable**. A ``where`` **before** the
+  ``join`` / second ``from`` filters the left source (single range var); a
+  ``where`` **after** it sees both range variables. Several ``where`` clauses may
+  appear in either slot — each emits its own filter, AND-folded in source order
+  (over a SQL source they push down as one ANDed ``WHERE``). A ``where`` written
+  after the ``orderby`` filters the sorted sequence — identical, for a total
+  order, to filtering first — so it emits ahead of the sort.
 - ``join <var2> in <src2> on <keyA> equals <keyB>`` — optional, a single inner
   equi-join introducing a second range variable (see :ref:`linq_das_join`).
 - ``from <var2> in <src2>`` — optional, a second ``from`` introducing a second
@@ -115,6 +119,28 @@ directly. For the SQL source, ``_sql`` resolves a single source against the
 placeholder ``_``; the macro normalizes the single-source lambda parameter to
 ``_`` internally, so the C# variable name is still spliced verbatim at the
 surface.
+
+.. _linq_das_filtering:
+
+Filtering (``where``)
+---------------------
+
+A ``where`` clause is optional and **repeatable** — C# allows several, and each
+emits its own ``_where`` filter, AND-folded in source order:
+
+.. code-block:: das
+
+    // two predicates — both apply
+    var names <- %linq! from c in cars where c.price > 100 where c.brand == "eco" select c.name %%
+    // ≡ _fold( each(cars) |> _where($(c) => c.price > 100) |> _where($(c) => c.brand == "eco") |> _select($(c) => c.name) |> to_array() )
+
+Over a **SQL** source the predicates push down as one ANDed ``WHERE`` (a single
+statement, no intermediate materialize). On a two-source query (``join`` / second
+``from``) the slot still applies: ``where``\ s **before** the second source filter
+the left source (and push to SQL), ``where``\ s **after** it filter the carried
+pair. A ``where`` written **after** the ``orderby`` filters the sorted sequence —
+for a total order that is identical to filtering first, so it emits ahead of the
+sort.
 
 .. _linq_das_let:
 
@@ -323,16 +349,18 @@ projection **pushes down to SQL**; a whole-row ``select c`` is in-memory only
 
 A ``where`` *before* the ``join`` filters the left source (single range var) and
 also pushes down — over an array/decs/XML source it fuses into the join's probe
-loop (no intermediate filtered array):
+loop (no intermediate filtered array). Several pre-join ``where``\ s AND-fold
+(see :ref:`linq_das_filtering`):
 
 .. code-block:: das
 
     var rows <- %linq! from c in cars where c.price >= 150 join b in brands
                        on c.brand equals b.brand select (Name = c.name, Country = b.country) %%
 
-**Transparent identifier** — a post-join ``where`` / ``orderby``, or a ``group``
-terminal. The join carries ``(c, b)`` as a pair so the later clauses can address
-both variables; the reader rewrites ``c`` / ``b`` to the carried fields. This is
+**Transparent identifier** — a post-join ``where`` (one or more) / ``orderby``,
+or a ``group`` terminal. The join carries ``(c, b)`` as a pair so the later
+clauses can address both variables; the reader rewrites ``c`` / ``b`` to the
+carried fields, and each post-join ``where`` becomes its own filter. This is
 **in-memory only** (array / decs / XML) — over a SQL source the carried
 whole-row tuple has no column form and ``_sql`` rejects it (project columns in a
 select-terminal join, or filter pre-join, to push down):
@@ -406,7 +434,7 @@ JOIN**; a scalar / named-tuple projection has a column form, a whole-row
 
 A ``where`` *before* the second ``from`` filters the left source (single range
 var) and pushes down; cross-then-filter on a key equality is the equi-join
-subset:
+subset. Both slots are repeatable (see :ref:`linq_das_filtering`):
 
 .. code-block:: das
 
@@ -436,7 +464,8 @@ than the cross's ``_cross_join``)::
 
 The result selector sees **both** range variables. A ``where`` after the second
 ``from`` that references **only the inner** variable is pushed into the
-collection before flattening (identical semantics, no carry)::
+collection before flattening (identical semantics, no carry); several such
+``where``\ s chain onto the collection::
 
     var rows <- %linq! from o in orders from l in o.lines where l.qty > 1
                        select (Id = o.id, Sku = l.sku) %%

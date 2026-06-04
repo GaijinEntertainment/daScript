@@ -60,6 +60,26 @@ def test_array_where_select(t : T?) {
 }
 
 [test]
+def test_array_multiple_where(t : T?) {
+    let cars <- mk_cars()
+    // C# allows several `where` clauses — each emits its own `_where` (AND-folded, source order).
+    let names <- %linq! from c in cars where c.price > 100 where c.brand == "eco" select c.name %%
+    t |> equal(length(names), 1, "both predicates apply: price>100 (mid,lux) AND eco (mid)")
+    t |> equal(names[0], "mid")
+}
+
+[test]
+def test_array_where_after_orderby(t : T?) {
+    let cars <- mk_cars()
+    // a `where` after the `orderby` filters the sorted sequence — same result as filtering first (total
+    // order), so it emits ahead of the order op. eco → cheap,mid; sorted desc → mid,cheap.
+    let names <- %linq! from c in cars orderby c.price descending where c.brand == "eco" select c.name %%
+    t |> equal(length(names), 2, "where-after-orderby keeps the eco cars, sorted desc")
+    t |> equal(names[0], "mid")
+    t |> equal(names[1], "cheap")
+}
+
+[test]
 def test_array_select_only(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars select c.name %%
@@ -150,6 +170,15 @@ def test_decs_where_select(t : T?) {
     seed_decs()
     let names <- %linq! from c : CarComp in decs where c.price > 100 select c.name %%
     t |> equal(length(names), 2, "decs: where filters, select projects")
+}
+
+[test]
+def test_decs_multiple_where(t : T?) {
+    seed_decs()
+    // decs rows: car0(100,a), car1(200,a), car2(300,b). price>100 → car1,car2; brand a → car1.
+    let names <- %linq! from c : CarComp in decs where c.price > 100 where c.brand == "a" select c.name %%
+    t |> equal(length(names), 1, "decs multi-where AND-folds both predicates")
+    t |> equal(names[0], "car1")
 }
 
 [test]
@@ -404,6 +433,44 @@ def test_join_post_join_where(t : T?) {
 }
 
 [test]
+def test_join_multiple_pre_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // two pre-join `where`s both filter cars (push to SQL, AND-folded): price>100 (mid,lux) AND eco (mid).
+    let rows <- %linq! from c in cars where c.price > 100 where c.brand == "eco"
+                       join b in brands on c.brand equals b.brand
+                       select (Name = c.name, Country = b.country) %%
+    t |> equal(length(rows), 1, "both pre-join predicates filter the left source")
+    t |> equal(rows[0].Name, "mid")
+    t |> equal(rows[0].Country, "USA")
+}
+
+[test]
+def test_join_multiple_post_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // two post-join `where`s filter the carried (c,b) pair: price>100 (mid,lux) AND USA (cheap,mid) → mid.
+    let names <- %linq! from c in cars join b in brands on c.brand equals b.brand
+                        where c.price > 100 where b.country == "USA"
+                        select c.name %%
+    t |> equal(length(names), 1, "both post-join predicates filter the joined pair")
+    t |> equal(names[0], "mid")
+}
+
+[test]
+def test_join_mixed_pre_post_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // pre + post `where`s on one join: pre price>=150 (mid,lux); post USA (mid) AND price<300 (mid).
+    let names <- %linq! from c in cars where c.price >= 150
+                        join b in brands on c.brand equals b.brand
+                        where b.country == "USA" where c.price < 300
+                        select c.name %%
+    t |> equal(length(names), 1, "pre-join and post-join wheres combine")
+    t |> equal(names[0], "mid")
+}
+
+[test]
 def test_join_orderby(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -627,6 +694,19 @@ def test_multifrom_post_where(t : T?) {
 }
 
 [test]
+def test_multifrom_multiple_where(t : T?) {
+    let cars <- mk_cars()
+    let brands <- mk_brands()
+    // two post-`from` `where`s over the crossed pairs: brand-match (the join subset) AND price>100.
+    let names <- %linq! from c in cars from b in brands
+                        where c.brand == b.brand where c.price > 100
+                        select c.name %%
+    t |> equal(length(names), 2, "brand-match (cheap,mid,lux) AND price>100 (mid,lux)")
+    t |> equal(names[0], "mid")
+    t |> equal(names[1], "lux")
+}
+
+[test]
 def test_multifrom_orderby(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -750,6 +830,17 @@ def test_correlated_push_where(t : T?) {
     t |> equal(rows[0].Sku, "a")
     t |> equal(rows[1].Sku, "c")
     t |> equal(rows[2].Sku, "d")
+}
+
+[test]
+def test_correlated_multiple_inner_where(t : T?) {
+    let orders <- mk_orders()
+    // two inner-only post-`from` `where`s both push into the collection (filter before flattening).
+    // qty>1 keeps a(2),c(5),d(3); sku!="c" then drops c → a,d.
+    let rows <- %linq! from o in orders from l in o.lines where l.qty > 1 where l.sku != "c" select (Id = o.id, Sku = l.sku) %%
+    t |> equal(length(rows), 2, "both inner predicates push into the collection")
+    t |> equal(rows[0].Sku, "a")
+    t |> equal(rows[1].Sku, "d")
 }
 
 [test]

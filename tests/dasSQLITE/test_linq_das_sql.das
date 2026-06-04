@@ -39,6 +39,19 @@ def test_sql_where_select(t : T?) {
 }
 
 [test]
+def test_sql_multiple_where(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // two `where`s push down as a single ANDed SQL WHERE (one statement, no intermediate materialize).
+        let names <- %linq! from c : Car in db where c.price > 150 where c.price < 300 select c.name %%
+        let ref <- _fold(db |> select_from(type<Car>) |> _where(_.price > 150) |> _where(_.price < 300) |> _select(_.name))
+        t |> equal(length(names), 1, "150 < price < 300 → Audi only")
+        t |> equal(names[0], "Audi")
+        t |> equal(length(names), length(ref), "linq_das multi-where ≡ hand-written AND-folded _sql chain")
+    }
+}
+
+[test]
 def test_sql_identity_select(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

@@ -411,11 +411,6 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         macro_error(prog, at, "linq: second range variable '{var2Name}' must differ from '{varName}' and the reserved '{JOIN_TI}'")
         return "(0)"
     }
-    // At most one `where` — its position (before vs after the second source intro) decides pre- vs post.
-    if (firstWhere >= 0 && find_kw_depth0(q, "where", firstWhere + 5) >= 0) {
-        macro_error(prog, at, "linq: at most one 'where' per query is supported")
-        return "(0)"
-    }
     // `into` after a `join … on … equals …` is a group-join (C# GroupJoin) — bound below once the terminal is
     // located. Over a second `from` (cross / SelectMany) it is not supported; single-source query-continuation
     // `into` lives in transpile_query.
@@ -489,24 +484,45 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             return "(0)"
         }
     }
-    // A `where` is valid before the second source (filters c, single var, no rewrite — pushes to SQL) or
-    // after the tail start (filters the carried pair, transparent-id rewrite). Anywhere else is a grammar
-    // error. Position decides pre- vs post-emit.
-    let hasWhere = firstWhere >= 0
-    let preWhere = hasWhere && firstWhere < secondIntroPos
-    if (hasWhere && !preWhere && firstWhere < tailStart) {
-        if (isJoin) {
-            macro_error(prog, at, "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')")
-        } else {
-            macro_error(prog, at, "linq: 'where' cannot appear between the second range variable and 'in'")
+    // Collect every `where` and split by position: a `where` BEFORE the second source filters the left
+    // source (single var `c`, no rewrite — pushes to SQL); a `where` AFTER the tail start filters the
+    // carried pair (transparent-id rewrite). A `where` inside the join / second-`from` clause (between the
+    // intro and the tail) is a grammar error. C# allows multiple in each slot; each runs to the next clause.
+    var preWheres : array<string>
+    var postWheres : array<string>
+    var firstPostWhere = -1
+    var wp = firstWhere
+    while (wp >= 0 && wp < termPos) {
+        let wEnd = next_clause_kw(q, wp + 5)
+        let predText = strip(slice(q, wp + 5, wEnd))
+        if (predText == "") {
+            macro_error(prog, at, "linq: empty 'where' predicate")
+            return "(0)"
         }
+        if (wp < secondIntroPos) {
+            preWheres |> push(predText)
+        } elif (wp < tailStart) {
+            if (isJoin) {
+                macro_error(prog, at, "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')")
+            } else {
+                macro_error(prog, at, "linq: 'where' cannot appear between the second range variable and 'in'")
+            }
+            return "(0)"
+        } else {
+            if (firstPostWhere < 0) { firstPostWhere = wp }
+            postWheres |> push(predText)
+        }
+        wp = find_kw_depth0(q, "where", wEnd)
+    }
+    let hasPostWhere = !empty(postWheres)
+    if (groupInto && hasPostWhere) {
+        macro_error(prog, at, "linq: a 'where' after 'join … into g' is not yet supported — the (outer, g) pair can't be carried; filter with a pre-'join' 'where', or use the pipe form")
         return "(0)"
     }
-    let postWhere = (hasWhere && !preWhere) ? firstWhere : -1
     // The tail (key B / second source expr) ends at the first post clause: orderby, a post-where, or term.
     var tailEnd = termPos
     if (orderByPos >= 0 && orderByPos < tailEnd) { tailEnd = orderByPos }
-    if (postWhere >= 0 && postWhere < tailEnd) { tailEnd = postWhere }
+    if (firstPostWhere >= 0 && firstPostWhere < tailEnd) { tailEnd = firstPostWhere }
     if (groupInto && intoPos < tailEnd) { tailEnd = intoPos }   // join key B ends at `into`, before the group var
     let tail = strip(slice(q, tailStart, tailEnd))
     var srcB = srcBForJoin
@@ -533,19 +549,11 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             srcB = build_src(rowType2, tail, false)
         }
     }
-    var wherePred = ""
-    if (hasWhere) {
-        let wEnd = preWhere ? secondIntroPos : (orderByPos >= 0 ? orderByPos : termPos)
-        wherePred = strip(slice(q, firstWhere + 5, wEnd))
-        if (wherePred == "") {
-            macro_error(prog, at, "linq: empty 'where' predicate")
-            return "(0)"
-        }
-    }
     var orderKeys : array<string>
     var orderDescMask = 0u
     if (orderByPos >= 0) {
-        let rawOrder = strip(slice(q, orderByPos + 7, termPos))
+        // End at the next clause keyword (a `where` may follow the `orderby`), not the terminal.
+        let rawOrder = strip(slice(q, orderByPos + 7, next_clause_kw(q, orderByPos + 7)))
         var op <- parse_orderby(rawOrder)
         if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
@@ -603,38 +611,43 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             macro_error(prog, at, "linq: 'group' over a correlated 'from … from' (flatten) is not supported — the outer row '{varName}' is non-copyable; 'select' the fields you need instead")
             return "(0)"
         }
-        if (postWhere >= 0 && mentions_ident(wherePred, varName)) {
-            macro_error(prog, at, "linq: a post-'from' 'where' over a correlated 'from … from' may reference only the inner range variable '{var2Name}' (it is pushed into the collection before flattening) — referencing the outer '{varName}' would require carrying the non-copyable outer row; filter the outer with a pre-'from' 'where', or restructure")
-            return "(0)"
+        for (pred in postWheres) {
+            if (mentions_ident(pred, varName)) {
+                macro_error(prog, at, "linq: a post-'from' 'where' over a correlated 'from … from' may reference only the inner range variable '{var2Name}' (it is pushed into the collection before flattening) — referencing the outer '{varName}' would require carrying the non-copyable outer row; filter the outer with a pre-'from' 'where', or restructure")
+                return "(0)"
+            }
         }
         // Zero-copy collection selector: `each` borrows the outer's collection — no per-row clone (unlike
         // `to_sequence`, whose const-array overload clones) and no per-row materialize (unlike `where_`'s
-        // array overload). An inner-only post-`where` fuses onto the borrowed iterator (the iterator overload
+        // array overload). Each inner-only post-`where` fuses onto the borrowed iterator (the iterator overload
         // of `where_` stays lazy). `each` outside a for-loop needs the `unsafe` wrap. Borrowing a TEMPORARY
         // tail (e.g. `from x in [c.id]` or a func result) is still safe: daslang heap-allocates arrays and
         // does NOT auto-finalize on scope exit, so the backing storage outlives the borrow (it is reclaimed
         // by GC, not at the end of the enclosing expression) — no use-after-free.
-        if (postWhere >= 0) {
-            srcB = "$({varName}) => unsafe(each({tail})) |> _where($({var2Name}) => {wherePred})"
-        } else {
-            srcB = "$({varName}) => unsafe(each({tail}))"
+        srcB = build_string() $(var sw) {
+            sw |> write("$({varName}) => unsafe(each({tail}))")
+            for (pred in postWheres) {
+                sw |> write(" |> _where($({var2Name}) => {pred})")
+            }
         }
     }
     let carryLambda = "$({varName}, {var2Name}) => ({varName} = {varName}, {var2Name} = {var2Name})"
     let names <- [varName, var2Name]
     let hasOrderBy = orderByPos >= 0
-    // A pre-source `where` (single range var `c`) filters the left source — emitted before the op, no
-    // rewrite; pushes down to SQL. Only a POST-source where/orderby/group forces the transparent-id carry.
-    // Correlated never uses the carry (rejections + push-down above), so it always emits select-terminal.
-    let preWhereClause = preWhere ? " |> _where($({varName}) => {wherePred})" : ""
-    let useTI = !correlated && (postWhere >= 0 || hasOrderBy || isGroup)
+    // Pre-source `where`s (single range var `c`) filter the left source — emitted before the op, no
+    // rewrite; push down to SQL (AND-folded). Only a POST-source where/orderby/group forces the
+    // transparent-id carry. Correlated never uses the carry (rejections + push-down above) → select-terminal.
+    let useTI = !correlated && (hasPostWhere || hasOrderBy || isGroup)
     // group-join emits `_group_join` (result's 2nd param is the match ARRAY `g`, not a single row); the on-key
     // lambda is identical to `_join`. In-memory only — `_group_join` is not a SQL-pushable op (over a SQL source
     // `_sql` rejects it, the documented boundary).
     let opName = groupInto ? "_group_join" : (isJoin ? "_join" : (correlated ? "_select_many" : "_cross_join"))
     let onLambdaPart = isJoin ? "{onLambda}, " : ""
     return build_string() $(var w) {
-        w |> write("( _fold( {srcA}{preWhereClause}")
+        w |> write("( _fold( {srcA}")
+        for (pred in preWheres) {
+            w |> write(" |> _where($({varName}) => {pred})")
+        }
         if (!useTI) {
             // Select-terminal: the `select` projection IS the op's result selector (both range vars in scope —
             // for a group-join the 2nd is the match array `g`). Underscore-prefix a range var the projection
@@ -648,7 +661,9 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             // Transparent-id: carry (c, d); post-source clauses rewrite c/d to the carried fields and
             // stream/sort/group the pairs directly (single stage — no pre-materialize).
             w |> write(" |> {opName}({srcB}, {onLambdaPart}{carryLambda})")
-            if (postWhere >= 0) { w |> write(" |> _where($({JOIN_TI}) => {rewrite_idents(wherePred, names, JOIN_TI)})") }
+            for (pred in postWheres) {
+                w |> write(" |> _where($({JOIN_TI}) => {rewrite_idents(pred, names, JOIN_TI)})")
+            }
             if (hasOrderBy) {
                 let rkeys <- [for (k in orderKeys); rewrite_idents(k, names, JOIN_TI)]
                 w |> write(emit_order_op(rkeys, orderDescMask, JOIN_TI))
@@ -968,8 +983,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
 struct private QueryStage {
     rangeVar : string = ""
     isGroupVar : bool = false
-    hasWhere : bool = false
-    predText : string = ""
+    predicates : array<string>   // every `where` before the terminal, in source order (C# allows multiple)
     hasOrderBy : bool = false
     orderKeys : array<string>
     orderDescMask : uint = 0u
@@ -1009,24 +1023,30 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
     }
     stage.isGroup = isGroup
     // where / orderby belong to THIS stage only when they precede its terminal (in C# clause order).
-    let wherePos = find_kw_depth0(q, "where", start)
-    stage.hasWhere = wherePos >= 0 && wherePos < termPos
-    let orderByPos = find_kw_depth0(q, "orderby", stage.hasWhere ? wherePos + 5 : start)
+    // Collect every depth-0 `where` before the terminal — C# allows multiple, in any body position. A
+    // `where` after the `orderby` filters the sorted sequence, which (for a total order) yields the same
+    // result as filtering first, so all predicates emit as `_where` ahead of the order op; source order
+    // among the wheres is preserved. Each predicate runs to the next clause keyword.
+    var wherePos = find_kw_depth0(q, "where", start)
+    while (wherePos >= 0 && wherePos < termPos) {
+        let predEnd = next_clause_kw(q, wherePos + 5)
+        let predText = strip(slice(q, wherePos + 5, predEnd))
+        if (predText == "") {
+            macro_error(prog, at, "linq: empty 'where' predicate")
+            return false
+        }
+        stage.predicates |> push(isGroupVar ? rewrite_group_var(predText, rangeVar) : predText)
+        wherePos = find_kw_depth0(q, "where", predEnd)
+    }
+    let orderByPos = find_kw_depth0(q, "orderby", start)
     stage.hasOrderBy = orderByPos >= 0 && orderByPos < termPos
     if (isGroup && stage.hasOrderBy) {
         macro_error(prog, at, "linq: 'orderby' before 'group' is not supported — order the groups after a 'select', or drop the 'orderby'")
         return false
     }
-    if (stage.hasWhere) {
-        let predText = strip(slice(q, wherePos + 5, stage.hasOrderBy ? orderByPos : termPos))
-        if (predText == "") {
-            macro_error(prog, at, "linq: empty 'where' predicate")
-            return false
-        }
-        stage.predText = isGroupVar ? rewrite_group_var(predText, rangeVar) : predText
-    }
     if (stage.hasOrderBy) {
-        let rawOrder = strip(slice(q, orderByPos + 7, termPos))
+        // End at the next clause keyword (a `where` may follow the `orderby`), not the terminal.
+        let rawOrder = strip(slice(q, orderByPos + 7, next_clause_kw(q, orderByPos + 7)))
         var op <- parse_orderby(rawOrder)
         if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
@@ -1188,8 +1208,8 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     return build_string() $(var writer) {
         writer |> write("( _fold( {srcBuild}")
         for (s in stages) {
-            if (s.hasWhere) {
-                writer |> write(" |> _where($({s.rangeVar}) => {s.predText})")
+            for (pred in s.predicates) {
+                writer |> write(" |> _where($({s.rangeVar}) => {pred})")
             }
             if (s.isGroup) {
                 writer |> write(" |> _group_by_lazy($({s.rangeVar}) => {s.groupKey})")
