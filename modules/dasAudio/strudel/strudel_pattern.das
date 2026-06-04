@@ -11,7 +11,10 @@ module strudel_pattern shared public
 
 require strudel/strudel_event
 require strudel/strudel_time
-require math
+// Re-exported publicly: widened (int|float|double) combinators like `linger` and
+// `compress` return captured lambdas that call math builtins (floor/min/max).
+// Those lambdas re-instantiate in consumer modules, so math must be visible there.
+require math public
 
 //! A Pattern is a pure function from a query `TimeSpan` to the `Hap`s
 //! (events with timing info) that fall within it. No side effects, no audio —
@@ -21,6 +24,18 @@ typedef Pattern = lambda<(span : TimeSpan) : array<Hap>>
 //! to describe how the transformed copy of a pattern should differ from the
 //! original. Use ``@(x) => rev(x)`` for a lambda literal at call sites.
 typedef PatternTransform = lambda<(var pat : Pattern) : Pattern>
+
+// Numeric coercion for the `int | float | double` scalar parameters used across
+// the fluent API — lets call sites accept bare ints (`fast(2)`), floats
+// (`gain(0.5)`), and doubles (`fast(2.0lf)`) uniformly. The PERF020 suppression
+// is centralized here: `double(n)`/`float(n)` is a no-op for the same-type union
+// member, but is required to cover the other two.
+def private numd(n : int | float | double) : double {
+    return double(n) // nolint:PERF020
+}
+def private numf(n : int | float | double) : float {
+    return float(n) // nolint:PERF020
+}
 
 // ─── Constructors ───
 
@@ -57,17 +72,18 @@ def atom(name : string) : Pattern {
 // ─── Time Manipulation ───
 
 // Speed up by factor n. The pattern repeats n times per cycle.
-def fast(var pat : Pattern; n : double) : Pattern {
-    //! Speeds up `pat` by factor `n` — the pattern repeats `n` times per cycle. Example: `s("bd") |> fast(2.0lf)`.
-    return @capture(= n, <- pat) (span : TimeSpan) : array<Hap> {
+def fast(var pat : Pattern; n : int | float | double) : Pattern {
+    //! Speeds up `pat` by factor `n` — the pattern repeats `n` times per cycle. Example: `s("bd") |> fast(2)`.
+    let nn = numd(n)
+    return @capture(= nn, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
-        let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
+        let innerSpan = TimeSpan(start = span.start * nn, stop = span.stop * nn)
         var haps <- pat(innerSpan)
         result |> reserve(length(haps))
         for (h in haps) {
             result |> push(Hap(
-                whole = TimeSpan(start = h.whole.start / n, stop = h.whole.stop / n),
-                part = TimeSpan(start = h.part.start / n, stop = h.part.stop / n),
+                whole = TimeSpan(start = h.whole.start / nn, stop = h.whole.stop / nn),
+                part = TimeSpan(start = h.part.start / nn, stop = h.part.stop / nn),
                 has_whole = h.has_whole,
                 value = h.value
             ))
@@ -78,9 +94,9 @@ def fast(var pat : Pattern; n : double) : Pattern {
 }
 
 // Slow down by factor n.
-def slow(var pat : Pattern; n : double) : Pattern {
-    //! Slows down `pat` by factor `n` — `pat` takes `n` cycles to complete once. Example: `s("bd sd") |> slow(2.0lf)`.
-    return fast(pat, 1.0lf / n)
+def slow(var pat : Pattern; n : int | float | double) : Pattern {
+    //! Slows down `pat` by factor `n` — `pat` takes `n` cycles to complete once. Example: `s("bd sd") |> slow(2)`.
+    return fast(pat, 1.0lf / numd(n))
 }
 
 // Shift pattern earlier in time by `offset` cycles.
@@ -233,14 +249,15 @@ def fmap(var pat : Pattern; var fn : lambda<(e : Event) : Event>) : Pattern {
 
 // Randomly remove events with given probability.
 // Uses deterministic hash of cycle position — same cycle = same result.
-def degrade(var pat : Pattern; prob : float) : Pattern {
+def degrade(var pat : Pattern; prob : int | float | double) : Pattern {
     //! Randomly drops events from `pat` with probability `prob` (0..1). Deterministic — same time yields same result. Example: `s("bd*8") |> degrade(0.3)`.
-    return @capture(= prob, <- pat) (span : TimeSpan) : array<Hap> {
+    let pf = numf(prob)
+    return @capture(= pf, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var haps <- pat(span)
         for (h in haps) {
             let r = strudel_hash01(h.whole.start, 0)
-            if (r >= prob) {
+            if (r >= pf) {
                 result |> push(h)
             }
         }
@@ -309,78 +326,88 @@ def bjorklund(k, n : int) : array<bool> {
 // Each sets a single Event field via fmap.
 
 // pat |> set_gain(0.5) — set amplitude
-def set_gain(var pat : Pattern; g : float) : Pattern {
+def set_gain(var pat : Pattern; g : int | float | double) : Pattern {
     //! Sets the `gain` (amplitude, 0..1) field on every event in `pat`. Example: `pat |> set_gain(0.5)`.
     let fn <- @capture(= g) (e : Event) : Event {
-        var r = e; r.gain = g; return r
+        var r = e; r.gain = numf(g); return r
     }
     return <- fmap(pat, fn)
 }
 
-// pat |> set_velocity(0.5) — set expression/velocity
-def private set_velocity(var pat : Pattern; v : float) : Pattern {
+def set_velocity(var pat : Pattern; v : int | float | double) : Pattern {
+    //! Sets the `velocity` (MIDI-like expression, 0..1) field on every event in `pat`.
     let fn <- @capture(= v) (e : Event) : Event {
-        var r = e; r.velocity = v; return r
+        var r = e; r.velocity = numf(v); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_pan(0.0) — set stereo position (0=left, 0.5=center, 1=right)
-def set_pan(var pat : Pattern; p : float) : Pattern {
+def set_pan(var pat : Pattern; p : int | float | double) : Pattern {
     //! Sets the `pan` (stereo position: 0=left, 0.5=center, 1=right) field on every event in `pat`.
     let fn <- @capture(= p) (e : Event) : Event {
-        var r = e; r.pan = p; return r
+        var r = e; r.pan = numf(p); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_hrtf_azimuth(-45.0) — set 3D HRTF azimuth (degrees, -180..180); pan still controls source width.
-def set_hrtf_azimuth(var pat : Pattern; deg : float) : Pattern {
+def set_hrtf_azimuth(var pat : Pattern; deg : int | float | double) : Pattern {
     //! Sets the HRTF azimuth (degrees, -180..180) on every event in `pat` and engages HRTF positioning.
     //! 0 = directly ahead, +90 = right, -90 = left. Under the binaural-stereo HRTF render `pan` still
     //! controls source width / L/R balance feeding the spatialiser; HRTF controls 3D position.
     let fn <- @capture(= deg) (e : Event) : Event {
-        var r = e; r.hrtf_azimuth = deg; r.hrtf_active = true; return r
+        var r = e; r.hrtf_azimuth = numf(deg); r.hrtf_active = true; return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_hrtf_elevation(15.0) — set 3D HRTF elevation (degrees, -90..90); pan still controls source width.
-def set_hrtf_elevation(var pat : Pattern; deg : float) : Pattern {
+def set_hrtf_elevation(var pat : Pattern; deg : int | float | double) : Pattern {
     //! Sets the HRTF elevation (degrees, -90..90) on every event in `pat` and engages HRTF positioning.
     //! 0 = horizontal plane, positive = up. Under the binaural-stereo HRTF render `pan` still controls
     //! source width / L/R balance feeding the spatialiser; HRTF controls 3D position.
     let fn <- @capture(= deg) (e : Event) : Event {
-        var r = e; r.hrtf_elevation = deg; r.hrtf_active = true; return r
+        var r = e; r.hrtf_elevation = numf(deg); r.hrtf_active = true; return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_hrtf(-45.0, 0.0) — set both HRTF azimuth and elevation in one call; pan still controls source width.
-def set_hrtf(var pat : Pattern; az, el : float) : Pattern {
+def set_hrtf(var pat : Pattern; az, el : int | float | double) : Pattern {
     //! Sets HRTF azimuth and elevation in one call and engages HRTF positioning.
     //! Azimuth (-180..180): 0 = ahead, +90 = right, -90 = left. Elevation (-90..90): 0 = horizontal.
     //! Under the binaural-stereo HRTF render `pan` still controls source width / L/R balance feeding
     //! the spatialiser; HRTF controls 3D position.
     let fn <- @capture(= az, = el) (e : Event) : Event {
-        var r = e; r.hrtf_azimuth = az; r.hrtf_elevation = el; r.hrtf_active = true; return r
+        var r = e; r.hrtf_azimuth = numf(az); r.hrtf_elevation = numf(el); r.hrtf_active = true; return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_speed(2.0) — set sample playback speed
-def private set_speed(var pat : Pattern; spd : float) : Pattern {
+def set_speed(var pat : Pattern; spd : int | float | double) : Pattern {
+    //! Sets the sample playback `speed` on every event in `pat` (1.0 = normal, 2.0 = double pitch/rate).
     let fn <- @capture(= spd) (e : Event) : Event {
-        var r = e; r.speed = spd; return r
+        var r = e; r.speed = numf(spd); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_note(48.0) — set MIDI note number
-def set_note(var pat : Pattern; n : float) : Pattern {
+def set_note(var pat : Pattern; n : int | float | double) : Pattern {
     //! Sets the MIDI `note` number on every event in `pat`. Example: `pat |> set_note(48.0)` (C3).
     let fn <- @capture(= n) (e : Event) : Event {
-        var r = e; r.note = n; return r
+        var r = e; r.note = numf(n); return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_freq(440.0) — set explicit oscillator frequency in Hz (overrides note)
+def set_freq(var pat : Pattern; f : int | float | double) : Pattern {
+    //! Sets the explicit oscillator frequency `freq` (Hz) on every event in `pat`, overriding `note`. Example: `atom("sawtooth") |> set_freq(440.0)`.
+    let fn <- @capture(= f) (e : Event) : Event {
+        var r = e; r.freq = numf(f); return r
     }
     return <- fmap(pat, fn)
 }
@@ -412,54 +439,54 @@ def private set_cut(var pat : Pattern; c : int) : Pattern {
 }
 
 // pat |> set_room(0.5) — set reverb send amount
-def set_room(var pat : Pattern; r : float) : Pattern {
+def set_room(var pat : Pattern; r : int | float | double) : Pattern {
     //! Sets the reverb send amount `room` (0..1) on every event in `pat`.
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.room = r; return ev
+        var ev = e; ev.room = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_roomsize(0.8) — set reverb room size
-def set_roomsize(var pat : Pattern; r : float) : Pattern {
+def set_roomsize(var pat : Pattern; r : int | float | double) : Pattern {
     //! Sets the reverb room size `roomsize` (larger = more sustained reverb) on every event in `pat`.
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.roomsize = r; return ev
+        var ev = e; ev.roomsize = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_delay(0.5) — set delay send amount
-def set_delay(var pat : Pattern; d : float) : Pattern {
+def set_delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the delay send amount (`delay_amount`, 0..1) on every event in `pat`.
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.delay_amount = d; return ev
+        var ev = e; ev.delay_amount = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_delaytime(0.25) — set delay time in seconds
-def set_delaytime(var pat : Pattern; d : float) : Pattern {
+def set_delaytime(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the delay time `delaytime` (seconds) on every event in `pat`.
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.delaytime = d; return ev
+        var ev = e; ev.delaytime = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_delayfeedback(0.7) — set delay feedback
-def set_delayfeedback(var pat : Pattern; d : float) : Pattern {
+def set_delayfeedback(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the delay feedback `delayfeedback` (0..<1) on every event in `pat`.
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.delayfeedback = d; return ev
+        var ev = e; ev.delayfeedback = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_delaysync(0.1875) — set delay time in cycles (tempo-synced delay)
-def private set_delaysync(var pat : Pattern; d : float) : Pattern {
+def private set_delaysync(var pat : Pattern; d : int | float | double) : Pattern {
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.delaysync = d; return ev
+        var ev = e; ev.delaysync = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
@@ -474,42 +501,43 @@ def set_orbit(var pat : Pattern; o : int) : Pattern {
 }
 
 // pat |> set_fm(2.0) — set FM modulation depth
-def set_fm(var pat : Pattern; f : float) : Pattern {
+def set_fm(var pat : Pattern; f : int | float | double) : Pattern {
     //! Sets the FM modulation depth `fm` (modulator amplitude) on every event in `pat`.
     let fn <- @capture(= f) (e : Event) : Event {
-        var ev = e; ev.fm = f; return ev
+        var ev = e; ev.fm = numf(f); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_fmh(1.5) — set FM harmonicity ratio
-def set_fmh(var pat : Pattern; f : float) : Pattern {
+def set_fmh(var pat : Pattern; f : int | float | double) : Pattern {
     //! Sets the FM harmonicity ratio `fmh` (modulator frequency / carrier frequency) on every event in `pat`.
     let fn <- @capture(= f) (e : Event) : Event {
-        var ev = e; ev.fmh = f; return ev
+        var ev = e; ev.fmh = numf(f); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // ─── Sample Region & Audio Effects ───
 
-def private set_begin(var pat : Pattern; b : float) : Pattern {
+def private set_begin(var pat : Pattern; b : int | float | double) : Pattern {
     let fn <- @capture(= b) (e : Event) : Event {
-        var r = e; r.begin = b; return r
+        var r = e; r.begin = numf(b); return r
     }
     return <- fmap(pat, fn)
 }
 
-def private set_end(var pat : Pattern; e_val : float) : Pattern {
+def private set_end(var pat : Pattern; e_val : int | float | double) : Pattern {
     let fn <- @capture(= e_val) (e : Event) : Event {
-        var r = e; r.end_pos = e_val; return r
+        var r = e; r.end_pos = numf(e_val); return r
     }
     return <- fmap(pat, fn)
 }
 
-def private set_crush(var pat : Pattern; c : float) : Pattern {
+def set_crush(var pat : Pattern; c : int | float | double) : Pattern {
+    //! Sets the bit-`crush` amount on every event in `pat` (lower = more bit-depth reduction).
     let fn <- @capture(= c) (e : Event) : Event {
-        var r = e; r.crush = c; return r
+        var r = e; r.crush = numf(c); return r
     }
     return <- fmap(pat, fn)
 }
@@ -521,110 +549,115 @@ def private set_coarse(var pat : Pattern; c : int) : Pattern {
     return <- fmap(pat, fn)
 }
 
-def private set_shape(var pat : Pattern; s : float) : Pattern {
+def set_shape(var pat : Pattern; s : int | float | double) : Pattern {
+    //! Sets the waveshape/distortion amount `shape` (0..1) on every event in `pat`.
     let fn <- @capture(= s) (e : Event) : Event {
-        var r = e; r.shape = s; return r
+        var r = e; r.shape = numf(s); return r
     }
     return <- fmap(pat, fn)
 }
 
-def private set_djf(var pat : Pattern; d : float) : Pattern {
+def private set_djf(var pat : Pattern; d : int | float | double) : Pattern {
     let fn <- @capture(= d) (e : Event) : Event {
-        var r = e; r.djf = d; return r
+        var r = e; r.djf = numf(d); return r
     }
     return <- fmap(pat, fn)
 }
 
-def private set_bpf(var pat : Pattern; freq : float) : Pattern {
+def set_bpf(var pat : Pattern; freq : int | float | double) : Pattern {
+    //! Sets the band-pass filter cutoff `bpf` (Hz) on every event in `pat`.
     let fn <- @capture(= freq) (e : Event) : Event {
-        var r = e; r.bpf = freq; return r
+        var r = e; r.bpf = numf(freq); return r
     }
     return <- fmap(pat, fn)
 }
 
-def private set_bpq(var pat : Pattern; q : float) : Pattern {
+def private set_bpq(var pat : Pattern; q : int | float | double) : Pattern {
     let fn <- @capture(= q) (e : Event) : Event {
-        var r = e; r.bpq = q; return r
+        var r = e; r.bpq = numf(q); return r
     }
     return <- fmap(pat, fn)
 }
 
 // Phaser: rate in Hz (0 disables). Modulates a single notch biquad.
-def private set_phaser(var pat : Pattern; r : float) : Pattern {
+def set_phaser(var pat : Pattern; r : int | float | double) : Pattern {
+    //! Sets the phaser rate `phaser` (Hz, 0 disables) on every event in `pat`.
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.phaser = r; return ev
+        var ev = e; ev.phaser = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_phaserdepth(var pat : Pattern; d : float) : Pattern {
+def private set_phaserdepth(var pat : Pattern; d : int | float | double) : Pattern {
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.phaserdepth = d; return ev
+        var ev = e; ev.phaserdepth = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_phasercenter(var pat : Pattern; c : float) : Pattern {
+def private set_phasercenter(var pat : Pattern; c : int | float | double) : Pattern {
     let fn <- @capture(= c) (e : Event) : Event {
-        var ev = e; ev.phasercenter = c; return ev
+        var ev = e; ev.phasercenter = numf(c); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_phasersweep(var pat : Pattern; s : float) : Pattern {
+def private set_phasersweep(var pat : Pattern; s : int | float | double) : Pattern {
     let fn <- @capture(= s) (e : Event) : Event {
-        var ev = e; ev.phasersweep = s; return ev
+        var ev = e; ev.phasersweep = numf(s); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // Tremolo: rate in Hz (0 disables), amplitude modulation.
-def private set_tremolo(var pat : Pattern; r : float) : Pattern {
+def set_tremolo(var pat : Pattern; r : int | float | double) : Pattern {
+    //! Sets the tremolo rate `tremolo` (Hz, 0 disables — amplitude modulation) on every event in `pat`.
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.tremolo = r; return ev
+        var ev = e; ev.tremolo = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_tremolodepth(var pat : Pattern; d : float) : Pattern {
+def private set_tremolodepth(var pat : Pattern; d : int | float | double) : Pattern {
     let fn <- @capture(= d) (e : Event) : Event {
-        var ev = e; ev.tremolodepth = d; return ev
+        var ev = e; ev.tremolodepth = numf(d); return ev
     }
     return <- fmap(pat, fn)
 }
 
 // Compressor: threshold in dB (>=0 = bypass). Negative values activate.
-def private set_compressor(var pat : Pattern; thr_db : float) : Pattern {
+def set_compressor(var pat : Pattern; thr_db : int | float | double) : Pattern {
+    //! Sets the compressor threshold `compressor` (dB; >=0 bypasses, negative activates) on every event in `pat`.
     let fn <- @capture(= thr_db) (e : Event) : Event {
-        var ev = e; ev.compressor = thr_db; return ev
+        var ev = e; ev.compressor = numf(thr_db); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_compressor_ratio(var pat : Pattern; ratio : float) : Pattern {
+def private set_compressor_ratio(var pat : Pattern; ratio : int | float | double) : Pattern {
     let fn <- @capture(= ratio) (e : Event) : Event {
-        var ev = e; ev.compressor_ratio = ratio; return ev
+        var ev = e; ev.compressor_ratio = numf(ratio); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_compressor_knee(var pat : Pattern; knee : float) : Pattern {
+def private set_compressor_knee(var pat : Pattern; knee : int | float | double) : Pattern {
     let fn <- @capture(= knee) (e : Event) : Event {
-        var ev = e; ev.compressor_knee = knee; return ev
+        var ev = e; ev.compressor_knee = numf(knee); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_compressor_attack(var pat : Pattern; a : float) : Pattern {
+def private set_compressor_attack(var pat : Pattern; a : int | float | double) : Pattern {
     let fn <- @capture(= a) (e : Event) : Event {
-        var ev = e; ev.compressor_attack = a; return ev
+        var ev = e; ev.compressor_attack = numf(a); return ev
     }
     return <- fmap(pat, fn)
 }
 
-def private set_compressor_release(var pat : Pattern; r : float) : Pattern {
+def private set_compressor_release(var pat : Pattern; r : int | float | double) : Pattern {
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.compressor_release = r; return ev
+        var ev = e; ev.compressor_release = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
@@ -751,105 +784,106 @@ def private set_sf2_bank(var pat : Pattern; bank : int) : Pattern {
 }
 
 // pat |> set_sf2_expression(0.5) — set SF2 expression CC11 (0.0–1.0)
-def private set_sf2_expression(var pat : Pattern; v : float) : Pattern {
+def private set_sf2_expression(var pat : Pattern; v : int | float | double) : Pattern {
     let fn <- @capture(= v) (e : Event) : Event {
-        var r = e; r.sf2_expression = v; return r
+        var r = e; r.sf2_expression = numf(v); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_sf2_mod_wheel(0.5) — set SF2 mod wheel CC1 (0.0–1.0, vibrato depth)
-def private set_sf2_mod_wheel(var pat : Pattern; v : float) : Pattern {
+def private set_sf2_mod_wheel(var pat : Pattern; v : int | float | double) : Pattern {
     let fn <- @capture(= v) (e : Event) : Event {
-        var r = e; r.sf2_mod_wheel = v; return r
+        var r = e; r.sf2_mod_wheel = numf(v); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_sf2_pitch_bend(0.6) — set SF2 pitch bend (0.0–1.0, 0.5 = center)
-def private set_sf2_pitch_bend(var pat : Pattern; v : float) : Pattern {
+def private set_sf2_pitch_bend(var pat : Pattern; v : int | float | double) : Pattern {
     let fn <- @capture(= v) (e : Event) : Event {
-        var r = e; r.sf2_pitch_bend = v; return r
+        var r = e; r.sf2_pitch_bend = numf(v); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_chorus(0.5) — set chorus send amount (0.0–1.0)
-def private set_chorus(var pat : Pattern; c : float) : Pattern {
+def set_chorus(var pat : Pattern; c : int | float | double) : Pattern {
+    //! Sets the chorus send amount `chorus` (0..1) on every event in `pat`.
     let fn <- @capture(= c) (e : Event) : Event {
-        var r = e; r.chorus = c; return r
+        var r = e; r.chorus = numf(c); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_lpq(5.0) — set low-pass filter resonance
-def set_lpq(var pat : Pattern; q : float) : Pattern {
+def set_lpq(var pat : Pattern; q : int | float | double) : Pattern {
     //! Sets the low-pass filter resonance `lpq` (Q factor) on every event in `pat`.
     let fn <- @capture(= q) (e : Event) : Event {
-        var r = e; r.lpq = q; return r
+        var r = e; r.lpq = numf(q); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_hpq(5.0) — set high-pass filter resonance
-def set_hpq(var pat : Pattern; q : float) : Pattern {
+def set_hpq(var pat : Pattern; q : int | float | double) : Pattern {
     //! Sets the high-pass filter resonance `hpq` (Q factor) on every event in `pat`.
     let fn <- @capture(= q) (e : Event) : Event {
-        var r = e; r.hpq = q; return r
+        var r = e; r.hpq = numf(q); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_lpf(1000.0) — set low-pass filter cutoff
-def set_lpf(var pat : Pattern; freq : float) : Pattern {
+def set_lpf(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Sets the low-pass filter cutoff `lpf` (Hz) on every event in `pat`.
     let fn <- @capture(= freq) (e : Event) : Event {
-        var r = e; r.lpf = freq; return r
+        var r = e; r.lpf = numf(freq); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_hpf(200.0) — set high-pass filter cutoff
-def set_hpf(var pat : Pattern; freq : float) : Pattern {
+def set_hpf(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Sets the high-pass filter cutoff `hpf` (Hz) on every event in `pat`.
     let fn <- @capture(= freq) (e : Event) : Event {
-        var r = e; r.hpf = freq; return r
+        var r = e; r.hpf = numf(freq); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_attack(0.1) — set envelope attack time
-def set_attack(var pat : Pattern; a : float) : Pattern {
+def set_attack(var pat : Pattern; a : int | float | double) : Pattern {
     //! Sets the amp-envelope `attack` time (seconds) on every event in `pat`.
     let fn <- @capture(= a) (e : Event) : Event {
-        var r = e; r.attack = a; return r
+        var r = e; r.attack = numf(a); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_decay(0.3) — set envelope decay time
-def set_decay(var pat : Pattern; d : float) : Pattern {
+def set_decay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the amp-envelope `decay` time (seconds) on every event in `pat`.
     let fn <- @capture(= d) (e : Event) : Event {
-        var r = e; r.decay = d; return r
+        var r = e; r.decay = numf(d); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_sustain(0.7) — set envelope sustain level
-def set_sustain(var pat : Pattern; s : float) : Pattern {
+def set_sustain(var pat : Pattern; s : int | float | double) : Pattern {
     //! Sets the amp-envelope `sustain` level (0..1) on every event in `pat`.
     let fn <- @capture(= s) (e : Event) : Event {
-        var r = e; r.sustain = s; return r
+        var r = e; r.sustain = numf(s); return r
     }
     return <- fmap(pat, fn)
 }
 
 // pat |> set_release(0.5) — set envelope release time
-def set_release(var pat : Pattern; r : float) : Pattern {
+def set_release(var pat : Pattern; r : int | float | double) : Pattern {
     //! Sets the amp-envelope `release` time (seconds) on every event in `pat`.
     let fn <- @capture(= r) (e : Event) : Event {
-        var ev = e; ev.release = r; return ev
+        var ev = e; ev.release = numf(r); return ev
     }
     return <- fmap(pat, fn)
 }
@@ -896,7 +930,7 @@ def rev(var pat : Pattern) : Pattern {
 // Stereo split: original panned left, transformed panned right.
 // jux(s("bd sd"), @(x) => rev(x)) — classic stereo widening
 def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
-    //! Stereo split: original is panned left, `transform(pat)` is panned right. Example: `s("bd sd") |> jux(@@(x) => rev(x))`.
+    //! Stereo split: original is panned left, `transform(pat)` is panned right. Example: `s("bd sd") |> jux(@(x) => rev(x))`.
     var transformed <- invoke(transform, pat) // nolint:LINT003
     var left <- pat |> set_pan(0.0)
     var right <- transformed |> set_pan(1.0)
@@ -908,9 +942,9 @@ def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
 
 // Overlay pattern with a time-shifted copy.
 // off(s("bd sd"), 0.125, @(x) => transpose(x, 7.0)) — canon at the fifth
-def off(var pat : Pattern; time : double; transform : PatternTransform) : Pattern {
-    //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @@(x) => transpose(x, 7.0))` — canon at the fifth.
-    var shifted <- invoke(transform, pat) |> late(time)
+def off(var pat : Pattern; time : int | float | double; transform : PatternTransform) : Pattern {
+    //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @(x) => transpose(x, 7.0))` — canon at the fifth.
+    var shifted <- invoke(transform, pat) |> late(numd(time))
     var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
     layers |> emplace <| shifted
@@ -957,7 +991,7 @@ def private degrade_drop(var pat : Pattern; prob : float) : Pattern {
 // Matches strudel: stack(degrade(pat, prob), transform(undegrade(pat, prob)))
 // Randomness is decided at original event positions, BEFORE transform reshuffles timing.
 def sometimesby(var pat : Pattern; prob : float; transform : PatternTransform) : Pattern {
-    //! Applies `transform` to each event with probability `prob` (0..1). Example: `s("bd*8") |> sometimesby(0.3, @@(x) => fast(x, 2.0lf))`.
+    //! Applies `transform` to each event with probability `prob` (0..1). Example: `s("bd*8") |> sometimesby(0.3, @(x) => fast(x, 2.0lf))`.
     var degraded <- degrade_keep(pat, prob)
     var undegraded <- degrade_drop(pat, prob) // nolint:LINT003
     var transformed <- invoke(transform, undegraded) // nolint:LINT003
@@ -993,16 +1027,16 @@ def layer(var pats : array<Pattern>; var base : Pattern) : Pattern {
 }
 
 // Shift note by semitones. transpose(pat, 7) = up a fifth.
-def transpose(var pat : Pattern; semitones : float) : Pattern {
+def transpose(var pat : Pattern; semitones : int | float | double) : Pattern {
     //! Shifts every event's MIDI note by `semitones`. Example: `pat |> transpose(7.0)` transposes up a fifth.
     let fn <- @capture(= semitones) (e : Event) : Event {
-        var r = e; r.note += semitones; return r
+        var r = e; r.note += numf(semitones); return r
     }
     return <- fmap(pat, fn)
 }
 
 // Alias: add is the same as transpose (matches strudel naming).
-def add(var pat : Pattern; semitones : float) : Pattern {
+def add(var pat : Pattern; semitones : int | float | double) : Pattern {
     //! Alias for `transpose` — adds `semitones` to each event's note. Matches strudel naming.
     return <- transpose(pat, semitones)
 }
@@ -1175,12 +1209,13 @@ def signal_perlin() : Pattern {
 }
 
 // Scale a signal from 0..1 to lo..hi.
-def signal_range(var pat : Pattern; lo, hi : float) : Pattern {
+def signal_range(var pat : Pattern; lo, hi : int | float | double) : Pattern {
     //! Scales a signal pattern from `0..1` to `lo..hi`. Example: `sine() |> signal_range(200.0, 4000.0)` for a 200..4000 Hz filter sweep.
-    let span = hi - lo
-    return fmap(pat, @capture(= lo, = span) (e : Event) : Event {
+    let vlo = numf(lo)
+    let span = numf(hi) - vlo
+    return fmap(pat, @capture(= vlo, = span) (e : Event) : Event {
         var r = e
-        r.note = lo + r.note * span
+        r.note = vlo + r.note * span
         return r
     })
 }
@@ -1233,6 +1268,13 @@ def set_note(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     //! Pattern-valued `set_note` — samples `mod_pat` at each event onset to set `note`. Example: `pat |> set_note(saw() |> range(48.0, 72.0))`.
     return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
         var r = e; r.note = val; return r
+    })
+}
+
+def set_freq(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-valued `set_freq` — samples `mod_pat` at each event onset to set `freq` (Hz, overrides note).
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.freq = val; return r
     })
 }
 
@@ -1621,6 +1663,43 @@ def euclid(var pat : Pattern; k, n : int) : Pattern {
     }
 }
 
+// pat |> euclidRot(3, 8, 1) — Euclidean rhythm rotated by `rot` steps
+def euclidRot(var pat : Pattern; k, n, rot : int) : Pattern {
+    //! Euclidean rhythm like `euclid`, then rotated left by `rot` steps. Example: `atom("bd") |> euclidRot(3, 8, 1)` shifts the tresillo onsets one step earlier.
+    var base <- bjorklund(k, n)
+    let steps = length(base)
+    var rhythm : array<bool>
+    if (steps > 0) {
+        rhythm |> resize(steps)
+        let r = ((rot % steps) + steps) % steps
+        for (i in range(steps)) {
+            rhythm[i] = base[(i + r) % steps]
+        }
+    }
+    delete base
+    let nf = double(n)
+    return @capture(<- rhythm, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        let steps = length(rhythm)
+        return <- result if (steps == 0)
+        let innerSpan = TimeSpan(start = span.start * nf, stop = span.stop * nf)
+        var haps <- pat(innerSpan)
+        for (h in haps) {
+            let step = int(sameCycle(h.whole.start)) % steps
+            if (rhythm[step]) {
+                result |> push(Hap(
+                    whole = TimeSpan(start = h.whole.start / nf, stop = h.whole.stop / nf),
+                    part = TimeSpan(start = h.part.start / nf, stop = h.part.stop / nf),
+                    has_whole = h.has_whole,
+                    value = h.value
+                ))
+            }
+        }
+        delete haps
+        return <- result
+    }
+}
+
 // ─── Additional Combinators ───
 
 // Play forward on even cycles, reversed on odd cycles.
@@ -1669,7 +1748,7 @@ def palindrome(var pat : Pattern) : Pattern {
 // Stack original + transformed copy.
 // superimpose(pat, @(x) => fast(x, 2.0lf)) — layer faster copy on top
 def superimpose(var pat : Pattern; transform : PatternTransform) : Pattern {
-    //! Stacks `pat` with `transform(pat)`, both playing simultaneously. Example: `pat |> superimpose(@@(x) => fast(x, 2.0lf))`.
+    //! Stacks `pat` with `transform(pat)`, both playing simultaneously. Example: `pat |> superimpose(@(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
@@ -1679,20 +1758,22 @@ def superimpose(var pat : Pattern; transform : PatternTransform) : Pattern {
 
 // Repeat events with time offset and gain decay.
 // echo(pat, 3, 0.25, 0.5) — 3 echoes, 0.25 cycles apart, each 50% quieter
-def echo(var pat : Pattern; times : int; time : double; feedback : float) : Pattern {
+def echo(var pat : Pattern; times : int; time : int | float | double; feedback : int | float | double) : Pattern {
     //! Repeats every event `times` times, offset by `time` cycles each, with each repeat scaled by `feedback`. Example: `pat |> echo(3, 0.25lf, 0.5)`.
     // Build gain table and offsets, then query pat once per span and duplicate haps
+    let vtime = numd(time)
+    let vfeedback = numf(feedback)
     var gains : array<float>
     var offsets : array<double>
     gains |> reserve(times)
     offsets |> reserve(times)
     gains |> push(1.0)       // original at full gain
     offsets |> push(0.0lf)   // original at zero offset
-    var current_gain = feedback
+    var current_gain = vfeedback
     for (i in range(1, times)) {
         gains |> push(current_gain)
-        offsets |> push(time * double(i))
-        current_gain *= feedback
+        offsets |> push(vtime * double(i))
+        current_gain *= vfeedback
     }
     let n = length(gains)
     return @capture(= n, <- gains, <- offsets, <- pat) (span : TimeSpan) : array<Hap> {
@@ -1720,7 +1801,7 @@ def echo(var pat : Pattern; times : int; time : double; feedback : float) : Patt
 }
 
 // stut — alias for echo with reordered parameters (times, feedback, time).
-def stut(var pat : Pattern; times : int; feedback : float; time : double) : Pattern {
+def stut(var pat : Pattern; times : int; feedback : int | float | double; time : int | float | double) : Pattern {
     //! Alias for `echo` with argument order `(times, feedback, time)`. Example: `pat |> stut(3, 0.5, 0.125lf)`.
     return <- echo(pat, times, time, feedback)
 }
@@ -1820,7 +1901,7 @@ def iterBack(var pat : Pattern; n : int) : Pattern {
 // Conditional transform based on cycle number.
 // when_cycle(pat, @(c) => c % 4 == 0, @(x) => fast(x, 2.0lf))
 def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; transform : PatternTransform) : Pattern {
-    //! Applies `transform` to `pat` on cycles where `cond(cycle)` is true, leaving others untouched. Example: `pat |> when_cycle(@(c) => c % 4 == 0, @@(x) => fast(x, 2.0lf))`.
+    //! Applies `transform` to `pat` on cycles where `cond(cycle)` is true, leaving others untouched. Example: `pat |> when_cycle(@(c) => c % 4 == 0, @(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     return @capture(<- pat, <- transformed, <- cond) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
@@ -1847,11 +1928,12 @@ def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; trans
 
 // Loop first fraction of pattern. linger(pat, 0.25) — first quarter looped to fill each cycle.
 // Semantics: output(T) = pat(T mod t). Equivalent to pat.zoom(0, t).slow(t).
-def linger(var pat : Pattern; t : double) : Pattern {
-    //! Loops the first `t`-cycle fraction of `pat` to fill each cycle. Example: `pat |> linger(0.25lf)` loops the first quarter.
-    return @capture(= t, <- pat) (span : TimeSpan) : array<Hap> {
+def linger(var pat : Pattern; t : int | float | double) : Pattern {
+    //! Loops the first `t`-cycle fraction of `pat` to fill each cycle. Example: `pat |> linger(0.25)` loops the first quarter.
+    let tt = numd(t)
+    return @capture(= tt, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
-        return <- result if (t <= 0.0lf)
+        return <- result if (tt <= 0.0lf)
         var inscope split = splitSpans(span)
         for (sub in split) {
             let cycle = floor(sub.start)
@@ -1860,9 +1942,9 @@ def linger(var pat : Pattern; t : double) : Pattern {
             // iterate each period-t chunk overlapping [relStart, relStop]
             var i = 0
             while (true) {
-                let chunkStart = double(i) * t
+                let chunkStart = double(i) * tt
                 break if (chunkStart >= 1.0lf || chunkStart >= relStop)
-                let chunkStop = chunkStart + t
+                let chunkStop = chunkStart + tt
                 if (chunkStop > relStart) {
                     let overlapStart = max(chunkStart, relStart)
                     let overlapStop = min(min(chunkStop, 1.0lf), relStop)
@@ -1891,23 +1973,24 @@ def linger(var pat : Pattern; t : double) : Pattern {
 }
 
 // Combined fast + speed. hurry(pat, 2.0) speeds up pattern AND sample playback.
-def hurry(var pat : Pattern; factor : double) : Pattern {
+def hurry(var pat : Pattern; factor : int | float | double) : Pattern {
     //! Combined `fast` + `set_speed` — speeds up both pattern timing AND sample playback by `factor`. Example: `pat |> hurry(2.0lf)`.
-    return <- fast(pat, factor) |> set_speed(float(factor))
+    return <- fast(pat, factor) |> set_speed(factor)
 }
 
 // Squeeze pattern into time window [b,e] within each cycle.
 // compress(pat, 0.25, 0.75) — pattern plays in middle half of each cycle
-def compress(var pat : Pattern; b, e : double) : Pattern {
-    //! Squeezes `pat` into the cycle-time window `[b, e]`. Example: `pat |> compress(0.25lf, 0.75lf)` plays the pattern in the middle half.
-    let dur = e - b
-    return @capture(= b, = dur, <- pat) (span : TimeSpan) : array<Hap> {
+def compress(var pat : Pattern; b, e : int | float | double) : Pattern {
+    //! Squeezes `pat` into the cycle-time window `[b, e]`. Example: `pat |> compress(0.25, 0.75)` plays the pattern in the middle half.
+    let bb = numd(b)
+    let dur = numd(e) - bb
+    return @capture(= bb, = dur, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var inscope split = splitSpans(span)
         for (sub in split) {
             let cycle = floor(sub.start)
-            let winStart = cycle + b
-            let winStop = cycle + b + dur
+            let winStart = cycle + bb
+            let winStop = cycle + bb + dur
             let overStart = max(sub.start, winStart)
             let overStop = min(sub.stop, winStop)
             if (overStart >= overStop) continue
@@ -1939,7 +2022,7 @@ def compress(var pat : Pattern; b, e : double) : Pattern {
 // Apply function to the nth chunk each cycle (rotating).
 // chunk(pat, 4, @(x) => fast(x, 2.0lf)) — doubles speed of chunk 0, then 1, then 2, then 3
 def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
-    //! Divides each cycle into `n` chunks, applying `transform` to a different chunk each cycle (rotating). Example: `pat |> chunk(4, @@(x) => fast(x, 2.0lf))`.
+    //! Divides each cycle into `n` chunks, applying `transform` to a different chunk each cycle (rotating). Example: `pat |> chunk(4, @(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     let nf = double(n)
     return @capture(= n, = nf, <- pat, <- transformed) (span : TimeSpan) : array<Hap> {
@@ -1983,6 +2066,7 @@ def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
 // Behavior: progressive slices reveal later parts of the sample envelope.
 def striate(var pat : Pattern; n : int) : Pattern {
     //! Cuts each sample into `n` slices and plays them in sequence. Slice `i` gets `begin=i/n`, `end=(i+1)/n`. Example: `pat |> striate(4)`.
+    return <- pat if (n <= 0)
     let nf = double(n)
     let nfinv = 1.0 / float(n)
     return @capture(= n, = nf, = nfinv, <- pat) (span : TimeSpan) : array<Hap> {
@@ -2004,6 +2088,80 @@ def striate(var pat : Pattern; n : int) : Pattern {
             ))
         }
         delete haps
+        return <- result
+    }
+}
+
+// pat |> chop(4) — subdivide each event into n consecutive sample slices
+def chop(var pat : Pattern; n : int) : Pattern {
+    //! Subdivides each event in place into `n` back-to-back slices of its sample (slice `i` = `begin..end` window `i/n`). Unlike `striate`, slices stay within each event's own time slot. Example: `s("bev") |> chop(4)`.
+    return <- pat if (n <= 0)
+    let nfinv = 1.0 / float(n)
+    return @capture(= n, = nfinv, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var haps <- pat(span)
+        result |> reserve(length(haps) * n)
+        for (h in haps) {
+            let wstart = h.whole.start
+            let wdur = h.whole.stop - h.whole.start
+            if (wdur <= 0.0lf) {
+                result |> push(h) // nolint:PERF006
+                continue
+            }
+            // subdivide the sample's existing [begin, end_pos] window into n parts
+            let b0 = h.value.begin
+            let win = h.value.end_pos - b0
+            for (i in range(n)) {
+                let subStart = wstart + wdur * (double(i) / double(n))
+                let subStop = wstart + wdur * (double(i + 1) / double(n))
+                let pStart = max(subStart, h.part.start)
+                let pStop = min(subStop, h.part.stop)
+                continue if (pStart >= pStop)
+                var ev = h.value
+                ev.begin = b0 + float(i) * nfinv * win
+                ev.end_pos = b0 + float(i + 1) * nfinv * win
+                result |> push(Hap( // nolint:PERF006
+                    whole = TimeSpan(start = subStart, stop = subStop),
+                    part = TimeSpan(start = pStart, stop = pStop),
+                    has_whole = h.has_whole,
+                    value = ev
+                ))
+            }
+        }
+        delete haps
+        return <- result
+    }
+}
+
+// pat |> slice(4, n("0 1 2 3")) — play sample slices in the order given by idx_pat
+def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
+    //! Cuts the sample into `n` slices and plays them in the order/rhythm of `idx_pat` (whose `note` values are slice indices). Structure comes from `idx_pat`, the sample from `pat`. Out-of-range indices wrap modulo `n`. Example: `s("bev") |> slice(4, note("0 2 1 3"))`.
+    return <- pat if (n <= 0)
+    let nfinv = 1.0 / float(n)
+    return @capture(= n, = nfinv, <- pat, <- idx_pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var ihaps <- idx_pat(span)
+        result |> reserve(length(ihaps))
+        for (ih in ihaps) {
+            let onset = ih.has_whole ? ih.whole.start : ih.part.start
+            var shaps <- pat(TimeSpan(start = onset, stop = onset + 0.001lf))
+            var ev = length(shaps) > 0 ? shaps[0].value : ih.value
+            delete shaps
+            // wrap the slice index into [0, n-1] so out-of-range values cycle (live-coding: never crash)
+            let i = ((int(ih.value.note) % n) + n) % n
+            // subdivide the sample's existing [begin, end_pos] window (composes like chop)
+            let b0 = ev.begin
+            let win = ev.end_pos - b0
+            ev.begin = b0 + float(i) * nfinv * win
+            ev.end_pos = b0 + float(i + 1) * nfinv * win
+            result |> push(Hap( // nolint:PERF006
+                whole = ih.whole,
+                part = ih.part,
+                has_whole = ih.has_whole,
+                value = ev
+            ))
+        }
+        delete ihaps
         return <- result
     }
 }
@@ -2134,7 +2292,10 @@ def chooseCycles(var pats : array<Pattern>) : Pattern {
 //   apply Murmur3 finalizer for full avalanche
 // This replaces earlier LCG/single-multiply hashes whose middle bits correlated
 // across consecutive slots (the "same-note-in-a-row" bug in scramble/shuffle).
-def private strudel_hash32(t : double; slot : int) : uint {
+def strudel_hash32(t : double; slot : int) : uint {
+    //! Deterministic 32-bit hash of a query time + slot index, used by the random combinators
+    //! (`degrade`, `shuffle`, `scramble`, `choose`). Public so their captured lambdas resolve it
+    //! when re-instantiated in a consumer module.
     let Ti = int64(t * 536870912.0lf)
     let lo = uint(Ti)
     let hi = uint(Ti >> 32l)
@@ -2149,7 +2310,9 @@ def private strudel_hash32(t : double; slot : int) : uint {
 }
 
 // Same hash, mapped to float in [0, 1).
-def private strudel_hash01(t : double; slot : int) : float {
+def strudel_hash01(t : double; slot : int) : float {
+    //! `strudel_hash32` mapped to a float in `[0, 1)`. Public so the random combinators' captured
+    //! lambdas resolve it when re-instantiated in a consumer module.
     return float(strudel_hash32(t, slot)) / 4294967296.0
 }
 
@@ -2368,40 +2531,40 @@ def private signal_run(n : int) : Pattern {
 
 // ── Scalar parameter aliases ──
 
-def gain(var pat : Pattern; g : float) : Pattern {
+def gain(var pat : Pattern; g : int | float | double) : Pattern {
     //! Fluent shorthand for `set_gain`. Sets amplitude (0..1) on every event.
     return <- set_gain(pat, g)
 }
-def velocity(var pat : Pattern; v : float) : Pattern {
+def velocity(var pat : Pattern; v : int | float | double) : Pattern {
     //! Fluent shorthand for `set_velocity`. Sets MIDI-like velocity (0..1) on every event.
     return <- set_velocity(pat, v)
 }
-def vel(var pat : Pattern; v : float) : Pattern {
+def vel(var pat : Pattern; v : int | float | double) : Pattern {
     //! Alias for `velocity`.
     return <- set_velocity(pat, v)
 }
-def pan(var pat : Pattern; p : float) : Pattern {
+def pan(var pat : Pattern; p : int | float | double) : Pattern {
     //! Fluent shorthand for `set_pan`. Sets stereo position (0=L, 0.5=C, 1=R).
     return <- set_pan(pat, p)
 }
-def hrtf_azimuth(var pat : Pattern; deg : float) : Pattern {
+def hrtf_azimuth(var pat : Pattern; deg : int | float | double) : Pattern {
     //! Fluent shorthand for `set_hrtf_azimuth`. Engages HRTF positioning; `pan` still controls source width.
     return <- set_hrtf_azimuth(pat, deg)
 }
-def hrtf_elevation(var pat : Pattern; deg : float) : Pattern {
+def hrtf_elevation(var pat : Pattern; deg : int | float | double) : Pattern {
     //! Fluent shorthand for `set_hrtf_elevation`. Engages HRTF positioning; `pan` still controls source width.
     return <- set_hrtf_elevation(pat, deg)
 }
-def hrtf(var pat : Pattern; az, el : float) : Pattern {
+def hrtf(var pat : Pattern; az, el : int | float | double) : Pattern {
     //! Fluent shorthand for `set_hrtf` — sets HRTF azimuth + elevation and engages 3D positioning;
     //! `pan` still controls source width.
     return <- set_hrtf(pat, az, el)
 }
-def speed(var pat : Pattern; spd : float) : Pattern {
+def speed(var pat : Pattern; spd : int | float | double) : Pattern {
     //! Fluent shorthand for `set_speed`. Sets sample playback speed.
     return <- set_speed(pat, spd)
 }
-def note(var pat : Pattern; n : float) : Pattern {
+def note(var pat : Pattern; n : int | float | double) : Pattern {
     //! Fluent shorthand for `set_note`. Sets MIDI note number on every event.
     return <- set_note(pat, n)
 }
@@ -2413,39 +2576,39 @@ def cut(var pat : Pattern; c : int) : Pattern {
     //! Fluent shorthand for `set_cut`. Sets the cut group (new voice kills previous in same group).
     return <- set_cut(pat, c)
 }
-def room(var pat : Pattern; r : float) : Pattern {
+def room(var pat : Pattern; r : int | float | double) : Pattern {
     //! Fluent shorthand for `set_room`. Sets reverb send amount (0..1).
     return <- set_room(pat, r)
 }
-def roomsize(var pat : Pattern; r : float) : Pattern {
+def roomsize(var pat : Pattern; r : int | float | double) : Pattern {
     //! Fluent shorthand for `set_roomsize`. Sets reverb room size.
     return <- set_roomsize(pat, r)
 }
-def size(var pat : Pattern; r : float) : Pattern {
+def size(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `roomsize`.
     return <- set_roomsize(pat, r)
 }
-def delay(var pat : Pattern; d : float) : Pattern {
+def delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delay`. Sets delay send amount (0..1).
     return <- set_delay(pat, d)
 }
-def delaytime(var pat : Pattern; d : float) : Pattern {
+def delaytime(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delaytime`. Sets delay time in seconds.
     return <- set_delaytime(pat, d)
 }
-def dt(var pat : Pattern; d : float) : Pattern {
+def dt(var pat : Pattern; d : int | float | double) : Pattern {
     //! Alias for `delaytime`.
     return <- set_delaytime(pat, d)
 }
-def delayfeedback(var pat : Pattern; d : float) : Pattern {
+def delayfeedback(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delayfeedback`. Sets delay feedback (0..<1).
     return <- set_delayfeedback(pat, d)
 }
-def dfb(var pat : Pattern; d : float) : Pattern {
+def dfb(var pat : Pattern; d : int | float | double) : Pattern {
     //! Alias for `delayfeedback`.
     return <- set_delayfeedback(pat, d)
 }
-def delaysync(var pat : Pattern; d : float) : Pattern {
+def delaysync(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delaysync`. Sets delay time in cycles (tempo-synced delay).
     return <- set_delaysync(pat, d)
 }
@@ -2453,90 +2616,90 @@ def orbit(var pat : Pattern; o : int) : Pattern {
     //! Fluent shorthand for `set_orbit`. Sets the effect-bus routing index.
     return <- set_orbit(pat, o)
 }
-def fm(var pat : Pattern; f : float) : Pattern {
+def fm(var pat : Pattern; f : int | float | double) : Pattern {
     //! Fluent shorthand for `set_fm`. Sets FM modulation depth.
     return <- set_fm(pat, f)
 }
-def fmh(var pat : Pattern; f : float) : Pattern {
+def fmh(var pat : Pattern; f : int | float | double) : Pattern {
     //! Fluent shorthand for `set_fmh`. Sets FM harmonicity ratio.
     return <- set_fmh(pat, f)
 }
-def lpf(var pat : Pattern; freq : float) : Pattern {
+def lpf(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Fluent shorthand for `set_lpf`. Sets low-pass cutoff (Hz).
     return <- set_lpf(pat, freq)
 }
-def lp(var pat : Pattern; freq : float) : Pattern {
+def lp(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Alias for `lpf`.
     return <- set_lpf(pat, freq)
 }
-def hpf(var pat : Pattern; freq : float) : Pattern {
+def hpf(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Fluent shorthand for `set_hpf`. Sets high-pass cutoff (Hz).
     return <- set_hpf(pat, freq)
 }
-def hp(var pat : Pattern; freq : float) : Pattern {
+def hp(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Alias for `hpf`.
     return <- set_hpf(pat, freq)
 }
-def lpq(var pat : Pattern; q : float) : Pattern {
+def lpq(var pat : Pattern; q : int | float | double) : Pattern {
     //! Fluent shorthand for `set_lpq`. Sets low-pass filter resonance.
     return <- set_lpq(pat, q)
 }
-def resonance(var pat : Pattern; q : float) : Pattern {
+def resonance(var pat : Pattern; q : int | float | double) : Pattern {
     //! Alias for `lpq`.
     return <- set_lpq(pat, q)
 }
-def hpq(var pat : Pattern; q : float) : Pattern {
+def hpq(var pat : Pattern; q : int | float | double) : Pattern {
     //! Fluent shorthand for `set_hpq`. Sets high-pass filter resonance.
     return <- set_hpq(pat, q)
 }
-def attack(var pat : Pattern; a : float) : Pattern {
+def attack(var pat : Pattern; a : int | float | double) : Pattern {
     //! Fluent shorthand for `set_attack`. Sets envelope attack (seconds).
     return <- set_attack(pat, a)
 }
-def att(var pat : Pattern; a : float) : Pattern {
+def att(var pat : Pattern; a : int | float | double) : Pattern {
     //! Alias for `attack`.
     return <- set_attack(pat, a)
 }
-def decay(var pat : Pattern; d : float) : Pattern {
+def decay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_decay`. Sets envelope decay (seconds).
     return <- set_decay(pat, d)
 }
-def dec(var pat : Pattern; d : float) : Pattern {
+def dec(var pat : Pattern; d : int | float | double) : Pattern {
     //! Alias for `decay`.
     return <- set_decay(pat, d)
 }
-def sustain(var pat : Pattern; s : float) : Pattern {
+def sustain(var pat : Pattern; s : int | float | double) : Pattern {
     //! Fluent shorthand for `set_sustain`. Sets envelope sustain level (0..1).
     return <- set_sustain(pat, s)
 }
-def sus(var pat : Pattern; s : float) : Pattern {
+def sus(var pat : Pattern; s : int | float | double) : Pattern {
     //! Alias for `sustain`.
     return <- set_sustain(pat, s)
 }
-def release(var pat : Pattern; r : float) : Pattern {
+def release(var pat : Pattern; r : int | float | double) : Pattern {
     //! Fluent shorthand for `set_release`. Sets envelope release (seconds).
     return <- set_release(pat, r)
 }
-def rel(var pat : Pattern; r : float) : Pattern {
+def rel(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `release`.
     return <- set_release(pat, r)
 }
-def chorus(var pat : Pattern; c : float) : Pattern {
+def chorus(var pat : Pattern; c : int | float | double) : Pattern {
     //! Fluent shorthand for `set_chorus`. Sets chorus send amount (0..1).
     return <- set_chorus(pat, c)
 }
 
 // ── Sample region & effects aliases ──
 
-def begin(var pat : Pattern; b : float) : Pattern {
+def begin(var pat : Pattern; b : int | float | double) : Pattern {
     //! Fluent shorthand for `set_begin`. Sets sample start position (0..1).
     return <- set_begin(pat, b)
 }
-def end_pos(var pat : Pattern; e_val : float) : Pattern {
+def end_pos(var pat : Pattern; e_val : int | float | double) : Pattern {
     //! Fluent shorthand for `set_end`. Sets sample end position (0..1).
     return <- set_end(pat, e_val)
 }
-def crush(var pat : Pattern; c : float) : Pattern {
+def crush(var pat : Pattern; c : int | float | double) : Pattern {
     //! Fluent shorthand for `set_crush`. Sets bit-crush amount.
     return <- set_crush(pat, c)
 }
@@ -2544,109 +2707,109 @@ def coarse(var pat : Pattern; c : int) : Pattern {
     //! Fluent shorthand for `set_coarse`. Sets sample-rate reduction factor.
     return <- set_coarse(pat, c)
 }
-def shape(var pat : Pattern; s : float) : Pattern {
+def shape(var pat : Pattern; s : int | float | double) : Pattern {
     //! Fluent shorthand for `set_shape`. Sets waveshape/distortion amount.
     return <- set_shape(pat, s)
 }
-def djf(var pat : Pattern; d : float) : Pattern {
+def djf(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_djf`. Sets DJ-filter position (<0.5 = LP, >0.5 = HP).
     return <- set_djf(pat, d)
 }
-def bpf(var pat : Pattern; freq : float) : Pattern {
+def bpf(var pat : Pattern; freq : int | float | double) : Pattern {
     //! Fluent shorthand for `set_bpf`. Sets band-pass filter cutoff (Hz).
     return <- set_bpf(pat, freq)
 }
-def bpq(var pat : Pattern; q : float) : Pattern {
+def bpq(var pat : Pattern; q : int | float | double) : Pattern {
     //! Fluent shorthand for `set_bpq`. Sets band-pass filter Q.
     return <- set_bpq(pat, q)
 }
 
 // ── Phaser / Tremolo / Compressor aliases ──
 
-def phaser(var pat : Pattern; r : float) : Pattern {
+def phaser(var pat : Pattern; r : int | float | double) : Pattern {
     //! Fluent shorthand for `set_phaser`. Sets phaser rate in Hz (0 disables).
     return <- set_phaser(pat, r)
 }
-def ph(var pat : Pattern; r : float) : Pattern {
+def ph(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `phaser`.
     return <- set_phaser(pat, r)
 }
-def phaserdepth(var pat : Pattern; d : float) : Pattern {
+def phaserdepth(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_phaserdepth`. Sets phaser depth.
     return <- set_phaserdepth(pat, d)
 }
-def phd(var pat : Pattern; d : float) : Pattern {
+def phd(var pat : Pattern; d : int | float | double) : Pattern {
     //! Alias for `phaserdepth`.
     return <- set_phaserdepth(pat, d)
 }
-def phasercenter(var pat : Pattern; c : float) : Pattern {
+def phasercenter(var pat : Pattern; c : int | float | double) : Pattern {
     //! Fluent shorthand for `set_phasercenter`. Sets phaser center frequency.
     return <- set_phasercenter(pat, c)
 }
-def phc(var pat : Pattern; c : float) : Pattern {
+def phc(var pat : Pattern; c : int | float | double) : Pattern {
     //! Alias for `phasercenter`.
     return <- set_phasercenter(pat, c)
 }
-def phasersweep(var pat : Pattern; s : float) : Pattern {
+def phasersweep(var pat : Pattern; s : int | float | double) : Pattern {
     //! Fluent shorthand for `set_phasersweep`. Sets phaser sweep range.
     return <- set_phasersweep(pat, s)
 }
-def phs(var pat : Pattern; s : float) : Pattern {
+def phs(var pat : Pattern; s : int | float | double) : Pattern {
     //! Alias for `phasersweep`.
     return <- set_phasersweep(pat, s)
 }
 
-def tremolo(var pat : Pattern; r : float) : Pattern {
+def tremolo(var pat : Pattern; r : int | float | double) : Pattern {
     //! Fluent shorthand for `set_tremolo`. Sets tremolo rate in Hz (0 disables).
     return <- set_tremolo(pat, r)
 }
-def trem(var pat : Pattern; r : float) : Pattern {
+def trem(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `tremolo`.
     return <- set_tremolo(pat, r)
 }
-def tremolodepth(var pat : Pattern; d : float) : Pattern {
+def tremolodepth(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_tremolodepth`. Sets tremolo depth.
     return <- set_tremolodepth(pat, d)
 }
-def tremdepth(var pat : Pattern; d : float) : Pattern {
+def tremdepth(var pat : Pattern; d : int | float | double) : Pattern {
     //! Alias for `tremolodepth`.
     return <- set_tremolodepth(pat, d)
 }
 
-def compressor(var pat : Pattern; thr_db : float) : Pattern {
+def compressor(var pat : Pattern; thr_db : int | float | double) : Pattern {
     //! Fluent shorthand for `set_compressor`. Sets compressor threshold in dB (>=0 bypasses).
     return <- set_compressor(pat, thr_db)
 }
 // camelCase aliases; also expose snake_case for daScript-idiomatic callers.
-def compressorRatio(var pat : Pattern; r : float) : Pattern {
+def compressorRatio(var pat : Pattern; r : int | float | double) : Pattern {
     //! camelCase fluent shorthand for `set_compressor_ratio`. Sets compressor ratio.
     return <- set_compressor_ratio(pat, r)
 }
-def compressor_ratio(var pat : Pattern; r : float) : Pattern {
+def compressor_ratio(var pat : Pattern; r : int | float | double) : Pattern {
     //! snake_case fluent shorthand for `set_compressor_ratio`. Sets compressor ratio.
     return <- set_compressor_ratio(pat, r)
 }
-def compressorKnee(var pat : Pattern; k : float) : Pattern {
+def compressorKnee(var pat : Pattern; k : int | float | double) : Pattern {
     //! camelCase fluent shorthand for `set_compressor_knee`. Sets compressor knee (dB).
     return <- set_compressor_knee(pat, k)
 }
-def compressor_knee(var pat : Pattern; k : float) : Pattern {
+def compressor_knee(var pat : Pattern; k : int | float | double) : Pattern {
     //! snake_case fluent shorthand for `set_compressor_knee`. Sets compressor knee (dB).
     return <- set_compressor_knee(pat, k)
 }
-def compressorAttack(var pat : Pattern; a : float) : Pattern {
+def compressorAttack(var pat : Pattern; a : int | float | double) : Pattern {
     //! camelCase fluent shorthand for `set_compressor_attack`. Sets compressor attack (seconds).
     return <- set_compressor_attack(pat, a)
 }
-def compressor_attack(var pat : Pattern; a : float) : Pattern {
+def compressor_attack(var pat : Pattern; a : int | float | double) : Pattern {
     //! snake_case fluent shorthand for `set_compressor_attack`. Sets compressor attack (seconds).
     return <- set_compressor_attack(pat, a)
 }
-def compressorRelease(var pat : Pattern; r : float) : Pattern {
+def compressorRelease(var pat : Pattern; r : int | float | double) : Pattern {
     //! camelCase fluent shorthand for `set_compressor_release`. Sets compressor release (seconds).
     return <- set_compressor_release(pat, r)
 }
-def compressor_release(var pat : Pattern; r : float) : Pattern {
+def compressor_release(var pat : Pattern; r : int | float | double) : Pattern {
     //! snake_case fluent shorthand for `set_compressor_release`. Sets compressor release (seconds).
     return <- set_compressor_release(pat, r)
 }
@@ -2665,15 +2828,15 @@ def sf2_bank(var pat : Pattern; bank : int) : Pattern {
     //! Fluent shorthand for `set_sf2_bank`. Sets SF2 bank (0 = melodic, 128 = percussion).
     return <- set_sf2_bank(pat, bank)
 }
-def sf2_expression(var pat : Pattern; v : float) : Pattern {
+def sf2_expression(var pat : Pattern; v : int | float | double) : Pattern {
     //! Fluent shorthand for `set_sf2_expression`. Sets SF2 expression CC11 (0..1).
     return <- set_sf2_expression(pat, v)
 }
-def sf2_mod_wheel(var pat : Pattern; v : float) : Pattern {
+def sf2_mod_wheel(var pat : Pattern; v : int | float | double) : Pattern {
     //! Fluent shorthand for `set_sf2_mod_wheel`. Sets SF2 mod wheel CC1 (0..1, vibrato depth).
     return <- set_sf2_mod_wheel(pat, v)
 }
-def sf2_pitch_bend(var pat : Pattern; v : float) : Pattern {
+def sf2_pitch_bend(var pat : Pattern; v : int | float | double) : Pattern {
     //! Fluent shorthand for `set_sf2_pitch_bend`. Sets SF2 pitch bend (0..1, 0.5 = center).
     return <- set_sf2_pitch_bend(pat, v)
 }
@@ -2711,6 +2874,14 @@ def speed(var pat : Pattern; var mod_pat : Pattern) : Pattern {
 def note(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     //! Pattern-modulated `note` — sampled from `mod_pat` per event.
     return <- set_note(pat, mod_pat)
+}
+def freq(var pat : Pattern; f : int | float | double) : Pattern {
+    //! Fluent shorthand for `set_freq`. Sets explicit oscillator frequency (Hz), overriding note. Example: `atom("sawtooth") |> freq(440)`.
+    return <- set_freq(pat, f)
+}
+def freq(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-modulated `freq` — Hz sampled from `mod_pat` per event.
+    return <- set_freq(pat, mod_pat)
 }
 def sound(var pat : Pattern; var sound_pat : Pattern) : Pattern {
     //! Pattern-valued `sound` — sound name sampled from `sound_pat.s` per event. Example: `note("c3") |> sound(s("<saw tri>"))`.
@@ -2967,7 +3138,7 @@ def perlin() : Pattern {
     //! Unipolar Perlin-noise signal `0..1`. Alias for `signal_perlin`.
     return <- signal_perlin()
 }
-def range(var pat : Pattern; lo, hi : float) : Pattern {
+def range(var pat : Pattern; lo, hi : int | float | double) : Pattern {
     //! Scales a signal pattern from `0..1` to `lo..hi`. Alias for `signal_range`. Example: `sine() |> range(200.0, 4000.0)`.
     return <- signal_range(pat, lo, hi)
 }
@@ -3030,7 +3201,7 @@ def run(n : int) : Pattern {
 
 // ── Additional aliases ──
 
-def degradeBy(var pat : Pattern; prob : float) : Pattern {
+def degradeBy(var pat : Pattern; prob : int | float | double) : Pattern {
     //! Alias for `degrade` with explicit probability. Randomly drops events with probability `prob`. Example: `pat |> degradeBy(0.3)`.
     return <- degrade(pat, prob)
 }

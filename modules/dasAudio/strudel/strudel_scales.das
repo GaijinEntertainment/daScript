@@ -82,7 +82,7 @@ def private parse_scale_root(root_str : string) : int {
             if (idx < n) {
                 let octCh = int(bytes[idx])
                 if (is_number(octCh)) {
-                    octave = octCh - int('0')
+                    octave = octCh - '0'
                 }
             }
         }

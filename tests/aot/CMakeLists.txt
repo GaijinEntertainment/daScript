@@ -186,6 +186,9 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_combinators.das
         tests/strudel/test_delay.das
         tests/strudel/test_effects.das
+        tests/strudel/test_fx_routing.das
+        tests/strudel/test_new_features.das
+        tests/strudel/test_numeric_widening.das
         tests/strudel/test_hrtf_pos.das
         tests/strudel/test_new_combinators.das
         tests/strudel/test_integration.das

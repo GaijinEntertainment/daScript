@@ -86,8 +86,8 @@ Parity or near-parity with strudel.cc:
        ``sometimesby``, ``degrade``, ``degradeBy``
    * - Euclidean rhythms
      - ``strudel_pattern``
-     - ``euclid(k, n)``, ``bjorklund``.  (``euclidRot`` and
-       mini-notation ``bd(3,8)`` forms are gaps — see below.)
+     - ``euclid(k, n)``, ``euclidRot(k, n, rot)``, ``bjorklund``, and
+       the mini-notation ``"bd(3,8)"`` / ``"bd(3,8,2)"`` forms
    * - Scales
      - ``strudel_scales``
      - ``scale("c:minor")``, ``note`` with scale context, modes
@@ -101,9 +101,10 @@ Parity or near-parity with strudel.cc:
      - ``strudel_synth``
      - oscillators (``sine``, ``sawtooth``, ``square``, ``triangle``,
        ``supersaw``), noise (``white``, ``pink``), FM via ``fm`` +
-       ``fmh``, vowel/formant filter, per-voice biquads. Note
-       ``sawtooth`` is spelled out — there is no ``saw`` alias (unlike
-       strudel.cc)
+       ``fmh``, ``freq`` for direct-Hz pitch, vowel/formant filter,
+       per-voice biquads. Note the oscillator *sound* is named
+       ``sawtooth`` — there is a ``saw`` *signal* generator (a ramp
+       LFO) but no ``saw`` sound-name alias
    * - Samples
      - ``strudel_samples``
      - WAV / MP3 / FLAC / OGG loading via ``load_audio_file`` /
@@ -130,9 +131,22 @@ Parity or near-parity with strudel.cc:
        number routes to one ``OrbitBus``
    * - Effects (per-voice)
      - ``strudel_synth`` (``VoiceFX``)
-     - Phaser, tremolo, compressor, waveshaper, DJ filter, bitcrush,
-       sample-rate reduction — all applied per voice before the
+     - ``lpf``/``hpf``/``bpf`` filters, phaser, tremolo, compressor,
+       waveshaper (``shape``), DJ filter, bitcrush (``crush``),
+       sample-rate reduction (``coarse``), plus ``gain``/``pan``/
+       ``speed``/``fm``/``vowel`` — all applied per voice before the
        orbit mix
+   * - Pattern-valued setters
+     - ``strudel_pattern``
+     - Every scalar setter (``gain``, ``lpf``, ``pan``, ``speed``,
+       ``freq``, …) also has a *pattern* overload: pass a signal or
+       pattern and it is sampled per event — e.g.
+       ``lpf(p, sine() |> range(200, 2000))`` or ``gain(p, saw())``
+   * - Numeric arguments
+     - ``strudel_pattern``
+     - Every scalar modifier accepts ``int``, ``float`` **or**
+       ``double`` — ``fast(2)``, ``gain(0.5)``, and ``speed(2.0lf)``
+       all work; no ``.0`` / ``lf`` suffix juggling needed
 
 
 .. _strudel_cc_missing:
@@ -142,14 +156,12 @@ What we don't have (yet)
 
 Features that are present in strudel.cc and absent in the daslang port:
 
-* **``euclidRot``** — Euclidean rotation helper.  Not implemented;
-  compose ``euclid`` with ``rev`` or ``off`` for a workaround.
-* **Mini-notation ``bd(3,8)`` form** — tokens ``(`` / ``)`` are
-  lexed but not parsed into Euclidean rhythms.  Use the
-  ``euclid(pat, 3, 8)`` function form instead.
-* **``jux_rev`` / ``chop`` / other convenience aliases** — the
-  parametric forms (``jux(pat, fn)``, ``stutter``, etc.) are
-  public; a few one-letter convenience wrappers were not ported.
+* **``jux_rev`` and other one-letter convenience wrappers** — the
+  parametric forms (``jux(pat, fn)``, ``stutter``, etc.) are public;
+  a few bare-name convenience wrappers were not ported.  Note
+  ``chop`` and ``slice`` *are* available (granulation via the sample
+  ``begin``/``end`` window), as are ``euclidRot`` and the
+  mini-notation ``"bd(3,8)"`` Euclidean form.
 * **Web sample packs** — strudel.cc streams sample packs from
   the web at runtime; daslang loads local samples from disk (via
   ``strudel_load_sample_dir``).  Bring your own sample library.
@@ -198,23 +210,27 @@ fills one cycle at the current tempo.
 
 See the ``adsr-defaults`` branch history for the full introduction.
 
-Per-voice FX chain
-------------------
+Per-voice vs per-orbit FX
+-------------------------
 
-**Divergence:** ``phaser``, ``tremolo``, ``compressor``, ``shape``,
-``crush``, ``coarse``, and ``djf`` are applied **per voice**, inside
-the voice renderer, before the orbit mix.  strudel.cc applies most
-of these after the send-bus mix.
+daslang splits effects into two groups, and this matches strudel.cc's
+model closely:
 
-**Why:** Per-voice FX gives a cleaner sound for polyphonic patterns
-(one voice's compressor can't duck another voice's transient) and
-integrates tightly with the ``VoiceFX`` struct, which the per-voice
-synth engine already carries.
+* **Per-voice** — ``lpf``/``hpf``/``bpf``, ``phaser``, ``tremolo``,
+  ``compressor``, ``shape``, ``crush``, ``coarse``, ``djf``, plus
+  ``gain``/``pan``/``speed``/``fm``/``vowel``.  These are baked into
+  each playing voice (the ``VoiceFX`` struct) and run *before* the
+  voice is mixed into its orbit.  strudel.cc likewise applies these
+  per event — daslang does **not** diverge here.
+* **Per-orbit (send bus)** — ``room``/``roomsize`` (reverb),
+  ``delay``/``delaytime``/``delayfeedback``, and ``chorus``.  One
+  shared instance per orbit number; voices send wet/dry into it.
 
-**How to apply:** for patterns that rely on strudel.cc's post-bus
-phaser, use ``room`` / ``delay`` bus routing (per-orbit) instead.
-Per-voice combinators like ``jux`` interact with per-voice FX
-differently — each transformed voice carries its own FX chain.
+**How to apply:** because the first group is per-voice, two stacked
+voices stay independent — each transformed copy from ``jux`` /
+``superimpose`` carries its own FX chain.  For shared reverb/delay,
+route patterns to the same ``orbit`` number (see below); for
+independent bus FX, split orbits.
 
 Orbit bus model
 ---------------
@@ -348,11 +364,14 @@ for ~95% of primitives.  When it differs:
      - ``note("c4")``
      - identical; for scale-degree use ``note(0.0)`` after ``scale(...)``
    * - ``.fast(2)``
-     - ``|> fast(2.0)``
-     - same name; pipe syntax preferred but method-chain also works
+     - ``|> fast(2)``
+     - same name; bare int / float / double all accepted.  Use the
+       pipe ``|>`` — ``Pattern`` is a lambda, so ``.method()`` does
+       **not** work on it
    * - ``.jux(rev)``
      - ``|> jux(@(x) => rev(x))``
-     - daslang expects a typed fn; lambda literal is normal
+     - daslang expects a typed lambda — use ``@(x) =>``, **not**
+       ``@@(x) =>`` (a function pointer won't match ``PatternTransform``)
    * - ``.velocity(0.5)`` / ``.vel(...)``
      - ``|> velocity(0.5)`` / ``|> vel(...)``
      - both aliases exist
@@ -360,11 +379,17 @@ for ~95% of primitives.  When it differs:
      - ``stack(a, b)``
      - top-level function, not a method
    * - ``.euclidRot(3, 8, 1)``
-     - *not available*
-     - use ``euclid(pat, 3, 8) |> off(1.0/8.0, @(x) => x)``
+     - ``|> euclidRot(3, 8, 1)``
+     - same name; rotates the Euclidean pattern left by ``rot`` steps
    * - ``"bd(3,8)"``
-     - ``euclid(s("bd"), 3, 8)``
-     - mini-notation Euclid form not parsed
+     - ``s("bd(3,8)")`` or ``euclid(s("bd"), 3, 8)``
+     - mini-notation Euclid form is parsed; ``"bd(3,8,2)"`` adds rotation
+   * - ``.chop(4)`` / ``.slice(4, "0 1 2 3")``
+     - ``|> chop(4)`` / ``|> slice(4, note("0 1 2 3"))``
+     - sample granulation via the ``begin``/``end`` window
+   * - ``.freq(440)``
+     - ``|> freq(440)``
+     - sets oscillator frequency in Hz directly, overriding ``note``
 
 For everything else, assume the name is identical.  Use the MCP
 ``list_module_api`` tool on ``strudel_pattern`` /

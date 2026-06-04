@@ -58,21 +58,25 @@ let pat <- (
 Without the surrounding parens the chain must be on one line
 (statement-level parsing is line-oriented).
 
-### 2. Numeric literals need a type
+### 2. Numeric literals just work
 
-strudel.cc accepts bare integers everywhere; daslang is typed:
+Every scalar pattern modifier accepts ``int``, ``float``, **or**
+``double`` (the param type is the union ``int | float | double``), so
+bare strudel.cc numbers translate directly — no suffix juggling:
 
 ```
-.fast(2)        →  |> fast(2.0)
-.gain(0.5)      →  |> gain(0.5)     // already OK
-.note(60)       →  |> note(60.0)
+.fast(2)        →  |> fast(2)       // bare int is fine
+.gain(0.5)      →  |> gain(0.5)
+.note(60)       →  |> note(60)
+.speed(2)       →  |> speed(2)      // (used to need 2.0)
 .delay(0.25)    →  |> delay(0.25)
-.orbit(1)       →  |> orbit(1)      // orbit is int — OK
+.orbit(1)       →  |> orbit(1)
 ```
 
-Rule: when in doubt, write the float with an explicit ``.0``. The
-compiler error for ``int`` where ``float`` is expected is loud and
-immediate.
+``2``, ``2.0``, and ``2.0lf`` are all accepted at the same call site.
+(This is a recent change — older code wrote ``fast(2.0lf)`` /
+``speed(2.0)`` because time funcs took ``double`` and effect funcs
+took ``float``. Both forms still compile; bare ints are now simplest.)
 
 ### 3. Bare identifiers as transforms → lambda literals
 
@@ -81,9 +85,15 @@ typed lambda:
 
 ```
 .jux(rev)              →  |> jux(@(x) => rev(x))
-.off(1/8, fast(2))     →  |> off(0.125, @(x) => fast(x, 2.0))
+.off(1/8, fast(2))     →  |> off(0.125, @(x) => fast(x, 2))
 .every(4, rev)         →  |> every(4, @(x) => rev(x))
 ```
+
+**Use ``@(x) =>`` (a capture lambda), NOT ``@@(x) =>``.** Combinators
+(``jux``, ``off``, ``sometimes``, ``superimpose``, ``chunk``,
+``when_cycle``, …) take ``PatternTransform = lambda<(Pattern):Pattern>``.
+A no-capture ``@@(x) =>`` is a *function pointer*, which does not match
+the ``lambda`` type and fails type inference. ``@(x) =>`` is correct.
 
 The ``@(x) => ...`` form is an inline lambda. See
 :ref:`tutorial_lambdas` for the syntax. If the transform itself is a
@@ -237,29 +247,29 @@ externalisation isn't needed. See
 
 ### Mini-notation ``bd(3,8)`` Euclidean form
 
-strudel.cc parses the integer-pair inside the string as Euclidean
-rhythm; daslang's mini-notation lexes the parens but does not parse
-them. **Rewrite** as an explicit combinator call::
+Parses directly — paste it verbatim::
 
-    // strudel.cc
-    s("bd(3,8)")
+    s("bd(3,8)")        // = euclid(s("bd"), 3, 8)
+    s("bd(3,8,2)")      // = euclidRot(s("bd"), 3, 8, 2)
 
-    // daslang
-    euclid(s("bd"), 3, 8)
+The function forms ``euclid(pat, k, n)`` and ``euclidRot(pat, k, n, rot)``
+are also public.
 
-### ``euclidRot``
+### Sample granulation: ``chop`` / ``slice`` / ``striate``
 
-Not implemented. Compose ``euclid`` with rotation via ``off`` or
-``rev``. See :ref:`strudel_vs_strudel_cc` for the full gap list.
+All available::
+
+    .chop(4)              →  |> chop(4)                    // n slices per event, in place
+    .striate(4)           →  |> striate(4)                 // n slices spread across the cycle
+    .slice(4, "0 1 2 3")  →  |> slice(4, note("0 1 2 3"))  // slices in index-pattern order
 
 ### Method aliases that don't exist
 
-``jux_rev``, ``chop``, and a few one-letter convenience wrappers are
-absent. Expand to the parametric form:
+``jux_rev`` and a few one-letter convenience wrappers are absent.
+Expand to the parametric form:
 
 ```
 .jux_rev()   →  |> jux(@(x) => rev(x))
-.chop(4)     →  |> striate(4)       // nearest equivalent
 ```
 
 ### Backtick-heavy mini-notation
@@ -303,8 +313,9 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
 3. **If it sounds wrong:** check the three most common culprits in
    order — (a) missing samples falling back to silence, (b)
    tempo-aware ADSR making the envelope feel different, (c) a
-   combinator rewrite (``jux_rev``, ``chop``, ``euclidRot``) that
-   silently did nothing because the rewrite was wrong.
+   transform passed as ``@@(x) =>`` (function pointer) instead of
+   ``@(x) =>`` (lambda), which fails to compile against
+   ``PatternTransform``.
 
 ## Quick reference card
 
@@ -315,19 +326,23 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
    * - strudel.cc
      - daslang
    * - ``s("bd").fast(2)``
-     - ``s("bd") \|> fast(2.0)``
+     - ``s("bd") \|> fast(2)``
    * - ``.jux(rev)``
      - ``\|> jux(@(x) => rev(x))``
    * - ``.every(4, fast(2))``
-     - ``\|> every(4, @(x) => fast(x, 2.0))``
+     - ``\|> every(4, @(x) => fast(x, 2))``
    * - ``stack(a, b, c)``
      - ``stack([a, b, c])``
    * - ``"bd(3,8)"``
-     - ``euclid(s("bd"), 3, 8)``
+     - ``s("bd(3,8)")`` (parses directly)
+   * - ``.euclidRot(3,8,2)`` / ``.chop(4)``
+     - ``\|> euclidRot(3,8,2)`` / ``\|> chop(4)``
+   * - ``.freq(440)``
+     - ``\|> freq(440)``
    * - ``.gain("1 0.5")``
      - ``\|> gain(s("1 0.5"))``
    * - ``.note(60)``
-     - ``\|> note(60.0)``
+     - ``\|> note(60)``
    * - ``s("saw")``
      - ``s("sawtooth")`` — no ``saw`` alias
    * - auto-play

@@ -483,6 +483,7 @@ def public get_generator_range(zone : SF2Zone; oper : int) : int2 {
     return int2(0, 127)
 }
 
+[unused_argument(terminal_oper)]
 def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>; all_mods : array<SF2Modulator>;
                           bag_start, bag_end : int; terminal_oper : int) : array<SF2Zone?> {
     var zones : array<SF2Zone?>

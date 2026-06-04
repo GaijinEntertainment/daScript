@@ -15,6 +15,9 @@ struct Event {
         //! Sound/sample name (`"bd"`, `"sd"`, `"sawtooth"`, `"sine"`, ...).
     note    : float = 60.0      // MIDI note number (60 = middle C)
         //! MIDI note number (60 = middle C).
+    freq    : float = 0.0       // explicit frequency in Hz (0 = unset → derived from note)
+        //! Explicit oscillator frequency in Hz. `0` = unset (derive from `note`); any
+        //! positive value overrides `note`. Matches strudel.cc `.freq(440)`.
     n       : int = 0           // sample variation index (bd:0, bd:1, bd:2)
         //! Sample variation index within a bank (`bd:0`, `bd:1`, `bd:2`).
     gain    : float = 0.8       // amplitude 0.0–1.0 (applied after rendering)

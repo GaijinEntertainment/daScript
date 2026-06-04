@@ -339,6 +339,7 @@ def public strudel_command(cmd : string) {
     }
 }
 
+[unused_argument(cmd)]
 def public strudel_noop_cmd(cmd : string) {
     //! No-op command handler — default argument when no user command dispatcher is needed.
     pass

@@ -7,10 +7,10 @@
 //   - chunk(pat, n, fn)  : apply fn to every n-th chunk in turn
 //
 // It also introduces daslang's *per-voice FX* (phaser, tremolo, compressor,
-// shape) which differ from typical live-coding systems where these effects
-// are placed on a shared bus. In daslang each playing voice carries its own
-// FX chain — the FX run BEFORE the voices are mixed into the orbit, so
-// per-note timbral variation is possible.
+// shape). Like strudel.cc, daslang applies these per event: each playing voice
+// carries its own FX chain, run BEFORE the voices are mixed into the orbit, so
+// two simultaneous notes can carry different settings without bleeding into each
+// other. (Only room/delay/chorus are shared per-orbit send buses — see tut 08.)
 //
 // Run: daslang.exe tutorials/daStrudel/daStrudel_07_per_voice_fx.das
 
@@ -93,10 +93,10 @@ def example_chunk_fast() {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // Per-voice FX — phaser, tremolo, compressor, shape — are baked into each
-// playing voice. This is a daslang divergence from systems where these are
-// global bus effects. Because the FX live with the voice, two simultaneous
-// notes in a single stack can carry DIFFERENT phaser rates without leaking
-// into each other.
+// playing voice (as in strudel.cc). Because the FX live with the voice, two
+// simultaneous notes in a single stack can carry DIFFERENT phaser rates without
+// leaking into each other. (room/delay/chorus differ — those are per-orbit
+// send buses; see tutorial 08.)
 
 def example_per_voice_phaser() {
     print("\n=== Section 4: per-voice phaser at two different rates ===\n")

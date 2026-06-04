@@ -964,7 +964,8 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     let adsr = resolve_adsr(h.value.attack, h.value.decay, h.value.sustain, h.value.release)
                     var oscv = OscVoice(
                         osc_type = oscType,
-                        freq = note_to_freq(h.value.note),
+                        // explicit freq() overrides note; 0 = derive from note (strudel.cc parity)
+                        freq = h.value.freq > 0.0 ? h.value.freq : note_to_freq(h.value.note),
                         duration = durSec,
                         attack = adsr._0,
                         decay = adsr._1,
@@ -1066,7 +1067,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     sched.voice_fx_buf |> resize(chunk_samples)
                 }
                 let pan = clamp(voice.pan, -1.0, 1.0)
-                let angle = (pan + 1.0) * 0.25 * float(TWO_PI / 2.0)
+                let angle = (pan + 1.0) * 0.25 * (TWO_PI / 2.0)
                 let lGain = voice.gain * cos(angle)
                 let rGain = voice.gain * sin(angle)
                 for (f in range(nf)) {
@@ -1113,7 +1114,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     )
                 }
                 let pan = clamp(voice.pan, -1.0, 1.0)
-                let angle = (pan + 1.0) * 0.25 * float(TWO_PI / 2.0)
+                let angle = (pan + 1.0) * 0.25 * (TWO_PI / 2.0)
                 // reverb send for pre-rendered voices
                 if (voice.reverb_send > 0.0 && reverb_buf != null) {
                     let sL = voice.gain * voice.reverb_send * cos(angle)
