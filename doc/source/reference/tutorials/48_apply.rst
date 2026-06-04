@@ -22,7 +22,6 @@ Prerequisites: basic daslang knowledge (structs, tuples, variants).
     options gen2
     options rtti
 
-    require daslib/rtti
     require daslib/apply
     require daslib/strings_boost
 
@@ -225,6 +224,49 @@ for each field.  ``RttiValue`` is a variant with alternatives
 This pattern powers ``daslib/json_boost``'s ``@rename``,
 ``@optional``, ``@enum_as_int``, ``@unescape``, and ``@embed``
 field annotations.
+
+
+Skipping a field with ``return``
+=================================
+
+A block may use ``return`` to skip the rest of the current field and move on to the next — handy in a
+serializer that drops some fields:
+
+.. code-block:: das
+
+    apply(record) $(name : string; field; annotations) {
+        for (ann in annotations) {
+            if (ann.name == "skip") {
+                return            // skip this field entirely
+            }
+        }
+        // ... serialize field ...
+    }
+
+Internally this is the one case where ``apply`` does **not** inline: a block with an escaping
+``return`` falls back to a generated per-field helper that the macro invokes (so ``return`` stays a
+block-local "skip this field", not a function exit).  The fallback is transparent — nothing you write
+changes — but it is why ``apply_imm`` (below) cannot accept such a block.
+
+
+``apply`` vs ``apply_imm``
+==========================
+
+``apply`` inlines the block once per field — no helper function and no per-field block invoke — so it is
+already cheap enough for hot paths like serialization.  (The sole exception is a block that uses
+``return`` to skip a field, which transparently falls back to the per-field invoke codegen, as above.)
+For a struct-only hot field walk there is a slightly faster sibling, ``apply_imm``: it aliases the block
+parameters instead of binding reference locals, which is about 25% faster under the interpreter
+(identical under JIT).  Use ``apply_imm`` for **structs** in a hot loop, and ``apply`` for tuples,
+variants, a side-effecting source value, or a block that uses ``return`` — because ``apply_imm`` always
+inlines, it has no invoke fallback and rejects a ``return`` block at compile time.  The block shape is
+otherwise the same:
+
+.. code-block:: das
+
+    apply_imm(record) $(name : string; var field) {
+        // same $(name, field[, annotations]) block as apply
+    }
 
 
 Full source

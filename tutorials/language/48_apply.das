@@ -8,6 +8,7 @@
 //   - Iterating variant alternatives
 //   - Building a generic describe function
 //   - Reading field annotations with the 3-argument form
+//   - apply_imm — the faster struct-only sibling
 //
 // Prerequisites: None (basic daScript knowledge only)
 //
@@ -23,7 +24,6 @@
 options gen2
 options rtti
 
-require daslib/rtti
 require daslib/apply
 require daslib/strings_boost
 
@@ -308,6 +308,34 @@ def demo_annotations() {
 
 
 // ============================================================
+// Section 8: apply_imm — the faster struct-only sibling
+// ============================================================
+//
+// apply_imm has the same $(name, field[, annotations]) block shape but
+// is struct-only; it aliases the block params instead of binding
+// reference locals, so a hot struct field walk is ~25% faster under
+// the interpreter (identical under JIT). Use apply for tuples,
+// variants, a side-effecting source value, or a block that uses
+// `return` to skip a field — apply always inlines, falling back to a
+// per-field helper for a return-block; apply_imm has no fallback and
+// rejects one at compile time.
+
+def demo_apply_imm() {
+    print("\n=== Section 8: apply_imm (faster struct-only) ===\n")
+
+    var hero = Hero(name = "Mage", health = 80, speed = 4.0)
+    apply_imm(hero) $(name : string; var field) {
+        static_if (typeinfo stripped_typename(field) == "int") {
+            field += 5
+        }
+    }
+    print("  health after +5: {hero.health}\n")
+    // output:
+    //   health after +5: 85
+}
+
+
+// ============================================================
 // Main
 // ============================================================
 
@@ -320,4 +348,5 @@ def main() {
     demo_variants()
     demo_describe()
     demo_annotations()
+    demo_apply_imm()
 }

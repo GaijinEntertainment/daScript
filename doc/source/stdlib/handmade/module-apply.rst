@@ -33,6 +33,15 @@ Example:
         // b = 3.14
         // c = hello
 
+When the block has no function-escaping ``return``, it runs inline once per field — no helper function
+and no per-field block invoke — so it is cheap enough for hot paths like serialization. A block that
+uses ``return`` to skip a field falls back transparently to a generated per-field helper, where
+``return`` keeps its original block-local "skip this field" meaning; nothing the caller writes changes.
+``apply_imm`` is a struct-only, slightly faster variant (it aliases the block params rather than binding
+reference locals); use it for hot *struct* field walks and ``apply`` for tuples, variants, a
+side-effecting source value, or a block that uses ``return`` (``apply_imm`` always inlines, so it
+cannot accept one).
+
 .. seealso::
 
    :ref:`tutorial_apply` — comprehensive tutorial covering structs,
