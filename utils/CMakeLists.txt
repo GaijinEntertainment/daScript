@@ -28,6 +28,7 @@ set(DAS_UTILS
     detect-dupe
     hygiene
     jit
+    lint
 )
 
 if(NOT DAS_SQLITE_DISABLED)
@@ -57,11 +58,12 @@ endif()
 foreach(util ${DAS_UTILS})
     set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util}/main.das)
 
-    # The jit util is a compiler-driver: its standalone exe recompiles arbitrary
-    # daslang at runtime, so it must register every builtin native module at
-    # startup (otherwise targets requiring math/fio/dasbind/... fail to resolve).
+    # jit and lint are compiler-drivers: their standalone exes recompile
+    # arbitrary daslang at runtime (lint compiles each target to walk its AST),
+    # so they must register every builtin native module at startup — otherwise
+    # targets requiring math/fio/ast_core/... fail to resolve.
     set(_util_extra_args "")
-    if(util STREQUAL "jit")
+    if(util STREQUAL "jit" OR util STREQUAL "lint")
         set(_util_extra_args --jit-register-all-modules)
     endif()
 
