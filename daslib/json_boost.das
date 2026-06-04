@@ -713,3 +713,33 @@ def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9; val10) : JsonValue?
     //! Creates array of ten JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7), _::JV(val8), _::JV(val9), _::JV(val10)])
 }
+
+// ===== linq_fold JSON source =====
+
+[unsafe_outside_of_for]
+def from_json(jv : JsonValue const?; t : type<auto(TT)>) : iterator<TT -const> {
+    //! Lazily walks the elements of a JSON array *jv*, materializing each into a *TT* via ``from_JV``.
+    //! A non-array (or null) *jv* yields nothing. Yields owned values — rows collected via ``to_array``
+    //! or a comprehension stay valid. The JSON counterpart of ``from_xml_node``, for ``for`` loops and
+    //! LINQ chains: ``for (car in from_json(jv, type<Car>)) { ... }``.
+    return <- generator<TT -const> {
+        if (jv != null && jv.value is _array) {
+            for (elem in jv.value as _array) {
+                yield from_JV(elem, type<TT>)
+            }
+        }
+        return false
+    }
+}
+
+def read_json_field(jv : JsonValue const?; key : string; defv : auto(TT)) : TT {
+    //! Reads one same-named key of the JSON object *jv* into a *TT* — the field-pruned counterpart of
+    //! a full ``from_JV(jv, type<Row>)``, emitted by linq_fold's fused JSON lane. A missing key keeps
+    //! *defv* (pass the struct field's declared default), matching the full-row per-field semantics.
+    //! *jv* is const so the fused loop's ``jsrc as _array`` elements (const) bind without a copy.
+    let sub = jv?[key]   // operator ?[] above: the value, or JVNull() for a missing key / non-object jv
+    if (!(sub.value is _null)) {
+        return from_JV(sub, type<TT>)
+    }
+    return defv
+}

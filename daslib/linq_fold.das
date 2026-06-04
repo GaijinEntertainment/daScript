@@ -35,6 +35,7 @@ require strings
 require daslib/linq_fold_common public
 require daslib/linq_fold_array public
 require daslib/linq_fold_decs public
+require daslib/linq_fold_json public          // in-tree JSON source adapter — emits by name, pulls in no json dep
 require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — loaded only when pugixml is linked
 require ?sqlite sqlite/linq_fold_sql         // optional SQL source pass-through — loaded only when sqlite is linked
 
@@ -201,6 +202,14 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
                                elemType = clone_type(xmlCall._type.firstType), nameArg = nameArg),
                 exprIsIter, at)
         }
+    }
+    // JSON adapter (in-tree, no static_if — extract_json_source name-matches `from_json`, null in a JSON-less program → array tier).
+    var jsonCall = extract_json_source(top)
+    if (jsonCall != null) {
+        var jtopClone = clone_expression(top)
+        return run_splice_adapter(calls, jtopClone, jtopClone,
+            new JsonAdapter(jsonExpr = clone_expression(jsonCall.arguments[0]), srcName = qn("jsrc", at),
+                            elemType = clone_type(jsonCall._type.firstType)), exprIsIter, at)
     }
     top = peel_each(top)
     var topClone = clone_expression(top)
