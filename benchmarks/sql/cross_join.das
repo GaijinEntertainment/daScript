@@ -68,6 +68,20 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let dealers <- fixture_dealers_array()
+    b |> run("m6f_json_fold/{n}", n) {
+        let rows <- cross_join_to_array(unsafe(from_json(jv, type<Car>)), dealers,
+                                        $(ca : Car, de : Dealer) => (CarId = ca.id, DealerId = de.id))
+        let c = length(rows)
+        b |> accept(c)
+        if (c != n * DEALER_COUNT) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def cross_join_m1(b : B?) {
     run_m1(b, CROSS_N)
@@ -81,4 +95,9 @@ def cross_join_m3f(b : B?) {
 [benchmark]
 def cross_join_m5f(b : B?) {
     run_m5f(b, CROSS_N)
+}
+
+[benchmark]
+def cross_join_m6f(b : B?) {
+    run_m6f(b, CROSS_N)
 }

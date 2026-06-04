@@ -59,6 +59,20 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let ys <- make_ints(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let rows <- _fold(zip(unsafe(from_json(jv, type<Car>)), ys)
+                          .reverse()
+                          .to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def zip_reverse_to_array_m3f(b : B?) {
     run_m3f(b, 100000)
@@ -67,4 +81,9 @@ def zip_reverse_to_array_m3f(b : B?) {
 [benchmark]
 def zip_reverse_to_array_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def zip_reverse_to_array_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

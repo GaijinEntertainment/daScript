@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require daslib/fio public
 require daslib/decs_boost public
 require pugixml/PUGIXML_boost public
+require daslib/json_boost public
 require strings public
 
 let public BRAND_COUNT = 5
@@ -82,6 +83,13 @@ def public fixture_xml_string(n : int) : string {
         }
         w |> write("</cars>")
     }
+}
+
+// JSON fold lane (m6f): same Car schema, rows materialized from a pre-built JsonValue array via
+// from_json. Reflective JV per row over the same deterministic generator as fixture_array, so the JSON
+// lane is directly comparable to the XML (m5f) lane — both fold over a pre-parsed in-memory tree.
+def public fixture_json(n : int) : JsonValue? {
+    return JV([for (c in fixture_array(n)); JV(c)])
 }
 
 def public fixture_dealers_array() : array<Dealer> {

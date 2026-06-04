@@ -76,6 +76,20 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let ys <- make_ints(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let c = _fold(zip(unsafe(from_json(jv, type<Car>)), ys)
+                      ._select(int64(_._0.price) * int64(_._1))
+                      .count($(v) => v > THRESHOLD))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def zip_count_pred_m1(b : B?) {
     run_m1(b, 100000)
@@ -89,4 +103,9 @@ def zip_count_pred_m3f(b : B?) {
 [benchmark]
 def zip_count_pred_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def zip_count_pred_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

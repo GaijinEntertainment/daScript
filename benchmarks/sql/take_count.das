@@ -61,6 +61,17 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let rows <- _fold(unsafe(from_json(jv, type<Car>)).take(TAKE_N).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def take_count_m1(b : B?) {
     run_m1(b, 100000)
@@ -79,4 +90,9 @@ def take_count_m4(b : B?) {
 [benchmark]
 def take_count_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def take_count_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

@@ -65,6 +65,18 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let sentinel = Car(id = SENTINEL_ID, name = "none", price = 0, brand = 0, year = 0, dealer_id = 0)
+    b |> run("m6f_json_fold/{n}", n) {
+        let row = _fold(unsafe(from_json(jv, type<Car>))._where(_.price > THRESHOLD).first_or_default(sentinel))
+        b |> accept(row)
+        if (row.id == SENTINEL_ID) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def first_or_default_match_m1(b : B?) {
     run_m1(b, 100000)
@@ -83,4 +95,9 @@ def first_or_default_match_m4(b : B?) {
 [benchmark]
 def first_or_default_match_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def first_or_default_match_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

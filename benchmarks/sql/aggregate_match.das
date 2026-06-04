@@ -81,7 +81,24 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let total = _fold(unsafe(from_json(jv, type<Car>))._where(_.price > THRESHOLD)
+            .aggregate(0, $(acc : int, c : Car) => acc + c.price))
+        b |> accept(total)
+        if (total == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def aggregate_match_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def aggregate_match_m6f(b : B?) {
+    run_m6f(b, 100000)
 }
