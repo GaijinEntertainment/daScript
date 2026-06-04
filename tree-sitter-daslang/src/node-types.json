@@ -3126,6 +3126,20 @@
           }
         ]
       },
+      "guard": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "?",
+            "named": false
+          },
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "module": {
         "multiple": false,
         "required": true,

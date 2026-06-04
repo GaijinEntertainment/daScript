@@ -167,6 +167,7 @@ module.exports = grammar({
 
     require_declaration: $ => seq(
       'require',
+      optional(field('guard', seq('?', $.identifier))),  // optional require: `require ?guard target`
       field('module', $.require_module_name),
       optional(seq('as', field('alias', $.identifier))),
       optional('public'),
@@ -1215,12 +1216,12 @@ module.exports = grammar({
       seq('clone', '(', $.identifier, ')'),
     ),
 
-    // ---- Reader macro: %name~ content %% ----
+    // ---- Reader macro: %name~ content %% (module-level) / %name! content %% (expression-level) ----
 
     reader_macro: $ => seq(
       '%',
       field('name', $.identifier),
-      token.immediate('~'),
+      token.immediate(choice('~', '!')),
       field('content', optional($.reader_macro_content)),
       '%%',
     ),

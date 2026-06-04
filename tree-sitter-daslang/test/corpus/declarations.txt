@@ -328,3 +328,32 @@ def foo(t : type<array<int>>) {
           type: (array_type
             (basic_type)))))
     body: (block)))
+
+================================================================================
+Optional require
+================================================================================
+
+require ?math math
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    guard: (identifier)
+    module: (require_module_name
+      (identifier))))
+
+================================================================================
+Optional require with path target and public
+================================================================================
+
+require ?pugixml pugixml/linq_fold_xml public
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    guard: (identifier)
+    module: (require_module_name
+      (identifier)
+      (identifier))))
