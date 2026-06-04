@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-16: HRTF — 3D positional override for stereo pan
+// Tutorial DASTRUDEL-17: HRTF — 3D positional override for stereo pan
 //
 // daslang exposes a per-event HRTF position (azimuth, elevation). When set,
 // HRTF positioning REPLACES the equal-power stereo pan path: the dry signal
@@ -28,7 +28,7 @@
 // of the source (L/R balance feeding the spatialiser), HRTF positions the
 // source in 3D.
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_16_hrtf_position.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_17_hrtf_position.das
 
 options gen2
 options persistent_heap
@@ -141,7 +141,7 @@ def example_mixed() {
 
 [export]
 def main() {
-    print("DASTRUDEL-16: HRTF — 3D positional override for stereo pan\n")
+    print("DASTRUDEL-17: HRTF — 3D positional override for stereo pan\n")
     print("Best heard on headphones.\n")
     example_static_positions()
     example_animated_azimuth()

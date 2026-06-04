@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-13: SF2 SoundFont Playback
+// Tutorial DASTRUDEL-14: SF2 SoundFont Playback
 //
 // This tutorial covers:
 //   - Loading a General MIDI SoundFont with strudel_load_sf2
@@ -7,7 +7,7 @@
 //   - The GM drum map on bank 128: sf2(0) |> sf2_bank(128)
 //   - Per-note expression and velocity: sf2_expression / velocity
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_13_sf2_soundfont.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_14_sf2_soundfont.das
 //
 // Requires: a General MIDI .sf2 file (e.g. FluidR3_GM.sf2) under
 // examples/daStrudel/midi_sf2_demo/ — see that folder's README.md for
@@ -125,7 +125,7 @@ def example_expression(sf2_path : string) {
 
 [export]
 def main() {
-    print("DASTRUDEL-13: SF2 SoundFont\n\n")
+    print("DASTRUDEL-14: SF2 SoundFont\n\n")
     let sf2_path = find_sf2()
     if (empty(sf2_path)) {
         print("No SF2 found — place a GM SoundFont under examples/daStrudel/midi_sf2_demo/\n")

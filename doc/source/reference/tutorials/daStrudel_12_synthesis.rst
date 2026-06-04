@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_synthesis:
 
 ==========================
-STRUDEL-11 — Synthesis
+STRUDEL-12 — Synthesis
 ==========================
 
 .. index::
@@ -92,7 +92,7 @@ chain of modifiers — each ``|>`` returns a new ``Pattern``.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_11_synthesis.das <../../../../tutorials/daStrudel/daStrudel_11_synthesis.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_12_synthesis.das <../../../../tutorials/daStrudel/daStrudel_12_synthesis.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_scales_music_theory`
 

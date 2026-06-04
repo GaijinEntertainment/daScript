@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_live_reloading:
 
 ====================================
-STRUDEL-15 — Live-Reloading Patterns
+STRUDEL-16 — Live-Reloading Patterns
 ====================================
 
 .. index::
@@ -19,7 +19,7 @@ Run this tutorial under the live host:
 
 ::
 
-   bin/Release/daslang-live.exe tutorials/daStrudel/daStrudel_15_live_reloading.das
+   bin/Release/daslang-live.exe tutorials/daStrudel/daStrudel_16_live_reloading.das
 
 It also runs under plain ``daslang.exe`` — the file works in both hosts.
 In standalone mode there is no hot-reload and the lifecycle collapses to
@@ -152,7 +152,7 @@ Workflow Tips
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_15_live_reloading.das <../../../../tutorials/daStrudel/daStrudel_15_live_reloading.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_16_live_reloading.das <../../../../tutorials/daStrudel/daStrudel_16_live_reloading.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_midi_files`
 

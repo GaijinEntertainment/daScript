@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_scales_music_theory:
 
 ==================================
-STRUDEL-10 — Scales & Music Theory
+STRUDEL-11 — Scales & Music Theory
 ==================================
 
 .. index::
@@ -97,7 +97,7 @@ Same scale, two octaves, two different envelopes — instant counterpoint.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_10_scales_music_theory.das <../../../../tutorials/daStrudel/daStrudel_10_scales_music_theory.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_11_scales_music_theory.das <../../../../tutorials/daStrudel/daStrudel_11_scales_music_theory.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_adsr_envelopes`
 

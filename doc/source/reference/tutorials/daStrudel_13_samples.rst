@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_samples:
 
 ==========================
-STRUDEL-12 — Samples
+STRUDEL-13 — Samples
 ==========================
 
 .. index::
@@ -101,7 +101,7 @@ always check before using the data.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_12_samples.das <../../../../tutorials/daStrudel/daStrudel_12_samples.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_13_samples.das <../../../../tutorials/daStrudel/daStrudel_13_samples.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_synthesis`
 

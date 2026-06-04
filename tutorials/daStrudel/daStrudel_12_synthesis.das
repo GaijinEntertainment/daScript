@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-11: Synthesis
+// Tutorial DASTRUDEL-12: Synthesis
 //
 // This tutorial covers:
 //   - Oscillator sources via s("sine"|"sawtooth"|"square"|"triangle"|"supersaw")
@@ -6,7 +6,7 @@
 //   - Noise sources ("white", "pink", "brown")
 //   - FM synthesis with fm() and fmh() (modulation index and harmonicity)
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_11_synthesis.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_12_synthesis.das
 
 options gen2
 options indenting = 4
@@ -105,7 +105,7 @@ def example_fm_gentle() {
 
 [export]
 def main() {
-    print("DASTRUDEL-11: Synthesis\n\n")
+    print("DASTRUDEL-12: Synthesis\n\n")
     example_oscillators()
     example_supersaw()
     example_noise()

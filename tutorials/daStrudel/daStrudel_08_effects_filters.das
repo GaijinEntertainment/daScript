@@ -72,7 +72,7 @@ def example_room() {
 //
 // delay(amount), delaytime(seconds), delayfeedback(0..1) drive the orbit's
 // delay line. delaytime defaults to a tempo-aware 3/16 cycle (see tutorial
-// 09 for the resolver), so plain `delay(0.5)` already locks to the cps.
+// 10 for the resolver), so plain `delay(0.5)` already locks to the cps.
 
 def example_delay() {
     print("\n=== Section 3: delay echo on a pluck ===\n")

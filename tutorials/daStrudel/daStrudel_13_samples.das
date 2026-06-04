@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-12: Samples
+// Tutorial DASTRUDEL-13: Samples
 //
 // This tutorial covers:
 //   - Loading audio files into named sample banks with strudel_load_sound
@@ -7,7 +7,7 @@
 //   - Pitch-shifting samples with speed() (2.0 = one octave up)
 //   - Decoding a single file with load_audio_file
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_12_samples.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_13_samples.das
 
 options gen2
 options indenting = 4
@@ -123,7 +123,7 @@ def example_decode() {
 
 [export]
 def main() {
-    print("DASTRUDEL-12: Samples\n\n")
+    print("DASTRUDEL-13: Samples\n\n")
     example_drum_pattern()
     example_variations()
     example_speed_shift()

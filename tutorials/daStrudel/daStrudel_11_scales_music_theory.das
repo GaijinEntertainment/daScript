@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-10: Scales & Music Theory
+// Tutorial DASTRUDEL-11: Scales & Music Theory
 //
 // Scales let you write melodies in terms of degrees (0, 1, 2, ...) instead
 // of absolute pitches. Combined with a scale name like "C4:major" or
@@ -10,7 +10,7 @@
 //   - modes: dorian, mixolydian, lydian, phrygian, locrian
 //   - transposition by switching the scale root or by transpose(semitones)
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_10_scales_music_theory.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_11_scales_music_theory.das
 
 options gen2
 options persistent_heap
@@ -123,7 +123,7 @@ def example_two_octaves() {
 
 [export]
 def main() {
-    print("DASTRUDEL-10: Scales & Music Theory\n")
+    print("DASTRUDEL-11: Scales & Music Theory\n")
     example_major_vs_minor()
     example_pentatonic()
     example_modes()

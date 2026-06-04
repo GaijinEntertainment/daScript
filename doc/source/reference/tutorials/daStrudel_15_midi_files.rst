@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_midi_files:
 
 ==========================
-STRUDEL-14 — MIDI Files
+STRUDEL-15 — MIDI Files
 ==========================
 
 .. index::
@@ -100,7 +100,7 @@ live patterns.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_14_midi_files.das <../../../../tutorials/daStrudel/daStrudel_14_midi_files.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_15_midi_files.das <../../../../tutorials/daStrudel/daStrudel_15_midi_files.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_sf2_soundfont`
 

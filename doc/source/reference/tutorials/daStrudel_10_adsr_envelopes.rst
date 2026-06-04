@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_adsr_envelopes:
 
 ====================================
-STRUDEL-09 — ADSR & Envelope Shaping
+STRUDEL-10 — ADSR & Envelope Shaping
 ====================================
 
 .. index::
@@ -118,7 +118,7 @@ Each voice keeps the same plucky envelope but a different peak level.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_09_adsr_envelopes.das <../../../../tutorials/daStrudel/daStrudel_09_adsr_envelopes.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_10_adsr_envelopes.das <../../../../tutorials/daStrudel/daStrudel_10_adsr_envelopes.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_effects_filters`
 
