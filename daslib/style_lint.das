@@ -34,6 +34,8 @@ module style_lint shared private
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
+//!   STYLE029 — non-public 'require X' used only for modules X re-exports (transitive-only) — require those directly and drop X (skipped when X provides macros or [init])
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it). Suppress a deliberate keep with '// nolint:STYLE030'
 
 require daslib/ast_boost
 require daslib/is_local
@@ -74,6 +76,12 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete unsafeExprs : table<Expression?; UnsafeFrame>
     unsafe_stack : array<UnsafeFrame>
     unsafe_block_stack : array<int>
+    // STYLE029 — transitive-only require detection. Enabled only when linting the
+    // root module. `used_modules` collects names of modules with >=1 direct
+    // reference from code written in `this_module`.
+    analyze_requires : bool = false
+    @do_not_delete this_module : Module?
+    used_modules : table<string>
 
     def StyleLintVisitor() {
         pass
@@ -145,6 +153,11 @@ class StyleLintVisitor : AstVisitor {
         current_function = fn
         unsafe_block_stack |> push(0)
         check_defer_pipe(fn)
+        if (analyze_requires && fn._module == this_module) {
+            for (a in fn.annotations) {
+                if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
+            }
+        }
     }
 
     // --- STYLE001/002 for defer <| (macro erases AST, scan source lines) ---
@@ -240,6 +253,8 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
+        st029_record_func(expr.func)
+        st029_record_module_getter(expr)
         check_block_pipe(expr.at, expr.arguments)
         check_style019_clamp(expr)
         check_style020_from_jv(expr)
@@ -403,6 +418,7 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE001/002 for desugared generators ---
 
     def override preVisitExprMakeStruct(var expr : ExprMakeStruct?) : void {
+        st029_record_func(expr.constructor)
         if (!expr.genFlags.generated && !expr.makeStructFlags.isNewClass
                 && expr.makeType != null && expr.makeType.isClass) {
             mark_unsafe_in_stack()
@@ -465,6 +481,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
+        st029_record_func(expr.func)
         if (!expr.genFlags.generated
                 && call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
@@ -1208,6 +1225,213 @@ class StyleLintVisitor : AstVisitor {
 
     // --- STYLE014/STYLE015: large comment blocks (post-visit pass) ---
 
+    // ===== STYLE029 — transitive-only require =====
+
+    def st029_expr_in_scope() : bool {
+        // Record refs for any code belonging to the linted (root) module — INCLUDING
+        // generated functions (class methods desugar to generated funcs; macro-
+        // generated code holds real uses too). Excluding generated here would miss
+        // those uses and mis-report the require as unused.
+        // current_function == null means a global/constant initializer — record
+        // those too (uses there keep a require live). Over-recording at global
+        // scope is the safe direction for an unused-require check.
+        return (analyze_requires
+            && (current_function == null || current_function._module == this_module))
+    }
+
+    def st029_note_module(m : Module const?) : void {
+        // Unconditional insert — the caller has already scoped (decl._module for
+        // declarations, expr_in_scope for expressions via st029_record_mod).
+        st029_note_module_name(m == null ? "" : "{m.name}")
+    }
+
+    def st029_note_module_name(n : string) : void {
+        if (this_module == null || n == "" || n == "$" || n == "builtin" || n == "{this_module.name}") return
+        if (!key_exists(used_modules, n)) used_modules |> insert(n)
+    }
+
+    def st029_record_module_getter(expr : ExprCall?) : void {
+        // get_module("X") / find_module("X") / has_module("X") load X for runtime
+        // reflection — a real use of X even though no X symbol is referenced.
+        // (das2rst's document_module_* are the canonical case.)
+        if (expr.func == null || !st029_expr_in_scope() || empty(expr.arguments)) return
+        // find_module is [generic] — match on the template name, not the instance.
+        let fn = expr.func.fromGeneric != null ? "{expr.func.fromGeneric.name}" : "{expr.func.name}"
+        if (fn != "get_module" && fn != "find_module" && fn != "has_module" && fn != "find_compiling_module") return
+        let arg0 = expr.arguments[0]
+        if (arg0 != null && arg0 is ExprConstString) {
+            st029_note_module_name(string((arg0 as ExprConstString).value))
+        }
+    }
+
+    def st029_record_mod(m : Module const?) : void {
+        // Expression/type context: record only refs from the linted module's code.
+        if (st029_expr_in_scope()) st029_note_module(m)
+    }
+
+    def st029_record_func(fun : Function?) : void {
+        return if (fun == null)
+        // Generic instances point _module at the instantiating module; the
+        // symbol's real origin is fromGeneric._module.
+        if (fun.fromGeneric != null) st029_record_mod(fun.fromGeneric._module)
+        else st029_record_mod(fun._module)
+    }
+
+    def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
+        // Type references — st029_record_mod self-gates on expr_in_scope (global
+        // scope or this module's code; never a foreign function body).
+        if (typ.baseType == Type.tStructure && typ.structType != null) st029_record_mod(typ.structType._module)
+        elif (typ.baseType == Type.tEnumeration && typ.enumType != null) st029_record_mod(typ.enumType._module)
+        elif (typ.baseType == Type.tHandle && typ.annotation != null) st029_record_mod(typ.annotation._module)
+    }
+
+    def override preVisitStructure(var st : StructurePtr) : void {
+        // Declaration context: scoped by the struct's own module, so use the
+        // un-gated note_module (current_function is unrelated here).
+        if (analyze_requires && st._module == this_module) {
+            if (st.parent != null) st029_note_module(st.parent._module)
+            for (a in st.annotations) {
+                if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
+            }
+        }
+    }
+
+    def override preVisitEnumeration(var en : EnumerationPtr) : void {
+        if (analyze_requires && en._module == this_module) {
+            for (a in en.annotations) {
+                if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
+            }
+        }
+    }
+
+    def st029_module_provides_macro(mod : Module?) : bool {
+        // Pessimistic guard: a required module that registers any compile-time
+        // macro fires by syntax and leaves no traceable AST node, so we cannot
+        // see its uses. Treat it as used rather than risk a false positive.
+        var found = false
+        for_each_call_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_reader_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_variant_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_for_loop_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_typeinfo_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_typemacro(mod) $(_) { found = true; }
+        if (found) return true
+        // Pass macros (infer / optimization / lint) leave no symbol ref either —
+        // this is what keeps `require daslib/style_lint` (a [lint_macro] module)
+        // from being flagged unused.
+        for_each_pass_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_capture_macro(mod) $(_) { found = true; }
+        if (found) return true
+        for_each_simulate_macro(mod) $(_) { found = true; }
+        if (found) return true
+        // Function/tag macros ([tag_function_macro], e.g. macro_boost's macro_verify)
+        // are FunctionAnnotations that rewrite calls away at compile time, erasing
+        // the reference. Handle/struct annotations (fio's FILE) are NOT counted.
+        for_each_function_annotation(mod) $(_) { found = true; }
+        if (found) return true
+        // A [comment_reader] (e.g. daslib/rst_comment) processes //! doc-comments
+        // at compile time, also leaving no symbol reference.
+        return module_has_comment_reader(mod)
+    }
+
+    def st029_module_has_init(mod : Module?) : bool {
+        // Modules with an [init] function run side effects on load even with no
+        // visible reference, so they are never "unused".
+        var found = false
+        for_each_function(mod, "") $(fn) {
+            if (found) return
+            for (a in fn.annotations) {
+                if (a != null && a.annotation != null && a.annotation.name == "init") {
+                    found = true
+                    break
+                }
+            }
+        }
+        return found
+    }
+
+    def st029_collect_public_deps(mod : Module?; var exported : table<string; bool>) : void {
+        module_for_each_dependency(mod) $(dep, is_pub) {
+            if (!is_pub || dep == null) return
+            let dn = "{dep.name}"
+            if (dn == "" || dn == "$" || dn == "builtin") return
+            if (!key_exists(exported, dn)) {
+                exported |> insert(dn, "{dep.fileName}" != "")
+                st029_collect_public_deps(dep, exported)
+            }
+        }
+    }
+
+    def st029_check_requires(prog : ProgramPtr) : void {
+        if (!analyze_requires || this_module == null) return
+        let this_name = "{this_module.name}"
+        // Source files that belong to the linted module — used to ignore require
+        // declarations issued from other source-compiled modules. Seed with the
+        // module's own fileName so a file with no functions/structures (only
+        // requires + enums/globals/typedefs) is still covered.
+        var module_files : table<string>
+        let primary = string(this_module.fileName)
+        if (!empty(primary)) module_files |> insert(primary)
+        for_each_function(this_module, "") $(fn) {
+            if (fn.at.fileInfo != null && fn._module == this_module) {
+                let fname = string(fn.at.fileInfo.name)
+                if (!key_exists(module_files, fname)) module_files |> insert(fname)
+            }
+        }
+        for_each_structure(this_module) $(st) {
+            if (st.at.fileInfo != null && st._module == this_module) {
+                let fname = string(st.at.fileInfo.name)
+                if (!key_exists(module_files, fname)) module_files |> insert(fname)
+            }
+        }
+        for_each_enumeration(this_module) $(en) {
+            if (en.at.fileInfo != null && en._module == this_module) {
+                let fname = string(en.at.fileInfo.name)
+                if (!key_exists(module_files, fname)) module_files |> insert(fname)
+            }
+        }
+        prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
+            if (mod == null || pub
+                || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+            let mname = "{mod.name}"
+            if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
+                || key_exists(used_modules, mname)
+                || st029_module_provides_macro(mod)
+                || st029_module_has_init(mod)) return
+            var closure : table<string; bool>
+            st029_collect_public_deps(mod, closure)
+            var via : array<string>
+            var used_any = false
+            for (cm in keys(closure)) {
+                if (!key_exists(used_modules, cm)) continue
+                used_any = true
+                if (closure?[cm] ?? false) via |> push(cm)
+            }
+            var line_at = at
+            if (!empty(via)) {
+                sort(via)
+                let mods = build_string() $(w) {
+                    for (i in range(length(via))) {
+                        if (i > 0) { w |> write(", ") }
+                        w |> write(via[i])
+                    }
+                }
+                style_warning("STYLE029: require {req_name} is used only for modules it re-exports ({mods}); require those directly and drop {req_name}", line_at)
+                return
+            }
+            // Skip when only builtin-facade re-exports are used (legitimate).
+            return if (used_any)
+            // Nothing direct, nothing transitive, no macro/[init] — genuinely unused.
+            style_warning("STYLE030: require {req_name} is unused — no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
+        }
+    }
+
     def scan_long_comment_blocks(prog : ProgramPtr) : void {
         let mod = prog.getThisModule
         if (mod == null) return
@@ -1584,7 +1808,22 @@ class StyleLintVisitor : AstVisitor {
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
     }
     def override preVisitExprAddr(expr : ExprAddr?) : void {
+        st029_record_func(expr.func)
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
+    }
+    def override preVisitExprCopy(expr : ExprCopy?) : void { st029_record_func(expr.func) }
+    def override preVisitExprMove(expr : ExprMove?) : void { st029_record_func(expr.func) }
+    def override preVisitExprClone(expr : ExprClone?) : void { st029_record_func(expr.func) }
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        if (expr.variable != null) st029_record_mod(expr.variable._module)
+    }
+    def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
+        if (expr.enumType != null) st029_record_mod(expr.enumType._module)
+    }
+    def override preVisitExprConstBitfield(expr : ExprConstBitfield?) : void {
+        if (expr.bitfieldType != null && expr.bitfieldType.annotation != null) {
+            st029_record_mod(expr.bitfieldType.annotation._module)
+        }
     }
     def override preVisitExprRef2Ptr(expr : ExprRef2Ptr?) : void {
         // `addr(x)` — address-of-reference. Always unsafe.
@@ -1672,18 +1911,21 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp1(expr : ExprOp1?) : void {
+        st029_record_func(expr.func)
         if (!expr.genFlags.generated
                 && call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
         }
     }
     def override preVisitExprOp3(expr : ExprOp3?) : void {
+        st029_record_func(expr.func)
         if (!expr.genFlags.generated
                 && call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
         }
     }
     def override preVisitExprNew(expr : ExprNew?) : void {
+        st029_record_func(expr.func)
         if (!expr.genFlags.generated
                 && (expr.func == null || expr.func.flags.unsafeOperation)) {
             mark_unsafe_in_stack()
@@ -1736,6 +1978,17 @@ class StyleLintVisitor : AstVisitor {
 // Public API
 // ---------------------------------------------------------------------------
 
+def private require_analysis_enabled(disabled, enabled : table<string>) : bool {
+    // Require analysis (STYLE029/STYLE030) runs only if at least one of those
+    // codes survives the disabled denylist and enabled whitelist.
+    var any = false
+    for (code in ["STYLE029", "STYLE030"]) {
+        if (key_exists(disabled, code) || (!empty(enabled) && !key_exists(enabled, code))) continue
+        any = true
+    }
+    return any
+}
+
 def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int {
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
@@ -1750,12 +2003,16 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     //! ``// nolint:CODE`` directives.
     var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, comment_hygiene = comment_hygiene)
     astVisitor.disabled_codes := disabled_codes
+    astVisitor.this_module = prog.getThisModule
+    let empty_enabled : table<string>
+    astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
     if (comment_hygiene) {
         astVisitor->scan_long_comment_blocks(prog)
     }
+    astVisitor->st029_check_requires(prog)
     // STYLE024/025 stack-balance sanity check.
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
@@ -1781,12 +2038,15 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = comment_hygiene)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
+    astVisitor.this_module = prog.getThisModule
+    astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
     if (comment_hygiene) {
         astVisitor->scan_long_comment_blocks(prog)
     }
+    astVisitor->st029_check_requires(prog)
     // STYLE024/025 stack-balance sanity check.
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")

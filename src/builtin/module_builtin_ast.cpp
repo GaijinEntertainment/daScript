@@ -498,6 +498,40 @@ namespace das {
         }
     }
 
+    void for_each_pass_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
+        for ( auto * vec : { &mod->macros, &mod->inferMacros, &mod->optimizationMacros, &mod->lintMacros, &mod->globalLintMacros } ) {
+            for ( auto & td : *vec ) {
+                das_invoke<void>::invoke<const char *>(context,at,block,td->name.c_str());
+            }
+        }
+    }
+
+    void for_each_capture_macro ( Module * mod, const TBlock<void,CaptureMacroPtr> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->captureMacros ) {
+            das_invoke<void>::invoke<CaptureMacroPtr>(context,at,block,td.get());
+        }
+    }
+
+    void for_each_simulate_macro ( Module * mod, const TBlock<void,SimulateMacroPtr> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->simulateMacros ) {
+            das_invoke<void>::invoke<SimulateMacroPtr>(context,at,block,td.get());
+        }
+    }
+
+    void for_each_function_annotation ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & it : mod->handleTypes ) {
+            if ( it.second && it.second->rtti_isFunctionAnnotation() ) {
+                das_invoke<void>::invoke<const char *>(context,at,block,it.second->name.c_str());
+            }
+        }
+    }
+
+    bool module_has_comment_reader ( Module * mod ) {
+        // A [comment_reader] (AstCommentReader, e.g. daslib/rst_comment) processes
+        // //! doc-comments at compile time, leaving no symbol reference.
+        return mod != nullptr && mod->commentReader != nullptr;
+    }
+
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
                      RefMatters refMatters,
@@ -1335,6 +1369,21 @@ namespace das {
         addExtern<DAS_BIND_FUN(for_each_typemacro)>(*this, lib,  "for_each_typemacro",
             SideEffects::modifyExternal, "for_each_typemacro")
                 ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_pass_macro)>(*this, lib,  "for_each_pass_macro",
+            SideEffects::modifyExternal, "for_each_pass_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_capture_macro)>(*this, lib,  "for_each_capture_macro",
+            SideEffects::modifyExternal, "for_each_capture_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_simulate_macro)>(*this, lib,  "for_each_simulate_macro",
+            SideEffects::modifyExternal, "for_each_simulate_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_function_annotation)>(*this, lib,  "for_each_function_annotation",
+            SideEffects::modifyExternal, "for_each_function_annotation")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(module_has_comment_reader)>(*this, lib,  "module_has_comment_reader",
+            SideEffects::modifyExternal, "module_has_comment_reader")
+                ->arg("module");
         addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
             SideEffects::modifyExternal, "builtin_structure_for_each_field")
                 ->args({"annotation","block","context","line"});
