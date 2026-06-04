@@ -732,6 +732,9 @@ class AnyGenBind {
             to_log(LOG_WARNING, "collectActiveDefines: cannot parse {fname}, falling back to raw scan\n")
             return data
         }
+        // libclang returns backslashes on Windows; normalize both sides so the suffix
+        // match is OS-independent (else every MacroDefinition cursor filters out)
+        let fnameNorm = fname |> replace_multiple([(text = "\\", replacement = "/")])
         let result = build_string() $(var wr : StringBuilderWriter) {
             clang_visitChildren(clang_getTranslationUnitCursor(unit)) $(var c, _parent) {
                 if (clang_getCursorKind(c) == CXCursorKind.MacroDefinition) {
@@ -739,7 +742,7 @@ class AnyGenBind {
                     var ml, mc, mo : uint
                     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(mfile), safe_addr(ml), safe_addr(mc), safe_addr(mo))
                     // builtin / command-line macros have a null CXFile — skip them
-                    if (mfile != null && string(clang_getFileName(mfile)) |> ends_with(fname)) {
+                    if (mfile != null && (string(clang_getFileName(mfile)) |> replace_multiple([(text = "\\", replacement = "/")])) |> ends_with(fnameNorm)) {
                         var ext = clang_getCursorExtent(c)
                         var sfile, efile : CXFile
                         var sl, scol, so, el, ecol, eo : uint
@@ -1397,7 +1400,12 @@ class CppGenBind : AnyGenBind {
             for (ai in urange(narg)) {
                 let aii = int(isMethod ? ai + 1u : ai)
                 var carg = clang_Cursor_getArgument(c, ai)
-                let cp = getCursorArgType(clang_getCursorType(carg))     // non-canonical
+                var cp = getCursorArgType(clang_getCursorType(carg))     // non-canonical
+                // a binder may pin a (function,arg) to its raw C int instead of the enum
+                // retype, to preserve a shipped signature; cp="" -> int + ExprConstInt default
+                if (cp != "" && keep_c_arg_type(das_function_name, string(clang_getCursorSpelling(carg)), aii)) {
+                    cp = ""
+                }
                 if (cp != "") {
                     fprint(func_file, "\n\t\t->arg_type({aii},makeType<{cp}>(lib))")
                 }
@@ -1457,6 +1465,10 @@ class CppGenBind : AnyGenBind {
             }
         }
         fprint(func_file, ";\n")
+    }
+    //! Override to keep a specific (function,arg) at its raw C type instead of the enum/alias retype — preserves a shipped public signature.
+    def keep_c_arg_type(funcName, argName : string; argIndex : int) : bool {
+        return false
     }
     def getCursorArgType(var t : CXType) {
         let tn = string(clang_getTypeSpelling(t))
