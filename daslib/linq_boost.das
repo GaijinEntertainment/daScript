@@ -45,7 +45,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         if (call.arguments[1] is ExprMakeBlock) {
             // named-variable form: the argument is already a `$(x) => …` block (e.g. emitted by linq_das).
             // Inject the element type onto the user's parameter and pass the block through, instead of
-            // wrapping a bare expression in `$(_ : iterType) => …`. The C# range variable thus survives verbatim.
+            // wrapping a bare expression in `$(_ : iterType) => …`. The query's range variable thus survives verbatim.
             var blk = call.arguments[1] as ExprMakeBlock
             var inner = blk._block as ExprBlock
             macro_verify(length(inner.arguments) == 1, prog, call.at, "{predName}: block argument must take exactly one parameter")
