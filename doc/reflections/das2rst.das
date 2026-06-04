@@ -451,6 +451,7 @@ def document_module_json_boost(_root : string) {
     var mod = find_module("json_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Value conversion", mod, %regex~(JV|from_JV)$%%),
+        group_by_regex("LINQ source builders", mod, %regex~(from_json|read_json_field)$%%),
         group_by_regex("Element access operators", mod, %regex~(\[\]|\?\[\]|\?\.|\.)$%%),
         group_by_regex("Null coalescing operators", mod, %regex~(\?\?)$%%),
         group_by_regex("Value extraction", mod, %regex~(\?\.)?`value$%%),

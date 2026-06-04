@@ -3349,8 +3349,9 @@ def private iter_type(src : array<auto(TT)>) : TT -const -& {
 def private select_many_impl(var src; tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(type<TT>))) -const -&>
-    // Lower-bound reserve when the outer source is length-bearing — flat-map produces ≥ length(src) elements
-    // for non-degenerate inner sequences; reduces realloc count even when the actual output is larger.
+    // Capacity hint when the outer source is length-bearing — one slot per outer row. The true count is the
+    // sum of the inner collection lengths (so it may be more, or fewer when some inner collections are empty);
+    // `length(src)` is just a reasonable starting capacity that avoids reallocating from zero.
     static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
         buffer |> reserve(length(src))
     }
@@ -3386,8 +3387,9 @@ def select_many_to_array(var src : iterator<auto(TT)>; result_selector) : array<
 def private select_many_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&>
-    // Lower-bound reserve when the outer source is length-bearing — flat-map produces ≥ length(src) elements
-    // for non-degenerate inner sequences; reduces realloc count even when the actual output is larger.
+    // Capacity hint when the outer source is length-bearing — one slot per outer row. The true count is the
+    // sum of the inner collection lengths (so it may be more, or fewer when some inner collections are empty);
+    // `length(src)` is just a reasonable starting capacity that avoids reallocating from zero.
     static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
         buffer |> reserve(length(src))
     }

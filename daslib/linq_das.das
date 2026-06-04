@@ -1232,8 +1232,9 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
 class FromInMacro : AstCallMacro {
     //! Typed-source dispatcher for the C# query form `from c : Row in <src>`. Rewrites
     //! `from_in(src, type<Row>)` to the concrete `_fold` source builder by `src`'s type — a SQL runner
-    //! → `select_from`, an XML node → `from_xml_node`. Must be a call macro: a plain function would leave
-    //! `from_in(...)` at the chain head, which `_fold`'s name-based source detection cannot route.
+    //! → `select_from`, an XML node → `from_xml_node`, a JSON value → `from_json`. Must be a call macro:
+    //! a plain function would leave `from_in(...)` at the chain head, which `_fold`'s name-based source
+    //! detection cannot route.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
         if (length(call.arguments) != 2) {
             macro_error(prog, call.at, "from_in(src, type<Row>): expected 2 arguments")
@@ -1252,7 +1253,14 @@ class FromInMacro : AstCallMacro {
         // from_xml_node is [unsafe_outside_of_for]; the unsafe wrap is required in a `_fold` chain.
         if (srcT.isHandle && srcT.annotation != null && srcT.annotation.name == "xml_node")
             return qmacro(unsafe($c("from_xml_node")($e(call.arguments[0]), $e(call.arguments[1]))))
-        macro_error(prog, call.at, "linq: unsupported source for `from c : Row in <src>` — expected a SQL runner or an XML node (use `in decs` for decs, or an array for the untyped `from c in <arr>` form)")
+        // JSON: src is a json `JsonValue?` (pointer to json::JsonValue, a JSON array) → unsafe(from_json(jv, type<Row>)).
+        // from_json is [unsafe_outside_of_for]; the unsafe wrap is required in a `_fold` chain. String-matched
+        // on the type so linq_das pulls in no json dependency.
+        if (srcT.isPointer && srcT.firstType != null && srcT.firstType.structType != null
+                && srcT.firstType.structType.name == "JsonValue"
+                && srcT.firstType.structType._module != null && srcT.firstType.structType._module.name == "json")
+            return qmacro(unsafe($c("from_json")($e(call.arguments[0]), $e(call.arguments[1]))))
+        macro_error(prog, call.at, "linq: unsupported source for `from c : Row in <src>` — expected a SQL runner, an XML node, or a JSON value (use `in decs` for decs, or an array for the untyped `from c in <arr>` form)")
         return call
     }
 }
@@ -1262,7 +1270,7 @@ class LinqDasReader : AstReaderMacro {
     //! C#-style LINQ query reader macro.
     //! ``%linq! from c [: Row] in src [where <pred>] [ join d [: RowB] in B on <kA> equals <kB> | from d [: RowB] in B ] [orderby <expr> [descending]] ( select <proj> | group c by <key> ) [iterator] %%``
     //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
-    //! ``from c : Row in src`` over decs / SQL / XML. ``orderby`` is a single sort key; ``group c by <key>``
+    //! ``from c : Row in src`` over decs / SQL / XML / JSON. ``orderby`` is a single sort key; ``group c by <key>``
     //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). A second range
     //! variable comes from either a ``join`` (single inner equi-join) or a second ``from`` (SelectMany):
     //! uncorrelated (``from d in B``) is the cross product, emitting ``_cross_join`` (pushes down to a SQL

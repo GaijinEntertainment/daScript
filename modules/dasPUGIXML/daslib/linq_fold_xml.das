@@ -20,98 +20,8 @@ require daslib/templates_boost
 require strings
 require daslib/linq_fold_common public
 
-// ===== Field-pruning (pass 2b) =====
-// Walk the chain body to learn which Row fields it reads, so the per-element materialization can read
-// only those attributes — skipping `clone_string` for unread string fields (zero allocs when no kept
-// field is a string). Mirrors linq_fold_decs's DecsTupUsageScanner / DecsTupFieldFlattener, specialized
-// to a single struct bind (no iter-var reverse-map; no whole-tuple rewriter — a whole-`it` escape just
-// routes to full build_xml_row).
-
-class private XmlRowUsageScanner : AstVisitor {
-    bindName      : string
-    usedFields    : table<string>
-    allFieldsUsed : bool = false
-    inTargetField : bool = false
-    def XmlRowUsageScanner(n : string) {
-        bindName = n
-    }
-    def override preVisitExprField(expr : ExprField?) : void {
-        var v = expr.value
-        if (v is ExprRef2Value) {
-            v = (v as ExprRef2Value).subexpr
-        }
-        if (v is ExprVar && (v as ExprVar).name == bindName) {
-            usedFields |> insert(string(expr.name))
-            inTargetField = true
-        }
-    }
-    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
-        inTargetField = false
-        return expr
-    }
-    def override preVisitExprVar(expr : ExprVar?) : void {
-        // A whole-var `it` ref (not the inner value of a matched field access) means the whole row
-        // escapes (to_array push_clone, identity select, pass-to-user-fn) — fall back to full materialization.
-        if (expr.name == bindName && !inTargetField) {
-            allFieldsUsed = true
-        }
-    }
-}
-
-[macro_function]
-def private collect_xml_row_usage(var body : Expression?; bindName : string) : tuple<bool; array<string>> {
-    var allUsed = false
-    var used : array<string>
-    if (body == null) return (allUsed, used)
-    var sc = new XmlRowUsageScanner(bindName)
-    make_visitor(*sc) $(astVisitorAdapter) {
-        visit_expression(body, astVisitorAdapter)
-    }
-    allUsed = sc.allFieldsUsed
-    for (k in keys(sc.usedFields)) {
-        used |> push(k)
-    }
-    unsafe {
-        delete sc
-    }
-    return (allUsed, used)
-}
-
-class private XmlRowFieldFlattener : AstVisitor {
-    bindName     : string
-    fieldToLocal : table<string; string>
-    def XmlRowFieldFlattener(b : string; var f : table<string; string>) {
-        bindName = b
-        fieldToLocal <- f
-    }
-    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
-        var v = expr.value
-        if (v is ExprRef2Value) {
-            v = (v as ExprRef2Value).subexpr
-        }
-        if (v is ExprVar && (v as ExprVar).name == bindName) {
-            let fname = string(expr.name)
-            if (key_exists(fieldToLocal, fname)) return new ExprVar(at = expr.at, name := fieldToLocal[fname])
-        }
-        return expr
-    }
-}
-
-// Rewrites every `bind.<field>` read in `body` to its `fieldToLocal` local, returning the (possibly
-// replaced) root — needed when `body` is itself a bare field access (`where(_.flag)`): visit_expression
-// updates its `Expression?&` argument in place, but our by-value copy wouldn't propagate the new root back.
-[macro_function]
-def private flatten_xml_row_to_locals(var body : Expression?; bindName : string; var fieldToLocal : table<string; string>) : Expression? {
-    if (body == null) return body
-    var fl = new XmlRowFieldFlattener(bindName, fieldToLocal)
-    make_visitor(*fl) $(astVisitorAdapter) {
-        visit_expression(body, astVisitorAdapter)
-    }
-    unsafe {
-        delete fl
-    }
-    return body
-}
+// Field-pruning row-usage scanning (RowUsageScanner / collect_row_usage / RowFieldFlattener /
+// flatten_row_to_locals / hoist_prelude) is shared with the JSON adapter — see daslib/linq_fold_common.das.
 
 // Materialize-under-guard: when the whole row escapes only inside a bare `if (fieldCond) { ... }`, read
 // just the predicate's fields cheaply and build the full row (its `name` clone) only for matching elements.
@@ -123,7 +33,7 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
     if (!(body is ExprIfThenElse)) return false
     var ite = body as ExprIfThenElse
     if (ite.if_false != null || ite.cond == null || ite.if_true == null) return false
-    var (condAllUsed, condFields) = collect_xml_row_usage(ite.cond, bindName)
+    var (condAllUsed, condFields) = collect_row_usage(ite.cond, bindName)
     if (condAllUsed || empty(condFields)) return false   // whole-`it` in the guard, or no field to prune
     sort(condFields)
     var fieldToLocal <- {for (f in condFields); f => qn("xf_{f}", at)}
@@ -138,7 +48,7 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
             let $i(local) = peek_xml_field($i(chName), $v(f), $i(defName).$f(f))
         }
     }
-    ite.cond = flatten_xml_row_to_locals(ite.cond, bindName, fieldToLocal)
+    ite.cond = flatten_row_to_locals(ite.cond, bindName, fieldToLocal)
     // Prepend the full materialize to the guarded branch so only matching elements pay build_xml_row.
     var guarded : array<Expression?>   // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
     guarded |> push <| qmacro_expr() {
@@ -160,7 +70,7 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
 def private build_xml_materializer(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                    defName, chName : string; at : LineInfo;
                                    var prelude : array<Expression?>; var inner : array<Expression?>) {
-    var (allUsed, usedFields) = collect_xml_row_usage(body, bindName)
+    var (allUsed, usedFields) = collect_row_usage(body, bindName)
     if (allUsed) {
         if (try_xml_under_guard_materialize(body, bindName, declT, defName, chName, at, prelude, inner)) {
             return
@@ -190,7 +100,7 @@ def private build_xml_materializer(var body : Expression?; bindName : string; de
             let $i(local) = read_xml_field($i(chName), $v(f), $i(defName).$f(f))
         }
     }
-    body = flatten_xml_row_to_locals(body, bindName, fieldToLocal)
+    body = flatten_row_to_locals(body, bindName, fieldToLocal)
     inner |> push(body)
 }
 
@@ -229,21 +139,6 @@ def private build_xml_dom_walk(sn : string; var nameArg : Expression?; curName, 
             $b(elemBody)
         }
     }
-}
-
-// Hoist the materializer prelude (`let xdef`, flatten path only) as a FLAT sibling before the walk — a
-// `$b(prelude)` splice would nest it in its own scope, hiding it from the per-element reads.
-[macro_function]
-def private hoist_prelude(var prelude : array<Expression?>; var loop : Expression?; at : LineInfo) : Expression? {
-    if (empty(prelude)) return loop
-    var outBlk = new ExprBlock(at = at)
-    for (s in prelude) {
-        outBlk.list |> push(s)
-    }
-    for (s in (loop as ExprBlock).list) {
-        outBlk.list |> push(s)
-    }
-    return outBlk
 }
 
 // 2-source invoke binding the XML node (param 1, named `srcName` so the DOM walk in bodyStmts reads it)

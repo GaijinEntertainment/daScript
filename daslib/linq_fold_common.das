@@ -153,6 +153,110 @@ class ProjectedSourceAdapter : SourceAdapter {
     }
 }
 
+// ===== Field-pruning row-usage scanner (shared by the XML / JSON source adapters) =====
+// Scan a chain body for which Row fields it reads, so a deferred source's per-element materialization
+// reads only those fields. Pure AST (bind name → field reads); each adapter keeps its own per-field read
+// / full-row build. A whole-`it` ref (to_array push_clone, identity select, pass-to-fn) sets
+// allFieldsUsed → the caller falls back to full materialization.
+
+class RowUsageScanner : AstVisitor {
+    bindName      : string
+    usedFields    : table<string>
+    allFieldsUsed : bool = false
+    inTargetField : bool = false
+    def RowUsageScanner(n : string) {
+        bindName = n
+    }
+    def override preVisitExprField(expr : ExprField?) : void {
+        var v = expr.value
+        if (v is ExprRef2Value) {
+            v = (v as ExprRef2Value).subexpr
+        }
+        if (v is ExprVar && (v as ExprVar).name == bindName) {
+            usedFields |> insert(string(expr.name))
+            inTargetField = true
+        }
+    }
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        inTargetField = false
+        return expr
+    }
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        if (expr.name == bindName && !inTargetField) {
+            allFieldsUsed = true
+        }
+    }
+}
+
+[macro_function]
+def collect_row_usage(var body : Expression?; bindName : string) : tuple<bool; array<string>> {
+    var allUsed = false
+    var used : array<string>
+    if (body == null) return (allUsed, used)
+    var sc = new RowUsageScanner(bindName)
+    make_visitor(*sc) $(astVisitorAdapter) {
+        visit_expression(body, astVisitorAdapter)
+    }
+    allUsed = sc.allFieldsUsed
+    for (k in keys(sc.usedFields)) {
+        used |> push(k)
+    }
+    unsafe {
+        delete sc
+    }
+    return (allUsed, used)
+}
+
+class RowFieldFlattener : AstVisitor {
+    bindName     : string
+    fieldToLocal : table<string; string>
+    def RowFieldFlattener(b : string; var f : table<string; string>) {
+        bindName = b
+        fieldToLocal <- f
+    }
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        var v = expr.value
+        if (v is ExprRef2Value) {
+            v = (v as ExprRef2Value).subexpr
+        }
+        if (v is ExprVar && (v as ExprVar).name == bindName) {
+            let fname = string(expr.name)
+            if (key_exists(fieldToLocal, fname)) return new ExprVar(at = expr.at, name := fieldToLocal[fname])
+        }
+        return expr
+    }
+}
+
+// Rewrites every `bind.<field>` read in `body` to its `fieldToLocal` local, returning the (possibly
+// replaced) root — needed when `body` is itself a bare field access (`where(_.flag)`).
+[macro_function]
+def flatten_row_to_locals(var body : Expression?; bindName : string; var fieldToLocal : table<string; string>) : Expression? {
+    if (body == null) return body
+    var fl = new RowFieldFlattener(bindName, fieldToLocal)
+    make_visitor(*fl) $(astVisitorAdapter) {
+        visit_expression(body, astVisitorAdapter)
+    }
+    unsafe {
+        delete fl
+    }
+    return body
+}
+
+// Hoist the materializer prelude (the hoisted default-row decl, prune path only) as a FLAT sibling before
+// the walk — a `$b(prelude)` splice would nest it in its own scope, hiding it from the per-element reads.
+[macro_function]
+def hoist_prelude(var prelude : array<Expression?>; var loop : Expression?; at : LineInfo) : Expression? {
+    if (empty(prelude)) return loop
+    var outBlk = new ExprBlock(at = at)
+    for (s in prelude) {
+        outBlk.list |> push(s)
+    }
+    for (s in (loop as ExprBlock).list) {
+        outBlk.list |> push(s)
+    }
+    return outBlk
+}
+
 variant SlotMatcher {
     literal : string                       // exact name match
     one_of  : array<string>                // any-of name set

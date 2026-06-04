@@ -97,14 +97,20 @@ because the source value alone does not carry it:
     // XML — an xml_node value → `from_xml_node`, fused by the XmlAdapter
     var x <- %linq! from c : Car in doc.document_element where c.price > 100.0 select c.brand %%
 
-For value sources (SQL, XML, and later JSON) the reader emits
+    // JSON — a JsonValue? array → `from_json`, fused by the JsonAdapter
+    var j <- %linq! from c : Car in carsJson where c.price > 100 select c.name %%
+
+For value sources (SQL, XML, JSON) the reader emits
 ``from_in(<src>, type<Row>)``; the ``from_in`` call macro dispatches on the
 source value's type to the concrete builder (so a new backend is a new
 ``from_in`` branch, never a parser change). ``decs`` has no source value, so it
 is emitted directly as ``from_decs_template`` and never goes through
 ``from_in``. The row type's required annotation depends on the source —
 ``[decs_template]`` for decs, ``[sql_table]`` / ``[sql_view]`` for SQL, a plain
-struct for XML.
+struct for XML and JSON. The JSON source is a ``JsonValue?`` holding a JSON
+**array** of objects (``from c : Car in jv["cars"]`` descends into a nested
+array first); each element materializes through ``from_JV``, field-pruned to
+just the keys the chain reads.
 
 Range variable
 --------------
@@ -239,7 +245,7 @@ keywords per key:
     // multi-key with mixed directions: brand ascending, then price descending
     var rows <- %linq! from c in cars orderby c.brand, c.price descending select c %%
 
-Works over all four sources: SQL emits ``ORDER BY c1, c2 DESC, …``; array / decs / XML
+Works over all five sources: SQL emits ``ORDER BY c1, c2 DESC, …``; array / decs / XML / JSON
 sort the materialized rows. Multi-key ordering is **stable** (C# ``OrderBy`` / ``ThenBy``
 parity — rows equal on every key keep input order) and supports **at most four keys**.
 Single-key ordering is unchanged — it keeps its existing (unstable) sort, so there is
@@ -526,7 +532,6 @@ Current limitations
 
 The following are not yet supported:
 
-- **JSON** as a source (the planned 5th adapter).
 - **Multi-key ``orderby``** (``orderby a, b descending``) — a single sort key
   only, for now.
 - **``group … by`` over a SQL source**, and the ``group … into`` aggregate
