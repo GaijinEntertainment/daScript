@@ -583,6 +583,7 @@ def public sf2_recalc_atten(atten_state : SF2VoiceAttenState; cc_values : int[12
 
 // ─── C Voice Creation (populates ma_sf2_voice from SF2 generators) ───
 
+[unused_argument(channel)]
 def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
                               pzone : SF2Zone const?; global_pzone : SF2Zone const?;
                               note, velocity, channel : int;
@@ -594,7 +595,7 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let global_izone = inst.global_zone
-    let sr = float(SF2_SAMPLE_RATE)
+    let sr = SF2_SAMPLE_RATE
 
     let sid = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.sampleID), -1)
     if (sid < 0 || sid >= length(sf2.samples)) return false

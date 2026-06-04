@@ -104,7 +104,7 @@ def render_bd(duration : float; gain : float) : array<float> {
     var phase = 0.0
     var seed = 22222u
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     // bandpass for subtle beater click
     var attack_bp = BiquadState()
     biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
@@ -139,7 +139,7 @@ def render_sd(duration : float; gain : float) : array<float> {
     var phase = 0.0
     var seed = 12345u
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     // snare wires: HPF at 1.5kHz to get the sizzle
     var wire_hpf = BiquadState()
     biquad_highpass(wire_hpf, 1500.0, float(SAMPLE_RATE))
@@ -170,7 +170,7 @@ def render_hh(duration : float; gain : float) : array<float> {
     // add tonal component (~200Hz) like SF2 — the "bell" of the hi-hat
     var phase = 0.0
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     let inc = tp * 180.0 * iSr
     for (i in range(nsamples)) {
         let t = float(i) * iSr
@@ -218,7 +218,7 @@ struct private BiquadState {
 }
 
 def private biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
-    let w0 = float(TWO_PI) * freq / sample_rate
+    let w0 = TWO_PI * freq / sample_rate
     let cs = cos(w0)
     let sn = sin(w0)
     let alpha = sn / (2.0 * 0.707)  // Q = 0.707 (Butterworth)
@@ -231,7 +231,7 @@ def private biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
 }
 
 def private biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
-    let w0 = float(TWO_PI) * freq / sample_rate
+    let w0 = TWO_PI * freq / sample_rate
     let cs = cos(w0)
     let sn = sin(w0)
     let alpha = sn / (2.0 * q)
@@ -264,7 +264,7 @@ def private render_metallic(duration : float; gain : float; decay_rate : float; 
     samples |> resize(nsamples)
     var phases : float[6]
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     // two bandpass stages at ~3.4kHz and ~7.1kHz (808 circuit) + HPF
     var bp1 = BiquadState()
     biquad_bandpass(bp1, 3400.0, 1.5, float(SAMPLE_RATE))
@@ -311,7 +311,7 @@ def render_tom(duration : float; gain : float; base_freq : float) : array<float>
     var phase = 0.0
     var seed = 33333u
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     var attack_bp = BiquadState()
     biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
     var impulse_lp = BiquadState()
@@ -353,7 +353,7 @@ def render_ride(duration : float; gain : float) : array<float> {
     var bell_phase1 = 0.0
     var bell_phase2 = 0.0
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     var hpf = BiquadState()
     biquad_highpass(hpf, 200.0, float(SAMPLE_RATE))
     let bell_inc1 = tp * 340.0 * iSr
@@ -387,7 +387,7 @@ def render_crash(duration : float; gain : float) : array<float> {
     var bell_phase1 = 0.0
     var bell_phase2 = 0.0
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     var hpf = BiquadState()
     biquad_highpass(hpf, 4000.0, float(SAMPLE_RATE))
     let bell_inc1 = tp * 180.0 * iSr
@@ -420,7 +420,7 @@ def render_rimshot(duration : float; gain : float) : array<float> {
     var phase1 = 0.0
     var seed = 44444u
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     let inc1 = tp * 200.0 * iSr
     var snap_bp = BiquadState()
     biquad_bandpass(snap_bp, 800.0, 0.8, float(SAMPLE_RATE))
@@ -448,7 +448,7 @@ def render_cowbell(duration : float; gain : float) : array<float> {
     var phase1 = 0.0
     var phase2 = 0.0
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     let inc1 = tp * 375.0 * iSr
     let inc2 = tp * 504.0 * iSr
     var bpf = BiquadState()
@@ -939,7 +939,7 @@ def osc_voice_init_supersaw(var voice : OscVoice) {
     //! Seed the supersaw unison phases with randomised offsets so the detuned voices don't start in phase.
     var seed = 99999u
     for (i in range(SUPERSAW_VOICES)) {
-        voice.supersaw_phases[i] = float(noise(seed) * 0.5 + 0.5)  // [0,1)
+        voice.supersaw_phases[i] = (noise(seed) * 0.5 + 0.5)  // [0,1)
     }
 }
 
@@ -1193,9 +1193,9 @@ def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb
     // hoist invariants
     let iSr = 1.0 / float(SAMPLE_RATE)
     let phaseInc = voice.freq * iSr
-    let tp = float(TWO_PI)
+    let tp = TWO_PI
     let pan = clamp(voice.pan, -1.0, 1.0)
-    let angle = (pan + 1.0) * 0.25 * float(TWO_PI / 2.0)
+    let angle = (pan + 1.0) * 0.25 * (TWO_PI / 2.0)
     let lGain = voice.gain * OSC_TURN_DOWN * cos(angle)
     let rGain = voice.gain * OSC_TURN_DOWN * sin(angle)
     let hasSend = voice.reverb_send > 0.0 && length(reverb_send_buf) >= chunkFrames * 2

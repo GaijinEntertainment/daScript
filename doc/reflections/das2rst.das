@@ -1611,9 +1611,9 @@ def document_module_strudel_pattern(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Pattern construction", mod, %regex~(pure|silence|atom|querySpan|queryArc|patternType)$%%),
         group_by_regex("Time manipulation", mod, %regex~(fast|slow|stack|cat|fastcat|weighted_fastcat|fmap)$%%),
-        group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby)$%%),
+        group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|euclidRot|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|chop|slice|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby)$%%),
         group_by_regex("Setter primitives", mod, %regex~set_.*$%%),
-        group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|sound|cut|orbit|begin|end_pos)$%%),
+        group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|freq|sound|cut|orbit|begin|end_pos)$%%),
         group_by_regex("Fluent control: 3D positioning (HRTF)", mod, %regex~(hrtf|hrtf_azimuth|hrtf_elevation)$%%),
         group_by_regex("Fluent control: effects sends", mod, %regex~(room|roomsize|size|delay|delaytime|dt|delayfeedback|dfb|delaysync|chorus)$%%),
         group_by_regex("Fluent control: filters", mod, %regex~(lpf|lp|hpf|hp|lpq|resonance|hpq|bpf|bpq|djf)$%%),
@@ -1621,7 +1621,10 @@ def document_module_strudel_pattern(_root : string) {
         group_by_regex("Fluent control: synthesis and shaping", mod, %regex~(fm|fmh|crush|coarse|shape)$%%),
         group_by_regex("Fluent control: modulation FX", mod, %regex~(phaser|ph|phaserdepth|phd|phasercenter|phc|phasersweep|phs|tremolo|trem|tremolodepth|tremdepth|compressor.*)$%%),
         group_by_regex("Fluent control: SF2", mod, %regex~sf2.*$%%),
-        group_by_regex("Signals", mod, %regex~(signal|signal_.*|sine|cosine|saw|tri|perlin|range|square|isaw|itri|sine2|cosine2|saw2|tri2|square2|isaw2|itri2|rand|rand2|irand|run)$%%)
+        group_by_regex("Signals", mod, %regex~(signal|signal_.*|sine|cosine|saw|tri|perlin|range|square|isaw|itri|sine2|cosine2|saw2|tri2|square2|isaw2|itri2|rand|rand2|irand|run)$%%),
+        // public only so union-widened combinators' captured lambdas resolve them
+        // cross-module — not user-facing API
+        hide_group(group_by_regex("Internal", mod, %regex~(strudel_hash01|strudel_hash32)$%%))
     )
     document("Pattern algebra, combinators, and fluent control API", mod, "strudel_pattern.rst", groups)
 }

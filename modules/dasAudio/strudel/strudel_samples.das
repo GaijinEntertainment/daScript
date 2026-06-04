@@ -180,7 +180,7 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
             ma_resample_algorithm.ma_resample_algorithm_linear
         )
         ma_resampler_init(unsafe(addr(resampler_config)), unsafe(addr(resampler)))
-        var outFrames = uint64(ma_resampler_get_expected_output_frame_count(unsafe(addr(resampler)), uint64(sliceFrames)))
+        var outFrames = ma_resampler_get_expected_output_frame_count(unsafe(addr(resampler)), uint64(sliceFrames))
         var resampled : array<float>
         resampled |> resize(int(outFrames) * int(srcChannels))
         var inFrames = uint64(sliceFrames)

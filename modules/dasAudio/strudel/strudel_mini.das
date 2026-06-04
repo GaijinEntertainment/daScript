@@ -285,6 +285,20 @@ def private parse_element(var p : Parser) : Pattern {
                 var r = e; r.n = idx; return r
             }
             pat <- pat |> fmap(fn)
+        } elif (k == TokenKind.LPAREN) {
+            // Euclidean rhythm: "bd(3,8)" → euclid(3,8); "bd(3,8,1)" → euclidRot(3,8,1)
+            advance(p)
+            let kk = to_int(expect_token(p, TokenKind.NUMBER).text)
+            expect_token(p, TokenKind.COMMA)
+            let nn = to_int(expect_token(p, TokenKind.NUMBER).text)
+            if (peek(p).kind == TokenKind.COMMA) {
+                advance(p)
+                let rot = to_int(expect_token(p, TokenKind.NUMBER).text)
+                pat <- pat |> euclidRot(kk, nn, rot)
+            } else {
+                pat <- pat |> euclid(kk, nn)
+            }
+            expect_token(p, TokenKind.RPAREN)
         } else {
             break
         }
@@ -363,8 +377,8 @@ def parse_note_name(name : string) : float {
             octaveIdx = 2
         }
         let octCh = int(bytes[octaveIdx])
-        if (octCh < '0' || octCh > '9') return
-        let octave = octCh - int('0')
+        if (!is_number(octCh)) return
+        let octave = octCh - '0'
         result = float((octave + 1) * 12 + semitone)
     }
     return result
@@ -401,8 +415,8 @@ def parse_note_name_default(name : string; default_oct : int) : float {
         }
         if (nextIdx < n) {
             let octCh = int(bytes[nextIdx])
-            if (octCh < '0' || octCh > '9') return
-            octave = octCh - int('0')
+            if (!is_number(octCh)) return
+            octave = octCh - '0'
         }
         result = float((octave + 1) * 12 + semitone)
     }
@@ -552,7 +566,7 @@ def seq(notation : string; sound : string = "sine") : Pattern {
 // These re-parse the notation to create two independent patterns,
 // since lambdas aren't copyable.
 
-def every_fast(n : int; factor : double; notation : string) : Pattern {
+def every_fast(n : int; factor : int | float | double; notation : string) : Pattern {
     //! Apply `fast(factor)` to the pattern every `n`th cycle. Example:
     //! `every_fast(4, 2.0, "bd sd hh cp")` plays at double speed on cycles 4, 8, 12, ...
     let on <- s(notation) |> fast(factor)
@@ -560,7 +574,7 @@ def every_fast(n : int; factor : double; notation : string) : Pattern {
     return <- every(n, on, off)
 }
 
-def every_slow(n : int; factor : double; notation : string) : Pattern {
+def every_slow(n : int; factor : int | float | double; notation : string) : Pattern {
     //! Apply `slow(factor)` to the pattern every `n`th cycle. Example:
     //! `every_slow(4, 2.0, "bd sd hh cp")` plays at half speed on cycles 4, 8, 12, ...
     let on <- s(notation) |> slow(factor)
@@ -568,7 +582,7 @@ def every_slow(n : int; factor : double; notation : string) : Pattern {
     return <- every(n, on, off)
 }
 
-def every_degrade(n : int; prob : float; notation : string) : Pattern {
+def every_degrade(n : int; prob : int | float | double; notation : string) : Pattern {
     //! Randomly drop events from the pattern every `n`th cycle. Example:
     //! `every_degrade(4, 0.5, "bd sd hh cp")` drops ~half the events on cycles 4, 8, ...
     let on <- s(notation) |> degrade(prob)
