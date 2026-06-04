@@ -791,9 +791,7 @@ def read_json_field(jv : JsonValue const?; key : string; defv : auto(TT)) : TT {
     //! (pass the struct field's declared default). The value is converted by name via ``from_json_row``,
     //! so a struct field reads *its* fields by name too — never an overridable whole-struct ``from_JV``.
     //! *jv* is const so the fused loop's ``jsrc as _array`` elements (const) bind without a copy.
-    let sub = jv?[key]   // operator ?[] above: the value, or JVNull() for a missing key / non-object jv
-    if (!(sub.value is _null)) {
-        return from_json_row(sub, type<TT>)
-    }
+    let found = unsafe((unsafe(jv ?as _object))?[key])   // value-slot pointer; null if jv is null, not an object, or key absent
+    if (found != null) return from_json_row(*found, type<TT>)
     return defv
 }
