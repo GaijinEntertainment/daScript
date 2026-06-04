@@ -100,13 +100,13 @@ def cmd_set_volume(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Pause playback")]
-def cmd_pause(input : JsonValue?) : JsonValue? {
+def cmd_pause(_input : JsonValue?) : JsonValue? {
     strudel_set_pause(true)
     return JV("paused")
 }
 
 [live_command(description="Unpause playback")]
-def cmd_unpause(input : JsonValue?) : JsonValue? {
+def cmd_unpause(_input : JsonValue?) : JsonValue? {
     strudel_set_pause(false)
     return JV("unpaused")
 }

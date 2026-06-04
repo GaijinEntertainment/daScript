@@ -95,6 +95,58 @@ bass + lead pair from one scale — switch the scale root (``C4`` vs
 
 Same scale, two octaves, two different envelopes — instant counterpoint.
 
+Part F: ``degree_to_note`` — the primitive under ``scale``
+==========================================================
+
+``scale`` is built on ``degree_to_note(degree, root_midi, intervals)``,
+which converts a single scale degree to a MIDI note.  Degree 0 is the
+root, degree 7 wraps up an octave, and negative degrees wrap backwards.
+``get_scale_intervals_by_name`` returns the semitone table for a named
+scale, so you can resolve degrees by hand and feed the MIDI numbers
+straight into ``note()``:
+
+.. code-block:: das
+
+    let root = 60   // C4
+    let intervals <- get_scale_intervals_by_name("major")
+    for (deg in range(0, 8)) {
+        let midi = degree_to_note(deg, root, intervals)
+        print("  degree {deg} -> MIDI {int(midi)}\n")
+    }
+
+This is the same mapping ``n("0 2 4") |> scale("C4:major")`` performs
+internally — reaching for it directly is useful when you need the MIDI
+numbers themselves rather than a finished pattern.
+
+Part G: ``add`` — shift notes by semitones
+==========================================
+
+``add(pat, n)`` adds ``n`` semitones to every event's note — the
+chromatic-shift alias of ``transpose``.  ``run(8)`` produces a 0..7 ramp
+across the cycle, and ``add(48)`` lifts it into the audible C3..G3 range
+as a rising chromatic line:
+
+.. code-block:: das
+
+    let pat <- run(8) |> add(48.0) |> sound("sine") |> sustain(0.3)
+
+Part H: ``freq`` — pitch directly in Hz
+=======================================
+
+``note()`` derives the playback frequency from a MIDI number via
+``note_to_freq``.  ``freq()`` bypasses that path and sets an absolute
+frequency in Hz, so you can use tunings or raw frequency sweeps that
+have no MIDI name.  Here a sawtooth steps through 220 / 277 / 330 / 440
+Hz (an A-major-ish chord):
+
+.. code-block:: das
+
+    let pat <- (
+        s("sawtooth*4")
+        |> freq(note("220 277 330 440"))
+        |> lpf(2500.0) |> release(0.2) |> gain(0.5)
+    )
+
 .. seealso::
 
    Full source: :download:`tutorials/daStrudel/daStrudel_11_scales_music_theory.das <../../../../tutorials/daStrudel/daStrudel_11_scales_music_theory.das>`

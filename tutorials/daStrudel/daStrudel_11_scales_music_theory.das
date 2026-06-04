@@ -121,6 +121,67 @@ def example_two_octaves() {
     play(pat, 0.5lf, 5.0lf)
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 6 — degree_to_note: the primitive under scale()
+// ──────────────────────────────────────────────────────────────────────────
+//
+// scale() is built on degree_to_note(degree, root_midi, intervals), which
+// converts one scale degree to a MIDI note. Degree 0 = root, degree 7 wraps
+// up an octave, negative degrees wrap backwards. get_scale_intervals_by_name
+// returns the semitone table for a named scale, so you can resolve degrees
+// by hand and feed the MIDI numbers straight into note().
+
+def example_degree_to_note() {
+    print("\n=== Section 6: degree_to_note maps degrees to MIDI notes ===\n")
+    let root = 60   // C4
+    let intervals <- get_scale_intervals_by_name("major")
+    // Resolve a 0..7 run by hand and print the MIDI numbers.
+    for (deg in range(0, 8)) {
+        let midi = degree_to_note(deg, root, intervals)
+        print("  degree {deg} -> MIDI {int(midi)}\n")
+    }
+    // Play degrees 0,2,4,7 resolved through the same primitive.
+    let n0 = degree_to_note(0, root, intervals)
+    let n2 = degree_to_note(2, root, intervals)
+    let n4 = degree_to_note(4, root, intervals)
+    let n7 = degree_to_note(7, root, intervals)
+    let pat <- s("sine sine sine sine") |> note(note("{int(n0)} {int(n2)} {int(n4)} {int(n7)}")) |> decay(0.15) |> release(0.2)
+    play(pat, 0.5lf)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 7 — add: shift notes by semitones
+// ──────────────────────────────────────────────────────────────────────────
+//
+// add(pat, n) adds n semitones to every event's note — the chromatic-shift
+// alias of transpose. run(8) produces a 0..7 ramp across the cycle; add(48)
+// lifts it into the audible C3..G3 range as a rising chromatic line.
+
+def example_add() {
+    print("\n=== Section 7: add() shifts a degree ramp into the audible range ===\n")
+    let pat <- run(8) |> add(48.0) |> sound("sine") |> sustain(0.3)
+    play(pat, 0.5lf)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 8 — freq: pitch directly in Hz
+// ──────────────────────────────────────────────────────────────────────────
+//
+// note() derives the playback frequency from a MIDI number via note_to_freq.
+// freq() bypasses that path entirely and sets an absolute frequency in Hz, so
+// you can use tuning systems or raw frequency sweeps that have no MIDI name.
+// Here a sawtooth steps through 220 / 277 / 330 / 440 Hz (an A-major-ish chord).
+
+def example_freq() {
+    print("\n=== Section 8: freq() sets pitch directly in Hz ===\n")
+    let pat <- (
+        s("sawtooth*4")
+        |> freq(note("220 277 330 440"))
+        |> lpf(2500.0) |> release(0.2) |> gain(0.5)
+    )
+    play(pat, 0.5lf)
+}
+
 [export]
 def main() {
     print("DASTRUDEL-11: Scales & Music Theory\n")
@@ -129,5 +190,8 @@ def main() {
     example_modes()
     example_transpose()
     example_two_octaves()
+    example_degree_to_note()
+    example_add()
+    example_freq()
     print("\nDone.\n")
 }

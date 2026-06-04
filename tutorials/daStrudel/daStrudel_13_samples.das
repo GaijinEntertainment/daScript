@@ -121,6 +121,78 @@ def example_decode() {
     print("  duration:    {float(length(sample.data)) / float(sample.channels * sample.sample_rate):.3f} s\n")
 }
 
+def load_gong() {
+    // The audio/ folder holds gong.wav (index :0, sorted alphabetically).
+    strudel_load_sound("{MEDIA}/audio", "gong")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — begin() / end_pos(): play a slice of the sample
+// ──────────────────────────────────────────────────────────────────────────
+//
+// begin(x) and end_pos(x) take normalized positions in 0..1 and play only the
+// [begin, end) window of the sample. begin(0.5) skips the first half; end_pos
+// trims the tail. (The setter is end_pos, because `end` is a reserved word.)
+// Here the gong's bright attack is skipped to expose its softer middle decay.
+
+def example_begin_end() {
+    print("\n=== Section 5: begin()/end_pos() play a [begin, end) window ===\n")
+    let pat <- s("gong") |> begin(0.3) |> end_pos(0.8) |> gain(0.6)
+    play(pat, 4.0, 0.5lf) {
+        load_gong()
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 6 — Granulation: striate / chop / slice
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Three ways to cut a sample into n grains:
+//   - chop(n):     cuts each event in place into n back-to-back slices —
+//                  the slices stay inside that event's own time slot.
+//   - striate(n):  spreads n slices across the whole cycle — successive
+//                  events reveal progressively later parts of the sample.
+//   - slice(n, p): cuts into n slices and plays them in the order/rhythm of
+//                  index pattern p, so structure comes from p, sound from pat.
+
+def example_granulation() {
+    print("\n=== Section 6a: chop(8) — 8 grains inside one event ===\n")
+    let chopped <- s("gong") |> chop(8) |> gain(0.6)
+    play(chopped, 4.0, 0.5lf) {
+        load_gong()
+    }
+
+    print("\n=== Section 6b: striate(4) — slices spread across the cycle ===\n")
+    let striated <- s("bd sd hh cp") |> striate(4) |> gain(0.4)
+    play(striated, 4.0, 0.5lf) {
+        load_drum_bank()
+    }
+
+    print("\n=== Section 6c: slice(8, idx) — slices reshuffled by an index pattern ===\n")
+    let sliced <- s("gong") |> slice(8, note("0 2 4 6 1 3 5 7")) |> gain(0.6)
+    play(sliced, 4.0, 0.5lf) {
+        load_gong()
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 7 — Loading a whole sample directory
+// ──────────────────────────────────────────────────────────────────────────
+//
+// strudel_load_sample_dir(root) loads every audio file directly under root,
+// using each filename as the sound name. It is the quick way to bring in an
+// external pack (e.g. tidalcycles/dirt-samples). The built-in drums work with
+// no loading at all, so this is only needed for sounds beyond bd/sd/hh/cp.
+
+def example_load_dir() {
+    print("\n=== Section 7: strudel_load_sample_dir loads a whole folder ===\n")
+    let pat <- s("gong") |> gain(0.6)
+    play(pat, 3.0, 0.5lf) {
+        // Loads gong.wav (and any other files) under audio/ by filename.
+        strudel_load_sample_dir("{MEDIA}/audio")
+    }
+}
+
 [export]
 def main() {
     print("DASTRUDEL-13: Samples\n\n")
@@ -128,5 +200,8 @@ def main() {
     example_variations()
     example_speed_shift()
     example_decode()
+    example_begin_end()
+    example_granulation()
+    example_load_dir()
     print("\nDone!\n")
 }

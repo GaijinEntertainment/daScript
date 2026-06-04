@@ -87,10 +87,66 @@ Above, the C voice carries a slow phaser sweep while the G voice
 carries a fast one.  On a shared-bus system both voices would have to
 share the same rate.
 
-The per-voice setters available today: ``lpf``, ``hpf``, ``phaser`` /
-``ph``, ``tremolo`` / ``trem``, ``compressor``, ``shape``, ``crush``,
-``coarse``.  The shared-bus setters (``room``, ``delay``, ``chorus``)
-are covered in the next tutorial.
+The full split (the same table appears in tutorial 08):
+
+.. list-table:: Per-voice vs per-orbit FX
+   :header-rows: 1
+   :widths: 32 68
+
+   * - Scope
+     - Setters
+   * - Per-voice (independent per note)
+     - ``gain``, ``pan``, ``speed``, ``lpf``, ``hpf``, ``bpf``, ``phaser``,
+       ``tremolo``, ``compressor``, ``shape``, ``crush``, ``coarse``,
+       ``djf``, ``fm``, ``vowel``
+   * - Per-orbit (one shared bus per orbit)
+     - ``room`` / ``roomsize``, ``delay`` / ``delaytime`` /
+       ``delayfeedback``, ``chorus``
+
+Part E: probabilistic combinators — ``sometimes``, ``degradeBy``
+================================================================
+
+``sometimes(pat, fn)`` applies ``fn`` to a random ~50% of events;
+``degradeBy(prob)`` randomly **drops** events with the given probability.
+Both turn a rigid loop into something that breathes:
+
+.. code-block:: das
+
+    let pat <- sometimes(s("bd sd hh cp"), @(x) => fast(x, 2.0lf))
+    // and: s("hh*8") |> degradeBy(0.4)   // thin a hi-hat run
+
+Part F: cycle-conditional — ``every``, ``when_cycle``
+=====================================================
+
+``every(n, pat_on, pat_off)`` plays ``pat_on`` on cycles 0, n, 2n, ... and
+``pat_off`` otherwise. Note daslang's ``every`` takes two **patterns**, not
+a transform — build the variant explicitly:
+
+.. code-block:: das
+
+    let pat <- every(4, note("c4 e4 g4 c5", "sine") |> sustain(0.4) |> rev(),
+                        note("c4 e4 g4 c5", "sine") |> sustain(0.4))
+
+``when_cycle(pat, cond, fn)`` applies ``fn`` only on cycles where
+``cond(cycle)`` is true (``cond`` is a ``lambda<(cycle:int):bool>``):
+
+.. code-block:: das
+
+    let pat <- when_cycle(note("c4 e4 g4 c5", "sine") |> sustain(0.4),
+                          @(c) => c % 2 == 0, @(x) => fast(x, 2.0lf))
+
+Part G: reordering & gating — ``shuffle``, ``scramble``, ``mask``
+=================================================================
+
+``shuffle(n)`` cuts the cycle into ``n`` slices and plays them in a
+shuffled order (a permutation — each slice once); ``scramble(n)`` picks
+``n`` slices at random (repeats allowed). ``mask(pat, bool_pat)`` gates
+events through a ``1``/``~`` pattern:
+
+.. code-block:: das
+
+    note("c4 d4 e4 f4 g4 a4 b4 c5", "sine") |> sustain(0.4) |> shuffle(8)
+    note("c4 d4 e4 f4", "sine") |> sustain(0.4) |> mask(s("1 ~ 1 ~"))
 
 .. seealso::
 
