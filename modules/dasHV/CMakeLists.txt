@@ -103,6 +103,14 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 			"-DCMAKE_CXX_FLAGS=${_HV_ASAN_FLAG}"
 		)
 	ENDIF()
+	# daslang compiles its modules with the static CRT (/MT, /MTd); libhv's
+	# ExternalProject otherwise defaults to /MD and the resulting hv_static.lib
+	# fails to link into dasModuleHV on MSVC (LNK2038 RuntimeLibrary mismatch +
+	# unresolved __imp_* dynamic-CRT imports). BUILD_FOR_MT is libhv's own knob
+	# to switch its sub-build to /MT (Release) / /MTd (Debug) and match daslang.
+	IF(MSVC)
+		LIST(APPEND HV_CMAKE_FLAGS -DBUILD_FOR_MT=ON)
+	ENDIF()
 	ExternalProject_Add(
 		LIBHV
 		URL https://github.com/ithewei/libhv/archive/5da5fc22cdfd1b59ba2b0520abb34f95d050975c.tar.gz
