@@ -15,7 +15,6 @@ expect 50503   // join … into: post-`into` `orderby` over the (outer, g) pair 
 expect 50503   // join … into: `group` terminal after `into` (select the group instead — not yet)
 expect 50503   // join: a query-continuation `into` AFTER the terminal (single-source only; group-join `into` precedes it)
 expect 50503   // join: `where` inside the join clause (between join and equals)
-expect 50503   // join: two `where` clauses (one pre-join, one post-join)
 expect 50503   // join: range var collides with the reserved transparent-id name
 expect 50503   // multiple-from: three `from` clauses (N-ary SelectMany unsupported)
 expect 50503   // multiple-from: `from … from` combined with `join`
@@ -144,12 +143,6 @@ def trigger_join_into_post_terminal_continuation() {
 def trigger_join_where_inside_clause() {
     var cars <- one_car()
     let x <- %linq! from c in cars join b in cars where c.price > 0 on c.brand equals b.brand select c.name %%
-    unused(x)
-}
-
-def trigger_join_two_wheres() {
-    var cars <- one_car()
-    let x <- %linq! from c in cars where c.price > 0 join b in cars on c.brand equals b.brand where c.name == "a" select c.name %%
     unused(x)
 }
 

@@ -32,6 +32,17 @@ def test_xml_where_select(t : T?) {
 }
 
 [test]
+def test_xml_multiple_where(t : T?) {
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        // two `where`s prune the DOM walk: price>99 (car1 Ford, car2 Honda) AND brand Ford (car1).
+        let ids <- %linq! from c : Car in doc.document_element where c.price > 99.0 where c.brand == "Ford" select c.id %%
+        t |> equal(length(ids), 1, "both predicates apply over the XML rows")
+        t |> equal(ids[0], 1)
+    }
+}
+
+[test]
 def test_xml_identity_select(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)

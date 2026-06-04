@@ -187,31 +187,31 @@ Array-source patterns
      - ``plan_loop_or_count`` (predicate-driven ranges)
      - ``take_while`` exits on first non-match; ``skip_while`` toggles state.
    * - ``._order_by(K).first()`` / ``.first_or_default()``
-     - ``plan_order_family`` (streaming-min)
+     - ``plan_order_family`` (streaming-min) → ``emit_streaming_min``
      - Single ``var best`` + ``var seen``, no buffer; one comparison per element.
    * - ``._order_by(K).take(N).to_array()``
-     - ``plan_order_family`` (bounded-heap)
+     - ``plan_order_family`` (bounded-heap) → ``emit_bounded_heap``
      - ``spliced_push_heap`` fill + replace, ``spliced_pop_heap`` on replace, ``order_inplace`` at end. Buffer of size N.
    * - ``._distinct_by(K1)._order_by(K2).take(N).to_array()`` / ``._order_by(K2).distinct().take(N).to_array()`` (plain ``distinct()`` mirror order accepted)
-     - ``plan_order_family`` (bounded-heap + set-gate)
+     - ``plan_order_family`` (bounded-heap + set-gate) → ``emit_bounded_heap``
      - Theme 3 Phase 3 (audit C1/C5). The bounded-heap path gains a leading or middle ``distinct[_by]`` recognizer; per-element push/pop is gated by a set-insert on the distinct key (or whole element for plain ``distinct``). Single source pass, no full distinct materialization. Position of ``distinct`` in the chain (before vs after ``_order_by``) has no bearing on emission for the safe shapes — the set just gates the same heap update. **Bails** (cascades) on ``_order_by(K2).distinct_by(K1)`` because cascade semantics ("min-K2 per K1" — first K1 occurrence in sort order) cannot be honored by a source-walk set-gate, which would keep an arbitrary K1 representative; on ``distinct[_by]`` without ``take`` (would be silently dropped); and on ``take(N).distinct[_by]()`` (would dedup pre-take instead of post-take). Inline-able order key required (cascades otherwise). Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project ≤N heap survivors at return).
    * - ``._order_by(K).take(N)._select(F).to_array()`` / ``.first()._select(F)`` / ``.first_or_default()._select(F)``
-     - ``plan_order_family`` (terminal ``_select``)
+     - ``plan_order_family`` (terminal ``_select``) → ``emit_bounded_heap`` / ``emit_streaming_min``
      - Bounded-heap / streaming-min holds the raw element; projection ``F`` runs ≤K times at return. Closes the natural "take top-K then project" idiom.
    * - ``._order_by(K).to_array()`` / ``.order_by_descending(K).to_array()`` / ``.order(K).to_array()`` / ``.order_descending(K).to_array()``
-     - ``plan_order_family`` (full-sort fallback)
+     - ``plan_order_family`` (full-sort fallback) → ``emit_buffer_helper_dispatch``
      - Materializes + sorts. No bounded-heap shortcut.
    * - ``._order_by_keys((K1, K2, …), descMask).to_array()`` / ``._where(P)._order_by_keys((K1, K2), m).to_array()``
      - ``plan_order_family`` (multi-key composite stable sort)
      - Multi-key orderby with per-key direction (``descMask`` bit *i* → key *i* DESC; LSB = first key). With an inline-able tuple key + an upstream ``where`` (no ``take``/``first``/``distinct``), ``emit_fused_prefilter`` builds one composite if-chain comparator (``try_make_inline_cmp_keys``) and emits a **single** ``stable_sort(buf, cmp)`` on the fused buffer — C# ``OrderBy`` / ``ThenBy`` parity, stable on full ties. Bare ``order_by_keys`` (no ``where``) cascades to the eager ``order_by_keys`` op (also ``stable_sort``-backed). **Single-key ``_order_by`` is unchanged** — it keeps the unstable ``order_inplace`` / ``sort`` path (no regression). ``take`` / ``first`` over a multi-key chain cascade to the eager op (multi-key is gated out of the bounded-heap and streaming-min rows, whose min/max-by-first-key collapse is wrong for a composite key). Capped at 4 keys (eager ``less_masked`` ≤ 4-arity).
    * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count()`` / ``.to_array()``
-     - ``plan_distinct``
+     - ``plan_distinct`` → ``emit_hashtable_dedup``
      - Single-hash set lane; ``count`` reads ``length(set)``.
    * - ``._distinct()`` / ``._distinct_by(K)`` followed by ``.count(P)`` / ``.long_count(P)``
-     - ``plan_distinct`` (predicate counter)
+     - ``plan_distinct`` (predicate counter) → ``emit_hashtable_dedup``
      - Dedup table is built unconditionally so ``distinct_by`` semantics keep FIRST occurrence per key; a separate ``var acc`` increments only when ``P`` matches that first occurrence. Mirrors tier-2 ``distinct.count(P)`` semantics (distinct-then-filter, not filter-then-distinct).
    * - ``._distinct[_by](K1)._order_by[_descending](K2).to_array()`` / ``._where(P)._distinct[_by](K1)._order_by(K2).to_array()``
-     - ``plan_order_family`` (fused-loop + set-gate)
+     - ``plan_order_family`` (fused-loop + set-gate) → ``emit_fused_prefilter``
      - Theme 8 (audit 3b). The where_+order fused-loop path generalizes: when upstream ``distinct[_by]`` is present, declare ``var order_dset : table<...>`` and wrap the per-element ``push_clone`` with a set-gated ``if (!key_exists(...))`` block. Single source pass + in-place sort, no ``distinct_by_to_array`` intermediate iterator setup. Composes with ``where_`` (filter before distinct gate) and terminal ``_select`` (project at return). **Bails** (cascades) on ``distinct[_by] + order_by + first[_or_default]`` (streaming-min path has no dset hook) and on chains where ``take(N)`` is present (use the bounded-heap path via Theme 3 Phase 3 instead).
    * - ``._group_by(K)._select(reduce).to_array()``
      - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core`` → ``reducer_emitters`` lookup)
@@ -226,17 +226,20 @@ Array-source patterns
      - pattern ``group_by_array`` (sub-codegen ``plan_group_by_core``, trailing ``order_by`` as ORDER BY)
      - Theme 3 Phase 2 (audit C2). Inline-cmp ``sort(buf, ...)`` after the bucket-fill mutates the same output buffer in place — vs the tier-2 cascade's separate ``order_by_inplace`` over a fresh allocation. v1: ``_order_by(K2)`` / ``_order_by_descending(K2)`` with inline-able key only; non-inline keys (side-effects, multi-stmt body) cascade. Composes with HAVING / ``_having(P)``.
    * - ``.reverse().take(N)[._select(F)].to_array()`` (with no pre-reverse ``where`` / ``select``)
-     - ``plan_reverse`` R6 (backward-index walk)
+     - ``plan_reverse`` R6 (backward-index walk) → ``emit_reverse_backward_index_walk``
      - Single loop ``for k in 0..K`` indexes ``arr[len-1-k]`` and K push_clones into a srcElem-typed scratch buffer. When ``_select(F)`` is captured, ``build_terminal_select_tail`` then performs a post-loop projection pass into a separate projElem-typed output buffer (K projection push_clones). Two-buffer/two-pass mirrors the decs sibling ``emit_decs_reverse_skip_into_tail`` (PR #2915) and the R1-R4 catch-all: all source reads complete before any projection-side-effect runs, so impure ``_select`` behaves identically across the three paths. Skips the catch-all's full-source ``push_clone`` walk (N → K raws) + ``reverse_inplace`` + ``resize``. Fast path bails (cascades to R1-R4) when termsel's call-result element type is unresolved at macro stage.
    * - ``[._where(P)][._select(f)].reverse().take(N)._select(F).to_array()`` / ``.reverse()._select(F).first()``
-     - ``plan_reverse`` R1-R4 (terminal ``_select`` on catch-all) / Rb (walk-and-overwrite scalar)
+     - ``plan_reverse`` R1-R4 (terminal ``_select`` on catch-all) → ``emit_reverse_buffer_inplace`` / Rb (walk-and-overwrite scalar) → ``emit_reverse_walk_overwrite_scalar``
      - Catch-all path for chains with pre-reverse ``_where`` / ``_select`` (R6 doesn't accept those slots, cascades here). Projection runs ≤K times at return on the R1-R4 buffer or on the surviving ``last`` value. NOT accepted: ``reverse._select.take`` — user must reorder to ``reverse.take._select``.
    * - ``each(arr).reverse()._distinct[_by](K).to_array()`` (array source)
-     - ``plan_reverse`` R-2a (backward index walk + set-gate)
+     - ``plan_reverse`` R-2a (backward index walk + set-gate) → ``emit_reverse_backward_walk_dset_gate``
      - Theme 8 (audit 2a). Array source only (``array_source`` predicate). Walks source backward via index (``arr[len-1-k]``), maintains ``var rev_dset : table<...>`` and gates push by set-insert on the dedup key (or whole element for plain ``distinct``). LAST-per-key semantics preserved: backward walk picks first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 ``reverse.distinct_by``. Saves cascade's ``reverse_to_array`` allocation AND second ``distinct_by_inplace`` pass. v1 implicit ``to_array`` only; pre-reverse ``_where`` / ``_select`` / ``take`` bail to cascade. Non-array (forward) sources take R-2b below.
    * - ``src.reverse()._distinct[_by](K).to_array()`` (XML / decs / iterator source)
-     - ``plan_reverse`` R-2b (forward keep-last table-overwrite)
+     - ``plan_reverse`` R-2b (forward keep-last table-overwrite) → ``emit_reverse_distinct_forward_keeplast``
      - The exact complement of R-2a (``non_array_source`` predicate): forward-only sources have no random index for the backward walk. One forward pass OVERWRITES ``var rdb_tab : table<key; (seq, val)>`` per element (so the slot ends at the last forward occurrence + its monotonic seq), then sorts survivors by **descending seq** and emits — output-identical to R-2a (descending forward-index of each last occurrence). Source-generic via ``emit_terminator_lane`` + ``wrap_source_loop``: an XML source **defers** (``val`` is the ``xml_node`` handle; ``build_xml_row`` runs only for the K survivors, field-pruned to the key), while decs / iterator store the full element and still win single-pass over the cascade's reverse-buffer + second walk. Closes the decs ``m4`` cell for this shape (D6).
+   * - ``[._where(P)][._select(F)].reverse().count()``
+     - ``plan_reverse`` Ra (counter) → ``emit_reverse_counter``
+     - Reverse is identity for a count, so one forward pass increments a counter — no buffer, no reverse. The projection still fires per match (side-effect parity). Works on iterator and array sources (for-loop body, no indexed access).
 
 Decs-source patterns
 ====================
