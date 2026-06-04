@@ -6,7 +6,7 @@ options _comment_hygiene = true
 
 module linq_fold_json shared public
 
-//! linq_fold JSON source adapter: ``JsonAdapter`` + ``extract_json_source``. Lets ``_fold`` over a
+//! linq_fold JSON source adapter: ``JsonAdapter`` + ``JsonJoinAdapter`` + ``extract_json_source``. Lets ``_fold`` over a
 //! ``from_json(jv, type<Row>)`` chain emit an inlined ``for (e in jv.value as _array)`` walk that reads
 //! only the fields the chain touches (via ``read_json_field``), instead of materializing every element
 //! with ``from_JV``. In-tree companion to ``daslib/linq_fold`` (required unconditionally — the adapter is
@@ -135,6 +135,38 @@ def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bi
     return hoist_prelude(prelude, loop, at)
 }
 
+// 2-source invoke binding the JSON value (param 1, named `srcName` so the array walk in bodyStmts reads it)
+// + the in-memory srcB array (param 2). Shared by JsonAdapter.emit_join_hook (standalone) and
+// JsonJoinAdapter.wrap_invoke (group_by-after-join); const-forced source so a `let` JsonValue? binds.
+[macro_function]
+def private build_json_join_invoke(var jsonExpr : Expression?; srcName : string; var bodyStmts : array<Expression?>;
+                                   srcBName : string; srcBType : TypeDeclPtr; var srcBExpr : Expression?;
+                                   retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+    var jsonType = strip_const_ref(clone_type(jsonExpr._type))
+    jsonType.flags.constant = true
+    var jsonClone = clone_expression(jsonExpr)
+    jsonClone.genFlags.alwaysSafe = true
+    var srcbClone = clone_expression(srcBExpr)
+    srcbClone.genFlags.alwaysSafe = true
+    let sn = srcName
+    var emission : Expression?
+    if (retType != null) {
+        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBType)) : $t(retType) {
+            $b(bodyStmts)
+        }, $e(jsonClone), $e(srcbClone)))
+    } else {
+        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBType)) {
+            $b(bodyStmts)
+        }, $e(jsonClone), $e(srcbClone)))
+    }
+    emission = finalize_invoke(emission, at)
+    if (wrapIter) {
+        emission = qmacro($e(emission).to_sequence_move())
+        emission.force_generated(true)
+    }
+    return emission
+}
+
 // Single flat for-loop over the JSON array, like ArrayAdapter (unlike decs's 2-level archetype walk or
 // XML's DOM child-element while-walk). No name variants — the source IS the array.
 class JsonAdapter : SourceAdapter {
@@ -150,8 +182,109 @@ class JsonAdapter : SourceAdapter {
     def override const can_group_by() : bool {
         return true
     }
+    def override const can_join() : bool {
+        return true
+    }
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+        // JSON standalone join: hashed equi-join collecting srcB into a table, then probing from the
+        // field-pruned array walk (mirrors emit_array_join, but srcA is the JSON value, not an array param).
+        // group join over a JSON source isn't spliced yet — defer to tier-2 (the array adapter handles it).
+        if (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join") return null
+        var joinCall = c.single["join"]
+        if (!srcb_is_array_shaped(c, "join")) return null
+        var whereLam : Expression?
+        if (c.single |> key_exists("trailing_where")) {
+            whereLam = c.single["trailing_where"] != null ? c.single["trailing_where"].arguments[1] : null
+            if (whereLam == null) return null
+        }
+        var selectLam : Expression?
+        if (c.single |> key_exists("trailing_select")) {
+            var selCall = c.single["trailing_select"]
+            if (selCall == null || selCall._type == null || selCall._type.firstType == null) return null
+            selectLam = selCall.arguments[1]
+            if (selectLam == null) return null
+        }
+        var leadWhereLam = extract_join_lead_where(c)
+        if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
+        let countOnly = c.single |> key_exists("term")
+        // Iterator-typed result (no count terminator): the fused single-pass build is the measured winner over
+        // a streaming generator — materialize the field-pruned result array, then wrap as a sequence to honor
+        // the iterator contract.
+        let wrapIter = !countOnly && ctx.expr_is_iterator
+        var srcbSrc = joinCall.arguments[1]
+        if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
+        var keyaLam = joinCall.arguments[2]
+        var keybLam = joinCall.arguments[3]
+        if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
+        let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+        if (!is_primitive_join_key_type(keyType)) return null
+        let tupAName = bind_name(at)   // = "it"; keya/result peel to read it.<f> so the materializer prunes
+        let srcBName = qn("jjoin_srcB", at)
+        let tupBName = qn("jjoin_tup_b", at)
+        let hashName = qn("jjoin_hash", at)
+        var keyaBody = peel_lambda_rename_var(keyaLam, tupAName)
+        var keybBody = peel_lambda_rename_var(keybLam, tupBName)
+        if (keyaBody == null || keybBody == null) return null
+        let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
+        var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "jjoin", at)
+        if (pieces == null) return null
+        var allStmts : array<Expression?>
+        allStmts |> push_from(pieces.preludeStmts)
+        allStmts |> push <| qmacro_expr() {
+            var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+        }
+        allStmts |> push <| qmacro_expr() {
+            for ($i(tupBName) in $i(srcBName)) {
+                // nolint:PERF006 per-key bucket size unknown ahead of time
+                $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
+            }
+        }
+        allStmts |> push(wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at))
+        allStmts |> push(pieces.returnStmt)
+        return build_json_join_invoke(jsonExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, wrapIter, at)
+    }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
-        // join |> group_by over JSON isn't spliced yet (can_join is false) — group_by alone clones self.
+        if (c.single |> key_exists("upstream_join")) {
+            // join |> group_by over JSON: srcA = the JSON value (array-walked), srcB = join's second arg.
+            // plan_group_by_core drives the bucket-fill through JsonJoinAdapter.wrap_source_loop (pruning free).
+            var joinCall = c.single["upstream_join"]
+            var srcbSrc = joinCall.arguments[1]
+            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null
+                    || !(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) {
+                return null
+            }
+            var keyaLam = joinCall.arguments[2]
+            var keybLam = joinCall.arguments[3]
+            var resultLam = joinCall.arguments[4]
+            if (keyaLam == null || keybLam == null || resultLam == null
+                    || keyaLam._type == null || resultLam._type == null
+                    || resultLam._type.firstType == null) {
+                return null
+            }
+            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+            if (!is_primitive_join_key_type(keyType)) {
+                return null
+            }
+            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            var tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
+            var srcbClone = clone_expression(srcbSrc)
+            srcbClone.genFlags.alwaysSafe = true
+            return new JsonJoinAdapter(shape = JsonJoinShape(
+                jsonExpr = clone_expression(jsonExpr),
+                srcName = qn("jsrc", at),
+                elemType = clone_type(elemType),
+                srcBExpr = srcbClone,
+                srcBName = qn("jjoin_srcB", at),
+                srcBType = invoke_src_param_type(srcbSrc),
+                keyaLam = keyaLam,
+                keybLam = keybLam,
+                resultLam = resultLam,
+                keyType = keyType,
+                tupBType = tupBType,
+                resultType = resultType,
+                resBindName = qn("jjoin_jres", at)))
+        }
+        // join |> group_by deferred to tier-2 unless it hit the upstream-join arm; plain group_by clones self.
         return new JsonAdapter(jsonExpr = clone_expression(jsonExpr), srcName = qn("jsrc", at),
                                elemType = clone_type(elemType))
     }
@@ -219,6 +352,60 @@ class JsonAdapter : SourceAdapter {
         return qmacro_expr() {
             $i(outBind) <- from_JV($e(handleExpr), type<$t(declT)>)
         }
+    }
+}
+
+// JSON analog of XmlJoinShape — srcA = JSON value (array-walked), srcB = in-memory array.
+struct JsonJoinShape {
+    jsonExpr : Expression?
+    srcName  : string
+    elemType : TypeDeclPtr
+    srcBExpr : Expression?
+    srcBName : string
+    srcBType : TypeDeclPtr
+    keyaLam, keybLam, resultLam : Expression?
+    keyType, tupBType, resultType : TypeDeclPtr
+    resBindName : string
+}
+
+// group_by-after-join over JSON — returned from JsonAdapter.build_group_by_adapter on the upstream-join arm.
+// plan_group_by_core drives the bucket-fill through wrap_source_loop (collect srcB into a hash, probe from
+// the field-pruned array walk). Mirrors XmlJoinAdapter.
+class JsonJoinAdapter : SourceAdapter {
+    shape : JsonJoinShape
+    def override name_prefix() : string {
+        return "jjoin_"
+    }
+    def override supports_direct_return() : bool {
+        return true   // collect for{} + probe array for-walk, both single-level inside the invoke
+    }
+    def override bind_name(at : LineInfo) : string {
+        return shape.resBindName
+    }
+    def override element_type() : TypeDeclPtr {
+        return clone_type(shape.resultType)
+    }
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
+        let jhashName = qn("jjoin_jhash", at)
+        let arrName   = qn("jjoin_jarr", at)
+        let tupBName  = qn("jjoin_jtb", at)
+        let tupAName  = qn("it", at)   // srcA row bind; keya/result peel to read it.<f> so the materializer prunes
+        var pieces = build_join_adapter_pieces(shape.keyaLam, shape.keybLam, shape.resultLam, tupAName, tupBName, jhashName, arrName, shape.resBindName, shape.tupBType, shape.resultType, body, at)
+        if (pieces == null) return null
+        var probeWalk = build_pruned_array_walk(shape.srcName, shape.elemType, tupAName, pieces.probeOuter, null, at)
+        let keyType = shape.keyType
+        let tupBType = shape.tupBType
+        let srcBName = shape.srcBName
+        return <- qmacro_block() {
+            var $i(jhashName) : table<$t(keyType); array<$t(tupBType)>>
+            for ($i(tupBName) in $i(srcBName)) {
+                $e(pieces.collectInner)
+            }
+            $e(probeWalk)
+        }
+    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+        return build_json_join_invoke(shape.jsonExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
     }
 }
 
