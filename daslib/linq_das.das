@@ -214,7 +214,7 @@ def private read_ident(q : string; from : int) : tuple<string; int> {
         while (i < n && is_ident_byte(int(arr[i]))) { i++ }
         e = i
     }
-    if (s < 0 || e <= s) { return ("", -1) }
+    if (s < 0 || e <= s) return ("", -1)
     return (slice(q, s, e), e)
 }
 
@@ -224,12 +224,12 @@ def private strip_trailing_keyword(text : string; kw : string) : tuple<string; b
     let p = strip(text)
     let m = length(kw)
     let n = length(p)
-    if (n <= m || !ends_with(p, kw)) { return (p, false) }
+    if (n <= m || !ends_with(p, kw)) return (p, false)
     var wsBefore = false
     peek_data(p) $(arr) {
         wsBefore = is_white_space(int(arr[n - m - 1]))
     }
-    if (wsBefore) { return (strip(slice(p, 0, n - m)), true) }
+    if (wsBefore) return (strip(slice(p, 0, n - m)), true)
     return (p, false)
 }
 
@@ -240,8 +240,8 @@ def private strip_trailing_keyword(text : string; kw : string) : tuple<string; b
 // cross_join overload is selected). array (untyped) → each(...) / bare; decs (keyword marker) →
 // from_decs_template; any other typed value source → from_in (dispatches by the source value's type).
 def private build_src(rowType : string; srcText : string; fused : bool) : string {
-    if (rowType == "") { return fused ? "each({srcText})" : "({srcText})" }
-    if (srcText == "decs") { return "from_decs_template(type<{rowType}>)" }
+    if (rowType == "") return fused ? "each({srcText})" : "({srcText})"
+    if (srcText == "decs") return "from_decs_template(type<{rowType}>)"
     return "from_in({srcText}, type<{rowType}>)"
 }
 
@@ -804,7 +804,7 @@ def private next_clause_kw(q : string; from : int) : int {
     return best
 }
 
-// Extract C# `let` bindings (Approach A — textual inlining). `let n = <expr>` introduces a computed range
+// Extract `let` bindings (Approach A — textual inlining). `let n = <expr>` introduces a computed range
 // variable; every downstream reference is replaced with `(<expr>)`, yielding a `let`-free query the rest of
 // the reader handles unchanged — in every context (single / join / second-`from`), and inlined computed
 // columns/keys push down to SQL. Chained lets resolve in order (a later RHS inlines the earlier bindings).
@@ -873,7 +873,7 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
         cuts |> push((lp, rhsEnd, name))
         searchFrom = rhsEnd
     }
-    if (empty(subs)) { return (true, q) }
+    if (empty(subs)) return (true, q)
     // Rebuild: source region (< srcEnd) verbatim; each `let` span dropped (replaced by a space); each clause
     // segment inlined with only the bindings introduced BEFORE it, so a reference preceding a binding stays.
     let body = build_string() $(var w) {
@@ -1161,7 +1161,7 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     // `let` bindings are inlined away first, so the rest of the reader sees a `let`-free query in every
     // context (the substitution rewrites the whole body, including a join/second-`from` tail).
     let lets = extract_lets(q, srcStart, varName, prog, at)
-    if (!lets._0) { return "(0)" }
+    if (!lets._0) return "(0)"
     q = lets._1
     let nq = length(q)
     // A `join` or a second `from` introduces a second range variable — each has its own grammar and emit
@@ -1172,12 +1172,10 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
         macro_error(prog, at, "linq: combining 'join' with a second 'from' (SelectMany) in one query is not yet supported")
         return "(0)"
     }
-    if (secondFromPos >= 0) {
+    if (secondFromPos >= 0)
         return transpile_cross(q, nq, varName, rowType, srcStart, secondFromPos, prog, at)
-    }
-    if (joinPos >= 0) {
+    if (joinPos >= 0)
         return transpile_join(q, nq, varName, rowType, srcStart, joinPos, prog, at)
-    }
     let srcEnd = next_clause_kw(q, srcStart)
     let srcText = strip(slice(q, srcStart, srcEnd))
     if (srcText == "") {
@@ -1194,12 +1192,12 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
     var pstart = srcEnd
     while (true) {
         var stage <- QueryStage()
-        if (!parse_one_stage(q, nq, pstart, curVar, curIsGroup, prog, at, stage)) { return "(0)" }
+        if (!parse_one_stage(q, nq, pstart, curVar, curIsGroup, prog, at, stage)) return "(0)"
         let contVar = stage.intoVar
         let contStart = stage.nextStart
         let contIsGroup = stage.isGroup
         stages |> emplace(stage)
-        if (contVar == "") { break }
+        if (contVar == "") break
         curVar = contVar
         curIsGroup = contIsGroup
         pstart = contStart
@@ -1248,14 +1246,12 @@ class FromInMacro : AstCallMacro {
         }
         // SQL: db is a sqlite_boost::SqlRunner → select_from(db, type<Row>)
         if (srcT.structType != null && srcT.structType.name == "SqlRunner"
-                && srcT.structType._module != null && srcT.structType._module.name == "sqlite_boost") {
+                && srcT.structType._module != null && srcT.structType._module.name == "sqlite_boost")
             return qmacro($c("select_from")($e(call.arguments[0]), $e(call.arguments[1])))
-        }
         // XML: node is a pugixml `xml_node` (handled type) → unsafe(from_xml_node(node, type<Row>)).
         // from_xml_node is [unsafe_outside_of_for]; the unsafe wrap is required in a `_fold` chain.
-        if (srcT.isHandle && srcT.annotation != null && srcT.annotation.name == "xml_node") {
+        if (srcT.isHandle && srcT.annotation != null && srcT.annotation.name == "xml_node")
             return qmacro(unsafe($c("from_xml_node")($e(call.arguments[0]), $e(call.arguments[1]))))
-        }
         macro_error(prog, call.at, "linq: unsupported source for `from c : Row in <src>` — expected a SQL runner or an XML node (use `in decs` for decs, or an array for the untyped `from c in <arr>` form)")
         return call
     }

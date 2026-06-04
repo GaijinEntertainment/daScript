@@ -2207,11 +2207,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         var sc = ctx.src->count_shortcut(lastName, at)   // source owns its O(1) applicability; null → walk
         if (sc != null) return sc
     }
-    if (lane == LinqLane.ACCUMULATOR && !counting) {     // value reducers only; long_count rides the counter lane
+    if (lane == LinqLane.ACCUMULATOR && !counting)     // value reducers only; long_count rides the counter lane
         return emit_accumulator_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
-    }
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = c.single["term"]
         let isAnyNoPred = lastName == "any" && length(terminatorCall.arguments) == 1
@@ -2450,7 +2449,7 @@ def make_inline_less_call(orderKey : Expression?; orderName : string;
 
 [macro_function]
 def private renamed_key_clone(body : Expression?; argName, newName : string) : Expression? {
-    // Clone a key-element body and rename its single block param (the C# range var) to v1 / v2.
+    // Clone a key-element body and rename its single block param (the query's range var) to v1 / v2.
     return clone_and_rename_var(body, argName, newName)
 }
 
@@ -2855,9 +2854,8 @@ def private build_surrogate_type(keyType : TypeDeclPtr; handleType : TypeDeclPtr
 // comparator over surrogate keys (._0); flipped for descending. Reused across heap push/pop + order_inplace.
 [macro_function, unused_argument(at)]
 def private build_surrogate_cmp(descending : bool; at : LineInfo) : Expression? {
-    if (descending) {
+    if (descending)
         return qmacro($(v1, v2) { return _::less(v2._0, v1._0) })
-    }
     return qmacro($(v1, v2) { return _::less(v1._0, v2._0) })
 }
 
@@ -4494,9 +4492,8 @@ def emit_reducer_branches(spec : ReducerSpec; at : LineInfo; entryName, itName :
                           var adapter : SourceAdapter? = null) : tuple<Expression?; Expression?> {
     // (missInit, hitUpdate); hitUpdate null for first* (subsequent same-key elements ignored).
     // Whole-element `first` over a deferring source materializes from the handle in the miss-branch.
-    if (spec.name == "first" && adapter != null && adapter->handle_type() != null) {
+    if (spec.name == "first" && adapter != null && adapter->handle_type() != null)
         return mk_reducer_first_deferred(spec, at, entryName, itName, adapter)
-    }
     let emitter = reducer_emitters?[spec.name] ?? default<ReducerEmitterFn>
     return (null, null) if (emitter == null)
     return invoke(emitter, spec, at, entryName, itName)

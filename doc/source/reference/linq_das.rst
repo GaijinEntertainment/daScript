@@ -111,13 +111,13 @@ Range variable
 
 The range variable is spliced **verbatim** as the lambda parameter — the
 predicate becomes ``_where($(c) => …)`` and the projection ``_select($(c) =>
-…)``, keeping the C# variable name; the predicate and projection text is passed
+…)``, keeping the range-variable name; the predicate and projection text is passed
 through unchanged. Any identifier name works.
 
 The ``_fold`` operator DSL accepts a named-variable ``$(x) => …`` block
 directly. For the SQL source, ``_sql`` resolves a single source against the
 placeholder ``_``; the macro normalizes the single-source lambda parameter to
-``_`` internally, so the C# variable name is still spliced verbatim at the
+``_`` internally, so the range-variable name is still spliced verbatim at the
 surface.
 
 .. _linq_das_filtering:
@@ -125,8 +125,8 @@ surface.
 Filtering (``where``)
 ---------------------
 
-A ``where`` clause is optional and **repeatable** — C# allows several, and each
-emits its own ``_where`` filter, AND-folded in source order:
+A ``where`` clause is optional and **repeatable** (as in C#) — each emits its
+own ``_where`` filter, AND-folded in source order:
 
 .. code-block:: das
 
@@ -147,7 +147,7 @@ sort.
 Let bindings
 ------------
 
-``let <name> = <expr>`` introduces a computed value (a new range variable in C#)
+``let <name> = <expr>`` introduces a computed value (what C# calls a new range variable)
 that is reused in the clauses that follow it:
 
 .. code-block:: das
