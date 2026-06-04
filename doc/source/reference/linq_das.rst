@@ -132,7 +132,7 @@ emits its own ``_where`` filter, AND-folded in source order:
 
     // two predicates — both apply
     var names <- %linq! from c in cars where c.price > 100 where c.brand == "eco" select c.name %%
-    // ≡ _fold( each(cars) |> _where($(c) => c.price > 100) |> _where($(c) => c.brand == "eco") |> _select($(c) => c.name) |> to_array() )
+    // expands to: _fold( each(cars) |> _where($(c) => c.price > 100) |> _where($(c) => c.brand == "eco") |> _select($(c) => c.name) |> to_array() )
 
 Over a **SQL** source the predicates push down as one ANDed ``WHERE`` (a single
 statement, no intermediate materialize). On a two-source query (``join`` / second
