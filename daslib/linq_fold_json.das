@@ -9,8 +9,9 @@ module linq_fold_json shared public
 //! linq_fold JSON source adapter: ``JsonAdapter`` + ``extract_json_source``. Lets ``_fold`` over a
 //! ``from_json(jv, type<Row>)`` chain emit an inlined ``for (e in jv.value as _array)`` walk that reads
 //! only the fields the chain touches (via ``read_json_field``), instead of materializing every element
-//! with ``from_JV``. In-tree companion to ``daslib/linq_fold`` (required unconditionally — JSON is always
-//! present). Emits ``from_json`` / ``from_JV`` / ``read_json_field`` BY NAME (resolved at the user's
+//! with ``from_JV``. In-tree companion to ``daslib/linq_fold`` (required unconditionally — the adapter is
+//! always compiled in, unlike XML's pugixml gate; the matcher just returns null in a JSON-less program).
+//! Emits ``from_json`` / ``from_JV`` / ``read_json_field`` BY NAME (resolved at the user's
 //! splice site, like linq_fold_decs emits ``for_each_archetype``), so this module pulls in no json
 //! dependency. See daslib/linq_fold.md.
 
@@ -197,9 +198,8 @@ class JsonAdapter : SourceAdapter {
         return emission
     }
     // Deferred materialization: a buffered reducer (order/take, distinct) holds `(orderKey, JsonValue?)`
-    // surrogates and runs from_JV only for the K survivors — from_json otherwise materializes all N. The
-    // handle is the per-element array element `jcur`; from_JV's one-call full-row build makes the survivor
-    // materialize trivial (no per-attribute walk like XML's build_xml_row).
+    // surrogates and runs from_JV only for the K survivors. The handle is the per-element `jcur`; from_JV's
+    // one-call full-row build makes the survivor materialize a single call (no XML-style per-attribute walk).
     def override const defers_materialization() : bool {
         return true
     }
@@ -231,5 +231,13 @@ def extract_json_source(var top : Expression?) : ExprCall? {
     var c = top as ExprCall
     if (get_call_short_name(c) != "from_json" || c._type == null || !c._type.isIterator
             || c._type.firstType == null || length(c.arguments) != 2) return null
+    // Confirm arg0 is a json::JsonValue? pointer. Name-only match would spuriously fire on an unrelated user
+    // `from_json` (this adapter is required unconditionally) and emit unresolved from_JV. No json dep — string-matched.
+    let srcT = c.arguments[0]._type
+    if (srcT == null || !srcT.isPointer || srcT.firstType == null || srcT.firstType.structType == null
+            || srcT.firstType.structType.name != "JsonValue"
+            || srcT.firstType.structType._module == null || srcT.firstType.structType._module.name != "json") {
+        return null
+    }
     return c
 }

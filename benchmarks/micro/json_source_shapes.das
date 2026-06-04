@@ -53,20 +53,6 @@ def fixture_json(n : int) : JsonValue? {
     return JV(arr)
 }
 
-// Candidate runtime builder — the from_json generator the macro's unfused source would call.
-// Mirrors from_xml_node: lazily walks the array, materializing each element via from_JV.
-[unsafe_outside_of_for]
-def from_json(jv : JsonValue?; t : type<auto(TT)>) : iterator<TT -const> {
-    return <- generator<TT -const> {
-        if (jv != null && jv.value is _array) {
-            for (elem in jv.value as _array) {
-                yield from_JV(elem, type<TT>)
-            }
-        }
-        return false
-    }
-}
-
 // A — field-pruned fused (the JsonAdapter target): read price + name only.
 def shape_A(jv : JsonValue?) : array<string> {
     var result : array<string>
@@ -149,6 +135,6 @@ def probe_B_fullrow_fused(b : B?) {
 }
 
 [benchmark]
-def probe_C_generator_unfused(b : B?) {
+def probe_C_fold_adapter(b : B?) {
     run_C(b)
 }

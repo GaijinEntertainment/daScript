@@ -52,16 +52,27 @@ def parity_where_select(t : T?) {
 
 [test]
 def parity_whole_row(t : T?) {
-    // identity select -> whole row escapes -> allUsed full from_JV build
+    // whole-row escape: `to_array()` with no `_select` yields `array<Car>`, so the entire row escapes ->
+    // allUsed -> the adapter emits a full `from_JV(it, type<Car>)` build per survivor (not the field-pruned path).
     let jv = fixture_json()
     let arr <- fixture_array()
-    let j <- _fold(unsafe(from_json(jv, type<Car>))._where(_.brand == "Ford")._select(_.id).to_array())
-    let a <- _fold(each(arr)._where(_.brand == "Ford")._select(_.id).to_array())
-    t |> equal(j, a)
-    // read multiple fields off the survivor row (whole-row materialize then project a derived value)
-    let jd <- _fold(unsafe(from_json(jv, type<Car>))._where(_.qty > 3)._select("{_.brand}:{_.id}").to_array())
-    let ad <- _fold(each(arr)._where(_.qty > 3)._select("{_.brand}:{_.id}").to_array())
-    t |> equal(jd, ad)
+    let j <- _fold(unsafe(from_json(jv, type<Car>))._where(_.brand == "Ford").to_array())
+    let a <- _fold(each(arr)._where(_.brand == "Ford").to_array())
+    t |> equal(length(j), length(a))
+    for (cj, ca in j, a) {
+        t |> equal(cj.id, ca.id)
+        t |> equal(cj.price, ca.price)
+        t |> equal(cj.qty, ca.qty)
+        t |> equal(cj.brand, ca.brand)
+    }
+    // second whole-row escape under a numeric filter, materializing a different (non-Ford) survivor set
+    let jp <- _fold(unsafe(from_json(jv, type<Car>))._where(_.price > 199.0).to_array())
+    let ap <- _fold(each(arr)._where(_.price > 199.0).to_array())
+    t |> equal(length(jp), length(ap))
+    for (cj, ca in jp, ap) {
+        t |> equal(cj.id, ca.id)
+        t |> equal(cj.brand, ca.brand)
+    }
 }
 
 [test]
