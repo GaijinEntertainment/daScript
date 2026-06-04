@@ -1,0 +1,1 @@
+Iterates over the function annotations (including tag/function macros) registered in the given module, invoking the provided block with each annotation name. Handle and structure annotations are not included.

@@ -21,7 +21,6 @@ options gen2
 expect 31209:4
 
 require daslib/style_lint
-require strings
 
 // --- Bad patterns ---
 

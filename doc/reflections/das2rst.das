@@ -9,10 +9,10 @@ require uriparser
 require strings
 require jobque
 require daslib/ast_boost
-require daslib/rst_comment
 require daslib/strings_boost
 require daslib/strings_convert
 require daslib/rst
+require daslib/rst_comment
 require daslib/functional
 require daslib/json
 require daslib/json_boost
@@ -353,7 +353,7 @@ def document_module_ast(_root : string) {
         group_by_regex("Removal", mod, %regex~(remove.*)%%),
         group_by_regex("Properties", mod, %regex~(is|has|get|can)_.*%%),
         group_by_regex("Infer", mod, %regex~(infer_generic_type|update_alias_map)$%%),
-        group_by_regex("Module queries", mod, %regex~(module_find_annotation|module_find_type_annotation|module_find_structure|not_inferred)$%%),
+        group_by_regex("Module queries", mod, %regex~(module_find_annotation|module_find_type_annotation|module_find_structure|module_has_comment_reader|not_inferred)$%%),
         group_by_regex("Debug info helpers", mod, %regex~(debug_helper_.*)%%),
         group_by_regex("AOT support", mod, %regex~(aot_require|aot_type_ann_get_field_ptr|aot_need_type_info|aot_previsit_get_field_ptr|aot_previsit_get_field|aot_visit_get_field|write_aot_body|write_aot_suffix|write_aot_macro_suffix|write_aot_macro_prefix|macro_aot_infix|getInitSemanticHashWithDep|get_aot_hash_comment)$%%),
         group_by_regex("String builder writer", mod, %regex~(string_builder_str|string_builder_clear)$%%),
