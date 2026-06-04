@@ -321,3 +321,86 @@ class ApplyMacro : AstCallMacro {
         return null
     }
 }
+
+// Inline one field of an apply_imm: clone the block, alias its params via `assume` (name -> field-name
+// const, field -> self.field lvalue, optional annotations -> static RTTI), drop the params; no invoke.
+[macro_function]
+def private inline_apply_imm_field(fldname : string; var fieldAccess : ExpressionPtr; hasExtraArg : bool;
+                                   var annExpr : ExpressionPtr; blk : ExpressionPtr) : ExpressionPtr {
+    var res = clone_expression(blk)
+    var imb = res as ExprMakeBlock
+    var rblk = imb._block as ExprBlock
+    // prepend assumes at the front (reverse order so final body order is name, field[, annotations], ...)
+    if (hasExtraArg) {
+        var aAnn = new ExprAssume(at = blk.at, alias := rblk.arguments[2].name, subexpr <- annExpr)
+        rblk.list |> emplace(aAnn, 0)
+    }
+    var aField = new ExprAssume(at = blk.at, alias := rblk.arguments[1].name, subexpr <- fieldAccess)
+    rblk.list |> emplace(aField, 0)
+    var aName = new ExprAssume(at = blk.at, alias := rblk.arguments[0].name,
+        subexpr <- new ExprConstString(at = blk.at, value := fldname))
+    rblk.list |> emplace(aName, 0)
+    while (!empty(rblk.arguments)) {
+        rblk.arguments |> erase(0)
+    }
+    return imb._block
+}
+
+[call_macro(name = "apply_imm")]  // apply_imm(struct_value, block)
+class ApplyImmMacro : AstCallMacro {
+    //! Struct-only inlining variant of ``apply``: emits the block body once per field in a lexical scope
+    //! with the block params aliased via ``assume`` (``name`` -> the field-name string, ``field`` -> the
+    //! ``self.field`` lvalue, optional ``annotations`` -> static RTTI data). Unlike ``apply`` it generates
+    //! no helper function and no per-field block invoke — the body inlines directly, so a hot field walk
+    //! (e.g. a serialization materializer) pays zero block/invoke overhead. Same ``$(name, var field[,
+    //! annotations])`` block shape as ``apply``.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(expr.arguments |> length == 2, prog, expr.at, "expecting apply_imm(value, block)")
+        if (expr.arguments[0]._type == null) {  // need value inferred
+            return null
+        }
+        var argT = clone_type(expr.arguments[0]._type)
+        macro_verify(empty(argT.dim), prog, expr.at, "can't apply_imm to dim")
+        macro_verify(argT.baseType == Type.tStructure, prog, expr.at, "apply_imm supports struct only")
+        macro_verify(expr.arguments[1] is ExprMakeBlock, prog, expr.at, "expecting make block, i.e. $(..)")
+        let emb = expr.arguments[1] as ExprMakeBlock
+        var hasExtraArg = false
+        if (emb._block is ExprBlock) {
+            let eb = emb._block as ExprBlock
+            hasExtraArg = length(eb.arguments) == 3
+        }
+        let st = expr.arguments[0]._type.structType
+        var scopes : array<ExpressionPtr>
+        scopes |> reserve(length(st.fields))
+        for (fld in st.fields) {
+            let fname = string(fld.name)
+            var fieldAccess = qmacro($e(expr.arguments[0]).$f(fname))
+            var annExpr : ExpressionPtr
+            if (hasExtraArg) {
+                var rttiAnnValues : array<tuple<name : string; data : RttiValue>>
+                rttiAnnValues |> reserve(length(fld.annotation))
+                for (ann in fld.annotation) {
+                    var value : tuple<name : string; data : RttiValue>
+                    value.name = string(ann.name)
+                    if (ann.basicType == Type.tString) {
+                        value.data = RttiValue(tString = string(ann.sValue))
+                    } elif (ann.basicType == Type.tInt) {
+                        value.data = RttiValue(tInt = ann.iValue)
+                    } elif (ann.basicType == Type.tFloat) {
+                        value.data = RttiValue(tFloat = ann.fValue)
+                    } elif (ann.basicType == Type.tBool) {
+                        value.data = RttiValue(tBool = ann.bValue)
+                    }
+                    rttiAnnValues |> emplace(value)
+                }
+                annExpr = qmacro($v(rttiAnnValues))
+            }
+            scopes |> push(inline_apply_imm_field(fname, fieldAccess, hasExtraArg, annExpr, expr.arguments[1]))
+        }
+        var outer = new ExprBlock(at = expr.at)
+        unsafe {
+            outer.list := scopes
+        }
+        return outer
+    }
+}

@@ -9,11 +9,13 @@ module linq_fold_json shared public
 //! linq_fold JSON source adapter: ``JsonAdapter`` + ``JsonJoinAdapter`` + ``extract_json_source``. Lets ``_fold`` over a
 //! ``from_json(jv, type<Row>)`` chain emit an inlined ``for (e in jv.value as _array)`` walk that reads
 //! only the fields the chain touches (via ``read_json_field``), instead of materializing every element
-//! with ``from_JV``. In-tree companion to ``daslib/linq_fold`` (required unconditionally — the adapter is
-//! always compiled in, unlike XML's pugixml gate; the matcher just returns null in a JSON-less program).
-//! Emits ``from_json`` / ``from_JV`` / ``read_json_field`` BY NAME (resolved at the user's
-//! splice site, like linq_fold_decs emits ``for_each_archetype``), so this module pulls in no json
-//! dependency. See daslib/linq_fold.md.
+//! whole. A struct row is built **by name** — each top-level field via ``read_json_field`` (Option B,
+//! "like XML"), so a custom whole-row ``from_JV(Row)`` override is never honored; only a non-struct
+//! element type falls back to ``from_JV``. In-tree companion to ``daslib/linq_fold`` (required
+//! unconditionally — the adapter is always compiled in, unlike XML's pugixml gate; the matcher just
+//! returns null in a JSON-less program). Emits ``from_json`` / ``read_json_field`` (and ``from_JV`` for
+//! non-struct elements) BY NAME (resolved at the user's splice site, like linq_fold_decs emits
+//! ``for_each_archetype``), so this module pulls in no json dependency. See daslib/linq_fold.md.
 
 require daslib/ast_boost
 require daslib/ast_match
@@ -24,9 +26,25 @@ require daslib/linq_fold_common public
 // Field-pruning row-usage scanning (RowUsageScanner / collect_row_usage / RowFieldFlattener /
 // flatten_row_to_locals / hoist_prelude) is shared with the XML adapter — see daslib/linq_fold_common.das.
 
+// Whole-row by-name materialize: assign every top-level field via read_json_field (by name), so the JSON
+// linq source reads flat objects field-by-field like from_xml_node and NEVER calls the overridable struct
+// from_JV. Field VALUES still convert via from_JV (nested/scalar overrides honored); only a whole-row
+// from_JV(T) override is bypassed — by design (B / "like XML"): for that, materialize to an array first.
+// Caller declares `var <bindName>` (or it is pre-declared) and the `<defName>` default row.
+[macro_function]
+def private emit_full_row_by_name(bindName : string; declT : TypeDeclPtr; defName, curName : string;
+                                  var dest : array<Expression?>) {
+    for (fld in declT.structType.fields) {
+        let fname = string(fld.name)
+        dest |> push <| qmacro_expr() {
+            $i(bindName).$f(fname) = read_json_field($i(curName), $v(fname), $i(defName).$f(fname))
+        }
+    }
+}
+
 // Materialize-under-guard: when the whole row escapes only inside a bare `if (fieldCond) { ... }`, read
 // the predicate's fields cheaply (read_json_field — no peek/borrow split, JSON is heap-owned) and build the
-// full from_JV row only for matches. False (caller does the full build) unless the body is that exact shape.
+// full by-name row only for matches. False (caller does the full build) unless the body is that exact shape.
 [macro_function]
 def private try_json_under_guard_materialize(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                              defName, curName : string; at : LineInfo;
@@ -49,11 +67,12 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
         }
     }
     ite.cond = flatten_row_to_locals(ite.cond, bindName, fieldToLocal)
-    // Prepend the full materialize to the guarded branch so only matching elements pay from_JV.
+    // Prepend the by-name full materialize to the guarded branch so only matching elements build the row.
     var guarded : array<Expression?>   // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
     guarded |> push <| qmacro_expr() {
-        var $i(bindName) <- from_JV($i(curName), type<$t(declT)>)
+        var $i(bindName) <- default<$t(declT)>
     }
+    emit_full_row_by_name(bindName, declT, defName, curName, guarded)
     guarded |> push(ite.if_true)
     ite.if_true = stmts_to_expr(guarded)
     inner |> push(body)
@@ -72,8 +91,19 @@ def private build_json_materializer(var body : Expression?; bindName : string; d
         if (try_json_under_guard_materialize(body, bindName, declT, defName, curName, at, prelude, inner)) {
             return
         }
-        inner |> push <| qmacro_expr() {
-            var $i(bindName) <- from_JV($i(curName), type<$t(declT)>)
+        // whole row escapes: read every field by name (no struct from_JV — see emit_full_row_by_name).
+        if (declT.baseType == Type.tStructure) {
+            prelude |> push <| qmacro_expr() {
+                let $i(defName) = default<$t(declT)>
+            }
+            inner |> push <| qmacro_expr() {
+                var $i(bindName) <- default<$t(declT)>
+            }
+            emit_full_row_by_name(bindName, declT, defName, curName, inner)
+        } else {
+            inner |> push <| qmacro_expr() {
+                var $i(bindName) <- from_JV($i(curName), type<$t(declT)>)
+            }
         }
         inner |> push(body)
         return
@@ -331,8 +361,8 @@ class JsonAdapter : SourceAdapter {
         return emission
     }
     // Deferred materialization: a buffered reducer (order/take, distinct) holds `(orderKey, JsonValue?)`
-    // surrogates and runs from_JV only for the K survivors. The handle is the per-element `jcur`; from_JV's
-    // one-call full-row build makes the survivor materialize a single call (no XML-style per-attribute walk).
+    // surrogates and builds the row only for the K survivors. The handle is the per-element `jcur`; the
+    // survivor materialize reads each field by name (like XML), never the overridable struct from_JV.
     def override const defers_materialization() : bool {
         return true
     }
@@ -349,9 +379,25 @@ class JsonAdapter : SourceAdapter {
     }
     def override materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? {
         var declT = strip_const_ref(clone_type(elemType))
-        return qmacro_expr() {
-            $i(outBind) <- from_JV($e(handleExpr), type<$t(declT)>)
+        if (declT.baseType != Type.tStructure) {
+            return qmacro_expr() {
+                $i(outBind) <- from_JV($e(handleExpr), type<$t(declT)>)
+            }
         }
+        // distinct prefix from the array-walk's "jdef" (line ~159): a group_by + first/order/distinct/take
+        // chain fires both materialize sites at the same `at`, and qn keys only on (prefix, at) — same
+        // prefix there would shadow (see groupby_first m6f).
+        let defName = qn("jhdef", at)
+        let curName = qn("jhandle", at)
+        var stmts : array<Expression?>   // nolint:STYLE012 -- list grown further by emit_full_row_by_name below
+        stmts |> push <| qmacro_expr() {
+            let $i(curName) = $e(handleExpr)
+        }
+        stmts |> push <| qmacro_expr() {
+            let $i(defName) = default<$t(declT)>
+        }
+        emit_full_row_by_name(outBind, declT, defName, curName, stmts)
+        return stmts_to_expr(stmts)
     }
 }
 

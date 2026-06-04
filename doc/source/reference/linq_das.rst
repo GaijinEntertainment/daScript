@@ -109,8 +109,12 @@ is emitted directly as ``from_decs_template`` and never goes through
 ``[decs_template]`` for decs, ``[sql_table]`` / ``[sql_view]`` for SQL, a plain
 struct for XML and JSON. The JSON source is a ``JsonValue?`` holding a JSON
 **array** of objects (``from c : Car in jv["cars"]`` descends into a nested
-array first); each element materializes through ``from_JV``, field-pruned to
-just the keys the chain reads.
+array first); like the XML source, each element materializes **by name** —
+top-level fields read by key, field-pruned to just the keys the chain reads. A
+custom whole-row ``from_JV(Row)`` override is **not** honored (this is a flat
+query source, not a deserializer); to query through ``from_JV`` instead,
+materialize the array first
+(``[for (e in jv.value as _array); from_JV(e, type<Row>)]``) and query that.
 
 Range variable
 --------------

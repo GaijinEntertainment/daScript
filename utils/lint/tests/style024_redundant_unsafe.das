@@ -26,10 +26,10 @@ options gen2
 // walks the body (skipping `genFlags.generated` subtrees per design) and
 // looks for known inherently-unsafe AST shapes:
 //   ExprCast(upcast|reinterpret), ExprDelete, ExprAddr, ExprRef2Ptr,
-//   ExprAsVariant, ExprAt on table, ExprField on variant, and
-//   ExprCallFunc whose `func.flags.unsafeOperation` (or unsafeOutsideOfFor
-//   outside a for-loop source) is set. If nothing matches, the wrap is
-//   redundant.
+//   ExprAsVariant, ExprSafeAsVariant (`?as`), ExprAt on table, ExprField
+//   on variant, and ExprCallFunc whose `func.flags.unsafeOperation` (or
+//   unsafeOutsideOfFor outside a for-loop source) is set. If nothing
+//   matches, the wrap is redundant.
 //
 // Note: the parser-flag form (`unsafe(expr)`) only survives compile-time
 // folding when `no_optimizations + no_infer_time_folding` is set; the
@@ -110,4 +110,20 @@ def good_class_on_stack() : void {
         var c2 = MyClass(x = 7)
         print("{c1.x} {c2.x}\n")
     }
+}
+
+// --- Regression: `?as` on a non-pointer variant requires unsafe ---
+// `v ?as a` on a by-value variant materializes a pointer into the payload
+// (ast_infer_type.cpp: unsafe_variant_safe_as), so the wrap is justified.
+// STYLE024 must NOT fire (preVisitExprSafeAsVariant marks it unsafe).
+
+variant private MyVar {
+    a : int
+    b : string
+}
+
+def good_safe_as_on_value_variant() : void {
+    let v = MyVar(a = 5)
+    let pa = unsafe(v ?as a)
+    print("{pa != null}\n")
 }

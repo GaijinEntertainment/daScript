@@ -1593,6 +1593,11 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprAsVariant(expr : ExprAsVariant?) : void {
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
     }
+    def override preVisitExprSafeAsVariant(expr : ExprSafeAsVariant?) : void {
+        // `?as` on a non-pointer variant requires unsafe (unsafe_variant_safe_as); mark
+        // unconditionally like `as` above — over-marking only misses a redundant-unsafe note.
+        if (!expr.genFlags.generated) mark_unsafe_in_stack()
+    }
 
     // Conditional own-contribution.
 
