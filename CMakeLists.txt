@@ -1137,6 +1137,11 @@ target_compile_definitions(libDaScriptDyn_runtime PUBLIC
 # compiles empty in Release/Debug.
 target_sources(libDaScript_runtime    PRIVATE src/misc/alloc_tracker_overrides.cpp)
 target_sources(libDaScriptDyn_runtime PRIVATE src/misc/alloc_tracker_overrides.cpp)
+# The compiler lib is a separate binary (own CRT new/delete on Windows). Without
+# its own copy of the override, parser/infer/ast allocations escape the tracker
+# and read as cross-module orphan frees (false leaks in the RelWithDebInfo report).
+target_sources(libDaScript    PRIVATE src/misc/alloc_tracker_overrides.cpp)
+target_sources(libDaScriptDyn PRIVATE src/misc/alloc_tracker_overrides.cpp)
 
 target_link_libraries(libDaScript libDaScript_runtime)
 target_link_libraries(libDaScriptDyn libDaScriptDyn_runtime)
