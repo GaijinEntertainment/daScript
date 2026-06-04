@@ -54,6 +54,18 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let key = n / 2
+    b |> run("m6f_json_fold/{n}") {
+        let c = _fold(unsafe(from_json(jv, type<Car>))._where(_.id == key).count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 // Decs eid lookup (O(1) hash): query(eid, $(...)) wraps for_eid_archetype, which
 // hashes the eid into entityLookup and dispatches the block once if the archetype
 // matches. The block-arg `car_id` is the request-shape witness AND a fixture-drift
@@ -93,4 +105,9 @@ def indexed_lookup_m4(b : B?) {
 [benchmark]
 def indexed_lookup_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def indexed_lookup_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

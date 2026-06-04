@@ -79,6 +79,21 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let groups <- _fold(unsafe(from_json(jv, type<Car>))
+                            ._group_by(_.brand)
+                            ._having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
+                            ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def groupby_having_hidden_sum_m1(b : B?) {
     run_m1(b, 100000)
@@ -97,4 +112,9 @@ def groupby_having_hidden_sum_m4(b : B?) {
 [benchmark]
 def groupby_having_hidden_sum_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def groupby_having_hidden_sum_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

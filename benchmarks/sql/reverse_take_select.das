@@ -70,6 +70,19 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        unsafe {
+            let rows <- _fold(from_json(jv, type<Car>).reverse().take(TAKE_N)._select(_.name).to_array())
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
+
 [benchmark]
 def reverse_take_select_m1(b : B?) {
     run_m1(b, 100000)
@@ -88,4 +101,9 @@ def reverse_take_select_m4(b : B?) {
 [benchmark]
 def reverse_take_select_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def reverse_take_select_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

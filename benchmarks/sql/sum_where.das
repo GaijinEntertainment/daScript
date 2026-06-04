@@ -62,6 +62,17 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let s = _fold(unsafe(from_json(jv, type<Car>))._where(_.price > THRESHOLD)._select(_.price).sum())
+        b |> accept(s)
+        if (s == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def sum_where_m1(b : B?) {
     run_m1(b, 100000)
@@ -80,4 +91,9 @@ def sum_where_m4(b : B?) {
 [benchmark]
 def sum_where_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def sum_where_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

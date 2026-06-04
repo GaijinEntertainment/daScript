@@ -81,6 +81,22 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let groups <- _fold(unsafe(from_json(jv, type<Car>))
+                            ._group_by(_.brand)
+                            ._select((Brand = _._0,
+                                      Total = _._1 |> select($(c : Car) => c.price) |> sum()))
+                            ._order_by(_.Total)
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def groupby_select_order_m1(b : B?) {
     run_m1(b, 100000)
@@ -99,4 +115,9 @@ def groupby_select_order_m4(b : B?) {
 [benchmark]
 def groupby_select_order_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def groupby_select_order_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

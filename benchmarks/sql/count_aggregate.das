@@ -61,6 +61,17 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let c = _fold(unsafe(from_json(jv, type<Car>))._where(_.price > THRESHOLD).count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def count_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -79,4 +90,9 @@ def count_aggregate_m4(b : B?) {
 [benchmark]
 def count_aggregate_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def count_aggregate_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

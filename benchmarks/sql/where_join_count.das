@@ -81,6 +81,22 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let dealers <- fixture_dealers_array()
+    b |> run("m6f_json_fold/{n}", n) {
+        let c = _fold(unsafe(from_json(jv, type<Car>)) |> _where(_.price > THRESHOLD)
+                       |> _join(dealers,
+                                $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                                $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
+                       |> count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def where_join_count_m1(b : B?) {
     run_m1(b, 100000)
@@ -99,4 +115,9 @@ def where_join_count_m4(b : B?) {
 [benchmark]
 def where_join_count_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def where_join_count_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

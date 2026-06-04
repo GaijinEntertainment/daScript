@@ -93,6 +93,23 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    let dealers <- fixture_dealers_array()
+    b |> run("m6f_json_fold/{n}", n) {
+        let groups <- _fold(unsafe(from_json(jv, type<Car>)) |> _join(dealers,
+                                      $(c : Car, d : Dealer) => c.dealer_id == d.id,
+                                      $(c : Car, _d : Dealer) => (Brand = c.brand, Price = c.price))
+                             |> _group_by(_.Brand)
+                             |> _select((Brand = _._0,
+                                         Total = _._1 |> select($(t : tuple<Brand : int; Price : int>) => t.Price) |> sum())))
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def join_groupby_to_array_m1(b : B?) {
     run_m1(b, 100000)
@@ -111,4 +128,9 @@ def join_groupby_to_array_m4(b : B?) {
 [benchmark]
 def join_groupby_to_array_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def join_groupby_to_array_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

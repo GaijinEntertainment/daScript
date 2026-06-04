@@ -58,6 +58,17 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let a = _fold(unsafe(from_json(jv, type<Car>))._select(double(_.price)).average())
+        b |> accept(a)
+        if (a == 0.0lf) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def average_aggregate_m1(b : B?) {
     run_m1(b, 100000)
@@ -76,4 +87,9 @@ def average_aggregate_m4(b : B?) {
 [benchmark]
 def average_aggregate_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def average_aggregate_m6f(b : B?) {
+    run_m6f(b, 100000)
 }

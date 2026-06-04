@@ -60,6 +60,17 @@ def run_m5f(b : B?; n : int) {
     }
 }
 
+def run_m6f(b : B?; n : int) {
+    let jv = fixture_json(n)
+    b |> run("m6f_json_fold/{n}", n) {
+        let prices <- _fold(unsafe(from_json(jv, type<Car>))._where(_.price > THRESHOLD)._select(_.price).to_array())
+        b |> accept(prices)
+        if (empty(prices)) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def to_array_filter_m1(b : B?) {
     run_m1(b, 100000)
@@ -78,4 +89,9 @@ def to_array_filter_m4(b : B?) {
 [benchmark]
 def to_array_filter_m5f(b : B?) {
     run_m5f(b, 100000)
+}
+
+[benchmark]
+def to_array_filter_m6f(b : B?) {
+    run_m6f(b, 100000)
 }
