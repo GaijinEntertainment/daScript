@@ -13,6 +13,11 @@ def private at(d : double) : TimeSpan {
     return TimeSpan(start = 0.0lf, stop = d)
 }
 
+def private hc(p : Pattern) : int {
+    let h <- p(TimeSpan(start = 0.0lf, stop = 1.0lf))
+    return length(h)
+}
+
 [test]
 def test_freq_sets_field(t : T?) {
     let p <- atom("sawtooth") |> freq(440.0)
@@ -84,6 +89,21 @@ def test_slice(t : T?) {
     t |> success(abs(h[2].value.begin - 0.25) < 0.001)
     // sound carried from pat
     t |> equal(h[0].value.s, "bev")
+    // out-of-range indices wrap modulo n: "4 5" with n=4 -> slices 0, 1
+    let pw <- s("bev") |> slice(4, note("4 5"))
+    let hw <- pw(at(1.0lf))
+    t |> equal(length(hw), 2)
+    t |> success(abs(hw[0].value.begin - 0.0) < 0.001)
+    t |> success(abs(hw[1].value.begin - 0.25) < 0.001)
+}
+
+[test]
+def test_granulation_guards(t : T?) {
+    // live-coding safety: n <= 0 must not crash — returns the pattern unchanged
+    t |> equal(hc(atom("bev") |> chop(0)), 1)
+    t |> equal(hc(atom("bev") |> chop(-2)), 1)
+    t |> equal(hc(atom("bev") |> striate(0)), 1)
+    t |> equal(hc(s("bev") |> slice(0, note("0 1"))), 1)
 }
 
 [test]
@@ -95,7 +115,14 @@ def test_mini_euclid_paren(t : T?) {
     t |> success(abs(h[0].whole.start - 0.0lf) < 0.001lf)
     t |> success(abs(h[1].whole.start - 0.375lf) < 0.001lf)
     t |> success(abs(h[2].whole.start - 0.75lf) < 0.001lf)
-    // "bd(3,8,2)" -> rotated; composes in a sequence with another atom
+    // "bd(3,8,2)" -> euclidRot(3,8,2): rotate left by 2 -> steps 1,4,6 -> 0.125, 0.5, 0.75
+    let pr <- s("bd(3,8,2)")
+    let hr <- pr(at(1.0lf))
+    t |> equal(length(hr), 3)
+    t |> success(abs(hr[0].whole.start - 0.125lf) < 0.001lf)
+    t |> success(abs(hr[1].whole.start - 0.5lf) < 0.001lf)
+    t |> success(abs(hr[2].whole.start - 0.75lf) < 0.001lf)
+    // composes in a sequence with another atom
     let p2 <- s("bd(3,8) sd")
     let h2 <- p2(at(1.0lf))
     t |> equal(length(h2), 4)

@@ -930,7 +930,7 @@ def rev(var pat : Pattern) : Pattern {
 // Stereo split: original panned left, transformed panned right.
 // jux(s("bd sd"), @(x) => rev(x)) — classic stereo widening
 def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
-    //! Stereo split: original is panned left, `transform(pat)` is panned right. Example: `s("bd sd") |> jux(@@(x) => rev(x))`.
+    //! Stereo split: original is panned left, `transform(pat)` is panned right. Example: `s("bd sd") |> jux(@(x) => rev(x))`.
     var transformed <- invoke(transform, pat) // nolint:LINT003
     var left <- pat |> set_pan(0.0)
     var right <- transformed |> set_pan(1.0)
@@ -943,7 +943,7 @@ def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
 // Overlay pattern with a time-shifted copy.
 // off(s("bd sd"), 0.125, @(x) => transpose(x, 7.0)) — canon at the fifth
 def off(var pat : Pattern; time : int | float | double; transform : PatternTransform) : Pattern {
-    //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @@(x) => transpose(x, 7.0))` — canon at the fifth.
+    //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @(x) => transpose(x, 7.0))` — canon at the fifth.
     var shifted <- invoke(transform, pat) |> late(numd(time))
     var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
@@ -991,7 +991,7 @@ def private degrade_drop(var pat : Pattern; prob : float) : Pattern {
 // Matches strudel: stack(degrade(pat, prob), transform(undegrade(pat, prob)))
 // Randomness is decided at original event positions, BEFORE transform reshuffles timing.
 def sometimesby(var pat : Pattern; prob : float; transform : PatternTransform) : Pattern {
-    //! Applies `transform` to each event with probability `prob` (0..1). Example: `s("bd*8") |> sometimesby(0.3, @@(x) => fast(x, 2.0lf))`.
+    //! Applies `transform` to each event with probability `prob` (0..1). Example: `s("bd*8") |> sometimesby(0.3, @(x) => fast(x, 2.0lf))`.
     var degraded <- degrade_keep(pat, prob)
     var undegraded <- degrade_drop(pat, prob) // nolint:LINT003
     var transformed <- invoke(transform, undegraded) // nolint:LINT003
@@ -1748,7 +1748,7 @@ def palindrome(var pat : Pattern) : Pattern {
 // Stack original + transformed copy.
 // superimpose(pat, @(x) => fast(x, 2.0lf)) — layer faster copy on top
 def superimpose(var pat : Pattern; transform : PatternTransform) : Pattern {
-    //! Stacks `pat` with `transform(pat)`, both playing simultaneously. Example: `pat |> superimpose(@@(x) => fast(x, 2.0lf))`.
+    //! Stacks `pat` with `transform(pat)`, both playing simultaneously. Example: `pat |> superimpose(@(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
@@ -1901,7 +1901,7 @@ def iterBack(var pat : Pattern; n : int) : Pattern {
 // Conditional transform based on cycle number.
 // when_cycle(pat, @(c) => c % 4 == 0, @(x) => fast(x, 2.0lf))
 def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; transform : PatternTransform) : Pattern {
-    //! Applies `transform` to `pat` on cycles where `cond(cycle)` is true, leaving others untouched. Example: `pat |> when_cycle(@(c) => c % 4 == 0, @@(x) => fast(x, 2.0lf))`.
+    //! Applies `transform` to `pat` on cycles where `cond(cycle)` is true, leaving others untouched. Example: `pat |> when_cycle(@(c) => c % 4 == 0, @(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     return @capture(<- pat, <- transformed, <- cond) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
@@ -2022,7 +2022,7 @@ def compress(var pat : Pattern; b, e : int | float | double) : Pattern {
 // Apply function to the nth chunk each cycle (rotating).
 // chunk(pat, 4, @(x) => fast(x, 2.0lf)) — doubles speed of chunk 0, then 1, then 2, then 3
 def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
-    //! Divides each cycle into `n` chunks, applying `transform` to a different chunk each cycle (rotating). Example: `pat |> chunk(4, @@(x) => fast(x, 2.0lf))`.
+    //! Divides each cycle into `n` chunks, applying `transform` to a different chunk each cycle (rotating). Example: `pat |> chunk(4, @(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
     let nf = double(n)
     return @capture(= n, = nf, <- pat, <- transformed) (span : TimeSpan) : array<Hap> {
@@ -2066,6 +2066,7 @@ def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
 // Behavior: progressive slices reveal later parts of the sample envelope.
 def striate(var pat : Pattern; n : int) : Pattern {
     //! Cuts each sample into `n` slices and plays them in sequence. Slice `i` gets `begin=i/n`, `end=(i+1)/n`. Example: `pat |> striate(4)`.
+    return <- pat if (n <= 0)
     let nf = double(n)
     let nfinv = 1.0 / float(n)
     return @capture(= n, = nf, = nfinv, <- pat) (span : TimeSpan) : array<Hap> {
@@ -2094,6 +2095,7 @@ def striate(var pat : Pattern; n : int) : Pattern {
 // pat |> chop(4) — subdivide each event into n consecutive sample slices
 def chop(var pat : Pattern; n : int) : Pattern {
     //! Subdivides each event in place into `n` back-to-back slices of its sample (slice `i` = `begin..end` window `i/n`). Unlike `striate`, slices stay within each event's own time slot. Example: `s("bev") |> chop(4)`.
+    return <- pat if (n <= 0)
     let nfinv = 1.0 / float(n)
     return @capture(= n, = nfinv, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
@@ -2133,9 +2135,10 @@ def chop(var pat : Pattern; n : int) : Pattern {
 
 // pat |> slice(4, n("0 1 2 3")) — play sample slices in the order given by idx_pat
 def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
-    //! Cuts the sample into `n` slices and plays them in the order/rhythm of `idx_pat` (whose `note` values are slice indices). Structure comes from `idx_pat`, the sample from `pat`. Example: `s("bev") |> slice(4, note("0 2 1 3"))`.
+    //! Cuts the sample into `n` slices and plays them in the order/rhythm of `idx_pat` (whose `note` values are slice indices). Structure comes from `idx_pat`, the sample from `pat`. Out-of-range indices wrap modulo `n`. Example: `s("bev") |> slice(4, note("0 2 1 3"))`.
+    return <- pat if (n <= 0)
     let nfinv = 1.0 / float(n)
-    return @capture(= nfinv, <- pat, <- idx_pat) (span : TimeSpan) : array<Hap> {
+    return @capture(= n, = nfinv, <- pat, <- idx_pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var ihaps <- idx_pat(span)
         result |> reserve(length(ihaps))
@@ -2144,7 +2147,8 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
             var shaps <- pat(TimeSpan(start = onset, stop = onset + 0.001lf))
             var ev = length(shaps) > 0 ? shaps[0].value : ih.value
             delete shaps
-            let i = int(ih.value.note)
+            // wrap the slice index into [0, n-1] so out-of-range values cycle (live-coding: never crash)
+            let i = ((int(ih.value.note) % n) + n) % n
             ev.begin = float(i) * nfinv
             ev.end_pos = float(i + 1) * nfinv
             result |> push(Hap( // nolint:PERF006
