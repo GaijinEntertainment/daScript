@@ -1,5 +1,140 @@
 # daslang Changelog
 
+## 0.6.3 (June 2026) — PRELIMINARY
+
+> Preliminary changelog covering everything merged since 0.6.2 (#2618 – #2997). Subject to edit before release.
+
+### New Features
+
+#### LINQ Fusion Engine: `daslib/linq_fold` (#2687, #2689, #2691, #2696, #2697, #2712, #2714, #2721, #2723, #2724, #2725, #2727, #2728, #2729, #2730, #2732, #2733, #2738, #2741, #2750, #2760, #2765, #2766, #2769, #2770, #2772, #2775, #2784, #2785, #2806, #2809, #2822, #2824, #2833, #2834, #2837, #2839, #2841, #2848, #2851, #2852, #2857, #2861, #2862, #2865, #2866, #2875, #2878, #2881, #2883, #2885, #2886, #2887, #2888, #2891, #2893, #2895, #2896, #2899, #2901, #2903, #2913, #2914, #2915, #2917, #2919, #2924, #2926, #2935, #2936, #2939, #2941, #2943, #2945, #2946, #2947, #2948, #2950, #2952, #2955)
+
+`_fold` is a new compile-time macro that fuses an entire LINQ chain into a single splice-emitted loop — no intermediate arrays, no per-stage iterator allocation. It became the universal fusion lane behind the whole `daslib/linq` surface, beating in-memory SQLite on headline benchmark shapes.
+
+- **Operator coverage** — `where` / `select` / counter lanes; aggregates and early-exit terminators (`any` / `all` / `contains` / `first` / `count` / `long_count` / `last` / `single` / `element_at` / `aggregate`); `take` / `skip` / `take_while` / `skip_while`; the order/sort family, `reverse`, `distinct` / `distinct_by`, and `group_by` with `sum` / `min` / `max` / `first` / `average` / multi-reducer plus `_having`
+- **Four sources, one engine** — array, `decs` (spliced into unrolled `for_each_archetype` loops, 10×+ over the eager bridge), XML (`from_xml_node`, with DOM-walk inlining + field pruning), and SQL (pure pass-through to `_sql`, gated on `_sql` being linked). Deferred/handle-buffering materialization keeps XML buffered reducers single-pass
+- **N-ary `zip`** (#2737, #2738, #2741) — `zip` / `zip_to_array` extended from pairs to 4-through-8-way, array and iterator forms, each with an optional result selector; rides the shared int64 counter lane
+- **Architecture** — migrated onto a unified `splice_patterns` pattern table + capability-method `SourceAdapter`s (G1→G3d), collapsing seven bespoke planner tables and the per-source terminator scaffolds into shared `linq_fold_common` / `_array` / `_decs` lanes
+
+#### LINQ Query Syntax: C# `%linq!` (#2957, #2958, #2960, #2962, #2966, #2969, #2972, #2975, #2978, #2981, #2987, #2990, #2994, #2996)
+
+`daslib/linq_das` adds a C#-style query expression that rewrites to a `_fold(...)` chain at compile time, built on the new **expression-level reader macros** (`%name! … %%`, #2957). Full clause-level parity shipped incrementally:
+
+- `from … in`, repeatable `where` (#2996), `let` bindings (#2981), `select`
+- `join … on … equals …` (#2969) and `join … into g` group-join / GroupJoin (#2994)
+- multiple-`from` SelectMany, both uncorrelated (cross product, #2975) and correlated (flatten, #2978)
+- `orderby` single-key (#2962) and multi-key composite (#2987); `group … by` (#2962); `into` group/select continuation (#2990)
+- **Typed sources via `from_in`** — arrays, `decs`, XML, and SQL, with iterator output (#2960); SQL sources push `WHERE` / `GROUP BY` / `ORDER BY` down to SQLite
+
+```das
+let names <- %linq! from c in cars where c.price > 100 orderby c.name select c.name %%
+```
+
+#### 64-bit Arrays and Tables — the `longarr` arc (#2743, #2746, #2755, #2762, #2764, #2766, #2768, #2771, #2773, #2779, #2899)
+
+`array<T>` / `table<K;V>` capacity, length, and index were widened to `int64` internally so collections can exceed `INT_MAX` / 4 GB.
+
+- New `long_length` / `long_reserve` / `long_capacity` / `long_count` / `long_find_index` / `long_iter_range` shadow builtins, `_i64` AOT helpers, and `das_array_*_i64` / `das_table_*_i64` C-API entries
+- `int | int64` disjunction-parameter dispatch (plus `typeinfo is_int` / `is_int64` / `is_float` / `is_double`) keeps the daslang surface single-overload while forking by base type; `builtin` / `array_boost` / `json_boost` / `strings_boost` / `decs` widened
+- The 8.5k-test existing surface is preserved via shadow names rather than a hard widen; `MemoryModel` / heap byte counts and `alignMask` widened to 64-bit with 4 GB-cap guards
+
+#### Sort Family: pdqsort, `<algorithm>`, and `stable_sort` (#2706, #2707, #2986)
+
+- **`<algorithm>` bindings + `top_n`** (#2706, #2707) — new `sort_boost` API (`partial_sort`, `nth_element`, `make_heap` / `push_heap` / `pop_heap`, each with optional comparator) over a typed `das_sort<T>` block-partition pdqsort C++ binding, plus `top_n` / `top_n_by` selection in `daslib/linq`; array + iterator sources
+- **`stable_sort`** (#2986) — new adaptive natural-run merge (timsort-lite, galloping merge): `das_stable_sort_r` (byte) and typed `das_stable_sort<T>`, with AOT support, tests, bench, and docs
+
+#### dasOPENAI: OpenAI-compatible API Client (#2938, #2942, #2944)
+
+New pure-daslang module over dasHV / json_boost — chat (streaming + tools + structured outputs), embeddings, models, completions, audio TTS/STT, moderations, images, and vision. Works against OpenAI, Ollama, OpenRouter, vLLM, and LM Studio. Streamed tool-call fragments are reassembled by index (#2944). Ships 12 examples, 7 mock-server-backed tutorials, and an RST reference.
+
+#### New Libraries and Transports
+
+- **`daslib/jsonrpc` + stdio live transport** (#2674, #2679) — unified JSON-RPC 2.0 library (request/response, line-dispatch, §6 batch) and a JSON-RPC stdio transport for daslang-live commands that needs no dasHV
+- **`daslib/logger`** (#2908) — JSON-Lines structured logger; `logger_install_hook()` diverts `print` / `to_log` to a file (critical for stdio-transport processes like MCP). Adds C++ `iso8601_now()` and `popen_argv_pipe()` (bidirectional, shell-bypass subprocess pipes)
+- **`daslib/toml` + `.lint_config`** (#2884) — TOML-1.0 parser (closed-table semantics); repo-level `.lint_config` (TOML) now configures lint, with STYLE005 off by default
+- **`daslib/with_boost`** (#2880, #2889) — `with_` call macro binds one or more `arr[i]` / `tab[k]` element references inside a block under an automatic `lock`, so push/erase/resize panic instead of dangling; any arity, mixed array + table
+- **LINQ over XML** (#2920) — `from_xml_node(root, type<Row>)` typed LINQ source over XML child elements in `dasPUGIXML` / `PUGIXML_boost`
+
+#### C, Graphics, and Audio
+
+- **C-API arrays & tables** (#2619, #2779) — `das_array_*` / `das_table_*` (with `_i64` completeness) build, lock, and borrow daslang collections from C; integration tutorial 14
+- **APNG recording pipeline** (#2630, #2645, #2951) — streaming animated-PNG writer in dasStbImage (`stbi_apng_*`), `record_start` / `stop` / `status` live commands, an async PBO ring in dasOpenGL, and a synchronous frame-exact writer with fixed-delay capture
+- **dasGLFW synthetic input** (#2630, #2633) — chain dispatcher plus synthetic mouse / keyboard / char input; `glfw_live` mouse and keyboard drivers (held-input release on stop)
+- **dasAudio HRTF + simulated-3D mixing** (#2879) — `set_hrtf_budget(n)` routes the closest channels to HRTF slots and the rest to constant-power-pan / distance-attenuation 3D, with anti-flap margins, calibrated gain, and cross-context stats
+- **dasStrudel widening + combinators** (#2995) — every scalar pattern modifier accepts `int | float | double`; exposes `set_X`, adds `freq` / `euclidRot` / `chop` / `slice` and `bd(3,8)` Euclidean mini-notation
+
+### Improvements
+
+#### Language and Compiler
+
+- **Implicit integer-literal promotion** (#2876) — bare int literals now silently promote to any fitting numeric target (`int8/16/64`, `uint8/16/32/64`, `bitfield*`, `float`, `double`) at infer time across assignments, returns, var/struct/make-* inits and binary ops; range overflow is `error[30515]`, and `LINT011` warns on precision loss
+- **`enum_trait` `operator !` / `bool()` for any enum** (#2825) — flag-op enums read like bitfields (`if (!(flags & MASK))`), width-safe across all backings; also folds const-foldable enum exprs at infer time
+- **Lambdas are copyable** (#2731) — `=` / pass-by-value / `push` copy the pointer (alias, no `push_clone`); `delete lam` now requires `unsafe`, and the rule cascades to containers/structs holding a lambda
+- **C++ keywords as identifiers** (#2735) — any C++ keyword that is not also a daslang reserved word can name vars, structs, fields, enums, and typedefs (`register`, `union`, `short`, …); C++-keyword function names compile via AOT mangling (#2655)
+- **Unnamed → named tuple promotion** (#2642) — a positional tuple literal of bare variables is promoted to a named tuple when the names match the target fields
+- **Optional `require`** (#2921) — `require ?guard target` loads `target` only when module `guard` is linked, else silently skips; pairs with `typeinfo builtin_module_exists`
+- **One-liner block / EOF parsing** (#2925, #2651) — a single-line brace block no longer needs a trailing `;` before `}`, and a gen2 file whose final statement has no trailing newline now parses
+- **`class` super-call discipline** (#2892, #2900) — CFG-aware lint requires exactly one `super(...)` on every control-flow path and rejects skipping an intermediate class; a chaining default ctor is synthesized for empty-derived classes only when safe (`options always_call_super` removed)
+- **`uint8` / `uint16` / `uint64`-backed enum casts zero-extend** (#2739) — no longer sign-extend to negative values; fixed across interpreter, AOT, and JIT
+- **Faster compile** (#2849, #2853) — hoisted per-module overload visibility + a lazy `findAlias` subtree cache (~19% faster), with the scratch bits excluded from semantic/AOT hashes
+- **Clearer diagnostics** (#2989, #2650, #2626) — type-mismatch errors print short alias names with a single `where '<alias> = <def>'` clause (#2989, fixes #2571); assume-alias errors report at the use site (#2650); better for-in iterator-exhaustion message
+- **`ref_time_ticks` → nanoseconds** (#2685) — monotonic ns on every platform, so raw subtraction is valid everywhere
+
+#### JIT, AOT, and Build
+
+- **Per-loop LLVM hints** (#2634, #2635, #2637, #2638, #2639) — `for` / `while` loops accept `unroll` / `vectorize` / `unroll_count=N` annotations driving `!llvm.loop.*` metadata; plus host-CPU TargetMachine, `mustprogress` backedges, cold panic paths, `math::length` intrinsic, and declared allocator memory effects
+- **LLVM update + cross-compilation** (#2631, #2643, #2797, #2821) — bumped LLVM bindings, host-target-only initializers, and WASM JIT/exe backend support
+- **LTO in Release** (#2858) and **clang-mingw64 toolchain** (#2838, #2840, #2846) — core + 7 modules + JIT build under clang-mingw64, with a Windows CI worker and dasClangBind regen (libclang 22.1.5)
+- **JIT robustness** (#2793, #2808, #2811) — non-zero process exit on JIT failure/leaks, `-jit-no-cache` opt-out, and a `jit_table_at` DLLExport cache-hit fix
+
+#### Runtime Libraries, Tooling, and Hosting
+
+- **sqlite_linq LINQ-to-SQL coverage** (#2845, #2847, #2906, #2909, #2910, #2928, #2979, #2984) — `long_count` → `COUNT(*)`, `_distinct_by` as a chain operator + `COUNT(DISTINCT …)`, expression keys in `_group_by`, `_.<alias>` resolution after `_join`, computed-scalar `_select`, take/skip-before-aggregate subqueries, and workhorse-cast → SQLite `CAST` pushdown
+- **`daslib/linq` mixed-source overloads** (#2931, #2932, #2934) — binary ops (join/union/intersect/except/concat/zip) and their `*_to_array` forms accepting one array + one iterator in either direction
+- **daslang-live** (#2681, #2693, #2726, #2859, #2976) — post-`--` argv forwarding, `-project_root`, `--live-port=N` with a port-keyed lock, `POST /reset` (re-simulate without recompile, + a `reload_generation` counter), and a ModuleGroup-lifetime crash fix
+- **Dynamic modules** (#2774, #2956, #2937, #2991) — `-load_module <path>` loads a module straight from its folder (no junction); order-independent loading via deferred-`dlopen` fixed-point retry; `compileDaScript` verifies modules are initialized; a `module_file_access` `option_blocked` hook
+- **MCP** (#2620, #2701, #2718, #2908) — per-tool subprocess isolation, `project` / `project_root` threading through every tool, and stdio-audit hardening (logger + `popen_argv_pipe` + stdin isolation)
+- **dasHV** (#2668, #2684, #2788, #2980) — enabled by default, env-gated log routing, libhv pin bump (trie-router fix), and async (non-blocking) HTTP handlers fixing a `stop()` / teardown deadlock
+- **dastest** (#2894, #2897, #2968, #2974, #2985, #2988) — semi-isolated `--batch` mode, `--worker-index` / `--headless` forwarding (1-based, keeping live-API 9090 free), full pre-`--` flag preservation, crashing-subprocess stderr capture, and `--stack-on-exception`
+- **das_hash_map** (#2716, #2722) — insert-only `map` / `set` variants (no tombstones/rehash), EASTL/no-exception build support, used for `Module::annotationData` / `requireModule`
+- **JSON** (#2626, #2871, #2965) — lazier `JV` serialization, `vec2/3/4` emitted as `{x,y,z}` objects to match `JV<vec>`, and OR-combined flag enums serialized as their numeric value (was invalid empty)
+- **`from_decs_template`** (#2745) and **`DelegateReturn` made public** (#2624)
+
+#### Lint
+
+A large rule-and-infrastructure expansion, swept clean across daslib / modules / tutorials / utils.
+
+- **New rules** — PERF018 (direct iteration over `range(length)`), PERF019 (collapse double int-casts on bitfield ORs), PERF020 (redundant same-type workhorse cast), PERF021 (hoist common cast out of a ternary), PERF022 (`push_from` / `push_clone_from` / `emplace_from` bulk overloads), PERF023 (drop pre-clone before a qmacro splice), PERF024 (drop pre-clone before a `[clone(...)]`-annotated fn), PERF025 (redundant `string()` in interpolation), PERF014 extension (negated out-of-range char-class); STYLE005 (braceless early-exit), STYLE013 extension (`new`-allocated structs), STYLE020 / STYLE021 (`??` over `from_JV`, named-tuple `JV`), STYLE022 / STYLE023 (bitfield-as-field read/write), STYLE024 / STYLE025 / STYLE026 (redundant / over-broad / nested `unsafe`), STYLE027 (for-push-loop → comprehension), STYLE028 (`self->` inside class methods); LINT010 (dead-store), LINT011 (int-literal precision), LINT012 / LINT013 (unused function / block arguments)
+- **Infrastructure** — `--enable` / `--disable` rule selection (#2758), the `.lint_config` TOML (#2884), self-spawn parallelization (43s → 14s, #2672), a daslang auto-fixer (~1900 mechanical rewrites, #2627, #2628), a self-lint check (#2813), an O(1) FileInfo line index + unified suppression API (#2670), the `[clone(...)]` function annotation (#2819), and a `.githooks/pre-push` hook mirroring CI (#2761, #2763)
+
+### Bug Fixes
+
+- **ThinLTO SROA miscompile** (#2922) — `atomic_signal_fence` before reading `value.m[idx]` in `das_index<Matrix>::at` stops ThinLTO/SROA reusing a stale register after an aliased-type write (manifested as wrong shoot direction in rel+ThinLTO AOT builds)
+- **`eval_single_expression` crash on folded-away constexpr globals** (#2832) — `ExprVar(PI)`-style refs surviving in rtti-driven ASTs no longer deref a missing runtime slot
+- **Empty-named AST nodes** (#2890) — new `invalid_empty_name` (`error[30296]`) catches empty/whitespace names across ~10 node kinds (e.g. the `:=`-in-named-arg bug)
+- **Spurious `error[30151]` on `concept_assert` / `static_assert` under lint flags** (#2835); **clang-mingw64 `-fwrapv` signed-overflow UB** (#2840); **`ManagedVectorAnnotation::walk` TypeDecl leak** (#2863); **`ExprAt` null subexpression-type guard** (#2767)
+- **AOT negative int32 index before unsigned wrap** (#2776); **`alignMask` uint32 truncation on ≥4 GB allocations** (#2762); **`long_count` truncation past 2³¹** (#2899)
+- **Build / tooling** — dlopen `RTLD_GLOBAL` on POSIX (#2666), GC on serialization failure (#2669), AOT handled-type references (#2657), dasFormatter CRLF re-normalization unsticking the WASM build (#2829), cbind_boost backslash path strip (#2846, #2850), live_api POSIX shutdown hang (#2688), `migrate_93` disk-artifact leak (#2780), uriparser Windows path encoding (#2970), and assorted JIT/wasm-cross regressions (#2821)
+
+### Site / Blog / Docs / Playground
+
+- **Forge site redesign** (#2648, #2653, #2667, #2665, #2856, #2868) — new landing / blog / playground / mobile site, install-snippet fix, URL history, GoatCounter analytics, logo / slogan / favicon refresh, and a real daslang glyph
+- **Playground** (#2749, #2797, #2804, #2810, #2827, #2927) — embedded `dastest` Test button gated on `[test]`, ~18 benchmark samples with a multi-platform cycler and deep-link, a JIT/interp toggle, `?example=` URL override, mobile gate dropped, and a 3-service URL-shortener fallback
+- **Docs** (#2843, #2870, #2874, #2902, #2911, #2649, #2710) — `linq_decs` tutorial + living `linq_fold_patterns` reference, a stdlib-categorization CI gate (no "Uncategorized" sections), External Modules section, and Sphinx polish; news nav with a "N NEW" chip (#2907); Atom/RSS surfacing (#2682, #2683); `/daspkg` page (#2703, #2705)
+- **Blog** — "The three horsemen" (#2660), "Internal tools" (#2678), "Do you even sort?" (#2708), "Its like dejavu all over again" (#2747), "Verbose much?" (#2807), "from macro hell" (#2867), "spaghetti of choice" (#2898), "10k tests" (#2930), "Kibble" (#2971), and GFM strikethrough rendering (#2973)
+
+### Build / CI
+
+- **Windows on Ninja + Defender exclusion** (#2961, #2963, #2967) across extended_checks / build / release, with sccache on Windows (#2964, #2982) and a no-filesystem build added to CI (#2959)
+- **Caching and time** (#2786, #2815, #2982) — PR build-result caching, a CI-time reduction pass, and vcpkg/openssl caching everywhere
+- **JIT CI scoping** (#2977) — skip JIT on win64 Debug / RelWithDebInfo, keep it on Release; **dasLLVM mingw fallback** to a prebuilt download (#2992); **eastl CI build fix** (#2949)
+- **Packaging** (#2618, #2823, #2826, #2656) — stop publishing non-bundled release zips, a bundle install-rule smoke test (regressing the RC3 `cpp_search_config.das` breakage), `release.yml` narrowed to `[prereleased]`, and `install_name` alias / rpath scrubbing for release dylibs; untracked in-tree `modules/dasImgui` (now daspkg-managed, #2636)
+
+### Examples and Tutorials
+
+- **dasOPENAI** (#2938, #2942) — 12 examples + 7 mock-server tutorials; **dasStrudel tutorial rework** (#2997)
+- **LINQ query tutorial** (#2990, #2994) — `tutorials/language/56_linq_query.das` + RST for the `%linq!` syntax; SQL operator and LINQ-over-XML tutorials (#2979, #2906, #2909, #2920)
+- **Fourier viz** (#2695, #2699) — modernized to dasImgui boost-v2 with a dark theme; hash benchmark suite (#2722)
+
 ## 0.6.2 (May 2026)
 
 ### New Features

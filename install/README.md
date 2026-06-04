@@ -2,7 +2,7 @@
 
 **daslang** (formerly daScript) is a high-performance statically strongly typed programming language. It can be used standalone or embedded into a C++ host application, and is designed for games and real-time applications.
 
-- **Version:** 0.6.2
+- **Version:** 0.6.3
 - **Release date:** TBD
 - **License:** BSD 3-Clause
 
