@@ -5,6 +5,7 @@
 //   - Elongation @N — make an element occupy N units of its parent
 //   - Degrade ? — randomly drop events with 50% probability
 //   - Replicate !N — repeat an element N times in its parent sequence
+//   - Euclidean (k,n) / (k,n,rot) — spread k onsets over n steps, optional rotation
 //
 // Run: daslang.exe tutorials/daStrudel/daStrudel_03_mini_notation_advanced.das
 
@@ -94,6 +95,38 @@ def example_replicate() {
     play(pat, 4.0)
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — Euclidean rhythms with (k,n) and (k,n,rot)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Postfix "(k,n)" spreads k onsets as evenly as possible over n steps —
+// "bd(3,8)" is the classic tresillo. "(k,n,rot)" rotates the result left
+// by rot steps. The parser expands these to euclid()/euclidRot() FUNCTION
+// forms (see tutorial 05); here we both query and play to see WHERE hits land.
+
+def example_euclid() {
+    print("\n=== Section 5: \"bd(3,8)\" — 3 onsets over 8 steps (tresillo) ===\n")
+    let pat <- s("bd(3,8)")
+    // Query one cycle [0,1) by hand and print each onset position.
+    var haps <- invoke(pat, TimeSpan(start = 0.0lf, stop = 1.0lf))
+    for (h in haps) {
+        print("  onset at {h.whole.start}\n")
+    }
+    delete haps
+    play(pat, 4.0)
+}
+
+def example_euclid_rotated() {
+    print("\n=== Section 5b: \"bd(3,8,2)\" — same rhythm rotated left by 2 ===\n")
+    let pat <- s("bd(3,8,2)")
+    var haps <- invoke(pat, TimeSpan(start = 0.0lf, stop = 1.0lf))
+    for (h in haps) {
+        print("  onset at {h.whole.start}\n")
+    }
+    delete haps
+    play(pat, 4.0)
+}
+
 [export]
 def main() {
     print("DASTRUDEL-03: Mini-Notation Advanced\n\n")
@@ -102,5 +135,7 @@ def main() {
     example_elongation()
     example_degrade()
     example_replicate()
+    example_euclid()
+    example_euclid_rotated()
     print("\nDone!\n")
 }

@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-14: MIDI Files
+// Tutorial DASTRUDEL-15: MIDI Files
 //
 // This tutorial covers:
 //   - Parsing MIDI files with load_midi (format 0 and format 1)
@@ -7,7 +7,7 @@
 //   - Playback with built-in sample banks via midi_play
 //   - Switching to SF2 synthesis with midi_load_sf2
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_14_midi_files.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_15_midi_files.das
 
 options gen2
 options indenting = 4
@@ -146,7 +146,7 @@ def example_play_sf2() {
 
 [export]
 def main() {
-    print("DASTRUDEL-14: MIDI Files\n\n")
+    print("DASTRUDEL-15: MIDI Files\n\n")
     example_parse()
     example_tempo()
     example_play_samples()

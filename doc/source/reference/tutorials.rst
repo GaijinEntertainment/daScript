@@ -419,14 +419,15 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_06_stacking_combining.rst
    tutorials/daStrudel_07_per_voice_fx.rst
    tutorials/daStrudel_08_effects_filters.rst
-   tutorials/daStrudel_09_adsr_envelopes.rst
-   tutorials/daStrudel_10_scales_music_theory.rst
-   tutorials/daStrudel_11_synthesis.rst
-   tutorials/daStrudel_12_samples.rst
-   tutorials/daStrudel_13_sf2_soundfont.rst
-   tutorials/daStrudel_14_midi_files.rst
-   tutorials/daStrudel_15_live_reloading.rst
-   tutorials/daStrudel_16_hrtf_position.rst
+   tutorials/daStrudel_09_signals_modulation.rst
+   tutorials/daStrudel_10_adsr_envelopes.rst
+   tutorials/daStrudel_11_scales_music_theory.rst
+   tutorials/daStrudel_12_synthesis.rst
+   tutorials/daStrudel_13_samples.rst
+   tutorials/daStrudel_14_sf2_soundfont.rst
+   tutorials/daStrudel_15_midi_files.rst
+   tutorials/daStrudel_16_live_reloading.rst
+   tutorials/daStrudel_17_hrtf_position.rst
 
 .. _tutorials_jsonrpc:
 

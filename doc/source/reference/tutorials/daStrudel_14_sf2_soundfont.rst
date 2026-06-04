@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_sf2_soundfont:
 
 ===================================
-STRUDEL-13 — SF2 SoundFont Playback
+STRUDEL-14 — SF2 SoundFont Playback
 ===================================
 
 .. index::
@@ -113,7 +113,7 @@ standard mini-notation.  See :ref:`mini-notation compatibility
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_13_sf2_soundfont.das <../../../../tutorials/daStrudel/daStrudel_13_sf2_soundfont.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_14_sf2_soundfont.das <../../../../tutorials/daStrudel/daStrudel_14_sf2_soundfont.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_samples`
 

@@ -86,7 +86,7 @@ typed lambda:
 ```
 .jux(rev)              →  |> jux(@(x) => rev(x))
 .off(1/8, fast(2))     →  |> off(0.125, @(x) => fast(x, 2))
-.every(4, rev)         →  |> every(4, @(x) => rev(x))
+.sometimes(fast(2))    →  |> sometimes(@(x) => fast(x, 2))
 ```
 
 **Use ``@(x) =>`` (a capture lambda), NOT ``@@(x) =>``.** Combinators
@@ -94,6 +94,19 @@ typed lambda:
 ``when_cycle``, …) take ``PatternTransform = lambda<(Pattern):Pattern>``.
 A no-capture ``@@(x) =>`` is a *function pointer*, which does not match
 the ``lambda`` type and fails type inference. ``@(x) =>`` is correct.
+
+**``every`` is the exception — it takes two PATTERNS, not a transform.**
+daslang's signature is ``every(n, pat_on, pat_off)``: it plays ``pat_on``
+on cycles 0, n, 2n, … and ``pat_off`` otherwise. There is no
+``every(n, transform)`` overload, so build both branches explicitly
+(construct the pattern twice rather than aliasing one — ``every`` moves
+both into its closure):
+
+```
+// strudel.cc:  s("c4 e4 g4").every(4, rev)
+// daslang:
+every(4, note("c4 e4 g4") |> rev(), note("c4 e4 g4"))
+```
 
 The ``@(x) => ...`` form is an inline lambda. See
 :ref:`tutorial_lambdas` for the syntax. If the transform itself is a
@@ -329,8 +342,8 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
      - ``s("bd") \|> fast(2)``
    * - ``.jux(rev)``
      - ``\|> jux(@(x) => rev(x))``
-   * - ``.every(4, fast(2))``
-     - ``\|> every(4, @(x) => fast(x, 2))``
+   * - ``p.every(4, rev)``
+     - ``every(4, p_rev, p)`` — two patterns, not a transform
    * - ``stack(a, b, c)``
      - ``stack([a, b, c])``
    * - ``"bd(3,8)"``

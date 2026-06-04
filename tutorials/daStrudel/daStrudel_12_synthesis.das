@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-11: Synthesis
+// Tutorial DASTRUDEL-12: Synthesis
 //
 // This tutorial covers:
 //   - Oscillator sources via s("sine"|"sawtooth"|"square"|"triangle"|"supersaw")
@@ -6,7 +6,7 @@
 //   - Noise sources ("white", "pink", "brown")
 //   - FM synthesis with fm() and fmh() (modulation index and harmonicity)
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_11_synthesis.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_12_synthesis.das
 
 options gen2
 options indenting = 4
@@ -103,13 +103,55 @@ def example_fm_gentle() {
     play(pat, 4.0)
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — Shaping FM timbre with fm() and fmh()
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The two FM knobs interact:
+//   - fm(index):       modulation depth — more index = brighter, busier spectrum
+//   - fmh(harmonicity): modulator/carrier ratio — sets WHERE the partials land
+// Integer fmh stays harmonic (brass, organ); non-integer fmh smears the
+// partials into inharmonic, metallic, or industrial tones. Compare a clean
+// integer ratio against a harsh non-integer one.
+
+def example_fm_shaping() {
+    print("\n=== Section 5a: harsh FM (fm=5, fmh=1.4) — non-integer ratio ===\n")
+    let harsh <- note("c3", "sine") |> fm(5.0) |> fmh(1.4) |> attack(0.01) |> decay(0.2) |> release(0.3)
+    play(harsh, 4.0)
+
+    print("\n=== Section 5b: bright integer FM (fm=3, fmh=3) ===\n")
+    let bright <- note("c3", "sine") |> fm(3.0) |> fmh(3.0) |> attack(0.01) |> decay(0.1) |> sustain(0.8) |> release(0.3)
+    play(bright, 4.0)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 6 — Direct-Hz synthesis with freq()
+// ──────────────────────────────────────────────────────────────────────────
+//
+// note() derives the oscillator frequency from a MIDI number; freq() sets the
+// frequency directly in Hz, bypassing the note-name -> MIDI -> Hz path. Use it
+// for raw frequency content or non-equal-tempered tunings. Here a sawtooth
+// steps through 220 / 277 / 330 / 440 Hz (an A-major-ish chord).
+
+def example_freq_direct() {
+    print("\n=== Section 6: freq() — pitch directly in Hz ===\n")
+    let pat <- (
+        s("sawtooth*4")
+        |> freq(note("220 277 330 440"))
+        |> lpf(2500.0) |> release(0.2) |> gain(0.5)
+    )
+    play(pat, 4.0)
+}
+
 [export]
 def main() {
-    print("DASTRUDEL-11: Synthesis\n\n")
+    print("DASTRUDEL-12: Synthesis\n\n")
     example_oscillators()
     example_supersaw()
     example_noise()
     example_fm_bells()
     example_fm_gentle()
+    example_fm_shaping()
+    example_freq_direct()
     print("\nDone!\n")
 }

@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-15: Live-Reloading Patterns
+// Tutorial DASTRUDEL-16: Live-Reloading Patterns
 //
 // This tutorial covers:
 //   - Running daStrudel under daslang-live.exe for instant code reload
@@ -8,10 +8,10 @@
 //   - The persistent byte store: live_store_bytes / live_load_bytes
 //
 // Run (live mode, recommended):
-//   bin/Release/daslang-live.exe tutorials/daStrudel/daStrudel_15_live_reloading.das
+//   bin/Release/daslang-live.exe tutorials/daStrudel/daStrudel_16_live_reloading.das
 //
 // Also works in standalone mode:
-//   bin/Release/daslang.exe tutorials/daStrudel/daStrudel_15_live_reloading.das
+//   bin/Release/daslang.exe tutorials/daStrudel/daStrudel_16_live_reloading.das
 //
 // In live mode, edit this file and save — the pattern updates without
 // stopping the audio stream. The SID stays the same, the sample bank stays
@@ -100,13 +100,13 @@ def cmd_set_volume(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Pause playback")]
-def cmd_pause(input : JsonValue?) : JsonValue? {
+def cmd_pause(_input : JsonValue?) : JsonValue? {
     strudel_set_pause(true)
     return JV("paused")
 }
 
 [live_command(description="Unpause playback")]
-def cmd_unpause(input : JsonValue?) : JsonValue? {
+def cmd_unpause(_input : JsonValue?) : JsonValue? {
     strudel_set_pause(false)
     return JV("unpaused")
 }
@@ -150,7 +150,7 @@ var asch : AudioSystemChannels
 
 [export]
 def init() {
-    print("daStrudel tutorial 15 — live reload\n")
+    print("daStrudel tutorial 16 — live reload\n")
     if (get_audio_command_stream() == null) {
         asch = audio_system_create()
     }
@@ -174,7 +174,7 @@ def shutdown() {
 // Standalone fallback — if run under daslang.exe, act as a regular demo.
 [export]
 def main() {
-    print("daStrudel tutorial 15 (standalone — no hot-reload)\n")
+    print("daStrudel tutorial 16 (standalone — no hot-reload)\n")
     with_audio_system() {
         load_samples()
         strudel_init(@@strudel_main)

@@ -92,6 +92,79 @@ we add a faster octave-up echo on top:
 The lambda has type ``@(Pattern) => Pattern`` — the same shape every
 transforming combinator (``jux``, ``off``, ``superimpose``, …) expects.
 
+Part E: ``fastcat`` — squeeze all patterns into one cycle
+=========================================================
+
+Where ``cat`` gives each pattern a whole cycle in turn, ``fastcat``
+squeezes **all** of them into a single cycle side by side.  With *N*
+patterns each one fills ``1/N`` of every cycle — it is exactly
+``fast(cat(pats), N)``:
+
+.. code-block:: das
+
+    let pat <- fastcat([
+        s("bd"),
+        s("hh"),
+        s("sd"),
+        s("hh")
+    ])
+
+Four sounds, one per quarter of the cycle, looping every cycle.
+
+Part F: ``randcat`` / ``chooseCycles`` — pick one pattern per cycle
+===================================================================
+
+``randcat`` picks one of the patterns at random each cycle.  The choice
+is **deterministic** — a given cycle index always selects the same
+pattern — so the result is reproducible.  ``chooseCycles`` is an alias
+for the same per-cycle behaviour; in this build both are aliases of
+``choose``.  Use them to vary a phrase from cycle to cycle without
+spelling out every variation:
+
+.. code-block:: das
+
+    let pat <- randcat([
+        note("c4 e4 g4 c5", "sine") |> sustain(0.4),
+        note("c4 g4 e4 c4", "sine") |> sustain(0.4),
+        note("c4 d4 e4 f4", "sine") |> sustain(0.4)
+    ])
+
+Part G: ``choose`` — the per-cycle pick that backs ``randcat``
+==============================================================
+
+In daStrudel ``choose`` performs the same discrete, per-cycle random
+pick that ``randcat`` and ``chooseCycles`` do — those two are aliases of
+``choose``.  (Some pattern libraries make ``choose`` a *continuous*
+per-event signal; daStrudel keeps it per-cycle so that note patterns do
+not glitch mid-phrase.)
+
+.. code-block:: das
+
+    let pat <- choose([
+        note("c4 e4 g4", "sine") |> sustain(0.4),
+        note("d4 f4 a4", "sine") |> sustain(0.4),
+        note("e4 g4 b4", "sine") |> sustain(0.4)
+    ])
+
+Part H: ``wchoose`` — weighted per-cycle pick
+=============================================
+
+``wchoose`` takes **two** arrays: the patterns, then a parallel array of
+``float`` weights.  Each cycle a pattern is chosen with probability equal
+to its weight divided by the sum of all weights.  Here ``bd`` is three
+times as likely as ``cp`` or ``sd``:
+
+.. code-block:: das
+
+    let pat <- wchoose([
+        s("bd*4"),
+        s("cp*4"),
+        s("sd*4")
+    ], [3.0, 1.0, 1.0])
+
+The weights array must be the same length as the patterns array and uses
+plain ``float`` literals.
+
 .. seealso::
 
    Full source: :download:`tutorials/daStrudel/daStrudel_06_stacking_combining.das <../../../../tutorials/daStrudel/daStrudel_06_stacking_combining.das>`

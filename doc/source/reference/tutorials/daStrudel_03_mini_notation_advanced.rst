@@ -10,6 +10,7 @@ STRUDEL-03 — Mini-Notation Advanced
     single: Tutorial; Strudel; Elongation
     single: Tutorial; Strudel; Degrade
     single: Tutorial; Strudel; Replicate
+    single: Tutorial; Strudel; Euclidean
 
 The four operators in this tutorial — ``<...>``, ``@N``, ``?``, and
 ``!N`` — are what take you from drum-machine patterns to genuinely
@@ -103,6 +104,40 @@ followed by a snare in the second.
 The mental model: ``*N`` divides time, ``!N`` adds slots. Use ``*`` to
 make things faster within one slot, ``!`` to repeat the same element
 across the parent sequence.
+
+Part E: Euclidean rhythms with ``(k,n)`` and ``(k,n,rot)``
+==========================================================
+
+Postfix ``(k,n)`` spreads ``k`` onsets as evenly as possible over ``n``
+steps. ``bd(3,8)`` is the classic tresillo — three kicks across eight
+slots:
+
+.. code-block:: das
+
+    var pat <- s("bd(3,8)")
+    var haps <- invoke(pat, TimeSpan(start = 0.0lf, stop = 1.0lf))
+    for (h in haps) {
+        print("  onset at {h.whole.start}\n")
+    }
+    play(pat, 4.0)
+
+Querying one cycle ``[0,1)`` by hand and printing ``h.whole.start`` shows
+exactly where the hits land — ``0``, ``0.375``, ``0.75`` for the 3-in-8
+tresillo. The parser rewrites ``(k,n)`` to the ``euclid(pat, k, n)``
+combinator.
+
+The three-argument form ``(k,n,rot)`` rotates the onset pattern left by
+``rot`` steps — the rhythm is the same, only its starting offset moves:
+
+.. code-block:: das
+
+    var pat <- s("bd(3,8,2)")
+    play(pat, 4.0)
+
+This rewrites to ``euclidRot(pat, k, n, rot)``. The function forms
+``euclid`` and ``euclidRot`` are public and covered in tutorial 05 — use
+them directly when ``k``/``n`` come from variables rather than a literal
+string.
 
 Where next
 ==========

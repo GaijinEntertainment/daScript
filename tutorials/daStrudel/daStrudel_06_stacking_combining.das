@@ -103,6 +103,89 @@ def example_superimpose() {
     play(pat, 0.5lf)
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — fastcat: squeeze all patterns into ONE cycle
+// ──────────────────────────────────────────────────────────────────────────
+//
+// cat gives each pattern a whole cycle in turn; fastcat squeezes ALL of
+// them into a single cycle, side by side. With N patterns each fills 1/N
+// of every cycle. It is exactly fast(cat(pats), N).
+
+def example_fastcat() {
+    print("\n=== Section 5: fastcat ===\n")
+    let pat <- fastcat([
+        s("bd"),
+        s("hh"),
+        s("sd"),
+        s("hh")
+    ])
+    play(pat, 0.5lf)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 6 — randcat / chooseCycles: pick one pattern per cycle
+// ──────────────────────────────────────────────────────────────────────────
+//
+// randcat picks one of the patterns at random each cycle (deterministic —
+// the same cycle index always picks the same pattern). chooseCycles is an
+// alias for the same per-cycle behaviour; both are aliases of choose in this
+// build. Use them to vary a phrase from cycle to cycle without writing out
+// every variation by hand.
+
+def example_randcat() {
+    print("\n=== Section 6: randcat / chooseCycles ===\n")
+    let pat <- randcat([
+        note("c4 e4 g4 c5", "sine") |> sustain(0.4),
+        note("c4 g4 e4 c4", "sine") |> sustain(0.4),
+        note("c4 d4 e4 f4", "sine") |> sustain(0.4)
+    ])
+    play(pat, 0.5lf, 6.0lf)
+
+    // chooseCycles is the same per-cycle pick under a different name.
+    let pat2 <- chooseCycles([
+        s("bd hh sd hh"),
+        s("bd bd sd hh")
+    ])
+    play(pat2, 0.5lf, 4.0lf)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 7 — choose: pick one pattern per cycle (randcat's base)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// In this build choose performs the same discrete, per-cycle random pick
+// that randcat and chooseCycles do — randcat / chooseCycles are aliases of
+// choose. (Some pattern libraries make choose a continuous per-event signal;
+// daStrudel keeps it per-cycle so note patterns do not glitch.)
+
+def example_choose() {
+    print("\n=== Section 7: choose ===\n")
+    let pat <- choose([
+        note("c4 e4 g4", "sine") |> sustain(0.4),
+        note("d4 f4 a4", "sine") |> sustain(0.4),
+        note("e4 g4 b4", "sine") |> sustain(0.4)
+    ])
+    play(pat, 0.5lf, 6.0lf)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 8 — wchoose: weighted per-cycle pick
+// ──────────────────────────────────────────────────────────────────────────
+//
+// wchoose takes TWO arrays — the patterns, then a parallel array of float
+// weights. A pattern's chance of being chosen each cycle is its weight over
+// the sum of all weights. Here bd is three times as likely as cp or sd.
+
+def example_wchoose() {
+    print("\n=== Section 8: wchoose ===\n")
+    let pat <- wchoose([
+        s("bd*4"),
+        s("cp*4"),
+        s("sd*4")
+    ], [3.0, 1.0, 1.0])
+    play(pat, 0.5lf, 6.0lf)
+}
+
 [export]
 def main() {
     print("DASTRUDEL-06: Stacking & Combining\n")
@@ -110,5 +193,9 @@ def main() {
     example_cat()
     example_layer_chord()
     example_superimpose()
+    example_fastcat()
+    example_randcat()
+    example_choose()
+    example_wchoose()
     print("\nDone.\n")
 }

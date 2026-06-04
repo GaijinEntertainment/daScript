@@ -111,24 +111,49 @@ takes ``array<Pattern>`` and ``emplace`` needs to **move** the lambda
 (Patterns are non-copyable lambdas) — that requires a mutable
 binding.
 
+Part E: ``euclidRot(pat, k, n, rot)`` — rotate the onsets
+=========================================================
+
+``euclidRot`` is ``euclid`` with the Bjorklund pattern rotated **left by
+rot steps**. The density is unchanged — still ``k`` onsets over ``n``
+steps — but the accents land on a different set of grid positions, which
+shifts the *feel* without adding or removing hits. ``euclid(3, 8)`` hits
+steps 0, 3, 6; ``euclidRot(3, 8, 2)`` shifts that window two steps:
+
+.. code-block:: das
+
+    let kick <- atom("bd") |> euclid(3, 8)
+    play(kick, 4.0)
+
+    let hat <- atom("hh") |> euclidRot(5, 8, 2)
+    play(hat, 4.0)
+
+Query one cycle by hand to see the onset positions move:
+
+.. code-block:: das
+
+    var rotd <- atom("bd") |> euclidRot(3, 8, 2)
+    var haps <- invoke(rotd, TimeSpan(start = 0.0lf, stop = 1.0lf))
+    for (h in haps) {
+        print("{h.whole.start} ")
+    }
+    delete haps
+
 Note on the ``bd(3,8)`` mini-notation form
 ==========================================
 
 In the original Tidal/Strudel mini-notation, ``"bd(3,8)"`` is an inline
-shorthand for euclid. **This daStrudel build does not parse parentheses
-inside mini-notation strings** — the parser tokenises ``(`` and ``)``
-but does not assemble them into the euclid form. Use the function
-directly:
+shorthand for euclid and ``"bd(3,8,2)"`` adds rotation. daStrudel
+supports both — :ref:`tutorial 03 <tutorial_dastrudel_mini_advanced>`
+(Section 5) demonstrates ``s("bd(3,8)")`` and ``s("bd(3,8,2)")``, which
+the parser expands directly to the ``euclid()`` / ``euclidRot()``
+function forms shown above. The function forms are the explicit
+equivalents and read well in a pipe:
 
 .. code-block:: das
 
-    s("bd sd") |> euclid(5, 8)
-    atom("hh") |> euclid(3, 8)
-
-Rotation (Tidal's ``bd(3,8,1)``, the JS Strudel ``euclidRot``) is
-likewise not exposed as a standalone function in this build. To get a
-rotated rhythm you can reorder the elements inside the pattern fed to
-``euclid``, or chain ``rev`` / ``slow`` against a control pattern.
+    s("bd sd") |> euclid(5, 8)         // same as s("bd sd(5,8)")
+    atom("hh") |> euclidRot(5, 8, 2)   // same as s("hh(5,8,2)")
 
 Where next
 ==========

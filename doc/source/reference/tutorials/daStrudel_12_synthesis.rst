@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_synthesis:
 
 ==========================
-STRUDEL-11 — Synthesis
+STRUDEL-12 — Synthesis
 ==========================
 
 .. index::
@@ -90,9 +90,44 @@ The ``note("c5", "sine")`` form is shorthand for
 See :ref:`tutorial_lambdas` for how ``|>`` threads a pattern through a
 chain of modifiers — each ``|>`` returns a new ``Pattern``.
 
+Part E: Shaping FM timbre with ``fm`` and ``fmh``
+=================================================
+
+The two FM knobs interact.  ``fm(index)`` is modulation depth — more
+index means a brighter, busier spectrum.  ``fmh(harmonicity)`` is the
+modulator-to-carrier ratio, which sets *where* the partials land:
+integer ratios stay harmonic (brass, organ), while non-integer ratios
+smear the partials into inharmonic, metallic, or industrial tones.
+Compare a harsh non-integer ratio against a clean integer one:
+
+.. code-block:: das
+
+    // Harsh, inharmonic — non-integer ratio
+    let harsh <- note("c3", "sine") |> fm(5.0) |> fmh(1.4) |> attack(0.01) |> decay(0.2) |> release(0.3)
+
+    // Bright but musical — integer ratio
+    let bright <- note("c3", "sine") |> fm(3.0) |> fmh(3.0) |> attack(0.01) |> decay(0.1) |> sustain(0.8) |> release(0.3)
+
+Part F: Direct-Hz synthesis with ``freq``
+=========================================
+
+``note()`` derives the oscillator frequency from a MIDI number;
+``freq()`` sets the frequency directly in Hz, bypassing the
+note-name → MIDI → Hz path.  Use it for raw frequency content or
+non-equal-tempered tunings.  Here a sawtooth steps through
+220 / 277 / 330 / 440 Hz (an A-major-ish chord):
+
+.. code-block:: das
+
+    let pat <- (
+        s("sawtooth*4")
+        |> freq(note("220 277 330 440"))
+        |> lpf(2500.0) |> release(0.2) |> gain(0.5)
+    )
+
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_11_synthesis.das <../../../../tutorials/daStrudel/daStrudel_11_synthesis.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_12_synthesis.das <../../../../tutorials/daStrudel/daStrudel_12_synthesis.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_scales_music_theory`
 

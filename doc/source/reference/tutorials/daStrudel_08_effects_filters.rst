@@ -13,22 +13,27 @@ STRUDEL-08 — Effects & Filters
     single: Tutorial; Strudel; phaser
 
 Strudel splits effects into two groups, distinguished by where they live
-in the signal graph:
+in the signal graph (the same table appears in tutorial 07):
 
-================== =========================== ================================================
-Group              Setters                     Lifetime
-================== =========================== ================================================
-Per-orbit bus FX   ``room``, ``delay``,        one shared instance per orbit; voices send wet
-                   ``chorus``                  / dry into it
-Per-voice FX       ``lpf``, ``hpf``,           baked into each individual voice; runs before
-                   ``phaser``, ``tremolo``,    mixdown into the orbit
-                   ``compressor``, ``shape``,
-                   ``crush``, ``coarse``
-================== =========================== ================================================
+.. list-table:: Per-voice vs per-orbit FX
+   :header-rows: 1
+   :widths: 32 68
+
+   * - Scope
+     - Setters
+   * - Per-voice (independent per note)
+     - ``gain``, ``pan``, ``speed``, ``lpf``, ``hpf``, ``bpf``, ``phaser``,
+       ``tremolo``, ``compressor``, ``shape``, ``crush``, ``coarse``,
+       ``djf``, ``fm``, ``vowel``
+   * - Per-orbit (one shared bus per orbit)
+     - ``room`` / ``roomsize``, ``delay`` / ``delaytime`` /
+       ``delayfeedback``, ``chorus``
 
 This split lets you give each layer of a stack its own reverb and delay
 character (per-orbit), while still personalising every note's filter and
-modulation (per-voice).
+modulation (per-voice). Every per-voice setter also has a pattern-valued
+overload — feed it a signal to make the parameter move over time; see
+tutorial 09.
 
 Part A: per-voice filters — ``lpf`` and ``hpf``
 ===============================================
@@ -66,7 +71,7 @@ Part C: per-orbit delay — tempo-aware by default
 drive the orbit's delay line.  ``delaytime`` defaults to a tempo-aware
 3/16 cycle (resolved from ``delaysync`` and the current cps), so plain
 ``delay(0.5)`` already locks to the tempo even without a ``delaytime``
-setter.  Tutorial 09 covers the resolver in detail.
+setter.  Tutorial 10 covers the resolver in detail.
 
 .. code-block:: das
 
@@ -100,10 +105,57 @@ in a tight small room while orbit 1 sits inside a cathedral:
 The pluck on orbit 0 sounds tight; the pad on orbit 1 swims in
 reverb — neither bleeds into the other.
 
+Part F: crush & shape — per-voice waveshaping
+=============================================
+
+``crush(bits)`` reduces bit depth for lo-fi grit; ``coarse(n)`` decimates
+the sample rate by a factor of ``n``; ``shape(amount)`` is a waveshaper
+that adds harmonic distortion. All per-voice:
+
+.. code-block:: das
+
+    note("c3 e3 g3 c4", "sawtooth") |> sustain(0.8) |> crush(4.0) |> coarse(4)
+    note("c3 e3 g3 c4", "sine")     |> sustain(0.8) |> shape(0.6)
+
+Part G: tremolo & compressor — per-voice amplitude FX
+=====================================================
+
+``tremolo(rateHz)`` pulses the amplitude (``tremolodepth`` sets the
+depth); ``compressor(thresholdDb)`` tames dynamics so quiet and loud
+notes sit closer together:
+
+.. code-block:: das
+
+    note("d3 d3 d#3 d3", "supersaw") |> sustain(1.0) |> release(0.5) |> tremolo(8.0) |> tremolodepth(0.8)
+    s("bd sd hh cp") |> compressor(-20.0)
+
+Part H: ``bpf`` & ``djf`` — more per-voice filters
+==================================================
+
+``bpf(freq)`` is a band-pass filter (``bpq`` sets resonance/Q); ``djf(x)``
+is a single DJ-style filter knob — below ``0.5`` it acts as a low-pass,
+above ``0.5`` a high-pass, so one parameter sweeps muffled to thin:
+
+.. code-block:: das
+
+    note("c3 e3 g3 c4", "sawtooth") |> sustain(0.8) |> bpf(800.0) |> bpq(6.0)
+    note("c3 e3 g3 c4", "sawtooth") |> sustain(0.8) |> djf(0.8)
+
+Part I: ``chorus`` — per-orbit bus
+==================================
+
+``chorus(amount)`` thickens a sound with slightly detuned copies. Like
+``room`` and ``delay`` it lives on the orbit bus, so all voices on the
+same orbit share one chorus instance:
+
+.. code-block:: das
+
+    note("<[c3,e3,g3] [f3,a3,c4] [g3,b3,d4] [a3,c4,e4]>", "sawtooth") |> chorus(0.5) |> attack(0.05) |> decay(0.1) |> sustain(0.6) |> release(0.3) |> gain(0.4)
+
 .. seealso::
 
    Full source: :download:`tutorials/daStrudel/daStrudel_08_effects_filters.das <../../../../tutorials/daStrudel/daStrudel_08_effects_filters.das>`
 
    Previous tutorial: :ref:`tutorial_dastrudel_per_voice_fx`
 
-   Next tutorial: :ref:`tutorial_dastrudel_adsr_envelopes`
+   Next tutorial: :ref:`tutorial_dastrudel_signals_modulation`

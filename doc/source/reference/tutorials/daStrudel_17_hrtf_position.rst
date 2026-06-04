@@ -1,7 +1,7 @@
 .. _tutorial_dastrudel_hrtf_position:
 
 ====================================================
-STRUDEL-16 — HRTF: 3D Positional Override for Pan
+STRUDEL-17 — HRTF: 3D Positional Override for Pan
 ====================================================
 
 .. index::
@@ -134,7 +134,7 @@ itself HRTF-positioned, so the room follows the source through space.
 
 .. seealso::
 
-   Full source: :download:`tutorials/daStrudel/daStrudel_16_hrtf_position.das <../../../../tutorials/daStrudel/daStrudel_16_hrtf_position.das>`
+   Full source: :download:`tutorials/daStrudel/daStrudel_17_hrtf_position.das <../../../../tutorials/daStrudel/daStrudel_17_hrtf_position.das>`
 
    Standalone examples: ``examples/daStrudel/features/hrtf_basic.das``,
    ``examples/daStrudel/features/hrtf_animated.das``,

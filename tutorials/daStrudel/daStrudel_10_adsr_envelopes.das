@@ -1,4 +1,4 @@
-// Tutorial DASTRUDEL-09: ADSR & Envelope Shaping
+// Tutorial DASTRUDEL-10: ADSR & Envelope Shaping
 //
 // An ADSR envelope shapes a note's amplitude over time:
 //   Attack  — time from key-down to peak
@@ -15,7 +15,7 @@
 // This lets `note(...).s("sine")` ring out for the full note, instead of
 // decaying to silence in 50ms like older defaults.
 //
-// Run: daslang.exe tutorials/daStrudel/daStrudel_09_adsr_envelopes.das
+// Run: daslang.exe tutorials/daStrudel/daStrudel_10_adsr_envelopes.das
 
 options gen2
 options persistent_heap
@@ -125,7 +125,7 @@ def example_velocity_curve() {
 
 [export]
 def main() {
-    print("DASTRUDEL-09: ADSR & Envelope Shaping\n")
+    print("DASTRUDEL-10: ADSR & Envelope Shaping\n")
     example_default_held()
     example_pluck()
     example_pad()
