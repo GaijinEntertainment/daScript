@@ -29,6 +29,7 @@ This skill uses `bin/Release/daslang.exe` in examples below (the dominant local-
 - **Always use `timeout: 0`** (no timeout) when running `cmake --build` commands. A build that hasn't finished is not stuck or broken, it's just compiling
 - **Do not assume build failure** from lack of output — MSVC and most generators are silent during compilation and only print when there are warnings/errors or when it finishes
 - For incremental builds after editing a single `.cpp` file, expect ~2-5 minutes. For changes touching headers, expect longer
+- **MSVC `C1001` / `LNK1000` during "Generating code"** (Windows) — link-time codegen (LTCG) choking on a **stale incremental database** (`.ipdb`/`.iobj`) in a long-lived `build/`, *not* a code bug. The line `"no usable IPDB/IOBJ from previous compilation … fall back to full compilation"` on a clean retry confirms it. Fix: clean-rebuild just the offending target — `cmake --build build --target <name> --clean-first` — rather than nuking `build/`. Commonly triggered when a config change (e.g. flipping a `DAS_*_DISABLED` flag) forces a recompile of an object whose stale LTCG state no longer matches.
 
 ## Debugging runtime crashes
 

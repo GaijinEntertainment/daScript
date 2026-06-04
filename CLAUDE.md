@@ -50,6 +50,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
 | `skills/cpp_integration.md` | Writing/editing C++ in `src/`, `modules/`, `tutorials/integration/cpp/` |
+| `skills/clang_bind_build.md` | Enabling the `dasClangBind` module / installing or bumping the libclang SDK / running any `bind_*.das` self-binder (`bind_clangbind`, `bind_imgui`, …) to regenerate native bindings |
 | `skills/daslib_modules.md` | Working with `daslib/` modules or extending the stdlib |
 | `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
 | `skills/writing_benchmarks.md` | Writing/running `benchmarks/` files |
