@@ -112,6 +112,7 @@ def example_euclid() {
     for (h in haps) {
         print("  onset at {h.whole.start}\n")
     }
+    delete haps
     play(pat, 4.0)
 }
 
@@ -122,6 +123,7 @@ def example_euclid_rotated() {
     for (h in haps) {
         print("  onset at {h.whole.start}\n")
     }
+    delete haps
     play(pat, 4.0)
 }
 
