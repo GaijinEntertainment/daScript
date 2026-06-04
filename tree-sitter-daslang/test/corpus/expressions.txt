@@ -164,3 +164,39 @@ def test() {
             (integer_literal)
             (integer_literal)
             (integer_literal)))))))
+
+================================================================================
+Expression-level reader macro
+================================================================================
+
+def test() {
+  let names <- %linq! from c in cars where c.price > 100 select c.name %%
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (reader_macro
+            name: (identifier)
+            content: (reader_macro_content)))))))
+
+================================================================================
+Module-level reader macro
+================================================================================
+
+%define~ foo %%
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (reader_macro
+    name: (identifier)
+    content: (reader_macro_content)))

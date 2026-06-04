@@ -106,6 +106,8 @@
 ; Require (import)
 (require_declaration
   (require_module_name) @module)
+(require_declaration
+  guard: (identifier) @module)
 
 ; Struct/class names
 (structure_declaration
