@@ -1883,8 +1883,7 @@ class public LlvmJitVisitor : AstVisitor {
     // String-key find/at via the precomputed-hash C++ helpers: emit hash(key) inline
     // (build_string_hash folds it to an immediate for a constant key) and pass it through,
     // so the hash is hoistable/CSE-able and a literal key costs no hashing.
-    def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
-        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+    def build_string_table_find_call(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; h : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
@@ -1899,6 +1898,97 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
         LLVMAddCallSiteAttribute(ccall, 5u, attributes.nocapture)
         return ccall
+    }
+
+    // hashToHashKey(TableHashKey(hash)) from runtime_table.h: truncate the 64-bit hash to the
+    // 32-bit TableHashKey, then map 0/1 -> 16777619 so it can't alias EMPTY/KILLED slots.
+    def reduce_hash_to_key32(h : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var hk = LLVMBuildTrunc(g_builder, h, types.t_int32, "hk.trunc")
+        var one = LLVMConstInt(types.t_int32, 1ul, 0)
+        var prime = LLVMConstInt(types.t_int32, 16777619ul, 0)
+        var le1 = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULE, hk, one, "hk.le1")
+        return LLVMBuildSelect(g_builder, le1, prime, hk, "hk")
+    }
+
+    // PackedFind<char*>: scan hashes[0..N) (uint32), lowest i with hashes[i]==hk32 else -1.
+    // Branch-free unrolled scalar fold (apply i=N-1..0 so the lowest match sticks).
+    def packed_find_scalar(hashes : LLVMOpaqueValue?; hk32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var idx = types.ConstI32(uint64(-1))
+        for (k in range(JIT_TABLE_MAX_LINEAR_CAPACITY)) {
+            let j = JIT_TABLE_MAX_LINEAR_CAPACITY - 1 - k
+            var slot = LLVMBuildGEP2(g_builder, types.t_int32, hashes, LLVMConstInt(types.t_int64, uint64(j), 0), "h.slot")
+            var hv = LLVMBuildLoad2(g_builder, types.t_int32, slot, "h.v")
+            var eq = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, hk32, "h.eq")
+            idx = LLVMBuildSelect(g_builder, eq, types.ConstI32(uint64(j)), idx, "h.idx")
+        }
+        return idx
+    }
+
+    // Same scan as one <N x i32> SIMD compare: load the hash slots, compare against the
+    // splatted key, bitcast the mask to i8, cttz -> first set lane; empty mask -> -1.
+    def packed_find_vector(hashes : LLVMOpaqueValue?; hk32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var vecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
+        var hvp = LLVMBuildPointerCast(g_builder, hashes, LLVMPointerType(vecTy, 0u), "h.vp")
+        var hv = LLVMBuildLoad2(g_builder, vecTy, hvp, "h.vec")
+        LLVMSetAlignment(hv, 4u)
+        var ins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(vecTy), hk32, LLVMConstInt(types.t_int32, 0ul, 0), "h.ins")
+        var splat = LLVMBuildShuffleVector(g_builder, ins, LLVMGetUndef(vecTy), LLVMConstNull(vecTy), "h.splat")
+        var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, splat, "h.eqv")
+        var maskI8 = LLVMBuildBitCast(g_builder, eqv, types.t_int8, "h.mask")
+        var argTypes <- [ types.t_int8 ]
+        let id = LLVMLookupIntrinsicID("llvm.cttz.i8")
+        var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+        var cttzTy = LLVMFunctionType(types.t_int8, [ types.t_int8, types.t_int1 ])
+        var cttzArgs <- [ maskI8, LLVMConstInt(types.t_int1, 0ul, 0) ]
+        var ctz = LLVMBuildCall2(g_builder, cttzTy, decl, cttzArgs, "h.cttz")
+        var ctz32 = LLVMBuildZExt(g_builder, ctz, types.t_int32, "h.cttz32")
+        var none = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, maskI8, LLVMConstInt(types.t_int8, 0ul, 0), "h.none")
+        return LLVMBuildSelect(g_builder, none, types.ConstI32(uint64(-1)), ctz32, "h.vidx")
+    }
+
+    def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        if (JIT_STRING_FIND == JIT_STRING_FIND_MODE.NONE) {
+            return build_string_table_find_call(tab, key, h, valueTypeSize)
+        }
+        // Read capacity + hashes from the table header. Small (packed) iff cap != 0 && cap <=
+        // TABLE_MAX_LINEAR_CAPACITY -> inlined fixed scan; else C++ (cap==0 empty, or hashed).
+        let hdrTy = table_header_llvm_type(types)
+        var tabHdr = LLVMBuildLoad2(g_builder, hdrTy, LLVMBuildPointerCast(g_builder, tab, LLVMPointerType(hdrTy, 0u), "tab.hdrp"), "tab.hdr")
+        var cap = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.CAPACITY), "cap")
+        var hashesV = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.HASHES), "hashes.v")
+        var hashes = LLVMBuildPointerCast(g_builder, hashesV, LLVMPointerType(types.t_int32, 0u), "hashes")
+        var hk32 = reduce_hash_to_key32(h)
+
+        var find_entry = LLVMGetInsertBlock(g_builder)
+        var find_parent = LLVMGetBasicBlockParent(find_entry)
+        var bb_small = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.small")
+        var bb_large = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.large")
+        var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.merge")
+        var nz = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, cap, LLVMConstInt(types.t_int64, 0ul, 0), "cap.nz")
+        var le = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULE, cap, LLVMConstInt(types.t_int64, uint64(JIT_TABLE_MAX_LINEAR_CAPACITY), 0), "cap.le")
+        var isSmall = LLVMBuildAnd(g_builder, nz, le, "cap.small")
+        LLVMBuildCondBr(g_builder, isSmall, bb_small, bb_large)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_small)
+        var idxSmall : LLVMOpaqueValue?
+        if (JIT_STRING_FIND == JIT_STRING_FIND_MODE.VECTOR) {
+            idxSmall = packed_find_vector(hashes, hk32)
+        } else {
+            idxSmall = packed_find_scalar(hashes, hk32)
+        }
+        var smallEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_merge)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_large)
+        var idxLarge = build_string_table_find_call(tab, key, h, valueTypeSize)
+        var largeEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_merge)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_merge)
+        var res = LLVMBuildPhi(g_builder, types.t_int32, "find.idx")
+        LLVMAddIncoming(res, [ idxSmall, idxLarge ], [ smallEnd, largeEnd ])
+        return res
     }
 
     def build_string_table_at_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {

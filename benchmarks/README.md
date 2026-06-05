@@ -50,6 +50,7 @@ Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the la
 | `test03.das` | Constant string-literal keys (`const_*`) vs runtime-array keys (`var_*`) — baseline for item 4 (precomputed-hash specialization of constant keys) |
 | `test04.das` | Many small tables (decs/per-entity shape) — thousands of independent N-element tables, build (watch B/op for item 1 memory) and cold-sweep query (cache locality) |
 | `test05.das` | Crossover prototype — inlined hash-only linear scan (`lin_*`) vs real open-addressed `?[]` (`hash_*`) over N, short and long keys; predicts `maxLinearCapacity` before packed mode exists |
+| `test06.das` | Lookup-only (never insert) packed string-table find at N=8 — const/var keys, hit and miss; A/B/C harness for the JIT inlined packed find (`JIT_STRING_FIND` none/scalar/vector) |
 
 ## core/array/
 

@@ -177,6 +177,41 @@ anything for constant keys. `var_*` (runtime keys) still hash; the inlined loop 
 C++ call (cf. test13), so the straight-line microbench shows little there — the runtime-key
 win is loop hoisting / CSE of an invariant key, which this per-key-once bench doesn't expose.
 
+## Inlined packed find — 3-way A/B/C MEASURED (JIT, `JIT_STRING_FIND` none/scalar/vector)
+
+String-key `?[]` find previously always called the C++ helper (which hashes, then for a
+packed table runs `PackedFind`). We can inline that fixed 8-slot uint32 hash scan on the JIT
+side when the table is small (`cap != 0 && cap <= 8`), falling back to the C++ call for
+empty/hashed. Three variants — `NONE` (always C++), `SCALAR` (unrolled 8× select fold),
+`VECTOR` (`<8 x i32>` compare + `cttz`). Lookup-only benches, ns/op:
+
+| lane | NONE | SCALAR | VECTOR |
+|---|---|---|---|
+| const_hit (t06)  | 4.4 | 2.9 | **1.4** |
+| const_miss (t06) | 5.9 | 2.6 | **1.2** |
+| var_hit (t06)    | 7.0 | 6.9 | **4.8** |
+| var_miss (t06)   | 7.8 | 6.7 | **4.7** |
+| const_short (t03)| 4.7 | 2.9 | **1.4** |
+| const_long (t03) | 4.4 | 3.0 | **1.3** |
+| var_short (t03)  | 6.2 | 7.0 | **4.6** |
+| var_long (t03)   | 17.2 | 20.0 | 17.8 |
+
+**VECTOR wins across the board and is the pick.**
+- Constant keys drop to **~1.3ns** (folded-hash immediate + one SIMD compare) — −70% vs the
+  C++ call. `const_miss` is the sharpest (5.9 → 1.2): the C++ path pays call overhead + a full
+  scan on a miss, while the vector compare costs the same hit or miss.
+- Runtime short keys: ~4.7ns vs ~7 (−33%).
+- `var_long` is *hash*-dominated (a long runtime key costs ~14ns to hash), so the find win is
+  masked — VECTOR ≈ NONE (17.8 vs 17.2). SCALAR even regresses there (20.0) from its extra
+  scalar ops.
+
+**SCALAR** helps constants but is a wash-to-regression on runtime keys — not worth shipping.
+The `JIT_STRING_FIND` toggle stays in the source (defaulting to `VECTOR`) for future A/Bs.
+Gate is `cap != 0 && cap <= TABLE_MAX_LINEAR_CAPACITY` (mirrors C++ `find`: cap==0 → −1, then
+packed); the inlined scan reduces the 64-bit hash to the 32-bit `TableHashKey` exactly as
+`hashToHashKey` does. Covers `?[]`, `key_exists`, and `find` (all route through
+`build_table_find`); `[]`/insert keeps the C++ `at` path.
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor

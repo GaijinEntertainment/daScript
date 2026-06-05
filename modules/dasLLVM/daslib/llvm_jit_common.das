@@ -184,6 +184,21 @@ enum public JIT_SIMFUNCTION {
     FLAGS
 }
 
+// Must match TABLE_MAX_LINEAR_CAPACITY in runtime_table.h. A packed string table has
+// exactly this many uint32 hash slots, so the inlined packed find scans a fixed count.
+let public JIT_TABLE_MAX_LINEAR_CAPACITY = 8
+
+// Inlined small-table string find on the JIT side. NONE = always call the C++ helper;
+// SCALAR = inline an unrolled 8-slot scan for small tables (C++ for large); VECTOR = the
+// same scan as a <8 x i32> SIMD compare. A/B/C perf experiment; flip + clear .jitted_scripts.
+enum public JIT_STRING_FIND_MODE {
+    NONE
+    SCALAR
+    VECTOR
+}
+
+let public JIT_STRING_FIND = JIT_STRING_FIND_MODE.VECTOR
+
 enum public JIT_FUNCTION {
     SIM_FUNCTION
 }
@@ -319,6 +334,23 @@ def public get_string_table_at_with_hash(g_builder : LLVMOpaqueBuilder?; llvm_mo
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at_wh")
     return (tab_fun, at_type)
+}
+
+// Generic Table header (Array base + keys/hashes/tombstones) with pointer fields as void*,
+// so it is independent of key/value type. Field order matches JIT_TABLE; used only to read
+// capacity / hashes for the inlined packed find.
+def public table_header_llvm_type(var types : PrimitiveTypes?) : LLVMOpaqueType? {
+    return types |> StructType(fixed_array(
+        types.LLVMVoidPtrType(),   // DATA
+        types.t_int64,             // SIZE
+        types.t_int64,             // CAPACITY
+        types.t_int32,             // MAGIC
+        types.t_int32,             // LOCK
+        types.t_int32,             // FLAGS
+        types.t_int32,             // PAD_AFTER_FLAGS
+        types.LLVMVoidPtrType(),   // KEYS
+        types.LLVMVoidPtrType(),   // HASHES (TableHashKey* = uint32*)
+        types.t_int64))            // TOMBSTONES
 }
 
 def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
