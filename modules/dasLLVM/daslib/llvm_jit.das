@@ -36,6 +36,15 @@ require llvm/llvm_debug
 
 var active_filenames : table<string>
 
+// Packed-find codegen per key type (measured on benchmarks/core/small_table, JIT):
+//  - INT keys: SIMD wins. 8xi32 is one cheap 256-bit vpcmpeqd, and it crushes early-out on a
+//    miss (early-out scans all 8 with an i<sz guard, no early exit).
+//  - STRING keys: early-out wins. 8xi64 is 512 bits -> 2x vpcmpeqq + mask reduction (heavy);
+//    the scalar early-out exits on the first hit and has no size guard. json_find -35%.
+// Flip + bump LLVM_JIT_CODEGEN_VERSION to re-A/B.
+let JIT_PACKED_FIND_INT_EARLY_OUT = false
+let JIT_PACKED_FIND_STR_EARLY_OUT = true
+
 // VarInfo annotation type on c++ side is `vector`.
 // They cannot be allocated as global variable and require
 // Memory managment - ctors/dtors, same as FileInfo.
@@ -1938,6 +1947,9 @@ class public LlvmJitVisitor : AstVisitor {
     // bitcast to i8, cttz -> first set lane; no match -> -1. Used by both the integer key-scan and
     // the string 64-bit-hash scan (keyElemTy = i64, keysPtr = the hashes array).
     def packed_find_vector_keys(keysPtr : LLVMOpaqueValue?; keyVal : LLVMOpaqueValue?; keyElemTy : LLVMOpaqueType?; sizeI32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        if (JIT_PACKED_FIND_INT_EARLY_OUT) {
+            return packed_find_earlyout(keysPtr, keyVal, keyElemTy, sizeI32, true, 1u)
+        }
         var keyVecTy = LLVMVectorType(keyElemTy, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var i32VecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var kvp = LLVMBuildPointerCast(g_builder, keysPtr, LLVMPointerType(keyVecTy, 0u), "k.vp")
@@ -1962,6 +1974,9 @@ class public LlvmJitVisitor : AstVisitor {
     // 64-bit width) and a real hash is >1, so the tail never matches — unlike the integer key-data
     // scan, whose tail can hold a valid 0 key and needs the size mask. Exact: no strcmp.
     def packed_find_hashes64(hashesPtr : LLVMOpaqueValue?; hash : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        if (JIT_PACKED_FIND_STR_EARLY_OUT) {
+            return packed_find_earlyout(hashesPtr, hash, types.t_int64, null, false, 8u)
+        }
         var vecTy = LLVMVectorType(types.t_int64, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var i32VecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var hvp = LLVMBuildPointerCast(g_builder, hashesPtr, LLVMPointerType(vecTy, 0u), "h.vp")
@@ -1971,6 +1986,46 @@ class public LlvmJitVisitor : AstVisitor {
         var splat = LLVMBuildShuffleVector(g_builder, ins, LLVMGetUndef(vecTy), LLVMConstNull(i32VecTy), "h.splat")
         var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, splat, "h.eqv")
         return first_set_lane_or_neg1(LLVMBuildBitCast(g_builder, eqv, types.t_int8, "h.mask"))
+    }
+
+    // Unrolled scalar early-out packed find: for i in [0,N): if ([i<sz when guarded] && elem[i]==q)
+    // return i; -1 if none. Mirrors the C++ PackedPolicy early-out; emitted when the toggle is on.
+    def packed_find_earlyout(elemPtr : LLVMOpaqueValue?; queryVal : LLVMOpaqueValue?; elemTy : LLVMOpaqueType?;
+                             sizeI32 : LLVMOpaqueValue?; useSizeGuard : bool; loadAlign : uint) : LLVMOpaqueValue? {
+        let N = JIT_TABLE_MAX_LINEAR_CAPACITY
+        var parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
+        var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, parent, "pf.merge")
+        var bb_nf = LLVMAppendBasicBlockInContext(g_ctx, parent, "pf.nf")
+        var checks <- [for (_i in range(N)); LLVMAppendBasicBlockInContext(g_ctx, parent, "pf.chk")]
+        var founds <- [for (_i in range(N)); LLVMAppendBasicBlockInContext(g_ctx, parent, "pf.found")]
+        LLVMBuildBr(g_builder, checks[0])
+        for (i in range(N)) {
+            LLVMPositionBuilderAtEnd(g_builder, checks[i])
+            var ci = types.ConstI32(uint64(i))
+            var ptr = LLVMBuildGEP2(g_builder, elemTy, elemPtr, ci, "pf.gep")
+            var ld = LLVMBuildLoad2(g_builder, elemTy, ptr, "pf.ld")
+            LLVMSetAlignment(ld, loadAlign)
+            var hit = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, ld, queryVal, "pf.eq")
+            if (useSizeGuard) {
+                var live = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, ci, sizeI32, "pf.live")
+                hit = LLVMBuildAnd(g_builder, hit, live, "pf.hit")
+            }
+            let nextBB = (i + 1 < N) ? checks[i + 1] : bb_nf
+            LLVMBuildCondBr(g_builder, hit, founds[i], nextBB)
+            LLVMPositionBuilderAtEnd(g_builder, founds[i])
+            LLVMBuildBr(g_builder, bb_merge)
+        }
+        LLVMPositionBuilderAtEnd(g_builder, bb_nf)
+        LLVMBuildBr(g_builder, bb_merge)
+        LLVMPositionBuilderAtEnd(g_builder, bb_merge)
+        var phi = LLVMBuildPhi(g_builder, types.t_int32, "pf.idx")
+        var vals <- [for (i in range(N)); types.ConstI32(uint64(i))]
+        vals |> push(types.ConstI32(uint64(-1)))
+        var blks <- [for (i in range(N)); founds[i]]
+        blks |> push(bb_nf)
+        LLVMAddIncoming(phi, vals, blks)
+        unsafe { delete checks; delete founds; delete vals; delete blks; }
+        return phi
     }
 
     // String tab?[key] / find: packed -> inline 64-bit-hash SIMD scan (exact, no strcmp — a 64-bit
