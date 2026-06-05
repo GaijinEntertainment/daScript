@@ -883,6 +883,7 @@ src/simulate/simulate_fusion_op2_scalar_vec.cpp
 src/simulate/simulate_fusion_at.cpp
 src/simulate/simulate_fusion_at_array.cpp
 src/simulate/simulate_fusion_tableindex.cpp
+src/simulate/simulate_fusion_tablewithhash.cpp
 src/simulate/simulate_fusion_misc_copy.cpp
 src/simulate/simulate_fusion_call1.cpp
 src/simulate/simulate_fusion_call2.cpp
