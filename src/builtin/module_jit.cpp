@@ -793,6 +793,15 @@ extern "C" {
         DAS_API void * get_jit_string_table_at_with_hash ( ) {
             return das_get_jit_string_table_at_with_hash();
         }
+        // Insert-after-packed-miss globals: the JIT's inline packed find calls these on a miss.
+        // The standalone-exe baker (llvm_exe.das add_table_at_call) stores the in-exe address
+        // here; without it the glob keeps its compile-process address and faults under ASLR.
+        DAS_API void * get_jit_string_table_at_after_packed_miss ( ) {
+            return das_get_jit_string_table_at_after_packed_miss();
+        }
+        DAS_API void * get_jit_table_at_after_packed_miss ( int32_t baseType, Context * context, LineInfoArg * at ) {
+            return das_get_jit_table_at_after_packed_miss(baseType, context, at);
+        }
         DAS_API void * das_get_jit_new ( TypeAnnotation *annotation ) {
             return annotation->jitGetNew();
         }
