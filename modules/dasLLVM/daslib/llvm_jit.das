@@ -1910,22 +1910,10 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMBuildSelect(g_builder, le1, prime, hk, "hk")
     }
 
-    // PackedFind<char*>: scan hashes[0..N) (uint32), lowest i with hashes[i]==hk32 else -1.
-    // Branch-free unrolled scalar fold (apply i=N-1..0 so the lowest match sticks).
-    def packed_find_scalar(hashes : LLVMOpaqueValue?; hk32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        var idx = types.ConstI32(uint64(-1))
-        for (k in range(JIT_TABLE_MAX_LINEAR_CAPACITY)) {
-            let j = JIT_TABLE_MAX_LINEAR_CAPACITY - 1 - k
-            var slot = LLVMBuildGEP2(g_builder, types.t_int32, hashes, LLVMConstInt(types.t_int64, uint64(j), 0), "h.slot")
-            var hv = LLVMBuildLoad2(g_builder, types.t_int32, slot, "h.v")
-            var eq = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, hk32, "h.eq")
-            idx = LLVMBuildSelect(g_builder, eq, types.ConstI32(uint64(j)), idx, "h.idx")
-        }
-        return idx
-    }
-
-    // Same scan as one <N x i32> SIMD compare: load the hash slots, compare against the
-    // splatted key, bitcast the mask to i8, cttz -> first set lane; empty mask -> -1.
+    // PackedFind<char*> as one <N x i32> SIMD compare: load the hash slots, compare against
+    // the splatted 32-bit key, bitcast the mask to i8, cttz -> first set lane; empty -> -1.
+    // The empty tail (hash 0) never matches the clamped key, so no size guard is needed.
+    // (Measured fastest of none/scalar/vector — see benchmarks/core/small_table/results.md.)
     def packed_find_vector(hashes : LLVMOpaqueValue?; hk32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
         var vecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var hvp = LLVMBuildPointerCast(g_builder, hashes, LLVMPointerType(vecTy, 0u), "h.vp")
@@ -1948,11 +1936,8 @@ class public LlvmJitVisitor : AstVisitor {
 
     def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
         var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
-        if (JIT_STRING_FIND == JIT_STRING_FIND_MODE.NONE) {
-            return build_string_table_find_call(tab, key, h, valueTypeSize)
-        }
         // Read capacity + hashes from the table header. Small (packed) iff cap != 0 && cap <=
-        // TABLE_MAX_LINEAR_CAPACITY -> inlined fixed scan; else C++ (cap==0 empty, or hashed).
+        // TABLE_MAX_LINEAR_CAPACITY -> inlined SIMD scan; else C++ (cap==0 empty, or hashed).
         let hdrTy = table_header_llvm_type(types)
         var tabHdr = LLVMBuildLoad2(g_builder, hdrTy, LLVMBuildPointerCast(g_builder, tab, LLVMPointerType(hdrTy, 0u), "tab.hdrp"), "tab.hdr")
         var cap = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.CAPACITY), "cap")
@@ -1971,12 +1956,7 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMBuildCondBr(g_builder, isSmall, bb_small, bb_large)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_small)
-        var idxSmall : LLVMOpaqueValue?
-        if (JIT_STRING_FIND == JIT_STRING_FIND_MODE.VECTOR) {
-            idxSmall = packed_find_vector(hashes, hk32)
-        } else {
-            idxSmall = packed_find_scalar(hashes, hk32)
-        }
+        var idxSmall = packed_find_vector(hashes, hk32)
         var smallEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
 

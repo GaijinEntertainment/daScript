@@ -206,8 +206,8 @@ empty/hashed. Three variants — `NONE` (always C++), `SCALAR` (unrolled 8× sel
   scalar ops.
 
 **SCALAR** helps constants but is a wash-to-regression on runtime keys — not worth shipping.
-The `JIT_STRING_FIND` toggle stays in the source (defaulting to `VECTOR`) for future A/Bs.
-Gate is `cap != 0 && cap <= TABLE_MAX_LINEAR_CAPACITY` (mirrors C++ `find`: cap==0 → −1, then
+VECTOR shipped; the NONE/SCALAR paths and the `JIT_STRING_FIND` toggle were stripped (no dead
+code). Gate is `cap != 0 && cap <= TABLE_MAX_LINEAR_CAPACITY` (mirrors C++ `find`: cap==0 → −1, then
 packed); the inlined scan reduces the 64-bit hash to the 32-bit `TableHashKey` exactly as
 `hashToHashKey` does. Covers `?[]`, `key_exists`, and `find` (all route through
 `build_table_find`); `[]`/insert keeps the C++ `at` path.

@@ -184,20 +184,9 @@ enum public JIT_SIMFUNCTION {
     FLAGS
 }
 
-// Must match TABLE_MAX_LINEAR_CAPACITY in runtime_table.h. A packed string table has
-// exactly this many uint32 hash slots, so the inlined packed find scans a fixed count.
+// Must match TABLE_MAX_LINEAR_CAPACITY in runtime_table.h. A packed table has exactly this
+// many slots, so the inlined packed find scans a fixed count (and can vectorize it).
 let public JIT_TABLE_MAX_LINEAR_CAPACITY = 8
-
-// Inlined small-table string find on the JIT side. NONE = always call the C++ helper;
-// SCALAR = inline an unrolled 8-slot scan for small tables (C++ for large); VECTOR = the
-// same scan as a <8 x i32> SIMD compare. A/B/C perf experiment; flip + clear .jitted_scripts.
-enum public JIT_STRING_FIND_MODE {
-    NONE
-    SCALAR
-    VECTOR
-}
-
-let public JIT_STRING_FIND = JIT_STRING_FIND_MODE.VECTOR
 
 enum public JIT_FUNCTION {
     SIM_FUNCTION
