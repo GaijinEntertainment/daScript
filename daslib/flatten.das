@@ -401,6 +401,12 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
     } elif (stmt is ExprBlock) {
         // Bare lexical scope — flatten its statements under the same predicate.
         lower_list(ctx, stmt as ExprBlock, structPred, out)
+    } elif (stmt is ExprWith) {
+        // `with (x) { body }` is pure infer-time name resolution: post-infer the
+        // body's accesses are already bound to x's fields, and the node simulates
+        // to its body alone (ast_simulate.cpp: visit(ExprWith) = body). So unwrap
+        // it — lower the body under the same predicate, exactly like a bare block.
+        lower_branch(ctx, (stmt as ExprWith).body, structPred, out)
     } else {
         // Bare expression statement (a discarded value). Lifting emits any inline
         // frames and their side effects (global writes, etc.) as their own

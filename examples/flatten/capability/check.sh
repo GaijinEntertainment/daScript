@@ -17,6 +17,10 @@
 #   4. cap_swizzle.shader (user call buried under a `.xyz` swizzle) -> compiles.
 #      flatten recurses through the swizzle operand to inline the call; the
 #      backend bans user calls, so a clean compile proves it was inlined.
+#
+#   5. cap_with.shader (a `with (inp)` scope) -> compiles. The backend bans
+#      ExprWith; flatten unwraps it to its body (post-infer it's pure name
+#      resolution), so a clean compile proves it was omitted.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -70,6 +74,18 @@ nodes="$(echo "$out" | grep -c '^node ')"
 errs="$(echo "$out" | grep -ci error)"
 if [[ "$errs" -eq 0 && "$nodes" -gt 0 ]]; then
     echo "   ok — compiles ($nodes nodes); the swizzled user call was inlined"
+else
+    echo "   FAIL — errors=$errs nodes=$nodes"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "5. cap_with.shader (with-scope -> unwrapped to body)"
+out="$(compile "$here/cap_with.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+errs="$(echo "$out" | grep -ci error)"
+if [[ "$errs" -eq 0 && "$nodes" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes); the with-scope was unwrapped"
 else
     echo "   FAIL — errors=$errs nodes=$nodes"
     echo "$out" | grep -i error | head

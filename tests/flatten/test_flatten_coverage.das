@@ -70,6 +70,33 @@ def f_block(x : int) : int {
     return r
 }
 
+// ----- lower_stmt: bare block declaring a block-local (scope is omittable) -----
+[flatten]
+def f_block_local(x : int) : int {
+    var r = x
+    {
+        let y = r * 3
+        r = y + 1
+    }
+    return r
+}
+
+// ----- lower_stmt: `with` unwrap (pure infer-time scope; node simulates to body) -----
+struct Q {
+    px : int
+    py : int
+}
+
+[flatten]
+def f_with(n : int) : int {
+    let q = Q(px = n, py = n * 2)
+    var acc = n
+    with (q) {
+        acc += px + py     // px, py resolve to q.px, q.py at infer; with is omittable
+    }
+    return acc
+}
+
 // ----- lower_stmt: ExprLet, multiple variables + no initializer (v.init==null) -----
 [flatten]
 def f_multivar(x : int) : int {
@@ -144,6 +171,16 @@ def test_flatten_coverage(t : T?) {
     t |> run("bare block scope") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_block_flat(v), f_block(v))
+        }
+    }
+    t |> run("bare block declaring a block-local") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_block_local_flat(v), f_block_local(v))
+        }
+    }
+    t |> run("with-scope unwrap") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_with_flat(v), f_with(v))
         }
     }
     t |> run("let with multiple variables") @(t : T?) {
