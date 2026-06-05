@@ -92,6 +92,22 @@ else
     fail=1
 fi
 
+echo "6. cap_loop_cond.shader (loop-var-gated accumulate -> const-folded, no select)"
+out="$(compile "$here/cap_loop_cond.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+selects="$(echo "$out" | grep -c ' select ')"
+errs="$(echo "$out" | grep -ci error)"
+# The cond is a function of the loop var only, so every select const-folds away and
+# flatten_fold drops the false-iteration self-assigns. Without the fold this errors
+# (50503, self-referential accumulator); with it, zero select nodes remain.
+if [[ "$errs" -eq 0 && "$nodes" -gt 0 && "$selects" -eq 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), $selects select nodes (all const-folded)"
+else
+    echo "   FAIL — errors=$errs nodes=$nodes selects=$selects (expected 0 selects)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
 echo
 if [[ "$fail" -eq 0 ]]; then echo "capability: all checks passed"; else echo "capability: FAILED"; fi
 exit $fail

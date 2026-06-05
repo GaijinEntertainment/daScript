@@ -1422,13 +1422,24 @@ class ShaderMacro : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
-        // Skip during lint (the twin is irrelevant to linting source) and on the
-        // re-infer cycle after flattening already ran (the "flattened" guard arg).
-        if (is_in_lint_check() || shader_annotation_arg(func, "flattened")) {
+        // Skip during lint (the twin is irrelevant to linting source).
+        if (is_in_lint_check() || shader_annotation_arg(func, "folded")) {
             return true
         }
-        // flatten does ALL lowering: inline helper calls, if/else -> ?:, unroll
-        // fixed loops. The [hint] primitives are kept (whitelist precedence).
+        if (shader_annotation_arg(func, "flattened")) {
+            // Cycle 2 (re-inferred after flattening): collapse const-condition selects
+            // and drop the resulting pure self-assigns (`acc = acc`) — without this a
+            // loop-var-gated accumulate leaves a self-referential accumulator the IR
+            // builder cannot resolve. Re-infer once more if anything changed.
+            let folded = flatten_fold(func)
+            set_shader_annotation_flag(func, "folded")
+            if (folded) {
+                astChanged = true
+            }
+            return true
+        }
+        // Cycle 1: flatten does ALL lowering — inline helper calls, if/else -> ?:,
+        // unroll fixed loops. The [hint] primitives are kept (whitelist precedence).
         var ctx = flatten_function(func, HINT_WHITELIST)
         if (!ctx.ok) {
             errors := ctx.err

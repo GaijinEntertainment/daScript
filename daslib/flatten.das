@@ -19,15 +19,18 @@ module flatten shared private
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/macro_boost
 require daslib/rtti
 require strings
 
 // Phase token carried as the "phase" argument of the [flatten] annotation on
 // the ORIGINAL function (which we own and may mutate in place). Cycle 1 lowers
 // the twin and parks it at PHASE_LOWERED (then re-infers so call.func resolves);
-// cycle 2 runs the post-inference shape scan and parks at PHASE_DONE so the
-// entry never re-transforms.
+// cycle 2 runs the post-infer select fold and parks at PHASE_FOLDED (re-infers
+// again if it changed anything); the final cycle runs the shape scan and parks at
+// PHASE_DONE so the entry never re-transforms.
 let private PHASE_LOWERED = 1
+let private PHASE_FOLDED = 2
 let private PHASE_DONE = 999
 
 // Leaf builtins permitted to survive into flattened output: pure, branch-safe,
@@ -965,6 +968,69 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>) :
     return ctx
 }
 
+// ===== Post-infer select folding (infer_type_fold) =====
+//
+// The typer folds constant comparisons during re-infer (`0 >= 2` → false) but
+// leaves the wrapping `?:` in place: at infer time it lacks the side-effect flags
+// to prove the dead arm droppable, so a const-condition select survives — and a
+// predicated self-assign then collapses (post-typer) to `acc = acc`, which a
+// dataflow backend cannot resolve (an accumulator that reads itself with no
+// producer). This pass runs AFTER re-infer, where the conditions are already
+// `ExprConstBool`: it collapses every `const ? a : b` to the live arm (full tree,
+// so deeply-buried selects fold too), then drops the resulting `lhs = lhs`
+// self-assigns whose lvalue is provably side-effect-free. The two folds the
+// compiler will not do at infer time, done here with the lint side-effect estimate.
+
+class private FoldOp3Visitor : AstVisitor {
+    changed : bool
+    def override visitExprOp3(var that : ExprOp3?) : ExpressionPtr {
+        // Post-order: subexpr/arms already folded, so a now-constant condition
+        // collapses to its live arm (the dead arm + condition become unreachable).
+        if (that.subexpr is ExprConstBool) {
+            changed = true
+            return (that.subexpr as ExprConstBool).value ? that.left : that.right
+        }
+        return that
+    }
+}
+
+[macro_function]
+def public flatten_fold(var func : FunctionPtr) : bool {
+    //! Post-infer select-folding pass: collapse `const ? a : b` to the live arm and
+    //! drop the side-effect-free `lhs = lhs` self-assigns left behind by a folded
+    //! false-select. Run it AFTER re-inference — the constant conditions must already
+    //! be `ExprConstBool`, which only the typer produces. Returns true if anything
+    //! changed (the caller should then re-infer for clean codegen). `[flatten]` runs
+    //! this automatically between lowering and the shape check; backends calling
+    //! `flatten_function` run it after their own re-infer, before consuming the twin.
+    if (!(func.body is ExprBlock)) return false
+    var v = new FoldOp3Visitor()
+    make_visitor(*v) $(adapter) {
+        visit(func.body, adapter)
+    }
+    var changed = v.changed
+    unsafe {
+        delete v
+    }
+    // Drop the pure self-assigns (`acc = acc`) a collapsed false-select leaves behind.
+    // has_sideeffects gates it: `g[k()] = g[k()]` keeps (evaluating the lvalue is not free).
+    // Erase in reverse so earlier indices stay valid as we remove.
+    var blk = func.body as ExprBlock
+    var si = length(blk.list) - 1
+    while (si >= 0) {
+        var s = blk.list[si]
+        if (s is ExprCopy) {
+            let cp = s as ExprCopy
+            if (describe(cp.left) == describe(cp.right) && !has_sideeffects(cp.left)) {
+                blk.list |> erase(si)
+                changed = true
+            }
+        }
+        si --
+    }
+    return changed
+}
+
 // ===== Post-inference shape verification =====
 //
 // After lowering + re-infer, the twin must be branchless and call-free: no
@@ -1039,7 +1105,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             errors := "flatten: twin {twin_name(func)} was not declared"
             return false
         }
-        if (ph != PHASE_LOWERED) {
+        if (ph != PHASE_LOWERED && ph != PHASE_FOLDED) {
             // Cycle 1: lower the twin with the std whitelist, then re-infer so
             // call.func resolves. (Backends call flatten_function directly with
             // their own primitive set instead of going through this annotation.)
@@ -1052,7 +1118,19 @@ class FlattenAnnotation : AstFunctionAnnotation {
             astChanged = true
             return true
         }
-        // Cycle 2: the twin is inferred — verify it is branchless and call-free.
+        if (ph == PHASE_LOWERED) {
+            // Cycle 2: the twin is inferred — collapse const-condition selects and
+            // drop the resulting pure self-assigns. Re-infer if anything changed so
+            // the verify scan and codegen see clean types.
+            let folded = flatten_fold(twin)
+            set_flatten_phase(func, PHASE_FOLDED)
+            if (folded) {
+                astChanged = true
+                return true
+            }
+            // Nothing to fold — fall through to the shape check this cycle.
+        }
+        // Final cycle: verify the twin is branchless and call-free.
         let problem = verify_flat(twin)
         if (problem != "") {
             errors := problem
