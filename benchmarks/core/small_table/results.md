@@ -287,6 +287,26 @@ The §"Inlined packed find — 3-way" VECTOR column and the `str_update` row in 
 are the pre-confirm (hash-only) measurements; keep them for the SIMD-scan A/B but read the table
 above for shipped behavior.
 
+## Realistic literal-keyed "JSON" read — const-string pooling (test08)
+
+4096 small string-keyed records (6 fields, packed), summed by addressing each field with a string
+LITERAL. daslang pools constant strings, so the literal that *built* a field (`tab["foo"] = 1`)
+and the literal that *reads* it (`tab?["foo"]` / `tab["foo"]`) are the same pointer — the find's
+candidate confirm hits KeyCompare's `a==b` fast path and skips strcmp. This is the common case for
+fixed-field-name access (config, JSON-shaped data, per-entity property maps).
+
+| lane | ns/op | path |
+|---|---|---|
+| json_find (`tab?[k] ?? 0`) | **~3.5** | find (ExprSafeAt) |
+| json_at (`tab[k]`)         | **~3.1** | at/index (ExprAt) |
+
+~3ns/lookup — **~3× faster than the distinct-pointer string hit** (test06 `var_hit` 10.6). The win
+is the `a==b` confirm (no strcmp) on top of a cheap short-key hash and the SIMD packed scan;
+`json_at` edges `json_find` by the `?? 0` null-coalesce the find lane carries. So literal-keyed
+record access is already near int-key cost — the strcmp tax only shows up for keys that arrive by
+distinct pointer (I/O / parsing). const-pull also makes these keys' hash a foldable constant, the
+unexploited item-4 headroom.
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor
