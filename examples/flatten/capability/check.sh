@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# check.sh — flatten capability tier.
+#
+# These shaders use constructs the backend bans outright (if/else, helper calls).
+# flatten lowers them so the backend accepts them. Two checks:
+#
+#   1. cap_control.shader (if/else)  -> compiles to a Select-based graph.
+#      The backend bans ExprIfThenElse, so without flatten this would not compile;
+#      with flatten the `if` becomes `?:` -> a `select` node (+ comparison masks).
+#
+#   2. cap_helper.shader (helper fn) -> identical opcode multiset to its hand-inlined
+#      twin cap_inlined.shader. flatten's inlining is transparent.
+
+set -u
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/../../.." && pwd)"
+daslang="$root/bin/daslang"
+proj="$here/../flatten_shaders.das_project"
+
+compile() { "$daslang" -compile-only -project "$proj" "$1" 2>&1; }
+hist()    { compile "$1" | grep '^node ' | awk '{print $3}' | sort | uniq -c; }
+
+fail=0
+
+echo "1. cap_control.shader (if/else -> Select)"
+out="$(compile "$here/cap_control.shader")"
+selects="$(echo "$out" | grep -c ' select ')"
+errs="$(echo "$out" | grep -ci error)"
+if [[ "$errs" -eq 0 && "$selects" -gt 0 ]]; then
+    echo "   ok — compiles, $selects select node(s) from the lowered if/else"
+else
+    echo "   FAIL — errors=$errs selects=$selects"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "2. cap_helper.shader == cap_inlined.shader (helper inlining parity)"
+h="$(hist "$here/cap_helper.shader")"
+i="$(hist "$here/cap_inlined.shader")"
+if [[ -n "$h" && "$h" == "$i" ]]; then
+    echo "   ok — identical opcode multiset ($(echo "$h" | awk '{s+=$1} END {print s}') nodes)"
+else
+    echo "   FAIL — opcode histograms differ:"
+    diff <(echo "$h") <(echo "$i")
+    fail=1
+fi
+
+echo
+if [[ "$fail" -eq 0 ]]; then echo "capability: all checks passed"; else echo "capability: FAILED"; fi
+exit $fail

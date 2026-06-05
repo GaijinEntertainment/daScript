@@ -14,6 +14,7 @@ call-free code.
 ```
 ./run.sh                 # regression: compile every shader, report pass/fail
 ./run.sh cel_shading     # print one shader's opcode graph
+./capability/check.sh    # capability: control-flow shaders lower through flatten
 ```
 
 ## Layout
@@ -42,9 +43,13 @@ consume flatten's `?:` output.
   no control-flow primitive in the DSL *yet* — flatten is what adds one). flatten must
   be **transparent** on them: the emitted graph is the same one the backend produces
   without flatten. `./run.sh` checks every shader compiles clean and emits a graph.
-- **Capability** *(see `capability/`)* — shaders written with `if`/`?:`/helper calls,
-  which the backend rejects today, lower through flatten to a valid `Select`-based
-  graph. This is the feature flatten exists to deliver.
+- **Capability** *(`capability/check.sh`)* — shaders written with constructs the
+  backend rejects today, made to compile by flatten. This is the feature flatten
+  exists to deliver:
+  - `cap_control.shader` uses an `if/else`; flatten lowers it to `?:`, which the
+    backend consumes as `select` nodes (it bans `ExprIfThenElse` directly).
+  - `cap_helper.shader` factors logic into a helper function; flatten inlines it to
+    the **identical opcode graph** as the hand-inlined twin `cap_inlined.shader`.
 
 > The backend here is a faithful testing copy, not the shipping engine module; it
 > prints opcodes instead of feeding the native shader-graph compiler. It will be
