@@ -37,6 +37,34 @@ def make_tables(var tables : array<table<string; int>>) {
     }
 }
 
+// "bad" build: keys assembled at RUNTIME (var + concat) -> distinct heap pointers, NOT the const
+// pool. The bad_* scans below still read with const literals ("foo", ...), so the stored pointer
+// never equals the query pointer, KeyCompare's a==b misses, and a real strcmp runs on every
+// lookup. This is the table-built-from-data case (parsed keys) queried by fixed field name.
+def build_record_bad(var tab : table<string; int>) {
+    var foo = "fo"; foo += "o"
+    var bar = "ba"; bar += "r"
+    var far = "fa"; far += "r"
+    var baz = "ba"; baz += "z"
+    var qux = "qu"; qux += "x"
+    var quux = "quu"; quux += "x"
+    tab[foo] = 1
+    tab[bar] = 2
+    tab[far] = 3
+    tab[baz] = 4
+    tab[qux] = 5
+    tab[quux] = 6
+}
+
+def make_tables_bad(var tables : array<table<string; int>>) {
+    tables |> reserve(NTABLES)
+    for (i in range(NTABLES)) {
+        var tab : table<string; int>
+        build_record_bad(tab)
+        tables |> emplace(tab)
+    }
+}
+
 def free_tables(var tables : array<table<string; int>>) {
     for (t in tables) {
         unsafe { delete t; }
@@ -72,6 +100,50 @@ def json_at(b : B?) {
     var tables : array<table<string; int>>
     make_tables(tables)
     b |> run("json_at/6", NTABLES * NKEYS) {
+        var count = 0
+        for (tab in tables) {
+            count += tab["foo"]
+            count += tab["bar"]
+            count += tab["far"]
+            count += tab["baz"]
+            count += tab["qux"]
+            count += tab["quux"]
+        }
+        if (count != EXPECTED) {
+            b->failNow()
+        }
+    }
+    free_tables(tables)
+}
+
+// bad v1 — distinct-pointer stored keys, const-literal scan -> strcmp on every find
+[benchmark]
+def bad_json_find(b : B?) {
+    var tables : array<table<string; int>>
+    make_tables_bad(tables)
+    b |> run("bad_json_find/6", NTABLES * NKEYS) {
+        var count = 0
+        for (tab in tables) {
+            count += tab?["foo"] ?? 0
+            count += tab?["bar"] ?? 0
+            count += tab?["far"] ?? 0
+            count += tab?["baz"] ?? 0
+            count += tab?["qux"] ?? 0
+            count += tab?["quux"] ?? 0
+        }
+        if (count != EXPECTED) {
+            b->failNow()
+        }
+    }
+    free_tables(tables)
+}
+
+// bad v2 — distinct-pointer stored keys, const-literal scan -> strcmp on every at
+[benchmark]
+def bad_json_at(b : B?) {
+    var tables : array<table<string; int>>
+    make_tables_bad(tables)
+    b |> run("bad_json_at/6", NTABLES * NKEYS) {
         var count = 0
         for (tab in tables) {
             count += tab["foo"]

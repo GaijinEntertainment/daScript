@@ -295,17 +295,27 @@ and the literal that *reads* it (`tab?["foo"]` / `tab["foo"]`) are the same poin
 candidate confirm hits KeyCompare's `a==b` fast path and skips strcmp. This is the common case for
 fixed-field-name access (config, JSON-shaped data, per-entity property maps).
 
-| lane | ns/op | path |
-|---|---|---|
-| json_find (`tab?[k] ?? 0`) | **~3.5** | find (ExprSafeAt) |
-| json_at (`tab[k]`)         | **~3.1** | at/index (ExprAt) |
+The `bad_*` lanes are the control: same scan (const literals) but the table is built with keys
+assembled at runtime (`var foo = "fo"; foo += "o"`), so the stored key is a distinct heap pointer,
+`a==b` misses, and a real strcmp runs every lookup (the table-from-parsed-data case).
 
-~3ns/lookup — **~3× faster than the distinct-pointer string hit** (test06 `var_hit` 10.6). The win
-is the `a==b` confirm (no strcmp) on top of a cheap short-key hash and the SIMD packed scan;
-`json_at` edges `json_find` by the `?? 0` null-coalesce the find lane carries. So literal-keyed
-record access is already near int-key cost — the strcmp tax only shows up for keys that arrive by
-distinct pointer (I/O / parsing). const-pull also makes these keys' hash a foldable constant, the
-unexploited item-4 headroom.
+| lane | INTERP | JIT | path |
+|---|---|---|---|
+| json_find (good, const-pull `a==b`)   | ~11.8 | **~3.6** | find (ExprSafeAt) |
+| json_at (good)                        | ~10.0 | **~3.4** | at/index (ExprAt) |
+| bad_json_find (distinct ptr, strcmp)  | ~14.0 | ~6.3 | find |
+| bad_json_at (distinct ptr, strcmp)    | ~12.5 | ~5.8 | at |
+| **strcmp tax (bad − good)**           | **~2.3** | **~2.5** | short 3–4 char key |
+
+- Literal-keyed access is **~3ns JIT / ~10–12ns interp** — near int-key cost, and **~3× faster
+  than the distinct-pointer string hit** (test06 `var_hit` 10.6). The win is the `a==b` confirm
+  (no strcmp) on a cheap short-key hash + the SIMD packed scan; `json_at` edges `json_find` by the
+  `?? 0` the find lane carries.
+- **The strcmp tax is tier-independent (~2.5ns for a 3–4 char key)** — it is the same C++ compare
+  on both tiers; the ~3.3× interp/JIT gap is fixed per-node dispatch layered on top, not the table
+  op. So const-pull is worth ~2.5ns/lookup on a hit, on every tier.
+- const-pull also makes these keys' hash a foldable constant — the unexploited item-4 headroom
+  sitting under the good lanes.
 
 ## Synthesis for the plan
 
