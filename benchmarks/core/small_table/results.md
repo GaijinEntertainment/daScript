@@ -118,6 +118,65 @@ scan tax that the build/memory win dwarfs. `maxLinearCapacity = 8` is validated;
 defensible for string-heavy workloads (revisit in sub-phase 3 follow-up alongside
 `minCapacity 8→4`).
 
+## Hash intrinsic — A/B MEASURED (JIT, fast 16-bit-load `$::hash` on vs off)
+
+A/B by toggling the `$::hash` registration in `llvm_jit_intrin.das` (cache cleared
+between runs); "on" = inlined 16-bit-load intrinsic, "off" = runtime call into
+`hash_blockz64`. Numbers are stable over 3 runs (the first cold-codegen run reads
+high — discard it).
+
+### Bare `hash(string)` — `core/hash/test13`, 256 runtime keys
+
+| key | intrinsic on | call (off) | verdict |
+|---|---|---|---|
+| short (`k0`..`k255`) | **1.9ns** | 2.9ns | −34% — call overhead removed |
+| long (38-char) | 12.7ns | 12.1ns | ~on par (the win is no-call-overhead; the
+  MSVC-optimized `hash_blockz64` loop body is otherwise as good as the JIT's) |
+
+So the 16-bit version meets the bar: faster on short (the common key shape), on par
+on long. The earlier byte-by-byte version lost on long; the 16-bit load (half the
+iterations) closes that gap.
+
+### Table lookup `tab?[key]` — `core/small_table/test03`, 8-elem table
+
+The intrinsic does **not** reach table lookups, and the numbers confirm it: with vs
+without the `$::hash` intrinsic, every lane is identical (3-run stable).
+
+| lane | intrinsic on | intrinsic off |
+|---|---|---|
+| const_short | 7.0 | 7.0 |
+| var_short | 7.0 | 7.0 |
+| const_long | 16.2 | 16.7 |
+| var_long | 16.5 | 17.0 |
+
+Why: `tab?[key]` lowers to `build_table_find` → the C++ `jit_table_find(tab, key,
+valueTypeSize, ctx)` (llvm_jit.das:1856), which takes the **key** and computes the
+hash *internally*. The JIT-side `$::hash` intrinsic is never invoked on this path, so
+toggling it changes nothing. `const_* == var_*` for the same reason — nothing folds.
+
+(An earlier single-run A/B mis-measured this as −30-38%; that "off" run was an outlier
+under background load. The 3-run numbers above are the truth: zero current effect.)
+
+**This was the gap — now closed.** Added `jit_string_table_find_with_hash` /
+`jit_string_table_at_with_hash` (C++, take a precomputed hash) and routed string-key
+`?[]`/`[]` through them, emitting `hash(key)` via `build_string_hash` (the shared
+intrinsic IR). String-only, find+at — 2 functions, not the whole matrix.
+
+### Table lookup `tab?[key]` — with-hash lowering MEASURED (JIT, 3-run stable)
+
+| lane | before (hash in C++) | with-hash | Δ |
+|---|---|---|---|
+| const_short | 7.0 | **4.7** | −33% |
+| const_long | 16.2 | **4.5** | **−72%** |
+| var_short | 7.0 | 6.3 | −10% |
+| var_long | 16.5 | 17.2 | ~flat |
+
+**Pure item 4 is realized:** a literal key's hash folds to an immediate and disappears —
+`const_long` (4.5) now equals `const_short` (4.7), i.e. key length no longer costs
+anything for constant keys. `var_*` (runtime keys) still hash; the inlined loop ≈ the old
+C++ call (cf. test13), so the straight-line microbench shows little there — the runtime-key
+win is loop hoisting / CSE of an invariant key, which this per-key-once bench doesn't expose.
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor

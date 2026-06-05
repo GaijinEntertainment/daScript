@@ -702,6 +702,33 @@ extern "C" {
         JIT_TABLE_FUNCTION(&jit_table_find);
     }
 
+    // String-key find/at that take a precomputed hash, so the JIT emits the hash inline
+    // (foldable to an immediate for a constant key) instead of recomputing it in C++.
+    // String-only — no per-baseType matrix; the key is still passed for the KeyCompare
+    // strcmp once a table promotes past packed small-mode.
+    int32_t jit_string_table_find_with_hash ( Table * tab, char * key, uint64_t hfn, int32_t valueTypeSize, Context * context ) {
+        TableHash<char *> thh(context,valueTypeSize);
+        int64_t idx = thh.find(*tab, key, hfn);
+        if ( idx > int64_t(INT32_MAX) ) context->throw_error("JIT table slot index exceeds INT32_MAX; JIT does not yet support tables past INT_MAX slots");
+        return (int32_t) idx;
+    }
+
+    void * das_get_jit_string_table_find_with_hash ( ) {
+        return (void*)&jit_string_table_find_with_hash;
+    }
+
+    int32_t jit_string_table_at_with_hash ( Table * tab, char * key, uint64_t hfn, int32_t valueTypeSize, Context * context, LineInfoArg * at ) {
+        if ( tab->isLocked() ) context->throw_error_at(at, "can't insert to a locked table");
+        TableHash<char *> thh(context,valueTypeSize);
+        int64_t idx = thh.reserve(*tab, key, hfn, at);
+        if ( idx > int64_t(INT32_MAX) ) context->throw_error_at(at, "JIT table slot index %lld exceeds INT32_MAX; JIT does not yet support tables past INT_MAX slots", (long long)idx);
+        return (int32_t) idx;
+    }
+
+    void * das_get_jit_string_table_at_with_hash ( ) {
+        return (void*)&jit_string_table_at_with_hash;
+    }
+
 
     uint64_t das_get_global_variable_offset( const Context * ctx, int id ) {
         return ctx->getGlobalVariable(id).offset;
@@ -1143,6 +1170,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_table_erase");
             addExtern<DAS_BIND_FUN(das_get_jit_table_find)>(*this, lib, "get_jit_table_find",
                 SideEffects::none, "das_get_jit_table_find");
+            addExtern<DAS_BIND_FUN(das_get_jit_string_table_find_with_hash)>(*this, lib, "get_jit_string_table_find_with_hash",
+                SideEffects::none, "das_get_jit_string_table_find_with_hash");
+            addExtern<DAS_BIND_FUN(das_get_jit_string_table_at_with_hash)>(*this, lib, "get_jit_string_table_at_with_hash",
+                SideEffects::none, "das_get_jit_string_table_at_with_hash");
             addExtern<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
                 SideEffects::none, "das_get_global_variable_offset");
             addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",

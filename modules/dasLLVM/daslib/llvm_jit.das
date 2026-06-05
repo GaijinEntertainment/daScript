@@ -1836,6 +1836,11 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
+        // String keys: hash inline (foldable for a constant key) and call the with-hash
+        // variant, instead of recomputing the hash inside the C++ helper.
+        if (ttype == Type.tString) {
+            return build_string_table_at_with_hash(tab, key, valueTypeSize, at)
+        }
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
@@ -1854,6 +1859,11 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+        // String keys: hash inline (foldable for a constant key) and call the with-hash
+        // variant, instead of recomputing the hash inside the C++ helper.
+        if (ttype == Type.tString) {
+            return build_string_table_find_with_hash(tab, key, valueTypeSize)
+        }
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
@@ -1867,6 +1877,46 @@ class public LlvmJitVisitor : AstVisitor {
 
         LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
         LLVMAddCallSiteAttribute(ccall, 4u, attributes.nocapture)
+        return ccall
+    }
+
+    // String-key find/at via the precomputed-hash C++ helpers: emit hash(key) inline
+    // (build_string_hash folds it to an immediate for a constant key) and pass it through,
+    // so the hash is hoistable/CSE-able and a literal key costs no hashing.
+    def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        var params = fixed_array(
+            tab,                                                        // table ptr
+            key,                                                        // key
+            h,                                                          // precomputed hash
+            types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
+            get_context_param()
+        )
+        var (fun_ptr, typ) = get_string_table_find_with_hash(g_builder, g_mod, types)
+        let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
+        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
+        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
+        LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
+        LLVMAddCallSiteAttribute(ccall, 5u, attributes.nocapture)
+        return ccall
+    }
+
+    def build_string_table_at_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
+        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        var params = fixed_array(
+            tab,                                                        // table ptr
+            key,                                                        // key
+            h,                                                          // precomputed hash
+            types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
+            get_context_param(),
+            get_line_info_ptr(at)
+        )
+        var (tab_fun, typ) = get_string_table_at_with_hash(g_builder, g_mod, types)
+        let ccall = LLVMBuildCall2(g_builder, typ, tab_fun, params, "")
+        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
+        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
+        LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
+        LLVMAddCallSiteAttribute(ccall, 5u, attributes.nocapture)
         return ccall
     }
 
@@ -6483,27 +6533,45 @@ class public ResolveExternVisitor : AstVisitor {
         }
     }
 
+    // Pre-bind the JIT table-fn globals for the standalone-exe / cache-reload path. String
+    // keys route through the precomputed-hash helpers (see build_table_find/at), so bind
+    // those globals instead of the per-type ones.
+    def bind_jit_table_find_glob(t : Type) {
+        if (t == Type.tString) {
+            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()), get_jit_string_table_find_with_hash())
+        } else {
+            dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+        }
+    }
+    def bind_jit_table_at_glob(t : Type) {
+        if (t == Type.tString) {
+            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
+        } else {
+            dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
+        }
+    }
+
     def override preVisitExprAt(expr : ExprAt?) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType) {
             let t = get_table_t(subExprT)
-            dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
+            bind_jit_table_at_glob(t)
         }
     }
 
     def override preVisitExprSetInsert(expr : ExprSetInsert?) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
+        bind_jit_table_at_glob(t)
     }
 
     def override preVisitExprKeyExists(expr : ExprKeyExists?) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+        bind_jit_table_find_glob(t)
     }
 
     def override preVisitExprFind(expr : ExprFind?) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+        bind_jit_table_find_glob(t)
     }
 
     def override preVisitExprSafeAt(expr : ExprSafeAt?) {
@@ -6511,7 +6579,7 @@ class public ResolveExternVisitor : AstVisitor {
         if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var etype = subExprT.isPointer ? subExprT.firstType : subExprT
             let t = get_table_t(etype)
-            dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+            bind_jit_table_find_glob(t)
         }
     }
 
