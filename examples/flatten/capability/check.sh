@@ -13,6 +13,10 @@
 #
 #   3. cap_loop.shader (fixed for-loop) -> compiles to an unrolled `add` chain.
 #      The backend bans ExprFor; flatten unrolls it to straight-line accumulation.
+#
+#   4. cap_swizzle.shader (user call buried under a `.xyz` swizzle) -> compiles.
+#      flatten recurses through the swizzle operand to inline the call; the
+#      backend bans user calls, so a clean compile proves it was inlined.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,6 +60,18 @@ if [[ "$errs" -eq 0 && "$adds" -gt 0 ]]; then
     echo "   ok — compiles, $adds add node(s) from the unrolled loop"
 else
     echo "   FAIL — errors=$errs adds=$adds"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "4. cap_swizzle.shader (user call under a .xyz swizzle -> inlined)"
+out="$(compile "$here/cap_swizzle.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+errs="$(echo "$out" | grep -ci error)"
+if [[ "$errs" -eq 0 && "$nodes" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes); the swizzled user call was inlined"
+else
+    echo "   FAIL — errors=$errs nodes=$nodes"
     echo "$out" | grep -i error | head
     fail=1
 fi

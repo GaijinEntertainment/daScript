@@ -248,6 +248,69 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         o.right = lift_expr(ctx, oe.right, structPred, out)
         return n
     }
+    // Member / index / cast / constructor expressions: a user call can hide inside
+    // the operand of a swizzle (`f(x).xyz`), a struct field read (`f(x).a`), a cast,
+    // an index, or a constructor field (`Out(emission = f(x))`). Recurse into the
+    // operands so the call still gets inlined — without these, the call survives
+    // lowering and the post-pass verify scan rejects it as an "internal error".
+    if (e is ExprField) {
+        var n = clone_expression(e)
+        var o = n as ExprField
+        o.value = lift_expr(ctx, (e as ExprField).value, structPred, out)
+        return n
+    }
+    if (e is ExprSwizzle) {
+        var n = clone_expression(e)
+        var o = n as ExprSwizzle
+        o.value = lift_expr(ctx, (e as ExprSwizzle).value, structPred, out)
+        return n
+    }
+    if (e is ExprCast) {
+        var n = clone_expression(e)
+        var o = n as ExprCast
+        o.subexpr = lift_expr(ctx, (e as ExprCast).subexpr, structPred, out)
+        return n
+    }
+    if (e is ExprAt) {
+        var n = clone_expression(e)
+        var o = n as ExprAt
+        let oe = e as ExprAt
+        o.subexpr = lift_expr(ctx, oe.subexpr, structPred, out)
+        o.index = lift_expr(ctx, oe.index, structPred, out)
+        return n
+    }
+    if (e is ExprMakeStruct) {
+        var n = clone_expression(e)
+        var o = n as ExprMakeStruct
+        for (si in range(length(o.structs))) {
+            for (fld in *(o.structs[si])) {
+                fld.value = lift_expr(ctx, fld.value, structPred, out)
+            }
+        }
+        return n
+    }
+    if (e is ExprMakeTuple) {
+        var n = clone_expression(e)
+        var o = n as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = lift_expr(ctx, o.values[vi], structPred, out)
+        }
+        return n
+    }
+    // Typer-inserted ref/value/pointer conversion wrappers (e.g. ExprRef2Value
+    // around a field read `f(x).a`). Recurse through to reach the buried call.
+    if (e is ExprRef2Value) {
+        var n = clone_expression(e)
+        var o = n as ExprRef2Value
+        o.subexpr = lift_expr(ctx, (e as ExprRef2Value).subexpr, structPred, out)
+        return n
+    }
+    if (e is ExprPtr2Ref) {
+        var n = clone_expression(e)
+        var o = n as ExprPtr2Ref
+        o.subexpr = lift_expr(ctx, (e as ExprPtr2Ref).subexpr, structPred, out)
+        return n
+    }
     return clone_expression(e)
 }
 
