@@ -58,7 +58,7 @@ namespace das
     void table_clear ( Context & context, Table & arr, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't clear locked table");
         if ( arr.data ) {
-            memset(arr.hashes, 0, arr.capacity*sizeof(TableHashKey));
+            memset(arr.hashes, 0, arr.capacity*tableHashSlotBytes(arr.capacity));
             memset(arr.data, 0, arr.keys - arr.data);
         }
         arr.size = 0;
@@ -102,7 +102,7 @@ namespace das
 
     size_t TableIterator::nextValid ( size_t index ) const {
         for ( auto indexs=table->capacity; index < indexs; index++) {
-            if (table->hashes[index] > HASH_KILLED64) {
+            if (tableLiveSlot(*table, index)) {
                 break;
             }
         }
@@ -212,7 +212,7 @@ namespace das
             return;
         }
         ptrdiff_t index = offset / value_stride;
-        if ( tab.hashes[index] <= HASH_KILLED64 ) {
+        if ( !tableLiveSlot(tab, (uint64_t)index) ) {
             __context__->throw_error_at(at, "get_key: value points to an empty or deleted table slot");
             return;
         }
@@ -228,7 +228,7 @@ namespace das
         for ( uint32_t i=0, is=total; i!=is; ++i, pTable-- ) {
             if ( pTable->data ) {
                 if ( !pTable->isLocked() ) {
-                    uint64_t oldSize = pTable->capacity * uint64_t(vts_add_kts + sizeof(TableHashKey));
+                    uint64_t oldSize = pTable->capacity * uint64_t(vts_add_kts) + pTable->capacity*tableHashSlotBytes(pTable->capacity);
                     context.free(pTable->data, oldSize, &debugInfo);
                 } else {
                     context.throw_error_at(debugInfo, "deleting locked table%s", errorMessage);

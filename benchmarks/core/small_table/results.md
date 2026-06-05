@@ -231,7 +231,12 @@ the SIMD compare *is* the whole operation. Inserts of genuinely new keys also sk
 redundant C++ `PackedFind` dedup the JIT already performed. Integer keys only
 (`int`/`uint` ×8/16/32/64); float/double/struct keep the C++ path.
 
-## Correctness: 32-bit hashKey collisions — confirm on find (SUPERSEDES the hash-only numbers above)
+## Correctness: 32-bit hashKey collisions — confirm on find (SUPERSEDED by §"64-bit packed hash")
+
+> **Superseded.** The confirm-on-find / promote-on-collision design below was the intermediate
+> step. It is **replaced** by the 64-bit packed hash (final section) — packed string find now
+> compares a full 64-bit hash exactly, with no strcmp and no confirm. Read this section for the
+> *why* (32-bit hashKey is too narrow to trust); read §"64-bit packed hash" for shipped behavior.
 
 The hash-only string path above is **incorrect**: `TableHashKey` is `uint32_t`, so distinct keys
 can share a hashKey and a hash-only match returns a false positive. Fix (all tiers):
@@ -316,6 +321,82 @@ assembled at runtime (`var foo = "fo"; foo += "o"`), so the stored key is a dist
   op. So const-pull is worth ~2.5ns/lookup on a hit, on every tier.
 - const-pull also makes these keys' hash a foldable constant — the unexploited item-4 headroom
   sitting under the good lanes.
+
+## 64-bit packed hash — strcmp eliminated (SHIPPED, supersedes the confirm approach)
+
+The confirm approach (32-bit `TableHashKey` + a `KeyCompare` / bound `jit_string_equal` confirm on
+every hash-candidate hit, promote-to-open-addressing on the first hashKey collision) is **replaced**.
+Packed small tables (`capacity <= TABLE_MAX_LINEAR_CAPACITY`) now store a **64-bit** hash per slot
+(uniform for *all* key types — the width is a pure function of capacity, so type-erased free/GC sites
+need no keytype); large tables keep the 32-bit `TableHashKey`. Packed string find compares the full
+64-bit hash **exactly** and returns the slot — **no strcmp, no confirm, no collision-promote** (a
+64-bit hash collision between two distinct live keys in an ≤8-slot table is not a real-world event).
+Packed workhorse find compares key *data* (the 64-bit hash is stored-but-unused on that path — the
++32B/table it costs is reclaimed by the deferred workhorse-no-hash follow-up).
+
+The clean-tail invariant makes the string scan branch-free over all 8 slots: alloc / erase /
+`table_clear` clear the full 64-bit width, a real hash is always `> HASH_KILLED64`, so the dead tail
+(value 0) never matches — no size mask needed.
+
+### JIT ns/op — 64-bit packed vs the confirm build (3-run warm)
+
+| lane | hashed baseline | confirm (32-bit + strcmp) | **64-bit packed** | Δ vs confirm |
+|---|---|---|---|---|
+| const_hit (t06)  | ~9–18 | 6.8  | **2.3**  | −66% |
+| const_miss (t06) | ~9–18 | 1.1  | **1.8**  | +0.7 (no strcmp either way) |
+| var_hit (t06)    | ~9–18 | 10.6 | **5.5**  | −48% |
+| var_miss (t06)   | ~9–18 | 4.0  | **5.6**  | +1.6 |
+| const_short (t03)| ~9–18 | 6.8  | **3.5**  | −49% |
+| const_long (t03) | ~9–18 | 20.8 | **2.2**  | **−89%** (strcmp(38) gone) |
+| var_short (t03)  | ~9–18 | 10.5 | **8.8**  | −16% |
+| var_long (t03)   | ~9–18 | 43.5 | **20.6** | **−53%** (now pure hash, no strcmp) |
+| int_hit (t07)    | ~4–5  | 1.8  | **2.6**  | +0.8 (data compare unchanged; noise) |
+| int_miss (t07)   | ~4–5  | 1.7  | **1.9**  | ~flat |
+| int_update (t07) | —     | 3.8  | **4.3**  | +0.5 |
+| str_update (t07) | —     | 9.9  | **5.7**  | −42% |
+
+Reading it:
+- **String hits no longer strcmp.** `const_long` 20.8 → **2.2** is the whole story: that 20.8 was
+  almost entirely `strcmp(38)`, and it's gone — `const_long` (2.2) now equals `const_short` (3.5),
+  key length is free for constant keys. `var_long` 43.5 → **20.6** drops by the same ~23ns strcmp; the
+  residual 20.6 is the *runtime hash* of the 38-char key (the find itself is the cheap 64-bit compare).
+- **Short-key string hits** drop ~−16 to −66% — the confirm's bound-call overhead is gone with it.
+- **The int data path is unchanged** (SIMD key-data compare, no hash); the sub-nanosecond up-tick on
+  the int lanes is run-to-run noise plus the wider (64- vs 32-bit) hash array touching one more line.
+
+### INTERP ns/op — 64-bit packed (per-SimNode dispatch floor compresses the deltas)
+
+| lane | INTERP | | lane | INTERP |
+|---|---|---|---|---|
+| const_hit  | 12.0 | | int_hit    | 11.2 |
+| const_miss | 14.9 | | int_miss   | 13.3 |
+| var_hit    | 12.6 | | int_update | 10.6 |
+| var_miss   | 13.7 | | str_update | 11.1 |
+| const_short| 12.0 | | const_long | 21.8 |
+| var_short  | 11.8 | | var_long   | 29.2 |
+
+INTERP `const_long` 21.8 / `var_long` 29.2: the strcmp is gone here too (`const_long` was ~strcmp-
+dominated under confirm), the residual long-key cost is the hash. The ~10–15ns floor on the short
+lanes is fixed SimNode dispatch, not the table op.
+
+### Realistic JSON read — good vs bad now CONVERGE (test08, the headline)
+
+The §"Realistic literal-keyed JSON read" `bad_*` control existed to isolate the strcmp tax: `good`
+keys are const-pooled (`a==b` skips strcmp), `bad` keys are runtime-assembled distinct pointers
+(parsed-data shape, strcmp every lookup). **With no strcmp anywhere, that distinction collapses** —
+both lanes compare the 64-bit hash:
+
+| lane | INTERP confirm → 64-bit | JIT confirm → 64-bit |
+|---|---|---|
+| json_find (good)     | 11.8 → **11.2** | 3.6 → **2.1** |
+| json_at (good)       | 10.0 → **10.0** | 3.4 → **1.7** |
+| bad_json_find (parsed)| 14.0 → **11.4** | 6.3 → **2.3** |
+| bad_json_at (parsed) | 12.5 → **10.0** | 5.8 → **1.5** |
+| **good/bad gap (JIT)** | | **2.5 → ~0.2** |
+
+The parsed-data case (`bad_json_find` 6.3 → **2.3** JIT) was the one paying strcmp; it now matches the
+const-pooled case (`json_find` 2.1). **A table built from parsed/IO keys reads as fast as one built
+from string literals** — the strcmp tax that const-pooling used to dodge no longer exists for anyone.
 
 ## Synthesis for the plan
 

@@ -66,16 +66,16 @@ def test_packed_string(t : T?) {
 }
 
 // "k1832" and "k16303" share the same 32-bit table hashKey (0xf9102e8c) but are different
-// strings — found by brute force over uint(hash(s)). Hashes are only 32 bits, so packed string
-// tables must promote on the first such collision (open addressing confirms every hit with a
-// strcmp); the inline packed find relies on at most one slot per hashKey.
+// strings (found by brute force over uint(hash(s))). Packed string tables store the full 64-bit
+// hash and compare it exactly, so these two 32-bit-colliding keys coexist in packed mode with no
+// strcmp and no promotion — the 64-bit hashes differ. Both must remain findable with their values.
 [test]
-def test_packed_string_collision_promotes(t : T?) {
+def test_packed_string_hashkey32_collision(t : T?) {
     var tab : table<string; int>
     unsafe(tab[kcopy(1832)]) = 111
-    unsafe(tab[kcopy(16303)]) = 222          // same hashKey, different string -> promotes out of packed
+    unsafe(tab[kcopy(16303)]) = 222
     t |> equal(length(tab), 2)
-    t |> equal(tab?[kcopy(1832)] ?? -1, 111)  // distinct-pointer queries -> real strcmp
+    t |> equal(tab?[kcopy(1832)] ?? -1, 111)  // distinct-pointer queries (clean 64-bit hash compare)
     t |> equal(tab?[kcopy(16303)] ?? -1, 222)
     t |> equal(key_exists(tab, kcopy(1832)), true)
     t |> equal(key_exists(tab, kcopy(16303)), true)
@@ -83,14 +83,14 @@ def test_packed_string_collision_promotes(t : T?) {
     unsafe { delete tab; }
 }
 
-// False-positive guard: a single-entry (still packed) table whose only key collides on hashKey
-// with the query must MISS — the packed find confirms the actual string, not just the hash.
+// False-positive guard: a single-entry packed table whose only key shares a 32-bit hashKey with
+// the query must MISS — the packed find compares the full 64-bit hash, so the 32-bit clash is moot.
 [test]
-def test_packed_string_hash_collision_miss(t : T?) {
+def test_packed_string_hashkey32_miss(t : T?) {
     var tab : table<string; int>
-    unsafe(tab[kcopy(1832)]) = 111            // single entry -> stays packed
+    unsafe(tab[kcopy(1832)]) = 111
     t |> equal(length(tab), 1)
-    t |> equal(tab?[kcopy(16303)] ?? -777, -777)   // collides on hashKey, must not false-positive
+    t |> equal(tab?[kcopy(16303)] ?? -777, -777)   // 32-bit hashKey clash, distinct 64-bit hash -> miss
     t |> equal(key_exists(tab, kcopy(16303)), false)
     t |> equal(tab?[kcopy(1832)] ?? -1, 111)       // the real key still hits
     unsafe { delete tab; }

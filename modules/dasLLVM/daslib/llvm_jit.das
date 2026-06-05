@@ -1918,16 +1918,6 @@ class public LlvmJitVisitor : AstVisitor {
         return ccall
     }
 
-    // hashToHashKey(TableHashKey(hash)) from runtime_table.h: truncate the 64-bit hash to the
-    // 32-bit TableHashKey, then map 0/1 -> 16777619 so it can't alias EMPTY/KILLED slots.
-    def reduce_hash_to_key32(h : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        var hk = LLVMBuildTrunc(g_builder, h, types.t_int32, "hk.trunc")
-        var one = LLVMConstInt(types.t_int32, 1ul, 0)
-        var prime = LLVMConstInt(types.t_int32, 16777619ul, 0)
-        var le1 = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULE, hk, one, "hk.le1")
-        return LLVMBuildSelect(g_builder, le1, prime, hk, "hk")
-    }
-
     // First set lane of an N-bit (i8) match mask -> i32 index, or -1 if the mask is empty.
     // (N == TABLE_MAX_LINEAR_CAPACITY == 8, so the mask is exactly i8 and cttz.i8 fits.)
     def first_set_lane_or_neg1(maskI8 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
@@ -1942,25 +1932,11 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMBuildSelect(g_builder, none, types.ConstI32(uint64(-1)), ctz32, "lane.idx")
     }
 
-    // PackedFind<char*> as one <N x i32> SIMD compare: load the hash slots, compare against
-    // the splatted 32-bit key, bitcast the mask to i8, cttz -> first set lane; empty -> -1.
-    // The empty tail (hash 0) never matches the clamped key, so no size guard is needed.
-    // (Measured fastest of none/scalar/vector — see benchmarks/core/small_table/results.md.)
-    def packed_find_vector(hashes : LLVMOpaqueValue?; hk32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        var vecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
-        var hvp = LLVMBuildPointerCast(g_builder, hashes, LLVMPointerType(vecTy, 0u), "h.vp")
-        var hv = LLVMBuildLoad2(g_builder, vecTy, hvp, "h.vec")
-        LLVMSetAlignment(hv, 4u)
-        var ins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(vecTy), hk32, LLVMConstInt(types.t_int32, 0ul, 0), "h.ins")
-        var splat = LLVMBuildShuffleVector(g_builder, ins, LLVMGetUndef(vecTy), LLVMConstNull(vecTy), "h.splat")
-        var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, splat, "h.eqv")
-        return first_set_lane_or_neg1(LLVMBuildBitCast(g_builder, eqv, types.t_int8, "h.mask"))
-    }
-
-    // The non-string mirror — generic PackedFind<KeyType>: compare actual KEY data (not
-    // hashes) over [0,size). Load <N x KeyT>, compare to the splatted key, AND with a
-    // liveness mask (lane i live iff i < size) — non-string tails are not sentinel-zeroed,
-    // so stale tail keys must be masked out (strings dodge this via the 0 hash sentinel).
+    // Packed find as one <N x T> SIMD compare over [0,size): load the slots (key DATA for
+    // workhorse keys, or the 64-bit hash array for string keys), splat the query value, icmp eq,
+    // AND a liveness mask (lane i live iff i < size, since the tail is not relied on to be clean),
+    // bitcast to i8, cttz -> first set lane; no match -> -1. Used by both the integer key-scan and
+    // the string 64-bit-hash scan (keyElemTy = i64, keysPtr = the hashes array).
     def packed_find_vector_keys(keysPtr : LLVMOpaqueValue?; keyVal : LLVMOpaqueValue?; keyElemTy : LLVMOpaqueType?; sizeI32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
         var keyVecTy = LLVMVectorType(keyElemTy, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
         var i32VecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
@@ -1984,66 +1960,39 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 
-    // Confirm a packed string candidate: load keys[idxLane] and jit_string_equal it against the
-    // query key. The SIMD scan matches only the 32-bit hash (collidable), so this is the real
-    // compare; insert-time collision promotion guarantees at most one hash-match, so one strcmp is
-    // exact. Returns the i32 0/1 result. Caller must be in a block where idxLane is a genuine
-    // candidate (>=0) — a clean miss (no hash match) never reaches here, so it stays strcmp-free.
-    def emit_string_key_equal(keysV : LLVMOpaqueValue?; key : LLVMOpaqueValue?; idxLane : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        var i8ptr = LLVMPointerType(types.t_int8, 0u)
-        var keysArr = LLVMBuildPointerCast(g_builder, keysV, LLVMPointerType(i8ptr, 0u), "keys.arr")
-        var idxv = idxLane
-        var slotPtr = LLVMBuildGEP2(g_builder, i8ptr, keysArr, idxv, "cf.slotp")
-        var slotKey = LLVMBuildLoad2(g_builder, i8ptr, slotPtr, "cf.key")
-        var (eq_fun, eq_typ) = get_string_equal(g_builder, g_mod, types)
-        var eqArgs <- [ slotKey, key ]
-        var eqCall = LLVMBuildCall2(g_builder, eq_typ, eq_fun, eqArgs, "cf.eq")
-        LLVMAddCallSiteAttribute(eqCall, -1 |> uint(), attributes.nounwind)
-        LLVMAddCallSiteAttribute(eqCall, -1 |> uint(), attributes.willreturn)
-        return eqCall
+    // String packed find: one <N x i64> SIMD compare of the 64-bit hash array, no liveness mask.
+    // The packed-string hash tail is always 0 (alloc / erase / table_clear all clear the full
+    // 64-bit width) and a real hash is >1, so the tail never matches — unlike the integer key-data
+    // scan, whose tail can hold a valid 0 key and needs the size mask. Exact: no strcmp.
+    def packed_find_hashes64(hashesPtr : LLVMOpaqueValue?; hash : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var vecTy = LLVMVectorType(types.t_int64, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
+        var i32VecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
+        var hvp = LLVMBuildPointerCast(g_builder, hashesPtr, LLVMPointerType(vecTy, 0u), "h.vp")
+        var hv = LLVMBuildLoad2(g_builder, vecTy, hvp, "h.vec")
+        LLVMSetAlignment(hv, 8u)
+        var ins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(vecTy), hash, LLVMConstInt(types.t_int32, 0ul, 0), "h.ins")
+        var splat = LLVMBuildShuffleVector(g_builder, ins, LLVMGetUndef(vecTy), LLVMConstNull(i32VecTy), "h.splat")
+        var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, hv, splat, "h.eqv")
+        return first_set_lane_or_neg1(LLVMBuildBitCast(g_builder, eqv, types.t_int8, "h.mask"))
     }
 
+    // String tab?[key] / find: packed -> inline 64-bit-hash SIMD scan (exact, no strcmp — a 64-bit
+    // collision is treated as impossible); large/empty -> C++ find-with-hash.
     def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
         var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
-        // Read capacity + hashes from the table header. Small (packed) iff cap != 0 && cap <=
-        // TABLE_MAX_LINEAR_CAPACITY -> inlined SIMD scan; else C++ (cap==0 empty, or hashed).
-        let hdrTy = table_header_llvm_type(types)
-        var tabHdr = LLVMBuildLoad2(g_builder, hdrTy, LLVMBuildPointerCast(g_builder, tab, LLVMPointerType(hdrTy, 0u), "tab.hdrp"), "tab.hdr")
-        var cap = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.CAPACITY), "cap")
-        var hashesV = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.HASHES), "hashes.v")
-        var hashes = LLVMBuildPointerCast(g_builder, hashesV, LLVMPointerType(types.t_int32, 0u), "hashes")
-        var keysV = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.KEYS), "keys.v")
-        var hk32 = reduce_hash_to_key32(h)
+        var hdr = load_table_header(tab)
+        var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
+        var hashesV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "hashes.v")
+        var isSmall = packed_cap_cond(cap)
 
-        var find_entry = LLVMGetInsertBlock(g_builder)
-        var find_parent = LLVMGetBasicBlockParent(find_entry)
+        var find_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
         var bb_small = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.small")
         var bb_large = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.large")
         var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.merge")
-        var nz = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, cap, LLVMConstInt(types.t_int64, 0ul, 0), "cap.nz")
-        var le = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULE, cap, LLVMConstInt(types.t_int64, uint64(JIT_TABLE_MAX_LINEAR_CAPACITY), 0), "cap.le")
-        var isSmall = LLVMBuildAnd(g_builder, nz, le, "cap.small")
         LLVMBuildCondBr(g_builder, isSmall, bb_small, bb_large)
 
-        // packed: SIMD hash scan -> candidate; confirm the real string (skip on a clean miss).
         LLVMPositionBuilderAtEnd(g_builder, bb_small)
-        var idxRaw = packed_find_vector(hashes, hk32)
-        var hasCand = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, idxRaw, types.ConstI32(uint64(-1)), "find.has")
-        var smallSrc = LLVMGetInsertBlock(g_builder)
-        var bb_confirm = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.confirm")
-        var bb_small2 = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.small2")
-        LLVMBuildCondBr(g_builder, hasCand, bb_confirm, bb_small2)
-
-        LLVMPositionBuilderAtEnd(g_builder, bb_confirm)
-        var eq = emit_string_key_equal(keysV, key, idxRaw)
-        var ok = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, eq, types.ConstI32(0ul), "find.ok")
-        var idxConf = LLVMBuildSelect(g_builder, ok, idxRaw, types.ConstI32(uint64(-1)), "find.conf")
-        var confEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildBr(g_builder, bb_small2)
-
-        LLVMPositionBuilderAtEnd(g_builder, bb_small2)
-        var idxSmall = LLVMBuildPhi(g_builder, types.t_int32, "find.small.idx")
-        LLVMAddIncoming(idxSmall, [ types.ConstI32(uint64(-1)), idxConf ], [ smallSrc, confEnd ])
+        var idxSmall = packed_find_hashes64(hashesV, h)
         var smallEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
 
@@ -2125,49 +2074,30 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMBuildAnd(g_builder, nz, le, "cap.small")
     }
 
-    // String tab[key]: packed -> SIMD hash scan + string confirm. Three packed outcomes:
-    //  - confirmed hit -> return the slot, no insert;
-    //  - hash candidate but string differs -> a 32-bit collision; route to the full C++ at, which
-    //    promotes to open addressing (keeps packed tables collision-free);
-    //  - no hash candidate at all -> genuinely absent, insert via the skip-packed reserve.
-    // The collision/clean-miss fork is free: it reuses the SIMD match mask. Large/empty -> C++ at.
+    // String tab[key]: packed -> inline 64-bit-hash SIMD scan over [0,size); hit returns the slot,
+    // miss inserts via the skip-packed reserve (no strcmp, no collision fork — 64-bit exact).
+    // large/empty -> full C++ at. Same shape as build_int_table_at_fast over the hash array (i64).
     def build_string_table_at_fast(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var hdr = load_table_header(tab)
         var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
         var hashesV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "hashes.v")
-        var hashes = LLVMBuildPointerCast(g_builder, hashesV, LLVMPointerType(types.t_int32, 0u), "hashes")
-        var keysV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.KEYS), "keys.v")
         var isSmall = packed_cap_cond(cap)
 
         var at_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
         var bb_packed = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.packed")
-        var bb_confirm = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.confirm")
-        var bb_collision = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.collision")
-        var bb_cleanmiss = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.cleanmiss")
+        var bb_miss = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.miss")
         var bb_large = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.large")
         var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.merge")
         LLVMBuildCondBr(g_builder, isSmall, bb_packed, bb_large)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_packed)
         var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
-        var idxRaw = packed_find_vector(hashes, reduce_hash_to_key32(h))
-        var hasCand = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, idxRaw, types.ConstI32(uint64(-1)), "at.has")
+        var idxFound = packed_find_hashes64(hashesV, h)
+        var isMiss = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, idxFound, types.ConstI32(uint64(-1)), "at.ismiss")
         var packedEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildCondBr(g_builder, hasCand, bb_confirm, bb_cleanmiss)
+        LLVMBuildCondBr(g_builder, isMiss, bb_miss, bb_merge)
 
-        // candidate present: confirm the real string. hit -> merge(slot); differs -> collision.
-        LLVMPositionBuilderAtEnd(g_builder, bb_confirm)
-        var eq = emit_string_key_equal(keysV, key, idxRaw)
-        var ok = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, eq, types.ConstI32(0ul), "at.ok")
-        var confirmEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildCondBr(g_builder, ok, bb_merge, bb_collision)
-
-        LLVMPositionBuilderAtEnd(g_builder, bb_collision)
-        var idxColl = build_string_table_at_with_hash(tab, key, valueTypeSize, at)   // promotes, returns slot
-        var collEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildBr(g_builder, bb_merge)
-
-        LLVMPositionBuilderAtEnd(g_builder, bb_cleanmiss)
+        LLVMPositionBuilderAtEnd(g_builder, bb_miss)
         var idxMiss = build_string_table_at_after_packed_miss(tab, key, h, valueTypeSize, at)
         var missEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
@@ -2179,7 +2109,7 @@ class public LlvmJitVisitor : AstVisitor {
 
         LLVMPositionBuilderAtEnd(g_builder, bb_merge)
         var res = LLVMBuildPhi(g_builder, types.t_int32, "at.idx")
-        LLVMAddIncoming(res, [ idxRaw, idxColl, idxMiss, idxLarge ], [ confirmEnd, collEnd, missEnd, largeEnd ])
+        LLVMAddIncoming(res, [ idxFound, idxMiss, idxLarge ], [ packedEnd, missEnd, largeEnd ])
         return res
     }
 
@@ -6872,7 +6802,6 @@ class public ResolveExternVisitor : AstVisitor {
     def bind_jit_table_find_glob(t : Type) {
         if (t == Type.tString) {
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()), get_jit_string_table_find_with_hash())
-            dll.set_glob_address(DllName(FN_JIT_STRING_EQUAL()), get_jit_string_equal())
         } else {
             dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
         }
@@ -6881,7 +6810,6 @@ class public ResolveExternVisitor : AstVisitor {
         if (t == Type.tString) {
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()), get_jit_string_table_at_after_packed_miss())
-            dll.set_glob_address(DllName(FN_JIT_STRING_EQUAL()), get_jit_string_equal())
         } else {
             dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
             if (is_simd_packed_key(t)) {
