@@ -26,6 +26,7 @@ Form                                            Behavior
 ``db |> _sql_upsert(row, on_conflict, ...)``    proper merge --- keep old row, update chosen cols
 ``db |> _sql_upsert_returning(...)``            same, but capture the post-merge row
 ``db |> _sql_try_upsert(...)``                  non-panic ``Result<int, string>``
+``db |> _sql_try_upsert_returning(...)``        non-panic + capture (``Result<array<T>, string>``)
 ==============================================  ===================================================
 
 ``insert_or_ignore`` / ``insert_or_replace`` also have ``try_``
@@ -76,8 +77,8 @@ ON CONFLICT ... DO UPDATE --- the proper merge
         (Hits = _.Hits + 1, Last = _excluded.Last))
     // INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
     //   ON CONFLICT("Id") DO UPDATE SET
-    //     "Hits" = "WordHits"."Hits" + 1,
-    //     "Last" = "excluded"."Last"
+    //     "Hits" = ("Hits") + (?),
+    //     "Last" = excluded."Last"
 
 Composite conflict targets
 ==========================
@@ -105,8 +106,8 @@ list.
         tuple(_.Email, _.Tenant),
         (Name = _excluded.Name))
     // INSERT INTO "UserAccts" (...) VALUES (?,?,?,?)
-    //   ON CONFLICT("Email","Tenant") DO UPDATE SET
-    //     "Name" = "excluded"."Name"
+    //   ON CONFLICT("Email", "Tenant") DO UPDATE SET
+    //     "Name" = excluded."Name"
 
 UPSERT RETURNING
 ================
@@ -121,8 +122,8 @@ practice; the array shape mirrors ``_sql_update_returning``).
         _.Id,
         (Hits = _.Hits + 1))
     // INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
-    //   ON CONFLICT("Id") DO UPDATE SET "Hits" = "WordHits"."Hits" + 1
-    //   RETURNING "Id","Word","Hits","Last"
+    //   ON CONFLICT("Id") DO UPDATE SET "Hits" = ("Hits") + (?)
+    //   RETURNING "Id", "Word", "Hits", "Last"
 
 Non-panic ``try_`` variants
 ===========================

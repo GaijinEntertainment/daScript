@@ -27,7 +27,10 @@ The dasSQLITE surface lives in ``sqlite/sqlite_boost``:
   qualified runner cannot outlive its lexical scope (it shares
   ``db``'s libsqlite3 handle; only the original owns lifetime).
 * ``with_attached(db, path, as_name) $(scoped) { ... }`` ---
-  attach + invoke + detach in ``finally`` (covers panic paths).
+  attach + invoke + detach in ``finally`` on normal exit and
+  early return. Panic is fatal, so the connection closes on
+  process exit anyway --- detach is not a recoverable cleanup
+  on panic.
 
 ``:memory:`` is a valid attach target: each ``:memory:`` attach
 creates a fresh, separate in-memory DB. The runnable example

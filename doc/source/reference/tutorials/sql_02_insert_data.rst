@@ -53,18 +53,24 @@ struct's namespace:
 User code rarely calls these directly — the user-facing CRUD generics
 below dispatch to them.
 
-Each field's SQL type is resolved through the convention
-``sqlite_sql_type(witness : T) : string``. Built-in primitives
-(``int``, ``int64``, ``float``, ``double``, ``string``, ``bool``)
-ship with overloads. To support a custom type, add your own
-overload — no registration required:
+Each field is stored through a bidirectional adapter pair defined
+next to its type: ``sql_bind`` maps the value to a SQLite primitive,
+``sql_extract`` maps it back. Built-in primitives (every
+``int``/``uint`` width, ``float``, ``double``, ``string``,
+``array<uint8>``, ``bool``, and enums) ship with pairs. To support a
+custom type, add your own pair — no registration required:
 
 .. code-block:: das
 
-    def sqlite_sql_type(witness : MyType) : string { return "TEXT" }
-    def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : MyType) : void { ... }
+    def sql_bind(v : MyType) : string { return ... }
+    [unused_argument(t)]
+    def sql_extract(v : string; t : type<MyType>) : MyType { return ... }
 
-Tutorial 26 covers the custom-type adapter rail in full.
+The primitive ``P`` returned by ``sql_bind`` is one of
+``int64`` / ``double`` / ``string`` / ``array<uint8>``, and that
+return type alone picks the column's storage class — there is no
+separate DDL-type override. Tutorial 26 covers the custom-type
+adapter rail in full.
 
 CREATE / DROP
 =============
@@ -166,8 +172,8 @@ Helper                                                Description
 ``db |> insert(row)``                                 Single-row INSERT, returns assigned rowid
 ``db |> insert(array<row>)``                          Batched INSERT in one transaction
 ``db |> try_insert(row) : Result<int64, string>``     Non-panic single-row INSERT
-``sqlite_sql_type(witness : T)``                      Convention for column-type DDL string
-``sqlite_bind(stmt, idx, value : T)``                 Convention for binding a value to a placeholder
+``def sql_bind(v : T) : P``                           Adapter: value → SQLite primitive ``P``
+``def sql_extract(v : P; t : type<T>) : T``           Adapter: ``P`` → value (``P`` picks storage)
 ====================================================  ================================================
 
 .. seealso::

@@ -75,11 +75,11 @@ error. dasSQLITE turns this into a panic in the strict path, or
 
 * **Default (recommended):** ``apply_recommended_pragmas`` plus
   short transactions. Most workloads never hit the 5s ceiling.
-* **Manual retry:** ``try_with_transaction`` returns
+* **Manual retry:** ``try_transaction`` returns
   ``SqlError``; on ``some(err)``, check the error string for
   ``"database is locked"`` / ``"BUSY"``, sleep with jitter,
   retry up to a cap.
-* **Tune the timeout:** ``db |> set_pragma("busy_timeout", 30000)``
+* **Tune the timeout:** ``db |> set_pragma("busy_timeout", 30000l)``
   if you have legitimate load spikes longer than 5s.
 
 What breaks
@@ -96,8 +96,8 @@ What breaks
   WAL mode (no lock acquired).
 * **journal_mode=DELETE (the legacy default).**
   ``apply_recommended_pragmas`` uses WAL. Verify with
-  ``query_scalar("PRAGMA journal_mode")`` if you inherit a DB
-  built elsewhere.
+  ``query_scalar("PRAGMA journal_mode", type<string>)`` if you
+  inherit a DB built elsewhere.
 
 Out of scope
 ============

@@ -48,8 +48,9 @@ into ``array<T>``:
 
 The macro emits the SQL ``SELECT "Id", "Name", "Price" FROM "Cars"``
 and the runtime materializes each row into a ``Car`` via the
-per-field ``sqlite_read`` overloads ``[sql_table]`` generates. The
-move-assign ``<-`` is required because ``array<Car>`` is non-copyable.
+generated ``_sql_read_row`` reader, which dispatches to the per-type
+``sql_extract`` adapter. The move-assign ``<-`` is required because
+``array<Car>`` is non-copyable.
 
 Filtering with ``_where`` (bind capture)
 ========================================
@@ -73,9 +74,12 @@ either a column reference (``_.X``) or a captured value (everything
 else), and routes them to the SQL identifier vs. bind list
 accordingly. Multiple ``_where`` calls compose AND-wise.
 
-Supported operators inside ``_where``: ``==``, ``!=``, ``<``, ``<=``,
-``>``, ``>=``, ``&&``, ``||``, ``!``. The captured side may be a
-literal or a free variable from any enclosing scope.
+Comparison/boolean operators recognized here: ``==``, ``!=``, ``<``,
+``<=``, ``>``, ``>=``, ``&&``, ``||``, ``!``. The captured side may be
+a literal or a free variable from any enclosing scope. The predicate
+surface is much wider than this (arithmetic, bitwise, string, and
+function calls all translate) --- see :ref:`tutorial_sql_where` for
+the full set.
 
 Projecting a single column with ``_select``
 ===========================================

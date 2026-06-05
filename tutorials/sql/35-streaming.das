@@ -20,12 +20,13 @@ require sqlite/sqlite_linq
 //   prepare → bind → step+yield → step+yield → ... → finalize
 //
 // The underlying prepared statement is finalized in the generator's
-// `finally` block, which runs on:
+// iterator-close `finally` block, which runs on:
 //   - normal exhaustion (loop runs to completion)
 //   - early `break` from the for-loop
-//   - panic from inside the loop body
-// In every case, the statement is released; subsequent writes to the
-// same DB are NOT blocked by a stale read transaction.
+// In both cases the statement is released; subsequent writes to the same
+// DB are NOT blocked by a stale read transaction. (A `panic` from the loop
+// body is fatal — it tears down the process, so the statement is reclaimed
+// only as part of that teardown, not a recoverable cleanup.)
 
 [sql_table(name = "Logs")]
 struct LogEntry {

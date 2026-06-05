@@ -81,7 +81,7 @@ Each ``_where`` adds another ``AND`` conjunct:
     _sql(db |> select_from(type<Car>)
            |> _where(_.Price > 100)
            |> _where(_.Name |> starts_with("T")))
-    // ... WHERE ("Name" LIKE ? || '%') AND ("Price" > ?)
+    // ... WHERE ("Price" > ?) AND ("Name" LIKE ? ESCAPE '\')
 
 The full ``_where`` translation surface lives in
 :ref:`tutorial_sql_where`.
@@ -127,10 +127,13 @@ Tutorial                                          Surface
 What ``_sql`` refuses
 =====================
 
-If you write a shape outside the translation table --- an arbitrary
-user-defined function in ``_where``, an unsupported math op, a regex
---- compile fails with ``macro_error`` pointing at the offending
-node. Two responses:
+Most predicate shapes translate: arithmetic (``+ - * / %``), bitwise
+(``& | << >>``), unary (``- ~``), string concat (``+`` → ``||``), and
+workhorse casts (``int()`` → ``CAST``) all lower to SQL.
+``[sql_function]``-annotated functions translate too. What hard-rejects
+is narrow --- bitwise XOR (``^``), an *unannotated* user-defined
+function in ``_where``, or a regex --- and compile fails with
+``macro_error`` pointing at the offending node. Two responses:
 
 - Add the rule to the analyzer (fork-and-extend) if the pattern is
   reusable across queries.

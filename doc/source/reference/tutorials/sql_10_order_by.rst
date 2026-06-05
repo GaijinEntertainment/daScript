@@ -21,6 +21,7 @@ Key shape                                       Emitted SQL
 ``(_.k1, _.k2, ...)``                           ``ORDER BY "k1" ASC, "k2" ASC, ...``
 ``_.expr`` (e.g. ``_.Price / 10``)              ``ORDER BY (expr) ASC`` (constants inlined)
 ``_order_by_descending(_.Field)``               ``ORDER BY "Field" DESC``
+``_order_by_keys((_.k1, _.k2), mask)``          ``ORDER BY "k1" ASC, "k2" DESC`` (per bit)
 ==============================================  ===========================================
 
 Single-column order
@@ -80,10 +81,21 @@ reference is instead treated as a dynamic column **name**.)
 Mixed ASC/DESC
 ==============
 
-A single ``_order_by`` step emits all columns in the same direction.
-Mixed ASC/DESC across columns (e.g. ``ORDER BY a ASC, b DESC``) is
-**not yet supported**. Drop down to the raw-SQL escape hatch
-(``query_one`` / ``query_scalar`` / ``exec``) when you need it.
+``_order_by`` and ``_order_by_descending`` emit every column in the
+same direction. For **per-column** direction, use ``_order_by_keys``:
+it takes the key tuple plus a ``uint`` mask, where bit ``i`` sets key
+``i`` to ``DESC`` (LSB = first key, a clear bit stays ``ASC``):
+
+.. code-block:: das
+
+    let mixed <- _sql(db |> select_from(type<Car>)
+                        |> _order_by_keys((_.Price, _.Name), 2u))
+    // ... ORDER BY "Price" ASC, "Name" DESC
+
+Mask ``2u`` is ``0b10`` --- bit 0 clear (``Price`` ASC), bit 1 set
+(``Name`` DESC). ``1u`` flips the first key, ``3u`` flips both, ``0u``
+is all-ascending (same as a plain tuple ``_order_by``). Like the other
+ordering steps, ordering may appear at most once in a chain.
 
 Composes with ``_where`` and ``take``
 =====================================

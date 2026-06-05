@@ -74,6 +74,21 @@ def main() {
                                     |> sum())
         to_log(LOG_INFO, "SUM(Price) WHERE Price>100 = {total_over_100}\n")
 
+        // ── Aggregating a computed expression ────────────────────────────
+        // `_select` takes a computed scalar, not just a bare column —
+        // the expression lowers into the aggregate's argument.
+        // SELECT SUM(("Price") + ("Id")) FROM "Cars"
+        let sum_expr = _sql(db |> select_from(type<Car>) |> _select(_.Price + _.Id) |> sum())
+        to_log(LOG_INFO, "SUM(Price+Id) = {sum_expr}\n")
+
+        // Workhorse casts lower to SQLite CAST and drive read-back precision:
+        // int64(...) keeps the SUM 64-bit (no 32-bit truncation at scale).
+        // SELECT SUM((CAST("Price" AS INTEGER)) * (CAST("Id" AS INTEGER))) FROM "Cars"
+        let sum_cast = _sql(db |> select_from(type<Car>)
+                              |> _select(int64(_.Price) * int64(_.Id))
+                              |> sum())
+        to_log(LOG_INFO, "SUM(int64(Price)*int64(Id)) = {sum_cast}\n")
+
         // ── Inspect emitted SQL ──────────────────────────────────────────
         let sql_sum = _sql_text(db |> select_from(type<Car>)
                                   |> _select(_.Price)
@@ -81,7 +96,11 @@ def main() {
         let sql_avg = _sql_text(db |> select_from(type<Car>)
                                   |> _select(_.Price)
                                   |> average())
+        let sql_expr = _sql_text(db |> select_from(type<Car>)
+                                   |> _select(int64(_.Price) * int64(_.Id))
+                                   |> sum())
         to_log(LOG_INFO, "  SUM SQL: {sql_sum}\n")
         to_log(LOG_INFO, "  AVG SQL: {sql_avg}\n")
+        to_log(LOG_INFO, "  computed SUM SQL: {sql_expr}\n")
     }
 }

@@ -20,7 +20,7 @@ require sqlite/sqlite_linq
 //     panics at runtime with a "views are read-only" message.
 //
 // In production, view DDL belongs in a migration body so the schema
-// lives alongside table DDL — see a future tut covering migrations.
+// lives alongside table DDL — see the migrations tutorial (sql_43).
 // For now we create views inline at app setup.
 
 [sql_table(name = "Customers")]
@@ -44,7 +44,8 @@ struct Order {
 //   - `@sql_column = "..."`           rename the on-disk column
 //   - `@sql_json` / `@sql_blob`       opt non-scalar storage adapters
 // Anything that affects DDL of the underlying table is rejected loud:
-// keys, uniqueness, computed columns, defaults, foreign keys.
+// keys, uniqueness, computed/stored columns, defaults, foreign keys,
+// indexes, FK actions, and field initializers (among others).
 [sql_view(name = "BigOrders")]
 struct BigOrder {
     Id : int
@@ -153,9 +154,10 @@ def main {
 // Mutate the underlying table(s) and re-query the view."
 //
 // The runtime gate fires on row-form mutations (`insert(bigOrderRow)`,
-// `update(bigOrderRow)`, `delete_(bigOrderRow)`) — these panic with the
-// same message. Real mutating workflows update the underlying tables
-// (Customer / Order here) and re-query the view to see the new state.
+// `update(bigOrderRow)`, `delete_(bigOrderRow)`) — these panic with an
+// equivalent read-only message ("[sql_view] BigOrder: cannot insert
+// into a view — views are read-only..."). Real mutating workflows update
+// the underlying tables (Customer / Order here) and re-query the view.
 
 // --- Captured locals via `to_sql_literal` -------------------------------
 //

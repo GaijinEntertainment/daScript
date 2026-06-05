@@ -81,8 +81,8 @@ def main {
         //                INSERT
         // SQL: INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
         //      ON CONFLICT("Id") DO UPDATE SET
-        //         "Hits" = "WordHits"."Hits" + 1,
-        //         "Last" = "excluded"."Last"
+        //         "Hits" = ("Hits") + (?),
+        //         "Last" = excluded."Last"
         let bumped = db |> _sql_upsert(
             WordHit(Id = 1, Word = "hello", Hits = 1, Last = 1234l),
             _.Id,
@@ -95,8 +95,8 @@ def main {
         // PRIMARY KEY or UNIQUE constraint" at runtime if no constraint
         // covers the column list.
         // SQL: INSERT INTO "UserAccts" (...) VALUES (?,?,?,?)
-        //      ON CONFLICT("Email","Tenant") DO UPDATE SET
-        //         "Name" = "excluded"."Name"
+        //      ON CONFLICT("Email", "Tenant") DO UPDATE SET
+        //         "Name" = excluded."Name"
         db |> _sql_upsert(
             UserAcct(Id = 999, Email = "x@y.com", Name = "alice2", Tenant = "acme"),
             tuple(_.Email, _.Tenant),
@@ -106,8 +106,8 @@ def main {
         // `_sql_upsert_returning` returns `array<T>` (always one row in
         // practice; the array shape mirrors `_sql_update_returning`).
         // SQL: INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
-        //      ON CONFLICT("Id") DO UPDATE SET "Hits" = "WordHits"."Hits" + 1
-        //      RETURNING "Id","Word","Hits","Last"
+        //      ON CONFLICT("Id") DO UPDATE SET "Hits" = ("Hits") + (?)
+        //      RETURNING "Id", "Word", "Hits", "Last"
         let after <- db |> _sql_upsert_returning(
             WordHit(Id = 1, Word = "hello", Hits = 1, Last = 0l),
             _.Id,

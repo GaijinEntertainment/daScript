@@ -63,9 +63,9 @@ Built-in adapters ship in ``sqlite_boost`` for:
   ``uint8`` / ``uint16`` / ``uint64`` round-trip through ``int64``;
   ``float`` round-trips through ``double``; ``bool`` round-trips
   through ``int64`` (``true`` -> ``1``).
-* A single enum generic ``def sql_bind $T (e : T) : int64 where T :
-  enum`` (and the matching ``sql_extract``) so any enum auto-
-  round-trips through ``INTEGER``.
+* A single ``auto``-typed ``sql_bind`` overload (and the matching
+  ``sql_extract``) detects enums via ``typeinfo is_enum`` and
+  round-trips any enum through ``INTEGER``.
 
 User code only writes adapters for domain types.
 

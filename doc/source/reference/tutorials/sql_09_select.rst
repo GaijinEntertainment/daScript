@@ -110,6 +110,13 @@ fields map by position, so no SQL alias is emitted:
 A computed column composes with a computed ``_where`` --- the predicate
 and projection binds are emitted in SQL-clause order.
 
+Any predicate-legal shape works as a column: string concatenation
+(``Label = _.Name + " car"`` → ``("Name") || (?)``) and workhorse casts
+(``AsText = string(_.Price)`` → ``CAST("Price" AS TEXT)``) both render via
+the same translator. The runnable
+:download:`09-select.das <../../../../tutorials/sql/09-select.das>` shows the
+``Bonus = _.Price / 10`` form end-to-end.
+
 Combining with terminals
 ========================
 

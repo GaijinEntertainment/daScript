@@ -27,7 +27,7 @@ daslang-side trigger DSL. Reasons:
   abstraction would lose the parts people actually use
   triggers for.
 * **Schema migrations are the right home for trigger DDL** ---
-  ``tut 32 (migrations, shipping in a later chunk)`` covers this
+  :ref:`tutorial_sql_migrations` covers this
   pattern: each migration can ``exec`` a ``CREATE TRIGGER`` so
   the trigger ships with the schema version that needs it.
 
@@ -78,7 +78,7 @@ Drop / replace
     db |> exec("DROP TRIGGER IF EXISTS articles_audit_insert")
 
 Replace = drop + recreate. The lifecycle is migration-shaped,
-which is why migrations (``tut 32``, shipping in a later chunk)
+which is why :ref:`tutorial_sql_migrations`
 is the natural home for trigger DDL.
 
 The typical anti-pattern

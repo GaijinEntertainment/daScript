@@ -56,7 +56,7 @@ def main() {
         // default for SQL injection).
         let cutoff = 150
         let sql2 = _sql_text(db |> select_from(type<Car>) |> _where(_.Price > cutoff))
-        to_log(LOG_INFO, "(2) Captured-var WHERE:\n  {sql2}\n")
+        to_log(LOG_INFO, "(2) Captured-var WHERE (cutoff = {cutoff}):\n  {sql2}\n")
 
         // ── (3) Column ref vs bind: which side is which ──────────────────
         // `_.Price` is a column reference (becomes "Price"). `cutoff`
@@ -90,11 +90,13 @@ def main() {
         to_log(LOG_INFO, "(6) raw-SQL total Price = {total}\n")
 
         // ── (7) What `_sql` refuses ──────────────────────────────────────
-        // The translation table is intentionally finite. If you write a
-        // shape the analyzer doesn't recognize — an arbitrary user-
-        // defined function call inside `_where`, an unsupported math
-        // op, a regex — compile fails with `macro_error` pointing at
-        // the offending node. Two possible responses:
+        // The translation surface is wide: arithmetic (+ - * / %), bitwise
+        // (& | << >>), unary (- ~), string concat (+ → ||), and workhorse
+        // casts (int() → CAST) all lower to SQL, and [sql_function]-
+        // annotated functions translate too. Only a few shapes hard-reject —
+        // bitwise XOR (^), an *unannotated* user-defined function inside
+        // `_where`, or a regex — and compile fails with `macro_error`
+        // pointing at the offending node. Two possible responses:
         //   - Add the rule to the analyzer (fork-and-extend) if the
         //     pattern is reusable.
         //   - Use the raw-SQL escape hatch (6) if it's a one-off.

@@ -24,8 +24,9 @@ The contract
   Field annotations are the read-only subset of ``[sql_table]``:
   ``@sql_column = "..."`` (rename) and ``@sql_json`` / ``@sql_blob``
   (non-scalar storage). DDL-affecting annotations on the underlying
-  table --- keys, uniqueness, computed columns, defaults, foreign keys
-  --- are rejected at compile time.
+  table --- keys, uniqueness, computed/stored columns, defaults,
+  foreign keys, indexes, FK actions, and field initializers (among
+  others) --- are rejected at compile time.
 * ``_create_view(type<V>, chain)`` builds the ``CREATE VIEW`` from a
   LINQ-shaped chain. The macro walks it, validates the projection
   against ``V``'s fields (count + per-position type), and emits a
@@ -47,7 +48,8 @@ Views are read-only. Any mutation attempt is blocked:
   Mutate the underlying table(s) and re-query the view."*
 * **Runtime rejection.** Row-form mutations
   (``insert(viewRow)`` / ``update(...)`` / ``delete_(...)``) panic with
-  the same message.
+  an equivalent read-only message (*"[sql_view] <name>: cannot
+  <insert|update|delete> into a view --- views are read-only..."*).
 
 Real mutating workflows update the underlying tables and re-query the
 view to see the new state.
@@ -221,9 +223,8 @@ Production tip
 ==============
 
 In production, view DDL belongs in a migration body so the schema
-lives alongside table DDL. The migration story ships in a future
-chunk; for now the inline ``_create_view`` form is fine for app setup
-and tests.
+lives alongside table DDL --- see :ref:`tutorial_sql_migrations`. For
+quick app setup and tests, the inline ``_create_view`` form is fine.
 
 .. seealso::
 

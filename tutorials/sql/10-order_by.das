@@ -13,9 +13,8 @@ require sqlite/sqlite_linq
 //   - `(_.k1, _.k2, …)`      → ORDER BY "k1" ASC, "k2" ASC, …
 //   - `_order_by_descending` flips ASC to DESC for the whole chain step
 //
-// Mixed ASC/DESC across columns in a single chain step is **not
-// supported** — use the raw-SQL escape hatch
-// (`db |> query_one("...ORDER BY a, b DESC", ...)`) when you need it.
+// Per-column ASC/DESC mixing uses `_order_by_keys((_.k1, _.k2), mask)`:
+// bit i of the uint mask sets key i to DESC (LSB = first key).
 
 [sql_table(name = "Cars")]
 struct Car {
@@ -63,6 +62,15 @@ def main() {
             to_log(LOG_INFO, "  {c.Name}: {c.Price}\n")
         }
 
+        // ── Mixed ASC/DESC — `_order_by_keys((keys), mask)` ──────────────
+        // mask 2u = 0b10: bit 0 clear (Price ASC), bit 1 set (Name DESC).
+        let price_asc_name_desc <- _sql(db |> select_from(type<Car>)
+                                          |> _order_by_keys((_.Price, _.Name), 2u))
+        to_log(LOG_INFO, "Mixed (Price ASC, Name DESC):\n")
+        for (c in price_asc_name_desc) {
+            to_log(LOG_INFO, "  {c.Name}: {c.Price}\n")
+        }
+
         // ── Composes with `_where` and `take` ────────────────────────────
         let cheap_top3 <- _sql(db |> select_from(type<Car>)
                                  |> _where(_.Price > 50)
@@ -77,5 +85,9 @@ def main() {
         let sql = _sql_text(db |> select_from(type<Car>)
                               |> _order_by((_.Price, _.Name)))
         to_log(LOG_INFO, "  emitted SQL: {sql}\n")
+
+        let sql_mixed = _sql_text(db |> select_from(type<Car>)
+                                    |> _order_by_keys((_.Price, _.Name), 2u))
+        to_log(LOG_INFO, "  mixed-direction SQL: {sql_mixed}\n")
     }
 }

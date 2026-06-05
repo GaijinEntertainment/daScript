@@ -33,13 +33,23 @@ Source shape                                  Lowered SQL
 ``+`` ``-`` ``*`` ``/`` ``%`` (numeric)       same operators
 ``a + b`` (strings)                           ``(a) || (b)``  (SQL string concatenation)
 ``&`` ``|`` ``<<`` ``>>``, unary ``-`` ``~``  same operators
-``s |> starts_with(p)``                       ``s LIKE ? || '%'``        (``p`` bound)
-``s |> ends_with(p)``                         ``s LIKE '%' || ?``        (``p`` bound)
-``s |> contains(p)``                          ``s LIKE '%' || ? || '%'`` (``p`` bound)
+``s |> starts_with(p)``                       ``s LIKE ? ESCAPE '\'``  (bind ``p`` + ``%``)
+``s |> ends_with(p)``                         ``s LIKE ? ESCAPE '\'``  (bind ``%`` + ``p``)
+``s |> contains(p)``                          ``s LIKE ? ESCAPE '\'``  (bind ``%`` + ``p`` + ``%``)
 ``s |> to_lower()``, ``s |> to_upper()``      ``LOWER(s)``, ``UPPER(s)``
 ``length(s)``                                 ``LENGTH(s)``
 ``x |> abs()``                                ``ABS(x)``
+``x |> is_some``, ``x |> is_none``            ``x IS NOT NULL``, ``x IS NULL``
+``x |> unwrap_or(d)``                         ``COALESCE(x, ?)`` --- the bound default
+``x |> _in(subq)``, ``x |> _not_in(subq)``    ``IN (subquery)``, ``NOT IN (subquery)``
+``x |> _in(arr)`` (captured array)            ``IN (SELECT value FROM json_each(?))``
+``int64(x)``, ``double(x)``, ``string(x)``    ``CAST(x AS INTEGER)`` / ``REAL`` / ``TEXT``
+``_.Col |> text_match(q)``                    ``MATCH ?`` (FTS5 --- see :ref:`tutorial_sql_fts5`)
 ============================================  ============================================================
+
+For the ``LIKE`` shapes, the ``%`` wildcard padding and the escaping of
+literal ``%`` / ``_`` / ``\`` are applied to the **bound value** (not
+concatenated into the SQL), so user input can never inject a wildcard.
 
 Captured-variable equality
 ==========================
@@ -64,8 +74,8 @@ Each ``_where`` adds an AND-clause; chain freely:
     let cheap_F <- _sql(db |> select_from(type<Car>)
                           |> _where(_.Price < 1000)
                           |> _where(_.Name |> starts_with("F")))
-    // emits:  ... WHERE "Price" < ? AND "Name" LIKE ? || '%'
-    // binds:  [1000, "F"]
+    // emits:  ... WHERE ("Price" < ?) AND ("Name" LIKE ? ESCAPE '\')
+    // binds:  [1000, "F%"]
 
 Boolean operators
 =================

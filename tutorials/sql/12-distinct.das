@@ -11,11 +11,8 @@ require sqlite/sqlite_linq
 // of the chain (column list, WHERE, ORDER BY, LIMIT) composes
 // normally.
 //
-// Set operations (UNION / INTERSECT / EXCEPT) are **deferred to a
-// later chunk**: they need a multi-source / multi-stage analyzer
-// extension that lives alongside joins and subqueries. Until then,
-// the raw-SQL escape hatch (`db |> exec(...)` /
-// `db |> query_one(...)`) handles those cases.
+// Set operations (UNION / INTERSECT / EXCEPT) live in tutorial
+// `12b-set_ops.das`.
 
 [sql_table(name = "Cars")]
 struct Car {
@@ -139,12 +136,7 @@ def main() {
             to_log(LOG_INFO, "  Brand={g.Brand}  FirstCar.Id={g.FirstCar.Id} Price={g.FirstCar.Price}\n")
         }
 
-        // ── Set operations (UNION / INTERSECT / EXCEPT) — deferred ───────
-        // The chain analyzer is single-source today: every SELECT comes
-        // from one `select_from(type<T>)`. Set ops bring in a second
-        // SqlQuery and need a multi-stage emitter — same engine work
-        // joins and subqueries need. Until that lands, drive `sqlite3_*`
-        // directly or `exec` a `CREATE TEMP VIEW` that wraps the union
-        // and `select_from` the view.
+        // ── Set operations (UNION / INTERSECT / EXCEPT) ──────────────────
+        // See tutorial `12b-set_ops.das`.
     }
 }

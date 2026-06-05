@@ -323,6 +323,19 @@ Path 2 (no legacy struct): hand-written
 ``db |> exec("INSERT INTO users_new (...) SELECT (...) FROM users")``
 also works. The legacy struct is convenience, not a requirement.
 
+.. warning::
+
+   **Runtime-created indexes are dropped by the rebuild.**
+   ``convert_and_rename`` re-emits the current struct's
+   ``[sql_index]`` annotations after the RENAME, but indexes
+   created at runtime via ``create_index`` / ``create_unique_index``
+   (e.g. in an earlier migration) are not ``[sql_index]`` siblings,
+   so the staging table never gets them and they vanish on rebuild.
+   Two fixes: declare such indexes as ``[sql_index(...)]`` siblings
+   on the struct so ``create_table`` emits them during the rebuild,
+   or recreate them after ``convert_and_rename`` via
+   ``create_index`` / ``create_unique_index``.
+
 Adopting migrations on an existing DB
 ======================================
 

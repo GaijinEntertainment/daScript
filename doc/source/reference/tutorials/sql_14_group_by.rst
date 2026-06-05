@@ -119,6 +119,24 @@ Pass a tuple to ``_group_by``. Each tuple field becomes its own
     // SELECT "City", "Age", COUNT(*) FROM "Users"
     // GROUP BY "City", "Age"
 
+Expression group keys
+=====================
+
+``_group_by`` also accepts a **computed key**. Constants inline into
+the rendered fragment (no ``?`` binds), and the same fragment is
+shared by the SELECT and the GROUP BY clause:
+
+.. code-block:: das
+
+    _sql(db |> select_from(type<User>)
+           |> _group_by(_.Age % 100)
+           |> _select((K = _._0, N = _._1 |> length)))
+    // SELECT (("Age") % (100)), COUNT(*) FROM "Users"
+    // GROUP BY (("Age") % (100))
+
+A computed key can sit alongside a plain field key in a multi-key
+tuple --- both render, in order, into SELECT and GROUP BY.
+
 The full reporting query
 ========================
 
