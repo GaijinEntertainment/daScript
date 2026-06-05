@@ -62,6 +62,29 @@ produce ``int64``.
     let mean = _sql(db |> select_from(type<Car>) |> _select(_.Price) |> average())
     // SELECT AVG("Price") FROM "Cars"     -- result type: double
 
+Aggregating a computed expression
+=================================
+
+``_select`` accepts a **computed scalar**, not just a bare column.
+The expression lowers into the aggregate's argument:
+
+.. code-block:: das
+
+    let s = _sql(db |> select_from(type<Car>) |> _select(_.Price + _.Id) |> sum())
+    // SELECT SUM(("Price") + ("Id")) FROM "Cars"
+
+Workhorse casts inside the projection lower to a SQLite ``CAST`` and
+drive the read-back type. Wrapping in ``int64(...)`` makes the
+projection 64-bit, so the SUM reads back faithfully instead of
+truncating at 32-bit scale:
+
+.. code-block:: das
+
+    let s = _sql(db |> select_from(type<Car>)
+                   |> _select(int64(_.Price) * int64(_.Id))
+                   |> sum())
+    // SELECT SUM((CAST("Price" AS INTEGER)) * (CAST("Id" AS INTEGER))) FROM "Cars"
+
 Composing with ``_where``
 =========================
 

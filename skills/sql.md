@@ -1,6 +1,6 @@
 # SQL — dasSQLITE
 
-Read this skill before writing or editing any `.das` code that talks to a SQL database. The companion tutorials live under [tutorials/sql/](../tutorials/sql/) (43 files, numbered by teaching order — `01-version.das` through `43-migrations.das`); read the relevant ones for runnable examples of every pattern below. Implementation is in [modules/dasSQLITE/daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das) (runtime + `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]` macros), [modules/dasSQLITE/daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das) (the `_sql(...)` family of call macros), and [modules/dasSQLITE/daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das) (`[sql_migration]` + `migrate_to_latest` runner). Design notes, decision logs, and the deferred-feature list live next to the implementation in [modules/dasSQLITE/API_REWORK.md](../modules/dasSQLITE/API_REWORK.md), [TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md), and [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md).
+Read this skill before writing or editing any `.das` code that talks to a SQL database. The companion tutorials live under [tutorials/sql/](../tutorials/sql/) (45 files, numbered by teaching order — `01-version.das` through `44-in_not_in_collections.das`, plus `12b-set_ops.das`); read the relevant ones for runnable examples of every pattern below. Implementation is in [modules/dasSQLITE/daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das) (runtime + `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]` macros), [modules/dasSQLITE/daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das) (the `_sql(...)` family of call macros), and [modules/dasSQLITE/daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das) (`[sql_migration]` + `migrate_to_latest` runner). Design notes, decision logs, and the deferred-feature list live next to the implementation in [modules/dasSQLITE/API_REWORK.md](../modules/dasSQLITE/API_REWORK.md), [TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md), and [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md).
 
 The shipped backend is **SQLite only**. The split between `daslib/sql` (provider-neutral types — `SqlRunner`, `SqlError`, `SqlType`, `ColumnInfo`, `Option`/`Result`) and `sqlite/sqlite_boost` (provider-specific runtime + macros) keeps user code portable for the day a second backend lands. Until then the names "SQL" and "SQLite" are interchangeable in this skill.
 
@@ -198,7 +198,7 @@ let cars <- _sql(db |> select_from(type<Car>)
 Compile-time `macro_error` pointing at the offending node:
 
 - Unknown function calls in `_where` / `_select`
-- `_select` struct-type projection (a whole-struct project is a deferred follow-up; `_.Field`, named-tuple, and computed-scalar `_.A + _.B` projections are supported). A computed projection containing a type cast (`int64(_.A) * int64(_.B)`) currently fails inference — deferred
+- `_select` struct-type projection — a whole-struct project is a deferred follow-up; `_.Field`, named-tuple, and computed-scalar `_.A + _.B` projections are supported, including workhorse casts (`int64(_.A) * int64(_.B)` lowers to `CAST(...)`)
 - Multiple `_select` calls in one chain
 - Multiple terminals in one chain (`_to_array() |> _first()`)
 - `text_match` on a non-`[sql_fts5]` column (suggests `contains` or `[sql_fts5]`)
@@ -697,7 +697,7 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 
 ## Reference
 
-- Tutorials — every shipped feature has a runnable file under [tutorials/sql/](../tutorials/sql/) (43 files). Teaching order is documented in [modules/dasSQLITE/TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md).
+- Tutorials — every shipped feature has a runnable file under [tutorials/sql/](../tutorials/sql/) (45 files). Teaching order is documented in [modules/dasSQLITE/TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md).
 - Implementation — [daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das), [daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das), [daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das).
 - Design notes — [API_REWORK.md](../modules/dasSQLITE/API_REWORK.md) (the master plan; per-chunk decision log), [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md) (migrations design walk), [API_CHECKED.md](../modules/dasSQLITE/API_CHECKED.md) (parity audit), [API_MISSING.md](../modules/dasSQLITE/API_MISSING.md) (deferred-feature list).
 - Tests — `tests/dasSQLITE/` — every operator + macro has a focused test, plus `failed_*.das` files for compile-error cases.

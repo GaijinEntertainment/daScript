@@ -87,7 +87,7 @@ def main {
 //
 //   - Default (recommended): `apply_recommended_pragmas` + short
 //     transactions. Most workloads never hit the 5 s ceiling.
-//   - Manual retry: `try_with_transaction` (returns SqlError); on Err,
+//   - Manual retry: `try_transaction` (returns SqlError); on Err,
 //     check err substring `"database is locked"` or `"BUSY"`, sleep
 //     with jitter, retry up to a cap.
 //   - PRAGMA `busy_timeout = N`: tune the wait if you have load
@@ -105,8 +105,8 @@ def main {
 //     and commit only the writes, or use a snapshot read connection
 //     in WAL mode (no lock acquired).
 //   - JOURNAL_MODE=DELETE (the legacy default). `apply_recommended_pragmas`
-//     uses WAL. Verify with `query_scalar("PRAGMA journal_mode")` if you
-//     inherit a DB built elsewhere.
+//     uses WAL. Verify with `query_scalar("PRAGMA journal_mode", type<string>)`
+//     if you inherit a DB built elsewhere.
 //
 // --- WHAT'S OUT OF SCOPE FOR THIS TUTORIAL -----------------------------
 //

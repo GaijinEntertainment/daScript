@@ -27,9 +27,10 @@ The ``on`` predicate is locked to the equi-join shape
 --- a 2-arg lambda whose body is one ``==`` comparison between a
 left-side field and a right-side field. Theta joins (``<``, ``>``,
 ``&&``-chained multi-key equality, function calls inside) emit a
-compile-time ``macro_error`` pointing at raw SQL as the escape
+compile-time ``error[50503]`` pointing at raw SQL as the escape
 hatch. The single-key restriction matches the backing ``join`` fn's
-hash-based O(n+m) implementation; multi-key tuple joins land later.
+hash-based O(n+m) implementation; for composite-key joins, use raw
+SQL.
 
 Multi-source mode and table aliases
 ====================================
@@ -133,18 +134,25 @@ read aliases through the same registry. Aliases that don't appear in
 the join's ``into`` projection reject with a clear macro_error listing
 the valid alias names.
 
+Other join shapes
+=================
+
+``_left_join`` / ``_right_join`` / ``_full_outer_join`` /
+``_cross_join`` all ship --- see :ref:`tutorial_sql_left_join`, which
+covers every outer-join shape and the WHERE-on-preserved-side rules.
+
+Three-table joins chain cleanly: each ``_join``'s named ``into``
+projection is referenced by alias in the next join's lambdas (e.g.
+``uo.OrderId``). The one constraint is that each join's RIGHT side
+cannot itself be a join --- chain from the left.
+
 What's not shipped
 ==================
 
-* ``_right_join`` --- trivially ``_left_join`` with swapped sources
-* ``_full_outer_join`` --- rare; raw SQL escape hatch
-* ``_cross_join`` --- footgun; raw SQL escape hatch
-* Three-table joins --- compose syntactically but produce verbose
-  tuple chains; documented as "use 2-table joins idiomatically;
-  3+ either chain with verbose tuple access, or drop to raw SQL"
 * Multi-key equi-joins (``u.Id == o.UserId && u.Tenant == o.Tenant``)
-  --- legitimate, but the backing ``join`` fn's keys are
-  single-column; deferred to a later ``multi_key_join`` extension
+  --- the backing ``join`` fn's keys are single-column, so a
+  ``&&``-chained ``ON`` predicate errors with ``error[50503]``; use
+  raw SQL for composite-key joins.
 
 .. seealso::
 

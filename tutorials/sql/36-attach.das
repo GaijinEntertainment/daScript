@@ -20,7 +20,9 @@ require sqlite/sqlite_linq
 //   with_schema(db, name)       — runner copy that qualifies queries
 //                                  with `"<name>"."<table>"`
 //   with_attached(db, path, as_name) <| $(scoped) { … }
-//                                — attach + invoke + detach (covers panic)
+//                                — attach + invoke + detach in `finally` on
+//                                  normal exit / early return (panic is fatal;
+//                                  the connection closes on process exit)
 //
 // `:memory:` is a valid attach target — each `:memory:` attach creates
 // a fresh, separate in-memory DB. The tutorial uses that so it has no
@@ -69,7 +71,9 @@ def main {
 
         // --- with_attached block — preferred shape ------------------------
         // Attaches, invokes the body with a schema-qualified runner, and
-        // detaches in `finally`. Detach runs even if the body panics.
+        // detaches in `finally` on normal exit / early return. Panic is fatal,
+        // so the connection closes on process exit anyway — detach is not a
+        // recoverable cleanup on panic.
         db |> with_attached(":memory:", "tenant_42") $(tenant) {
             fixture_archive(tenant)
             for (u in _sql(tenant |> select_from(type<User>))) {

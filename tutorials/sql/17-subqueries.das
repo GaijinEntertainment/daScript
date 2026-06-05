@@ -71,6 +71,14 @@ def main {
         to_log(LOG_INFO, "NOT IN subquery — orderless users: {length(no_orders)}")
         // 1 row: Carol.
 
+        // IN with a captured collection — `array<T>` in scope, not a
+        // subquery. JSON-encoded into a single bind, queried via
+        // SQLite's table-valued `json_each` (EF Core 8's default).
+        let want_ids <- [1, 2]
+        let picked <- _sql(db |> select_from(type<User>) |> _where(_.Id._in(want_ids)))
+        to_log(LOG_INFO, "IN(array) — users 1,2: {length(picked)}")
+        // 2 rows: Alice, Bob.
+
         // EXISTS subquery — uncorrelated test (`Orders` non-empty?).
         let any_orders <- _sql(db |> select_from(type<User>)
                                  |> _where((db |> select_from(type<Order>))._any()))
@@ -91,6 +99,8 @@ def main {
         let sql_in = _sql_text(db |> select_from(type<User>)
                                  |> _where(_.Id._in(db |> select_from(type<Order>) |> _select(_.UserId))))
         to_log(LOG_INFO, "SQL (IN): {sql_in}")
+        let sql_in_arr = _sql_text(db |> select_from(type<User>) |> _where(_.Id._in(want_ids)))
+        to_log(LOG_INFO, "SQL (IN array): {sql_in_arr}")
         let sql_exists = _sql_text(db |> select_from(type<User>)
                                      |> _where((db |> select_from(type<Order>))._any(_.Total > 200)))
         to_log(LOG_INFO, "SQL (EXISTS): {sql_exists}")

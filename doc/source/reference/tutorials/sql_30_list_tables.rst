@@ -112,11 +112,13 @@ Deferred
   Could ship as ``daslib/sql_admin`` once a second provider lands and
   the lowest-common-denominator subset is concrete. Premature to
   design with one backend in hand.
-* **Schema-diff helpers** (compare DB catalog ↔ declared
-  ``[sql_table]`` types). Useful for migration tooling but pushes
-  design choices around what counts as a "diff" (column renames vs.
-  drop+add, index name normalization, view body equivalence). Defer
-  until a real migration story is on the table.
+* **Multi-object schema-diff** (compare the whole DB catalog ↔ declared
+  ``[sql_table]`` types). Single-table verify already ships as
+  ``check_schema(db, type<T>)`` / ``try_check_schema(...)`` --- a typed
+  catalog↔struct diff on name / type / NOT NULL / PRIMARY KEY. What
+  remains deferred is catalog-wide diffing, which pushes design choices
+  around what counts as a "diff" (column renames vs. drop+add, index
+  name normalization, view body equivalence).
 
 .. seealso::
 

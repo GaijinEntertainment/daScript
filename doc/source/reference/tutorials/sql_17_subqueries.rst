@@ -57,6 +57,29 @@ For IN-style subqueries, project a single column with
                             |> _where(_.Id._not_in(db |> select_from(type<Order>) |> _select(_.UserId))))
     // ... WHERE "Id" NOT IN (...)
 
+IN / NOT IN with a captured collection
+======================================
+
+``_in`` / ``_not_in`` also accept a **captured daslang collection**
+(an ``array<T>`` in scope). It is JSON-encoded into a single bind and
+queried through SQLite's table-valued ``json_each`` --- EF Core 8's
+default IN-list strategy:
+
+.. code-block:: das
+
+    let want_ids <- [1, 2]
+    let some <- _sql(db |> select_from(type<User>)
+                       |> _where(_.Id._in(want_ids)))
+    // ... WHERE "Id" IN (SELECT value FROM json_each(?))
+
+``NOT IN`` on a **nullable** column adds the ``OR <x> IS NULL`` guard
+so three-valued logic doesn't silently drop ``NULL`` rows:
+
+.. code-block:: das
+
+    // nullable column:
+    // ... WHERE ("Tag" NOT IN (SELECT value FROM json_each(?)) OR "Tag" IS NULL)
+
 EXISTS / NOT EXISTS
 ===================
 

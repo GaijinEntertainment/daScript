@@ -183,6 +183,17 @@ tempting symmetry. Two reasons it does not ship:
 The honest path: Band 1 stays compile-time-typed, Band 3 stays the
 raw-SQL escape hatch, and the boundary is explicit.
 
+.. note::
+
+    What *does* ship for "does my open DB match my ``[sql_table]``
+    type?" is ``check_schema(db, type<T>)`` / ``try_check_schema(db,
+    type<T>)`` --- a typed runtime verifier that diffs the live catalog
+    against ``T``'s fields (name / type / NOT NULL / PRIMARY KEY) and
+    panics / returns ``SqlError`` on mismatch. It answers a yes/no
+    verification question against a known ``T``; it does not return the
+    ColumnInfo-shaped ``schema(name)`` array discussed above, which is
+    the part that stays unshipped.
+
 .. seealso::
 
     Full source: :download:`tutorials/sql/29-column_names.das <../../../../tutorials/sql/29-column_names.das>`

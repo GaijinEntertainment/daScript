@@ -21,7 +21,9 @@ require sqlite/sqlite_linq
 //
 // The named-tuple form lets you rename columns at the result-type level
 // (`(Identifier=_.Id, Label=_.Name)` returns rows whose `Identifier` field
-// holds the underlying `Id`).
+// holds the underlying `Id`), and a tuple value may be any computed
+// expression over the row (`(Bonus = _.Price / 10)`), rendered by the same
+// translator that powers `_where`.
 
 [sql_table(name = "Cars")]
 struct Car {
@@ -70,6 +72,17 @@ def main() {
             to_log(LOG_INFO, "  Identifier={r.Identifier} Label={r.Label}\n")
         }
 
+        // ── Computed column — any _where-legal expression as a column ────
+        // A named-tuple value can be a computed expression over the row,
+        // not just a bare `_.Field`. Rendered by the same translator that
+        // powers `_where`; result fields map by position (no SQL alias).
+        let bonuses <- _sql(db |> select_from(type<Car>)
+                              |> _select((Name = _.Name, Bonus = _.Price / 10)))
+        to_log(LOG_INFO, "Computed column (Bonus = Price/10) — {length(bonuses)} rows:\n")
+        for (b in bonuses) {
+            to_log(LOG_INFO, "  {b.Name} bonus={b.Bonus}\n")
+        }
+
         // ── Combining with terminals: _first, _first_opt ─────────────────
         let head = _sql(db |> select_from(type<Car>)
                           |> _select((Name = _.Name, Price = _.Price))
@@ -80,5 +93,9 @@ def main() {
         let sql = _sql_text(db |> select_from(type<Car>)
                               |> _select((Name = _.Name, Price = _.Price)))
         to_log(LOG_INFO, "  emitted SQL: {sql}\n")
+
+        let sql_computed = _sql_text(db |> select_from(type<Car>)
+                                       |> _select((Name = _.Name, Bonus = _.Price / 10)))
+        to_log(LOG_INFO, "  computed-column SQL: {sql_computed}\n")
     }
 }

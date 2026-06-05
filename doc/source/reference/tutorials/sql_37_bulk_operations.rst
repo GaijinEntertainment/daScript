@@ -57,8 +57,14 @@ overload uses a single prepared statement reused across rows
     }
     let inserted = db |> insert(events)
 
-Combine ``with_transaction`` + ``insert(rows)`` for the absolute
-fastest path: single transaction, single prepared statement.
+``insert(rows)`` is **already** wrapped in a single
+``BEGIN IMMEDIATE`` / ``COMMIT`` internally --- one ``fsync`` for
+the whole batch (it degrades to ``SAVEPOINT`` / ``RELEASE`` when
+called inside an existing transaction). So you do **not** need an
+outer ``with_transaction`` for the fsync win. Reach for an outer
+``with_transaction`` only to group ``insert(rows)`` atomically
+with **other** statements --- it adds no extra fsync benefit by
+itself.
 
 ``INSERT ... SELECT``
 =====================

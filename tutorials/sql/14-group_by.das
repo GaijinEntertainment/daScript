@@ -130,6 +130,24 @@ def main() {
             to_log(LOG_INFO, "  ({r.City}, age {r.Age}): {r.N}\n")
         }
 
+        // ── Expression group keys ────────────────────────────────────────
+        // `_group_by` accepts a computed key. Constants inline (no `?`
+        // binds); the same fragment is shared by SELECT and GROUP BY.
+        // SELECT (("Age") % (100)), COUNT(*) FROM "Users"
+        //   GROUP BY (("Age") % (100))
+        let by_age_bucket <- _sql(db |> select_from(type<User>)
+                                    |> _group_by(_.Age % 100)
+                                    |> _order_by(_._0)
+                                    |> _select((K = _._0, N = _._1 |> length)))
+        to_log(LOG_INFO, "Users per (Age % 100) bucket:\n")
+        for (r in by_age_bucket) {
+            to_log(LOG_INFO, "  {r.K}: {r.N}\n")
+        }
+        let sql_expr_key = _sql_text(db |> select_from(type<User>)
+                                       |> _group_by(_.Age % 100)
+                                       |> _select((K = _._0, N = _._1 |> length)))
+        to_log(LOG_INFO, "  expr-key SQL: {sql_expr_key}\n")
+
         // ── Full reporting query: WHERE → GROUP BY → HAVING → ORDER BY → LIMIT
         // The chain mirrors SQL clause order one-for-one. Bind ordering
         // tracks: WHERE binds first, HAVING next, LIMIT last.

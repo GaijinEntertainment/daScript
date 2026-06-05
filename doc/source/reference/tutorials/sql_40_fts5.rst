@@ -198,4 +198,4 @@ code never sees escape sequences:
 
     Full source: :download:`tutorials/sql/40-fts5.das <../../../../tutorials/sql/40-fts5.das>`
 
-    Previous tutorial: :ref:`tutorial_sql_concurrency`
+    Previous tutorial: :ref:`tutorial_sql_schema_from`
