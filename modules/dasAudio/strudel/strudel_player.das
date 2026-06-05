@@ -279,6 +279,16 @@ def public strudel_debug_voices() {
 
 // --- Track management ---
 
+def private init_track(var track : StrudelTrack?; startTime : double) {
+    track.sched.cps = g_cps
+    track.sched.startTime = startTime
+    track.sched.lastQueryEnd = (g_wall_time - startTime) * g_cps
+    track.sched.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
+    if (g_sf2 != null) {
+        init_reverb(track.sched)
+    }
+}
+
 def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
     //! Add a track playing the given pattern at the given gain. Returns its index (matches g_vis_index for visualizer combinators).
     let idx = g_vis_index
@@ -288,12 +298,29 @@ def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
         target_gain = gain
     ))
     var track = g_tracks[length(g_tracks) - 1]
-    track.sched.cps = g_cps
-    track.sched.lastQueryEnd = g_wall_time * g_cps
-    track.sched.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
-    if (g_sf2 != null) {
-        init_reverb(track.sched)
+    init_track(track, 0.0lf)
+    // ensure per-track PCM arrays are big enough
+    while (length(g_track_pcm) <= idx) {
+        var empty : array<float>
+        g_track_pcm |> emplace(empty)
     }
+    g_vis_index ++
+    return idx
+}
+
+def public strudel_add_track_immediate(var pat : Pattern; gain : float = 1.0) : int {
+    //! Like strudel_add_track but aligns the track's cycle origin to the current cycle floor,
+    //! guaranteeing that a note at degree 0 fires on the very first scheduler tick.
+    let idx = g_vis_index
+    g_tracks |> push(new StrudelTrack(
+        pat <- pat,
+        gain = gain,
+        target_gain = gain
+    ))
+    var track = g_tracks[length(g_tracks) - 1]
+    let cycleFloor = floor(g_wall_time * g_cps)
+    let alignedStart = g_wall_time - cycleFloor / g_cps
+    init_track(track, alignedStart)
     // ensure per-track PCM arrays are big enough
     while (length(g_track_pcm) <= idx) {
         var empty : array<float>
@@ -414,7 +441,7 @@ def public strudel_tick() {
         if (track == null) continue
         // sync tempo
         if (track.sched.cps != g_cps) {
-            track.sched.lastQueryEnd = g_wall_time * g_cps
+            track.sched.lastQueryEnd = (g_wall_time - track.sched.startTime) * g_cps
             track.sched.cps = g_cps
         }
         tick(track.sched, track.pat, g_bank, g_wall_time, CHUNK_SEC, g_look_ahead)
@@ -499,7 +526,7 @@ def public strudel_tick_offline() {
         if (track == null) continue
         // sync tempo
         if (track.sched.cps != g_cps) {
-            track.sched.lastQueryEnd = g_wall_time * g_cps
+            track.sched.lastQueryEnd = (g_wall_time - track.sched.startTime) * g_cps
             track.sched.cps = g_cps
         }
         tick(track.sched, track.pat, g_bank, g_wall_time, CHUNK_SEC, g_look_ahead)
