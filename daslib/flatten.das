@@ -42,6 +42,14 @@ let private STD_WHITELIST : table<string> <- {
     "float2", "float3", "float4", "int2", "int3", "int4", "uint2", "uint3", "uint4"
 }
 
+// Compound-assignment operators → their base binary op. `acc += rhs` survives infer
+// as an `ExprOp2` (op="+="), not an `ExprCopy`; predicated lowering rewrites it to
+// `acc = P ? (acc + rhs) : acc` using the base op. This is the shader accumulator idiom.
+let private ASSIGN_BASE : table<string; string> <- {
+    "+=" => "+", "-=" => "-", "*=" => "*", "/=" => "/", "%=" => "%",
+    "&=" => "&", "|=" => "|", "^=" => "^", "<<=" => "<<", ">>=" => ">>"
+}
+
 def private twin_name(func : FunctionPtr) : string {
     return "{func.name}_flat"
 }
@@ -277,12 +285,35 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
             }
         }
         out |> push <| letClone
-    } elif (stmt is ExprFor || stmt is ExprWhile) {
+    } elif (stmt is ExprFor) {
+        lower_for(ctx, stmt as ExprFor, structPred, out)
+    } elif (stmt is ExprWhile) {
         ctx.ok = false
-        ctx.err = "flatten: loops are not supported yet; unroll to a fixed count first"
+        ctx.err = "flatten: while loops are not supported; use a fixed range(N) or array-literal for loop"
+    } elif (stmt is ExprBreak || stmt is ExprContinue) {
+        ctx.ok = false
+        ctx.err = "flatten: break / continue inside a flattened loop are not supported yet"
     } elif (stmt is ExprMove || stmt is ExprClone) {
         ctx.ok = false
         ctx.err = "flatten: move (<-) / clone (:=) cannot be predicated; only copyable-value assignment is supported"
+    } elif (stmt is ExprOp2 && key_exists(ASSIGN_BASE, "{(stmt as ExprOp2).op}")) {
+        // Compound assignment `lhs OP= rhs` → `lhs = P ? (lhs OP rhs) : lhs`.
+        let o = stmt as ExprOp2
+        let bop = ASSIGN_BASE?["{o.op}"] ?? ""
+        let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+        var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.left),
+            right = lower_value(ctx, o.right, structPred, out))
+        out |> push <| qmacro_expr(${ $e(o.left) = $e(pred) ? $e(combined) : $e(o.left); })
+    } elif (stmt is ExprOp1 && ("{(stmt as ExprOp1).op}" == "++" || "{(stmt as ExprOp1).op}" == "--")) {
+        // `x++` / `x--` as a statement → `x = P ? (x +/- 1) : x` (the postfix value
+        // is discarded at statement level, so pre/post is irrelevant here). Same
+        // drop-if-unhandled hazard as compound assignment; PERF013 nudges toward these.
+        let o = stmt as ExprOp1
+        let bop = "{o.op}" == "++" ? "+" : "-"
+        let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+        var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.subexpr),
+            right = new ExprConstInt(at = o.at, value = 1))
+        out |> push <| qmacro_expr(${ $e(o.subexpr) = $e(pred) ? $e(combined) : $e(o.subexpr); })
     } elif (stmt is ExprBlock) {
         // Bare lexical scope — flatten its statements under the same predicate.
         lower_list(ctx, stmt as ExprBlock, structPred, out)
@@ -294,6 +325,56 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         // compile error (30151 "no side effect operation"). Copy-prop would
         // otherwise fold a discarded result temp into exactly that.
         lower_value(ctx, stmt, structPred, out)
+    }
+}
+
+// Fixed-count loop unrolling (M4). A `for` over a constant `range(N)` or an array
+// literal has a compile-time-known iteration count: clone the body once per
+// iteration, substitute the loop variable with that iteration's constant, and lower
+// each unrolled copy under the SAME predicate (an unrolled body always executes).
+// Mirrors daslib/unroll.das. break / continue are rejected upstream in lower_stmt
+// (deferred to a later cut); while loops and non-constant sources error too.
+def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
+    if (length(efor.iterators) != 1 || length(efor.sources) != 1) {
+        ctx.ok = false
+        ctx.err = "flatten: only single-variable, single-source for loops can be flattened"
+        return
+    }
+    let src = efor.sources[0]
+    // Build one substitution expression per iteration (the loop var's value).
+    var substs : array<ExpressionPtr>
+    if (src is ExprConstRange) {
+        for (i in (src as ExprConstRange).value) {
+            var e : ExpressionPtr = new ExprConstInt(at = efor.at, value = i)
+            substs |> push(e)   // nolint:PERF006 -- macro-time, count is the (small) unroll bound
+        }
+    } else {
+        // Array-literal source: `for (v in [a, b, c])` parses as
+        // `to_array_move([[a, b, c]])` (ExprCall wrapping ExprMakeArray), or a bare
+        // ExprMakeArray. Each element expression substitutes for one iteration.
+        var mk : ExprMakeArray? = null
+        if (src is ExprMakeArray) {
+            mk = src as ExprMakeArray
+        } elif (src is ExprCall && !empty((src as ExprCall).arguments) &&
+                (src as ExprCall).arguments[0] is ExprMakeArray) {
+            mk = (src as ExprCall).arguments[0] as ExprMakeArray
+        }
+        if (mk == null) {
+            ctx.ok = false
+            ctx.err = "flatten: for loop source must be a constant range(N) or an array literal"
+            return
+        }
+        substs <- [for (v in mk.values); clone_expression(v)]
+    }
+    let van = "{efor.iterators[0]}"
+    for (se in substs) {
+        var iblk = clone_expression(efor.body)
+        remove_deref(van, iblk)               // strip ExprRef2Value around the workhorse loop var
+        var rules : Template
+        rules |> replaceVariable(van) <| se
+        apply_template(rules, efor.at, iblk, false)
+        lower_branch(ctx, iblk, structPred, out)
+        if (!ctx.ok) return
     }
 }
 
@@ -567,12 +648,14 @@ def private copy_prop_pass(var out : array<ExpressionPtr>) {
     while (changed) {
         changed = false
         let n = length(out)
-        // Every assignment target (flat or user): a source reading one of these
-        // cannot be safely hoisted forward — its value may change before the use.
-        var reassigned : table<string>
-        for (s in out) {
-            if (s is ExprCopy && (s as ExprCopy).left is ExprVar) {
-                reassigned |> insert("{((s as ExprCopy).left as ExprVar).name}")
+        // Map every assignment target to its store indices. A source reading var V
+        // is only unsafe if V is reassigned BETWEEN this temp's def and a use — a
+        // reassignment fully before the def (e.g. an accumulator finalized into the
+        // return temp) leaves the captured value intact, so it must not block.
+        var storeIdx : table<string; array<int>>
+        for (j in range(n)) {
+            if (out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar) {
+                storeIdx["{((out[j] as ExprCopy).left as ExprVar).name}"] |> push(j)
             }
         }
         for (k in range(n)) {
@@ -581,7 +664,7 @@ def private copy_prop_pass(var out : array<ExpressionPtr>) {
             if (length(lc.variables) != 1) continue
             let nm = "{lc.variables[0].name}"
             if (!is_flat_temp(nm)) continue
-            // Stores to nm (besides the decl-init).
+            // Single definition: decl-init + no stores, OR no-init decl + one store.
             let stores <- [for (j in range(n)); j;
                 where out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar &&
                     "{((out[j] as ExprCopy).left as ExprVar).name}" == nm]
@@ -595,23 +678,15 @@ def private copy_prop_pass(var out : array<ExpressionPtr>) {
             } else {
                 continue                                   // multi-def (e.g. early-return mask) — leave it
             }
-            // Source must not read any reassigned var (would capture a stale value);
-            // this also rejects the self-referential `__flat_ret = pred ? v : __flat_ret`.
+            let defIdx = si >= 0 ? si : k
             var srcReads : table<string>
             var srcRisky = false
             scan_src(src, srcReads, srcRisky)
-            var blocked = false
-            for (rn in keys(srcReads)) {
-                if (key_exists(reassigned, rn)) {
-                    blocked = true
-                    break
-                }
-            }
-            if (blocked) continue
-            // Uses must follow the definition; risky sources never get duplicated.
-            let defIdx = si >= 0 ? si : k
+            if (key_exists(srcReads, nm)) continue         // self-referential source — never fold
+            // Uses must follow the def; track the last one for the reassignment window.
             var refCount = 0
             var firstRef = n
+            var maxUseIdx = -1
             for (j in range(n)) {
                 if (j == k || j == si) continue
                 let c = count_refs(out[j], nm)
@@ -620,9 +695,26 @@ def private copy_prop_pass(var out : array<ExpressionPtr>) {
                     if (j < firstRef) {
                         firstRef = j
                     }
+                    if (j > maxUseIdx) {
+                        maxUseIdx = j
+                    }
                 }
             }
             if ((refCount > 0 && firstRef < defIdx) || (srcRisky && refCount > 1)) continue
+            // Position-aware guard: block only if a source var is reassigned strictly
+            // between the def and the last use.
+            var blocked = false
+            for (rn in keys(srcReads)) {
+                if (!key_exists(storeIdx, rn)) continue
+                for (r in storeIdx[rn]) {
+                    if (r > defIdx && r <= maxUseIdx) {
+                        blocked = true
+                        break
+                    }
+                }
+                if (blocked) break
+            }
+            if (blocked) continue
             // Inline the source at every use, then drop the def (+ store).
             var rules : Template
             rules |> replaceVariable(nm, clone_expression(src))
@@ -813,6 +905,11 @@ class FlattenAnnotation : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
+        // Lint runs with constant folding off, so `range(N)` is not yet an
+        // ExprConstRange and the generated twin is irrelevant to linting the source
+        // anyway. Leave the twin as the inert clone from `apply` (mirrors how
+        // daslib/unroll.das skips unrolling under is_in_lint_check()).
+        if (is_in_lint_check()) return true
         let ph = get_flatten_phase(func)
         if (ph == PHASE_DONE) return true
         var twin = find_unique_function(compiling_module(), twin_name(func), true)

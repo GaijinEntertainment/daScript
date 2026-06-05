@@ -30,9 +30,17 @@ def test_flatten_boundaries(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_recursion.das")
         t |> success(find(issues, "recursion through") >= 0, "expected recursion error, got: {issues}")
     }
-    t |> run("loops are rejected") @(t : T?) {
+    t |> run("non-constant range loop is rejected") @(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_loop.das")
-        t |> success(find(issues, "loops are not supported") >= 0, "expected loop error, got: {issues}")
+        t |> success(find(issues, "constant range(N)") >= 0, "expected non-constant-loop error, got: {issues}")
+    }
+    t |> run("while loop is rejected") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_while.das")
+        t |> success(find(issues, "while loops are not supported") >= 0, "expected while error, got: {issues}")
+    }
+    t |> run("break inside a flattened loop is rejected") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_break.das")
+        t |> success(find(issues, "break / continue") >= 0, "expected break error, got: {issues}")
     }
     t |> run("non-whitelisted builtin is rejected") @(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_builtin.das")
