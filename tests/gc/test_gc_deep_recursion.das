@@ -33,7 +33,7 @@ def chain_len(head : Node?) : int {
     return n
 }
 
-// [test] // Causes stackoverflow
+[test]
 def test_gc_deep_chain_no_overflow(t : T?) {
     let depth = 200000
     build_chain(depth)

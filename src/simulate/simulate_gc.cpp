@@ -729,6 +729,10 @@ namespace das
         das_set<char *>     failed;
         bool                markStringHeap = true;
         bool                validate = false;
+        // Bounded-recursion guard: cap recursion depth, defer the rest to an iterative drain.
+        vector<pair<char *,TypeInfo *>> deferred;
+        int                 depth = 0;
+        static const int    GC_MAX_DEPTH = 256;
         void prepare() {
             currentRange.clear();
             gcFlags = TypeInfo::flag_heapGC;
@@ -865,6 +869,11 @@ namespace das
         using DataWalker::walk;
 
         virtual void walk ( char * pa, TypeInfo * info ) override {
+            if ( depth >= GC_MAX_DEPTH ) {    // too deep: defer, drain iteratively at the collectHeap frame
+                if ( pa ) deferred.emplace_back(pa, info);
+                return;
+            }
+            ++ depth;
             if ( pa == nullptr ) {
             } else if ( info->flags & TypeInfo::flag_ref ) {
                 beforeRef(pa,info);
@@ -953,6 +962,7 @@ namespace das
                     default: break;
                 }
             }
+            -- depth;
         }
     };
 
@@ -1049,6 +1059,12 @@ namespace das
             }
             lineAt = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
+        }
+        while ( !walker.deferred.empty() ) {
+            auto item = walker.deferred.back();
+            walker.deferred.pop_back();
+            walker.prepare();
+            walker.walk(item.first, item.second);
         }
         // sweep
         int markUsec = gcLogTime ? get_time_usec(gcT0) : 0;
