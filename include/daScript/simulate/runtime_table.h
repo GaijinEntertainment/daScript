@@ -185,6 +185,33 @@ namespace das
             }
         }
 
+        // Insert a key the caller has ALREADY PROVEN absent from a packed table — the JIT
+        // path runs the SIMD packed find inline, and on a miss it knows the key is not there,
+        // so re-running PackedFind here (as reserve() does to dedup) is wasted work. This is
+        // that shortcut: it skips the dedup scan and goes straight to the dense append, or
+        // promotes to open addressing first if the packed table is full. PRECONDITION: the
+        // table is packed and the key is genuinely absent — 0 < capacity <= the linear cap,
+        // and no live slot carries this key's hashKey. Calling it on a non-packed table, or
+        // with a key that is actually present, double-inserts. Not a general reserve; use
+        // reserve() unless you just did the packed find yourself and it missed.
+        __forceinline int64_t reserveAfterPackedMiss ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
+            DAS_ASSERT(hash>1);
+            DAS_ASSERT(tab.capacity!=0 && tab.capacity<=TABLE_MAX_LINEAR_CAPACITY);
+            if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
+            if ( tab.size >= tab.capacity ) {
+                // full packed table -> promote to open addressing, then insert via the hashed
+                // path (no packed dedup re-run, since it is now hashed).
+                reserveInternal(tab, tab.capacity*4, at);
+                return reserve(tab, key, hash, at);
+            }
+            auto hashKey = hashToHashKey(TableHashKey(hash));
+            uint64_t i = tab.size;
+            tab.hashes[i] = hashKey;
+            ((KeyType *) tab.keys)[i] = key;
+            tab.size++;
+            return (int64_t) i;
+        }
+
         __forceinline int64_t erase ( Table & tab, KeyType key, uint64_t hash ) {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
