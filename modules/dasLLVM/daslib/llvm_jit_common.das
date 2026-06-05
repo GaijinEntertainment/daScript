@@ -242,6 +242,11 @@ def public FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS() {
     return "`jit`string_table_at_after_packed_miss`"
 }
 
+// Confirm a packed-find candidate's actual string (the SIMD scan matches only the 32-bit hash).
+def public FN_JIT_STRING_EQUAL() {
+    return "`jit`string_equal`"
+}
+
 def private add_table_linkage(val : LLVMOpaqueValue?) {
     // DLLExport storage so ResolveExternVisitor's set_glob_address (GetProcAddress
     // on Windows) can find the slot on cache-hit reload; otherwise #2802 stale-addr.
@@ -367,6 +372,19 @@ def public get_string_table_at_after_packed_miss(g_builder : LLVMOpaqueBuilder?;
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at_apm")
     return (tab_fun, at_type)
+}
+
+def public get_string_equal(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?) {
+    assume fn_ptr = get_jit_string_equal()
+    // int32_t jit_string_equal ( char * a, char * b )
+    assume eq_type = LLVMFunctionType(types.t_int32,
+        fixed_array<LLVMTypeRef>(base_type_to_llvm_type(Type.tString),   // a (char*)
+        base_type_to_llvm_type(Type.tString)))                          // b (char*)
+    let fn_name = DllName(FN_JIT_STRING_EQUAL())
+    var fn : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, eq_type, fn_ptr)
+    assert(fn != null)
+    fn = LLVMBuildLoad2(g_builder, LLVMPointerType(eq_type, 0u), fn, "func_streq")
+    return (fn, eq_type)
 }
 
 // Generic Table header (Array base + keys/hashes/tombstones) with pointer fields as void*,

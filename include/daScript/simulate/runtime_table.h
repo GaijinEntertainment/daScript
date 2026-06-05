@@ -55,10 +55,15 @@ namespace das
 
     // Packed (small-table) find, specialized per key type so each instantiation is a flat,
     // unrollable/vectorizable scan rather than a generic loop with a per-element compare.
-    // String keys scan the hash slots and trust the 64-bit hash (no strcmp); the empty tail
-    // (hash 0) never matches a real key hash (>1), so the loop runs the full fixed capacity.
-    // Every other key type compares keys directly over the live prefix [0,size) and never
-    // touches the hash array (the `i<sz` guard short-circuits the stale tail).
+    // String keys scan only the 32-bit hash slots and return the first hash match as a
+    // *candidate* — the caller (find/reserve/erase) confirms it with KeyCompare (one strcmp).
+    // Hashes are only 32 bits so distinct keys can collide, but insert-time promotion to open
+    // addressing on the first collision (see reserve) guarantees a packed table never holds two
+    // slots with the same hashKey, so a single candidate is exact. The empty tail (hash 0) never
+    // matches a real key hash (>1), so the loop runs the full fixed capacity. Every other key
+    // type compares keys directly over the live prefix [0,size) and never touches the hash array
+    // (the `i<sz` guard short-circuits the stale tail), so its result is already exact and the
+    // caller's KeyCompare is a no-op confirm.
     template <typename KeyType>
     struct PackedFind {
         static __forceinline int64_t find ( const Table & tab, const KeyType & key, TableHashKey ) {
@@ -117,7 +122,10 @@ namespace das
             if ( tab.capacity==0 ) return -1;
             auto hashKey = hashToHashKey(TableHashKey(hash));
             if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed
-                return PackedFind<KeyType>::find(tab, key, hashKey);
+                int64_t idx = PackedFind<KeyType>::find(tab, key, hashKey);
+                // PackedFind<char*> returns a hash-only candidate; confirm the key (one strcmp).
+                // Other key types already compared data, so KeyCompare here is a trivial no-op.
+                return ( idx>=0 && KeyCompare<KeyType>()(((const KeyType *)tab.keys)[idx], key) ) ? idx : -1;
             }
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
@@ -138,15 +146,23 @@ namespace das
             DAS_ASSERT(hash>1);
             auto hashKey = hashToHashKey(TableHashKey(hash));
             if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: dense, load factor 1.0
+                bool hashCollision = false;
                 if ( tab.capacity != 0 ) {  // dedup against existing (skip on an unallocated table)
-                    int64_t found = PackedFind<KeyType>::find(tab, key, hashKey);
-                    if ( found>=0 ) return found;
+                    int64_t idx = PackedFind<KeyType>::find(tab, key, hashKey);
+                    if ( idx>=0 ) {
+                        // confirm the candidate; for non-string keys this already-data-matched.
+                        if ( KeyCompare<KeyType>()(((const KeyType *)tab.keys)[idx], key) ) return idx;
+                        hashCollision = true;   // hash matched but key differs -> 32-bit collision (string keys)
+                    }
                 }
                 if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
-                if ( tab.size >= tab.capacity ) {
-                    // cap-0 -> first allocation (stays packed); a full packed table promotes
-                    // to open addressing. *4 gives the hashed table load-factor headroom so it
-                    // does not immediately re-grow (cap*2 would land exactly on the 0.5 trigger).
+                // Promote out of packed mode on a full table (load factor 1.0) OR a 32-bit hashKey
+                // collision with a different stored key — open addressing confirms every hit with
+                // KeyCompare, so a collision-free packed table keeps find at one candidate + one
+                // strcmp. *4 gives the hashed table load-factor headroom so it does not immediately
+                // re-grow (cap*2 would land exactly on the 0.5 trigger).
+                if ( hashCollision || tab.size >= tab.capacity ) {
+                    // cap-0 -> first allocation (stays packed); otherwise grow to open addressing.
                     uint64_t newCapacity = (tab.capacity == 0) ? minCapacity : tab.capacity*4;
                     reserveInternal(tab, newCapacity, at);
                     return reserve(tab, key, hash, at);  // re-dispatch: now hashed (or the freshly allocated packed table)
@@ -219,9 +235,12 @@ namespace das
             if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: locate, then swap-remove the last live slot into the hole
                 int64_t fidx = PackedFind<KeyType>::find(tab, key, hashKey);
                 if ( fidx<0 ) return -1;
-                uint64_t i = (uint64_t) fidx;
                 auto pHashes = tab.hashes;
                 auto pKeys = (KeyType *) tab.keys;
+                // PackedFind<char*> is hash-only; confirm the candidate before removing it, or a
+                // colliding query would swap-remove the wrong key. Other key types already matched.
+                if ( !KeyCompare<KeyType>()(pKeys[fidx], key) ) return -1;
+                uint64_t i = (uint64_t) fidx;
                 uint64_t last = tab.size - 1;
                 if ( i != last ) {
                     pHashes[i] = pHashes[last];

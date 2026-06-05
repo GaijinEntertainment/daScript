@@ -1984,6 +1984,25 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 
+    // Confirm a packed string candidate: load keys[idxLane] and jit_string_equal it against the
+    // query key. The SIMD scan matches only the 32-bit hash (collidable), so this is the real
+    // compare; insert-time collision promotion guarantees at most one hash-match, so one strcmp is
+    // exact. Returns the i32 0/1 result. Caller must be in a block where idxLane is a genuine
+    // candidate (>=0) — a clean miss (no hash match) never reaches here, so it stays strcmp-free.
+    def emit_string_key_equal(keysV : LLVMOpaqueValue?; key : LLVMOpaqueValue?; idxLane : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var i8ptr = LLVMPointerType(types.t_int8, 0u)
+        var keysArr = LLVMBuildPointerCast(g_builder, keysV, LLVMPointerType(i8ptr, 0u), "keys.arr")
+        var idxv = idxLane
+        var slotPtr = LLVMBuildGEP2(g_builder, i8ptr, keysArr, idxv, "cf.slotp")
+        var slotKey = LLVMBuildLoad2(g_builder, i8ptr, slotPtr, "cf.key")
+        var (eq_fun, eq_typ) = get_string_equal(g_builder, g_mod, types)
+        var eqArgs <- [ slotKey, key ]
+        var eqCall = LLVMBuildCall2(g_builder, eq_typ, eq_fun, eqArgs, "cf.eq")
+        LLVMAddCallSiteAttribute(eqCall, -1 |> uint(), attributes.nounwind)
+        LLVMAddCallSiteAttribute(eqCall, -1 |> uint(), attributes.willreturn)
+        return eqCall
+    }
+
     def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
         var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
         // Read capacity + hashes from the table header. Small (packed) iff cap != 0 && cap <=
@@ -1993,6 +2012,7 @@ class public LlvmJitVisitor : AstVisitor {
         var cap = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.CAPACITY), "cap")
         var hashesV = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.HASHES), "hashes.v")
         var hashes = LLVMBuildPointerCast(g_builder, hashesV, LLVMPointerType(types.t_int32, 0u), "hashes")
+        var keysV = LLVMBuildExtractValue(g_builder, tabHdr, uint(JIT_TABLE.KEYS), "keys.v")
         var hk32 = reduce_hash_to_key32(h)
 
         var find_entry = LLVMGetInsertBlock(g_builder)
@@ -2005,8 +2025,25 @@ class public LlvmJitVisitor : AstVisitor {
         var isSmall = LLVMBuildAnd(g_builder, nz, le, "cap.small")
         LLVMBuildCondBr(g_builder, isSmall, bb_small, bb_large)
 
+        // packed: SIMD hash scan -> candidate; confirm the real string (skip on a clean miss).
         LLVMPositionBuilderAtEnd(g_builder, bb_small)
-        var idxSmall = packed_find_vector(hashes, hk32)
+        var idxRaw = packed_find_vector(hashes, hk32)
+        var hasCand = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, idxRaw, types.ConstI32(uint64(-1)), "find.has")
+        var smallSrc = LLVMGetInsertBlock(g_builder)
+        var bb_confirm = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.confirm")
+        var bb_small2 = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "find.small2")
+        LLVMBuildCondBr(g_builder, hasCand, bb_confirm, bb_small2)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_confirm)
+        var eq = emit_string_key_equal(keysV, key, idxRaw)
+        var ok = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, eq, types.ConstI32(0ul), "find.ok")
+        var idxConf = LLVMBuildSelect(g_builder, ok, idxRaw, types.ConstI32(uint64(-1)), "find.conf")
+        var confEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_small2)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_small2)
+        var idxSmall = LLVMBuildPhi(g_builder, types.t_int32, "find.small.idx")
+        LLVMAddIncoming(idxSmall, [ types.ConstI32(uint64(-1)), idxConf ], [ smallSrc, confEnd ])
         var smallEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
 
@@ -2088,30 +2125,49 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMBuildAnd(g_builder, nz, le, "cap.small")
     }
 
-    // String tab[key]: packed -> SIMD find; found returns the slot (no insert), miss inserts
-    // via the skip-packed reserve (reusing the same hash); large/empty -> full C++ at.
+    // String tab[key]: packed -> SIMD hash scan + string confirm. Three packed outcomes:
+    //  - confirmed hit -> return the slot, no insert;
+    //  - hash candidate but string differs -> a 32-bit collision; route to the full C++ at, which
+    //    promotes to open addressing (keeps packed tables collision-free);
+    //  - no hash candidate at all -> genuinely absent, insert via the skip-packed reserve.
+    // The collision/clean-miss fork is free: it reuses the SIMD match mask. Large/empty -> C++ at.
     def build_string_table_at_fast(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var hdr = load_table_header(tab)
         var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
         var hashesV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "hashes.v")
         var hashes = LLVMBuildPointerCast(g_builder, hashesV, LLVMPointerType(types.t_int32, 0u), "hashes")
+        var keysV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.KEYS), "keys.v")
         var isSmall = packed_cap_cond(cap)
 
         var at_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
         var bb_packed = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.packed")
-        var bb_miss = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.miss")
+        var bb_confirm = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.confirm")
+        var bb_collision = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.collision")
+        var bb_cleanmiss = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.cleanmiss")
         var bb_large = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.large")
         var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "at.merge")
         LLVMBuildCondBr(g_builder, isSmall, bb_packed, bb_large)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_packed)
         var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
-        var idxFound = packed_find_vector(hashes, reduce_hash_to_key32(h))
-        var isMiss = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, idxFound, types.ConstI32(uint64(-1)), "at.ismiss")
+        var idxRaw = packed_find_vector(hashes, reduce_hash_to_key32(h))
+        var hasCand = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, idxRaw, types.ConstI32(uint64(-1)), "at.has")
         var packedEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildCondBr(g_builder, isMiss, bb_miss, bb_merge)
+        LLVMBuildCondBr(g_builder, hasCand, bb_confirm, bb_cleanmiss)
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_miss)
+        // candidate present: confirm the real string. hit -> merge(slot); differs -> collision.
+        LLVMPositionBuilderAtEnd(g_builder, bb_confirm)
+        var eq = emit_string_key_equal(keysV, key, idxRaw)
+        var ok = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, eq, types.ConstI32(0ul), "at.ok")
+        var confirmEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildCondBr(g_builder, ok, bb_merge, bb_collision)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_collision)
+        var idxColl = build_string_table_at_with_hash(tab, key, valueTypeSize, at)   // promotes, returns slot
+        var collEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_merge)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_cleanmiss)
         var idxMiss = build_string_table_at_after_packed_miss(tab, key, h, valueTypeSize, at)
         var missEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
@@ -2123,7 +2179,7 @@ class public LlvmJitVisitor : AstVisitor {
 
         LLVMPositionBuilderAtEnd(g_builder, bb_merge)
         var res = LLVMBuildPhi(g_builder, types.t_int32, "at.idx")
-        LLVMAddIncoming(res, [ idxFound, idxMiss, idxLarge ], [ packedEnd, missEnd, largeEnd ])
+        LLVMAddIncoming(res, [ idxRaw, idxColl, idxMiss, idxLarge ], [ confirmEnd, collEnd, missEnd, largeEnd ])
         return res
     }
 
@@ -6816,6 +6872,7 @@ class public ResolveExternVisitor : AstVisitor {
     def bind_jit_table_find_glob(t : Type) {
         if (t == Type.tString) {
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()), get_jit_string_table_find_with_hash())
+            dll.set_glob_address(DllName(FN_JIT_STRING_EQUAL()), get_jit_string_equal())
         } else {
             dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
         }
@@ -6824,6 +6881,7 @@ class public ResolveExternVisitor : AstVisitor {
         if (t == Type.tString) {
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()), get_jit_string_table_at_after_packed_miss())
+            dll.set_glob_address(DllName(FN_JIT_STRING_EQUAL()), get_jit_string_equal())
         } else {
             dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
             if (is_simd_packed_key(t)) {

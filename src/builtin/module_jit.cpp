@@ -757,6 +757,17 @@ extern "C" {
         JIT_TABLE_FUNCTION(&jit_table_at_after_packed_miss);
     }
 
+    // Confirm a packed-find candidate: the inline SIMD scan matches on the 32-bit hash, which can
+    // collide, so the JIT calls this on the single candidate lane to confirm the actual string.
+    // Same null=="" semantics as KeyCompare<char*> (null is the empty string in daslang).
+    int32_t jit_string_equal ( char * a, char * b ) {
+        return KeyCompare<char *>()(a,b) ? 1 : 0;
+    }
+
+    void * das_get_jit_string_equal ( ) {
+        return (void*)&jit_string_equal;
+    }
+
 
     uint64_t das_get_global_variable_offset( const Context * ctx, int id ) {
         return ctx->getGlobalVariable(id).offset;
@@ -1206,6 +1217,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_string_table_at_after_packed_miss");
             addExtern<DAS_BIND_FUN(das_get_jit_table_at_after_packed_miss)>(*this, lib, "get_jit_table_at_after_packed_miss",
                 SideEffects::none, "das_get_jit_table_at_after_packed_miss");
+            addExtern<DAS_BIND_FUN(das_get_jit_string_equal)>(*this, lib, "get_jit_string_equal",
+                SideEffects::none, "das_get_jit_string_equal");
             addExtern<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
                 SideEffects::none, "das_get_global_variable_offset");
             addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",

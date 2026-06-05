@@ -231,6 +231,51 @@ the SIMD compare *is* the whole operation. Inserts of genuinely new keys also sk
 redundant C++ `PackedFind` dedup the JIT already performed. Integer keys only
 (`int`/`uint` ×8/16/32/64); float/double/struct keep the C++ path.
 
+## Correctness: 32-bit hashKey collisions — confirm on find (SUPERSEDES the hash-only numbers above)
+
+The hash-only string path above is **incorrect**: `TableHashKey` is `uint32_t`, so distinct keys
+can share a hashKey and a hash-only match returns a false positive. Fix (all tiers):
+- packed string find returns a hash *candidate*; the caller confirms it with one `KeyCompare`
+  (C++) / bound `jit_string_equal` (JIT). Misses with no hash match never reach the confirm.
+- `reserve` promotes a packed table to open addressing on the first hashKey collision (a
+  confirmed hash-match with a *different* key), so a packed table never holds two same-hashKey
+  slots — the single candidate is always exact. The int/data path is unaffected (exact compare,
+  no hash, no confirm).
+
+Corrected JIT ns/op (warm, 3-run avg), vs the hash-only (wrong) figures and the pre-plan hashed
+baseline (§"Baseline find cost"):
+
+| lane | hashed baseline | hash-only (WRONG) | confirmed (correct) |
+|---|---|---|---|
+| const_hit (t06)  | ~9–18 | 1.4 | **7.7** |
+| const_miss (t06) | ~9–18 | 1.2 | **1.4** |
+| var_hit (t06)    | ~9–18 | 4.8 | **7.7** |
+| var_miss (t06)   | ~9–18 | 4.7 | **4.8** |
+| const_short (t03)| ~9–18 | 1.4 | **7.0** |
+| const_long (t03) | ~9–18 | 1.3 | **21.3** |
+| var_short (t03)  | ~9–18 | 4.6 | **6.7** |
+| var_long (t03)   | ~9–18 | 17.8 | **19.6** |
+| int_hit (t07)    | ~4–5 | 1.8 | **1.9** |
+| int_miss (t07)   | ~4–5 | 1.6 | **1.8** |
+| int_update (t07) | — | 4.5 | **3.8** |
+| str_update (t07) | — | 4.1 | **6.5** |
+
+Reading it:
+- **Misses and the whole int path are unchanged** — the confirm only fires on a hash-candidate
+  hit, and ints never hash/confirm. `const_miss` ~1.4ns and `int_hit` ~1.9ns stand.
+- **String hits now pay one strcmp confirm** — short keys +~5–6ns (≈7ns total), the 38-char key
+  +~18ns (≈21ns). `const_hit` ≈ `var_hit` because the strcmp+call dominates and the folded-hash
+  saving is now a small fraction. The confirm is a *bound call* — its fixed overhead is the bulk
+  of the short-key cost; an inlined/generated `string==` is the obvious next lever.
+- **Still beats the hashed baseline across the board**: packed short-string hit ~7ns vs hashed
+  ~9–18; packed miss ~1.4ns vs ~9–18; int hit ~1.9ns vs ~4–5. The confirm removes the (illusory)
+  hash-only speedup, not the packed win — packed pays the *same* one strcmp a hashed hit pays,
+  on top of a cheaper scan, and skips strcmp entirely on a miss.
+
+The §"Inlined packed find — 3-way" VECTOR column and the `str_update` row in §"Integer-key find"
+are the pre-confirm (hash-only) measurements; keep them for the SIMD-scan A/B but read the table
+above for shipped behavior.
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor

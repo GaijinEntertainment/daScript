@@ -9,6 +9,11 @@ def dkey(prefix : string; i : int) : string {
     return "{prefix}_{i}"
 }
 
+// Fresh string copy with exact content "k{n}" (distinct pointer each call, forcing real strcmp).
+def kcopy(n : int) : string {
+    return "k{n}"
+}
+
 def sorted_keys(tab : table<int; int>) : array<int> {
     var got : array<int>
     for (k in keys(tab)) {
@@ -57,6 +62,37 @@ def test_packed_string(t : T?) {
     }
     t |> equal(tab?[dkey("k", 99)] ?? -1, -1)
     t |> equal(key_exists(tab, dkey("k", 2)), true)
+    unsafe { delete tab; }
+}
+
+// "k1832" and "k16303" share the same 32-bit table hashKey (0xf9102e8c) but are different
+// strings — found by brute force over uint(hash(s)). Hashes are only 32 bits, so packed string
+// tables must promote on the first such collision (open addressing confirms every hit with a
+// strcmp); the inline packed find relies on at most one slot per hashKey.
+[test]
+def test_packed_string_collision_promotes(t : T?) {
+    var tab : table<string; int>
+    unsafe(tab[kcopy(1832)]) = 111
+    unsafe(tab[kcopy(16303)]) = 222          // same hashKey, different string -> promotes out of packed
+    t |> equal(length(tab), 2)
+    t |> equal(tab?[kcopy(1832)] ?? -1, 111)  // distinct-pointer queries -> real strcmp
+    t |> equal(tab?[kcopy(16303)] ?? -1, 222)
+    t |> equal(key_exists(tab, kcopy(1832)), true)
+    t |> equal(key_exists(tab, kcopy(16303)), true)
+    t |> equal(tab?[kcopy(9999)] ?? -1, -1)
+    unsafe { delete tab; }
+}
+
+// False-positive guard: a single-entry (still packed) table whose only key collides on hashKey
+// with the query must MISS — the packed find confirms the actual string, not just the hash.
+[test]
+def test_packed_string_hash_collision_miss(t : T?) {
+    var tab : table<string; int>
+    unsafe(tab[kcopy(1832)]) = 111            // single entry -> stays packed
+    t |> equal(length(tab), 1)
+    t |> equal(tab?[kcopy(16303)] ?? -777, -777)   // collides on hashKey, must not false-positive
+    t |> equal(key_exists(tab, kcopy(16303)), false)
+    t |> equal(tab?[kcopy(1832)] ?? -1, 111)       // the real key still hits
     unsafe { delete tab; }
 }
 
