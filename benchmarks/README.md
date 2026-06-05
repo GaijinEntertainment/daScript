@@ -51,6 +51,7 @@ Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the la
 | `test04.das` | Many small tables (decs/per-entity shape) — thousands of independent N-element tables, build (watch B/op for item 1 memory) and cold-sweep query (cache locality) |
 | `test05.das` | Crossover prototype — inlined hash-only linear scan (`lin_*`) vs real open-addressed `?[]` (`hash_*`) over N, short and long keys; predicts `maxLinearCapacity` before packed mode exists |
 | `test06.das` | Lookup-only (never insert) packed string-table find at N=8 — const/var keys, hit and miss; A/B/C harness for the JIT inlined packed find (`JIT_STRING_FIND` none/scalar/vector) |
+| `test07.das` | Packed (N=8) integer-key find (hit/miss, no-hash SIMD key compare) and `tab[k]++` update fast-path (string + int) — the paths added when the inline find was extended to integer keys and to insert |
 
 ## core/array/
 

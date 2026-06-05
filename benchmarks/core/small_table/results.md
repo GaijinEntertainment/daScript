@@ -212,6 +212,25 @@ packed); the inlined scan reduces the 64-bit hash to the 32-bit `TableHashKey` e
 `hashToHashKey` does. Covers `?[]`, `key_exists`, and `find` (all route through
 `build_table_find`); `[]`/insert keeps the C++ `at` path.
 
+## Integer-key find + tab[key] update — MEASURED (JIT, test07)
+
+The inline packed find was extended to integer keys (a `<8 x KeyT>` compare of the key data
+over `[0,size)` with a liveness mask — no hash on the packed path) and to the insert path
+(`tab[key]`: SIMD find first; a hit returns the slot, a miss inserts via
+`reserveAfterPackedMiss`, skipping the C++ packed dedup).
+
+| lane | ns/op | note |
+|---|---|---|
+| int_hit  | 1.8 | pure SIMD key compare, **no hash** (vs ~5.1 baseline C++ int find → −65%) |
+| int_miss | 1.6 | same cost as hit (branch-free) |
+| int_update (`tab[k]++`) | 4.5 | find-first hit → slot, no C++ `at` call |
+| str_update (`tab[k]++`) | 4.1 | same fast-path on the string `at` |
+
+Integer find is the standout: with no hash to compute, a small int-keyed lookup is ~1.7ns —
+the SIMD compare *is* the whole operation. Inserts of genuinely new keys also skip the
+redundant C++ `PackedFind` dedup the JIT already performed. Integer keys only
+(`int`/`uint` ×8/16/32/64); float/double/struct keep the C++ path.
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor
