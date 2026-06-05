@@ -88,6 +88,37 @@ def f_loop_if(x : int) : int {
     return acc
 }
 
+// ----- loop-dependent cond that DOES const-fold (cond is a function of `i` only) -----
+// After unrolling, `i` is a literal per copy, so `i >= 3` folds to a compile-time
+// `false`/`true`: the twin becomes `acc = false ? (acc+x) : acc` (×3) then
+// `acc = true ? (acc+x) : acc` (×2). The constant-comparison fold is the TYPER's
+// (re-infer), not flatten's const_prop — flatten emits `(i>=3)?…` and relies on the
+// compiler to fold the now-constant comparison. Verified branchless by the cycle-2 scan.
+[flatten]
+def f_loop_constfold(x : int) : int {
+    var acc = 0
+    for (i in range(5)) {
+        if (i >= 3) {
+            acc += x
+        }
+    }
+    return acc
+}
+
+// ----- loop-dependent cond that does NOT const-fold (cond depends on runtime `x`) -----
+// `x > i` keeps a genuine runtime select per unrolled copy: `acc = (x>0)?…`,
+// `acc = (x>1)?…`, … `i` folds to a literal but `x` is runtime, so the select stays.
+[flatten]
+def f_loop_runtime(x : int) : int {
+    var acc = 0
+    for (i in range(5)) {
+        if (x > i) {
+            acc += i
+        }
+    }
+    return acc
+}
+
 // ----- helper call inside an unrolled iteration (inlined per copy) -----
 [flatten]
 def f_loop_call(x : int) : int {
@@ -164,6 +195,16 @@ def test_flatten_loops(t : T?) {
     t |> run("if inside an unrolled iteration") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_loop_if_flat(v), f_loop_if(v))
+        }
+    }
+    t |> run("loop-dependent cond that const-folds (cond of i only)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_loop_constfold_flat(v), f_loop_constfold(v))
+        }
+    }
+    t |> run("loop-dependent cond that stays runtime (cond of x)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_loop_runtime_flat(v), f_loop_runtime(v))
         }
     }
     t |> run("helper call inside an unrolled iteration") @(t : T?) {
