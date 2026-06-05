@@ -3526,3 +3526,178 @@ def test_decs_join_to_array_projection(t : T?) {
     t |> equal(length(seen), 6, "all 6 distinct car ids present")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Random-index tail fast path: BARE last() / last_or_default() (no where/select)
+// over indexable decs sources read the last archetype's [size-1] directly instead
+// of walking all N. (Predicated / _select'd last keeps the walk — Slice 5f above.)
+// reverse|>take's random-index branch is exercised by the Unroll5dRow / RevTakeMultiArch
+// tests; here we add the get_default_ro iterator-source FALLBACK those don't reach.
+// ─────────────────────────────────────────────────────────────────────────────
+
+typedef UnrollTuple = tuple<val : int; flag : int>
+
+[export, marker(no_coverage)]
+def target_bare_last_fold() : UnrollTuple {
+    return _fold(from_decs_template(type<UnrollChainRow>).last())
+}
+
+[export, marker(no_coverage)]
+def target_bare_last_cascade() : UnrollTuple {
+    return from_decs_template(type<UnrollChainRow>) |> last()
+}
+
+[export, marker(no_coverage)]
+def target_bare_last_or_default_fold() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).last_or_default((val = -1, flag = -1))).val
+}
+
+[test]
+def test_bare_last_parity(t : T?) {
+    fixture_unroll2(7)
+    let fast = target_bare_last_fold()
+    let cascade = target_bare_last_cascade()
+    // single archetype = insertion order → last is the 7th entity (val 6)
+    t |> equal(fast.val, 6, "bare last() reads the last entity")
+    t |> equal(fast.val, cascade.val, "bare last val == tier-2 cascade")
+    t |> equal(fast.flag, cascade.flag, "bare last flag == tier-2 cascade")
+}
+
+[test]
+def test_bare_last_or_default_empty(t : T?) {
+    restart()
+    commit()
+    t |> equal(target_bare_last_or_default_fold(), -1, "bare last_or_default empty → explicit default")
+}
+
+[test]
+def test_bare_last_or_default_nonempty(t : T?) {
+    fixture_unroll2(5)
+    t |> equal(target_bare_last_or_default_fold(), 4, "bare last_or_default nonempty → last val")
+}
+
+// Eager-eval regression: the default expr must be bound BEFORE iteration (matches the walk lane),
+// so its side effects fire even when the query is non-empty. A lazy tail-only eval would skip them.
+var g_bare_default_evals = 0
+
+def private bare_side_effecting_default() : UnrollTuple {
+    g_bare_default_evals++
+    return (val = -77, flag = -77)
+}
+
+[export, marker(no_coverage)]
+def target_bare_last_or_default_sidefx() : int {
+    return _fold(from_decs_template(type<UnrollChainRow>).last_or_default(bare_side_effecting_default())).val
+}
+
+[test]
+def test_bare_last_or_default_eager_eval(t : T?) {
+    fixture_unroll2(5)
+    g_bare_default_evals = 0
+    let v = target_bare_last_or_default_sidefx()
+    t |> equal(v, 4, "non-empty → last val, not the default")
+    t |> equal(g_bare_default_evals, 1, "default expr evaluated eagerly even when query non-empty")
+}
+
+// Proves the random-index fast path fired: bare last() emits a single void
+// for_each_archetype with NO per-entity inner for-loop (the walk path clones the
+// bridge for-loop → count_expr_for >= 1). No to_sequence, no _find.
+[test]
+def test_bare_last_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_bare_last_fold)
+        t |> success(func != null, "RTTI must resolve target_bare_last_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> equal(describe_count(body_expr, "to_sequence"), 0, "bare last must NOT call to_sequence")
+        t |> equal(describe_count(body_expr, "for_each_archetype_find"), 0, "bare last uses void for_each_archetype")
+        t |> equal(describe_count(body_expr, "for_each_archetype"), 1, "exactly one for_each_archetype")
+        t |> equal(count_expr_for(body_expr), 0, "random-index last has NO per-entity inner for-loop")
+    }
+}
+
+// Iterator fallback: a default-init field compiles to get_default_ro (an iterator,
+// not an indexable array), so decs_can_random_index → false. bare last() / reverse.take
+// must still be correct via the walk fallback — checked vs the tier-2 cascade.
+[decs_template(prefix = "fb_")]
+struct FallbackRow {
+    val : int
+    hp  : int = 100
+}
+
+def private fixture_fallback(n : int) {
+    restart()
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, FallbackRow(val = i, hp = i + 1))
+    }
+}
+
+[export, marker(no_coverage)]
+def target_fb_last_fold() : tuple<val : int; hp : int> {
+    return _fold(from_decs_template(type<FallbackRow>).last())
+}
+
+[export, marker(no_coverage)]
+def target_fb_last_cascade() : tuple<val : int; hp : int> {
+    return from_decs_template(type<FallbackRow>) |> last()
+}
+
+[export, marker(no_coverage)]
+def target_fb_reverse_take_fold() : array<tuple<val : int; hp : int>> {
+    return <- _fold(from_decs_template(type<FallbackRow>).reverse().take(2).to_array())
+}
+
+[export, marker(no_coverage)]
+def target_fb_reverse_take_cascade() : array<tuple<val : int; hp : int>> {
+    return <- (from_decs_template(type<FallbackRow>) |> reverse() |> take(2) |> to_array())
+}
+
+[test]
+def test_fb_last_parity(t : T?) {
+    fixture_fallback(6)
+    let fast = target_fb_last_fold()
+    let cascade = target_fb_last_cascade()
+    // assert the default-init field hp too (= i+1 = 6) — that's what forces the iterator-source fallback
+    t |> equal(fast.val, 5, "fallback bare last() correct via walk")
+    t |> equal(fast.hp, 6, "fallback bare last() default-init field via walk")
+    t |> equal(fast.val, cascade.val, "fallback last val == cascade")
+    t |> equal(fast.hp, cascade.hp, "fallback last hp == cascade")
+}
+
+[test]
+def test_fb_reverse_take_parity(t : T?) {
+    fixture_fallback(6)
+    let fast <- target_fb_reverse_take_fold()
+    let cascade <- target_fb_reverse_take_cascade()
+    t |> equal(length(fast), 2, "fallback reverse.take(2) → 2 elements")
+    t |> equal(length(fast), length(cascade), "fallback fast len == cascade len")
+    for (a, b in fast, cascade) {
+        t |> equal(a.val, b.val, "fallback reverse take val parity")
+        t |> equal(a.hp, b.hp, "fallback reverse take hp parity")   // hp is the default-init field forcing the fallback
+    }
+    t |> equal(fast[0].val, 5, "fallback reverse take [0] val")
+    t |> equal(fast[0].hp, 6, "fallback reverse take [0] hp")
+    t |> equal(fast[1].val, 4, "fallback reverse take [1] val")
+    t |> equal(fast[1].hp, 5, "fallback reverse take [1] hp")
+}
+
+// The fallback emission must take the walk (clones the bridge for-loop) — proven by
+// the presence of a per-entity inner for-loop, which the random-index path lacks.
+[test]
+def test_fb_last_splice_shape(t : T?) {
+    ast_gc_guard() {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_fb_last_fold)
+        t |> success(func != null, "RTTI must resolve target_fb_last_fold")
+        if (func == null) return
+        var body_expr : ExpressionPtr
+        let r = qmatch_function(func) $() {
+            return <- $e(body_expr)
+        }
+        t |> success(r.matched && body_expr is ExprInvoke, "expected splice invoke wrapper")
+        t |> success(count_expr_for(body_expr) >= 1, "fallback last walks → has a per-entity inner for-loop")
+    }
+}
+

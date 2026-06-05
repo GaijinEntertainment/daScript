@@ -309,7 +309,10 @@ identical — only the source iteration changes.
      - Per-archetype accumulator; pruner keeps only the components read by ``F``.
    * - ``from_decs_template(...).first()`` / ``.first_or_default()`` / ``.last()`` / ``.last_or_default()`` / ``.single()`` / ``.single_or_default()`` / ``.element_at(N)`` / ``.element_at_or_default(N)`` / ``.aggregate(...)``
      - ``plan_decs_unroll`` → ``emit_decs_walk_lane`` / ``emit_decs_element_at``
-     - Walk lane reads one component per loop iteration; element_at uses cumulative-size short-circuit.
+     - Walk lane reads one component per loop iteration; element_at uses cumulative-size short-circuit. Bare ``.last()`` / ``.last_or_default()`` (no ``_where`` / ``_select`` / range) over indexable sources take the random-index row below instead of this walk.
+   * - ``from_decs_template(...).last()`` / ``.last_or_default(D)`` — **bare** (no ``_where`` / ``_select`` / range)
+     - ``emit_decs_last_random_index``
+     - Reads the last non-empty archetype's ``[size-1]`` directly (``get_ro(arch, comp, def)[idx]``) — O(num_archetypes), no per-entity walk. ``for_each_archetype`` visits in order + skips empties, so the last overwrite is the global-last; behavior-identical to the walk lane. **Indexable sources only** — a ``[decs_template]`` field with a default-init compiles to ``get_default_ro`` (an iterator), so ``decs_can_random_index`` returns false and the chain cascades to the ``emit_decs_walk_lane`` row above.
    * - ``from_decs_template(...).any()`` / ``.all(P)`` / ``.contains(V)``
      - ``plan_decs_unroll`` → ``emit_decs_early_exit``
      - Boolean fast-path; walks until first match or end.
@@ -338,8 +341,8 @@ identical — only the source iteration changes.
      - ``plan_decs_distinct`` (predicate counter)
      - Decs mirror of the array-side predicate-distinct splice. Same dedup-unconditional / counter-gated-on-P shape across archetypes.
    * - ``from_decs_template(...).reverse().take(N)[._select(F)].to_array()``
-     - ``plan_decs_reverse`` (skip-into-tail; extended for terminal ``_select`` in PR #2915)
-     - Whole-archetype skip + partial-archetype skip-counter + early-exit. When trailing ``_select(F)`` is captured (no pre-reverse ``_where`` / ``_select``), the K reversed survivors are projected into a separate buffer typed by termsel's call-result element type — saves the catch-all's N push_clones + full reverse_inplace + project pass. Bails (cascades to R1-R4) when termsel's call-result element type is unresolved at macro stage.
+     - ``plan_decs_reverse`` (skip-into-tail; extended for terminal ``_select`` in PR #2915; boundary random-index added later)
+     - Whole-archetype skip + early-exit. For **indexable** sources the boundary archetype is **random-indexed** (``get_ro(arch, comp, def)[idx]`` over ``[skipsLeft .. size)`` via ``build_decs_index_collect``) instead of continue-walking its head — O(K) on a single archetype, not O(N). **Iterator** sources (a ``[decs_template]`` field with a default-init → ``get_default_ro``) fall back to the partial-archetype skip-counter walk. When trailing ``_select(F)`` is captured (no pre-reverse ``_where`` / ``_select``), the K reversed survivors are projected into a separate buffer typed by termsel's call-result element type — saves the catch-all's N push_clones + full reverse_inplace + project pass. Bails (cascades to R1-R4) when termsel's call-result element type is unresolved at macro stage.
    * - ``from_decs_template(...).reverse()._select(F).first()``
      - ``plan_decs_reverse`` (Rb walk-and-overwrite scalar with terminal ``_select``)
      - Decs mirror of ``plan_reverse``'s Rb walk-and-overwrite scalar. Projection applies to the surviving ``last`` value at return.

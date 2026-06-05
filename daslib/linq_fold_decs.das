@@ -14,7 +14,6 @@ require daslib/ast_boost
 require daslib/ast_match
 require daslib/templates_boost
 require daslib/macro_boost
-require strings
 require daslib/linq_fold_common public
 
 // Stamp the assembled decs walk with the call-site LineInfo + the generated flag, optionally
@@ -363,6 +362,19 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
     }
     if (isMinMaxBy) return emit_decs_min_max_by(bridge, termName, chainInfo, rangeInfo, calls, rangeInfo.chainEnd, termCall, at)
     if (isEarlyExit || isWalk || isElementAt) {
+        // No-predicate `last()` / `last_or_default()` over indexable decs sources: read the last
+        // archetype's [size-1] directly (O(num_archetypes)), behavior-identical to the walk. Predicated/
+        // chained/ranged last can't random-index → keeps the walk. Gate: empty chain, no ranges, indexable.
+        if ((termName == "last" || termName == "last_or_default")
+                && rangeInfo.chainEnd == 0
+                && rangeInfo.skipExpr == null && rangeInfo.takeExpr == null
+                && rangeInfo.skipWhileCond == null && rangeInfo.takeWhileCond == null
+                && rangeInfo.postTakeWhereCond == null
+                && chainInfo.selectCount == 0
+                && decs_can_random_index(bridge)) {
+            var fast = emit_decs_last_random_index(bridge, termName, termCall, chainInfo.finalType, at)
+            if (fast != null) return fast
+        }
         // first/first_or_default/any/all/contains/last/single/single_or_default/aggregate/element_at — the
         // shared early-exit lane. The DecsAdapter walks (chain+ranges+for_each{,_find}); the lane supplies the
         // per-op !supports_direct_return state path + the adapter's effective dispatch (Each→Find under take).
@@ -422,7 +434,6 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
     let projBufName = qn("decs_rts_buf", at)
     let archName = bridge.archName
     var bufElemType = strip_const_ref(clone_type(bridge.elementType))
-    let tupBind = build_decs_tup_bind(bridge, tupName, at)
     var projBody : Expression?
     var projType : TypeDeclPtr
     if (terminalSelectLam != null) {
@@ -431,22 +442,32 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
         projType = strip_const_ref(clone_type(terminalSelectElemType))
         if (projType == null) return null
     }
-    var innerBody : Expression? = qmacro_block() {
-        if ($i(skipsLeftName) > 0_l) {
-            $i(skipsLeftName) --
-            continue
+    // Per-archetype tail collection. Indexable sources (get_ro): random-index the boundary archetype's
+    // tail [skipsLeft .. arch.size) instead of continue-walking its head (O(K), not O(N)). Iterator
+    // sources (default-init field → get_default_ro): keep the walk-and-skip. Both fill buf forward.
+    var collectExpr : Expression?
+    if (decs_can_random_index(bridge)) {
+        collectExpr = build_decs_index_collect(bridge, bufName, skipsLeftName, actualName, at)
+    } else {
+        let tupBind = build_decs_tup_bind(bridge, tupName, at)
+        var innerBody : Expression? = qmacro_block() {
+            if ($i(skipsLeftName) > 0_l) {
+                $i(skipsLeftName) --
+                continue
+            }
+            $e(tupBind)
+            $i(bufName) |> push_clone($i(tupName))
+            if (long_length($i(bufName)) >= $i(actualName)) {
+                break
+            }
         }
-        $e(tupBind)
-        $i(bufName) |> push_clone($i(tupName))
-        if (long_length($i(bufName)) >= $i(actualName)) {
-            break
-        }
+        var clonedForExpr = clone_expression(bridge.forExpr)
+        var clonedFor = clonedForExpr as ExprFor
+        var newForBody = new ExprBlock(at = at)
+        newForBody.list |> push(innerBody)
+        clonedFor.body = newForBody
+        collectExpr = clonedForExpr
     }
-    var clonedForExpr = clone_expression(bridge.forExpr)
-    var clonedFor = clonedForExpr as ExprFor
-    var newForBody = new ExprBlock(at = at)
-    newForBody.list |> push(innerBody)
-    clonedFor.body = newForBody
     var emission : Expression?
     if (terminalSelectLam == null) {
         emission = qmacro(invoke($() : array<$t(bufElemType)> {
@@ -469,7 +490,7 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
                     return false
                 }
                 var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
-                $e(clonedForExpr)
+                $e(collectExpr)
                 $i(seenName) += $i(archName).size
                 return long_length($i(bufName)) >= $i(actualName)
             })
@@ -498,7 +519,7 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
                     return false
                 }
                 var $i(skipsLeftName) = ($i(skipName) > $i(seenName)) ? ($i(skipName) - $i(seenName)) : 0_l
-                $e(clonedForExpr)
+                $e(collectExpr)
                 $i(seenName) += $i(archName).size
                 return long_length($i(bufName)) >= $i(actualName)
             })
@@ -525,6 +546,113 @@ def build_decs_tup_bind(bridge : DecsBridgeShape?; tupName : string; at : LineIn
     return qmacro_expr() {
         var $i(tupName) = $e(mkTup)
     }
+}
+
+[macro_function]
+def decs_can_random_index(bridge : DecsBridgeShape?) : bool {
+    // Random-index needs every component source to be an indexable array (get_ro). A [decs_template]
+    // field carrying a default-init compiles to get_default_ro → an iterator (not indexable) → bail.
+    if (bridge == null || !(bridge.forExpr is ExprFor)) return false
+    var fe = bridge.forExpr as ExprFor
+    if (empty(fe.sources)) return false
+    for (s in fe.sources) {
+        if (s == null || s._type == null || s._type.baseType != Type.tArray) return false
+    }
+    return true
+}
+
+[macro_function]
+def build_decs_index_tup(bridge : DecsBridgeShape?; idxName : string; at : LineInfo) : Expression? {
+    // Named tuple `(userName_i = get_ro(arch, comp_i, def)[idx], ...)` — the bridge's component sources,
+    // indexed directly. get_ro is [unsafe_outside_of_for]; mark each source + the index read alwaysSafe
+    // (mirrors decs_boost append_index_lookup) so no `unsafe` wrap is needed.
+    var fe = bridge.forExpr as ExprFor
+    var mkTup = new ExprMakeTuple(at = at)
+    mkTup.recordNames |> resize(length(bridge.userNames))
+    for (i in 0 .. length(bridge.userNames)) {
+        mkTup.recordNames[i] := bridge.userNames[i]
+        var src = clone_expression(fe.sources[i])
+        src.genFlags.alwaysSafe = true
+        force_generated(src, true)
+        var idxExpr : Expression? = qmacro_expr() {
+            $e(src)[$i(idxName)]
+        }
+        idxExpr.genFlags.alwaysSafe = true
+        force_generated(idxExpr, true)
+        mkTup.values |> emplace_new(idxExpr)
+    }
+    return mkTup
+}
+
+[macro_function]
+def build_decs_index_collect(bridge : DecsBridgeShape?; bufName : string; skipsLeftName : string;
+                             actualName : string; at : LineInfo) : Expression? {
+    // reverse|>take tail collect: random-index [skipsLeft .. arch.size) into buf. Boundary archetype skips
+    // its head by indexing past it; later archetypes have skipsLeft==0. get_ro lives inside the idx for-loop.
+    let archName = bridge.archName
+    let idxName = qn("decs_rix", at)
+    var tup = build_decs_index_tup(bridge, idxName, at)
+    return qmacro_block() {
+        for ($i(idxName) in range64($i(skipsLeftName), $i(archName).size)) {
+            $i(bufName) |> push_clone($e(tup))
+            break if (long_length($i(bufName)) >= $i(actualName))
+        }
+    }
+}
+
+[macro_function]
+def emit_decs_last_random_index(bridge : DecsBridgeShape?; termName : string; var termCall : ExprCall?;
+                                elemType : TypeDeclPtr; at : LineInfo) : Expression? {
+    // No-predicate decs `last()` / `last_or_default()`: read the last non-empty archetype's [size-1]
+    // directly instead of walking all N. for_each_archetype visits in order + skips empties, so the last
+    // overwrite of res is the global-last (O(num_archetypes)). Caller gates trivial-chain + indexable.
+    var bt = strip_const_ref(clone_type(elemType))
+    if (bt == null) return null
+    let archName = bridge.archName
+    let liName = qn("decs_rli", at)
+    let foundName = qn("decs_rfound", at)
+    let resName = qn("decs_rres", at)
+    var tup = build_decs_index_tup(bridge, liName, at)
+    var archBody = qmacro_block() {
+        let $i(liName) = $i(archName).size - 1_l   // arch.size is int64 — no int truncation for >INT_MAX archetypes
+        $i(resName) := $e(tup)
+        $i(foundName) = true
+    }
+    var emission : Expression?
+    if (termName == "last") {
+        emission = qmacro(invoke($() : $t(bt) {
+            var $i(foundName) = false
+            var $i(resName) = default<$t(bt)>
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(archBody)
+            })
+            if (!$i(foundName)) {
+                panic("sequence contains no elements")
+            }
+            return <- $i(resName)
+        }))
+    } else {
+        // last_or_default: bind the user default EAGERLY before iteration (matches the walk lane's
+        // emit_default_bind, linq_fold_common) so its side effects fire even on a non-empty query;
+        // early-return it when empty. Lazy tail-only eval would diverge from the walk / iterator fallback.
+        let dvalName = qn("decs_rdval", at)
+        let dvCanCopy = (termCall.arguments[1]._type != null && termCall.arguments[1]._type.canCopy)
+        var bindStmt = emit_default_bind(dvalName, termCall.arguments[1], dvCanCopy)
+        var retStmt = emit_default_return(dvalName, dvCanCopy)
+        emission = qmacro(invoke($() : $t(bt) {
+            var $i(foundName) = false
+            var $i(resName) = default<$t(bt)>
+            $e(bindStmt)
+            for_each_archetype($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) {
+                $e(archBody)
+            })
+            if (!$i(foundName)) {
+                $e(retStmt)
+            }
+            return <- $i(resName)
+        }))
+    }
+    return finalize_decs_emission(emission, at, false)
 }
 
 [macro_function]
