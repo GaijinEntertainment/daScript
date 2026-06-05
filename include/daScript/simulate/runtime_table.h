@@ -80,6 +80,17 @@ namespace das
         return ( capacity <= TABLE_MAX_LINEAR_CAPACITY ) ? uint64_t(sizeof(uint64_t)) : uint64_t(sizeof(TableHashKey));
     }
 
+    // Packed tables store 64-bit hashes in the `hashes` block (declared TableHashKey*=uint32_t*).
+    // Access them via memcpy: a direct ((uint64_t*)hashes)[i] lets clang -O3 assume 8-byte alignment
+    // and vectorize the fixed packed-find scan into an aligned 16-byte load that faults on linux/wasm
+    // (the block is only 8-aligned). memcpy lowers to the same unaligned load with no UB.
+    __forceinline uint64_t loadHash64 ( const void * hashes, uint64_t slot ) {
+        uint64_t h; memcpy(&h, (const char *)hashes + slot * sizeof(uint64_t), sizeof(uint64_t)); return h;
+    }
+    __forceinline void storeHash64 ( void * hashes, uint64_t slot, uint64_t h ) {
+        memcpy((char *)hashes + slot * sizeof(uint64_t), &h, sizeof(uint64_t));
+    }
+
     // Iterate a table's live (key,value) slots from C++. ALWAYS use this (or tableLiveSlot) instead
     // of a raw `for (i in [0,capacity)) if (hashes[i] > KILLED)` scan: a packed table stores 64-bit
     // hashes (PackedPolicy), so a 32-bit `((TableHashKey*)hashes)[i]` read misindexes it. fn is
@@ -116,17 +127,17 @@ namespace das
             return -1;
         }
         static __forceinline void insertHash ( Table & tab, uint64_t slot, uint64_t hash ) {
-            ((uint64_t *) tab.hashes)[slot] = hash;
+            storeHash64(tab.hashes, slot, hash);
         }
         static __forceinline void moveHash ( Table & tab, uint64_t to, uint64_t from ) {
-            ((uint64_t *) tab.hashes)[to] = ((uint64_t *) tab.hashes)[from];
+            storeHash64(tab.hashes, to, loadHash64(tab.hashes, from));
         }
         static __forceinline void clearHash ( Table & tab, uint64_t slot ) {
-            ((uint64_t *) tab.hashes)[slot] = 0;
+            storeHash64(tab.hashes, slot, 0);
         }
         // 64-bit key used to re-bucket into the large (32-bit) target during promotion.
         static __forceinline uint64_t promoteHash ( const Table & tab, uint64_t slot, const KeyType &, Context * ) {
-            return ((const uint64_t *) tab.hashes)[slot];
+            return loadHash64(tab.hashes, slot);
         }
     };
 
@@ -136,23 +147,24 @@ namespace das
         static __forceinline int64_t find ( const Table & tab, char * const &, uint64_t hash ) {
             // All-8 scan: the tail is always 0 (alloc / erase / table_clear clear the full 64-bit
             // width) and a real hash is >1, so the tail never matches — no size guard needed.
-            auto p = (const uint64_t *) tab.hashes;
+            // loadHash64 reads unaligned — see its definition for why a raw (uint64_t*) cast here
+            // faults under clang -O3 on linux/wasm.
             for ( uint32_t i=0; i!=TABLE_MAX_LINEAR_CAPACITY; ++i ) {
-                if ( p[i]==hash ) return (int64_t) i;
+                if ( loadHash64(tab.hashes, i)==hash ) return (int64_t) i;
             }
             return -1;
         }
         static __forceinline void insertHash ( Table & tab, uint64_t slot, uint64_t hash ) {
-            ((uint64_t *) tab.hashes)[slot] = hash;  // full 64-bit; hash_blockz64 already clamps 0/1
+            storeHash64(tab.hashes, slot, hash);  // full 64-bit; hash_blockz64 already clamps 0/1
         }
         static __forceinline void moveHash ( Table & tab, uint64_t to, uint64_t from ) {
-            ((uint64_t *) tab.hashes)[to] = ((uint64_t *) tab.hashes)[from];
+            storeHash64(tab.hashes, to, loadHash64(tab.hashes, from));
         }
         static __forceinline void clearHash ( Table & tab, uint64_t slot ) {
-            ((uint64_t *) tab.hashes)[slot] = 0;
+            storeHash64(tab.hashes, slot, 0);
         }
         static __forceinline uint64_t promoteHash ( const Table & tab, uint64_t slot, char * const &, Context * ) {
-            return ((const uint64_t *) tab.hashes)[slot];
+            return loadHash64(tab.hashes, slot);
         }
     };
 
@@ -160,23 +172,22 @@ namespace das
     struct PackedPolicy<const char *> {
         static constexpr uint32_t hashBytes = sizeof(uint64_t);
         static __forceinline int64_t find ( const Table & tab, const char * const &, uint64_t hash ) {
-            auto p = (const uint64_t *) tab.hashes;
             for ( uint32_t i=0; i!=TABLE_MAX_LINEAR_CAPACITY; ++i ) {
-                if ( p[i]==hash ) return (int64_t) i;
+                if ( loadHash64(tab.hashes, i)==hash ) return (int64_t) i;
             }
             return -1;
         }
         static __forceinline void insertHash ( Table & tab, uint64_t slot, uint64_t hash ) {
-            ((uint64_t *) tab.hashes)[slot] = hash;
+            storeHash64(tab.hashes, slot, hash);
         }
         static __forceinline void moveHash ( Table & tab, uint64_t to, uint64_t from ) {
-            ((uint64_t *) tab.hashes)[to] = ((uint64_t *) tab.hashes)[from];
+            storeHash64(tab.hashes, to, loadHash64(tab.hashes, from));
         }
         static __forceinline void clearHash ( Table & tab, uint64_t slot ) {
-            ((uint64_t *) tab.hashes)[slot] = 0;
+            storeHash64(tab.hashes, slot, 0);
         }
         static __forceinline uint64_t promoteHash ( const Table & tab, uint64_t slot, const char * const &, Context * ) {
-            return ((const uint64_t *) tab.hashes)[slot];
+            return loadHash64(tab.hashes, slot);
         }
     };
 
