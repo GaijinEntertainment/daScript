@@ -1582,6 +1582,7 @@ namespace das
         /*option*/ bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
         /*option*/ bool force_inscope_pod = false;                 // force in-scope for POD-like types
         /*option*/ bool log_inscope_pod = false;                   // log in-scope for POD-like types
+        /*option*/ bool log_gc_time = false;                       // log gc time
     // debugger
         //  when enabled
         //      1. disables [fastcall]

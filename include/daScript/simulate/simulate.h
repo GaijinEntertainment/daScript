@@ -830,6 +830,7 @@ namespace das
         bool                            showArgumentsOnException = false;
         bool                            instrumentAllocations = false;
         bool                            gcEnabled = false;
+        bool                            gcLogTime = false;          // log per-phase heap GC timing
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
         bool                            sharedPtrContext = false;   // there is a shared ptr to this context

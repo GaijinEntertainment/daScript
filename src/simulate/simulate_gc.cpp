@@ -4,6 +4,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_print.h"
+#include "daScript/misc/performance_time.h"
 
 namespace das
 {
@@ -971,6 +972,7 @@ namespace das
         // pointers valid for the heap report. track_allocations is a diagnostic
         // mode, so unbounded stringHeap growth during the run is acceptable.
         if ( stringHeap->isTrackingAllocations() ) sheap = false;
+        int64_t gcT0 = gcLogTime ? ref_time_ticks() : 0;   // mark phase = beforeGC + walk
         if ( sheap && !stringHeap->mark() ) return;
         if ( !heap->mark() ) return;
         // now
@@ -1049,9 +1051,18 @@ namespace das
             sp += info ? info->stackSize : pp->stackSize;
         }
         // sweep
+        int markUsec = gcLogTime ? get_time_usec(gcT0) : 0;
+        int64_t gcT1 = gcLogTime ? ref_time_ticks() : 0;
         if ( sheap ) stringHeap->sweep();
         // report errors
         heap->sweep();
+        if ( gcLogTime ) {
+            int sweepUsec = get_time_usec(gcT1);
+            printf("gc: mark %.3f ms, sweep %.3f ms, live %llu bytes\n",
+                markUsec / 1000.0, sweepUsec / 1000.0,
+                (unsigned long long) heap->bytesAllocated());
+            fflush(stdout);
+        }
         if ( !walker.failed.empty() ) {
             reportAnyHeap(at, sheap, true, true, true);
             TextWriter tw;
