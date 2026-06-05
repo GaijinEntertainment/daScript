@@ -1,0 +1,54 @@
+// flatten_shaders.das_project — module resolver for the flatten shader harness.
+//
+// Aliases the EdenSpark engine module `engine.render.shader_dsl` (and its two
+// submodules) to our local testing backend under backend/, so the real shader
+// files compile UNEDITED. `shader_graph_ir_builder` resolves to the print-only
+// stand-in. Everything else (daslib/*) falls through to the dasroot.
+//
+//   bin/daslang -das_project examples/flatten/flatten_shaders.das_project \
+//               examples/flatten/shaders/user_shader/cel_shading.shader
+
+options gen2
+require strings
+require daslib/strings_boost
+
+typedef module_info = tuple<string; string; string> const
+
+// Overwritten by the C++ ModuleFileAccess ctor to this .das_project's directory.
+var {
+    DAS_PAK_ROOT = "./"
+}
+
+[export]
+def module_get(req, from : string) : module_info {
+    if (req == "engine.render.shader_dsl") {
+        return ("shader_dsl", "{DAS_PAK_ROOT}/backend/shader_dsl.das", "")
+    }
+    if (req == "engine.render.shader_dsl_primitives") {
+        return ("shader_dsl_primitives", "{DAS_PAK_ROOT}/backend/shader_dsl_primitives.das", "")
+    }
+    if (req == "engine.render.shader_dsl_boost") {
+        return ("shader_dsl_boost", "{DAS_PAK_ROOT}/backend/shader_dsl_boost.das", "")
+    }
+    if (req == "shader_graph_ir_builder") {
+        return ("shader_graph_ir_builder", "{DAS_PAK_ROOT}/backend/shader_graph_ir_builder.das", "")
+    }
+    if (req |> starts_with("daslib/")) {
+        let name = slice(req, length("daslib/"), length(req))
+        return (name, "{get_das_root()}/daslib/{name}.das", "")
+    }
+    // Fallback (mirrors the stock module_default): a single name resolves to
+    // (name, name.das) so native/builtin modules (strings, math, fio_core, ...)
+    // match by name; a dotted/path name maps dots+slashes relative to `from`.
+    let rs <- split_by_chars(req, "./")
+    let mod_name = rs[length(rs) - 1]
+    if (length(rs) <= 1) {
+        return (mod_name, req + ".das", "")
+    }
+    var fr <- split_by_chars(from, "/")
+    pop(fr)
+    for (se in rs) {
+        push(fr, se)
+    }
+    return (mod_name, join(fr, "/") + ".das", "")
+}

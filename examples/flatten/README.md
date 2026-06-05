@@ -1,0 +1,52 @@
+# flatten shader example harness
+
+Demonstrates [`daslib/flatten`](../../daslib/flatten.das) driving a real **callless,
+branchless shader-graph backend** — a local testing copy of EdenSpark's
+`engine.render.shader_dsl`.
+
+The backend compiles a pixel shader into a pure dataflow graph of primitive
+"opcodes" (`add`, `mul`, `lerp`, `sat`, `dot_f3`, …). It has **no control flow**:
+no `if`, no loops, no user function calls, no `?:`. flatten is the front-half that
+makes those expressible — it inlines helper calls, lowers `if/else` to predicated
+`?:` selects, and unrolls fixed-count loops, handing the backend branchless,
+call-free code.
+
+```
+./run.sh                 # regression: compile every shader, report pass/fail
+./run.sh cel_shading     # print one shader's opcode graph
+```
+
+## Layout
+
+| Path | What |
+|---|---|
+| `shaders/user_shader/`, `shaders/user_shader_2d/` | The real EdenSpark sample shaders (3D + 2D post-fx), **unedited**. |
+| `backend/shader_dsl_primitives.das` | The `[hint]`/`[stub]` leaf primitives + I/O contract structs (`PbrInput`/`PbrOutput`). |
+| `backend/shader_dsl_boost.das` | The validator + graph IR builder + the `[shader(stage=,type=)]` annotation. **This is where flatten is wired in.** |
+| `backend/shader_graph_ir_builder.das` | Print-only stand-in for the engine's native `sg_ir_*` graph sink — dumps human-readable opcodes. |
+| `backend/shader_dsl.das` | Re-exporter: `require engine.render.shader_dsl` pulls in the two modules above. |
+| `flatten_shaders.das_project` | Module resolver aliasing `engine.render.shader_dsl` → `backend/`, so the real shaders compile with **zero edits**. |
+
+## How flatten plugs in
+
+The `[shader]` annotation's `patch` hook calls `flatten_function(func, HINT_WHITELIST)`
+*before* validation (`backend/shader_dsl_boost.das`). `HINT_WHITELIST` is the set of
+backend primitive names — flatten keeps those calls as leaves and inlines/lowers
+everything else. The backend then walks the branchless result. For the capability
+tier the backend also maps `ExprOp3 → Select` (and comparison ops → mask nodes) to
+consume flatten's `?:` output.
+
+## Two tiers
+
+- **Regression** — all 61 real shaders are already 100% branchless dataflow (there is
+  no control-flow primitive in the DSL *yet* — flatten is what adds one). flatten must
+  be **transparent** on them: the emitted graph is the same one the backend produces
+  without flatten. `./run.sh` checks every shader compiles clean and emits a graph.
+- **Capability** *(see `capability/`)* — shaders written with `if`/`?:`/helper calls,
+  which the backend rejects today, lower through flatten to a valid `Select`-based
+  graph. This is the feature flatten exists to deliver.
+
+> The backend here is a faithful testing copy, not the shipping engine module; it
+> prints opcodes instead of feeding the native shader-graph compiler. It will be
+> re-synced as the engine's `engine.render.shader_dsl` evolves (the engine side adds
+> the `ExprOp3 → Select` opcode to consume flatten's `?:`).

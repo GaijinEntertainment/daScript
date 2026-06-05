@@ -114,6 +114,17 @@ def private is_flat_temp(name : string) : bool {
     return name |> starts_with("__flat_")
 }
 
+// Strip a monomorphized generic's mangling to the bare function name: an OR-type
+// instance is named `<scope>`<name>`<hash>` (backtick = char 96). Used so the
+// caller-supplied whitelist can match by simple name regardless of instantiation.
+def private simple_name(fullname : string) : string {
+    let t1 = find(fullname, 96, 0)
+    if (t1 < 0) return fullname
+    let t2 = find(fullname, 96, t1 + 1)
+    let endp = t2 < 0 ? length(fullname) : t2
+    return slice(fullname, t1 + 1, endp)
+}
+
 def private p_and(a, b : ExpressionPtr) : ExpressionPtr {
     if (a == null && b == null) return null
     if (a == null) return clone_expression(b)
@@ -193,8 +204,10 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         // Whitelist takes precedence over inlining: a whitelisted leaf primitive is
         // KEPT (args lifted), even if it has a body. Backend [hint] primitives are
         // [stub] functions — non-null (empty) body — so without this they'd be
-        // treated as user calls and inlined away to nothing.
-        if (key_exists(ctx.whitelist, bname)) {
+        // treated as user calls and inlined away to nothing. Match the SIMPLE name:
+        // OR-type generics monomorphize to `<scope>`<name>`<hash>`, but the backend
+        // whitelists by the bare name.
+        if (key_exists(ctx.whitelist, simple_name(bname))) {
             var n = clone_expression(e)
             var o = n as ExprCall
             for (ai in range(length(c.arguments))) {
