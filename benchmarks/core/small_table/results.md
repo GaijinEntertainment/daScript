@@ -398,6 +398,53 @@ The parsed-data case (`bad_json_find` 6.3 → **2.3** JIT) was the one paying st
 const-pooled case (`json_find` 2.1). **A table built from parsed/IO keys reads as fast as one built
 from string literals** — the strcmp tax that const-pooling used to dodge no longer exists for anyone.
 
+## Interpreter const-string key fast path — SimNode_*_WithHash + OP1 fusion (SHIPPED)
+
+The 64-bit packed change above removed strcmp on every tier. The remaining per-lookup cost for a
+string key in the *interpreter* is the `hash_blockz64` byte walk over the key (JIT/AOT already fold a
+constant key's hash to an immediate; the interpreter still hashed at runtime — this was the interp↔JIT
+gap, e.g. JSON const lane ~2ns JIT vs ~11ns interp). When the key is an `ExprConstString` its bytes
+and hash are known at simulate time, so we bake both into a dedicated node and skip the walk.
+
+- **WithHash nodes** (`runtime_table_nodes.h`): `SimNode_TableIndex_WithHash` (`tab["lit"]`),
+  `SimNode_SafeTableIndex_WithHash` (`tab?["lit"]`), `SimNode_TableFind_WithHash` /
+  `SimNode_KeyExists_WithHash` (the `__builtin_table_find` / `__builtin_table_key_exists` intrinsics).
+  `reserve`/`find` already take the hash as a parameter, so the node passes the baked hash directly;
+  the key string is carried only for the large-table `KeyCompare` confirm. Interpreter-only — JIT and
+  AOT lower from the AST and keep their own const-hash folding. `find`/`key_exists` *user* calls route
+  through non-inlined daslib generic wrappers, so the literal only reaches the node via the
+  `__builtin_table_*` intrinsics today (and via the wrappers once they inline).
+- **OP1 fusion** (`simulate_fusion_tablewithhash.cpp`): each WithHash node has a single sub-node — the
+  table container (`tabExpr` → `Table*`). Fuse that container load in, dropping one virtual dispatch
+  per lookup. The container is an lvalue address, so it uses the OP1-SET matcher (`GetLocal` /
+  `GetGlobal` / `GetLocalRefOff` / argument / block-arg shapes — the same set OP2-SET's left/container
+  side matches for array-at), extended to the full 7-shape set so tables reached as locals, globals,
+  struct fields, array/loop-variable elements, and argument fields all fuse. Shapes outside the set
+  fall back to the un-fused WithHash node (also the Debug path — both are exercised and correct).
+
+### Interp ns/op — within-branch progression (baseline = the 64-bit packed build above)
+
+| lane | 64-bit packed | +WithHash | +fusion (local var) |
+|---|---|---|---|
+| const_long (38-char literal) | 21.8 | **8.5** | **7.6** |
+| const_short | 12.0 | 8.6 | **7.9** |
+| const_hit | 12.0 | 8.6 | **7.6** |
+| const_miss | 14.9 | 11.2 | **9.8** |
+| json_find / json_at | 11.2 / 10.0 | 8.6 / 9.2 | 8.6 / 9.2 |
+
+Reading it:
+- **WithHash is the lever**: `const_long` 21.8 → **8.5** — the 38-char hash walk is gone, key length is
+  now free for a literal key (`const_long` ≈ `const_short`), exactly mirroring the JIT's item-4 fold.
+- **Fusion** shaves ~1ns more on the single-local-table case (`const_hit` 8.6 → 7.6) and removes the
+  extra container node across every shape. For ref-off container shapes (loop variable, array element,
+  struct field — e.g. the `for (tab in tables)` json loop, which fuses as `…WithHashLocro`) the shave
+  is roughly flat: `computeLocalRefOff` costs about what the separate dispatch did. So json holds at
+  ~8.6/9.2 — the WithHash win is already banked there; fusion is node-cleanliness, not extra speed.
+- Runtime-key lanes (`var_*`) are unchanged — only literal keys fold.
+
+(End-to-end master-vs-branch before/after — measured on the same machine with the same bench files run
+against an un-optimized master build — is the final section below / the PR body.)
+
 ## Synthesis for the plan
 
 - **Items 1 + 2 are coupled.** Packed small mode (insertion-dense slots, load factor
