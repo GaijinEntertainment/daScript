@@ -33,6 +33,24 @@ def test_hash_builder(t : T?) {
 
 
 [test]
+def test_hash_string_reference(t : T?) {
+    // Pins hash(string) to known hash_blockz64 (FNV-1a) values across lengths and
+    // parities, including the empty string (-> FNV basis). Under JIT this validates
+    // the inlined hash intrinsic; under interp, the bound builtin. Both must agree.
+    t |> equal(hash(""), 0xcbf29ce484222325ul)
+    t |> equal(hash("a"), 0xaf63dc4c8601ec8cul)
+    t |> equal(hash("ab"), 0xaf81dc4c8634e68cul)
+    t |> equal(hash("abc"), 0x6e9045080be4681dul)
+    t |> equal(hash("abcd"), 0x6e2c45080b3a7c1dul)
+    t |> equal(hash("abcde"), 0x6fb5c4ab14617fe8ul)
+    t |> equal(hash("hello world"), 0x408bf6d7388fe711ul)
+    t |> equal(hash("this/is/a/fairly/long/identifier/alpha"), 0xa31f63a5100a123dul)
+    t |> equal(hash("x"), 0xaf63f54c86021707ul)
+    t |> equal(hash("key_0"), 0x63f98bc40fe415bbul)
+    t |> equal(hash("key_15"), 0x64248ac4102d2508ul)
+}
+
+[test]
 def test_hash_builder4(t : T?) {
     var fake <- Faker()
     fuzz() {

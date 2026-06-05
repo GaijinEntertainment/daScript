@@ -54,12 +54,15 @@ def test_dapi_table_keys_hashes_non_null(t : T?) {
 
 [test]
 def test_dapi_table_tombstones_after_erase(t : T?) {
+    // Small (packed) tables erase via swap-remove and leave no tombstone; tombstones only
+    // exist in the open-addressed regime, so grow past maxLinearCapacity (8) first.
     var tab : table<int; int>
-    tab |> insert(1, 100)
-    tab |> insert(2, 200)
-    tab |> erase(1)
+    for (i in range(10)) {
+        tab |> insert(i, i * 100)
+    }
+    tab |> erase(3)
     let view = unsafe(reinterpret<DapiTable?>(unsafe(addr(tab))))
-    t |> equal(view.size, uint64(1))
+    t |> equal(view.size, uint64(9))
     t |> equal(view.tombstones, uint64(1))
 }
 
