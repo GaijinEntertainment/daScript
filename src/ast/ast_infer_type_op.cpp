@@ -447,10 +447,9 @@ namespace das {
                 }
             }
         }
-        if (expr->left->type->isEnum() && expr->right->type->isEnum())
-            if (!expr->left->type->isSameType(*expr->right->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
-                error("operations on different enumerations are prohibited", "", "",
-                      expr->at, CompilationError::invalid_enumeration);
+        // NOTE: mismatched-enum operands are gated AFTER the custom-operator lookup
+        // below (see reportOp2Errors) — a user-defined operator |(E1;E2) must win over
+        // the "different enumerations" error, so the gate can't run before resolution.
         // try promoting int literal on either side to match the other side's type
         {
             bool rangeError = false;

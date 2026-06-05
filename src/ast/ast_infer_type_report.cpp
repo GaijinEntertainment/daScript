@@ -814,6 +814,15 @@ namespace das {
                 }
             }
         }
+        // Mismatched-enum operands are only an error if no custom operator matched —
+        // this runs after the operator lookup failed, so a user operator |(E1;E2)
+        // would already have been picked up. (Moved here from visit(ExprOp2).)
+        if (expr_left->type->isEnum() && expr_right->type->isEnum()
+            && !expr_left->type->isSameType(*expr_right->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
+            error("operations on different enumerations are prohibited", "", "",
+                  expr->at, CompilationError::invalid_enumeration);
+            return true;
+        }
         return false;
     }
     void InferTypes::collectMissingOperators(const string &opN, MatchingFunctions &mf, bool identicalName) {
