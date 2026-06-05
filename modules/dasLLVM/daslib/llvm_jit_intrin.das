@@ -27,7 +27,7 @@ let g_intrin_lookup <- {
     // misc
         "$::length" => @@intrinsic_builtin_length,
         "$::is_standalone_exe" => @@intrinsic_is_standalone_exe,
-        // "$::hash" => @@intrinsic_builtin_hash_string,   // disabled: re-enable when wiring const-key table lookup (item 4)
+        "$::hash" => @@intrinsic_builtin_hash_string,
     // pointer math
         "$::i_das_ptr_set_add" => @@intrinsic_das_ptr_set_add,
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add,
@@ -136,8 +136,11 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     // First guard: $::length only handles arrays (not table<string; json::JsonValue>
     // or $::dasvector`ptr`Variable&). Second: intrinsics can't have handle types
     // (e.g. int64(clock)).
+    // $::hash is inlined only for string keys and only when the host runtime uses the
+    // fast 16-bit-over-read hash (DAS_SAFE_HASH==0); under safe-hash we fall back to the
+    // runtime call so the JIT never over-reads where the runtime carefully does not.
     if ((call_name == "$::length" && !argType.isGoodArrayType)
-        || (call_name == "$::hash" && argType.baseType != Type.tString)
+        || (call_name == "$::hash" && (argType.baseType != Type.tString || is_safe_hash()))
         || (!expr.arguments |> empty() && argType.isHandle)) return false
     g_intrin_lookup |> get(call_name) $(pfun) {
         result = true
@@ -183,17 +186,24 @@ def intrinsic_is_standalone_exe(var ctx : JitCtx; expr : ExprCallFunc?; argument
     return LLVMConstInt(ctx.types.t_int1, g_jit_exe_mode ? 1ul : 0ul, 0)
 }
 
-// hash(string) -> uint64, inlined. Reproduces hash_blockz64 (anyhash.h) bit-for-bit:
-// FNV-1a, two bytes per round, zero-terminated; null -> FNV basis; final clamp h<=1 -> prime.
-// Equality with the C++ runtime hash is what lets a JIT-emitted hash feed a table lookup.
+// hash(string) -> uint64, inlined. Reproduces hash_blockz64's DAS_SAFE_HASH==0 path
+// (anyhash.h) bit-for-bit: FNV-1a over zero-terminated 16-bit words via a single
+// unaligned 2-byte load per round (the same over-read the fast runtime path does);
+// null -> FNV basis; final clamp h<=1 -> prime. Only emitted when !is_safe_hash(), so
+// the over-read never fires under ASAN/safe-hash builds (has_intrinsic falls back to a
+// runtime call there). Matching the C++ hash bit-for-bit is what lets a JIT-emitted hash
+// feed a table lookup; for a constant key the optimizer folds the whole loop to a literal.
 def intrinsic_builtin_hash_string(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     if (empty(arguments) || expr.arguments[0]._type.baseType != Type.tString) return null
     let i8ptr = LLVMPointerType(ctx.types.t_int8, 0u)
+    let i16ptr = LLVMPointerType(ctx.types.t_int16, 0u)
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], i8ptr, "hash.str")
     var basis = LLVMConstInt(ctx.types.t_int64, 14695981039346656037ul, 0)
     var prime = LLVMConstInt(ctx.types.t_int64, 1099511628211ul, 0)
     var one64 = LLVMConstInt(ctx.types.t_int64, 1ul, 0)
-    var zero8 = LLVMConstInt(ctx.types.t_int8, 0ul, 0)
+    var c256 = LLVMConstInt(ctx.types.t_int64, 256ul, 0)
+    var lowmask = LLVMConstInt(ctx.types.t_int64, 255ul, 0)
+    var zero64 = LLVMConstInt(ctx.types.t_int64, 0ul, 0)
 
     var entry = LLVMGetInsertBlock(ctx.builder)
     var ffunc = LLVMGetBasicBlockParent(entry)
@@ -206,28 +216,24 @@ def intrinsic_builtin_hash_string(var ctx : JitCtx; expr : ExprCallFunc?; argume
     var is_null = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, ptr, LLVMConstPointerNull(i8ptr), "hash.isnull")
     LLVMBuildCondBr(ctx.builder, is_null, bb_merge, bb_loop)
 
-    // loop: carry running hash h and cursor p
+    // loop: v = *(uint16_t*)p (unaligned, zero-extended); if (v & 0xff)==0 break with h
     LLVMPositionBuilderAtEnd(ctx.builder, bb_loop)
     var h_phi = LLVMBuildPhi(ctx.builder, ctx.types.t_int64, "hash.h")
     var p_phi = LLVMBuildPhi(ctx.builder, i8ptr, "hash.p")
-    var a = LLVMBuildLoad2(ctx.builder, ctx.types.t_int8, p_phi, "hash.a")
-    var a_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, a, zero8, "hash.a0")
-    LLVMBuildCondBr(ctx.builder, a_is_zero, bb_merge, bb_body)
+    var p16 = LLVMBuildPointerCast(ctx.builder, p_phi, i16ptr, "hash.p16")
+    var v16 = LLVMBuildLoad2(ctx.builder, ctx.types.t_int16, p16, "hash.v16")
+    LLVMSetAlignment(v16, 1u)
+    var v = LLVMBuildZExt(ctx.builder, v16, ctx.types.t_int64, "hash.v")
+    var lo = LLVMBuildAnd(ctx.builder, v, lowmask, "hash.lo")
+    var lo_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, lo, zero64, "hash.lo0")
+    LLVMBuildCondBr(ctx.builder, lo_is_zero, bb_merge, bb_body)
 
-    // body: v = a | (b<<8); h = (h ^ v) * prime
+    // body: h = (h ^ v) * prime; if v < 0x100 (high byte 0) break with hmul
     LLVMPositionBuilderAtEnd(ctx.builder, bb_body)
-    var a64 = LLVMBuildZExt(ctx.builder, a, ctx.types.t_int64, "hash.a64")
-    var idx1 = LLVMConstInt(ctx.types.t_int64, 1ul, 0)
-    var p1 = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, p_phi, idx1, "hash.p1")
-    var bbyte = LLVMBuildLoad2(ctx.builder, ctx.types.t_int8, p1, "hash.b")
-    var b64 = LLVMBuildZExt(ctx.builder, bbyte, ctx.types.t_int64, "hash.b64")
-    var sh8 = LLVMConstInt(ctx.types.t_int64, 8ul, 0)
-    var bsh = LLVMBuildShl(ctx.builder, b64, sh8, "hash.bsh")
-    var v = LLVMBuildOr(ctx.builder, a64, bsh, "hash.v")
     var hx = LLVMBuildXor(ctx.builder, h_phi, v, "hash.hx")
     var hmul = LLVMBuildMul(ctx.builder, hx, prime, "hash.hmul")
-    var b_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, bbyte, zero8, "hash.b0")
-    LLVMBuildCondBr(ctx.builder, b_is_zero, bb_merge, bb_cont)
+    var v_lt_256 = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntULT, v, c256, "hash.vlt")
+    LLVMBuildCondBr(ctx.builder, v_lt_256, bb_merge, bb_cont)
 
     // cont: advance two bytes, loop
     LLVMPositionBuilderAtEnd(ctx.builder, bb_cont)

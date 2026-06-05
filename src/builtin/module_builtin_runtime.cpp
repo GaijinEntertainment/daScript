@@ -1364,6 +1364,14 @@ namespace das
         return false;
     }
 
+    // DAS_SAFE_HASH of the host binary (anyhash.h). When 0, string hashing uses the
+    // fast 16-bit-over-read load; the JIT can then inline a matching hash. When 1
+    // (e.g. ASAN), the runtime reads byte-by-byte and the JIT must not over-read, so
+    // it falls back to the runtime call instead of emitting the fast intrinsic.
+    bool is_safe_hash ( ) {
+        return DAS_SAFE_HASH != 0;
+    }
+
     DAS_API uint64_t get_context_share_counter ( Context * context ) {
         return (uint64_t) context->code.use_count();
     }
@@ -1888,6 +1896,8 @@ namespace das
                 ->arg("arguments");
         addExtern<DAS_BIND_FUN(is_standalone_exe)>(*this, lib, "is_standalone_exe",
             SideEffects::accessExternal, "is_standalone_exe");
+        addExtern<DAS_BIND_FUN(is_safe_hash)>(*this, lib, "is_safe_hash",
+            SideEffects::none, "is_safe_hash");
         addExtern<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
             SideEffects::invoke, "withArgv")
                 ->args({"new_arguments", "block","context","line"});

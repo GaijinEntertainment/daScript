@@ -51,6 +51,20 @@ def test_hash_string_reference(t : T?) {
 }
 
 [test]
+def test_hash_string_runtime(t : T?) {
+    // Same pins as test_hash_string_reference, but keys are built at runtime and read
+    // back through a heap array so the JIT hash intrinsic cannot const-fold them — this
+    // exercises the actual 16-bit-load loop (not the folded immediate), bit-for-bit.
+    var ks : array<string>
+    for (i in range(16)) {
+        ks |> push("key_{i}")
+    }
+    t |> equal(hash(ks[0]), 0x63f98bc40fe415bbul)    // "key_0"
+    t |> equal(hash(ks[15]), 0x64248ac4102d2508ul)   // "key_15"
+    delete ks
+}
+
+[test]
 def test_hash_builder4(t : T?) {
     var fake <- Faker()
     fuzz() {
