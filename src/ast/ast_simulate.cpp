@@ -120,6 +120,18 @@ namespace das
         }
     };
 
+    // Const-string table key: bake the key bytes (into the const-string heap) and their hash
+    // at simulate time so the runtime node skips the per-lookup hash_blockz64 walk. Returns the
+    // baked key char* (and sets outHash) when keyType is string and keyExpr is an ExprConstString;
+    // nullptr otherwise (caller falls back to the regular hashing node).
+    static __forceinline char * bakeConstStringKey ( Context & context, Expression * keyExpr,
+            const TypeDecl * keyType, uint64_t & outHash ) {
+        if ( keyType->baseType != Type::tString || !keyExpr->rtti_isStringConstant() ) return nullptr;
+        char * keyStr = context.constStringHeap->impl_allocateString(static_cast<ExprConstString*>(keyExpr)->getValue());
+        outHash = hash_blockz64((uint8_t *)keyStr);
+        return keyStr;
+    }
+
     struct SimulateVisitor : Visitor {
         Context & context;
         das_hash_map<const Expression*, SimNode*> e2v;
@@ -1619,18 +1631,24 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprFind * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
-        auto val = getE(expr->arguments[1]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = expr->arguments[0]->type->secondType->getSizeOf();
-            Type valueType;
-            if ( expr->arguments[0]->type->firstType->isWorkhorseType() ) {
-                valueType = expr->arguments[0]->type->firstType->baseType;
+            const auto & keyT = expr->arguments[0]->type->firstType;
+            uint64_t keyHash = 0u;
+            if ( char * keyStr = bakeConstStringKey(context, expr->arguments[1], keyT, keyHash) ) {
+                setE(expr, context.code->makeNode<SimNode_TableFind_WithHash>(at, cont, keyStr, keyHash, valueTypeSize));
             } else {
-                auto valueT = expr->arguments[0]->type->firstType->annotation->makeValueType();
-                valueType = valueT->baseType;
-                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+                auto val = getE(expr->arguments[1]);
+                Type valueType;
+                if ( keyT->isWorkhorseType() ) {
+                    valueType = keyT->baseType;
+                } else {
+                    auto valueT = keyT->annotation->makeValueType();
+                    valueType = valueT->baseType;
+                    val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+                }
+                setE(expr, context.code->makeValueNode<SimNode_TableFind>(valueType, at, cont, val, valueTypeSize));
             }
-            setE(expr, context.code->makeValueNode<SimNode_TableFind>(valueType, at, cont, val, valueTypeSize));
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
@@ -1642,18 +1660,24 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprKeyExists * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
-        auto val = getE(expr->arguments[1]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = expr->arguments[0]->type->secondType->getSizeOf();
-            Type valueType;
-            if ( expr->arguments[0]->type->firstType->isWorkhorseType() ) {
-                valueType = expr->arguments[0]->type->firstType->baseType;
+            const auto & keyT = expr->arguments[0]->type->firstType;
+            uint64_t keyHash = 0u;
+            if ( char * keyStr = bakeConstStringKey(context, expr->arguments[1], keyT, keyHash) ) {
+                setE(expr, context.code->makeNode<SimNode_KeyExists_WithHash>(at, cont, keyStr, keyHash, valueTypeSize));
             } else {
-                auto valueT = expr->arguments[0]->type->firstType->annotation->makeValueType();
-                valueType = valueT->baseType;
-                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+                auto val = getE(expr->arguments[1]);
+                Type valueType;
+                if ( keyT->isWorkhorseType() ) {
+                    valueType = keyT->baseType;
+                } else {
+                    auto valueT = keyT->annotation->makeValueType();
+                    valueType = valueT->baseType;
+                    val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+                }
+                setE(expr, context.code->makeValueNode<SimNode_KeyExists>(valueType, at, cont, val, valueTypeSize));
             }
-            setE(expr, context.code->makeValueNode<SimNode_KeyExists>(valueType, at, cont, val, valueTypeSize));
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
@@ -1996,17 +2020,24 @@ namespace das
             }
         } else if ( expr->subexpr->type->isGoodTableType() ) {
             auto prv = getE(expr->subexpr);
-            auto pidx = getE(expr->index);
             uint32_t valueTypeSize = expr->subexpr->type->secondType->getSizeOf();
-            Type keyType;
-            if ( expr->subexpr->type->firstType->isWorkhorseType() ) {
-                keyType = expr->subexpr->type->firstType->baseType;
+            const auto & keyT = expr->subexpr->type->firstType;
+            SimNode * res = nullptr;
+            uint64_t keyHash = 0u;
+            if ( char * keyStr = bakeConstStringKey(context, expr->index, keyT, keyHash) ) {
+                res = context.code->makeNode<SimNode_TableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize, 0);
             } else {
-                auto keyValueType = expr->subexpr->type->firstType->annotation->makeValueType();
-                keyType = keyValueType->baseType;
-                pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                auto pidx = getE(expr->index);
+                Type keyType;
+                if ( keyT->isWorkhorseType() ) {
+                    keyType = keyT->baseType;
+                } else {
+                    auto keyValueType = keyT->annotation->makeValueType();
+                    keyType = keyValueType->baseType;
+                    pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                }
+                res = context.code->makeValueNode<SimNode_TableIndex>(keyType, at, prv, pidx, valueTypeSize, 0);
             }
-            auto res = context.code->makeValueNode<SimNode_TableIndex>(keyType, at, prv, pidx, valueTypeSize, 0);
             if ( expr->r2v ) {
                 setE(expr, GetR2V(context, at, expr->type, res));
             } else {
@@ -2038,17 +2069,22 @@ namespace das
                 }
             } else if ( seT->isGoodTableType() ) {
                 auto prv = getE(expr->subexpr);
-                auto pidx = getE(expr->index);
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
-                Type valueType;
-                if ( seT->firstType->isWorkhorseType() ) {
-                    valueType = seT->firstType->baseType;
+                uint64_t keyHash = 0u;
+                if ( char * keyStr = bakeConstStringKey(context, expr->index, seT->firstType, keyHash) ) {
+                    setE(expr, context.code->makeNode<SimNode_SafeTableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize));
                 } else {
-                    auto valueT = seT->firstType->annotation->makeValueType();
-                    valueType = valueT->baseType;
-                    pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                    auto pidx = getE(expr->index);
+                    Type valueType;
+                    if ( seT->firstType->isWorkhorseType() ) {
+                        valueType = seT->firstType->baseType;
+                    } else {
+                        auto valueT = seT->firstType->annotation->makeValueType();
+                        valueType = valueT->baseType;
+                        pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                    }
+                    setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
                 }
-                setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
             } else if ( seT->dim.size() ) {
                 uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();
@@ -2089,17 +2125,22 @@ namespace das
                 }
             } else if ( expr->subexpr->type->isGoodTableType() ) {
                 auto prv = getE(expr->subexpr);
-                auto pidx = getE(expr->index);
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
-                Type valueType;
-                if ( seT->firstType->isWorkhorseType() ) {
-                    valueType = seT->firstType->baseType;
+                uint64_t keyHash = 0u;
+                if ( char * keyStr = bakeConstStringKey(context, expr->index, seT->firstType, keyHash) ) {
+                    setE(expr, context.code->makeNode<SimNode_SafeTableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize));
                 } else {
-                    auto valueT = seT->firstType->annotation->makeValueType();
-                    valueType = valueT->baseType;
-                    pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                    auto pidx = getE(expr->index);
+                    Type valueType;
+                    if ( seT->firstType->isWorkhorseType() ) {
+                        valueType = seT->firstType->baseType;
+                    } else {
+                        auto valueT = seT->firstType->annotation->makeValueType();
+                        valueType = valueT->baseType;
+                        pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                    }
+                    setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
                 }
-                setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
             } else if ( seT->dim.size() ) {
                 uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();
