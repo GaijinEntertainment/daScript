@@ -143,7 +143,7 @@ namespace das {
         int valueSize = info->secondType->size;
         uint64_t count = 0;
         for ( uint64_t i=0, is=tab->capacity; i!=is; ++i ) {
-            if ( tab->hashes[i] > HASH_KILLED64 ) {
+            if ( tableLiveSlot(*tab, i) ) {
                 bool last = (count == (tab->size-1));
                 // key
                 char * key = tab->keys + i*keySize;

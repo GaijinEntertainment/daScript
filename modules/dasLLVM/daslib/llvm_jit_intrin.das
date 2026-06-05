@@ -12,7 +12,7 @@ require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 require strings
 
-struct JitCtx {
+struct public JitCtx {
     ctx : LLVMContextRef
     types : PrimitiveTypes -const? -const
     builder : LLVMOpaqueBuilder -const? -const
@@ -27,6 +27,7 @@ let g_intrin_lookup <- {
     // misc
         "$::length" => @@intrinsic_builtin_length,
         "$::is_standalone_exe" => @@intrinsic_is_standalone_exe,
+        "$::hash" => @@intrinsic_builtin_hash_string,
     // pointer math
         "$::i_das_ptr_set_add" => @@intrinsic_das_ptr_set_add,
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add,
@@ -135,9 +136,12 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     // First guard: $::length only handles arrays (not table<string; json::JsonValue>
     // or $::dasvector`ptr`Variable&). Second: intrinsics can't have handle types
     // (e.g. int64(clock)).
+    // $::hash is inlined for string keys; build_string_hash picks the fast (2-byte) or
+    // safe (1-byte) round body by is_safe_hash() so it matches the host runtime exactly.
     if ((call_name == "$::length" && !argType.isGoodArrayType)
+        || (call_name == "$::hash" && argType.baseType != Type.tString)
         || (!expr.arguments |> empty() && argType.isHandle)) return false
-    g_intrin_lookup |> get(call_name) $(pfun) {
+    g_intrin_lookup |> get(call_name) $(_pfun) {
         result = true
     }
     return result
@@ -156,11 +160,11 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
 
 // intrinsics, $ aka builtin
 
-def intrinsic_builtin_variant_index(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, arguments[0], "$::variant_index")
 }
 
-def intrinsic_builtin_set_variant_index(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_set_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMBuildStore2(ctx.builder, ctx.types, ctx.types.t_int32, arguments[1], arguments[0])
 }
 
@@ -177,8 +181,142 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
     }
 }
 
-def intrinsic_is_standalone_exe(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_is_standalone_exe(var ctx : JitCtx; _expr : ExprCallFunc?; _arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMConstInt(ctx.types.t_int1, g_jit_exe_mode ? 1ul : 0ul, 0)
+}
+
+// Inlined hash(string) -> uint64, reproducing hash_blockz64 (anyhash.h) bit-for-bit:
+// FNV-1a over a zero-terminated 16-bit word stream; null -> FNV basis; final clamp
+// h<=1 -> prime. is_safe_hash() picks the round body to match the host runtime exactly:
+// the fast path does one unaligned 2-byte load per round (over-reading 1 byte past the
+// null, as DAS_SAFE_HASH==0 does), the safe path loads byte-by-byte (no over-read, for
+// ASAN/DAS_SAFE_HASH==1). Both compute the same value. Shared by the $::hash intrinsic
+// and the string-keyed table lookup lowering; for a constant key the optimizer folds the
+// whole loop to an immediate (item 4).
+def public build_string_hash(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    return is_safe_hash() ? build_string_hash_safe(ctx, strPtr) : build_string_hash_fast(ctx, strPtr)
+}
+
+def build_string_hash_fast(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let i8ptr = LLVMPointerType(ctx.types.t_int8, 0u)
+    let i16ptr = LLVMPointerType(ctx.types.t_int16, 0u)
+    var ptr = LLVMBuildPointerCast(ctx.builder, strPtr, i8ptr, "hash.str")
+    var basis = LLVMConstInt(ctx.types.t_int64, 14695981039346656037ul, 0)
+    var prime = LLVMConstInt(ctx.types.t_int64, 1099511628211ul, 0)
+    var one64 = LLVMConstInt(ctx.types.t_int64, 1ul, 0)
+    var c256 = LLVMConstInt(ctx.types.t_int64, 256ul, 0)
+    var lowmask = LLVMConstInt(ctx.types.t_int64, 255ul, 0)
+    var zero64 = LLVMConstInt(ctx.types.t_int64, 0ul, 0)
+
+    var entry = LLVMGetInsertBlock(ctx.builder)
+    var ffunc = LLVMGetBasicBlockParent(entry)
+    var bb_loop = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.loop")
+    var bb_body = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.body")
+    var bb_cont = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.cont")
+    var bb_merge = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.merge")
+
+    // entry: null string -> basis, else enter loop
+    var is_null = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, ptr, LLVMConstPointerNull(i8ptr), "hash.isnull")
+    LLVMBuildCondBr(ctx.builder, is_null, bb_merge, bb_loop)
+
+    // loop: v = *(uint16_t*)p (unaligned, zero-extended); if (v & 0xff)==0 break with h
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_loop)
+    var h_phi = LLVMBuildPhi(ctx.builder, ctx.types.t_int64, "hash.h")
+    var p_phi = LLVMBuildPhi(ctx.builder, i8ptr, "hash.p")
+    var p16 = LLVMBuildPointerCast(ctx.builder, p_phi, i16ptr, "hash.p16")
+    var v16 = LLVMBuildLoad2(ctx.builder, ctx.types.t_int16, p16, "hash.v16")
+    LLVMSetAlignment(v16, 1u)
+    var v = LLVMBuildZExt(ctx.builder, v16, ctx.types.t_int64, "hash.v")
+    var lo = LLVMBuildAnd(ctx.builder, v, lowmask, "hash.lo")
+    var lo_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, lo, zero64, "hash.lo0")
+    LLVMBuildCondBr(ctx.builder, lo_is_zero, bb_merge, bb_body)
+
+    // body: h = (h ^ v) * prime; if v < 0x100 (high byte 0) break with hmul
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_body)
+    var hx = LLVMBuildXor(ctx.builder, h_phi, v, "hash.hx")
+    var hmul = LLVMBuildMul(ctx.builder, hx, prime, "hash.hmul")
+    var v_lt_256 = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntULT, v, c256, "hash.vlt")
+    LLVMBuildCondBr(ctx.builder, v_lt_256, bb_merge, bb_cont)
+
+    // cont: advance two bytes, loop
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_cont)
+    var idx2 = LLVMConstInt(ctx.types.t_int64, 2ul, 0)
+    var p2 = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, p_phi, idx2, "hash.p2")
+    LLVMBuildBr(ctx.builder, bb_loop)
+
+    LLVMAddIncoming(h_phi, [basis, hmul], [entry, bb_cont])
+    LLVMAddIncoming(p_phi, [ptr, p2], [entry, bb_cont])
+
+    // merge: pick the hash at whichever exit fired, then clamp h<=1 -> prime
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_merge)
+    var hres = LLVMBuildPhi(ctx.builder, ctx.types.t_int64, "hash.res")
+    LLVMAddIncoming(hres, [basis, h_phi, hmul], [entry, bb_loop, bb_body])
+    var clamp = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntULE, hres, one64, "hash.clamp")
+    return LLVMBuildSelect(ctx.builder, clamp, prime, hres, "hash")
+}
+
+def build_string_hash_safe(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let i8ptr = LLVMPointerType(ctx.types.t_int8, 0u)
+    var ptr = LLVMBuildPointerCast(ctx.builder, strPtr, i8ptr, "hash.str")
+    var basis = LLVMConstInt(ctx.types.t_int64, 14695981039346656037ul, 0)
+    var prime = LLVMConstInt(ctx.types.t_int64, 1099511628211ul, 0)
+    var one64 = LLVMConstInt(ctx.types.t_int64, 1ul, 0)
+    var zero8 = LLVMConstInt(ctx.types.t_int8, 0ul, 0)
+
+    var entry = LLVMGetInsertBlock(ctx.builder)
+    var ffunc = LLVMGetBasicBlockParent(entry)
+    var bb_loop = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.loop")
+    var bb_body = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.body")
+    var bb_cont = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.cont")
+    var bb_merge = LLVMAppendBasicBlockInContext(ctx.ctx, ffunc, "hash.merge")
+
+    // entry: null string -> basis, else enter loop
+    var is_null = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, ptr, LLVMConstPointerNull(i8ptr), "hash.isnull")
+    LLVMBuildCondBr(ctx.builder, is_null, bb_merge, bb_loop)
+
+    // loop: a = p[0]; if a==0 break with h (never reads past the null)
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_loop)
+    var h_phi = LLVMBuildPhi(ctx.builder, ctx.types.t_int64, "hash.h")
+    var p_phi = LLVMBuildPhi(ctx.builder, i8ptr, "hash.p")
+    var a = LLVMBuildLoad2(ctx.builder, ctx.types.t_int8, p_phi, "hash.a")
+    var a_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, a, zero8, "hash.a0")
+    LLVMBuildCondBr(ctx.builder, a_is_zero, bb_merge, bb_body)
+
+    // body: b = p[1]; v = a | (b<<8); h = (h ^ v) * prime; if b==0 break with hmul
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_body)
+    var a64 = LLVMBuildZExt(ctx.builder, a, ctx.types.t_int64, "hash.a64")
+    var idx1 = LLVMConstInt(ctx.types.t_int64, 1ul, 0)
+    var p1 = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, p_phi, idx1, "hash.p1")
+    var bbyte = LLVMBuildLoad2(ctx.builder, ctx.types.t_int8, p1, "hash.b")
+    var b64 = LLVMBuildZExt(ctx.builder, bbyte, ctx.types.t_int64, "hash.b64")
+    var sh8 = LLVMConstInt(ctx.types.t_int64, 8ul, 0)
+    var bsh = LLVMBuildShl(ctx.builder, b64, sh8, "hash.bsh")
+    var v = LLVMBuildOr(ctx.builder, a64, bsh, "hash.v")
+    var hx = LLVMBuildXor(ctx.builder, h_phi, v, "hash.hx")
+    var hmul = LLVMBuildMul(ctx.builder, hx, prime, "hash.hmul")
+    var b_is_zero = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, bbyte, zero8, "hash.b0")
+    LLVMBuildCondBr(ctx.builder, b_is_zero, bb_merge, bb_cont)
+
+    // cont: advance two bytes, loop
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_cont)
+    var idx2 = LLVMConstInt(ctx.types.t_int64, 2ul, 0)
+    var p2 = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, p_phi, idx2, "hash.p2")
+    LLVMBuildBr(ctx.builder, bb_loop)
+
+    LLVMAddIncoming(h_phi, [basis, hmul], [entry, bb_cont])
+    LLVMAddIncoming(p_phi, [ptr, p2], [entry, bb_cont])
+
+    // merge: pick the hash at whichever exit fired, then clamp h<=1 -> prime
+    LLVMPositionBuilderAtEnd(ctx.builder, bb_merge)
+    var hres = LLVMBuildPhi(ctx.builder, ctx.types.t_int64, "hash.res")
+    LLVMAddIncoming(hres, [basis, h_phi, hmul], [entry, bb_loop, bb_body])
+    var clamp = LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntULE, hres, one64, "hash.clamp")
+    return LLVMBuildSelect(ctx.builder, clamp, prime, hres, "hash")
+}
+
+def intrinsic_builtin_hash_string(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    if (empty(arguments) || expr.arguments[0]._type.baseType != Type.tString) return null
+    return build_string_hash(ctx, arguments[0])
 }
 
 def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
@@ -708,7 +846,7 @@ def build_fsqrt(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOp
     return LLVMBuildCall2(ctx.builder, typ, decl_fsqrt, args_fsqrt, name)
 }
 
-def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; _name : string) : LLVMOpaqueValue? {
     var one = LLVMConstReal(ctx.types.t_float, 1.0lf)
     var fdiv = LLVMBuildFDiv(ctx.builder, one, v2, "")
     return fdiv
@@ -993,7 +1131,7 @@ def build_memset_64(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_128(ctx, ptr, value, size)
 }
 
-def intrinsic_memset64(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int64, 0u), "")
     return build_memset_64(ctx, ctx.types.t_int64, ptr, arguments[1], size)
@@ -1008,7 +1146,7 @@ def build_memset_32(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_64(ctx, ctx.types.t_int64, ptr, value, size)
 }
 
-def intrinsic_memset32(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset32(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int32, 0u), "")
     return build_memset_32(ctx, ctx.types.t_int32, ptr, arguments[1], size)
@@ -1023,13 +1161,13 @@ def build_memset_16(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_32(ctx, ctx.types.t_int32, ptr, value, size)
 }
 
-def intrinsic_memset16(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int16, 0u), "")
     return build_memset_16(ctx, ctx.types.t_int16, ptr, arguments[1], size)
 }
 
-def intrinsic_math_gather(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_gather(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int32, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[1], ctx.types.ConstI32(0ul), "")
     var iy = LLVMBuildExtractElement(ctx.builder, arguments[1], ctx.types.ConstI32(1ul), "")
@@ -1047,7 +1185,7 @@ def intrinsic_math_gather(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     return res
 }
 
-def intrinsic_math_store_neq_mask(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_store_neq_mask(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.LLVMInt4Type(), 0u), "")
     var value = arguments[1]
     var mask_v = arguments[2]
@@ -1067,7 +1205,7 @@ def intrinsic_math_gather_store_mask(var ctx : JitCtx; expr : ExprCallFunc?; arg
     return intrinsic_math_store_neq_mask(ctx, expr, arg_store_mask)
 }
 
-def intrinsic_math_gather_store_stride(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_gather_store_stride(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // gather
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[2], LLVMPointerType(ctx.types.t_int32, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[3], ctx.types.ConstI32(0ul), "")
@@ -1120,7 +1258,7 @@ def intrinsic_math_gather_store_stride(var ctx : JitCtx; expr : ExprCallFunc?; a
 // gather_store_neq_mask
 // def intrinsic_gather_store_neq_mask
 
-def intrinsic_math_u8x4_gather_store(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_u8x4_gather_store(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // gather
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(ctx.types.t_int8, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[2], ctx.types.ConstI32(0ul), "")
@@ -1189,7 +1327,7 @@ def intrinsic_math_sign(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
     }
 }
 
-def intrinsic_mul_128(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_mul_128(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var a = arguments[0]
     var b = arguments[1]
     var A = LLVMBuildZExtOrBitCast(ctx.builder, a, ctx.types.t_int128, "")

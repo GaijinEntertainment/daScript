@@ -1255,7 +1255,7 @@ namespace das
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
             if ( !tab.isLocked() || tab.hopeless ) {
-                uint64_t oldSize = tab.capacity*uint64_t(szk+szv+sizeof(TableHashKey));
+                uint64_t oldSize = tab.capacity*(uint64_t(szk)+uint64_t(szv)) + tab.capacity*tableHashSlotBytes(tab.capacity);
                 __context__->free(tab.data, oldSize, at);
             } else {
                 __context__->throw_error_at(at, "can't delete locked table");
@@ -1362,6 +1362,14 @@ namespace das
 
     bool is_standalone_exe ( ) {
         return false;
+    }
+
+    // DAS_SAFE_HASH of the host binary (anyhash.h). When 0, string hashing uses the
+    // fast 16-bit-over-read load; the JIT can then inline a matching hash. When 1
+    // (e.g. ASAN), the runtime reads byte-by-byte and the JIT must not over-read, so
+    // it falls back to the runtime call instead of emitting the fast intrinsic.
+    bool is_safe_hash ( ) {
+        return DAS_SAFE_HASH != 0;
     }
 
     DAS_API uint64_t get_context_share_counter ( Context * context ) {
@@ -1888,6 +1896,8 @@ namespace das
                 ->arg("arguments");
         addExtern<DAS_BIND_FUN(is_standalone_exe)>(*this, lib, "is_standalone_exe",
             SideEffects::accessExternal, "is_standalone_exe");
+        addExtern<DAS_BIND_FUN(is_safe_hash)>(*this, lib, "is_safe_hash",
+            SideEffects::none, "is_safe_hash");
         addExtern<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
             SideEffects::invoke, "withArgv")
                 ->args({"new_arguments", "block","context","line"});

@@ -722,14 +722,9 @@ void das_httpr_set_header ( HttpRequest * req, const char * key, const char * va
 
 http_headers das_req_table_to_headers ( const TTable<char *,char *> & tab) {
     http_headers headers;
-    char ** keys = (char **)tab.keys;
-    char ** values = (char **)tab.data;
-    auto * hashes = (TableHashKey *)tab.hashes;
-    for ( uint32_t i=0; i!=tab.capacity; ++i ) {
-        if ( hashes[i]!=HASH_EMPTY64 && hashes[i]!=HASH_KILLED64 ) {
-            headers[keys[i]] = values[i];
-        }
-    }
+    table_for_each<char *, char *>(tab, [&]( char * key, char * value ) {
+        headers[key] = value;
+    });
     return headers;
 }
 
@@ -763,23 +758,17 @@ void das_req_POST_HF ( const char * url, const char * text, const TTable<char *,
     req->url = url ? url : "";
     req->headers =das_req_table_to_headers(tab);
     req->body = text ? text : "";
-    char ** keys = (char **)from.keys;
-    char ** values = (char **)from.data;
-    auto * hashes = (TableHashKey *)from.hashes;
-    for ( uint32_t i=0; i!=from.capacity; ++i ) {
-        if ( hashes[i]!=HASH_EMPTY64 && hashes[i]!=HASH_KILLED64 ) {
-            hv::FormData data;
-            auto value = values[i];
-            if ( value != nullptr ) {
-                if (*value == '@') {
-                    data.filename = value+1;
-                } else {
-                    data.content = value;
-                }
+    table_for_each<char *, char *>(from, [&]( char * key, char * value ) {
+        hv::FormData data;
+        if ( value != nullptr ) {
+            if (*value == '@') {
+                data.filename = value+1;
+            } else {
+                data.content = value;
             }
-            req->form[keys[i] ? keys[i] : ""] = data;
         }
-    }
+        req->form[key ? key : ""] = data;
+    });
     auto resp = request(req);
     das_invoke<void>::invoke<HttpResponse*>(context,at,block,resp.get());
 }
@@ -804,23 +793,17 @@ void das_req_PUT_HF ( const char * url, const char * text, const TTable<char *,c
     req->url = url ? url : "";
     req->headers = das_req_table_to_headers(tab);
     req->body = text ? text : "";
-    char ** keys = (char **)from.keys;
-    char ** values = (char **)from.data;
-    auto * hashes = (TableHashKey *)from.hashes;
-    for ( uint32_t i=0; i!=from.capacity; ++i ) {
-        if ( hashes[i]!=HASH_EMPTY64 && hashes[i]!=HASH_KILLED64 ) {
-            hv::FormData data;
-            auto value = values[i];
-            if ( value != nullptr ) {
-                if (*value == '@') {
-                    data.filename = value+1;
-                } else {
-                    data.content = value;
-                }
+    table_for_each<char *, char *>(from, [&]( char * key, char * value ) {
+        hv::FormData data;
+        if ( value != nullptr ) {
+            if (*value == '@') {
+                data.filename = value+1;
+            } else {
+                data.content = value;
             }
-            req->form[keys[i] ? keys[i] : ""] = data;
         }
-    }
+        req->form[key ? key : ""] = data;
+    });
     auto resp = request(req);
     das_invoke<void>::invoke<HttpResponse*>(context,at,block,resp.get());
 }
@@ -845,23 +828,17 @@ void das_req_PATCH_HF ( const char * url, const char * text, const TTable<char *
     req->url = url ? url : "";
     req->headers = das_req_table_to_headers(tab);
     req->body = text ? text : "";
-    char ** keys = (char **)from.keys;
-    char ** values = (char **)from.data;
-    auto * hashes = (TableHashKey *)from.hashes;
-    for ( uint32_t i=0; i!=from.capacity; ++i ) {
-        if ( hashes[i]!=HASH_EMPTY64 && hashes[i]!=HASH_KILLED64 ) {
-            hv::FormData data;
-            auto value = values[i];
-            if ( value != nullptr ) {
-                if (*value == '@') {
-                    data.filename = value+1;
-                } else {
-                    data.content = value;
-                }
+    table_for_each<char *, char *>(from, [&]( char * key, char * value ) {
+        hv::FormData data;
+        if ( value != nullptr ) {
+            if (*value == '@') {
+                data.filename = value+1;
+            } else {
+                data.content = value;
             }
-            req->form[keys[i] ? keys[i] : ""] = data;
         }
-    }
+        req->form[key ? key : ""] = data;
+    });
     auto resp = request(req);
     das_invoke<void>::invoke<HttpResponse*>(context,at,block,resp.get());
 }

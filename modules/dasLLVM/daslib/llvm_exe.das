@@ -22,11 +22,9 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
-require daslib/debugger
+require daslib/rtti
 require daslib/clargs
-require daslib/json
 require daslib/json_boost
-require math
 require jit
 require daslib/fio
 
@@ -48,7 +46,12 @@ class CollectExternVisitor : AstVisitor {
     tab_at_accessor : LLVMOpaqueValue?
     tab_find_accessor : LLVMOpaqueValue?
     tab_erase_accessor : LLVMOpaqueValue?
+    tab_find_wh_accessor : LLVMOpaqueValue?
+    tab_at_wh_accessor : LLVMOpaqueValue?
+    tab_at_apm_accessor : LLVMOpaqueValue?
+    tab_at_apm_typed_accessor : LLVMOpaqueValue?
     reg_extern_tab_type : LLVMOpaqueType?
+    reg_extern_tab_wh_type : LLVMOpaqueType?
     trap_typ : LLVMOpaqueType?
     trap_ptr : LLVMOpaqueValue?
     reg_standalone_fn_type : LLVMOpaqueType?
@@ -148,6 +151,19 @@ class CollectExternVisitor : AstVisitor {
         tab_at_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_at", reg_extern_tab_type)
         tab_find_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_find", reg_extern_tab_type)
         tab_erase_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_erase", reg_extern_tab_type)
+
+        // void * get_jit_string_table_{find,at}_with_hash ( ) — string keys route through the
+        // precomputed-hash globals, so the standalone exe bakes those instead of the per-type ones.
+        reg_extern_tab_wh_type = LLVMFunctionType(types.LLVMVoidPtrType(), [])
+        tab_find_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_find_with_hash", reg_extern_tab_wh_type)
+        tab_at_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_with_hash", reg_extern_tab_wh_type)
+
+        // Insert-after-packed-miss globals (the inline packed find calls these on a miss). The
+        // string accessor is nullary; the per-type one shares get_jit_table_at's (baseType,ctx,at)
+        // shape. Without baking these in the exe, the glob keeps its compile-process address and
+        // faults under ASLR (works on Windows only because the DLL loads at the same base).
+        tab_at_apm_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_after_packed_miss", reg_extern_tab_wh_type)
+        tab_at_apm_typed_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_at_after_packed_miss", reg_extern_tab_type)
 
         trap_typ = LLVMFunctionType(types.t_void, [])
         trap_ptr = LLVMAddFunctionWithType(g_mod, "jit_trap", trap_typ)
@@ -250,7 +266,7 @@ class CollectExternVisitor : AstVisitor {
         if (key_exists(registered_modules, mod_name) || key_exists(dynamic_modules, mod_name)) return
         registered_modules[mod_name] = true
         // First ensure all dependencies of this module are registered
-        module_for_each_dependency(m) $(var dep : Module?; var pub : bool) {
+        module_for_each_dependency(m) $(var dep : Module?; var _pub : bool) {
             ensure_module(dep)
         }
         let cpp_name = string(m.cppClassName)
@@ -444,16 +460,51 @@ class CollectExternVisitor : AstVisitor {
     // Pass null for both to match the C++ signature without a real Context.
     def add_table_at_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
+        if (typ == Type.tString) {
+            // string keys route through the precomputed-hash at (see build_table_at); bake that
+            // glob plus its after-packed-miss insert helper
+            let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_at_wh_accessor, [], "")
+            let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()).glob())
+            if (tab_method != null) {
+                LLVMBuildStore(builder, tab_ptr, tab_method)
+            }
+            let apm_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_at_apm_accessor, [], "")
+            let apm_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()).glob())
+            if (apm_method != null) {
+                LLVMBuildStore(builder, apm_ptr, apm_method)
+            }
+            return
+        }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_at_accessor, call_args, "")
 
         let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT(typ)).glob())
         LLVMBuildStore(builder, tab_ptr, tab_method)
+
+        // SIMD-packed integer keys run an inline packed find that, on a miss, calls the
+        // after-packed-miss insert helper — bake that glob too (see bind_jit_table_at_glob)
+        if (is_simd_packed_key(typ)) {
+            var apm_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
+            let apm_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_at_apm_typed_accessor, apm_args, "")
+            let apm_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT_AFTER_PACKED_MISS(typ)).glob())
+            if (apm_method != null) {
+                LLVMBuildStore(builder, apm_ptr, apm_method)
+            }
+        }
     }
 
     def add_table_find_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
+        if (typ == Type.tString) {
+            // string keys route through the precomputed-hash find (see build_table_find); bake that glob
+            let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_find_wh_accessor, [], "")
+            let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()).glob())
+            if (tab_method != null) {
+                LLVMBuildStore(builder, tab_ptr, tab_method)
+            }
+            return
+        }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_find_accessor, call_args, "")
@@ -704,7 +755,7 @@ def private write_release_deps(prog : Program?) {
     // alongside `--force-shared-module dasglfw` (the daslang-side name).
     var by_das : table<string; SharedModuleEntry>
     var by_pkg : table<string; SharedModuleEntry>
-    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, _mod_name, das_name) {
         let abs = path
         let rel = compute_modules_relative_suffix(abs)
         let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = das_name)
@@ -848,7 +899,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
 
     // Collect dynamic module names — used by CollectExternVisitor to skip dlopen'd modules
     var dynamic_modules : table<string; bool>
-    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(_path, _mod_name, das_name) {
         dynamic_modules[das_name] = true
     }
 

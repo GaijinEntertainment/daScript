@@ -1855,7 +1855,8 @@ namespace das {
         static __forceinline void clear ( Context * __context__, TTable<TKey,TVal> & tab ) {
             if ( tab.data ) {
                 if ( !tab.isLocked() ) {
-                    uint64_t oldSize = uint64_t(tab.capacity)*(sizeof(TKey)+sizeof(TVal)+sizeof(TableHashKey));
+                    uint64_t hashBytes = (tab.capacity <= TABLE_MAX_LINEAR_CAPACITY) ? uint64_t(PackedPolicy<TKey>::hashBytes) : uint64_t(sizeof(TableHashKey));
+                    uint64_t oldSize = uint64_t(tab.capacity)*(sizeof(TKey)+sizeof(TVal)+hashBytes);
                     __context__->free(tab.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked table");

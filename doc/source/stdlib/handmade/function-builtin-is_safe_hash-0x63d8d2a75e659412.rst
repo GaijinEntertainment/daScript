@@ -1,0 +1,1 @@
+Returns true when the runtime computes string hashes with the safe byte-at-a-time algorithm rather than the faster word-at-a-time one. JIT string-hash code generation reads this so it can emit a hash body that matches the host runtime exactly.

@@ -366,6 +366,19 @@ def test_groupjoin(t : T?) {
     }
 }
 
+// group_by output order follows first-seen-key (insertion) order — an implementation
+// detail that shifted when small tables became packed. The pet-age groups are unordered,
+// so compare them sorted by key.
+def check_pet_age_groups(t : T?; var got : array<tuple<float; int; float; float>>) {
+    sort(got) $(a, b) => a._0 < b._0
+    t |> equal(length(got), 3)
+    if (length(got) == 3) {
+        t |> equal(got[0]._0, 1.); t |> equal(got[0]._1, 1); t |> equal(got[0]._2, 1.5); t |> equal(got[0]._3, 1.5)
+        t |> equal(got[1]._0, 4.); t |> equal(got[1]._1, 2); t |> equal(got[1]._2, 4.3); t |> equal(got[1]._3, 4.9)
+        t |> equal(got[2]._0, 8.); t |> equal(got[2]._1, 1); t |> equal(got[2]._2, 8.3); t |> equal(got[2]._3, 8.3)
+    }
+}
+
 [test]
 def test_groupby(t : T?) {
     t |> run("basic group by") @(t : T?) {
@@ -378,17 +391,12 @@ def test_groupby(t : T?) {
                 return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         )
-        var expected = [
-            (4., 2, 4.3, 4.9),
-            (1., 1, 1.5, 1.5),
-            (8., 1, 8.3, 8.3)
-        ]
-        for (c, e in query, expected) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
+        var got : array<tuple<float; int; float; float>>
+        for (c in query) {
+            got |> push(c)
         }
+        check_pet_age_groups(t, got)
+        delete got
     }
     t |> run("complex group by") @(t : T?) {
         var qcomplex = group_by(
@@ -421,17 +429,12 @@ def test_groupby(t : T?) {
                 return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         )
-        var expected = [
-            (4., 2, 4.3, 4.9),
-            (1., 1, 1.5, 1.5),
-            (8., 1, 8.3, 8.3)
-        ]
-        for (c, e in query, expected) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
+        var got : array<tuple<float; int; float; float>>
+        for (c in query) {
+            got |> push(c)
         }
+        check_pet_age_groups(t, got)
+        delete got
     }
     t |> run("group by to array") @(t : T?) {
         var query = group_by_to_array(
@@ -443,17 +446,12 @@ def test_groupby(t : T?) {
                 return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         )
-        var expected = [
-            (4., 2, 4.3, 4.9),
-            (1., 1, 1.5, 1.5),
-            (8., 1, 8.3, 8.3)
-        ]
-        for (c, e in query, expected) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
+        var got : array<tuple<float; int; float; float>>
+        for (c in query) {
+            got |> push(c)
         }
+        check_pet_age_groups(t, got)
+        delete got
     }
     t |> run("group by to sequence") @(t : T?) {
         var query = group_by_to_array(
@@ -465,17 +463,12 @@ def test_groupby(t : T?) {
                 return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         ).to_sequence()
-        var expected = [
-            (4., 2, 4.3, 4.9),
-            (1., 1, 1.5, 1.5),
-            (8., 1, 8.3, 8.3)
-        ]
-        for (c, e in query, expected) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
+        var got : array<tuple<float; int; float; float>>
+        for (c in query) {
+            got |> push(c)
         }
+        check_pet_age_groups(t, got)
+        delete got
     }
 }
 

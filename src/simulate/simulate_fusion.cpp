@@ -163,6 +163,7 @@ namespace das {
             createFusionEngine_at();
             createFusionEngine_at_array();
             createFusionEngine_tableindex();
+            createFusionEngine_tablewithhash();
             // call
             createFusionEngine_call1();
             createFusionEngine_call2();

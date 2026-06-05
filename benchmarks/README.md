@@ -39,6 +39,20 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `test01.das` | `get_key(tab, v)` vs `keys(tab)+values(tab)` — single iterator with pointer arithmetic vs two parallel iterators (1K, 10K, 100K entries) |
 
+## core/small_table/
+
+Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the large-table `core/hash/` suite does not cover. Used to locate the linear-vs-hashed crossover (`maxLinearCapacity`) and to measure the string-key and constant-key paths.
+
+| File | Description |
+|---|---|
+| `test01.das` | Integer-keyed small tables — build (insert+alloc), positive lookup (hit), negative lookup (miss), swept across N |
+| `test02.das` | String-keyed small tables — build/hit/miss sweep; hit queries with distinct-pointer keys (strcmp fires, realistic), keys pre-built outside the measured block |
+| `test03.das` | Constant string-literal keys (`const_*`) vs runtime-array keys (`var_*`) — baseline for item 4 (precomputed-hash specialization of constant keys) |
+| `test04.das` | Many small tables (decs/per-entity shape) — thousands of independent N-element tables, build (watch B/op for item 1 memory) and cold-sweep query (cache locality) |
+| `test05.das` | Crossover prototype — inlined hash-only linear scan (`lin_*`) vs real open-addressed `?[]` (`hash_*`) over N, short and long keys; predicts `maxLinearCapacity` before packed mode exists |
+| `test06.das` | Lookup-only (never insert) packed string-table find at N=8 — const/var keys, hit and miss; A/B/C harness for the JIT inlined packed find (`JIT_STRING_FIND` none/scalar/vector) |
+| `test07.das` | Packed (N=8) integer-key find (hit/miss, no-hash SIMD key compare) and `tab[k]++` update fast-path (string + int) — the paths added when the inline find was extended to integer keys and to insert |
+
 ## core/array/
 
 | File | Description |

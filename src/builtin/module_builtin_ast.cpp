@@ -380,7 +380,7 @@ namespace das {
         char * values = tab->data;
         char * keys = tab->keys;
         for ( uint32_t index=0, indexs=tab->capacity; index!=indexs; index++, keys+=keyStride, values+=valueStride ) {
-            if ( tab->hashes[index] > HASH_KILLED64 ) {
+            if ( tableLiveSlot(*tab, index) ) {
                 das_invoke<void>::invoke<void *,void *>(context,at,blk,(void*)keys,(void*)values);
             }
         }
