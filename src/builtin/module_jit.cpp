@@ -785,6 +785,14 @@ extern "C" {
         DAS_API void * get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
             return das_get_jit_table_erase(baseType, context, at);
         }
+        // String-key find/at route through these precomputed-hash globals (see llvm_jit.das
+        // build_table_find/at); the standalone-exe glob baking needs them as linkable symbols.
+        DAS_API void * get_jit_string_table_find_with_hash ( ) {
+            return das_get_jit_string_table_find_with_hash();
+        }
+        DAS_API void * get_jit_string_table_at_with_hash ( ) {
+            return das_get_jit_string_table_at_with_hash();
+        }
         DAS_API void * das_get_jit_new ( TypeAnnotation *annotation ) {
             return annotation->jitGetNew();
         }
