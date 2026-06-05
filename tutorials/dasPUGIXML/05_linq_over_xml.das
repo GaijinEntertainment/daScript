@@ -16,6 +16,7 @@ options persistent_heap
 
 require pugixml/PUGIXML_boost
 require daslib/linq_boost
+require daslib/linq_fold
 
 // A row type. Each field maps to a same-named XML *attribute* on the child
 // element. `year` carries a default — rows that omit the attribute keep it.
@@ -100,6 +101,38 @@ def aggregates() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Section 3.5 — Reverse iteration
+// ──────────────────────────────────────────────────────────────────────────
+//
+// each_child_reverse walks children in reverse document order via last_child /
+// previous_sibling (both O(1) in pugixml). The fused _fold lane uses the same
+// backward walk for reverse|>take(N) and a bare last(): it visits only the kept
+// tail (the last N elements), not the whole child list.
+
+def reverse_iteration() {
+    print("=== Section 3.5: reverse iteration ===\n")
+    parse_xml(CATALOG) $(doc, ok) {
+        if (!ok) return
+        let root = doc.document_element
+        // Raw reverse walk over <car> children — last car first.
+        print("  ids backward:")
+        for (ch in each_child_reverse(root, "car")) {
+            print(" {ch["id"] as int}")
+        }
+        print("\n")
+        // Fused _fold reverse: the last two cars, reversed, as typed rows — the
+        // macro walks backward and stops after 2, never touching cars #1/#2.
+        unsafe {
+            let last_two <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(2).to_array())
+            print("  last 2 (reversed): {[for (c in last_two); c.make]}\n")
+            // reverse |> take(1) is the last car in a single backward step.
+            let newest <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(1).to_array())
+            print("  last car: #{newest[0].id} {newest[0].make}\n")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Section 4 — Tag-filtered overload
 // ──────────────────────────────────────────────────────────────────────────
 //
@@ -149,6 +182,7 @@ def main() {
     basics()
     comprehensions()
     aggregates()
+    reverse_iteration()
     tag_filter()
     lifetime()
 }

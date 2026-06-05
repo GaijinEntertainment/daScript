@@ -70,6 +70,38 @@ The iterator is just an iterable, so comprehensions filter and project directly:
        // [ Toyota]
    }
 
+Reverse iteration
+=================
+
+``each_child_reverse`` walks children in reverse document order via
+``last_child`` / ``previous_sibling`` (both O(1) in pugixml). The fused
+``_fold`` lane uses the same backward walk for ``reverse |> take(N)`` and a
+no-predicate ``last()``: it visits only the kept tail — the last *N* elements —
+instead of scanning the whole child list forward:
+
+.. code-block:: das
+
+   parse_xml(CATALOG) $(doc, ok) {
+       let root = doc.document_element
+       // raw reverse walk — last car first
+       for (ch in each_child_reverse(root, "car")) {
+           print(" {ch["id"] as int}")
+       }
+       print("\n")
+       // 4 3 2 1
+       unsafe {
+           // the last two cars, reversed, as typed rows — the macro walks
+           // backward and stops after 2, never touching cars #1 / #2
+           let last_two <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(2).to_array())
+           print("{[for (c in last_two); c.make]}\n")
+           // [ Kia, Ford]
+       }
+   }
+
+A predicated ``reverse |> where |> last`` deliberately stays on the forward
+walk: reverse DOM traversal is ~2× cache-hostile per node, so a match far from
+the end would cost more than a forward scan.
+
 Tag-filtered walk
 =================
 

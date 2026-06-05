@@ -5,7 +5,6 @@ require daslib/linq_fold
 require daslib/linq_boost public
 require daslib/strings_boost
 require dastest/testing_boost public
-require math
 
 // XML linq parity — `_where` predicate surface + `_select` projection.
 // Each shape runs three ways and must agree:
@@ -61,6 +60,27 @@ def check3(t : T?; var m5f, m3f, m3 : array<Car>) {
     t |> success(cars_equal(m5f, m3f), "m5f == m3f")
     t |> success(cars_equal(m3f, m3), "m3f == m3")
     delete m5f; delete m3f; delete m3
+}
+
+[test]
+def parity_reverse_backward_text_skip(t : T?) {
+    // This fixture interleaves "noise"/"more" text nodes between elements. The BACKWARD DOM walk must
+    // skip non-element nodes exactly like the forward walk, so the fused result equals the array fold.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        // reverse |> take(3) — backward walk over the text-interleaved doc
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().take(3).to_array())
+        var m3f <- _fold(each(arr).reverse().take(3).to_array())
+        t |> success(cars_equal(m5f, m3f), "reverse|take backward text-skip")
+        delete m5f; delete m3f
+        // bare last() backward-1-step lands on the last ELEMENT (id 8), not the trailing text
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).last()).id,
+                   _fold(each(arr).last()).id)
+        // reverse |> first = last element
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().first()).id,
+                   _fold(each(arr).reverse().first()).id)
+    }
 }
 
 [test]

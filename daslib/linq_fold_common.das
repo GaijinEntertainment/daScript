@@ -79,6 +79,16 @@ class SourceAdapter {
     def emit_reverse_skip_into_tail(var takeArg : Expression?; isIter : bool; var termLam : Expression?; termElemType : TypeDeclPtr; at : LineInfo) : Expression? {
         return null
     }
+    // nolint:STYLE014 — No-predicate `last` / `reverse |> first`: a backward-walking source returns the
+    // last element in ONE step. Only for the no-where case — a predicated last scans backward to unknown
+    // depth, and reverse DOM traversal is ~2x cache-hostile per node (profiled), so predicated last keeps
+    // the forward path. valueExpr = peeled pre-reverse projection (refs bindName) / null = whole element;
+    // termSelLam = raw post-reverse _select / null; defaultExpr non-null = *_or_default / null = panic.
+    def emit_reverse_last_backward(bindName : string; var valueExpr : Expression?; var termSelLam : Expression?;
+                                   var defaultExpr : Expression?; rowType : TypeDeclPtr;
+                                   outElemType : TypeDeclPtr; at : LineInfo) : Expression? {
+        return null
+    }
     def emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         return null
     }
@@ -1880,6 +1890,19 @@ def emit_early_exit_lane(
         var retType = mut_result_type(projection, elementType)
         let foundName = qn("found", at)
         let lastBindName = qn("lst", at)
+        // No-predicate `last` via the source's backward fast path: a bare `source.last()` (no where / range /
+        // projection) is the last element, reachable in one backward DOM step. Predicated/ranged last stays
+        // forward — reverse DOM traversal is ~2x cache-hostile per node and a deep match would regress (profiled).
+        if (adapter != null && whereCond == null && postTakeWhereCond == null && skipExpr == null
+                && takeExpr == null && skipWhileCond == null && takeWhileCond == null
+                && empty(intermediateBinds) && empty(preCondStmts) && projection == null) {
+            var lastDefault : Expression?
+            if (opName == "last_or_default") {
+                lastDefault = clone_expression(terminatorCall.arguments[1])
+            }
+            var back = adapter->emit_reverse_last_backward(itName, null, null, lastDefault, elementType, retType, at)
+            if (back != null) return back
+        }
         // Deferred materialization (XML): a full walk clones the whole row on EVERY match, but only the LAST
         // survives. Store the node HANDLE per match; build the full row once, at the tail.
         let deferLast = (adapter != null && adapter->defers_materialization()
@@ -3505,6 +3528,20 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
     }
     // outElemType drives the invoke retType; terminal _select projects the survivor at return so the lane returns post-select shape.
     var outElemType = (terminalSelectLam != null) ? terminalSelectElemType : lastType
+    // No-predicate `reverse |> first` over a backward-walking source (XML): the first of the reversed
+    // sequence is the last element — one backward DOM step. Predicated reverse|first keeps the forward
+    // walk (reverse DOM traversal is ~2x cache-hostile per node; a deep match would regress — profiled).
+    if (whereCond == null) {
+        var rowT = ctx.src->element_type()
+        if (rowT != null) {
+            var firstDefault : Expression?
+            if (terminatorName == "first_or_default") {
+                firstDefault = clone_expression(terminatorCall.arguments[1])
+            }
+            var back = ctx.src->emit_reverse_last_backward(bindName, projection, terminalSelectLam, firstDefault, rowT, outElemType, at)
+            if (back != null) return back
+        }
+    }
     var valueExpr : Expression?
     if (projection != null) {
         valueExpr = clone_expression(projection)

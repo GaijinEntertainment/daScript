@@ -19,7 +19,7 @@ require daslib/templates
 require daslib/enum_trait
 require daslib/json_boost
 require daslib/static_let
-require strings
+require strings   // nolint:STYLE030 — unescape() is used inside the XML(struct) apply block, invisible to the require-usage scan
 
 // ============ Iteration helpers ============
 
@@ -123,6 +123,69 @@ def each_attribute(node : xml_node) : iterator<xml_attribute> {
             var next = a.next_attribute   // capture before yield
             yield a
             a = next
+        }
+        return false
+    }
+}
+
+def for_each_child_reverse(node : xml_node; blk : block<(child : xml_node) : void>) {
+    //! Iterates over all child nodes of *node* (text and comments included, not
+    //! only elements) in **reverse** document order (``last_child`` /
+    //! ``previous_sibling``, both O(1) in pugixml).
+    var ch = node.last_child
+    while (ch.ok) {
+        let prev = ch.previous_sibling   // capture before block may mutate
+        invoke(blk, ch)
+        ch = prev
+    }
+}
+
+def for_each_child_reverse(node : xml_node; name : string; blk : block<(child : xml_node) : void>) {
+    //! Iterates, in reverse document order, over child elements of *node* whose tag matches *name*.
+    var ch = node.last_child
+    while (ch.ok && ch.name != name) {   // seek back to the last name-matching child
+        ch = ch.previous_sibling
+    }
+    while (ch.ok) {
+        let prev = previous_sibling(ch, name)   // capture before block may mutate
+        invoke(blk, ch)
+        ch = prev
+    }
+}
+
+[unsafe_outside_of_for]
+def each_child_reverse(node : xml_node) : iterator<xml_node> {
+    //! Returns a lazy iterator over all child nodes of *node* (text and comments
+    //! included, not only elements) in **reverse** document order. Intended for
+    //! use in ``for`` loops:
+    //!
+    //!   ``for (ch in each_child_reverse(node)) { ... }``
+    return <- generator<xml_node> {
+        var ch = node.last_child
+        while (ch.ok) {
+            var prev = ch.previous_sibling   // capture before yield (user may mutate)
+            yield ch
+            ch = prev
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for]
+def each_child_reverse(node : xml_node; name : string) : iterator<xml_node> {
+    //! Returns a lazy iterator over child elements of *node* whose tag matches
+    //! *name*, in reverse document order. Intended for use in ``for`` loops:
+    //!
+    //!   ``for (ch in each_child_reverse(node, "item")) { ... }``
+    return <- generator<xml_node> {
+        var ch = node.last_child
+        while (ch.ok && ch.name != name) {   // seek back to the last name-matching child
+            ch = ch.previous_sibling
+        }
+        while (ch.ok) {
+            var prev = previous_sibling(ch, name)   // capture before yield
+            yield ch
+            ch = prev
         }
         return false
     }
@@ -894,21 +957,29 @@ def XML(var node : xml_node; value : auto(TT)) {
                     fieldState <- parse_json_annotation(name, annotations)
                     fieldStateParsed = true
                 }
+                // No `return` to replace a field: a `return` routes the whole apply walk to the slow
+                // per-field invoke fallback (PR #3008). Pivot on a static type guard with an explicit
+                // default `else` so the block stays return-free and inlines.
                 if (fieldState.enumAsInt) {
                     static_if (typeinfo is_enum(field)) {
                         var ch = append_child(node, fieldState.argName)
                         set(ch.text, int(field))
-                        return
+                    } else {
+                        var ch = append_child(node, fieldState.argName)
+                        _::XML(ch, field)
                     }
                 } elif (fieldState.unescape) {
                     static_if (typeinfo is_string(field)) {
                         var ch = append_child(node, fieldState.argName)
                         set(ch.text, unescape(field))
-                        return
+                    } else {
+                        var ch = append_child(node, fieldState.argName)
+                        _::XML(ch, field)
                     }
+                } else {
+                    var ch = append_child(node, fieldState.argName)
+                    _::XML(ch, field)
                 }
-                var ch = append_child(node, fieldState.argName)
-                _::XML(ch, field)
             }
         }
     } static_elif (typeinfo is_tuple(value)) {

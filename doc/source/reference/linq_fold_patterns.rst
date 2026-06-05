@@ -559,6 +559,12 @@ feeding ``order_by(K).take(10)`` builds 10 rows, not 1000.
    * - ``.reverse()._distinct[_by](K).to_array()``
      - ``plan_reverse`` R-2b (``non_array_source``) → ``emit_reverse_distinct_forward_keeplast``
      - Forward keep-last table-overwrite (no backward index); the slot stores the ``xml_node`` handle, ``build_xml_row`` (field-pruned to the key) runs for the K survivors. The one row shared by decs / iterators / XML.
+   * - ``.reverse().take(N) [._select(F)].to_array()``
+     - ``plan_reverse`` skip-into-tail → ``XmlAdapter.emit_reverse_skip_into_tail``
+     - **Backward DOM walk** (``last_child`` / ``previous_sibling``, both O(1) in pugixml): collects only the last N element children — already in reverse order, so no ``reverse_inplace`` and no full forward buffer of all N handles. The forward-source analog of the array R6 backward-index walk. Profiled win: m5f ``reverse_take`` 88.9 → 0.0 ns/op. The named 3-arg ``from_xml_node(root, "tag", …)`` form has no last-named-child primitive, so it falls back to the buffer-all path (``emit_reverse_buffer_inplace`` deferred materialize).
+   * - bare ``.last()`` / ``.last_or_default(d)`` / ``.reverse().first[_or_default]()`` (no ``where`` / range)
+     - ``emit_early_exit_lane`` last branch / ``emit_reverse_walk_overwrite_scalar`` (Rb) → ``XmlAdapter.emit_reverse_last_backward``
+     - The last element is the first the backward walk reaches: one ``last_child`` step, build that row, return — no forward scan. Pre-/post-reverse ``_select`` projects the single survivor. **Predicated ``[where] |> last`` deliberately keeps the forward walk** — reverse DOM traversal is ~2× cache-hostile per node (profiled), so a match far from the end would regress. (Pre-existing, orthogonal: a row struct with a *default-bearing field* routes bare ``last()`` to tier-2 ``linq.das`` before reaching this hook.)
    * - ``from_xml_node(…) |> _join(arrB, ka, kb, result)`` (+ optional leading / trailing ``_where``, trailing ``_select``; count / to_array / iterator)
      - pattern ``join_general`` → ``XmlAdapter.emit_join_hook``
      - Hashed equi-join: srcB (an **in-memory array**) collected into ``table<KEY; array<TUPB>>``, probed from the field-pruned DOM walk. Primitive equi-key only. Mirrors ``emit_array_join`` with srcA = the XML node.
