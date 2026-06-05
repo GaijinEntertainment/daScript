@@ -218,6 +218,9 @@ namespace das
 
         __forceinline int64_t reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
             DAS_ASSERT(hash>1);
+            // A promote/alloc re-dispatches by looping back here, not by a recursive call:
+            // gcc -flto rejects a recursive always_inline function (MSVC tolerates it).
+          retry:
             if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: dense, load factor 1.0
                 if ( tab.capacity != 0 ) {  // dedup against existing (skip on an unallocated table)
                     int64_t idx = PackedPolicy<KeyType>::find(tab, key, hash);  // exact (no confirm needed)
@@ -230,7 +233,7 @@ namespace das
                 if ( tab.size >= tab.capacity ) {
                     uint64_t newCapacity = (tab.capacity == 0) ? minCapacity : tab.capacity*4;
                     reserveInternal(tab, newCapacity, at);
-                    return reserve(tab, key, hash, at);  // re-dispatch: now hashed (or the freshly allocated packed table)
+                    goto retry;  // re-dispatch: now hashed (or the freshly allocated packed table)
                 }
                 uint64_t i = tab.size;
                 PackedPolicy<KeyType>::insertHash(tab, i, hash);
