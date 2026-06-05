@@ -32,6 +32,15 @@ def fill(var tab : table<string; int>; keys : array<string>) {
     }
 }
 
+// Distinct-pointer copy (same content, fresh allocation). The var_* lanes query with these so
+// the find's candidate confirm runs a real strcmp instead of hitting KeyCompare's a==b
+// pointer-identity fast path — the realistic case (a key from I/O / parsing is never the stored
+// pointer). Querying with the stored array element (KEYS[i]) would short-circuit the strcmp and
+// understate find, badly so for long keys.
+def fresh(s : string) : string {
+    return clone_string(s)
+}
+
 [benchmark]
 def const_short(b : B?) {
     var tab : table<string; int>
@@ -63,8 +72,8 @@ def const_short(b : B?) {
 def var_short(b : B?) {
     var tab : table<string; int>
     fill(tab, SHORT_KEYS)
-    let k0 = SHORT_KEYS[0]; let k1 = SHORT_KEYS[1]; let k2 = SHORT_KEYS[2]; let k3 = SHORT_KEYS[3]
-    let k4 = SHORT_KEYS[4]; let k5 = SHORT_KEYS[5]; let k6 = SHORT_KEYS[6]; let k7 = SHORT_KEYS[7]
+    let k0 = fresh(SHORT_KEYS[0]); let k1 = fresh(SHORT_KEYS[1]); let k2 = fresh(SHORT_KEYS[2]); let k3 = fresh(SHORT_KEYS[3])
+    let k4 = fresh(SHORT_KEYS[4]); let k5 = fresh(SHORT_KEYS[5]); let k6 = fresh(SHORT_KEYS[6]); let k7 = fresh(SHORT_KEYS[7])
     b |> run("var_short/8", 8 * REPS) {
         var s = 0
         for (r in range(REPS)) {
@@ -111,8 +120,8 @@ def const_long(b : B?) {
 def var_long(b : B?) {
     var tab : table<string; int>
     fill(tab, LONG_KEYS)
-    let k0 = LONG_KEYS[0]; let k1 = LONG_KEYS[1]; let k2 = LONG_KEYS[2]; let k3 = LONG_KEYS[3]
-    let k4 = LONG_KEYS[4]; let k5 = LONG_KEYS[5]; let k6 = LONG_KEYS[6]; let k7 = LONG_KEYS[7]
+    let k0 = fresh(LONG_KEYS[0]); let k1 = fresh(LONG_KEYS[1]); let k2 = fresh(LONG_KEYS[2]); let k3 = fresh(LONG_KEYS[3])
+    let k4 = fresh(LONG_KEYS[4]); let k5 = fresh(LONG_KEYS[5]); let k6 = fresh(LONG_KEYS[6]); let k7 = fresh(LONG_KEYS[7])
     b |> run("var_long/8", 8 * REPS) {
         var s = 0
         for (r in range(REPS)) {

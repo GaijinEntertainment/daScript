@@ -242,35 +242,46 @@ can share a hashKey and a hash-only match returns a false positive. Fix (all tie
   slots — the single candidate is always exact. The int/data path is unaffected (exact compare,
   no hash, no confirm).
 
+**Benchmark fix:** the `var_*` HIT lanes previously queried with the *stored* key pointer
+(`let k = KEYS[i]`), so the confirm hit `KeyCompare`'s `a==b` pointer-identity fast path and
+**never ran strcmp** — flattering every string hit. They now query distinct-pointer copies
+(`clone_string`), the realistic case (a key from I/O / parsing is never the stored pointer). The
+`var_*` MISS lanes and the int lanes are unaffected (a miss never confirms; ints never strcmp).
+
 Corrected JIT ns/op (warm, 3-run avg), vs the hash-only (wrong) figures and the pre-plan hashed
-baseline (§"Baseline find cost"):
+baseline (§"Baseline find cost"). `confirmed` = honest distinct-pointer measurement:
 
 | lane | hashed baseline | hash-only (WRONG) | confirmed (correct) |
 |---|---|---|---|
-| const_hit (t06)  | ~9–18 | 1.4 | **7.7** |
-| const_miss (t06) | ~9–18 | 1.2 | **1.4** |
-| var_hit (t06)    | ~9–18 | 4.8 | **7.7** |
-| var_miss (t06)   | ~9–18 | 4.7 | **4.8** |
-| const_short (t03)| ~9–18 | 1.4 | **7.0** |
-| const_long (t03) | ~9–18 | 1.3 | **21.3** |
-| var_short (t03)  | ~9–18 | 4.6 | **6.7** |
-| var_long (t03)   | ~9–18 | 17.8 | **19.6** |
-| int_hit (t07)    | ~4–5 | 1.8 | **1.9** |
-| int_miss (t07)   | ~4–5 | 1.6 | **1.8** |
+| const_hit (t06)  | ~9–18 | 1.4 | **6.8** |
+| const_miss (t06) | ~9–18 | 1.2 | **1.1** |
+| var_hit (t06)    | ~9–18 | 4.8 | **10.6** |
+| var_miss (t06)   | ~9–18 | 4.7 | **4.0** |
+| const_short (t03)| ~9–18 | 1.4 | **6.8** |
+| const_long (t03) | ~9–18 | 1.3 | **20.8** |
+| var_short (t03)  | ~9–18 | 4.6 | **10.5** |
+| var_long (t03)   | ~9–18 | 17.8 | **43.5** |
+| int_hit (t07)    | ~4–5 | 1.8 | **1.8** |
+| int_miss (t07)   | ~4–5 | 1.6 | **1.7** |
 | int_update (t07) | — | 4.5 | **3.8** |
-| str_update (t07) | — | 4.1 | **6.5** |
+| str_update (t07) | — | 4.1 | **9.9** |
 
 Reading it:
 - **Misses and the whole int path are unchanged** — the confirm only fires on a hash-candidate
-  hit, and ints never hash/confirm. `const_miss` ~1.4ns and `int_hit` ~1.9ns stand.
-- **String hits now pay one strcmp confirm** — short keys +~5–6ns (≈7ns total), the 38-char key
-  +~18ns (≈21ns). `const_hit` ≈ `var_hit` because the strcmp+call dominates and the folded-hash
-  saving is now a small fraction. The confirm is a *bound call* — its fixed overhead is the bulk
-  of the short-key cost; an inlined/generated `string==` is the obvious next lever.
-- **Still beats the hashed baseline across the board**: packed short-string hit ~7ns vs hashed
-  ~9–18; packed miss ~1.4ns vs ~9–18; int hit ~1.9ns vs ~4–5. The confirm removes the (illusory)
-  hash-only speedup, not the packed win — packed pays the *same* one strcmp a hashed hit pays,
-  on top of a cheaper scan, and skips strcmp entirely on a miss.
+  hit, and ints never hash/confirm. `const_miss` ~1.1ns and `int_hit` ~1.8ns stand.
+- **The const-vs-var gap is now the runtime hash** (both lanes pay one strcmp): short keys
+  ~3.7ns (10.5 − 6.8), the 38-char key **~22.7ns** (43.5 − 20.8). That gap is exactly item 4's
+  target — folding a constant key's hash to an immediate. `const_long` ≈ 20.8 is almost entirely
+  the strcmp (hash folds to 0), so **strcmp(38) ≈ 20ns and hash(38) ≈ 22ns** — both O(len) walks
+  of the same bytes.
+- **String hits pay one strcmp confirm** — the cost the hash-only path skipped (incorrectly).
+  The confirm is a *bound call*; its fixed overhead is a large slice of the short-key cost
+  (`const_hit` 6.8 for a ≤7-char key), so an inlined/generated `string==` is the obvious next
+  lever — it cannot help the long-key strcmp itself, but removes the call overhead on short keys.
+- **Vs the hashed baseline:** packed wins on misses (skips strcmp entirely: ~1.1–4ns vs ~9–18)
+  and on int (~1.8 vs ~4–5). For string hits packed pays the *same* one strcmp a hashed hit pays
+  on a cheaper scan, so it is at worst a wash and better for short keys; long-key hits are
+  hash+strcmp-dominated either way (the scan saving is in the noise).
 
 The §"Inlined packed find — 3-way" VECTOR column and the `str_update` row in §"Integer-key find"
 are the pre-confirm (hash-only) measurements; keep them for the SIMD-scan A/B but read the table

@@ -23,6 +23,14 @@ def fill(var tab : table<string; int>) {
     }
 }
 
+// Distinct-pointer copy (same content, fresh allocation) so the find's candidate confirm runs a
+// real strcmp instead of hitting KeyCompare's a==b pointer-identity fast path. var_hit queries
+// with these (the realistic case); querying with the stored KEYS[i] would short-circuit the
+// strcmp and understate find. (var_miss is unaffected — a miss never reaches the confirm.)
+def fresh(s : string) : string {
+    return clone_string(s)
+}
+
 [benchmark]
 def const_hit(b : B?) {
     var tab : table<string; int>
@@ -73,8 +81,8 @@ def const_miss(b : B?) {
 def var_hit(b : B?) {
     var tab : table<string; int>
     fill(tab)
-    let k0 = KEYS[0]; let k1 = KEYS[1]; let k2 = KEYS[2]; let k3 = KEYS[3]
-    let k4 = KEYS[4]; let k5 = KEYS[5]; let k6 = KEYS[6]; let k7 = KEYS[7]
+    let k0 = fresh(KEYS[0]); let k1 = fresh(KEYS[1]); let k2 = fresh(KEYS[2]); let k3 = fresh(KEYS[3])
+    let k4 = fresh(KEYS[4]); let k5 = fresh(KEYS[5]); let k6 = fresh(KEYS[6]); let k7 = fresh(KEYS[7])
     b |> run("var_hit/8", 8 * REPS) {
         var s = 0
         for (r in range(REPS)) {

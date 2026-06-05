@@ -31,6 +31,12 @@ def fill_str(var tab : table<string; int>) {
     }
 }
 
+// Distinct-pointer copy so str_update's at-hit confirm runs a real strcmp rather than KeyCompare's
+// a==b pointer-identity fast path (querying with the stored SKEYS[i] would understate the update).
+def fresh(s : string) : string {
+    return clone_string(s)
+}
+
 [benchmark]
 def int_hit(b : B?) {
     var tab : table<int; int>
@@ -88,8 +94,8 @@ def int_update(b : B?) {
 def str_update(b : B?) {
     var tab : table<string; int>
     fill_str(tab)
-    let k0 = SKEYS[0]; let k1 = SKEYS[1]; let k2 = SKEYS[2]; let k3 = SKEYS[3]
-    let k4 = SKEYS[4]; let k5 = SKEYS[5]; let k6 = SKEYS[6]; let k7 = SKEYS[7]
+    let k0 = fresh(SKEYS[0]); let k1 = fresh(SKEYS[1]); let k2 = fresh(SKEYS[2]); let k3 = fresh(SKEYS[3])
+    let k4 = fresh(SKEYS[4]); let k5 = fresh(SKEYS[5]); let k6 = fresh(SKEYS[6]); let k7 = fresh(SKEYS[7])
     b |> run("str_update/8", 8 * REPS) {
         for (r in range(REPS)) {
             unsafe(tab[k0]) += 1; unsafe(tab[k1]) += 1; unsafe(tab[k2]) += 1; unsafe(tab[k3]) += 1
