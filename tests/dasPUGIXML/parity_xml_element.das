@@ -71,6 +71,41 @@ def parity_first_or_default(t : T?) {
 }
 
 [test]
+def parity_reverse_no_predicate(t : T?) {
+    // No-predicate last() / reverse|>first take the backward-DOM fast path (1 step); must equal the array fold.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        let SENT = Car(id = -1)
+        // bare last() — backward 1-step
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).last()).id,
+                   _fold(each(arr).last()).id)
+        // bare last_or_default (non-empty -> last element)
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).last_or_default(SENT)).id,
+                   _fold(each(arr).last_or_default(SENT)).id)
+        // reverse() |> first() = last element
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().first()).id,
+                   _fold(each(arr).reverse().first()).id)
+        // reverse() |> first_or_default()
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().first_or_default(SENT)).id,
+                   _fold(each(arr).reverse().first_or_default(SENT)).id)
+        // post-reverse projection: reverse |> select(_.brand) |> first
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse()._select(_.brand).first()),
+                   _fold(each(arr).reverse()._select(_.brand).first()))
+        // pre-reverse projection: select(_.id) |> reverse |> first
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>))._select(_.id).reverse().first()),
+                   _fold(each(arr)._select(_.id).reverse().first()))
+    }
+    // empty document: *_or_default returns the sentinel
+    parse_xml("<cars></cars>") $(doc, ok) {
+        t |> success(ok)
+        let SENT = Car(id = -1)
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).last_or_default(SENT)).id, -1)
+        t |> equal(_fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().first_or_default(SENT)).id, -1)
+    }
+}
+
+[test]
 def parity_single(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)

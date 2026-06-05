@@ -48,11 +48,18 @@ for (ch in each_child(node))            { ... }    // all children
 for (ch in each_child(node, "name"))    { ... }    // children with this tag
 for (a  in each_attribute(node))        { ... }
 
+// Reverse document order (last_child / previous_sibling, both O(1) in pugixml)
+for (ch in each_child_reverse(node))         { ... }
+for (ch in each_child_reverse(node, "name")) { ... }
+
 // Block (required when you need a `var` child for mutation)
-node |> for_each_child()       $(ch)      { ... }
-node |> for_each_child("name") $(ch)      { ... }
-node |> for_each_attribute()   $(a)       { ... }
+node |> for_each_child()         $(ch)    { ... }
+node |> for_each_child("name")   $(ch)    { ... }
+node |> for_each_child_reverse() $(ch)    { ... }    // + for_each_child_reverse("name")
+node |> for_each_attribute()     $(a)     { ... }
 ```
+
+Like their forward siblings, `each_child[_reverse]` (unnamed) yield **all** child nodes (text/comments included); the named forms yield only elements with that tag.
 
 Manual `node.first_child` / `node.next_sibling` walking still works but is rarely the right choice.
 
@@ -78,7 +85,7 @@ let cars <- unsafe(from_xml_node(root, "car", type<Car>) |> to_array())   // tag
 - **Defaults:** a missing attribute leaves the field at its declared default (`year : int = 2000` above), because the field value is passed as the accessor's fallback.
 - **Lifetime-safe:** rows are owned values — string fields are cloned out of the document — so results collected with `to_array` / a comprehension stay valid **past** the `parse_xml` / `open_xml` RAII block. (Contrast: a raw `xml_node` must not escape the block.)
 - **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs an `unsafe` block.
-- **Fused `_fold` lane (pass 2a/2b):** `_fold(unsafe(from_xml_node(root, type<Row>))._where(...)._select(...).count()/sum()/min()/max()/average()/any()/first()/take(N)...)` emits an inlined DOM child-walk via `XmlAdapter` (`require ?pugixml pugixml/linq_fold_xml`, gated by `static_if (typeinfo builtin_module_exists(pugixml))` in `daslib/linq_fold`) — no generator, no intermediate array. Pass the node by value (`var root`, not `let root`) since `_fold`'s macro-arg inference skips the const&→value copy. **Field-pruning (pass 2b):** the walk reads only the `Row` fields the chain actually references (via `read_xml_field` into scalar locals) — unread fields, especially `string` fields whose `clone_string` is the alloc cost, are never touched, so a float-only chain is alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (`to_array` / identity `_select(_)` / pass-to-fn) falls back to the full `build_xml_row`. Non-`loop_or_count` shapes (order_by / distinct / group_by / join / reverse) still take the un-fused tier-2 path — but they produce the same result as plain array linq (a full parity suite under `tests/dasPUGIXML/parity_xml_*.das` asserts `m5f ≡ m3f ≡ m3` across the whole `loop_or_count` + cascade surface). A `from_xml_node` source can also be **joined / union'd with an in-memory array** directly (`from_xml_node(...) |> _join(dealersArray, ...)`) via linq's mixed `(iterator, array)` overloads. See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
+- **Fused `_fold` lane (pass 2a/2b):** `_fold(unsafe(from_xml_node(root, type<Row>))._where(...)._select(...).count()/sum()/min()/max()/average()/any()/first()/take(N)...)` emits an inlined DOM child-walk via `XmlAdapter` (`require ?pugixml pugixml/linq_fold_xml`, gated by `static_if (typeinfo builtin_module_exists(pugixml))` in `daslib/linq_fold`) — no generator, no intermediate array. Pass the node by value (`var root`, not `let root`) since `_fold`'s macro-arg inference skips the const&→value copy. **Field-pruning (pass 2b):** the walk reads only the `Row` fields the chain actually references (via `read_xml_field` into scalar locals) — unread fields, especially `string` fields whose `clone_string` is the alloc cost, are never touched, so a float-only chain is alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (`to_array` / identity `_select(_)` / pass-to-fn) falls back to the full `build_xml_row`. Cascade shapes (order_by / distinct / group_by / join) fuse via the cascade arms (`wrap_source_loop` / `build_group_by_adapter`). **Reverse** has backward-DOM fast paths: `reverse |> take(N)` and no-predicate `last()` / `reverse |> first` walk `last_child` / `previous_sibling`, visiting only the kept tail (reverse-take m5f went 88.9 → 0.0 ns/op) — while predicated `[where] |> last` deliberately stays on the forward walk, since reverse DOM traversal is ~2× cache-hostile per node and a deep match would regress. All shapes produce the same result as plain array linq (a full parity suite under `tests/dasPUGIXML/parity_xml_*.das` asserts `m5f ≡ m3f ≡ m3` across the whole `loop_or_count` + cascade surface). A `from_xml_node` source can also be **joined / union'd with an in-memory array** directly (`from_xml_node(...) |> _join(dealersArray, ...)`) via linq's mixed `(iterator, array)` overloads. See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
 
 ## Quick accessors (with defaults)
 

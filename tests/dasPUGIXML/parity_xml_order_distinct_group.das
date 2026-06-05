@@ -163,6 +163,39 @@ def parity_reverse_take_select(t : T?) {
 }
 
 [test]
+def parity_reverse_take_edges(t : T?) {
+    // backward-walk edge cases: take(0) -> empty; take(N > element count) -> all, reversed.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var a5 <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().take(0).to_array())
+        var a3 <- _fold(each(arr).reverse().take(0).to_array())
+        t |> equal(length(a5), 0)
+        t |> success(cars_equal(a5, a3), "reverse|take(0)")
+        delete a5; delete a3
+        var b5 <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>)).reverse().take(99).to_array())
+        var b3 <- _fold(each(arr).reverse().take(99).to_array())
+        t |> equal(length(b5), 8)
+        t |> success(cars_equal(b5, b3), "reverse|take(99)")
+        delete b5; delete b3
+    }
+}
+
+[test]
+def parity_reverse_take_named_fallback(t : T?) {
+    // The named 3-arg from_xml_node has no last-named-child primitive, so reverse|>take falls back to the
+    // buffer-all path (not the backward walk) — it must still produce the correct (last-3-reversed) result.
+    parse_xml(XML) $(doc, ok) {
+        t |> success(ok)
+        let arr <- fixture_array()
+        var m5f <- _fold(unsafe(from_xml_node(doc.document_element, "car", type<Car>)).reverse().take(3).to_array())
+        var m3f <- _fold(each(arr).reverse().take(3).to_array())
+        t |> success(cars_equal(m5f, m3f), "named reverse|take fallback")
+        delete m5f; delete m3f
+    }
+}
+
+[test]
 def parity_distinct_by_take(t : T?) {
     // distinct+take fuses via XmlAdapter.emit_distinct_take_loop (early-exit after N distinct).
     parse_xml(XML) $(doc, ok) {

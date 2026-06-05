@@ -573,52 +573,63 @@ def JV(value : auto(TT)) : JsonValue? {
                     fieldState <- parse_json_annotation(name, annotations)
                     fieldStateParsed = true
                 }
+                // No `return` to skip/replace a field: a `return` in the apply block routes the whole
+                // walk to the slow per-field invoke fallback (PR #3008). Pivot enum/string handling on a
+                // static type guard with an explicit default `else`, and gate @optional with `if (!skip)`,
+                // so the block stays return-free and inlines.
+                var skip = false
                 if (fieldState.optional) {
                     // skip @optional fields at default (zero) value, matching sprint_json behavior
                     static_if (typeinfo is_string(field)) {
-                        if (empty(field)) return ;
+                        skip = empty(field)
                     } static_elif (typeinfo is_array(field)) {
-                        if (empty(field)) return ;
+                        skip = empty(field)
                     } static_elif (typeinfo is_table(field)) {
-                        if (empty(field)) return ;
+                        skip = empty(field)
                     } static_elif (typeinfo is_pointer(field)) {
-                        if (field == null) return ;
+                        skip = field == null
                     } else {
                         static_if (typeinfo is_workhorse(field)) {
                             // bool path uses `!field` (avoids STYLE018 on `bool == false` after
                             // generic instantiation); numeric workhorses keep the generic-zero compare.
                             static_if (typeinfo stripped_typename(field) == "bool") {
-                                if (!field) return ;
+                                skip = !field
                             } else {
-                                if (field == default<typedecl(field)>) return ;
+                                skip = field == default<typedecl(field)>
                             }
                         }
                     }
                 }
-                if (fieldState.enumAsInt) {     // we only need to handle it as we are writing out, reading handles it at the enum level
-                    static_if (typeinfo is_enum(field)) {
-                        let fieldStateEnumValue : int = int(field)
-                        map |> insert(fieldState.argName, _::JV(fieldStateEnumValue))
-                        return
-                    }
-                } elif (fieldState.unescape) {
-                    static_if (typeinfo is_string(field)) {
-                        map |> insert(fieldState.argName, _::JV(unescape(field)))
-                        return
-                    }
-                } elif (fieldState.embed && typeinfo is_string(field)) {
-                    static_if (typeinfo is_string(field)) {
-                        var errors : string
-                        var subexpr = read_json(field, errors)
-                        if (subexpr == null) {
-                            to_log(LOG_ERROR, "JSON: failed to parse embedded json field '{fieldState.argName}': {errors}\n")
-                            panic("failed to parse embedded json field '{fieldState.argName}': {errors}")
+                if (!skip) {
+                    if (fieldState.enumAsInt) {     // we only need to handle it as we are writing out, reading handles it at the enum level
+                        static_if (typeinfo is_enum(field)) {
+                            let fieldStateEnumValue : int = int(field)
+                            map |> insert(fieldState.argName, _::JV(fieldStateEnumValue))
+                        } else {
+                            map |> insert(fieldState.argName, _::JV(field))
                         }
-                        map |> insert(fieldState.argName, subexpr)
-                        return
+                    } elif (fieldState.unescape) {
+                        static_if (typeinfo is_string(field)) {
+                            map |> insert(fieldState.argName, _::JV(unescape(field)))
+                        } else {
+                            map |> insert(fieldState.argName, _::JV(field))
+                        }
+                    } elif (fieldState.embed) {
+                        static_if (typeinfo is_string(field)) {
+                            var errors : string
+                            var subexpr = read_json(field, errors)
+                            if (subexpr == null) {
+                                to_log(LOG_ERROR, "JSON: failed to parse embedded json field '{fieldState.argName}': {errors}\n")
+                                panic("failed to parse embedded json field '{fieldState.argName}': {errors}")
+                            }
+                            map |> insert(fieldState.argName, subexpr)
+                        } else {
+                            map |> insert(fieldState.argName, _::JV(field))
+                        }
+                    } else {
+                        map |> insert(fieldState.argName, _::JV(field))
                     }
                 }
-                map |> insert(fieldState.argName, _::JV(field))
             }
         }
         return _::JV(map)
