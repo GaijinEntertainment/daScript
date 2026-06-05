@@ -10,6 +10,9 @@
 #
 #   2. cap_helper.shader (helper fn) -> identical opcode multiset to its hand-inlined
 #      twin cap_inlined.shader. flatten's inlining is transparent.
+#
+#   3. cap_loop.shader (fixed for-loop) -> compiles to an unrolled `add` chain.
+#      The backend bans ExprFor; flatten unrolls it to straight-line accumulation.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,6 +45,18 @@ if [[ -n "$h" && "$h" == "$i" ]]; then
 else
     echo "   FAIL — opcode histograms differ:"
     diff <(echo "$h") <(echo "$i")
+    fail=1
+fi
+
+echo "3. cap_loop.shader (for-loop -> unrolled accumulation)"
+out="$(compile "$here/cap_loop.shader")"
+adds="$(echo "$out" | grep -c ' add ')"
+errs="$(echo "$out" | grep -ci error)"
+if [[ "$errs" -eq 0 && "$adds" -gt 0 ]]; then
+    echo "   ok — compiles, $adds add node(s) from the unrolled loop"
+else
+    echo "   FAIL — errors=$errs adds=$adds"
+    echo "$out" | grep -i error | head
     fail=1
 fi
 

@@ -98,6 +98,33 @@ def f_loop_call(x : int) : int {
     return acc
 }
 
+// ----- loop body with a per-iteration LOCAL (shadow-collision regression) -----
+// Each unrolled copy redeclares `step`; without per-iteration renaming the copies
+// shadow each other in the single flattened scope (error[30704]).
+[flatten]
+def f_loop_local(x : int) : int {
+    var acc = 0
+    for (i in range(4)) {
+        let step = x + i * 2
+        acc += step * step
+    }
+    return acc
+}
+
+// ----- nested loops, each with its own local (double-rename path) -----
+[flatten]
+def f_nested_local(x : int) : int {
+    var acc = 0
+    for (i in range(3)) {
+        let base = i * 100
+        for (j in range(2)) {
+            let cell = base + j + x
+            acc += cell
+        }
+    }
+    return acc
+}
+
 // ----- driver -----
 
 var GRID : array<int>
@@ -142,6 +169,16 @@ def test_flatten_loops(t : T?) {
     t |> run("helper call inside an unrolled iteration") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_loop_call_flat(v), f_loop_call(v))
+        }
+    }
+    t |> run("per-iteration local (shadow-collision regression)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_loop_local_flat(v), f_loop_local(v))
+        }
+    }
+    t |> run("nested loops with per-level locals (double rename)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_nested_local_flat(v), f_nested_local(v))
         }
     }
 }

@@ -349,12 +349,38 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
     }
 }
 
+// Collects the names of every `let`/`var` declared anywhere in a loop body, so
+// each unrolled copy can rename them uniquely (they would otherwise all land in
+// the single flat scope and shadow each other).
+class private LetNameScan : AstVisitor {
+    names : array<string>
+    def override preVisitExprLet(expr : ExprLet?) : void {
+        for (v in expr.variables) {
+            names |> push("{v.name}")   // nolint:PERF006 -- macro-time, count is the (small) local set
+        }
+    }
+}
+
+def private collect_let_names(body : ExpressionPtr) : array<string> {
+    var v = new LetNameScan()
+    make_visitor(*v) $(adapter) {
+        visit(body, adapter)
+    }
+    var result <- v.names
+    unsafe {
+        delete v
+    }
+    return <- result
+}
+
 // Fixed-count loop unrolling (M4). A `for` over a constant `range(N)` or an array
 // literal has a compile-time-known iteration count: clone the body once per
 // iteration, substitute the loop variable with that iteration's constant, and lower
 // each unrolled copy under the SAME predicate (an unrolled body always executes).
-// Mirrors daslib/unroll.das. break / continue are rejected upstream in lower_stmt
-// (deferred to a later cut); while loops and non-constant sources error too.
+// Per-iteration locals are renamed (`o` → `o_0`, `o_1`, …) so the copies don't
+// shadow each other in the flattened scope. Mirrors daslib/unroll.das. break /
+// continue are rejected upstream in lower_stmt (deferred to a later cut); while
+// loops and non-constant sources error too.
 def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
     if (length(efor.iterators) != 1 || length(efor.sources) != 1) {
         ctx.ok = false
@@ -388,11 +414,17 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
         substs <- [for (v in mk.values); clone_expression(v)]
     }
     let van = "{efor.iterators[0]}"
-    for (se in substs) {
+    let localNames <- collect_let_names(efor.body)
+    for (k in range(length(substs))) {
         var iblk = clone_expression(efor.body)
         remove_deref(van, iblk)               // strip ExprRef2Value around the workhorse loop var
         var rules : Template
-        rules |> replaceVariable(van) <| se
+        rules |> replaceVariable(van) <| substs[k]
+        // Rename this copy's locals uniquely so the unrolled bodies don't shadow
+        // each other once flattened into one scope.
+        for (ln in localNames) {
+            rules |> renameVariable(ln, "{ln}_{k}")
+        }
         apply_template(rules, efor.at, iblk, false)
         lower_branch(ctx, iblk, structPred, out)
         if (!ctx.ok) return

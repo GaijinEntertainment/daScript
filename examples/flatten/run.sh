@@ -11,6 +11,10 @@
 #   ./run.sh                         # regression: compile every shader, report pass/fail
 #   ./run.sh <name>                  # print one shader's opcode graph
 #                                    #   e.g. ./run.sh cel_shading
+#   ./run.sh [--das] <name|path>     # --das also prints the flattened daslang source
+#                                    #   (the branchless rewrite) above the opcodes;
+#                                    #   <name|path> accepts a bare name or a .shader path,
+#                                    #   e.g. ./run.sh --das capability/cap_control.shader
 #
 # Requires bin/daslang built in the daScript root.
 
@@ -19,6 +23,16 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 daslang="$root/bin/daslang"
 proj="$here/flatten_shaders.das_project"
+
+dump_das=0
+shaders=()
+for a in "$@"; do
+    if [[ "$a" == "--das" ]]; then
+        dump_das=1
+    else
+        shaders+=("$a")
+    fi
+done
 
 if [[ ! -x "$daslang" ]]; then
     echo "error: $daslang not found — build daScript first (cmake --build build --config Release)" >&2
@@ -30,12 +44,20 @@ find_shader() {
     find "$here/shaders" -name "${name}.shader" | head -1
 }
 
-# Single-shader mode: dump its opcodes.
-if [[ $# -ge 1 ]]; then
-    f="$(find_shader "$1")"
+# Single-shader mode: dump its opcodes (and, with --das, the flattened source).
+if [[ "${#shaders[@]}" -ge 1 ]]; then
+    name="${shaders[0]}"
+    if [[ -f "$name" ]]; then
+        f="$name"
+    else
+        f="$(find_shader "$name")"
+    fi
     if [[ -z "$f" ]]; then
-        echo "error: no shader named '$1' under shaders/" >&2
+        echo "error: no shader named '$name' under shaders/ (and not a file path)" >&2
         exit 1
+    fi
+    if [[ "$dump_das" -eq 1 ]]; then
+        exec env FLATTEN_DUMP_DAS=1 "$daslang" -compile-only -project "$proj" "$f"
     fi
     exec "$daslang" -compile-only -project "$proj" "$f"
 fi

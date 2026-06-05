@@ -8,6 +8,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require shader_graph_ir_builder
 require daslib/flatten
+require daslib/fio
 
 // ---------------------------------------------------------------------------
 // EdenSpark shader-DSL backend (flatten example harness copy).
@@ -50,6 +51,7 @@ let HINT_WHITELIST : table<string> <- {
     "sqrt", "pow", "sin", "cos", "atan2", "log", "exp", "sign",
     "dot", "cross", "length", "normalize", "fresnel",
     "remap", "one_minus", "step", "smooth_step", "unpack_normal",
+    "float", "int",
     "float2", "float3", "float4", "int2", "int3", "int4"
 }
 
@@ -276,17 +278,15 @@ class ValidateShaderVisitor : AstVisitor {
     contract : string
 
     def is_input_contract_struct(st : StructurePtr) : bool {
-        if (st == null || st._module == null) { return false; }
-        if (st._module.name != PRIMITIVES_MODULE_NAME) { return false; }
+        if (st == null || st._module == null || st._module.name != PRIMITIVES_MODULE_NAME) { return false; }
         let expectedName = CONTRACT_INPUT_STRUCTS?[contract] ?? ""
-        return !empty(expectedName) && string(st.name) == expectedName
+        return !empty(expectedName) && st.name == expectedName
     }
 
     def is_output_contract_struct(st : StructurePtr) : bool {
-        if (st == null || st._module == null) { return false; }
-        if (st._module.name != PRIMITIVES_MODULE_NAME) { return false; }
+        if (st == null || st._module == null || st._module.name != PRIMITIVES_MODULE_NAME) { return false; }
         let expectedName = CONTRACT_OUTPUT_STRUCTS?[contract] ?? ""
-        return !empty(expectedName) && string(st.name) == expectedName
+        return !empty(expectedName) && st.name == expectedName
     }
 
     static unsupportedExpr = {
@@ -676,7 +676,7 @@ class ValidateShaderVisitor : AstVisitor {
             if (v._type.isPointer) {
                 errors.push(("shader code doesn't support pointer types", unsafe(addr(v.at))))
             }
-            if (v._type.dim.length() != 0) {
+            if (!empty(v._type.dim)) {
                 errors.push(("shader code doesn't support vector literals; use float2/3/4 types instead", unsafe(addr(v.at))))
             }
             let isAccum = !v._type.isConst
@@ -864,13 +864,7 @@ class ValidateShaderVisitor : AstVisitor {
             }
         }
 
-        if (variablePins.key_exists(id)) {
-            return
-        }
-        if (variables.key_exists(id)) {
-            return
-        }
-        if (outPins.key_exists(id)) {
+        if (variablePins.key_exists(id) || variables.key_exists(id) || outPins.key_exists(id)) {
             return
         }
 
@@ -913,7 +907,7 @@ class ValidateShaderVisitor : AstVisitor {
             if (arg._type.isPointer) {
                 errors.push(("shader properties can't be pointers", unsafe(addr(arg.at))))
             }
-            if (length(arg._type.dim) != 0) {
+            if (!empty(arg._type.dim)) {
                 errors.push(("shader properties can't be vectors; use float2/3/4 types instead", unsafe(addr(arg.at))))
             }
             var prop : ShaderGraphProperty
@@ -1195,7 +1189,7 @@ def resolve_contract(struct_name : das_string, map : table<string, string>) : st
     return ""
 }
 
-[macro_function]
+[macro_function, unused_argument(group)]
 def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors : das_string; shaderStage : string) : bool {
 
     if (func._module != null) {
@@ -1211,7 +1205,7 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
             }
         }
         if (secondFn != "") {
-            errors := "module {func._module.name} contains multiple functions ({func.name.string()} and {secondFn}); shader code must be defined in a module with exactly one function"
+            errors := "module {func._module.name} contains multiple functions ({func.name} and {secondFn}); shader code must be defined in a module with exactly one function"
             return false
         }
     }
@@ -1222,10 +1216,9 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
         return false
     }
 
-    var astVisitor = new ValidateShaderVisitor()
-
-    astVisitor.moduleName = func._module != null ? func._module.name.string() : ""
-    astVisitor.contract = shaderContract
+    var astVisitor = new ValidateShaderVisitor(
+        moduleName = func._module != null ? func._module.name.string() : "",
+        contract = shaderContract)
 
     for (arg in func.arguments) {
         if (arg._type.baseType == Type.tStructure && arg._type.structType != null && astVisitor.is_input_contract_struct(arg._type.structType)) {
@@ -1244,10 +1237,10 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
 
     var res = true
 
-    make_visitor(*astVisitor) <| $(adapter) {
+    make_visitor(*astVisitor) $(adapter) {
         visit(func, adapter)
 
-        if (astVisitor.errors.length() > 0) {
+        if (!empty(astVisitor.errors)) {
             for (it in astVisitor.errors) {
                 macro_error(compiling_program(), it._1 != null ? *it._1 : func.at, it._0)
             }
@@ -1429,10 +1422,9 @@ class ShaderMacro : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
-        if (is_in_lint_check()) {
-            return true
-        }
-        if (shader_annotation_arg(func, "flattened")) {
+        // Skip during lint (the twin is irrelevant to linting source) and on the
+        // re-infer cycle after flattening already ran (the "flattened" guard arg).
+        if (is_in_lint_check() || shader_annotation_arg(func, "flattened")) {
             return true
         }
         // flatten does ALL lowering: inline helper calls, if/else -> ?:, unroll
@@ -1448,6 +1440,11 @@ class ShaderMacro : AstFunctionAnnotation {
     }
     def override finish(var func : FunctionPtr; var group : ModuleGroup;
                         args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+        // Optional: dump the flattened daslang source alongside the opcodes, so the
+        // branchless rewrite (inlined calls, if/else -> ?:, unrolled loops) is legible.
+        if (!is_in_completion() && !empty(get_env_variable("FLATTEN_DUMP_DAS"))) {
+            print(";; ---- flattened daslang ----\n{describe(func)}\n")
+        }
         return shader_build_ir(func, group, errors, shader_stage_arg(args))
     }
 }
