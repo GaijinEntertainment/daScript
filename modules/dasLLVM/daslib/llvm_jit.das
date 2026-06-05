@@ -21,7 +21,7 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
-require daslib/debugger
+require daslib/rtti
 require math
 require jit
 require daslib/fio
@@ -96,7 +96,7 @@ def set_public_linkage(value : LLVMOpaqueValue?) {
 }
 
 [macro_function]
-def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?; name : string) : LLVMOpaqueValue? {
+def get_file_info_global(_g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?; name : string) : LLVMOpaqueValue? {
     let sz = typeinfo sizeof(type<FileInfo>)
     let file_info_type = LLVMArrayType(types.t_int8, uint(sz))
     let filename_var = "fileinfo_{name}"
@@ -1946,10 +1946,7 @@ class public LlvmJitVisitor : AstVisitor {
         var kins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(keyVecTy), keyVal, LLVMConstInt(types.t_int32, 0ul, 0), "k.ins")
         var ksplat = LLVMBuildShuffleVector(g_builder, kins, LLVMGetUndef(keyVecTy), LLVMConstNull(i32VecTy), "k.splat")
         var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, kv, ksplat, "k.eqv")
-        var idxConsts : array<LLVMOpaqueValue?>
-        for (i in range(JIT_TABLE_MAX_LINEAR_CAPACITY)) {
-            idxConsts |> push(LLVMConstInt(types.t_int32, uint64(i), 0))
-        }
+        var idxConsts <- [for (i in range(JIT_TABLE_MAX_LINEAR_CAPACITY)); LLVMConstInt(types.t_int32, uint64(i), 0)]
         var idxVec = LLVMConstVector(array_data_ptr(idxConsts), uint(length(idxConsts)))
         unsafe { delete idxConsts; }
         var sins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(i32VecTy), sizeI32, LLVMConstInt(types.t_int32, 0ul, 0), "sz.ins")

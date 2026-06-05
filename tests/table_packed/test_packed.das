@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost
-require strings
 
 // Distinct-pointer key: built fresh each call so query pointers differ from stored
 // ones, forcing a real KeyCompare (not the a==b fast path).
@@ -15,10 +14,7 @@ def kcopy(n : int) : string {
 }
 
 def sorted_keys(tab : table<int; int>) : array<int> {
-    var got : array<int>
-    for (k in keys(tab)) {
-        got |> push(k)
-    }
+    var got <- [for (k in keys(tab)); k]
     sort(got)
     return <- got
 }
@@ -36,7 +32,7 @@ def check_keys(t : T?; tab : table<int; int>; expected : array<int>) {
 
 [test]
 def test_packed_int_basic(t : T?) {
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via packed index-assign path under test
     for (i in range(6)) {              // 6 <= maxLinearCapacity (8) -> packed
         unsafe(tab[i]) = i * 10
     }
@@ -53,7 +49,7 @@ def test_packed_int_basic(t : T?) {
 
 [test]
 def test_packed_string(t : T?) {
-    var tab : table<string; int>
+    var tab : table<string; int>    // nolint:STYLE027  built via packed index-assign path under test
     for (i in range(6)) {
         unsafe(tab[dkey("k", i)]) = i * 10
     }
@@ -99,7 +95,7 @@ def test_packed_string_hashkey32_miss(t : T?) {
 [test]
 def test_packed_promote(t : T?) {
     // insert past the threshold -> promotes to hashed; everything stays findable
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via index-assign to exercise packed->hashed promotion
     for (i in range(20)) {
         unsafe(tab[i]) = i * 10
     }
@@ -114,7 +110,7 @@ def test_packed_promote(t : T?) {
 [test]
 def test_packed_erase_swap(t : T?) {
     // swap-remove: erase first / last / middle; survivors stay findable, iteration complete
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via index-assign then swap-erased under test
     for (i in range(6)) {
         unsafe(tab[i]) = i * 10
     }
@@ -136,7 +132,7 @@ def test_packed_erase_swap(t : T?) {
 [test]
 def test_packed_erase_reinsert(t : T?) {
     // dense append after a swap-remove leaves a hole at the tail
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via index-assign then erase+reinsert under test
     for (i in range(4)) {
         unsafe(tab[i]) = i
     }
@@ -152,7 +148,7 @@ def test_packed_erase_reinsert(t : T?) {
 [test]
 def test_packed_grow_then_shrink(t : T?) {
     // grow past threshold (hashed), erase back below it -> stays hashed & correct (one-way)
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via index-assign to exercise grow-then-shrink regime
     for (i in range(20)) {
         unsafe(tab[i]) = i
     }
@@ -175,7 +171,7 @@ struct PackVal {
 [test]
 def test_packed_struct_value(t : T?) {
     // value larger than a workhorse: exercises valueTypeSize movement in swap-remove + dense copy
-    var tab : table<int; PackVal>
+    var tab : table<int; PackVal>    // nolint:STYLE027  built via index-assign to exercise struct-value swap-remove
     for (i in range(5)) {
         unsafe(tab[i]) = PackVal(a = i, b = i * 2, c = i * 3)
     }

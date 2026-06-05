@@ -45,7 +45,7 @@ def int_hit(b : B?) {
     let k4 = IKEYS[4]; let k5 = IKEYS[5]; let k6 = IKEYS[6]; let k7 = IKEYS[7]
     b |> run("int_hit/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0; s += tab?[k1] ?? 0; s += tab?[k2] ?? 0; s += tab?[k3] ?? 0
             s += tab?[k4] ?? 0; s += tab?[k5] ?? 0; s += tab?[k6] ?? 0; s += tab?[k7] ?? 0
         }
@@ -64,7 +64,7 @@ def int_miss(b : B?) {
     let k4 = IABSENT[4]; let k5 = IABSENT[5]; let k6 = IABSENT[6]; let k7 = IABSENT[7]
     b |> run("int_miss/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0; s += tab?[k1] ?? 0; s += tab?[k2] ?? 0; s += tab?[k3] ?? 0
             s += tab?[k4] ?? 0; s += tab?[k5] ?? 0; s += tab?[k6] ?? 0; s += tab?[k7] ?? 0
         }
@@ -82,9 +82,9 @@ def int_update(b : B?) {
     let k0 = IKEYS[0]; let k1 = IKEYS[1]; let k2 = IKEYS[2]; let k3 = IKEYS[3]
     let k4 = IKEYS[4]; let k5 = IKEYS[5]; let k6 = IKEYS[6]; let k7 = IKEYS[7]
     b |> run("int_update/8", 8 * REPS) {
-        for (r in range(REPS)) {
-            unsafe(tab[k0]) += 1; unsafe(tab[k1]) += 1; unsafe(tab[k2]) += 1; unsafe(tab[k3]) += 1
-            unsafe(tab[k4]) += 1; unsafe(tab[k5]) += 1; unsafe(tab[k6]) += 1; unsafe(tab[k7]) += 1
+        for (_r in range(REPS)) {
+            unsafe(tab[k0]) ++; unsafe(tab[k1]) ++; unsafe(tab[k2]) ++; unsafe(tab[k3]) ++
+            unsafe(tab[k4]) ++; unsafe(tab[k5]) ++; unsafe(tab[k6]) ++; unsafe(tab[k7]) ++
         }
     }
     unsafe { delete tab; }
@@ -97,9 +97,9 @@ def str_update(b : B?) {
     let k0 = fresh(SKEYS[0]); let k1 = fresh(SKEYS[1]); let k2 = fresh(SKEYS[2]); let k3 = fresh(SKEYS[3])
     let k4 = fresh(SKEYS[4]); let k5 = fresh(SKEYS[5]); let k6 = fresh(SKEYS[6]); let k7 = fresh(SKEYS[7])
     b |> run("str_update/8", 8 * REPS) {
-        for (r in range(REPS)) {
-            unsafe(tab[k0]) += 1; unsafe(tab[k1]) += 1; unsafe(tab[k2]) += 1; unsafe(tab[k3]) += 1
-            unsafe(tab[k4]) += 1; unsafe(tab[k5]) += 1; unsafe(tab[k6]) += 1; unsafe(tab[k7]) += 1
+        for (_r in range(REPS)) {
+            unsafe(tab[k0]) ++; unsafe(tab[k1]) ++; unsafe(tab[k2]) ++; unsafe(tab[k3]) ++
+            unsafe(tab[k4]) ++; unsafe(tab[k5]) ++; unsafe(tab[k6]) ++; unsafe(tab[k7]) ++
         }
     }
     unsafe { delete tab; }

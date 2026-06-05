@@ -19,7 +19,7 @@ let REPS = 64
 def small_int_build(b : B?) {
     for (n in SIZES) {
         b |> run("build/{n}", n) {
-            var tab : table<int; int>
+            var tab : table<int; int>  // nolint:STYLE027  measuring the build
             for (i in range(n)) {
                 unsafe(tab[i]) = i * 2
             }
@@ -31,14 +31,11 @@ def small_int_build(b : B?) {
 [benchmark]
 def small_int_hit(b : B?) {
     for (n in SIZES) {
-        var tab : table<int; int>
-        for (i in range(n)) {
-            unsafe(tab[i]) = i * 2
-        }
+        var tab <- {for (i in range(n)); i => i * 2}
         let expected = REPS * (n - 1) * n     // REPS * sum(i*2, i in 0..n-1)
         b |> run("hit/{n}", n * REPS) {
             var s = 0
-            for (r in range(REPS)) {
+            for (_r in range(REPS)) {
                 for (i in range(n)) {
                     s += tab?[i] ?? 0
                 }
@@ -54,13 +51,10 @@ def small_int_hit(b : B?) {
 [benchmark]
 def small_int_miss(b : B?) {
     for (n in SIZES) {
-        var tab : table<int; int>
-        for (i in range(n)) {
-            unsafe(tab[i]) = i * 2
-        }
+        var tab <- {for (i in range(n)); i => i * 2}
         b |> run("miss/{n}", n * REPS) {
             var s = 0
-            for (r in range(REPS)) {
+            for (_r in range(REPS)) {
                 for (i in range(n)) {
                     s += tab?[i + 1000000] ?? 0
                 }

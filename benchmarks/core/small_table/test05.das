@@ -19,10 +19,7 @@ let SIZES = [2, 4, 8, 12, 16, 24, 32]
 let REPS = 64
 
 def build_keys(n : int; prefix : string) : array<string> {
-    var keys : array<string>
-    for (i in range(n)) {
-        keys |> push("{prefix}{i}")
-    }
+    var keys <- [for (i in range(n)); "{prefix}{i}"]
     return <- keys
 }
 
@@ -32,6 +29,8 @@ def run_lanes(b : B?; n : int; tag : string; prefix : string) {
     var hashes : array<uint64>
     var vals : array<int>
     var tab : table<string; int>
+    hashes |> reserve(n)
+    vals |> reserve(n)
     for (i in range(n)) {
         hashes |> push(hash(keys[i]))
         vals |> push(i * 2)
@@ -41,7 +40,7 @@ def run_lanes(b : B?; n : int; tag : string; prefix : string) {
     // linear: hash-only scan, inlined (packed-find shape)
     b |> run("lin_{tag}/{n}", n * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             for (i in range(n)) {
                 let h = hash(probe[i])
                 var idx = -1
@@ -61,7 +60,7 @@ def run_lanes(b : B?; n : int; tag : string; prefix : string) {
     // hashed: real open-addressed table find
     b |> run("hash_{tag}/{n}", n * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             for (i in range(n)) {
                 s += tab?[probe[i]] ?? 0
             }

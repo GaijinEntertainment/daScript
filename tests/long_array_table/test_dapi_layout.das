@@ -56,7 +56,7 @@ def test_dapi_table_keys_hashes_non_null(t : T?) {
 def test_dapi_table_tombstones_after_erase(t : T?) {
     // Small (packed) tables erase via swap-remove and leave no tombstone; tombstones only
     // exist in the open-addressed regime, so grow past maxLinearCapacity (8) first.
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via real insert path then erased to exercise tombstone layout
     for (i in range(10)) {
         tab |> insert(i, i * 100)
     }
@@ -72,7 +72,7 @@ def test_dapi_table_keys_offset_matches_runtime(t : T?) {
     // In the C++ Table memory layout, `keys` points to `data + capacity * sizeof(value)`.
     // If DapiArray's pad/size disagrees with das::Array's, DapiTable.keys reads from
     // the wrong slot and the equality below fails — independent of platform.
-    var tab : table<int; int>
+    var tab : table<int; int>    // nolint:STYLE027  built via real insert path to validate keys-offset layout
     for (i in range(8)) {
         tab |> insert(i, i * 10)
     }

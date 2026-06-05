@@ -12,10 +12,7 @@ require dastest/testing_boost
 let N = 256
 
 def build_keys(prefix : string) : array<string> {
-    var keys : array<string>
-    for (i in range(N)) {
-        keys |> push("{prefix}{i}")
-    }
+    var keys <- [for (i in range(N)); "{prefix}{i}"]
     return <- keys
 }
 

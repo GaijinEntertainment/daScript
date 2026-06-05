@@ -30,7 +30,7 @@ def build_record(var tab : table<string; int>) {
 
 def make_tables(var tables : array<table<string; int>>) {
     tables |> reserve(NTABLES)
-    for (i in range(NTABLES)) {
+    for (_i in range(NTABLES)) {
         var tab : table<string; int>
         build_record(tab)
         tables |> emplace(tab)
@@ -58,7 +58,7 @@ def build_record_bad(var tab : table<string; int>) {
 
 def make_tables_bad(var tables : array<table<string; int>>) {
     tables |> reserve(NTABLES)
-    for (i in range(NTABLES)) {
+    for (_i in range(NTABLES)) {
         var tab : table<string; int>
         build_record_bad(tab)
         tables |> emplace(tab)

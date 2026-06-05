@@ -16,10 +16,7 @@ let SIZES = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
 let REPS = 64
 
 def build_keys(n : int; prefix : string) : array<string> {
-    var keys : array<string>
-    for (i in range(n)) {
-        keys |> push("{prefix}_{i}")
-    }
+    var keys <- [for (i in range(n)); "{prefix}_{i}"]
     return <- keys
 }
 
@@ -28,7 +25,7 @@ def small_str_build(b : B?) {
     for (n in SIZES) {
         var keys <- build_keys(n, "key")
         b |> run("build/{n}", n) {
-            var tab : table<string; int>
+            var tab : table<string; int>  // nolint:STYLE027  measuring the build
             for (i in range(n)) {
                 unsafe(tab[keys[i]]) = i * 2
             }
@@ -46,14 +43,11 @@ def small_str_hit(b : B?) {
         // fast path misses and a real strcmp runs — the realistic lookup case (keys
         // are parsed/built independently of what was stored), not interned reuse.
         var probe <- build_keys(n, "key")
-        var tab : table<string; int>
-        for (i in range(n)) {
-            unsafe(tab[keys[i]]) = i * 2
-        }
+        var tab <- {for (i in range(n)); keys[i] => i * 2}
         let expected = REPS * (n - 1) * n     // REPS * sum(i*2, i in 0..n-1)
         b |> run("hit/{n}", n * REPS) {
             var s = 0
-            for (r in range(REPS)) {
+            for (_r in range(REPS)) {
                 for (i in range(n)) {
                     s += tab?[probe[i]] ?? 0
                 }
@@ -73,13 +67,10 @@ def small_str_miss(b : B?) {
     for (n in SIZES) {
         var keys <- build_keys(n, "key")
         var misses <- build_keys(n, "absent")
-        var tab : table<string; int>
-        for (i in range(n)) {
-            unsafe(tab[keys[i]]) = i * 2
-        }
+        var tab <- {for (i in range(n)); keys[i] => i * 2}
         b |> run("miss/{n}", n * REPS) {
             var s = 0
-            for (r in range(REPS)) {
+            for (_r in range(REPS)) {
                 for (i in range(n)) {
                     s += tab?[misses[i]] ?? 0
                 }

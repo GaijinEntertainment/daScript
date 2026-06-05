@@ -47,7 +47,7 @@ def const_short(b : B?) {
     fill(tab, SHORT_KEYS)
     b |> run("const_short/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?["alpha"] ?? 0
             s += tab?["bravo"] ?? 0
             s += tab?["charlie"] ?? 0
@@ -76,7 +76,7 @@ def var_short(b : B?) {
     let k4 = fresh(SHORT_KEYS[4]); let k5 = fresh(SHORT_KEYS[5]); let k6 = fresh(SHORT_KEYS[6]); let k7 = fresh(SHORT_KEYS[7])
     b |> run("var_short/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0
             s += tab?[k1] ?? 0
             s += tab?[k2] ?? 0
@@ -99,7 +99,7 @@ def const_long(b : B?) {
     fill(tab, LONG_KEYS)
     b |> run("const_long/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?["this/is/a/fairly/long/identifier/alpha"] ?? 0
             s += tab?["this/is/a/fairly/long/identifier/bravo"] ?? 0
             s += tab?["this/is/a/fairly/long/identifier/charlie"] ?? 0
@@ -124,7 +124,7 @@ def var_long(b : B?) {
     let k4 = fresh(LONG_KEYS[4]); let k5 = fresh(LONG_KEYS[5]); let k6 = fresh(LONG_KEYS[6]); let k7 = fresh(LONG_KEYS[7])
     b |> run("var_long/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0
             s += tab?[k1] ?? 0
             s += tab?[k2] ?? 0

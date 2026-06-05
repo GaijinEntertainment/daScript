@@ -58,10 +58,7 @@ def many_int_query(b : B?) {
 
 [benchmark]
 def many_str_build(b : B?) {
-    var keys : array<string>
-    for (k in range(TABLE_N)) {
-        keys |> push("prop_{k}")
-    }
+    var keys <- [for (k in range(TABLE_N)); "prop_{k}"]
     b |> run("str_build/{TABLE_N}", NUM_TABLES * TABLE_N) {
         var tabs : array<table<string; int>>
         tabs |> resize(NUM_TABLES)
@@ -82,6 +79,8 @@ def many_str_build(b : B?) {
 def many_str_query(b : B?) {
     var keys : array<string>
     var probe : array<string>
+    keys |> reserve(TABLE_N)
+    probe |> reserve(TABLE_N)
     for (k in range(TABLE_N)) {
         keys |> push("prop_{k}")
         probe |> push("prop_{k}")

@@ -5,10 +5,7 @@ require dastest/testing_boost public
 // Tables/sets are unordered; iteration order is an implementation detail (it changed
 // when small tables moved to packed insertion-order storage). Compare contents sorted.
 def sorted_keys(tab : table<int>) : array<int> {
-    var got : array<int>
-    for (k in keys(tab)) {
-        got |> push(k)
-    }
+    var got <- [for (k in keys(tab)); k]
     sort(got)
     return <- got
 }
@@ -48,15 +45,15 @@ def test_set_table(t : T?) {
             tab |> insert(i)
         }
         tab |> erase(4)
-        var tc := tab
+        let tc := tab
         check(t, tc, [3, 5])
         t |> success(tc |> key_exists(3))
         t |> success(!tc |> key_exists(4))
     }
     t |> run("literal and to_table") @(t : T?) {
-        var ttt <- {1, 2, 3, 4}
+        let ttt <- {1, 2, 3, 4}
         check(t, ttt, [1, 2, 3, 4])
-        var qqq <- to_table(fixed_array<int>(1, 2, 3, 4))
+        let qqq <- to_table(fixed_array<int>(1, 2, 3, 4))
         check(t, qqq, [1, 2, 3, 4])
     }
 }

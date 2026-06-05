@@ -16,7 +16,8 @@ require daslib/strings_boost
 require daslib/defer
 
 require daslib/fio
-require daslib/clargs
+require daslib/option
+require daslib/result
 require jit
 
 module llvm_jit_run shared private

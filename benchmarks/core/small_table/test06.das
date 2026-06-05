@@ -37,7 +37,7 @@ def const_hit(b : B?) {
     fill(tab)
     b |> run("const_hit/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?["alpha"] ?? 0
             s += tab?["bravo"] ?? 0
             s += tab?["charlie"] ?? 0
@@ -60,7 +60,7 @@ def const_miss(b : B?) {
     fill(tab)
     b |> run("const_miss/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?["alpha_x"] ?? 0
             s += tab?["bravo_x"] ?? 0
             s += tab?["charlie_x"] ?? 0
@@ -85,7 +85,7 @@ def var_hit(b : B?) {
     let k4 = fresh(KEYS[4]); let k5 = fresh(KEYS[5]); let k6 = fresh(KEYS[6]); let k7 = fresh(KEYS[7])
     b |> run("var_hit/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0
             s += tab?[k1] ?? 0
             s += tab?[k2] ?? 0
@@ -110,7 +110,7 @@ def var_miss(b : B?) {
     let k4 = ABSENT[4]; let k5 = ABSENT[5]; let k6 = ABSENT[6]; let k7 = ABSENT[7]
     b |> run("var_miss/8", 8 * REPS) {
         var s = 0
-        for (r in range(REPS)) {
+        for (_r in range(REPS)) {
             s += tab?[k0] ?? 0
             s += tab?[k1] ?? 0
             s += tab?[k2] ?? 0

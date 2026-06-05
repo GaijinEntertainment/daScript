@@ -141,7 +141,7 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     if ((call_name == "$::length" && !argType.isGoodArrayType)
         || (call_name == "$::hash" && argType.baseType != Type.tString)
         || (!expr.arguments |> empty() && argType.isHandle)) return false
-    g_intrin_lookup |> get(call_name) $(pfun) {
+    g_intrin_lookup |> get(call_name) $(_pfun) {
         result = true
     }
     return result
@@ -160,11 +160,11 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
 
 // intrinsics, $ aka builtin
 
-def intrinsic_builtin_variant_index(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, arguments[0], "$::variant_index")
 }
 
-def intrinsic_builtin_set_variant_index(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_set_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMBuildStore2(ctx.builder, ctx.types, ctx.types.t_int32, arguments[1], arguments[0])
 }
 
@@ -181,7 +181,7 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
     }
 }
 
-def intrinsic_is_standalone_exe(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_is_standalone_exe(var ctx : JitCtx; _expr : ExprCallFunc?; _arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return LLVMConstInt(ctx.types.t_int1, g_jit_exe_mode ? 1ul : 0ul, 0)
 }
 
@@ -846,7 +846,7 @@ def build_fsqrt(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOp
     return LLVMBuildCall2(ctx.builder, typ, decl_fsqrt, args_fsqrt, name)
 }
 
-def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; _name : string) : LLVMOpaqueValue? {
     var one = LLVMConstReal(ctx.types.t_float, 1.0lf)
     var fdiv = LLVMBuildFDiv(ctx.builder, one, v2, "")
     return fdiv
@@ -1131,7 +1131,7 @@ def build_memset_64(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_128(ctx, ptr, value, size)
 }
 
-def intrinsic_memset64(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int64, 0u), "")
     return build_memset_64(ctx, ctx.types.t_int64, ptr, arguments[1], size)
@@ -1146,7 +1146,7 @@ def build_memset_32(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_64(ctx, ctx.types.t_int64, ptr, value, size)
 }
 
-def intrinsic_memset32(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset32(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int32, 0u), "")
     return build_memset_32(ctx, ctx.types.t_int32, ptr, arguments[1], size)
@@ -1161,13 +1161,13 @@ def build_memset_16(var ctx : JitCtx; ptr_type : LLVMOpaqueType?; _ptr, val, _si
     return build_memset_32(ctx, ctx.types.t_int32, ptr, value, size)
 }
 
-def intrinsic_memset16(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var size = LLVMBuildZExtOrBitCast(ctx.builder, arguments[2], ctx.types.t_int64, "")
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int16, 0u), "")
     return build_memset_16(ctx, ctx.types.t_int16, ptr, arguments[1], size)
 }
 
-def intrinsic_math_gather(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_gather(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.t_int32, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[1], ctx.types.ConstI32(0ul), "")
     var iy = LLVMBuildExtractElement(ctx.builder, arguments[1], ctx.types.ConstI32(1ul), "")
@@ -1185,7 +1185,7 @@ def intrinsic_math_gather(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     return res
 }
 
-def intrinsic_math_store_neq_mask(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_store_neq_mask(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(ctx.types.LLVMInt4Type(), 0u), "")
     var value = arguments[1]
     var mask_v = arguments[2]
@@ -1205,7 +1205,7 @@ def intrinsic_math_gather_store_mask(var ctx : JitCtx; expr : ExprCallFunc?; arg
     return intrinsic_math_store_neq_mask(ctx, expr, arg_store_mask)
 }
 
-def intrinsic_math_gather_store_stride(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_gather_store_stride(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // gather
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[2], LLVMPointerType(ctx.types.t_int32, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[3], ctx.types.ConstI32(0ul), "")
@@ -1258,7 +1258,7 @@ def intrinsic_math_gather_store_stride(var ctx : JitCtx; expr : ExprCallFunc?; a
 // gather_store_neq_mask
 // def intrinsic_gather_store_neq_mask
 
-def intrinsic_math_u8x4_gather_store(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_u8x4_gather_store(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // gather
     var ptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(ctx.types.t_int8, 0u), "")
     var ix = LLVMBuildExtractElement(ctx.builder, arguments[2], ctx.types.ConstI32(0ul), "")
@@ -1327,7 +1327,7 @@ def intrinsic_math_sign(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
     }
 }
 
-def intrinsic_mul_128(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_mul_128(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var a = arguments[0]
     var b = arguments[1]
     var A = LLVMBuildZExtOrBitCast(ctx.builder, a, ctx.types.t_int128, "")
