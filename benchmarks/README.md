@@ -22,6 +22,12 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test11.das` | SlotMap adapter insert of 1M random numbers — monotonic uint64 IDs, entity allocation pattern |
 | `test12.das` | Pathological key distribution — 8K sequential + random keys (100K total) with deliberately bad hash |
 
+## core/gc/
+
+| File | Description |
+|---|---|
+| `test01.das` | Runtime heap `heap_collect` cost — mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
+
 ## core/bool_array/
 
 | File | Description |
