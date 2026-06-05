@@ -38,4 +38,8 @@ def test_flatten_boundaries(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_builtin.das")
         t |> success(find(issues, "not on the whitelist") >= 0, "expected whitelist error, got: {issues}")
     }
+    t |> run("move (<-) is rejected") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_move.das")
+        t |> success(find(issues, "cannot be predicated") >= 0, "expected move/clone error, got: {issues}")
+    }
 }
