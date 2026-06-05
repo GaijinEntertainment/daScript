@@ -15,7 +15,10 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/rtti
 
-let private MY_PRIMS : table<string> <- { "max", "min" }
+// "myrec" is a USER function with a body (and recursive) that the caller declares
+// a leaf primitive: flatten must KEEP the call, not inline it. If whitelist
+// precedence regressed, flatten would try to inline a recursive function and fail.
+let private MY_PRIMS : table<string> <- { "max", "min", "myrec" }
 
 def private api_phase(func : FunctionPtr) : int {
     for (ann in func.annotations) {

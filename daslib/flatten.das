@@ -187,7 +187,30 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
 // visitor machinery. Operand order matches daslang left-to-right evaluation.
 def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) : ExpressionPtr {
     if (e == null) return null
-    if (is_user_call(e)) return inline_call(ctx, e as ExprCall, structPred, out)
+    if (e is ExprCall) {
+        let c = e as ExprCall
+        let bname = string(c.name)
+        // Whitelist takes precedence over inlining: a whitelisted leaf primitive is
+        // KEPT (args lifted), even if it has a body. Backend [hint] primitives are
+        // [stub] functions — non-null (empty) body — so without this they'd be
+        // treated as user calls and inlined away to nothing.
+        if (key_exists(ctx.whitelist, bname)) {
+            var n = clone_expression(e)
+            var o = n as ExprCall
+            for (ai in range(length(c.arguments))) {
+                o.arguments[ai] = lift_expr(ctx, c.arguments[ai], structPred, out)
+            }
+            return n
+        }
+        // A real user helper (resolved, non-builtin, has a body) → inline it.
+        if (is_user_call(e)) {
+            return inline_call(ctx, c, structPred, out)
+        }
+        // Otherwise: a non-whitelisted leaf/builtin — not backend-expressible.
+        ctx.ok = false
+        ctx.err = "flatten: builtin '{bname}' is not on the whitelist (not GPU-expressible / may have side effects)"
+        return clone_expression(e)
+    }
     if (e is ExprOp2) {
         var n = clone_expression(e)
         var o = n as ExprOp2
@@ -210,21 +233,6 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         o.subexpr = lift_expr(ctx, oe.subexpr, structPred, out)
         o.left = lift_expr(ctx, oe.left, structPred, out)
         o.right = lift_expr(ctx, oe.right, structPred, out)
-        return n
-    }
-    if (e is ExprCall) {  // builtin/leaf call — whitelist-gate, then lift args
-        let bname = string((e as ExprCall).name)
-        if (!key_exists(ctx.whitelist, bname)) {
-            ctx.ok = false
-            ctx.err = "flatten: builtin '{bname}' is not on the whitelist (not GPU-expressible / may have side effects)"
-            return clone_expression(e)
-        }
-        var n = clone_expression(e)
-        var o = n as ExprCall
-        let oe = e as ExprCall
-        for (ai in range(length(oe.arguments))) {
-            o.arguments[ai] = lift_expr(ctx, oe.arguments[ai], structPred, out)
-        }
         return n
     }
     return clone_expression(e)
