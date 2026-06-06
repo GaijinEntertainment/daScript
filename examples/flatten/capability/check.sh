@@ -31,6 +31,11 @@
 #
 #   8. cap_loop_continue.shader (RUNTIME continue) -> a PER-COPY bool mask (one
 #      boolConst init per unrolled copy) gating that copy's accumulation.
+#
+#   9. cap_fold_identity.shader (scalar identities `gain*1.0 + 0.0`) -> fold away.
+#      The general compiler leaves them (gain is a runtime prop) and the backend has
+#      no const-fold; flatten's fold removes them, so the graph has only the genuine
+#      `base*gain` multiply: exactly 1 mul, 0 add.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -149,6 +154,23 @@ if [[ "$errs" -eq 0 && "$selects" -gt 0 && "$masks" -gt 1 ]]; then
     echo "   ok — compiles ($nodes nodes), $masks per-copy bool masks gating $selects select(s)"
 else
     echo "   FAIL — errors=$errs selects=$selects masks=$masks (expected >0 selects and >1 per-copy masks)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "9. cap_fold_identity.shader (scalar identities gain*1.0 / +0.0 fold away)"
+out="$(compile "$here/cap_fold_identity.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+muls="$(echo "$out" | grep -c ' mul ')"
+adds="$(echo "$out" | grep -c ' add ')"
+errs="$(echo "$out" | grep -ci error)"
+# `gain * 1.0 + 0.0` collapses to `gain` (gain is a runtime prop, so the general
+# compiler can't; the backend has no const-fold), leaving only the genuine
+# `base * gain` multiply: exactly 1 mul, 0 add. Without the fold: 2 mul, 1 add.
+if [[ "$errs" -eq 0 && "$muls" -eq 1 && "$adds" -eq 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), 1 mul (base*gain), 0 add (identities folded)"
+else
+    echo "   FAIL — errors=$errs muls=$muls adds=$adds (expected 1 mul, 0 add)"
     echo "$out" | grep -i error | head
     fail=1
 fi

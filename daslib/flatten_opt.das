@@ -447,10 +447,14 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // Integer-only algebraic identities. Float is excluded on purpose: `x * 0.0`
-        // is NaN for x=±inf/NaN, and `x + 0.0` flips -0.0 to +0.0 — the identities only
-        // hold for two's-complement integers (where `e * -1 == -e` even at INT_MIN).
-        // Only `* 0` DROPS an operand, so only it needs the side-effect gate.
+        // Algebraic identities. Integer arms are always exact (two's-complement,
+        // `e*-1==-e` even at INT_MIN). Float arms fire under flatten's fast-math
+        // assumption — every consumer is a shader backend: `x*1`/`x*-1` are exact for
+        // all floats (incl. NaN/inf/±0), while `x*0`/`x+0`/`x-0` are lossy (NaN/inf·0
+        // = NaN; +0.0 flips -0.0) but enabled by decision. Only `*0` DROPS an operand
+        // (side-effect gate) and RETURNS the scalar zero, so it is gated to a scalar
+        // result — a vector `vec*0.0` would mistype to the scalar zero; full-const
+        // eval handles that case when the vector operand is itself constant.
         if (that.op == "*") {
             if (is_int_val(that.right, 0l) && !has_sideeffects(that.left)) { changed = true; return that.right }
             if (is_int_val(that.left, 0l) && !has_sideeffects(that.right)) { changed = true; return that.left }
@@ -458,12 +462,22 @@ class private FoldVisitor : AstVisitor {
             if (is_int_val(that.left, 1l)) { changed = true; return that.right }
             if (is_int_neg_one(that.right)) { changed = true; return negate(that.left) }
             if (is_int_neg_one(that.left)) { changed = true; return negate(that.right) }
+            if (is_real_val(that.right, 1.0lf)) { changed = true; return that.left }
+            if (is_real_val(that.left, 1.0lf)) { changed = true; return that.right }
+            if (is_real_val(that.right, -1.0lf)) { changed = true; return negate(that.left) }
+            if (is_real_val(that.left, -1.0lf)) { changed = true; return negate(that.right) }
+            if (is_real_val(that.right, 0.0lf) && !has_sideeffects(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
+            if (is_real_val(that.left, 0.0lf) && !has_sideeffects(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
         } elif (that.op == "+") {
             if (is_int_val(that.right, 0l)) { changed = true; return that.left }
             if (is_int_val(that.left, 0l)) { changed = true; return that.right }
+            if (is_real_val(that.right, 0.0lf)) { changed = true; return that.left }
+            if (is_real_val(that.left, 0.0lf)) { changed = true; return that.right }
         } elif (that.op == "-") {
             if (is_int_val(that.right, 0l)) { changed = true; return that.left }
             if (is_int_val(that.left, 0l)) { changed = true; return negate(that.right) }
+            if (is_real_val(that.right, 0.0lf)) { changed = true; return that.left }
+            if (is_real_val(that.left, 0.0lf)) { changed = true; return negate(that.right) }
         }
         return that
     }
@@ -532,6 +546,21 @@ def private is_int_neg_one(e : ExpressionPtr) : bool {
     var v = 0l
     var signed = false
     return int_const(e, v, signed) && signed && v == -1l
+}
+
+// A scalar float/double const equal to `want`. `want` is exact (0/1/-1) in both
+// float and double, so the widening compare is exact. Vector consts (ExprConstFloat3
+// …) are NOT scalars and return false — the float identities are scalar-operand only.
+def private is_real_val(e : ExpressionPtr; want : double) : bool {
+    if (e == null) return false
+    if (e is ExprConstFloat) return double((e as ExprConstFloat).value) == want
+    if (e is ExprConstDouble) return (e as ExprConstDouble).value == want
+    return false
+}
+
+def private same_base_type(a, b : ExpressionPtr) : bool {
+    if (a == null || b == null || a._type == null || b._type == null) return false
+    return a._type.baseType == b._type.baseType
 }
 
 def private negate(var e : ExpressionPtr) : ExpressionPtr {
