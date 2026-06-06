@@ -109,15 +109,19 @@ arm and drops the pure self-assigns a folded false-select leaves behind.
 
 **Constant folding.** Because the branchless target has no downstream optimizer,
 the twin is reduced as far as possible *before* the backend sees it. The
-post-inference fold applies algebraic identities (``x*1``, ``x*0``, ``x+0``,
-``x*-1`` over int / float / vectors; the boolean ``true && x``, ``c ? true :
-false``, ``!const``), collapses constant vector constructors (``float3(1, 2,
-3)``) and const-argument pure builtins (``float(7)``, ``min(2, 3)``) to literals,
-and constant-propagates single-definition locals — so a fully-constant
-accumulator loop reduces to its final constant. These are exactly the folds the
-general compiler leaves for the downstream tiers (it folds constant *arithmetic*
-but not constant *constructors*, and never a runtime-operand identity), done here
-under a shader's fast-math assumption (``x*0 → 0`` always fires).
+post-inference fold applies algebraic identities — ``x*1``, ``x+0``, ``x-0`` and
+``x*-1`` over int / float / vectors (each keeps the non-constant operand, so the
+vector type survives), plus a **scalar-only** ``x*0`` (it returns the zero
+literal, so it is gated to a scalar result — a runtime ``vec*0`` is left intact
+and folds only when the vector operand is itself constant, via full-const eval),
+and the boolean ``true && x``, ``c ? true : false``, ``!const``. It also collapses
+constant vector constructors (``float3(1, 2, 3)``) and const-argument pure
+builtins (``float(7)``, ``min(2, 3)``) to literals, and constant-propagates
+single-definition locals — so a fully-constant accumulator loop reduces to its
+final constant. These are exactly the folds the general compiler leaves for the
+downstream tiers (it folds constant *arithmetic* but not constant *constructors*,
+and never a runtime-operand identity), done here under a shader's fast-math
+assumption (scalar ``x*0 → 0`` always fires).
 
 Supported subset
 ================

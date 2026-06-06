@@ -527,12 +527,12 @@ class private FoldVisitor : AstVisitor {
         // assumption — every consumer is a shader backend: `x*1`/`x*-1` are exact for
         // all floats (incl. NaN/inf/±0), while `x*0`/`x+0`/`x-0` are lossy (NaN/inf·0
         // = NaN; +0.0 flips -0.0) but enabled by decision. Only `*0` DROPS an operand
-        // (side-effect gate) and RETURNS the scalar zero, so it is gated to a scalar
-        // result — a vector `vec*0.0` would mistype to the scalar zero; full-const
-        // eval handles that case when the vector operand is itself constant.
+        // (side-effect gate) and RETURNS the scalar zero, so both the int and float arms
+        // gate it to a scalar result (`same_base_type`) — a vector `vec*0` would otherwise
+        // mistype to the scalar zero; full-const eval handles a constant vector operand.
         if (that.op == "*") {
-            if (is_int_val(that.right, 0l) && !has_sideeffects(that.left)) { changed = true; return that.right }
-            if (is_int_val(that.left, 0l) && !has_sideeffects(that.right)) { changed = true; return that.left }
+            if (is_int_val(that.right, 0l) && !has_sideeffects(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
+            if (is_int_val(that.left, 0l) && !has_sideeffects(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
             if (is_int_val(that.right, 1l)) { changed = true; return that.left }
             if (is_int_val(that.left, 1l)) { changed = true; return that.right }
             if (is_int_neg_one(that.right)) { changed = true; return negate(that.left) }

@@ -5,12 +5,15 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require daslib/flatten
 
-//! Verification net for the flatten const-optimization arc — two layers per case:
+//! Verification net for the flatten const-optimization arc — two layers per case
+//! (numbered per the arc's 5-layer verification framework; Layer 1, the randomized
+//! fold-oracle, is deferred to a later arc, hence the 0/2 gap):
 //!   • VALUE (Layer 0): each `[flatten]` twin must compute identical results to its
-//!     un-flattened original over a FINITE input grid. On finite inputs the lossy
-//!     float folds (`x*0`, `x+0`, `x-0`) are value-exact (`finite*0 == 0`, `x+0 == x`),
-//!     so plain `equal` suffices — `equal_approx` is reserved for the reassociation
-//!     arc, where rounding genuinely differs.
+//!     un-flattened original over a FINITE input grid. On this grid the lossy float
+//!     folds (`x*0`, `x+0`, `x-0`) preserve `==` equality (`finite*0 == 0`, `x+0 == x`;
+//!     the bitwise `-0.0`/NaN/inf differences either don't arise here or compare
+//!     `==`-equal), so plain `equal` suffices — `equal_approx` is reserved for the
+//!     reassociation arc, where rounding genuinely differs.
 //!   • FIRED (Layer 2): every function opts into `[flatten(strict_fold=true)]`, so the
 //!     post-fold shape check REJECTS any const-foldable residual the fold should have
 //!     removed (an unfolded algebraic identity, all-const call, or const-condition
@@ -122,6 +125,20 @@ def f_isub0(x : int) : int {
 [flatten(strict_fold=true)]
 def f_izerosub(x : int) : int {
     return 0 - x
+}
+
+// Integer vector * scalar-0: same gate as the float case (f_vec0) — the `*0` fold must
+// NOT replace the int3 expression with a scalar zero (that would mistype int3 -> int).
+// It stays `x * 0` and computes int3(0,0,0); compiling proves the scalar-result gate
+// holds for the integer arm too.
+[flatten(strict_fold=true)]
+def f_ivec1(x : int3) : int3 {
+    return x * 1
+}
+
+[flatten(strict_fold=true)]
+def f_ivec0(x : int3) : int3 {
+    return x * 0
 }
 
 // ----- const-constructor folding (#1c): vector ctors over const args fold to a
@@ -422,6 +439,24 @@ def test_flatten_const(t : T?) {
         for (v in GRID) {
             let a = f_vec0(float3(v, v + 1.0, v - 1.0))
             let b = f_vec0_flat(float3(v, v + 1.0, v - 1.0))
+            t |> equal(a.x, b.x)
+            t |> equal(a.y, b.y)
+            t |> equal(a.z, b.z)
+        }
+    }
+    t |> run("int3 * 1 -> x (vector)") @(t : T?) {
+        for (n in IGRID) {
+            let a = f_ivec1(int3(n, n + 1, n - 1))
+            let b = f_ivec1_flat(int3(n, n + 1, n - 1))
+            t |> equal(a.x, b.x)
+            t |> equal(a.y, b.y)
+            t |> equal(a.z, b.z)
+        }
+    }
+    t |> run("int3 * 0 stays vector (gate held, no scalar mistype)") @(t : T?) {
+        for (n in IGRID) {
+            let a = f_ivec0(int3(n, n + 1, n - 1))
+            let b = f_ivec0_flat(int3(n, n + 1, n - 1))
             t |> equal(a.x, b.x)
             t |> equal(a.y, b.y)
             t |> equal(a.z, b.z)
