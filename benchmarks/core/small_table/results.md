@@ -457,3 +457,32 @@ against an un-optimized master build — is the final section below / the PR bod
   with a find-with-precomputed-hash seam when we build item 4.
 - **Threshold:** start at 8 (conservative), 16 well-supported by the data. A single
   global value captures most of the win for both key types; per-type is optional polish.
+
+## JIT packed find — per-key-type codegen (SHIPPED, follow-up)
+
+The JIT emitted a branchless `<N x T>` SIMD compare for every packed find. A/B against an
+unrolled scalar early-out (`JIT_PACKED_FIND_{INT,STR}_EARLY_OUT`) shows the optimum is
+**per key type** — `int` keeps SIMD, `string` switches to early-out:
+
+| lane (JIT ns/op) | SIMD | early-out | split |
+|---|---|---|---|
+| int hit/8 | 1.9 | 2.4 | **1.9** |
+| int miss/8 | 1.6 | 3.2 | **1.5** |
+| string hit/8 | 6.2 | 4.6 | **3.8** |
+| string miss/8 | 7.2 | 6.7 | **5.9** |
+| json_find (literal key) | 2.3 | 1.5 | **1.5** (−35%) |
+| bad_json_find (parsed key) | 2.5 | 1.6 | **1.4** (−44%) |
+| json_at | 1.7 | 1.3 | **1.3** |
+
+- **int**: `8×i32` is one cheap 256-bit `vpcmpeqd`, nearly free — and it crushes the
+  early-out on a **miss** (early-out scans all 8 with an `i<sz` guard, no early exit).
+- **string**: `8×i64` is 512 bits → `2× vpcmpeqq` + a `vextracti128`/`vpackssdw` mask
+  reduction (heavy setup). The scalar early-out exits on the first hit, has no size guard
+  (the packed-string hash tail is always 0), and beats SIMD on the realistic literal-key
+  read by ~35%.
+
+Interp packed find is left on its early-out scan: MSVC has no SLP vectorizer (the fixed
+loop unrolls scalar, `/Qvec-report` reason 1100), and a branchless rewrite measured 20–42%
+*slower* there (no SIMD + loses the hit early-exit). Even under clang the branchless form
+ties-or-loses the early-out, and `[[likely]]`/`[[unlikely]]` is a no-op (ignored in C++17,
+identical codegen in C++20 — MSVC already lays the match out as a cold forward branch).
