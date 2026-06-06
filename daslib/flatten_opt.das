@@ -688,6 +688,27 @@ def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
     return false
 }
 
+// True if `e` is an op2 that FoldVisitor's UNCONDITIONAL algebraic identities would
+// have rewritten away: `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x`. These
+// fold for any operand type with no side-effect or vector gate (unlike `x*0`, which
+// is excluded here — it carries the scalar-result + purity gates), and the typer
+// never folds a runtime-operand identity. A survivor of these is a const-fold miss —
+// the high-teeth half of the strict_fold verification invariant.
+def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
+    if (e == null) return false
+    if (e.op == "*") {
+        return (is_int_val(e.right, 1l) || is_int_val(e.left, 1l) ||
+            is_real_val(e.right, 1.0lf) || is_real_val(e.left, 1.0lf) ||
+            is_int_neg_one(e.right) || is_int_neg_one(e.left) ||
+            is_real_val(e.right, -1.0lf) || is_real_val(e.left, -1.0lf))
+    }
+    if (e.op == "+" || e.op == "-") {
+        return (is_int_val(e.right, 0l) || is_int_val(e.left, 0l) ||
+            is_real_val(e.right, 0.0lf) || is_real_val(e.left, 0.0lf))
+    }
+    return false
+}
+
 def private same_base_type(a, b : ExpressionPtr) : bool {
     if (a == null || b == null || a._type == null || b._type == null) return false
     return a._type.baseType == b._type.baseType
