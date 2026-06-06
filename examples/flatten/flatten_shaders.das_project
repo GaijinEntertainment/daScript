@@ -38,13 +38,13 @@ def module_get(req, from : string) : module_info {
         return (name, "{get_das_root()}/daslib/{name}.das", "")
     }
     // Fallback (mirrors the stock module_default): a single name resolves to
-    // (name, name.das) so native/builtin modules (strings, math, fio_core, ...)
-    // match by name; a dotted/path name maps dots+slashes relative to `from`.
+    // (name, <dir-of-from>/name.das): native/builtin modules (strings, math,
+    // fio_core, ...) match by NAME so the file path is unused for them, while a
+    // same-directory require of a non-builtin (e.g. daslib/flatten requiring
+    // flatten_opt) resolves from-relative. A dotted/path name maps dots+slashes
+    // relative to `from`.
     let rs <- split_by_chars(req, "./")
     let mod_name = rs[length(rs) - 1]
-    if (length(rs) <= 1) {
-        return (mod_name, req + ".das", "")
-    }
     var fr <- split_by_chars(from, "/")
     pop(fr)
     for (se in rs) {
