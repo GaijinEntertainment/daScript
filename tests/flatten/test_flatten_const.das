@@ -95,13 +95,102 @@ def f_ctor_mixed_rt(x : float3) : float3 {
     return x + float3(0.5)
 }
 
+// ----- boolean algebraic identities (&&, ||, !, bool-select) -----
+//
+// `true && x` / `x || true` etc. carry a const operand the typer leaves alone (it
+// folds only fully-const ops). In a no-early-return twin the lowering's mask-collapse
+// pass folds them; the early-return variants below (f_*_early) reassign the live mask,
+// so that pass bails and the post-infer FoldVisitor is the sole folder — exercising the
+// new arms directly. Differential proves the fold is value-preserving either way.
+
+[flatten]
+def f_and_tl(x : bool) : bool {
+    return true && x
+}
+
+[flatten]
+def f_and_tr(x : bool) : bool {
+    return x && true
+}
+
+[flatten]
+def f_and_fl(x : bool) : bool {
+    return false && x
+}
+
+[flatten]
+def f_and_fr(x : bool) : bool {
+    return x && false
+}
+
+[flatten]
+def f_or_fl(x : bool) : bool {
+    return false || x
+}
+
+[flatten]
+def f_or_fr(x : bool) : bool {
+    return x || false
+}
+
+[flatten]
+def f_or_tl(x : bool) : bool {
+    return true || x
+}
+
+[flatten]
+def f_or_tr(x : bool) : bool {
+    return x || true
+}
+
+[flatten]
+def f_not_t : bool {
+    return !true
+}
+
+[flatten]
+def f_not_f : bool {
+    return !false
+}
+
+[flatten]
+def f_sel_tf(c : bool) : bool {
+    return c ? true : false
+}
+
+[flatten]
+def f_sel_ft(c : bool) : bool {
+    return c ? false : true
+}
+
+// Early-return variants: the early return reassigns the live mask, so the mask-collapse
+// pass bails (empty const map) and the post-infer FoldVisitor folds the boolean. Scalar
+// return type auto-zero-inits, so no struct-init issue.
+[flatten]
+def f_and_early(x : bool; g : bool) : bool {
+    if (g) {
+        return true && x
+    }
+    return x || true
+}
+
+[flatten]
+def f_sel_early(c : bool; g : bool) : bool {
+    if (g) {
+        return c ? true : false
+    }
+    return c ? false : true
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
+var BOOLS : array<bool>
 
 [init]
 def fill_grid {
     GRID <- [-100.0, -3.5, -1.0, -0.0, 0.0, 1.0, 2.5, 7.0, 100.0]
+    BOOLS <- [true, false]
 }
 
 [test]
@@ -184,6 +273,54 @@ def test_flatten_const(t : T?) {
             let a = f_ctor_mixed_rt(float3(v, v + 1.0, v - 1.0))
             let b = f_ctor_mixed_rt_flat(float3(v, v + 1.0, v - 1.0))
             t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+        }
+    }
+    t |> run("true && x -> x ; x && true -> x") @(t : T?) {
+        for (b in BOOLS) {
+            t |> equal(f_and_tl_flat(b), f_and_tl(b))
+            t |> equal(f_and_tr_flat(b), f_and_tr(b))
+            t |> equal(f_and_tl_flat(b), b)
+        }
+    }
+    t |> run("false && x -> false ; x && false -> false") @(t : T?) {
+        for (b in BOOLS) {
+            t |> equal(f_and_fl_flat(b), f_and_fl(b))
+            t |> equal(f_and_fr_flat(b), f_and_fr(b))
+            t |> equal(f_and_fl_flat(b), false)
+        }
+    }
+    t |> run("false || x -> x ; x || false -> x") @(t : T?) {
+        for (b in BOOLS) {
+            t |> equal(f_or_fl_flat(b), f_or_fl(b))
+            t |> equal(f_or_fr_flat(b), f_or_fr(b))
+            t |> equal(f_or_fl_flat(b), b)
+        }
+    }
+    t |> run("true || x -> true ; x || true -> true") @(t : T?) {
+        for (b in BOOLS) {
+            t |> equal(f_or_tl_flat(b), f_or_tl(b))
+            t |> equal(f_or_tr_flat(b), f_or_tr(b))
+            t |> equal(f_or_tl_flat(b), true)
+        }
+    }
+    t |> run("!true -> false ; !false -> true") @(t : T?) {
+        t |> equal(f_not_t_flat(), f_not_t())
+        t |> equal(f_not_f_flat(), f_not_f())
+        t |> equal(f_not_t_flat(), false)
+        t |> equal(f_not_f_flat(), true)
+    }
+    t |> run("c ? true : false -> c ; c ? false : true -> !c") @(t : T?) {
+        for (b in BOOLS) {
+            t |> equal(f_sel_tf_flat(b), b)
+            t |> equal(f_sel_ft_flat(b), !b)
+        }
+    }
+    t |> run("boolean fold under early return (FoldVisitor path)") @(t : T?) {
+        for (g in BOOLS) {
+            for (b in BOOLS) {
+                t |> equal(f_and_early_flat(b, g), f_and_early(b, g))
+                t |> equal(f_sel_early_flat(b, g), f_sel_early(b, g))
+            }
         }
     }
 }

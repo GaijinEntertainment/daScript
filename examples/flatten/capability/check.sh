@@ -40,6 +40,10 @@
 #  10. cap_fold_ctor.shader (const vector ctor `float3(0.5)`) -> a const. The typer
 #      folds scalar const arithmetic but leaves const CONSTRUCTORS; flatten collapses
 #      it to a single `float3Const` node.
+#
+#  11. cap_fold_bool.shader (boolean identities `true && c` / `false || c`) -> fold away.
+#      The typer folds only fully-const ops, so the `&&`/`||` survive in source; flatten
+#      folds them to the bare comparison, so no `and`/`or` node reaches the backend.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -191,6 +195,24 @@ if [[ "$errs" -eq 0 && "$f3c" -ge 1 ]]; then
     echo "   ok — compiles ($nodes nodes), $f3c float3Const node(s) (const ctor folded)"
 else
     echo "   FAIL — errors=$errs float3Const=$f3c (expected >=1 float3Const)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "11. cap_fold_bool.shader (boolean identities true&& / false|| fold away)"
+out="$(compile "$here/cap_fold_bool.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+ands="$(echo "$out" | grep -c ' and ')"
+ors="$(echo "$out" | grep -c ' or ')"
+selects="$(echo "$out" | grep -c ' select ')"
+errs="$(echo "$out" | grep -ci error)"
+# `true && c` / `false || c` keep their `&&`/`||` in source (the typer folds only
+# fully-const ops); flatten folds them to the bare compare, so no `and`/`or` node
+# reaches the backend — just the comparisons feeding the selects.
+if [[ "$errs" -eq 0 && "$ands" -eq 0 && "$ors" -eq 0 && "$selects" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), 0 and, 0 or, $selects select(s) (identities folded)"
+else
+    echo "   FAIL — errors=$errs and=$ands or=$ors selects=$selects (expected 0 and, 0 or, >0 select)"
     echo "$out" | grep -i error | head
     fail=1
 fi

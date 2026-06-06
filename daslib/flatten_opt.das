@@ -478,6 +478,28 @@ class private FoldVisitor : AstVisitor {
             if (is_int_val(that.left, 0l)) { changed = true; return negate(that.right) }
             if (is_real_val(that.right, 0.0lf)) { changed = true; return that.left }
             if (is_real_val(that.left, 0.0lf)) { changed = true; return negate(that.right) }
+        } elif (that.op == "&&") {
+            // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
+            // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
+            if (is_bool_val(that.left, true)) { changed = true; return that.right }
+            if (is_bool_val(that.right, true)) { changed = true; return that.left }
+            if (is_bool_val(that.left, false)) { changed = true; return that.left }
+            if (is_bool_val(that.right, false) && !has_sideeffects(that.left)) { changed = true; return that.right }
+        } elif (that.op == "||") {
+            // Mirror of `&&`: `true || x` never evaluates x; `x || true` does.
+            if (is_bool_val(that.left, false)) { changed = true; return that.right }
+            if (is_bool_val(that.right, false)) { changed = true; return that.left }
+            if (is_bool_val(that.left, true)) { changed = true; return that.left }
+            if (is_bool_val(that.right, true) && !has_sideeffects(that.left)) { changed = true; return that.right }
+        }
+        return that
+    }
+    def override visitExprOp1(var that : ExprOp1?) : ExpressionPtr {
+        // `!true → false`, `!false → true` — const operand only (already folded
+        // post-order). Double-negation `!!x → x` is intentionally out of scope.
+        if (that.op == "!") {
+            if (is_bool_val(that.subexpr, true)) { changed = true; return new ExprConstBool(at = that.at, value = false) }
+            if (is_bool_val(that.subexpr, false)) { changed = true; return new ExprConstBool(at = that.at, value = true) }
         }
         return that
     }
@@ -487,6 +509,16 @@ class private FoldVisitor : AstVisitor {
         if (that.subexpr is ExprConstBool) {
             changed = true
             return (that.subexpr as ExprConstBool).value ? that.left : that.right
+        }
+        // Bool-const arms collapse to the condition: `c ? true : false → c`,
+        // `c ? false : true → !c`. Common after if-conversion of a bool-valued branch.
+        if (is_bool_val(that.left, true) && is_bool_val(that.right, false)) {
+            changed = true
+            return that.subexpr
+        }
+        if (is_bool_val(that.left, false) && is_bool_val(that.right, true)) {
+            changed = true
+            return new ExprOp1(at = that.at, op := "!", subexpr = that.subexpr)
         }
         // Equal arms (`c ? a : a → a`) — e.g. after `acc + 0 → acc` makes both arms `acc`.
         // Gated on a pure condition (dropping it must not lose a side effect).
@@ -570,6 +602,14 @@ def private is_real_val(e : ExpressionPtr; want : double) : bool {
     if (e == null) return false
     if (e is ExprConstFloat) return double((e as ExprConstFloat).value) == want
     if (e is ExprConstDouble) return (e as ExprConstDouble).value == want
+    return false
+}
+
+// A const bool equal to `want`. Backs the boolean algebraic identities
+// (`true && x → x`, `c ? true : false → c`, `!false → true`, …).
+def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
+    if (e == null) return false
+    if (e is ExprConstBool) return (e as ExprConstBool).value == want
     return false
 }
 
