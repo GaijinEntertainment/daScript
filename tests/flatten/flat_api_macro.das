@@ -18,7 +18,7 @@ require daslib/rtti
 // "myrec" is a USER function with a body (and recursive) that the caller declares
 // a leaf primitive: flatten must KEEP the call, not inline it. If whitelist
 // precedence regressed, flatten would try to inline a recursive function and fail.
-let private MY_PRIMS : table<string> <- { "max", "min", "myrec" }
+let private MY_PRIMS : table<string> <- { "max", "min", "myrec", "g_writer" }
 
 def private api_phase(func : FunctionPtr) : int {
     for (ann in func.annotations) {

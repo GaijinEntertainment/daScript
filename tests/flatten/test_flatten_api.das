@@ -68,6 +68,61 @@ def api_loopcond(x : int) : int {
     return acc
 }
 
+// ----- ?: fold side-effect safety -----
+// A whitelisted "primitive" WITH a side effect (global write). flatten keeps the
+// call (whitelist precedence). The const conditions below arise from loop unrolling
+// (i substituted to a literal), so `flatten_fold`'s `const ? a : b` collapse is what
+// actually fires. The fold must keep the call in the LIVE arm and drop it from the
+// DEAD arm (matching the source `if`, which never runs the dead branch).
+var g_calls : int
+
+def g_writer(x : int) : int {
+    g_calls ++     // the observable side effect under test
+    return x + 100
+}
+
+def ref_keep(x : int) : int {
+    var r = -1
+    for (i in range(1)) {
+        if (i >= 0) {       // i=0 → true: g_writer IS called
+            r = g_writer(x)
+        }
+    }
+    return r
+}
+
+[flat_api]
+def api_keep(x : int) : int {
+    var r = -1
+    for (i in range(1)) {
+        if (i >= 0) {
+            r = g_writer(x)
+        }
+    }
+    return r
+}
+
+def ref_drop(x : int) : int {
+    var r = -1
+    for (i in range(1)) {
+        if (i >= 1) {       // i=0 → false: g_writer is NOT called
+            r = g_writer(x)
+        }
+    }
+    return r
+}
+
+[flat_api]
+def api_drop(x : int) : int {
+    var r = -1
+    for (i in range(1)) {
+        if (i >= 1) {
+            r = g_writer(x)
+        }
+    }
+    return r
+}
+
 var GRID : array<int>
 
 [init]
@@ -90,6 +145,28 @@ def test_flatten_api(t : T?) {
     t |> run("flatten_fold collapses const selects cross-module") @(t : T?) {
         for (v in GRID) {
             t |> equal(api_loopcond_apiflat(v), ref_loopcond(v))
+        }
+    }
+    t |> run("?: fold KEEPS a side-effecting call in the const-true arm") @(t : T?) {
+        for (v in GRID) {
+            g_calls = 0
+            let refv = ref_keep(v)
+            let refCalls = g_calls          // 1 — source runs g_writer
+            g_calls = 0
+            let flatv = api_keep_apiflat(v)
+            t |> equal(flatv, refv)
+            t |> equal(g_calls, refCalls)   // the twin must ALSO call g_writer
+        }
+    }
+    t |> run("?: fold DROPS a side-effecting call from the dead arm (matches source)") @(t : T?) {
+        for (v in GRID) {
+            g_calls = 0
+            let refv = ref_drop(v)
+            let refCalls = g_calls          // 0 — source's `if (false)` never calls g_writer
+            g_calls = 0
+            let flatv = api_drop_apiflat(v)
+            t |> equal(flatv, refv)
+            t |> equal(g_calls, refCalls)   // the twin must ALSO not call it
         }
     }
 }

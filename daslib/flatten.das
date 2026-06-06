@@ -977,9 +977,10 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>) :
 // dataflow backend cannot resolve (an accumulator that reads itself with no
 // producer). This pass runs AFTER re-infer, where the conditions are already
 // `ExprConstBool`: it collapses every `const ? a : b` to the live arm (full tree,
-// so deeply-buried selects fold too), then drops the resulting `lhs = lhs`
-// self-assigns whose lvalue is provably side-effect-free. The two folds the
-// compiler will not do at infer time, done here with the lint side-effect estimate.
+// so deeply-buried selects fold too), drops the resulting `lhs = lhs` self-assigns
+// whose lvalue is provably side-effect-free, and strips redundant zero/default
+// initializers (`var acc = 0` → `var acc : int`). The cleanups the compiler will
+// not do at infer time, done here with the lint side-effect estimate.
 
 class private FoldOp3Visitor : AstVisitor {
     changed : bool
@@ -994,12 +995,34 @@ class private FoldOp3Visitor : AstVisitor {
     }
 }
 
+// A scalar zero/default literal: `default<T>` for every workhorse scalar is the
+// zero bit-pattern (int 0, float 0.0, bool false, …). A `var x = <this>` initializer
+// is therefore redundant with daslang's guaranteed zero-init of a bare `var x : T`,
+// so it can be dropped. Non-scalar inits (vector/struct ctors like `float3(0)`) are
+// NOT literals here and are left alone — conservative by design.
+def private is_zero_const(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprConstInt) return (e as ExprConstInt).value == 0
+    if (e is ExprConstInt8) return (e as ExprConstInt8).value == int8(0)
+    if (e is ExprConstInt16) return (e as ExprConstInt16).value == int16(0)
+    if (e is ExprConstInt64) return (e as ExprConstInt64).value == 0l
+    if (e is ExprConstUInt) return (e as ExprConstUInt).value == 0u
+    if (e is ExprConstUInt8) return (e as ExprConstUInt8).value == uint8(0)
+    if (e is ExprConstUInt16) return (e as ExprConstUInt16).value == uint16(0)
+    if (e is ExprConstUInt64) return (e as ExprConstUInt64).value == 0ul
+    if (e is ExprConstFloat) return (e as ExprConstFloat).value == 0.0f
+    if (e is ExprConstDouble) return (e as ExprConstDouble).value == 0.0lf
+    if (e is ExprConstBool) return !(e as ExprConstBool).value
+    return false
+}
+
 [macro_function]
 def public flatten_fold(var func : FunctionPtr) : bool {
-    //! Post-infer select-folding pass: collapse `const ? a : b` to the live arm and
-    //! drop the side-effect-free `lhs = lhs` self-assigns left behind by a folded
-    //! false-select. Run it AFTER re-inference — the constant conditions must already
-    //! be `ExprConstBool`, which only the typer produces. Returns true if anything
+    //! Post-infer select-folding pass: collapse `const ? a : b` to the live arm, drop
+    //! the side-effect-free `lhs = lhs` self-assigns left behind by a folded false-select,
+    //! and strip redundant zero/default initializers (`var acc = 0` → `var acc : int`).
+    //! Run it AFTER re-inference — the constant conditions must already be `ExprConstBool`,
+    //! which only the typer produces (and the var types must be settled). Returns true if anything
     //! changed (the caller should then re-infer for clean codegen). `[flatten]` runs
     //! this automatically between lowering and the shape check; backends calling
     //! `flatten_function` run it after their own re-infer, before consuming the twin.
@@ -1012,9 +1035,14 @@ def public flatten_fold(var func : FunctionPtr) : bool {
     unsafe {
         delete v
     }
-    // Drop the pure self-assigns (`acc = acc`) a collapsed false-select leaves behind.
-    // has_sideeffects gates it: `g[k()] = g[k()]` keeps (evaluating the lvalue is not free).
-    // Erase in reverse so earlier indices stay valid as we remove.
+    // Two statement-level cleanups over the (post-fold) body. Erase in reverse so
+    // earlier indices stay valid as we remove:
+    //   1. Drop pure self-assigns (`acc = acc`) a collapsed false-select leaves behind.
+    //      has_sideeffects gates it — `g[k()] = g[k()]` keeps (the lvalue is not free).
+    //   2. Strip a redundant zero/default initializer: `var acc = 0` → `var acc : int`,
+    //      since the bare decl already zero-inits. This is always a local decl (you can't
+    //      `var` a global), so it never touches observable state. Post-infer the var's
+    //      type is settled, so dropping the init keeps the declared type intact.
     var blk = func.body as ExprBlock
     var si = length(blk.list) - 1
     while (si >= 0) {
@@ -1024,6 +1052,14 @@ def public flatten_fold(var func : FunctionPtr) : bool {
             if (describe(cp.left) == describe(cp.right) && !has_sideeffects(cp.left)) {
                 blk.list |> erase(si)
                 changed = true
+            }
+        } elif (s is ExprLet) {
+            var lt = s as ExprLet
+            for (lv in lt.variables) {
+                if (is_zero_const(lv.init)) {
+                    lv.init = null
+                    changed = true
+                }
             }
         }
         si --
