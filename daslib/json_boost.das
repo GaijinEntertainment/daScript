@@ -23,6 +23,7 @@ require daslib/apply
 require daslib/macro_boost
 require daslib/static_let
 require daslib/enum_trait
+require daslib/constant_expression
 
 def operator ?[] (a : json::JsonValue const? ==const; key : string) : JsonValue? const {
     //! Returns the value of the key in the JSON object, if it exists.
@@ -796,12 +797,17 @@ def from_json(jv : JsonValue const?; t : type<auto(TT)>) : iterator<TT -const> {
     }
 }
 
+[constant_expression(key=false)]
 def read_json_field(jv : JsonValue const?; key : string; defv : auto(TT)) : TT {
     //! Reads one same-named key of the JSON object *jv* into a *TT* — the field-pruned counterpart of
     //! a full by-name materialize, emitted by linq_fold's fused JSON lane. A missing key keeps *defv*
     //! (pass the struct field's declared default). The value is converted by name via ``from_json_row``,
     //! so a struct field reads *its* fields by name too — never an overridable whole-struct ``from_JV``.
     //! *jv* is const so the fused loop's ``jsrc as _array`` elements (const) bind without a copy.
+    //! ``[constant_expression(key=false)]``: when *key* is a string literal (the fused lane always emits
+    //! one — and ``from_json_row``'s ``apply_imm`` substitutes the field name as one) it is folded into a
+    //! specialized copy, so the ``?[key]`` lookup bakes the key hash at simulate time
+    //! (``SafeTableIndex_WithHash``); a runtime *key* falls back to the generic.
     let found = unsafe((unsafe(jv ?as _object))?[key])   // value-slot pointer; null if jv is null, not an object, or key absent
     if (found != null) return from_json_row(*found, type<TT>)
     return defv
