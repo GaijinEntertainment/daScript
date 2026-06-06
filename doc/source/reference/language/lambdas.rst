@@ -30,7 +30,7 @@ form. Cloning is not supported.
 
 .. code-block:: das
 
-    def foo ( x : lambda < (arg1:int;arg2:float&):bool > ) {
+    def foo ( var x : lambda < (arg1:int;arg2:float&):bool > ) {
         ...
         var y = x       // copy — y and x now alias the same capture frame
         var z <- x      // move — alternative when x is no longer needed

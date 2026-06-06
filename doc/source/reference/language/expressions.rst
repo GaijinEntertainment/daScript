@@ -269,7 +269,7 @@ This is equivalent to:
 ``??`` evaluates expressions left to right until the first non-null value is found
 (similar to how ``||`` works for booleans).
 
-The ``??`` operator has lower precedence than ``|``, following C# convention.
+The ``??`` operator has higher precedence than the bitwise ``|`` operator (see the precedence table below).
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Ternary Operator (? :)
@@ -323,7 +323,7 @@ Both operators can be used on the left side of an assignment with ``??``:
 .. code-block:: das
 
     var dummy = 0
-    bar?.fooPtr?.x ?? dummy = 42    // writes to dummy if navigation fails
+    bar?.fooPtr?.x ?? dummy = 42    // the assignment targets the ?? dummy fallback lvalue, so writes land in dummy when navigation yields null
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Type Operators (is, as, ?as)
@@ -399,7 +399,7 @@ Cast, Upcast, and Reinterpret
 .. index::
     pair: Cast Operators; Operators
 
-**cast** performs a safe downcast from a parent structure type to a derived type:
+**cast** performs a safe upcast from a derived structure type to a parent (base) type:
 
 .. code-block:: das
 
@@ -586,7 +586,7 @@ Dynamic arrays can be created with several syntaxes:
     let a <- [1, 2, 3]                  // array<int>
     let b <- array(1, 2, 3)             // array<int>
     let c <- array<int>(1, 2, 3)        // explicitly typed
-    let d <- [for x in range(0, 10); x * x]  // comprehension
+    let d <- [for (x in range(0, 10)); x * x]  // comprehension
 
 (see :ref:`Arrays <arrays>`, :ref:`Comprehensions <comprehensions>`).
 
@@ -610,7 +610,7 @@ Structures can be initialized by specifying field values:
 
     let a = Foo(x = 13, y = 11)                     // x = 13, y = 11
     let b = Foo(x = 13)                             // x = 13, y = 2 (default)
-    let c = Foo(uninitialized x = 13)                // x = 13, y = 0 (no default init)
+    let c = unsafe(Foo(uninitialized x = 13))        // x = 13, y = 0 (uninitialized construction requires unsafe)
 
 Arrays of structures can be constructed inline:
 
@@ -701,7 +701,7 @@ The ``default`` expression creates a default-initialized value of a given type:
 .. code-block:: das
 
     var a = default<Foo>            // all fields zeroed, then default initializer called
-    var b = default<Foo> uninitialized  // all fields zeroed, no initializer
+    var b = unsafe(default<Foo> uninitialized)  // all fields zeroed, no initializer (uninitialized requires unsafe)
 
 The ``new`` operator allocates a value on the heap and returns a pointer:
 

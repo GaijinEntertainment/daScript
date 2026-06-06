@@ -148,7 +148,7 @@ Array of tuples can be constructed using similar syntax, with a comma as a separ
 
 .. code-block:: das
 
-    let H : array<Tup> <- array tuple<Tup>((a = 1, b = 2., c = "3"), (a = 4, b = 5., c = "6"))
+    let H : array<Tup> <- array<Tup>((a = 1, b = 2., c = "3"), (a = 4, b = 5., c = "6"))
 
 Tuples can be expanded upon the variable declaration, for example:
 

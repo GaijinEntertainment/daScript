@@ -16,7 +16,7 @@ Let's review the following C++ example:
         context->invoke(block, args, nullptr);
     }
 
-The C++ function here exposes a pointer a to c-string, internal to std::string.
+The C++ function here exposes a pointer to a C-string, internal to std::string.
 From Daslang's perspective, the declaration of the function looks like this:
 
 .. code-block:: das
@@ -58,10 +58,10 @@ This causes the following error:
 
 .. code-block:: text
 
-    30304: no matching functions or generics accept_string ( string const&# )
+    error[30341]: no matching functions or generics: accept_string(string const&#)
     candidate function:
-            accept_string ( s : string const ) : void
-                    invalid argument s. expecting string const, passing string const&#
+            accept_string(s: string const): void
+                    invalid argument 's' (0). expecting 'string const', passing 'string const&#'
 
 Values need to be marked as ``implicit`` to accept both temporary and regular values.
 These functions implicitly promise that the data will not be cached (copied, moved) in any form:

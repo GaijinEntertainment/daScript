@@ -128,11 +128,12 @@ A single-expression if statement can be written on one line:
 
 **Postfix if syntax:**
 
-The condition can be written after the statement:
+A terminator or call statement (``return``, ``break``, ``continue``, or a function
+call) can carry the condition after it:
 
 .. code-block:: das
 
-    a = b if ( a < b )
+    return b if ( a < b )
 
 **Ternary-style if:**
 
@@ -159,9 +160,9 @@ from the compiled output, and do not need to be valid for the given types:
 .. code-block:: das
 
     def describe(a) {
-        static_if ( typeinfo is_pointer(type<a>) ) {
+        static_if ( typeinfo is_pointer(a) ) {
             print("pointer\n")
-        } static_elif ( typeinfo is_ref_type(type<a>) ) {
+        } static_elif ( typeinfo is_ref_type(a) ) {
             print("reference type\n")
         } else {
             print("value type\n")
@@ -256,7 +257,7 @@ and returns an ``iterator``. When such a function exists, ``for (x in y)`` is eq
     }
 
     def each ( f : Foo ) : iterator<int&> {
-        return each(f.data)
+        return unsafe(each(f.data))
     }
 
     var f = Foo(data <- [1, 2, 3])

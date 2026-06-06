@@ -55,12 +55,14 @@ Arrays cannot be copied; only cloned or moved.
 
 .. code-block:: das
 
-  def clone_array(var a, b: array<string>)
+  def clone_array(var a, b: array<string>) {
     a := b      // a is now a deep copy of b
     clone(a, b) // same as above
+  }
 
-  def move_array(var a, b: array<string>)
+  def move_array(var a, b: array<string>) {
     a <- b  // a now points to the same data as b, and b is empty
+  }
 
 Arrays can be constructed inline:
 
@@ -78,7 +80,7 @@ Dynamic arrays can also be constructed inline:
 
 .. code-block:: das
 
-	let arr <- ["one"; "two"; "three"]
+	let arr <- ["one", "two", "three"]
 
 This is syntactic equivalent to:
 
@@ -114,7 +116,7 @@ Arrays of variants can be constructed inline:
     s : string
   }
 
-  var a <- array variant<Bar>(Bar(i=1), Bar(f=2.), Bar(s="3"))    // dynamic array of Bar (creates 3 different copies of Bar)
+  var a <- [Bar(i=1), Bar(f=2.), Bar(s="3")]    // dynamic array of Bar (creates 3 different copies of Bar)
 
 Arrays of tuples can be constructed inline:
 

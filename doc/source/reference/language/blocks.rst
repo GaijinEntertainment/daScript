@@ -29,11 +29,13 @@ Global or local block variables are prohibited; returning the block type is also
 
 .. code-block:: das
 
-    def goo ( b : block )
-        ...
+    def goo ( b : block ) {
+        // ...
+    }
 
-    def foo ( b : block < (arg1:int, arg2:float&) : bool >
-        ...
+    def foo ( b : block < (arg1:int, arg2:float&) : bool > ) {
+        // ...
+    }
 
 Blocks can be called via ``invoke``:
 
@@ -68,8 +70,8 @@ calls (see :ref:`Pipe Operators <expressions>` for full details):
 
 .. code-block:: das
 
-    var v1 = 1                              // block with arguments
-    res = radd(v1) $(var a:int&):int {
+    var v1 = 1
+    res = radd(v1) $(var a:int&):int {     // block with arguments
         return a++
     }
 
@@ -107,7 +109,7 @@ Nested blocks are allowed:
 
 .. code-block:: das
 
-    def passthroughFoo(a:Foo; blk:block<(b:Foo):void>) {
+    def passthrough(a:int; blk:block<(b:int):void>) {
         invoke(blk,a)
     }
 
@@ -127,7 +129,7 @@ Loop control expressions are not allowed to cross block boundaries:
 
     while ( true ) {
         take_any() {
-            break               // 30801, captured block can't break outside the block
+            break               // 30125, captured block can't 'break' outside of the block
         }
     }
 

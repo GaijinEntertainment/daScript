@@ -23,7 +23,7 @@ Daslang environments are organized into contexts. Compiling a Daslang program pr
     * miscellaneous lookup infrastructure
 
 In some sense, a ``Context`` can be viewed as a Daslang virtual machine — the object responsible for executing code and maintaining state.
-It can also be viewed as an instance of a class whose methods can be accessed when marked with ``[export]``.
+It can also be viewed as an instance of a class whose ``[export]``-marked functions act as its externally callable methods.
 
 Function code, the constant string heap, runtime debug information, and shared global variables are shared between cloned contexts.
 This allows each context instance to maintain a relatively small memory profile.
@@ -44,9 +44,9 @@ It is initialized in the following order:
     3. All specifically ordered functions tagged with ``[init]`` are called in the order they appear after topological sort.
 
 The topological sort order for the init functions is specified in the init annotation.
-    * ``tag`` attribute specifies that function will appear during the specified pass
-    * ``before`` attribute specifies that function will appear before the specified pass
-    * ``after`` attribute specifies that function will appear after the specified pass
+    * ``tag`` attribute specifies that the function will appear during the specified pass
+    * ``before`` attribute specifies that the function will appear before the specified pass
+    * ``after`` attribute specifies that the function will appear after the specified pass
 
 Consider the following example:
 
@@ -116,7 +116,9 @@ To collect garbage, from the inside of the context:
 
     var collect_string_heap = true
     var validate_after_collect = false
-    heap_collect(collect_string_heap, validate_after_collect)
+    unsafe {
+        heap_collect(collect_string_heap, validate_after_collect)
+    }
 
 To do the same from the C++ side:
 

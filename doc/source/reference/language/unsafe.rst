@@ -93,7 +93,7 @@ Variant ``?as`` on local variables is unsafe when not followed by the null coale
         return a ?as Bar                        // safe as is a form of 'addr' operation
     }
 
-Variant ``.?field`` is unsafe when not followed by the null coalescing operator:
+Variant ``?.field`` is unsafe when not followed by the null coalescing operator:
 
 .. code-block:: das
 
@@ -153,7 +153,7 @@ Local class variables are unsafe:
 implicit
 --------
 
-``implicit`` keyword is used to specify that type can be either temporary or regular type, and will be treated as defined.
+``implicit`` keyword is used to specify that type can be either temporary or regular type. The parameter is treated as the type written in the declaration, while also accepting the other form (temporary or regular) as an argument.
 For example:
 
 .. code-block:: das
@@ -166,8 +166,8 @@ Unfortunately implicit conversions like this are unsafe, so ``implicit`` is unsa
 other cases
 -----------
 
-There are several other cases where ``unsafe`` is required, but not explicitly mentioned in the documentation.
-They are typically controlled via CodeOfPolicies or appropriate option:
+There are several additional cases where ``unsafe`` is required.
+They are typically controlled via CodeOfPolicies or an appropriate option:
 
 .. code-block:: das
 

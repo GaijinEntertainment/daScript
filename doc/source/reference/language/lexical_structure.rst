@@ -115,7 +115,7 @@ Notable operators unique to Daslang:
 * ``<<<`` and ``>>>`` — bit rotation
 * ``^^`` — logical exclusive or
 * ``..`` — interval (range creation)
-* ``=>`` — tuple construction (``a => b`` creates ``tuple<auto,auto>(a, b)``; also used in table literals)
+* ``=>`` — tuple construction (``a => b`` creates ``tuple<auto;auto>(a, b)``; also used in table literals)
 
 ------------
 Other Tokens
@@ -156,7 +156,8 @@ Numeric Literals
 +-------------------------------+------------------------------------------+
 | ``0xFF00A120``                | Unsigned integer (base 16)               |
 +-------------------------------+------------------------------------------+
-| ``075``                       | Unsigned integer (base 8)                |
+| ``075``                       | Integer (base 10); leading zeros are     |
+|                               | insignificant (``075`` == ``75``)        |
 +-------------------------------+------------------------------------------+
 | ``13l``                       | 64-bit integer (base 10)                 |
 +-------------------------------+------------------------------------------+
@@ -217,11 +218,7 @@ and string interpolation:
 +------------------+-------------------------------+
 | ``\"``           | Double quote                  |
 +------------------+-------------------------------+
-| ``\'``           | Single quote                  |
-+------------------+-------------------------------+
-| ``\0``           | Null character                |
-+------------------+-------------------------------+
-| ``\a``           | Bell                          |
+| ``\'``           | Single quote (char literals)  |
 +------------------+-------------------------------+
 | ``\b``           | Backspace                     |
 +------------------+-------------------------------+
@@ -235,6 +232,9 @@ and string interpolation:
 +------------------+-------------------------------+
 | ``\UHHHHHHHH``   | Unicode code point (32-bit)   |
 +------------------+-------------------------------+
+
+``\'`` is valid only inside character literals (``'...'``); in a double-quoted
+string, write a bare ``'``. Conversely, ``\"`` is the string-only form.
 
 **Multiline strings:**
 

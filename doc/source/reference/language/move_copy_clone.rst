@@ -266,8 +266,8 @@ chosen initialization mode is not supported:
 
 .. code-block:: das
 
-    var a = get_array()     // error if relaxed_assign is false:
-                            // "local variable can only be move-initialized; use <- for that"
+    var a = get_array()     // error[30197] if relaxed_assign is false:
+                            // "local variable a can only be move-initialized" ... "use <- for that"
 
 ---------------------
 Struct Initialization
@@ -482,11 +482,11 @@ Expected output:
 .. code-block:: text
 
     copy: a=10 b=10
-    data = [[ 1; 2; 3]]
-    moved = [[ 1; 2; 3]]
-    data after move = [[]]
-    cloned = [[ 1; 2; 3; 4]]
-    moved = [[ 1; 2; 3]]
+    data = [ 1, 2, 3]
+    moved = [ 1, 2, 3]
+    data after move = []
+    cloned = [ 1, 2, 3, 4]
+    moved = [ 1, 2, 3]
 
 **I want to transfer ownership (source becomes empty):**
     Use ``<-`` (move)

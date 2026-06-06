@@ -18,6 +18,16 @@ but in reverse — tags extract values from the matched expression instead of su
 
     require daslib/ast_match
 
+Examples that build patterns with ``qmacro`` / ``qmacro_block`` also need ``daslib/ast_boost``
+and ``daslib/templates_boost`` (``daslib/ast_match`` requires them privately, so they are not
+re-exported):
+
+.. code-block:: das
+
+    require daslib/ast_match
+    require daslib/ast_boost
+    require daslib/templates_boost
+
 --------------
 Simple example
 --------------
@@ -140,8 +150,7 @@ The variable type determines which constant type is expected:
     let r = qmatch(expr, a + $v(val))
     // r.matched if the right operand is ExprConstInt; val receives the value
 
-Supported types: ``int``, ``float``, ``bool``, ``string``, ``int64``, ``uint``, ``double``,
-``uint64``, ``int8``, ``uint8``, ``int16``, ``uint16``.
+Supported types: ``int``, ``float``, ``bool``, ``string``, ``int64``, ``uint``, ``double``.
 
 $i(var) — identifier name
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

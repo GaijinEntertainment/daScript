@@ -55,7 +55,7 @@ However, if a custom clone function exists, it is immediately called regardless 
     cl := l                 // invokes clone(cl,l)
 
 
-Cloning is typically allowed between regular and temporary types (see :ref:`Temporary types <temporary>`).
+Cloning is permitted across the regular/temporary boundary: a temporary value can be cloned into a regular one and vice versa (see :ref:`Temporary types <temporary>`).
 
 POD types are copied instead of cloned:
 
@@ -206,6 +206,6 @@ Note that for non-cloneable types, Daslang will not promote ``:=`` initialize in
 
 .. seealso::
 
-    :ref:`Move, copy, and clone <clone_to_move>` for move, copy, and assignment rules,
+    :ref:`Move, copy, and clone <move_copy_clone>` for move, copy, and assignment rules,
     :ref:`Finalizers <finalizers>` for delete and finalization semantics,
     :ref:`Structs <structs>` and :ref:`Variants <variants>` for custom clone expansion.

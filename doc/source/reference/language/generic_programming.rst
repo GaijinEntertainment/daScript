@@ -24,7 +24,7 @@ Consider the following example:
         }
     }
 
-This function sets ``someField`` in the provided argument *if* it is a struct with a ``someField`` member.
+This function sets ``someField`` in the provided argument *if* it is a struct with a ``someField`` member. Note that ``has_field`` requires the argument to already be a struct or handled type — the generic only instantiates for such types, and passing a non-struct (e.g. an ``int``) is a compile error rather than a silent no-op. Use ``safe_has_field`` (see below) when the function must accept any argument and do nothing if no such field exists.
 
 We can do even more.  For example:
 
@@ -199,16 +199,18 @@ Also, consider the following:
 
 .. code-block:: das
 
-    def set0(a, b; index: int) { // a is only supposed to be of array type, of same type as b
-        return a[index] = b
+    def set0(var a, b; index: int) { // a is only supposed to be of array type, of same type as b
+        a[index] = b
     }
 
-If you call this function with an array of floats and an int, you would get a not-so-obvious compiler error message:
+If you call this function with mismatched argument types — say a ``float`` array and an ``int`` value — the failure surfaces deep inside the body (at the ``a[index] = b`` assignment), which makes for a not-so-obvious error message.
+
+To get a clearer error, constrain the types directly in the signature:
 
 .. code-block:: das
 
-    def set0(a: array<auto(some)>; b: some; index: int) { // a is of array type, of same type as b
-        return a[index] = b
+    def set0(var a: array<auto(some)>; b: some; index: int) { // a is an array, with elements of the same type as b
+        a[index] = b
     }
 
 Usage of named ``auto`` with ``typeinfo``
@@ -219,7 +221,7 @@ Usage of named ``auto`` with ``typeinfo``
         print(typeinfo typename(type<some>))
     }
 
-    fn(1) // print "const int"
+    fn(1) // print "int const"
 
 You can also modify the type with delete syntax:
 
@@ -329,15 +331,15 @@ Multiple options can be specified as a function argument:
 
     def foo ( a : int | float )   // accepts int or float
 
-Optional types always make function generic.
+OR types always make the function generic.
 
 Generic options will be matched in the order listed:
 
 .. code-block:: das
 
-    def foo ( a : Bar explicit | Foo )   // first will try to match exactly Bar, than anything else inherited from Foo
+    def foo ( a : Bar explicit | Foo )   // first will try to match exactly Bar, then anything else inherited from Foo
 
-``|#`` shortcat matches previous type, with temporary flipped:
+``|#`` shortcut matches previous type, with temporary flipped:
 
 .. code-block:: das
 

@@ -82,7 +82,7 @@ The index value for a specific case can be determined via the ``variant_index`` 
     assert(typeinfo safe_variant_index<f_value>(t)==1)
     assert(typeinfo safe_variant_index<unknown_value>(t)==-1)
 
-Current case selection can be modified with the unsafe operation ``safe_variant_index``:
+Current case selection can be modified with the unsafe operation ``set_variant_index``:
 
 .. code-block:: das
 
