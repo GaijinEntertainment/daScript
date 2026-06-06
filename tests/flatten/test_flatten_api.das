@@ -123,6 +123,26 @@ def api_drop(x : int) : int {
     return r
 }
 
+// `e * 0 → 0` is gated by has_sideeffects(e): a side-effecting `e` must NOT be
+// dropped. i=0 makes `g_writer(x) * 0`; the call must survive (global incremented)
+// even though the product is statically 0.
+def ref_mul0(x : int) : int {
+    var acc = 0
+    for (i in range(1)) {
+        acc += g_writer(x) * i      // i=0 → g_writer(x) * 0
+    }
+    return acc
+}
+
+[flat_api]
+def api_mul0(x : int) : int {
+    var acc = 0
+    for (i in range(1)) {
+        acc += g_writer(x) * i
+    }
+    return acc
+}
+
 var GRID : array<int>
 
 [init]
@@ -167,6 +187,17 @@ def test_flatten_api(t : T?) {
             let flatv = api_drop_apiflat(v)
             t |> equal(flatv, refv)
             t |> equal(g_calls, refCalls)   // the twin must ALSO not call it
+        }
+    }
+    t |> run("e*0 fold is side-effect-gated: g_writer(x)*0 keeps the call") @(t : T?) {
+        for (v in GRID) {
+            g_calls = 0
+            let refv = ref_mul0(v)
+            let refCalls = g_calls          // 1 — g_writer runs even though *0
+            g_calls = 0
+            let flatv = api_mul0_apiflat(v)
+            t |> equal(flatv, refv)
+            t |> equal(g_calls, refCalls)   // the twin must ALSO call g_writer (not fold *0 away)
         }
     }
 }

@@ -156,6 +156,27 @@ def f_nested_local(x : int) : int {
     return acc
 }
 
+// ----- identity folds: `x * i` over an unrolled range exercises *0, *1 (and *-1) -----
+// i=0 -> x*0 -> the whole `acc += x*0` store collapses away; i=1 -> x*1 -> x.
+[flatten]
+def f_loop_mul(x : int) : int {
+    var acc = 0
+    for (i in range(4)) {
+        acc += x * i
+    }
+    return acc
+}
+
+// negative start -> i=-1 -> x*-1 -> -x (the `* -1` negation fold)
+[flatten]
+def f_loop_negidx(x : int) : int {
+    var acc = 0
+    for (i in range(-1, 3)) {
+        acc += x * i
+    }
+    return acc
+}
+
 // ----- driver -----
 
 var GRID : array<int>
@@ -220,6 +241,16 @@ def test_flatten_loops(t : T?) {
     t |> run("nested loops with per-level locals (double rename)") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_nested_local_flat(v), f_nested_local(v))
+        }
+    }
+    t |> run("identity folds: x*0 / x*1 over an unrolled range") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_loop_mul_flat(v), f_loop_mul(v))
+        }
+    }
+    t |> run("identity fold: x*-1 -> -x (negative loop index)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_loop_negidx_flat(v), f_loop_negidx(v))
         }
     }
 }

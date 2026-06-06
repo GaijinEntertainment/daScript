@@ -982,14 +982,41 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>) :
 // initializers (`var acc = 0` → `var acc : int`). The cleanups the compiler will
 // not do at infer time, done here with the lint side-effect estimate.
 
-class private FoldOp3Visitor : AstVisitor {
+class private FoldVisitor : AstVisitor {
     changed : bool
+    def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        // Integer-only algebraic identities. Float is excluded on purpose: `x * 0.0`
+        // is NaN for x=±inf/NaN, and `x + 0.0` flips -0.0 to +0.0 — the identities only
+        // hold for two's-complement integers (where `e * -1 == -e` even at INT_MIN).
+        // Only `* 0` DROPS an operand, so only it needs the side-effect gate.
+        if (that.op == "*") {
+            if (is_int_val(that.right, 0l) && !has_sideeffects(that.left)) { changed = true; return that.right }
+            if (is_int_val(that.left, 0l) && !has_sideeffects(that.right)) { changed = true; return that.left }
+            if (is_int_val(that.right, 1l)) { changed = true; return that.left }
+            if (is_int_val(that.left, 1l)) { changed = true; return that.right }
+            if (is_int_neg_one(that.right)) { changed = true; return negate(that.left) }
+            if (is_int_neg_one(that.left)) { changed = true; return negate(that.right) }
+        } elif (that.op == "+") {
+            if (is_int_val(that.right, 0l)) { changed = true; return that.left }
+            if (is_int_val(that.left, 0l)) { changed = true; return that.right }
+        } elif (that.op == "-") {
+            if (is_int_val(that.right, 0l)) { changed = true; return that.left }
+            if (is_int_val(that.left, 0l)) { changed = true; return negate(that.right) }
+        }
+        return that
+    }
     def override visitExprOp3(var that : ExprOp3?) : ExpressionPtr {
         // Post-order: subexpr/arms already folded, so a now-constant condition
         // collapses to its live arm (the dead arm + condition become unreachable).
         if (that.subexpr is ExprConstBool) {
             changed = true
             return (that.subexpr as ExprConstBool).value ? that.left : that.right
+        }
+        // Equal arms (`c ? a : a → a`) — e.g. after `acc + 0 → acc` makes both arms `acc`.
+        // Gated on a pure condition (dropping it must not lose a side effect).
+        if (describe(that.left) == describe(that.right) && !has_sideeffects(that.subexpr)) {
+            changed = true
+            return that.left
         }
         return that
     }
@@ -1016,6 +1043,39 @@ def private is_zero_const(e : ExpressionPtr) : bool {
     return false
 }
 
+// Extract an integer constant's value (widened to int64) and whether its type is
+// signed. Float/double/bool consts are NOT integers and return false — the algebraic
+// identities only hold for integer arithmetic.
+def private int_const(e : ExpressionPtr; var v : int64&; var signed : bool&) : bool {
+    if (e == null) return false
+    if (e is ExprConstInt) { v = int64((e as ExprConstInt).value); signed = true; return true }
+    if (e is ExprConstInt8) { v = int64((e as ExprConstInt8).value); signed = true; return true }
+    if (e is ExprConstInt16) { v = int64((e as ExprConstInt16).value); signed = true; return true }
+    if (e is ExprConstInt64) { v = (e as ExprConstInt64).value; signed = true; return true }
+    if (e is ExprConstUInt) { v = int64((e as ExprConstUInt).value); signed = false; return true }
+    if (e is ExprConstUInt8) { v = int64((e as ExprConstUInt8).value); signed = false; return true }
+    if (e is ExprConstUInt16) { v = int64((e as ExprConstUInt16).value); signed = false; return true }
+    if (e is ExprConstUInt64) { v = int64((e as ExprConstUInt64).value); signed = false; return true }
+    return false
+}
+
+def private is_int_val(e : ExpressionPtr; want : int64) : bool {
+    var v = 0l
+    var signed = false
+    return int_const(e, v, signed) && v == want
+}
+
+def private is_int_neg_one(e : ExpressionPtr) : bool {
+    // Signed only — an unsigned "-1" is a large positive, not a negation factor.
+    var v = 0l
+    var signed = false
+    return int_const(e, v, signed) && signed && v == -1l
+}
+
+def private negate(var e : ExpressionPtr) : ExpressionPtr {
+    return new ExprOp1(at = e.at, op := "-", subexpr = e)
+}
+
 [macro_function]
 def public flatten_fold(var func : FunctionPtr) : bool {
     //! Post-infer select-folding pass: collapse `const ? a : b` to the live arm, drop
@@ -1027,7 +1087,7 @@ def public flatten_fold(var func : FunctionPtr) : bool {
     //! this automatically between lowering and the shape check; backends calling
     //! `flatten_function` run it after their own re-infer, before consuming the twin.
     if (!(func.body is ExprBlock)) return false
-    var v = new FoldOp3Visitor()
+    var v = new FoldVisitor()
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
