@@ -89,13 +89,23 @@ def private set_flatten_phase(var func : FunctionPtr; ph : int) {
 // them when it descends into a callee. structPred is the AND of enclosing
 // if-conditions on the path (null == statically true).
 
+// One stack entry per enclosing flattened loop (innermost last). `loopLive` is the
+// break mask (declared once, persists across unrolled copies); `iterLive` is the
+// continue mask (re-declared `= true` at each copy head). Either is "" when that
+// flavor is absent in the loop body — live_pred skips empty names.
+struct private LoopMask {
+    loopLive : string
+    iterLive : string
+}
+
 class private FlatCtx {
     counter   : int
     liveName  : string
     retName   : string
     hasRet    : bool
     worklist  : array<string>
-    whitelist : table<string>   // leaf-builtin names allowed to survive (backend-supplied)
+    loopMasks : array<LoopMask>   // enclosing loops' break/continue masks (innermost last)
+    whitelist : table<string>     // leaf-builtin names allowed to survive (backend-supplied)
     ok        : bool
     err      : string
 }
@@ -135,6 +145,41 @@ def private p_and(a, b : ExpressionPtr) : ExpressionPtr {
     return qmacro($e(a) && $e(b))
 }
 
+// The write predicate at the current point: the AND of every active mask
+// (funcLive plus each enclosing loop's loopLive/iterLive) and structPred. Passing
+// `exclude` drops that one mask from the AND — used to build a narrow term, where
+// the target mask cancels itself out (`M = M && !(rest)`). Returns null if nothing
+// remains (statically true), which the callers treat as `= false` on a narrow.
+def private live_pred(ctx : FlatCtx?; structPred : ExpressionPtr; exclude : string = "") : ExpressionPtr {
+    var acc : ExpressionPtr = null
+    if (ctx.liveName != exclude) {
+        acc = qmacro($i(ctx.liveName))
+    }
+    for (lm in ctx.loopMasks) {
+        if (lm.loopLive != "" && lm.loopLive != exclude) {
+            acc = acc == null ? qmacro($i(lm.loopLive)) : qmacro($e(acc) && $i(lm.loopLive))
+        }
+        if (lm.iterLive != "" && lm.iterLive != exclude) {
+            acc = acc == null ? qmacro($i(lm.iterLive)) : qmacro($e(acc) && $i(lm.iterLive))
+        }
+    }
+    if (structPred != null) {
+        acc = acc == null ? clone_expression(structPred) : qmacro($e(acc) && $e(structPred))
+    }
+    return acc
+}
+
+// Emit a mask narrow `name = name && !(term)` on the executing path. A null term
+// means the path is statically reached → `name = false`. Shared by return / break
+// / continue (their only difference is which mask narrows and what term excludes).
+def private emit_narrow(var out : array<ExpressionPtr>; name : string; term : ExpressionPtr) {
+    if (term == null) {
+        out |> push <| qmacro_expr(${ $i(name) = false; })
+    } else {
+        out |> push <| qmacro_expr(${ $i(name) = $i(name) && !($e(term)); })
+    }
+}
+
 def private is_user_call(e : ExpressionPtr) : bool {
     if (!(e is ExprCall)) return false
     let c = e as ExprCall
@@ -158,12 +203,12 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
         out |> push <| qmacro_expr(${ var $i(argN) = $e(call.arguments[ai]); })
         subst |> replaceVariable(string(p.name)) <| qmacro($i(argN))
     }
-    // The callee runs where the caller's predicate holds.
-    if (structPred == null) {
-        out |> push <| qmacro_expr(${ var $i(liveN) = $i(ctx.liveName); })
-    } else {
-        out |> push <| qmacro_expr(${ var $i(liveN) = $i(ctx.liveName) && $e(structPred); })
-    }
+    // The callee runs where the caller's full predicate holds — funcLive AND every
+    // enclosing loop's break/continue masks AND structPred — all baked into the frame
+    // seed. The callee body then lowers with this seed as its base mask and an EMPTY
+    // loop stack (its returns narrow only this frame; it cannot break the caller's loop).
+    let seed = live_pred(ctx, structPred)
+    out |> push <| qmacro_expr(${ var $i(liveN) = $e(seed); })
     // Result temp only for value-returning callees. A void callee is inlined
     // for its side effects (e.g. predicated writes to output globals); it has
     // no value to bind, so emitting `default<void>` would be a type error.
@@ -179,6 +224,7 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
     let savedLive = ctx.liveName
     let savedRet = ctx.retName
     let savedHas = ctx.hasRet
+    var savedLoops <- ctx.loopMasks   // move out → ctx.loopMasks is empty for the callee body
     ctx.liveName = liveN
     ctx.retName = retN
     ctx.hasRet = !isVoidCallee
@@ -190,6 +236,7 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
     ctx.liveName = savedLive
     ctx.retName = savedRet
     ctx.hasRet = savedHas
+    ctx.loopMasks <- savedLoops
     if (isVoidCallee) return null
     return qmacro($i(retN))
 }
@@ -335,19 +382,38 @@ def private lower_branch(var ctx : FlatCtx?; br : ExpressionPtr; structPred : Ex
     }
 }
 
+// Lower a `break` (isBreak) or `continue` by narrowing the innermost loop's mask.
+// The narrow term excludes the target mask (it cancels) and is gated by every other
+// active mask + structPred, so a prior return/break/continue on the same path
+// correctly suppresses this one.
+def private lower_loop_exit(var ctx : FlatCtx?; structPred : ExpressionPtr; var out : array<ExpressionPtr>; isBreak : bool) {
+    if (empty(ctx.loopMasks)) {
+        ctx.ok = false
+        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} outside a flattened loop"
+        return
+    }
+    let lm = ctx.loopMasks[length(ctx.loopMasks) - 1]
+    let nm = isBreak ? lm.loopLive : lm.iterLive
+    if (nm == "") {
+        ctx.ok = false
+        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} mask was not allocated"
+        return
+    }
+    emit_narrow(out, nm, live_pred(ctx, structPred, nm))
+}
+
 def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
     if (stmt is ExprReturn) {
         let r = stmt as ExprReturn
         if (ctx.hasRet && r.subexpr != null) {
             let valExpr = lower_value(ctx, r.subexpr, structPred, out)
-            let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+            let pred = live_pred(ctx, structPred)
             out |> push <| qmacro_expr(${ $i(ctx.retName) = $e(pred) ? $e(valExpr) : $i(ctx.retName); })
         }
-        if (structPred == null) {
-            out |> push <| qmacro_expr(${ $i(ctx.liveName) = false; })
-        } else {
-            out |> push <| qmacro_expr(${ $i(ctx.liveName) = $i(ctx.liveName) && !($e(structPred)); })
-        }
+        // Narrow funcLive on the executing path. The term is every OTHER active mask
+        // (enclosing loop masks) AND structPred — funcLive itself cancels. With no
+        // enclosing loop this reduces to the old `funcLive = funcLive && !structPred`.
+        emit_narrow(out, ctx.liveName, live_pred(ctx, structPred, ctx.liveName))
     } elif (stmt is ExprIfThenElse) {
         let ite = stmt as ExprIfThenElse
         let cN = fresh(ctx, "__flat_c")
@@ -359,7 +425,7 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
     } elif (stmt is ExprCopy) {
         let cp = stmt as ExprCopy
         let rhs = lower_value(ctx, cp.right, structPred, out)
-        let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+        let pred = live_pred(ctx, structPred)
         out |> push <| qmacro_expr(${ $e(cp.left) = $e(pred) ? $e(rhs) : $e(cp.left); })
     } elif (stmt is ExprLet) {
         // A local declaration always executes; inline any user-call initializer
@@ -377,9 +443,14 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
     } elif (stmt is ExprWhile) {
         ctx.ok = false
         ctx.err = "flatten: while loops are not supported; use a fixed range(N) or array-literal for loop"
-    } elif (stmt is ExprBreak || stmt is ExprContinue) {
-        ctx.ok = false
-        ctx.err = "flatten: break / continue inside a flattened loop are not supported yet"
+    } elif (stmt is ExprBreak) {
+        // Narrow the innermost loop's break mask: it persists across unrolled copies,
+        // so once a copy breaks, the rest of it and every later copy mask off.
+        lower_loop_exit(ctx, structPred, out, true)
+    } elif (stmt is ExprContinue) {
+        // Narrow the innermost loop's per-iteration mask: the rest of THIS copy masks
+        // off; the next copy re-declares it `= true`.
+        lower_loop_exit(ctx, structPred, out, false)
     } elif (stmt is ExprMove || stmt is ExprClone) {
         ctx.ok = false
         ctx.err = "flatten: move (<-) / clone (:=) cannot be predicated; only copyable-value assignment is supported"
@@ -387,7 +458,7 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         // Compound assignment `lhs OP= rhs` → `lhs = P ? (lhs OP rhs) : lhs`.
         let o = stmt as ExprOp2
         let bop = ASSIGN_BASE?["{o.op}"] ?? ""
-        let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+        let pred = live_pred(ctx, structPred)
         var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.left),
             right = lower_value(ctx, o.right, structPred, out))
         out |> push <| qmacro_expr(${ $e(o.left) = $e(pred) ? $e(combined) : $e(o.left); })
@@ -397,7 +468,7 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         // drop-if-unhandled hazard as compound assignment; PERF013 nudges toward these.
         let o = stmt as ExprOp1
         let bop = "{o.op}" == "++" ? "+" : "-"
-        let pred = p_and(qmacro($i(ctx.liveName)), structPred)
+        let pred = live_pred(ctx, structPred)
         var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.subexpr),
             right = new ExprConstInt(at = o.at, value = 1))
         out |> push <| qmacro_expr(${ $e(o.subexpr) = $e(pred) ? $e(combined) : $e(o.subexpr); })
@@ -445,14 +516,67 @@ def private collect_let_names(body : ExpressionPtr) : array<string> {
     return <- result
 }
 
+// Does THIS loop's body contain a break / continue that targets THIS loop? A
+// nested for/while owns its own break/continue, so we only count those at nesting
+// depth 0 (the depth counter ignores any inside a deeper loop). Drives whether
+// lower_for allocates the loopLive (break) / iterLive (continue) masks at all —
+// a loop with neither stays byte-identical to the pre-M4.1 output.
+class private BreakContinueScan : AstVisitor {
+    depth       : int
+    hasBreak    : bool
+    hasContinue : bool
+    def override preVisitExprFor(expr : ExprFor?) : void {
+        depth ++
+    }
+    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        depth --
+        return expr
+    }
+    def override preVisitExprWhile(expr : ExprWhile?) : void {
+        depth ++
+    }
+    def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
+        depth --
+        return expr
+    }
+    def override preVisitExprBreak(expr : ExprBreak?) : void {
+        if (depth == 0) {
+            hasBreak = true
+        }
+    }
+    def override preVisitExprContinue(expr : ExprContinue?) : void {
+        if (depth == 0) {
+            hasContinue = true
+        }
+    }
+}
+
+def private scan_break_continue(body : ExpressionPtr; var hasBreak : bool&; var hasContinue : bool&) {
+    var v = new BreakContinueScan()
+    make_visitor(*v) $(adapter) {
+        visit(body, adapter)
+    }
+    if (v.hasBreak) {
+        hasBreak = true
+    }
+    if (v.hasContinue) {
+        hasContinue = true
+    }
+    unsafe {
+        delete v
+    }
+}
+
 // Fixed-count loop unrolling (M4). A `for` over a constant `range(N)` or an array
 // literal has a compile-time-known iteration count: clone the body once per
 // iteration, substitute the loop variable with that iteration's constant, and lower
 // each unrolled copy under the SAME predicate (an unrolled body always executes).
 // Per-iteration locals are renamed (`o` → `o_0`, `o_1`, …) so the copies don't
 // shadow each other in the flattened scope. Mirrors daslib/unroll.das. break /
-// continue are rejected upstream in lower_stmt (deferred to a later cut); while
-// loops and non-constant sources error too.
+// continue (M4.1) allocate runtime masks — loopLive (persists across copies) for
+// break, a per-copy iterLive for continue — pushed on ctx.loopMasks for the body to
+// narrow; absent both, the loop is byte-identical to the pre-M4.1 output. while
+// loops and non-constant sources error.
 def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
     if (length(efor.iterators) != 1 || length(efor.sources) != 1) {
         ctx.ok = false
@@ -487,7 +611,27 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
     }
     let van = "{efor.iterators[0]}"
     let localNames <- collect_let_names(efor.body)
+    // Allocate break/continue masks only if THIS loop uses them (depth-0 scan).
+    var hasBreak = false
+    var hasContinue = false
+    scan_break_continue(efor.body, hasBreak, hasContinue)
+    var pushed = false
+    if (hasBreak || hasContinue) {
+        var loopName = ""
+        if (hasBreak) {
+            loopName = fresh(ctx, "__flat_loop")
+            out |> push <| qmacro_expr(${ var $i(loopName) = true; })   // persists across copies
+        }
+        ctx.loopMasks |> push(LoopMask(loopLive = loopName, iterLive = ""))
+        pushed = true
+    }
     for (k in range(length(substs))) {
+        if (pushed && hasContinue) {
+            // Fresh per-copy continue mask, reset to true at this copy's head.
+            let iterName = fresh(ctx, "__flat_iter")
+            out |> push <| qmacro_expr(${ var $i(iterName) = true; })
+            ctx.loopMasks[length(ctx.loopMasks) - 1].iterLive = iterName
+        }
         var iblk = clone_expression(efor.body)
         remove_deref(van, iblk)               // strip ExprRef2Value around the workhorse loop var
         var rules : Template
@@ -499,7 +643,15 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
         }
         apply_template(rules, efor.at, iblk, false)
         lower_branch(ctx, iblk, structPred, out)
-        if (!ctx.ok) return
+        if (!ctx.ok) {
+            if (pushed) {
+                ctx.loopMasks |> pop()
+            }
+            return
+        }
+    }
+    if (pushed) {
+        ctx.loopMasks |> pop()
     }
 }
 

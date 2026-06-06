@@ -38,10 +38,6 @@ def test_flatten_boundaries(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_while.das")
         t |> success(find(issues, "while loops are not supported") >= 0, "expected while error, got: {issues}")
     }
-    t |> run("break inside a flattened loop is rejected") @(t : T?) {
-        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_break.das")
-        t |> success(find(issues, "break / continue") >= 0, "expected break error, got: {issues}")
-    }
     t |> run("non-whitelisted builtin is rejected") @(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_builtin.das")
         t |> success(find(issues, "not on the whitelist") >= 0, "expected whitelist error, got: {issues}")
