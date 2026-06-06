@@ -28,10 +28,11 @@ FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPEN
 #                                 annotation_arguments, ExprBlock) lacking AOT header decls
 #   network                    — daslang class `Server` shadows C++ `das::Server`,
 #                                codegen resolves NetworkServer? to the daslang class
-#   style_lint                 — [lint_macro] consumed only at compile time;
-#                                iterates `*ExprMakeStruct.structs[i]` (a `MakeStruct`
-#                                that subclasses `vector<MakeFieldDeclPtr>` in C++) which
-#                                has no `das_iterator<MakeStruct>` AOT specialization
+#   style_lint                 — [lint_macro] consumed only at compile time; calls
+#                                AST/module-introspection builtins (for_each_pass_macro,
+#                                for_each_capture_macro, for_each_simulate_macro,
+#                                for_each_function_annotation, module_has_comment_reader)
+#                                that lack AOT header declarations
 list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network|style_lint)\\.das$")
 # just_in_time bootstraps the LLVM-backed JIT module via [extern](library=LLVM.dll).
 # Without DAS_LLVM_DISABLED=OFF, the [extern] macro fails at compile time.
@@ -240,6 +241,12 @@ FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_D
 
 # AOT for fio test files
 FILE(GLOB AOT_FIO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fio/*.das")
+
+# AOT for flatten test files
+FILE(GLOB AOT_FLATTEN_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/flatten/*.das")
+# Exclude the _err_ boundary fixtures (they intentionally fail to compile) and the
+# flat_api_macro helper module (a compile-time-only macro, not a test entry point)
+list(FILTER AOT_FLATTEN_FILES EXCLUDE REGEX "_err_|flat_api_macro")
 
 # AOT for fs test files
 FILE(GLOB AOT_FS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fs/*.das")
@@ -566,6 +573,10 @@ add_custom_target(test_aot_fio)
 SET(FIO_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FIO_FILES}" FIO_AOT_GENERATED_SRC test_aot_fio daslang)
 
+add_custom_target(test_aot_flatten)
+SET(FLATTEN_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_FLATTEN_FILES}" FLATTEN_AOT_GENERATED_SRC test_aot_flatten daslang)
+
 add_custom_target(test_aot_fs)
 SET(FS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FS_FILES}" FS_AOT_GENERATED_SRC test_aot_fs daslang)
@@ -765,6 +776,7 @@ SOURCE_GROUP_FILES("aot generated" LIVE_HOST_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LIVE_HOST_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FIO_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" FLATTEN_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FUNCTIONAL_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" GC_AOT_GENERATED_SRC)
@@ -838,6 +850,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LIVE_HOST_MODULES_AOT_GENERATED_SRC}
     ${DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC}
     ${FIO_AOT_GENERATED_SRC}
+    ${FLATTEN_AOT_GENERATED_SRC}
     ${FS_AOT_GENERATED_SRC}
     ${FUNCTIONAL_AOT_GENERATED_SRC}
     ${GC_AOT_GENERATED_SRC}
