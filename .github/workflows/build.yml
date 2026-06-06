@@ -685,3 +685,75 @@ jobs:
       # is where libclang/cbind is available (same reason as the self-binder).
       run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
 
+  build_windows_clangcl:
+  ###########################################################
+  # Catches clang-cl (Visual Studio "ClangCL" toolset) build regressions. clang-cl
+  # sets CMake's MSVC=TRUE but uses clang's resource headers, and the toolset puts
+  # that resource include dir on INCLUDE. dasHV builds OpenSSL from source with plain
+  # cl, which rejects clang's #include_next <stdint.h> (C1021) — modules/dasHV/
+  # scrub_clang_include.cmake strips the clang dir from INCLUDE so cl falls back to
+  # MSVC's stdint.h. Without this job that fix — and clang-cl buildability generally —
+  # could silently rot. Same runner pool as the MSVC matrix; separate top-level job.
+  ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: windows-latest-fat
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Defender"
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionProcess "daslang.exe"
+        Add-MpPreference -ExclusionProcess "test_aot.exe"
+
+    - name: "Install nasm (OpenSSL asm)"
+      uses: ilammy/setup-nasm@v1
+
+    # dasHV builds OpenSSL from source here (the path the scrub fix targets), and
+    # nmake is serial — ~7 min. Cache the install so only the first run (or a dasHV
+    # CMakeLists change) pays it; on a hit find_package(OpenSSL) finds it and the
+    # from-source ExternalProject is skipped. (sccache — the matrix's compiler cache
+    # — is not usable here: the VS generator, required for the ClangCL toolset, does
+    # not support CMAKE_CXX_COMPILER_LAUNCHER.)
+    - name: "Cache OpenSSL (clang-cl from-source build)"
+      uses: actions/cache@v4
+      with:
+        path: |
+          build-clangcl/openssl/include
+          build-clangcl/openssl/lib
+          build-clangcl/openssl/bin
+        key: openssl-clangcl-${{ runner.os }}-${{ hashFiles('modules/dasHV/CMakeLists.txt') }}
+
+    - name: "Build: Daslang (clang-cl / VS ClangCL toolset)"
+      shell: pwsh
+      run: |
+        cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        cmake --build build-clangcl --config Release --parallel
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Test: interpreter sweep"
+      shell: pwsh
+      run: |
+        bin\Release\daslang.exe dastest\dastest.das -- --color --failures-only --timeout 900 --test tests
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Test: AOT sweep"
+      shell: pwsh
+      run: |
+        cmake --build build-clangcl --config Release --target test_aot --parallel
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        bin\Release\test_aot.exe -use-aot dastest\dastest.das -- --use-aot --color --failures-only --timeout 900 --test tests
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Small C++ tests"
+      shell: pwsh
+      run: |
+        cd build-clangcl
+        ctest --build-config Release -L small --output-on-failure
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+

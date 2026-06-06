@@ -25,6 +25,19 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 			set(OPENSSL_LIBRARIES ${OPENSSL_ROOT_DIR}/lib)
 			set(OPENSSL_LIBRARIES_FILES ${OPENSSL_ROOT_DIR}/lib/libcrypto.lib ${OPENSSL_ROOT_DIR}/lib/libssl.lib)
 
+			# clang-cl also satisfies MSVC, but the VS ClangCL toolset puts clang's
+			# resource include (whose <stdint.h>/<vadefs.h> use #include_next) on
+			# INCLUDE; OpenSSL builds with plain cl, which rejects #include_next (C1021).
+			# Run nmake through a wrapper that strips the clang resource dir from INCLUDE
+			# so cl falls back to MSVC's stdint.h. (The strip propagates via env to
+			# nmake's recursive cl children; a `nmake CC=clang-cl` override does not.)
+			IF(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+				SET(_OSSL_BUILD_CMD ${CMAKE_COMMAND} -P ${DAS_HV_DIR}/scrub_clang_include.cmake -- nmake)
+				SET(_OSSL_INSTALL_CMD ${CMAKE_COMMAND} -P ${DAS_HV_DIR}/scrub_clang_include.cmake -- nmake install_sw)
+			ELSE()
+				SET(_OSSL_BUILD_CMD nmake)
+				SET(_OSSL_INSTALL_CMD nmake install_sw)
+			ENDIF()
 			# Note that under Ninja it should be run from VS developer code Prompt to setup all variables (or call vcvarsall.bat)
 			ExternalProject_Add(openssl_build
 				URL "https://www.openssl.org/source/openssl-3.5.1.tar.gz"
@@ -32,8 +45,8 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 				PREFIX ${OPENSSL_ROOT_DIR}
 				CONFIGURE_COMMAND perl Configure ${OPENSSL_ARCH} no-shared --prefix=${OPENSSL_ROOT_DIR} --openssldir=${OPENSSL_ROOT_DIR}
-				BUILD_COMMAND nmake
-				INSTALL_COMMAND nmake install_sw
+				BUILD_COMMAND ${_OSSL_BUILD_CMD}
+				INSTALL_COMMAND ${_OSSL_INSTALL_CMD}
 				BUILD_IN_SOURCE 1
 				BUILD_BYPRODUCTS ${OPENSSL_LIBRARIES_FILES}
 			)
