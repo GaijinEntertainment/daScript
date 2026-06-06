@@ -107,6 +107,22 @@ and disappears entirely, so a branchless input flattens *byte-identical* to its
 source. A post-inference fold collapses ``const ? a : b`` selects to the live
 arm and drops the pure self-assigns a folded false-select leaves behind.
 
+**Constant folding.** Because the branchless target has no downstream optimizer,
+the twin is reduced as far as possible *before* the backend sees it. The
+post-inference fold applies algebraic identities — ``x*1``, ``x+0``, ``x-0`` and
+``x*-1`` over int / float / vectors (each keeps the non-constant operand, so the
+vector type survives), plus a **scalar-only** ``x*0`` (it returns the zero
+literal, so it is gated to a scalar result — a runtime ``vec*0`` is left intact
+and folds only when the vector operand is itself constant, via full-const eval),
+and the boolean ``true && x``, ``c ? true : false``, ``!const``. It also collapses
+constant vector constructors (``float3(1, 2, 3)``) and const-argument pure
+builtins (``float(7)``, ``min(2, 3)``) to literals, and constant-propagates
+single-definition locals — so a fully-constant accumulator loop reduces to its
+final constant. These are exactly the folds the general compiler leaves for the
+downstream tiers (it folds constant *arithmetic* but not constant *constructors*,
+and never a runtime-operand identity), done here under a shader's fast-math
+assumption (scalar ``x*0 → 0`` always fires).
+
 Supported subset
 ================
 
@@ -180,6 +196,15 @@ Public API
 ``[flatten]``
     The thin annotation. Generates ``<name>_flat`` with the standard whitelist.
     Use it when you just want a flattened twin to call.
+
+``[flatten(strict_fold = true)]``
+    Opt-in verification. The final shape check additionally rejects any
+    const-foldable residual the fold should have collapsed — an unconditional
+    algebraic identity, an all-const foldable call, a const-condition select, or
+    ``!const`` — turning a *missed* fold into a compile error. Default off (a
+    missed fold is suboptimal, not wrong); turn it on in tests to prove the
+    reduction actually happened, since a differential check alone cannot see a
+    fold that failed to fire.
 
 ``flatten_function(var func, whitelist : table<string>) : FlatCtx?``
     Flattens ``func``'s body in place using the caller-supplied primitive set.

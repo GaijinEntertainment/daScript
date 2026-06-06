@@ -1553,7 +1553,7 @@ def document_module_strudel_player(_root : string) {
         group_by_regex("Tempo and timing", mod, %regex~strudel_(set_bpm|set_cps|get_bpm|get_cps|get_playback_time|set_look_ahead)$%%),
         group_by_regex("Volume", mod, %regex~strudel_(set_volume|get_volume)$%%),
         group_by_regex("Asset loading", mod, %regex~strudel_(load_sound|load_sample_dir|load_sf2|get_sf2_path|has_sf2)$%%),
-        group_by_regex("Track management", mod, %regex~strudel_(add_track|remove_track|fade_track)$%%),
+        group_by_regex("Track management", mod, %regex~strudel_(add_track|add_track_immediate|remove_track|fade_track)$%%),
         group_by_regex("State serialization", mod, %regex~strudel_(save_state|restore_state|save_sf2_state|restore_sf2_state)$%%),
         group_by_regex("Debug and diagnostics", mod, %regex~strudel_(debug_memory|reset_memory_baseline|debug_sample_peaks|debug_master_peak|debug_output_peak|debug_voices)$%%)
     )

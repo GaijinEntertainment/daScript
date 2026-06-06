@@ -31,6 +31,24 @@
 #
 #   8. cap_loop_continue.shader (RUNTIME continue) -> a PER-COPY bool mask (one
 #      boolConst init per unrolled copy) gating that copy's accumulation.
+#
+#   9. cap_fold_identity.shader (scalar identities `gain*1.0 + 0.0`) -> fold away.
+#      The general compiler leaves them (gain is a runtime prop) and the backend has
+#      no const-fold; flatten's fold removes them, so the graph has only the genuine
+#      `base*gain` multiply: exactly 1 mul, 0 add.
+#
+#  10. cap_fold_ctor.shader (const vector ctor `float3(0.5)`) -> a const. The typer
+#      folds scalar const arithmetic but leaves const CONSTRUCTORS; flatten collapses
+#      it to a single `float3Const` node.
+#
+#  11. cap_fold_bool.shader (boolean identities `true && c` / `false || c`) -> fold away.
+#      The typer folds only fully-const ops, so the `&&`/`||` survive in source; flatten
+#      folds them to the bare comparison, so no `and`/`or` node reaches the backend.
+#
+#  12. cap_fold_accumulator.shader (const accumulator `var acc=0; acc+=0.1`×4) -> a const.
+#      flatten SSA-renames the reassigned accumulator to single-def versions and const-
+#      props the chain to one constant: 0 add nodes, result = base * <const>. Without it
+#      the backend rejects the self-referential accumulator (50503).
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -149,6 +167,75 @@ if [[ "$errs" -eq 0 && "$selects" -gt 0 && "$masks" -gt 1 ]]; then
     echo "   ok — compiles ($nodes nodes), $masks per-copy bool masks gating $selects select(s)"
 else
     echo "   FAIL — errors=$errs selects=$selects masks=$masks (expected >0 selects and >1 per-copy masks)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "9. cap_fold_identity.shader (scalar identities gain*1.0 / +0.0 fold away)"
+out="$(compile "$here/cap_fold_identity.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+muls="$(echo "$out" | grep -c ' mul ')"
+adds="$(echo "$out" | grep -c ' add ')"
+errs="$(echo "$out" | grep -ci error)"
+# `gain * 1.0 + 0.0` collapses to `gain` (gain is a runtime prop, so the general
+# compiler can't; the backend has no const-fold), leaving only the genuine
+# `base * gain` multiply: exactly 1 mul, 0 add. Without the fold: 2 mul, 1 add.
+if [[ "$errs" -eq 0 && "$muls" -eq 1 && "$adds" -eq 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), 1 mul (base*gain), 0 add (identities folded)"
+else
+    echo "   FAIL — errors=$errs muls=$muls adds=$adds (expected 1 mul, 0 add)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "10. cap_fold_ctor.shader (const vector ctor float3(0.5) folds to a const)"
+out="$(compile "$here/cap_fold_ctor.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+f3c="$(echo "$out" | grep -c ' float3Const ')"
+errs="$(echo "$out" | grep -ci error)"
+# The typer leaves `float3(0.5)` as a ctor (const constructors aren't infer-folded);
+# flatten collapses it to a single float3Const node. Without the fold there is no
+# float3Const for this expression (it'd be a vector ctor + floatConst inputs).
+if [[ "$errs" -eq 0 && "$f3c" -ge 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), $f3c float3Const node(s) (const ctor folded)"
+else
+    echo "   FAIL — errors=$errs float3Const=$f3c (expected >=1 float3Const)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "11. cap_fold_bool.shader (boolean identities true&& / false|| fold away)"
+out="$(compile "$here/cap_fold_bool.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+ands="$(echo "$out" | grep -c ' and ')"
+ors="$(echo "$out" | grep -c ' or ')"
+selects="$(echo "$out" | grep -c ' select ')"
+errs="$(echo "$out" | grep -ci error)"
+# `true && c` / `false || c` keep their `&&`/`||` in source (the typer folds only
+# fully-const ops); flatten folds them to the bare compare, so no `and`/`or` node
+# reaches the backend — just the comparisons feeding the selects.
+if [[ "$errs" -eq 0 && "$ands" -eq 0 && "$ors" -eq 0 && "$selects" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), 0 and, 0 or, $selects select(s) (identities folded)"
+else
+    echo "   FAIL — errors=$errs and=$ands or=$ors selects=$selects (expected 0 and, 0 or, >0 select)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "12. cap_fold_accumulator.shader (const accumulator folds to a constant)"
+out="$(compile "$here/cap_fold_accumulator.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+adds="$(echo "$out" | grep -c ' add ')"
+muls="$(echo "$out" | grep -c ' mul ')"
+errs="$(echo "$out" | grep -ci error)"
+# `var acc = 0.0; acc += 0.1` ×4 — the general compiler does no const-propagation across
+# the reassignments, and the backend rejects the self-referential accumulator outright
+# (50503). flatten SSA-renames acc to single-def versions and const-props the chain to
+# one constant, so it compiles with ZERO `add` nodes and result = `base * <const>`.
+if [[ "$errs" -eq 0 && "$adds" -eq 0 && "$muls" -ge 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), 0 add (accumulator folded), $muls mul (base*const)"
+else
+    echo "   FAIL — errors=$errs adds=$adds muls=$muls (expected 0 add, >=1 mul)"
     echo "$out" | grep -i error | head
     fail=1
 fi
