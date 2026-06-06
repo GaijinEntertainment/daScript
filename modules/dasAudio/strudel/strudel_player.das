@@ -10,7 +10,6 @@ module strudel_player shared public
 //! Manages tracks, BPM/CPS, sample/SF2 banks, and a command stream for both
 //! main-thread (strudel_tick) and dedicated-thread (strudel_play) playback modes.
 
-require strudel/strudel_event
 require strudel/strudel_time
 require strudel/strudel_pattern
 require strudel/strudel_synth
@@ -630,7 +629,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             }
             // sync tempo
             if (track.sched.cps != g_cps) {
-                track.sched.lastQueryEnd = g_wall_time * g_cps
+                track.sched.lastQueryEnd = (g_wall_time - track.sched.startTime) * g_cps
                 track.sched.cps = g_cps
             }
             tick(track.sched, track.pat, *g_bank_ptr, g_wall_time, CHUNK_SEC, g_look_ahead)
