@@ -27,6 +27,7 @@ THE SOFTWARE.
    embedding.rst
    utils.rst
    tutorials.rst
+   flatten.rst
    linq_fold_patterns.rst
    linq_das.rst
    strudel_vs_strudel_cc.rst
