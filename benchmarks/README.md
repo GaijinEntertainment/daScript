@@ -21,6 +21,8 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test10.das` | Pure insert of 1M unique random numbers — insert-only (no read, no clear) |
 | `test11.das` | SlotMap adapter insert of 1M random numbers — monotonic uint64 IDs, entity allocation pattern |
 | `test12.das` | Pathological key distribution — 8K sequential + random keys (100K total) with deliberately bad hash |
+| `test13.das` | `hash(string)` microbenchmark — short vs long keys; inlined FNV intrinsic (JIT) vs bound C++ builtin (interp) |
+| `test14.das` | Large string-keyed builtin table (open-addressed find/at) vs int reference — sizes the C++-call cost of the un-inlined large-string path; `_fresh`/`_same` isolate strcmp |
 
 ## core/gc/
 
