@@ -46,7 +46,6 @@ class CollectExternVisitor : AstVisitor {
     tab_at_accessor : LLVMOpaqueValue?
     tab_find_accessor : LLVMOpaqueValue?
     tab_erase_accessor : LLVMOpaqueValue?
-    tab_find_wh_accessor : LLVMOpaqueValue?
     tab_at_wh_accessor : LLVMOpaqueValue?
     tab_at_apm_accessor : LLVMOpaqueValue?
     reg_extern_tab_type : LLVMOpaqueType?
@@ -151,10 +150,10 @@ class CollectExternVisitor : AstVisitor {
         tab_find_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_find", reg_extern_tab_type)
         tab_erase_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_erase", reg_extern_tab_type)
 
-        // void * get_jit_string_table_{find,at}_with_hash ( ) — string keys route through the
-        // precomputed-hash globals, so the standalone exe bakes those instead of the per-type ones.
+        // void * get_jit_string_table_at_with_hash ( ) — the string at routes through this
+        // precomputed-hash global (grow fallback), so the standalone exe bakes it. String find is
+        // fully inline (no glob).
         reg_extern_tab_wh_type = LLVMFunctionType(types.LLVMVoidPtrType(), [])
-        tab_find_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_find_with_hash", reg_extern_tab_wh_type)
         tab_at_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_with_hash", reg_extern_tab_wh_type)
 
         // String insert-after-packed-miss global (the inline packed string find calls it on a
@@ -482,13 +481,9 @@ class CollectExternVisitor : AstVisitor {
 
     def add_table_find_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
+        // String find is fully inline (no glob to bake). Non-string binds the per-type C++ find glob,
+        // still used by non-workhorse keys (vectors / structs) routed through build_table_find_call.
         if (typ == Type.tString) {
-            // string keys route through the precomputed-hash find (see build_table_find); bake that glob
-            let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_find_wh_accessor, [], "")
-            let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()).glob())
-            if (tab_method != null) {
-                LLVMBuildStore(builder, tab_ptr, tab_method)
-            }
             return
         }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())

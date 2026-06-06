@@ -1904,26 +1904,6 @@ class public LlvmJitVisitor : AstVisitor {
         return build_table_find_call(ttype, tab, key, valueTypeSize)
     }
 
-    // String-key find/at via the precomputed-hash C++ helpers: emit hash(key) inline
-    // (build_string_hash folds it to an immediate for a constant key) and pass it through,
-    // so the hash is hoistable/CSE-able and a literal key costs no hashing.
-    def build_string_table_find_call(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; h : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
-        var params = fixed_array(
-            tab,                                                        // table ptr
-            key,                                                        // key
-            h,                                                          // precomputed hash
-            types.ConstI32(uint64(valueTypeSize)),    // valueTypeSize
-            get_context_param()
-        )
-        var (fun_ptr, typ) = get_string_table_find_with_hash(g_builder, g_mod, types)
-        let ccall = LLVMBuildCall2(g_builder, typ, fun_ptr, params, "")
-        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
-        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
-        LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
-        LLVMAddCallSiteAttribute(ccall, 5u, attributes.nocapture)
-        return ccall
-    }
-
     // First set lane of an N-bit (i8) match mask -> i32 index, or -1 if the mask is empty.
     // (N == TABLE_MAX_LINEAR_CAPACITY == 8, so the mask is exactly i8 and cttz.i8 fits.)
     def first_set_lane_or_neg1(maskI8 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
@@ -7181,9 +7161,9 @@ class public ResolveExternVisitor : AstVisitor {
     // keys route through the precomputed-hash helpers (see build_table_find/at), so bind
     // those globals instead of the per-type ones.
     def bind_jit_table_find_glob(t : Type) {
-        if (t == Type.tString) {
-            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH()), get_jit_string_table_find_with_hash())
-        } else {
+        // String find is fully inline (no glob). Non-string binds the per-type C++ find glob — still
+        // used by non-workhorse keys (vectors / structs) that route through build_table_find_call.
+        if (t != Type.tString) {
             dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
         }
     }
