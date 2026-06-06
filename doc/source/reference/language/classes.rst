@@ -361,7 +361,7 @@ Class methods can be declared static. Static methods don't have access to 'self'
             }
         }
 
-	    let count = Foo`getCount()  // they can be accessed outside of class
+        let count = Foo`getCount()  // static methods can be called from outside the class
 
 ----------------------------
 Runtime Type Checking (is)
@@ -391,9 +391,9 @@ from it. This requires the ``daslib/dynamic_cast_rtti`` module:
     }
 
     var a : Animal? = new Dog()
-    assert(a is Dog)            // true — a points to a Dog
-    assert(a is Animal)         // true — Dog is an Animal
-    assert(!(a is Cat))         // true — a is not a Cat
+    verify(a is Dog)            // true — a points to a Dog
+    verify(a is Animal)         // true — Dog is an Animal
+    verify(!(a is Cat))         // true — a is not a Cat
 
 Without ``daslib/dynamic_cast_rtti``, the ``is`` operator performs a static (compile-time) type
 check only. With the module, it performs runtime RTTI checking by walking the class hierarchy

@@ -54,12 +54,17 @@ new
     var q = new Point()                    // default field values
 
 Heap pointers must be released with ``delete`` (see :ref:`pointer_delete`)
-or declared with ``var inscope`` for automatic cleanup:
+or declared with ``var inscope`` for automatic cleanup.  Because a raw
+``new T()`` pointer is deleted at scope exit, and deleting a raw pointer
+requires ``unsafe``, the ``var inscope`` declaration itself must be inside an
+``unsafe`` block:
 
 .. code-block:: das
 
-    var inscope pt = new Point(x = 1.0, y = 2.0)
-    // pt is automatically deleted at scope exit
+    unsafe {
+        var inscope pt = new Point(x = 1.0, y = 2.0)
+        // pt is automatically deleted at scope exit
+    }
 
 addr
 ^^^^
@@ -111,9 +116,11 @@ For struct pointers, ``.`` auto-dereferences — no ``->`` operator is needed:
 
 .. code-block:: das
 
-    var inscope pt = new Point(x = 5.0, y = 6.0)
-    print("{pt.x}\n")     // 5 — same as (*pt).x
-    pt.x = 10.0           // modify through auto-deref
+    unsafe {
+        var inscope pt = new Point(x = 5.0, y = 6.0)
+        print("{pt.x}\n")     // 5 — same as (*pt).x
+        pt.x = 10.0           // modify through auto-deref
+    }
 
 .. _pointer_null_safety:
 
@@ -158,7 +165,7 @@ for a concrete fallback:
 
 .. code-block:: das
 
-    let val = p?.x ?? -1     // -1 if p is null
+    let val = p?.x ?? -1.0     // -1 if p is null
 
 Null coalescing ``??``
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -169,11 +176,11 @@ Null coalescing ``??``
 
     let x = p ?? default_value
 
-For pointer dereference:
+For a pointer with an integer/scalar pointee, coalesce the pointer itself:
 
 .. code-block:: das
 
-    let x = *p ?? 0    // 0 if p is null
+    let x = p ?? 0    // 0 if p is null
 
 .. _pointer_delete:
 
@@ -191,12 +198,16 @@ Deletion
     }
 
 Prefer ``var inscope`` for automatic cleanup — it adds a ``finally`` block
-that deletes the pointer when the scope exits:
+that deletes the pointer when the scope exits.  Since the generated delete is
+unsafe for a raw heap pointer, the ``var inscope`` declaration must live inside
+an ``unsafe`` block:
 
 .. code-block:: das
 
-    var inscope p = new Point()
-    // p is automatically deleted at end of scope
+    unsafe {
+        var inscope p = new Point()
+        // p is automatically deleted at end of scope
+    }
 
 .. _pointer_arithmetic:
 
@@ -260,7 +271,7 @@ at the top of the parameter type:
 
     var ats : array<tuple<string; Point const?>>
 
-    def push_named(dst : array<tuple<string; Point const?>>;
+    def push_named(var dst : array<tuple<string; Point const?>>;
                    e   : tuple<string; Point const?>) {
         dst |> push(e)
     }
@@ -367,13 +378,13 @@ Summary
 * ``p?.field`` — safe navigation (null-propagating)
 * ``p ?? default`` — null coalescing
 * ``safe_addr(x)`` — temporary pointer (``T?#``)
-* ``var inscope p = new T()`` — automatic cleanup
 * ``intptr(p)`` — pointer to integer
 
 **Unsafe (requires unsafe block):**
 
 * ``addr(x)`` — address of variable
 * ``delete p`` — free heap memory
+* ``var inscope p = new T()`` — automatic cleanup (generates an unsafe ``delete``)
 * ``p[i]`` — pointer indexing
 * ``++ p`` / ``p += N`` — pointer arithmetic
 * ``reinterpret<T>`` — raw bit cast

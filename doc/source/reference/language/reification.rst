@@ -88,11 +88,11 @@ qmacro_expr
 
 ``qmacro_expr`` takes a block with a single expression as an input and returns that expression as the result.
 Certain expressions like ``return`` and such can't be an argument to a call, so they can't be passed to ``qmacro`` directly.
-The work around is to pass them as first line of a block:
+The workaround is to pass them as the first line of a block, which ``qmacro_expr`` then unwraps into the single contained expression:
 
 .. code-block:: das
 
-    var expr <- qmacro_block() {
+    var expr <- qmacro_expr() {
         return 13
     }
     print(describe(expr))
@@ -196,7 +196,7 @@ $v(value)
 ^^^^^^^^^
 
 ``$v`` takes any value as an argument and substitutes it with an expression which generates that value.
-The value does not have to be a constant expression, but the expression will be evaluated before its substituted.
+The value does not have to be a constant expression, but the expression will be evaluated before it is substituted.
 Appropriate ``make`` infrastructure will be generated:
 
 .. code-block:: das
@@ -265,7 +265,7 @@ and replaces call arguments with each expression from the input array in sequent
 
 .. code-block:: das
 
-    var arguments <- [quote(1+2); quote("foo")]
+    var arguments <- [quote(1+2), quote("foo")]
     var blk <- qmacro <| somefunnycall(1,$a(arguments),2)
     print(describe(blk))
 
@@ -294,7 +294,7 @@ prints:
 
 .. code-block:: text
 
-    def public add ( a:int const; var v1:int; var v2:float = 1.2f; b:int const ) : int {
+    def public show ( a:int const; var v1:int; var v2:float = 1.2f; b:int const ) : auto {
         return a + b
     }
 
@@ -314,7 +314,7 @@ In the following example:
 
 we create pointer to a subtype:
 
-.. code-block:: das
+.. code-block:: text
 
     var a:int? -const
 

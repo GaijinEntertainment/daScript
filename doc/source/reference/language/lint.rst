@@ -14,8 +14,8 @@ Lint Tools
 daslang provides three complementary lint passes that detect issues at compile time:
 
 - **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables and arguments, variables that can be ``let``, underscore naming, redundant reinterpret casts
-- **Performance lint** (``daslib/perf_lint``) — performance anti-patterns (error code ``40217``)
-- **Style lint** (``daslib/style_lint``) — non-idiomatic patterns (error code ``40218``)
+- **Performance lint** (``daslib/perf_lint``) — performance anti-patterns (error code ``31208``)
+- **Style lint** (``daslib/style_lint``) — non-idiomatic patterns (error code ``31209``)
 
 Each pass can be used independently or together.
 
@@ -46,6 +46,8 @@ Options:
 - ``--paranoid-only`` — only run paranoid lint
 - ``--perf-only`` — only run performance lint
 - ``--style-only`` — only run style lint
+- ``--enable CODE[,CODE...]`` — force-enable specific rules (bypasses ``.lint_config`` defaults)
+- ``--disable CODE[,CODE...]`` — disable specific rules; on overlap with ``--enable``, ``--disable`` wins
 
 Examples::
 
@@ -531,7 +533,7 @@ check by scanning to the index. For accessing the first character, use
 .. code-block:: das
 
     let ch = character_at(s, 0)         // PERF003 — use first_character(s) instead
-    let ch2 = first_character(s)        // O(1), returns 0 for empty string
+    let ch2 = first_character(s)        // O(1); panics on empty string
 
 PERF004 — string interpolation reassignment in loop
 =====================================================
@@ -1086,6 +1088,36 @@ semantics while still letting ``apply_template`` produce N clones.
 ``clone_type`` call sites typically feed direct AST construction, not qmacro
 splices).
 
+PERF024 — redundant pre-clone before ``[clone]``-annotated callee
+===================================================================
+
+A function annotated ``[clone(arg)]`` clones the named argument internally.
+Pre-cloning the value with ``clone_expression`` / ``clone_type`` /
+``clone_function`` / ``clone_variable`` / ``clone_structure`` before passing
+it at that argument position clones twice — drop the pre-clone and pass the
+source directly.
+
+Two shapes fire. The **direct-splice** form wraps the clone right at the call
+site (``func(clone_*(X))``). The **var-init** form binds the clone to a local
+whose only uses are direct arguments at ``[clone(...)]`` positions — any other
+use (assignment, passing elsewhere, storing into a field) makes the pre-clone
+load-bearing and the lint stays silent.
+
+.. code-block:: das
+
+    [clone(node)]
+    def install(var node : ExpressionPtr) { ... }
+
+    // Bad — direct splice: callee already clones `node`
+    install(clone_expression(src))                  // PERF024
+
+    // Bad — var-init whose only use is the annotated arg
+    var n = clone_expression(src)                   // PERF024
+    install(n)
+
+    // Good
+    install(src)
+
 PERF025 — redundant ``string(...)`` inside string interpolation
 ================================================================
 
@@ -1206,7 +1238,8 @@ STYLE005 — braces around a single-statement early exit
 
 A single-statement braced ``if`` whose body is just a ``return`` / ``break``
 / ``continue`` is noise. Use either the braceless form ``if (cond) return X``
-or postfix ``return X if (cond)``. Always-on (no opt-in flag).
+or postfix ``return X if (cond)``. Off by default — opt in with
+``STYLE005 = true`` in ``.lint_config`` or ``--enable STYLE005``.
 
 The discriminator is AST-only: the parser shares ``LineInfo`` between a
 synthesized block and its inner terminator for both braceless ``if (c)
@@ -1330,6 +1363,32 @@ generic instantiations (same exclusions as STYLE011).
     for (i in range(10)) {
         b |> push(i)
     }
+
+STYLE013 — struct ``var`` then a run of field assignments
+===========================================================
+
+A struct ``var`` (or a ``new``-allocated struct pointer) given a default /
+empty / zero-argument init, immediately followed by two or more contiguous
+assignments to its fields, is the long-hand form of a named-argument
+constructor. Build it in one expression instead — the warning lists the
+exact field names so the rewrite is concrete.
+
+Fires only for the default/empty-init shapes (``var a : Foo``, ``var a =
+Foo()``, ``var a = new Foo()``). A non-empty constructor, a factory call, or
+a single field assignment is not flagged. ``var inscope``, compiler-generated
+variables, and generic instantiations are excluded.
+
+.. code-block:: das
+
+    struct Foo { x : int; y : int }
+
+    // Bad — default init then a run of field assignments
+    var a : Foo                                 // STYLE013
+    a.x = 1
+    a.y = 2
+
+    // Good — named-argument constructor
+    var a = Foo(x = 1, y = 2)
 
 STYLE014 — comment block exceeds 3 lines at module/public scope
 ================================================================
@@ -1604,6 +1663,155 @@ Multi-bit masks (``Mode.read | Mode.write``) are left alone since the
     // Good
     if (io.flags.read)   { ... }
     if (!io.flags.write) { ... }
+
+STYLE024 — redundant ``unsafe`` wrap
+======================================
+
+An ``unsafe(...)`` expression or ``unsafe { ... }`` block whose body contains
+no operation that actually requires unsafe is pure noise. Drop the wrap.
+
+The check walks the wrapped subtree for inherently-unsafe leaves
+(reinterpret / upcast casts, ``delete``, ``addr``, table indexing, variant
+writes, calls flagged ``unsafeOperation``). When none are present, the wrap
+is flagged. Macro-generated subtrees are skipped by design.
+
+.. code-block:: das
+
+    // Bad — nothing inside needs unsafe
+    let d = unsafe(x + y)                        // STYLE024
+
+    // Good
+    let d = x + y
+
+STYLE025 — block-form ``unsafe`` should be expression-form
+============================================================
+
+When an ``unsafe { ... }`` block contains exactly one statement that needs
+unsafe, the block scope is too broad. Narrow it to the expression form
+``unsafe(<sub-expr>)`` wrapping just the operation that requires it. When two
+or more statements need unsafe the block is justified and stays silent.
+
+.. code-block:: das
+
+    // Bad — only the reinterpret needs unsafe
+    unsafe {                                     // STYLE025
+        let a = compute()
+        let p = reinterpret<Foo?>(raw)
+    }
+
+    // Good
+    let a = compute()
+    let p = unsafe(reinterpret<Foo?>(raw))
+
+STYLE026 — nested ``unsafe`` block
+====================================
+
+An ``unsafe { ... }`` block directly inside another ``unsafe`` scope is
+redundant — the outer wrap already covers it. Drop the inner block. Closure,
+lambda, and generator bodies are not "nested" for this rule: they execute in
+a separate context the outer wrap does not reach.
+
+.. code-block:: das
+
+    // Bad — inner unsafe is already covered
+    unsafe {
+        foo()
+        unsafe {                                 // STYLE026
+            delete p
+        }
+    }
+
+    // Good
+    unsafe {
+        foo()
+        delete p
+    }
+
+STYLE027 — array/table ``var`` + push/insert loop → comprehension
+=====================================================================
+
+A ``var`` of type ``array<T>`` or ``table<K; V>`` with an empty default init,
+immediately followed by a ``for`` loop whose body only ``push``-es (array) or
+``insert``-s / index-assigns (table) into it, is the imperative form of a
+comprehension. Rewrite it.
+
+The loop body must consist solely of pushes / inserts / at-assigns targeting
+the variable (nested ``for`` / ``if`` filters allowed up to the rule's
+budget). ``var inscope``, compiler-generated variables, and generic
+instantiations are excluded.
+
+.. code-block:: das
+
+    // Bad — empty var then a push-only loop
+    var a : array<int>                          // STYLE027
+    for (x in src) {
+        a |> push(x * x)
+    }
+
+    // Good — comprehension
+    var a <- [for (x in src); x * x]
+
+STYLE028 — redundant ``self->`` on a method call
+==================================================
+
+Inside a class method, ``self->method(...)`` lowers to the same invoke the
+compiler produces for a bare ``method(...)`` call. Drop ``self->`` and call
+the method directly (or write ``self.method(...)`` if you prefer an explicit
+receiver).
+
+Source inspection confirms the literal ``self->`` spelling before flagging —
+the post-inference AST cannot distinguish ``self->m()``, ``self.m()``, and
+bare ``m()``.
+
+.. code-block:: das
+
+    class Widget {
+        def draw() {
+            self->layout()                      // STYLE028
+        }
+        def layout() { ... }
+    }
+
+    // Good
+    class Widget {
+        def draw() {
+            layout()
+        }
+        def layout() { ... }
+    }
+
+STYLE029 — transitive-only ``require``
+========================================
+
+A non-public ``require X`` whose only referenced symbols come from modules
+that ``X`` re-exports (``require ... public``) — none from ``X`` itself — is
+an indirect dependency. Require those modules directly and drop ``X``. Skipped
+when ``X`` provides macros or an ``[init]`` (requiring it has a side effect
+beyond symbol visibility).
+
+.. code-block:: das
+
+    // Bad — only Y's symbols are used; X just re-exports Y
+    require X                                    // STYLE029
+    // ... uses only symbols from Y (which X re-exports)
+
+    // Good — depend on Y directly
+    require Y
+
+STYLE030 — entirely-unused ``require``
+========================================
+
+A non-public ``require X`` where no symbol from ``X`` (or any module it
+re-exports) is referenced anywhere in the file. Remove it. Skipped when ``X``
+provides any macro or an ``[init]``, or only re-exports builtins used through
+it. Suppress a deliberate keep with ``// nolint:STYLE030``.
+
+.. code-block:: das
+
+    // Bad — nothing from strings is used
+    require strings                             // STYLE030
+
+    // Good — remove the require
 
 -----
 Tests

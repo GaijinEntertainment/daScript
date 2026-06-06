@@ -176,8 +176,8 @@ Lets review the following example from ``ast_boost`` of how the ``macro`` annota
 
     class MacroMacro : AstFunctionAnnotation {
         def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool {
-            compiling_program().flags |= ProgramFlags needMacroModule
-            func.flags |= FunctionFlags init
+            compiling_program().flags |= ProgramFlags.needMacroModule
+            func.flags |= FunctionFlags.init
             var blk = new ExprBlock(at=func.at)
             var ifm = new ExprCall(at=func.at, name:="is_compiling_macros")
             var ife = new ExprIfThenElse(at=func.at, cond=ifm, if_true=func.body)
@@ -305,7 +305,7 @@ Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost
 
 .. code-block:: das
 
-    // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
+    // replacing ExprIsVariant(value,name) => ExprOp2("==", value.__rtti, "name")
     // if value is ast::Expr*
     class BetterRttiVisitor : AstVariantMacro {
         def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:ExprIsVariant?) : ExpressionPtr {
@@ -329,7 +329,7 @@ Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost
     }
 
 Here, the macro takes advantage of the ExprIsVariant syntax.
-It replaces the ``expr is TYPENAME`` expression with an ``expr.__rtti = "TYPENAME"`` expression.
+It replaces the ``expr is TYPENAME`` expression with an ``expr.__rtti == "TYPENAME"`` expression.
 The ``isExpression`` function ensures that ``expr`` is from the ``ast::Expr*`` family, i.e. part of the Daslang syntax tree.
 
 --------------
@@ -377,7 +377,7 @@ Consider the implementation for the example above:
         }
         def override visit ( prog:ProgramPtr; mod:Module?; expr:ExprReader? ) : ExpressionPtr {
             let seqStr = string(expr.sequence)
-            var arrT = new TypeDecl(baseType=Type tInt)
+            var arrT = new TypeDecl(baseType=Type.tInt)
             push(arrT.dim,length(seqStr))
             var mkArr = new ExprMakeArray(at = expr.at, makeType <- arrT)
             for ( x in seqStr ) {
@@ -577,7 +577,7 @@ AstForLoopMacro
         def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:ExprFor? ) : ExpressionPtr
     }
 
-``add_new_for_loop_macro`` adds a reader macro to a module.
+``add_new_for_loop_macro`` adds a for-loop macro to a module.
 There is additionally the ``[for_loop_macro]`` annotation, which essentially automates the same thing.
 
 ``visitExprFor`` is similar to that of ``AstVisitor``. It returns a new expression, or null if no changes are required.
@@ -596,7 +596,7 @@ AstCaptureMacro
         def abstract releaseFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
     }
 
-``add_new_capture_macro`` adds a reader macro to a module.
+``add_new_capture_macro`` adds a capture macro to a module.
 There is additionally the ``[capture_macro]`` annotation, which essentially automates the same thing.
 
 ``captureExpression`` is called per captured variable when the lambda struct is being built.
@@ -647,7 +647,7 @@ AstCommentReader
         def abstract afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     }
 
-``add_new_comment_reader`` adds a reader macro to a module.
+``add_new_comment_reader`` adds a comment reader to a module.
 There is additionally the ``[comment_reader]`` annotation, which essentially automates the same thing.
 
 ``open`` occurs when the parsing of a comment starts.

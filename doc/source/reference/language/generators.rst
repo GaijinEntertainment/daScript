@@ -8,7 +8,7 @@ Generators allow you to declare a lambda that behaves like an iterator.
 Internally, a generator is compiled into a lambda that is passed to an ``each`` or ``each_ref`` function.
 
 Generator syntax is similar to lambda syntax.  A generator expression starts with the
-``generator`` keyword, followed by the element type in angle brackets, then a ``$`` and a block:
+``generator`` keyword, followed by the element type in angle brackets, an optional capture list, and a block:
 
 .. code-block:: das
 
@@ -54,7 +54,7 @@ Generators can output ref types. They can have a capture section:
         for ( t in gen ) {
             t ++
         }
-        print("src = {src}\n")  // will output [[2;3;4;5]]
+        print("src = {src}\n")  // will output [ 2, 3, 4, 5]
     }
 
 Generators can have loops and other control structures:
@@ -160,7 +160,7 @@ A lambda function is generated:
     }
 
 Control flow statements are replaced with the ``label`` + ``goto`` equivalents.
-Generators always start with ``goto __this.yield``.
+Generators always start with ``goto __this.__yield``.
 This effectively produces a finite state machine, with the ``yield`` variable holding current state index.
 
 The ``yield`` expression is converted into a copy result and return value pair.

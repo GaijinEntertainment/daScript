@@ -237,7 +237,8 @@ Nameless local functions do not capture variables at all:
         return a + count            // compilation error, can't locate variable count
     }
 
-Internally, a regular function will be generated:
+Internally, a regular function will be generated (illustrative — the backtick-mangled
+name is compiler-internal and is not source you can type):
 
 .. code-block:: das
 
@@ -479,7 +480,7 @@ To overload an operator, you need to define a special function with the name of 
 .. code-block:: das
 
     def operator <operator>(<arguments>) : <return_type>
-        # Implementation here
+        // Implementation here
 
 In this syntax, ``<operator>`` is the name of the operator you want to overload (e.g. ``+``, ``-``, ``*``, ``/``, ``==``, etc.),
 ``<arguments>`` are the parameters that the operator function takes, and ``<return_type>`` is the return type of the operator function.
@@ -505,9 +506,9 @@ With this operator overloaded, you can now use the == operator to compare iVec2 
 
 .. code-block:: das
 
-    let v1 = iVec2(1, 2)
-    let v2 = iVec2(1, 2)
-    let v3 = iVec2(3, 4)
+    let v1 = iVec2(x = 1, y = 2)
+    let v2 = iVec2(x = 1, y = 2)
+    let v3 = iVec2(x = 3, y = 4)
 
     print("{v1==v2}") // prints "true"
     print("{v1==v3}") // prints "false"
@@ -575,7 +576,7 @@ In the parser, ``++operator`` is the prefix form and ``operator++`` is the postf
         value : int
     }
 
-    def operator ++(var c : Counter) : Counter {
+    def ++operator(var c : Counter&) : Counter {
         c.value += 1
         return c
     }
@@ -733,14 +734,14 @@ To overload the dot . operator, you need to define a special function with the n
 .. code-block:: das
 
     def operator.(<object>: <type>, <name>: string) : <return_type>
-        # Implementation here
+        // Implementation here
 
 Alternatively you can specify field explicitly:
 
 .. code-block:: das
 
     def operator.<name> (<object>: <type>) : <return_type>
-        # Implementation here
+        // Implementation here
 
 In this syntax, <object> is the object you want to access, <type> is the type of the object, <name> is the name of the field you want to access, and <return_type> is the return type of the operator function.
 
@@ -775,8 +776,8 @@ With these operators overloaded, you can now use the dot . operator to access fi
     var field = g.a
     var length = g.length
 
-In this example, we create an instance of the Goo struct and access its world field using the dot . operator.
-The overloaded operator. function is called and returns the string "world = hello".
+In this example, we create an instance of the Goo struct and access its ``a`` field using the dot . operator.
+The overloaded operator. function is called and returns the string "a = hello".
 We also access the length property of the Goo object using the dot . operator.
 The overloaded operator. length function is called and returns the length of the a field of the Goo object (5 in this case).
 
@@ -814,8 +815,8 @@ Expected output:
 
 .. code-block:: text
 
-    magnitude = 3.7416575 // [[ 1,2,3]]
-    magnitude = 10 // [[ 2.6726124,5.345225,8.017837]]
+    magnitude = 3.7416575 // ( 1,2,3)
+    magnitude = 10 // ( 2.6726124,5.345225,8.017837)
 
 It now has accessor ``magnitude`` which can be used to get and set the magnitude of the ``dir`` field.
 

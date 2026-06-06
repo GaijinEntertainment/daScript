@@ -136,7 +136,7 @@ The same works with table comprehensions:
 
 .. code-block:: das
 
-    var tab <- { "one"=>1 }
+    var tab <- { 0=>0 }
     tab <- { for(x in range(5)); x => x * x }  // move comprehension result into tab
 
 Table keys can be not only strings, but any other 'workhorse' type as well.

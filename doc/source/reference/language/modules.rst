@@ -128,11 +128,11 @@ The default publicity of functions, structures, and enumerations is that of the 
 (i.e. if the module is public and a function's publicity is not specified, that function is public).
 
 
-Module can be made visible to all modules in the project via the ``inscope`` modifier:
+Module can be made visible to all modules in the project via the ``!inscope`` modifier:
 
 .. code-block:: das
 
-    module Foo inscope
+    module Foo !inscope
 
 ---------------
 Builtin modules

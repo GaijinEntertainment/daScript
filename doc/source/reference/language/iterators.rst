@@ -11,7 +11,7 @@ The iterator type is written as ``iterator`` followed by the element type in ang
 .. code-block:: das
 
     iterator<int>           // iterates over integers
-    iterator<const Foo&>    // iterates over Foo by const reference
+    iterator<Foo const&>    // iterates over Foo by const reference
 
 Iterators can be moved, but not copied or cloned.
 
@@ -58,7 +58,7 @@ you can iterate over ``T`` directly — the compiler calls ``each`` automaticall
     }
 
     def each ( f : Foo ) : iterator<int&> {
-        return each(f.data)
+        return unsafe(each(f.data))   // unsafe: the inner 'each' is not the for-loop source
     }
 
     var f = Foo(data <- [1, 2, 3])
@@ -69,14 +69,24 @@ you can iterate over ``T`` directly — the compiler calls ``each`` automaticall
 This is how built-in types like ranges, arrays, and strings become iterable — each has a corresponding
 ``each`` function defined in the standard library.
 
-Calling ``delete`` on an iterator will make it sequence out and free its memory:
+Calling ``delete`` on an iterator will make it sequence out and free its memory
+(``Numbers`` is the enumeration defined below in this section, and ``each`` comes from
+``daslib/enum_trait``):
 
 .. code-block:: das
 
-    var it <- each_enum(Numbers.one)
+    require daslib/enum_trait
+
+    var it <- each(type<Numbers>)
     delete it                           // safe to delete
 
-    var it <- each_enum(Numbers.one)
+It is always safe to delete a sequenced-out iterator:
+
+.. code-block:: das
+
+    require daslib/enum_trait
+
+    var it <- each(type<Numbers>)
     for ( x in it ) {
         print("x = {x}\n")
     }
@@ -107,9 +117,12 @@ It is possible to iterate over each character of the string via the ``each`` fun
         }
     }
 
-It is possible to iterate over each element of an enumeration via the ``each_enum`` function:
+It is possible to iterate over each element of an enumeration via the ``each`` function from
+``daslib/enum_trait`` (the older ``each_enum`` builtin is deprecated):
 
 .. code-block:: das
+
+    require daslib/enum_trait
 
     enum Numbers {
         one
@@ -117,7 +130,7 @@ It is possible to iterate over each element of an enumeration via the ``each_enu
         ten = 10
     }
 
-    for ( x in each_enum(Numbers.one) ) {       // argument is any value from said enumeration
+    for ( x in type<Numbers> ) {                // iterates over every value of the enumeration
         print("x = {x}\n")
     }
 
@@ -196,7 +209,7 @@ The function ``next`` is implemented as follows:
 
 .. code-block:: das
 
-    def next ( it:iterator<auto(TT)>; var value : TT& ) : bool {
+    def next ( var it:iterator<auto(TT)>; var value : TT& ) : bool {
         static_if (!typeinfo can_copy(type<TT>)) {
             concept_assert(false, "requires type
              which can be copied")

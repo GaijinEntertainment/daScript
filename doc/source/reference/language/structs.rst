@@ -65,12 +65,24 @@ The compiler will generate a 'default' initializer if there are any members with
         y: int = 2
     }
 
-Structure fields are initialized to zero by default, regardless of 'initializers' for members, unless you specifically call the initializer:
+Calling the initializer applies each field's declared initializer (or zero for fields that have none):
 
 .. code-block:: das
 
-    let fZero : Foo     // no initializer is called, x, y = 0
     let fInited = Foo() // initializer is called, x = 1, y = 2
+
+A structure local declared without calling an initializer is only allowed when the structure has no field initializers (and no members that are unsafe to leave uninitialized); such a value is zero-filled:
+
+.. code-block:: das
+
+    struct Bar {
+        x : int
+        y : int
+    }
+
+    var b : Bar         // no initializer; x = 0, y = 0
+
+If the structure has field initializers (like ``Foo`` above), declaring it uninitialized is rejected as unsafe (``error[31016]``) — call an initializer instead, or annotate the structure with ``[safe_when_uninitialized]``.
 
 Structure field types are inferred where possible:
 
@@ -81,32 +93,17 @@ Structure field types are inferred where possible:
         y = 2.0    // inferred as float
     }
 
-Explicit structure initialization during creation leaves all unspecified members zeroed:
-
-.. code-block:: das
-
-    let fExplicit = Foo(uninitialized x=13)  // x = 13, y = 0
-
-The previous code example is syntactic sugar for:
-
-.. code-block:: das
-
-    let fExplicit: Foo
-    fExplicit.x = 13
-
-Post-construction initialization only needs to specify overwritten fields:
+Construction only needs to name the fields that change; the rest keep their declared initializers:
 
 .. code-block:: das
 
     let fPostConstruction = Foo(x=13)  // x = 13, y = 2
 
-The previous code example is syntactic sugar for:
+The ``uninitialized`` keyword skips default initialization of the unspecified fields, leaving them uninitialized — which is why it must be wrapped in ``unsafe``:
 
 .. code-block:: das
 
-    let fPostConstruction: Foo
-    fPostConstruction.x = 13
-    fPostConstruction.y = 2
+    let fExplicit = unsafe(Foo(uninitialized x=13))  // x = 13; y is not default-initialized
 
 The "Clone initializer" is a useful pattern for creating a clone of an existing structure when both structures are on the heap:
 
@@ -118,7 +115,7 @@ The "Clone initializer" is a useful pattern for creating a clone of an existing 
     }
     ...
     let a = new Foo(x=1, y=2.)          // create new instance of Foo on the heap, initialize it
-    let b = new Foo(a)                  // clone of b is created here
+    let b = new Foo(a)                  // clone of a is created here
 
 --------------------------
 Structure Function Members
@@ -221,7 +218,7 @@ Virtual functions can be overridden in the derived structure:
         def override setXY(X, Y: int) {
             x = X + 1
             y = Y + 1
-            yf = x + y
+            yf = float(x + y)
         }
     }
 
@@ -348,12 +345,12 @@ As the example above is very dangerous, and in order to make it safer, you can m
 
     struct Foo {
         x: int
-        typeTag: uint = hash("Foo")
+        typeTag: uint64 = hash("Foo")
     }
 
     struct Foo2:Foo {
         y: int
-        override typeTag: uint = hash("Foo2")
+        override typeTag: uint64 = hash("Foo2")
     }
 
     def setY(var foo: Foo; y: int) {  // this won't do anything really bad, but will panic on wrong reference

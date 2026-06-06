@@ -28,9 +28,10 @@ A typical daslang file follows this layout:
     require math                              // imports
     require daslib/strings_boost
 
-    struct MyData                             // type declarations
+    struct MyData {                           // type declarations
         value : int
         name : string
+    }
 
     enum Color {
         red
@@ -222,7 +223,7 @@ Shared global variables use the ``shared`` keyword and are shared across cloned 
 
 .. code-block:: das
 
-    let shared GLOBAL_TABLE : table<string; int>
+    let shared GLOBAL_TABLE : table<string; int> <- { "a" => 1 }
 
 --------------------
 Entry Points
@@ -336,11 +337,11 @@ identifiers organized by compilation phase:
 +------------------+--------------------------------------------+
 | ``30301–30311``  | Semantic: not found (type, func, var, etc.)|
 +------------------+--------------------------------------------+
-| ``30401–30403``  | Semantic: can't initialize                 |
+| ``30401–30403``  | Semantic: mismatching type / argument      |
 +------------------+--------------------------------------------+
-| ``30501–30509``  | Semantic: can't dereference/copy/move      |
+| ``30501–30509``  | Semantic: exceeds limit (recursion, etc.)  |
 +------------------+--------------------------------------------+
-| ``30601–30602``  | Semantic: condition errors                 |
+| ``30601–30602``  | Semantic: ambiguous symbol (func/type/etc.)|
 +------------------+--------------------------------------------+
 | ``31300``        | Unsafe operation outside ``unsafe`` block  |
 +------------------+--------------------------------------------+
@@ -353,7 +354,7 @@ For example, a test that verifies the compiler rejects copying an array:
 
 .. code-block:: das
 
-    expect 30507    // cant_copy
+    expect 30197    // invalid_local_init (array can only be move-initialized)
 
     [export]
     def main {

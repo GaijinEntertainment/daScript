@@ -11,7 +11,7 @@ Comprehensions produce either a dynamic array, an iterator, or a table, dependin
 style of brackets used:
 
 * ``[ for(...); expr ]`` — produces a dynamic array
-* ``[iterator [ for(...); expr ]]`` — produces an iterator
+* ``[iterator for(...); expr]`` — produces an iterator
 * ``{ for(...); key_expr => value_expr }`` — produces a table
 * ``{ for(...); key_expr }`` — produces a key-only table (set)
 
@@ -43,7 +43,7 @@ Iterator comprehension may produce a referenced iterator:
 .. code-block:: das
 
     var a = [1,2,3,4]
-    var b <- [iterator for(x in a); a]  // iterator<int&> and will point to captured copy of the elements of a
+    var b <- unsafe([iterator for(x in a); x])  // iterator<int&>, points to captured copies of the elements of a
 
 Regular lambda capturing rules apply to iterator comprehensions (see :ref:`Lambdas <lambdas>`).
 

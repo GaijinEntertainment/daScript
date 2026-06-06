@@ -62,12 +62,12 @@ A type alias notation can also be used to specify the size:
     }
 
 
-Any two bitfields are the same type, if an underlying integer type is the same:
+Two bitfields are the same type only when both their flag list and underlying integer type match:
 
 .. code-block:: das
 
     var a : bitfield<one; two; three>
-    var b : bitfield<one; two>
+    var b : bitfield<one; two; three>
     b = a
 
 Individual flags can be read as if they were regular bool fields:

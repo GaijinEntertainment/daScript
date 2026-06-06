@@ -21,7 +21,7 @@ Daslang's storage types are:
 
     int8, uint8, int16, uint16 - 8/16-bits signed and unsigned integers
 
-They can't be manipulated, but can be used as storage type within structs, classes, etc.
+They have no arithmetic of their own, but can be used as a storage type within structs, classes, etc.
 
 Daslang's other types are:
 
@@ -46,7 +46,6 @@ An integer represents a 32-bit (un)signed number:
     let a = 123    // decimal, integer
     let u = 123u   // decimal, unsigned integer
     let h = 0x0012 // hexadecimal, unsigned integer
-    let o = 075    // octal, unsigned integer
 
     let a = int2(123, 124)    // two integers type
     let u = uint2(123u, 124u) // two unsigned integer type
@@ -67,7 +66,7 @@ A float represents a 32-bit floating point number:
 Bool
 --------
 
-A bool is a double-valued (Boolean) data type. Its literals are ``true``
+A bool is a two-valued (Boolean) data type. Its literals are ``true``
 and ``false``. A bool value expresses the validity of a condition
 (tells whether the condition is true or false):
 
@@ -354,7 +353,7 @@ Bitfield
 --------
 
 Bitfields are an anonymous data type, similar to enumerations. Each field explicitly represents one bit,
-and the storage type is always a uint. Queries on individual bits are available on variants,
+and the storage type is always a uint. Queries on individual bits are available on bitfields,
 as well as binary logical operations.
 
 (see :ref:`Bitfields <bitfields>`).

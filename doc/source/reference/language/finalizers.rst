@@ -160,7 +160,7 @@ This expands to:
         memzero(__this)
     }
 
-Tuples behave similar to structures. There is no way to ignore individual fields:
+Tuples behave similarly to structures. There is no way to ignore individual fields:
 
 .. code-block:: das
 

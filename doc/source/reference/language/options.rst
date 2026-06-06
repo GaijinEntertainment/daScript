@@ -51,7 +51,7 @@ Language and Syntax
    * - ``gen2``
      - bool
      - false
-     - Enables generation-2 syntax. Requires ``{ }`` braces for all blocks, ``;`` semicolons,
+     - Enables generation-2 syntax. Requires ``{ }`` braces for all blocks
        and disables legacy make syntax (``[[...]]`` for structs, ``[{...}]`` for arrays).
        Applied immediately during parsing.
    * - ``indenting``

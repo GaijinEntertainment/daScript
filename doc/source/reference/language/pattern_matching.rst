@@ -25,10 +25,10 @@ The ``_`` pattern is a catch-all that matches anything not covered by previous c
 
     def enum_match (color:Color) {
         match ( color ) {
-            if ( Color Black ) {
+            if ( Color.Black ) {
                 return 0
             }
-            if ( Color Red ) {
+            if ( Color.Red ) {
                 return 1
             }
             if ( _ ) {
@@ -102,10 +102,10 @@ This works in any pattern, not just variant matching:
                 return as_int
             }
             if ( $v(as_float) as f ) {
-                return as_float
+                return int(as_float)
             }
             if ( _ ) {
-                return None
+                return -1
             }
         }
     }
@@ -166,16 +166,16 @@ Tuples are matched using value or wildcard patterns. The ``...`` pattern matches
 
     def tuple_match ( A : tuple<int;float;string> ) {
         match ( A ) {
-            if (1,_,"3") {
+            if ((1,_,"3")) {
                 return 1
             }
-            if (13,...) {      // starts with 13
+            if ((13,...)) {      // starts with 13
                 return 2
             }
-            if (...,"13") {    // ends with "13"
+            if ((...,"13")) {    // ends with "13"
                 return 3
             }
-            if (2,...,"2") {   // starts with 2, ends with "2"
+            if ((2,...,"2")) {   // starts with 2, ends with "2"
                 return 4
             }
             if ( _ ) {
@@ -189,7 +189,7 @@ The ``_`` matches any single element; ``...`` matches zero or more elements.
 Matching Static Arrays
 ----------------------
 
-Static arrays use the ``fixed_array`` keyword and support the same wildcard and guard patterns:
+Static arrays use the ``fixed_array`` pattern and support the same wildcard and guard patterns:
 
 .. code-block:: das
 
@@ -201,7 +201,7 @@ Static arrays use the ``fixed_array`` keyword and support the same wildcard and 
             if ( fixed_array(0,...) ) {    // starts with 0
                 return 0
             }
-            if ( fixed_array(..,13) ) {   // ends with 13
+            if ( fixed_array(...,13) ) {   // ends with 13
                 return 2
             }
             if ( fixed_array(12,...,12) ) {    // starts and ends with 12
@@ -232,7 +232,7 @@ The number of explicit elements in the pattern is checked against the array leng
             if ( [...,1,2] ) {      // ends with 1,2
                 return 2
             }
-            if ( [0,1;...,2,3] ) {    // starts with 0,1, ends with 2,3
+            if ( [0,1,...,2,3] ) {    // starts with 0,1, ends with 2,3
                 return 3
             }
             if ( _ ) {
@@ -350,11 +350,12 @@ With these operators in place, you can match against ``CmdMove`` in a ``match`` 
 ----------------------------------
 
 The ``[match_copy]`` annotation provides an alternative to ``[match_as_is]`` by using a ``match_copy`` function
-instead of ``is``/``as`` operators:
+instead of ``is``/``as`` operators. The struct also needs ``safe_when_uninitialized``, because the match macro
+declares an uninitialized working instance of the type:
 
 .. code-block:: das
 
-    [match_copy]
+    [match_copy, safe_when_uninitialized]
     struct CmdLocate : Cmd {
         override rtti = "CmdLocate"
         x : float
@@ -424,7 +425,7 @@ Example:
 
     def enum_static_match ( color, blah ) {
         static_match ( color ) {
-            if ( Color red ) {
+            if ( Color.red ) {
                 return 0
             }
             if ( match_expr(blah) ) {

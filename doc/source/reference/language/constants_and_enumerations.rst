@@ -66,7 +66,7 @@ Local static variables can be declared via the ``static_let`` macro:
     require daslib/static_let
 
     def foo {
-        static_let {
+        static_let() {
             var bar = 13
         }
         bar = 14
@@ -129,7 +129,7 @@ If not specified, enumerations inherit module publicity (i.e. in public modules 
 and in private modules enumerations are private).
 
 An enum name itself is a strong type, and all enum values are of this type.
-An enum value can be addressed as 'enum name' followed by exact enumeration
+An enum value is addressed as the enum name followed by a dot and the value name, e.g. ``Numbers.one``
 
 .. code-block:: das
 
@@ -153,19 +153,21 @@ Enumerations can specify one of the following storage types: ``int``, ``int8``, 
 
 Enumeration values will be truncated down to the storage type.
 
-The ``each_enum`` iterator iterates over specific enumeration type values.
-Any enum element needs to be provided to specify the enumeration type:
+An enumeration type can be iterated directly over all of its values.
+Require ``daslib/enum_trait`` and pass the enum type via ``type<EnumT>``:
 
 .. code-block:: das
 
-    for ( x in each_enum(Characters.ch_a) ) {
+    require daslib/enum_trait
+
+    for ( x in type<Characters> ) {
         print("x = {x}\n")
     }
 
 .. seealso::
 
     :ref:`Datatypes <datatypes_and_values>` for a list of built-in types including enum storage types,
-    :ref:`Iterators <iterators>` for ``each_enum`` and other iteration patterns,
+    :ref:`Iterators <iterators>` for enum iteration and other iteration patterns,
     :ref:`Pattern matching <pattern-matching>` for matching on enumeration values,
     :ref:`Contexts <contexts>` for shared constant initialization across contexts,
     :ref:`Program structure <program_structure>` for the overall layout of global declarations.

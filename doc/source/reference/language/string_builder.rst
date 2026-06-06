@@ -32,7 +32,7 @@ The expression inside ``{}`` can be arbitrarily complex:
 
 .. code-block:: das
 
-    let items : array<string>
+    var items : array<string>
     push(items, "apple")
     push(items, "banana")
     print("count = {length(items)}, first = {items[0]}\n")
@@ -78,7 +78,7 @@ The general form is:
 Where:
 
 * **flags** — optional characters such as ``-`` (left-align), ``+`` (force sign),
-  ``0`` (zero-pad)
+  ``0`` (zero-pad), ``#`` (alternate form, e.g. ``0x`` prefix for hex)
 * **width** — minimum field width
 * **precision** — number of decimal places (for floating-point) or maximum string length
 * **type** — conversion character:

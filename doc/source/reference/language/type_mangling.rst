@@ -147,16 +147,23 @@ block             ``$``       Stack-allocated, cannot outlive scope
 ================  ========  ============================
 
 The argument list uses the ``0<args...>`` prefix with arguments separated
-by semicolons.  The callable's own **return type** is not encoded in the
-mangled name — it is determined by the enclosing context.
+by semicolons; the **return type** follows as a ``1<ret>`` prefix.  (The C
+interop binding-string format omits the callable return type — see
+`Interop function signatures`_ below — but the internal mangled name
+always includes it.)
 
-Examples:
+The examples below use the simplified C-interop binding form (no argument
+names, no per-argument const, no return prefix).  The full internal
+mangled name reported by ``typeinfo mangled_name`` also carries the
+``N<names...>`` prefix, per-argument const, and the ``1<ret>`` return
+prefix — for instance ``function<(a:int; b:float) : string>`` is
+``N<a;b>0<Ci;Cf>1<s>@@`` in full.
 
 - ``function<(a:int; b:float) : string>`` → ``0<i;f>@@``
 - ``lambda<(a:int; b:float) : string>``   → ``0<i;f>@``
 - ``block<(a:int; b:float) : string>``    → ``0<i;f>$``
 - ``block<(a:int) : void>``               → ``0<i>$``
-- ``function<() : void>``                 → ``@@`` (no args → no ``0<>`` prefix)
+- ``function<() : void>``                 → ``1<v>@@`` (no args → no ``0<>`` prefix; void return still encoded as ``1<v>``)
 
 
 Structures, handled types, and enumerations

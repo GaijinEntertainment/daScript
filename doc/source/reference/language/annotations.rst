@@ -124,9 +124,16 @@ Lifecycle
 Visibility
 ^^^^^^^^^^^^^^^^^^^^^
 
-``[private]``
-    Makes a function private to the current module. Equivalent to the ``private`` keyword
-    before ``def``.
+Visibility is controlled with the ``private`` prefix keyword, not an annotation. Place
+``private`` after ``def`` to make a function private to the current module:
+
+.. code-block:: das
+
+    def private helper {
+        pass
+    }
+
+There is no ``[private]`` annotation form.
 
 ^^^^^^^^^^^^^^^^^^^^^
 Safety
@@ -176,7 +183,7 @@ Lint Control
     Multiple arguments can be listed: ``[unused_argument(x, y)]``.
 
 ``[nodiscard]``
-    Warns if the return value of the function is discarded:
+    Errors if the return value of the function is discarded:
 
     .. code-block:: das
 
@@ -185,7 +192,7 @@ Lint Control
             return 42
         }
 
-        compute()       // warning: return value discarded
+        compute()       // error: return value discarded
 
 ``[deprecated]``
     Marks a function as deprecated. Produces a compile-time warning when called:
@@ -309,6 +316,8 @@ Macros
     ``for_each_tag_function``:
 
     .. code-block:: das
+
+        require daslib/ast_boost
 
         [tag_function(my_tag)]
         def tagged_func {
@@ -549,7 +558,8 @@ Negation is also supported:
         pass
     }
 
-Annotations on struct/class fields appear before the field name in the ``@`` metadata syntax:
+Annotations on struct/class fields use the ``@`` metadata syntax and appear before the field
+declaration:
 
 .. code-block:: das
 

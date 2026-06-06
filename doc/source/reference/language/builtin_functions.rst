@@ -437,7 +437,7 @@ Iterator Operations
 
     Creates an iterator over all values of an enumeration type.
 
-    .. deprecated:: Use the built-in enumeration iteration instead.
+    .. note:: Deprecated — use the built-in enumeration iteration instead.
 
 .. das:function:: next(var it : iterator<T>; var value : T&) : bool
 
@@ -494,7 +494,7 @@ Clone
     .. code-block:: das
 
         var a <- [1, 2, 3]
-        var b := a          // equivalent to: clone(b, a)
+        var b := a          // := deep-clones a into b
 
 .. das:function:: clone_dim(var dst; src)
 
