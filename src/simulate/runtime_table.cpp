@@ -157,15 +157,19 @@ namespace das
             table_end = data + table->capacity*stride;
             size_t index = nextValid(0);
             data += index * stride;
-            if ( data ) *(KeyType *)_value = *(KeyType *)data;
+            // Only read the key when the slot is real: an empty / fully-erased table lands data at
+            // table_end (one past the keys block). For a non-string packed table the keys block is
+            // the last region (no hash array follows), so dereferencing there is a heap overflow.
+            if ( data != table_end ) *(KeyType *)_value = *(KeyType *)data;
             return (bool) table->size;
         }
         virtual bool next  ( Context &, char * _value ) override {
             size_t index = (data-originData)/stride;
             index = nextValid(index + 1);
             data = originData + index * stride;
-            *(KeyType *)_value = *(KeyType *)data;
-            return data != table_end;
+            bool more = data != table_end;
+            if ( more ) *(KeyType *)_value = *(KeyType *)data;   // skip the past-end read on exhaustion
+            return more;
         }
         virtual void close ( Context & context, char * ) override {
             if ( getData()!=originData ) {

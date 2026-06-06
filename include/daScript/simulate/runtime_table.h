@@ -92,7 +92,8 @@ namespace das
         return tab.tableNoHash ? uint64_t(1) : uint64_t(sizeof(TableHashKey));
     }
 
-    // Packed tables store 64-bit hashes in the `hashes` block (declared TableHashKey*=uint32_t*).
+    // Packed STRING tables store 64-bit hashes in the `hashes` block (declared TableHashKey*=uint32_t*);
+    // packed non-string tables store no hash at all, so these helpers are only used on the string path.
     // Access them via memcpy: a direct ((uint64_t*)hashes)[i] lets clang -O3 assume 8-byte alignment
     // and vectorize the fixed packed-find scan into an aligned 16-byte load that faults on linux/wasm
     // (the block is only 8-aligned). memcpy lowers to the same unaligned load with no UB.
@@ -116,17 +117,15 @@ namespace das
         }
     }
 
-    // Per-key-type policy for the PACKED (small-table) regime: how a packed slot's hash is
-    // compared on find, stored on insert, moved on swap-remove, and read back for promotion, plus
-    // how wide the packed hash array is. TableHash delegates here so its packed paths stay
-    // key-agnostic.
-    // The packed hash array is uint64_t for EVERY key type (uniform width — a pure function of
-    // capacity, so the type-erased free/GC size math stays keytype-free). Only `find` differs:
-    //  - Workhorse keys (this generic): find compares key DATA over the dense [0,size) prefix; the
-    //    stored 64-bit hash is unused on find, kept only so promotion can re-bucket (a follow-up
-    //    will drop it for these keys and reclaim the slot).
-    //  - String keys (specialization): find compares the full 64-bit hash EXACTLY — no strcmp, and
-    //    a 64-bit collision is treated as impossible.
+    // Per-key-type policy for the PACKED (small-table) regime: how a packed slot's hash is compared
+    // on find, stored on insert, moved on swap-remove, and read back for promotion, plus how wide the
+    // packed hash array is (`hashBytes`) and whether one exists at all (`storesHash`). TableHash
+    // delegates here so its packed paths stay key-agnostic; reserveInternal records `!storesHash` in
+    // the table's `tableNoHash` flag so the type-erased free/GC size math can read the width.
+    //  - Workhorse keys (this generic): storesHash=false, hashBytes=0 — NO per-slot hash. find
+    //    compares key DATA over the dense [0,size) prefix; promotion recomputes the hash from the key.
+    //  - String keys (specialization): storesHash=true, 64-bit hash. find compares the full 64-bit
+    //    hash EXACTLY — no strcmp, and a 64-bit collision is treated as impossible.
     template <typename KeyType>
     struct PackedPolicy {
         static constexpr bool storesHash = false;     // non-string packed: no per-slot hash at all
@@ -332,7 +331,7 @@ namespace das
         // that shortcut: it skips the dedup scan and goes straight to the dense append, or
         // promotes to open addressing first if the packed table is full. PRECONDITION: the
         // table is packed and the key is genuinely absent — 0 < capacity <= the linear cap,
-        // and no live slot carries this key's hashKey. Calling it on a non-packed table, or
+        // and no live slot carries this key. Calling it on a non-packed table, or
         // with a key that is actually present, double-inserts. Not a general reserve; use
         // reserve() unless you just did the packed find yourself and it missed.
         __forceinline int64_t reserveAfterPackedMiss ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {

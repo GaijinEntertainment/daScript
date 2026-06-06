@@ -189,3 +189,30 @@ def test_promote_packed_to_large(t : T?) {
     }
     unsafe { delete tab; }
 }
+
+[test]
+def test_keys_iter_packed_no_overread(t : T?) {
+    // Regression: TableKeysIterator must not read the key one-past the keys block. A non-string
+    // packed table has no hash region after keys, so the past-end read on exhaustion / empty
+    // iteration ran off the allocation (ASan heap-buffer-overflow). Cover a full iteration (the
+    // final next lands on table_end) and an emptied table (first lands on table_end).
+    var tab : table<int; int>    // nolint:STYLE027  packed table iterated under test
+    for (i in range(5)) {
+        unsafe(tab[i]) = i
+    }
+    var n1 = 0
+    for (_k in keys(tab)) {
+        n1++
+    }
+    t |> equal(n1, 5)
+    for (i in range(5)) {
+        erase(tab, i)
+    }
+    t |> equal(length(tab), 0)
+    var n2 = 0
+    for (_k in keys(tab)) {
+        n2++
+    }
+    t |> equal(n2, 0)
+    unsafe { delete tab; }
+}
