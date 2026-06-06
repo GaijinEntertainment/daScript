@@ -75,6 +75,7 @@ namespace das
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         breakOnException |= policies.debugger;
         gcEnabled = options.getBoolOption("gc", false);
+        gcLogTime = options.getBoolOption("log_gc_time", policies.log_gc_time);
         persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( persistent ) {
             heap = make_unique<PersistentHeapAllocator>();

@@ -4,6 +4,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_print.h"
+#include "daScript/misc/performance_time.h"
 
 namespace das
 {
@@ -728,6 +729,10 @@ namespace das
         das_set<char *>     failed;
         bool                markStringHeap = true;
         bool                validate = false;
+        // Bounded-recursion guard: cap recursion depth, defer the rest to an iterative drain.
+        vector<pair<char *,TypeInfo *>> deferred;
+        int                 depth = 0;
+        static const int    GC_MAX_DEPTH = 256;
         void prepare() {
             currentRange.clear();
             gcFlags = TypeInfo::flag_heapGC;
@@ -864,6 +869,11 @@ namespace das
         using DataWalker::walk;
 
         virtual void walk ( char * pa, TypeInfo * info ) override {
+            if ( depth >= GC_MAX_DEPTH ) {    // too deep: defer, drain iteratively at the collectHeap frame
+                if ( pa ) deferred.emplace_back(pa, info);
+                return;
+            }
+            ++ depth;
             if ( pa == nullptr ) {
             } else if ( info->flags & TypeInfo::flag_ref ) {
                 beforeRef(pa,info);
@@ -952,6 +962,7 @@ namespace das
                     default: break;
                 }
             }
+            -- depth;
         }
     };
 
@@ -971,6 +982,7 @@ namespace das
         // pointers valid for the heap report. track_allocations is a diagnostic
         // mode, so unbounded stringHeap growth during the run is acceptable.
         if ( stringHeap->isTrackingAllocations() ) sheap = false;
+        int64_t gcT0 = gcLogTime ? ref_time_ticks() : 0;   // mark phase = beforeGC + walk
         if ( sheap && !stringHeap->mark() ) return;
         if ( !heap->mark() ) return;
         // now
@@ -1048,10 +1060,25 @@ namespace das
             lineAt = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
         }
+        while ( !walker.deferred.empty() ) {
+            auto item = walker.deferred.back();
+            walker.deferred.pop_back();
+            walker.prepare();
+            walker.walk(item.first, item.second);
+        }
         // sweep
+        int markUsec = gcLogTime ? get_time_usec(gcT0) : 0;
+        int64_t gcT1 = gcLogTime ? ref_time_ticks() : 0;
         if ( sheap ) stringHeap->sweep();
         // report errors
         heap->sweep();
+        if ( gcLogTime ) {
+            int sweepUsec = get_time_usec(gcT1);
+            printf("gc: mark %.3f ms, sweep %.3f ms, live %llu bytes\n",
+                markUsec / 1000.0, sweepUsec / 1000.0,
+                (unsigned long long) heap->bytesAllocated());
+            fflush(stdout);
+        }
         if ( !walker.failed.empty() ) {
             reportAnyHeap(at, sheap, true, true, true);
             TextWriter tw;

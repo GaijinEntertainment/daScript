@@ -268,18 +268,24 @@ namespace das {
             for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
                 ch->afterGC();
                 uint32_t utotal = ch->total / 32;
+#if DAS_SANITIZER
                 for ( uint32_t i=0; i!=utotal; ++i ) {
                     uint32_t b = ch->bits[i];
-                    for ( uint32_t j=0; j!=32; ++j ) {          // TODO: this is COUNTBITS * size
+                    for ( uint32_t j=0; j!=32; ++j ) {
                         if ( b & (1<<j) ) {
                             totalAllocated += ch->size;
                         } else {
-#if DAS_SANITIZER
                             memset ( ch->data + (i*32+j)*ch->size, 0xcd, ch->size );
-#endif
                         }
                     }
                 }
+#else
+                uint32_t live = 0;                              // popcount instead of per-bit scan
+                for ( uint32_t i=0; i!=utotal; ++i ) {
+                    live += das_popcount(ch->bits[i]);
+                }
+                totalAllocated += uint64_t(live) * ch->size;
+#endif
             }
         }
         for ( auto it = bigStuff.begin(); it!=bigStuff.end() ; ) {
