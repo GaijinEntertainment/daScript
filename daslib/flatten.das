@@ -338,7 +338,7 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         var n = clone_expression(e)
         var o = n as ExprMakeStruct
         for (si in range(length(o.structs))) {
-            for (fld in each(*(o.structs[si]))) {
+            for (fld in *(o.structs[si])) {
                 fld.value = lift_expr(ctx, fld.value, structPred, out)
             }
         }
