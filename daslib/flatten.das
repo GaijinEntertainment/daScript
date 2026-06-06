@@ -41,7 +41,7 @@ let private STD_WHITELIST : table<string> <- {
     "sqrt", "rsqrt", "pow", "exp", "exp2", "log", "log2",
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sincos",
     "dot", "cross", "length", "normalize", "distance", "reflect", "refract",
-    "lerp", "mix", "step", "smoothstep", "rcp", "mad",
+    "lerp", "mix", "step", "smooth_step", "rcp", "mad",
     "float2", "float3", "float4", "int2", "int3", "int4", "uint2", "uint3", "uint4"
 }
 
@@ -200,7 +200,12 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
     var subst : Template
     for (p, ai in callee.arguments, count()) {
         let argN = fresh(ctx, "__flat_arg")
-        out |> push <| qmacro_expr(${ var $i(argN) = $e(call.arguments[ai]); })
+        // Lift the argument FIRST (under the caller's predicate): a nested user call
+        // gets its own inline frame, a nested builtin is whitelist-checked. Without
+        // this, `f(g(x))` would bind `var __flat_arg = g(x)` verbatim — leaving `g`
+        // un-inlined and any non-whitelisted builtin in the arg unchecked.
+        let lifted = lift_expr(ctx, call.arguments[ai], structPred, out)
+        out |> push <| qmacro_expr(${ var $i(argN) = $e(lifted); })
         subst |> replaceVariable(string(p.name)) <| qmacro($i(argN))
     }
     // The callee runs where the caller's full predicate holds — funcLive AND every
@@ -333,7 +338,7 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         var n = clone_expression(e)
         var o = n as ExprMakeStruct
         for (si in range(length(o.structs))) {
-            for (fld in *(o.structs[si])) {
+            for (fld in each(*(o.structs[si]))) {
                 fld.value = lift_expr(ctx, fld.value, structPred, out)
             }
         }

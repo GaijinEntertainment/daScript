@@ -25,6 +25,14 @@ def vec(x : float) : float4 {
     return float4(x, x + 1.0, x + 2.0, 1.0)
 }
 
+def sq(a : int) : int {
+    return a * a
+}
+
+def addk(a : int; k : int) : int {
+    return a + k
+}
+
 // ExprField — user call as the object of a `.field` read (wrapped in ExprRef2Value)
 [flatten]
 def f_field(x : int) : int {
@@ -54,6 +62,14 @@ def f_tuple(x : int) : int {
 [flatten]
 def f_nested(x : float) : float {
     return vec(x).x + vec(x * 2.0).y
+}
+
+// inline_call argument is itself a user call — the argument must be lifted
+// (nested call inlined) BEFORE binding to the frame temp, else `sq(x)` survives
+// in `var __flat_arg = sq(x)` and the cycle-2 scan rejects the twin.
+[flatten]
+def f_arg_call(x : int) : int {
+    return addk(sq(x), sq(x + 1))
 }
 
 var GRID : array<int>
@@ -91,6 +107,11 @@ def test_flatten_lift(t : T?) {
     t |> run("nested swizzle + field + op") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_nested_flat(float(v)), f_nested(float(v)))
+        }
+    }
+    t |> run("user call in an argument position") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_arg_call_flat(v), f_arg_call(v))
         }
     }
 }
