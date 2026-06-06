@@ -21,6 +21,16 @@
 #   5. cap_with.shader (a `with (inp)` scope) -> compiles. The backend bans
 #      ExprWith; flatten unwraps it to its body (post-infer it's pure name
 #      resolution), so a clean compile proves it was omitted.
+#
+#   6. cap_loop_cond.shader (loop-var-gated accumulate) -> const-folds to zero selects.
+#
+#   7. cap_loop_break.shader (RUNTIME break) -> compiles to a stored bool mask
+#      (boolConst init + and/not narrows) feeding per-copy selects. The backend has
+#      no jump; flatten's loop-scoped mask + the backend's Phase-C bool-accumulator
+#      rail make a runtime break expressible.
+#
+#   8. cap_loop_continue.shader (RUNTIME continue) -> a PER-COPY bool mask (one
+#      boolConst init per unrolled copy) gating that copy's accumulation.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,6 +114,41 @@ if [[ "$errs" -eq 0 && "$nodes" -gt 0 && "$selects" -eq 0 ]]; then
     echo "   ok — compiles ($nodes nodes), $selects select nodes (all const-folded)"
 else
     echo "   FAIL — errors=$errs nodes=$nodes selects=$selects (expected 0 selects)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "7. cap_loop_break.shader (runtime break -> stored bool mask + selects)"
+out="$(compile "$here/cap_loop_break.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+selects="$(echo "$out" | grep -c ' select ')"
+masks="$(echo "$out" | grep -c ' boolConst ')"
+errs="$(echo "$out" | grep -ci error)"
+# A runtime break leaves a genuine runtime mask: the bool mask local (boolConst init,
+# narrowed by `&&`/`!` per copy) feeds a select on each unrolled copy. This is the
+# first construct whose mask survives as a stored bool — Phase C lets the backend
+# consume it.
+if [[ "$errs" -eq 0 && "$selects" -gt 0 && "$masks" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes), $selects select node(s) gated by a stored bool mask"
+else
+    echo "   FAIL — errors=$errs selects=$selects masks=$masks (expected >0 selects and a bool mask)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "8. cap_loop_continue.shader (runtime continue -> per-copy bool masks)"
+out="$(compile "$here/cap_loop_continue.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+selects="$(echo "$out" | grep -c ' select ')"
+masks="$(echo "$out" | grep -c ' boolConst ')"
+errs="$(echo "$out" | grep -ci error)"
+# continue is a PER-COPY mask: each unrolled copy declares its own `var __flat_iter = true`,
+# so there are multiple boolConst inits (one per copy) — distinct from break's single
+# persistent mask. Each gates that copy's accumulation via a select.
+if [[ "$errs" -eq 0 && "$selects" -gt 0 && "$masks" -gt 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), $masks per-copy bool masks gating $selects select(s)"
+else
+    echo "   FAIL — errors=$errs selects=$selects masks=$masks (expected >0 selects and >1 per-copy masks)"
     echo "$out" | grep -i error | head
     fail=1
 fi

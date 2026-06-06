@@ -79,6 +79,7 @@ let FloatConst = "floatConst";
 let Float2Const = "float2Const";
 let Float3Const = "float3Const";
 let Float4Const = "float4Const";
+let BoolConst = "boolConst";   // Phase C: a mask literal (true/false), modelled as a 0/1 selector
 
 // ---- Variables -------------------------------------------------------------
 let FloatVar = "floatVar";
@@ -680,7 +681,13 @@ class ValidateShaderVisitor : AstVisitor {
                 errors.push(("shader code doesn't support vector literals; use float2/3/4 types instead", unsafe(addr(v.at))))
             }
             let isAccum = !v._type.isConst
-            if (v._type.baseType == Type.tFloat || v._type.baseType == Type.tFloat2 || v._type.baseType == Type.tFloat3 || v._type.baseType == Type.tFloat4) {
+            // Phase C: a bool (`var __flat_loop = true`) is a stored mask — flatten's
+            // loop-scoped break / per-iteration continue mask. It is just a mutable
+            // accumulator whose pin type is the 0/1 selector (add_pin maps tBool->Float),
+            // reassigned with `&&`/`!` and read as a Select condition, so it rides the
+            // exact same accumulator rail as a float accumulator.
+            if (v._type.baseType == Type.tFloat || v._type.baseType == Type.tFloat2 || v._type.baseType == Type.tFloat3 || v._type.baseType == Type.tFloat4
+                || v._type.baseType == Type.tBool) {
                 add_variable(v)
                 if (isAccum) {
                     let accId : Variable const? = v
@@ -1155,6 +1162,13 @@ class ValidateShaderVisitor : AstVisitor {
     def override preVisitExprConstInt(expr : ExprConstInt?) : void {
         if (!empty(ignoreNext)) { return ; }
         emit_const_node(expr, FloatConst, float4(float(expr.value), 0., 0., 0.))
+    }
+
+    def override preVisitExprConstBool(expr : ExprConstBool?) : void {
+        if (!empty(ignoreNext)) { return ; }
+        // Phase C: a mask literal (flatten's `var __flat_loop = true`). Modelled as a
+        // 0/1 selector const (1 = true, 0 = false) — the initial value of the stored mask.
+        emit_const_node(expr, BoolConst, float4(expr.value ? 1.0 : 0.0, 0., 0., 0.))
     }
 
     def override preVisitExprConstFloat(expr : ExprConstFloat?) : void {
