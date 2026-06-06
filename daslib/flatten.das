@@ -690,6 +690,7 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>) :
         const_prop_pass(out)   // …so an unreassigned `__flat_live` reads as const true → collapse
         copy_prop_pass(out)    // inline single-def temps (`__flat_ret = c; return __flat_ret` → `return c`)
         dse_pass(out)          // remove anything left dead (collapsed mask decls, folded temps)
+        ssa_rename_pass(out)   // single-def-ify reassigned user locals → fold_body const-props the chain
     }
     var newBody = new ExprBlock(at = func.body.at)
     for (s in out) {

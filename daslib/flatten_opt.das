@@ -444,6 +444,81 @@ def public dse_pass(var out : array<ExpressionPtr>) {
     out <- [for (j in range(n)); out[j]; where !key_exists(dead, j)]
 }
 
+// ===== SSA-rename of reassigned user locals =====
+//
+// flatten's body is straight-line (if → ?:, loops unrolled, no user calls), so a
+// reassigned local has a single linear chain of definitions — no control-flow merges,
+// hence no phi nodes. Renaming each write to a fresh version (`acc = acc + 3` →
+// `var acc__s2 = acc__s1 + 3`) makes every local single-definition, which lets the
+// post-infer const-prop (fold_body) fold the chain through the existing single-def
+// path. We rename only user locals that are declared WITH an initializer (single-var)
+// and reassigned at least once — never `__flat_*` masks (handled by const_prop_pass),
+// globals (observable), or params (not declared here). A self-referential select
+// (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version.
+
+def private rename_reads(var e : ExpressionPtr; current : table<string; string>) : ExpressionPtr {
+    if (e == null) return null
+    var tmpl : Template
+    var any = false
+    for (orig in keys(current)) {
+        let vn = current?[orig] ?? ""
+        tmpl |> replaceVariable(orig, qmacro($i(vn)))
+        any = true
+    }
+    if (!any) return e
+    return apply_template(tmpl, e.at, e, false)
+}
+
+def public ssa_rename_pass(var out : array<ExpressionPtr>) {
+    // (1) user locals declared (single-var) with an initializer
+    var declaredInit : table<string>
+    for (s in out) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            let v = (s as ExprLet).variables[0]
+            let nm = "{v.name}"
+            if (!is_flat_temp(nm) && v.init != null) declaredInit |> insert(nm)
+        }
+    }
+    if (empty(declaredInit)) return
+    // (2) of those, the ones reassigned via a plain `var = ...` (multi-def)
+    var ssaNames : table<string>
+    for (s in out) {
+        if (s is ExprCopy && (s as ExprCopy).left is ExprVar) {
+            let nm = "{((s as ExprCopy).left as ExprVar).name}"
+            if (key_exists(declaredInit, nm)) ssaNames |> insert(nm)
+        }
+    }
+    if (empty(ssaNames)) return
+    // (3) forward rename: each read maps to the current version; each write mints a new
+    // version (after resolving the RHS reads, so a self-ref reads the prior version).
+    var current : table<string; string>
+    var counter = 0
+    var i = 0
+    while (i < length(out)) {
+        var s = out[i]
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 &&
+                key_exists(ssaNames, "{(s as ExprLet).variables[0].name}")) {
+            let orig = "{(s as ExprLet).variables[0].name}"
+            let newInit = rename_reads((s as ExprLet).variables[0].init, current)
+            counter ++
+            let vn = "{orig}__s{counter}"
+            out[i] = qmacro_expr(${ var $i(vn) = $e(newInit); })
+            current[orig] = vn
+        } elif (s is ExprCopy && (s as ExprCopy).left is ExprVar &&
+                key_exists(ssaNames, "{((s as ExprCopy).left as ExprVar).name}")) {
+            let orig = "{((s as ExprCopy).left as ExprVar).name}"
+            let newRhs = rename_reads((s as ExprCopy).right, current)
+            counter ++
+            let vn = "{orig}__s{counter}"
+            out[i] = qmacro_expr(${ var $i(vn) = $e(newRhs); })
+            current[orig] = vn
+        } else {
+            out[i] = rename_reads(s, current)
+        }
+        i ++
+    }
+}
+
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
@@ -674,17 +749,112 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
     return e
 }
 
+// ===== Generalized const-propagation of single-def user locals =====
+//
+// After SSA-rename every user local is single-definition, so a `var x = <const>` can
+// be substituted at all of x's uses and dropped. Because flatten linearized the body,
+// one forward pass folds a whole accumulator chain: each link's init is substituted
+// with the prior constants and evaluated exactly via the shared runtime evaluator
+// (types are present post-infer), so `var acc__s1=5; var acc__s2=acc__s1+3; …` collapses
+// to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are left
+// to const_prop_pass; globals/fields are never substituted (only their read operands).
+
+def private reads_any(var e : ExpressionPtr; names : table<string; ExpressionPtr>) : bool {
+    for (nm in keys(names)) {
+        if (count_refs(e, nm) > 0) return true
+    }
+    return false
+}
+
+def private subst_consts(var e : ExpressionPtr; constmap : table<string; ExpressionPtr>) : ExpressionPtr {
+    if (e == null) return null
+    var tmpl : Template
+    for (nm in keys(constmap)) {
+        let ex = unsafe(constmap?[nm]) ?? null     // non-inserting read (keys() locks the table)
+        tmpl |> replaceVariable(nm, clone_expression(ex))
+    }
+    return apply_template(tmpl, e.at, e, false)
+}
+
+def private body_read_count(var blk : ExprBlock?; nm : string) : int {
+    var total = 0
+    for (j in range(length(blk.list))) {
+        total += count_refs(blk.list[j], nm)
+    }
+    return total
+}
+
+def private const_prop_locals(var blk : ExprBlock?) : bool {
+    var changed = false
+    var constmap : table<string; ExpressionPtr>
+    var i = 0
+    while (i < length(blk.list)) {
+        // Substitute already-known constants into this statement's reads (the next
+        // link's init, a final `g_out = acc`, a `return acc`, …).
+        if (!empty(constmap) && reads_any(blk.list[i], constmap)) {
+            blk.list[i] = subst_consts(blk.list[i], constmap)
+            changed = true
+        }
+        // A single-def user local whose (now-substituted) init is literal-only folds to
+        // one constant and joins the map for the rest of the pass.
+        var s = blk.list[i]
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            var lc = s as ExprLet
+            let nm = "{lc.variables[0].name}"
+            if (!is_flat_temp(nm) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
+                var folded = eval_to_const(clone_expression(lc.variables[0].init))
+                if (folded |> is_expr_const()) {
+                    lc.variables[0].init = folded
+                    constmap[nm] = folded
+                    changed = true
+                }
+            }
+        }
+        i ++
+    }
+    // Drop the now-dead decls of fully-propagated locals (every use was substituted).
+    if (!empty(constmap)) {
+        var dead : table<int>
+        for (j in range(length(blk.list))) {
+            let s = blk.list[j]
+            if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+                let nm = "{(s as ExprLet).variables[0].name}"
+                if (key_exists(constmap, nm) && body_read_count(blk, nm) == 0) {
+                    dead |> insert(j)
+                }
+            }
+        }
+        if (!empty(dead)) {
+            // blk.list is a managed vector — erase high-to-low so indices stay valid.
+            var si = length(blk.list) - 1
+            while (si >= 0) {
+                if (key_exists(dead, si)) {
+                    blk.list |> erase(si)
+                }
+                si --
+            }
+            changed = true
+        }
+    }
+    return changed
+}
+
 def public fold_body(var func : FunctionPtr) : bool {
-    //! Post-infer fold over a flattened body: collapse `const ? a : b` to the live
-    //! arm, drop the side-effect-free `lhs = lhs` self-assigns a folded false-select
-    //! leaves behind, and strip redundant zero/default inits (`var acc = 0` →
-    //! `var acc : int`). Call AFTER re-inference (conditions must be `ExprConstBool`).
+    //! Post-infer fold over a flattened body: const-propagate single-def user locals
+    //! (accumulator chains → a constant), collapse `const ? a : b` to the live arm,
+    //! fold algebraic / boolean identities and const constructors, drop the
+    //! side-effect-free `lhs = lhs` self-assigns a folded false-select leaves behind,
+    //! and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
+    //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
     if (!(func.body is ExprBlock)) return false
+    var changed = const_prop_locals(func.body as ExprBlock)
     var v = new FoldVisitor()
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
-    var changed = v.changed
+    if (v.changed) {
+        changed = true
+    }
     unsafe {
         delete v
     }

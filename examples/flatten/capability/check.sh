@@ -44,6 +44,11 @@
 #  11. cap_fold_bool.shader (boolean identities `true && c` / `false || c`) -> fold away.
 #      The typer folds only fully-const ops, so the `&&`/`||` survive in source; flatten
 #      folds them to the bare comparison, so no `and`/`or` node reaches the backend.
+#
+#  12. cap_fold_accumulator.shader (const accumulator `var acc=0; acc+=0.1`×4) -> a const.
+#      flatten SSA-renames the reassigned accumulator to single-def versions and const-
+#      props the chain to one constant: 0 add nodes, result = base * <const>. Without it
+#      the backend rejects the self-referential accumulator (50503).
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -213,6 +218,24 @@ if [[ "$errs" -eq 0 && "$ands" -eq 0 && "$ors" -eq 0 && "$selects" -gt 0 ]]; the
     echo "   ok — compiles ($nodes nodes), 0 and, 0 or, $selects select(s) (identities folded)"
 else
     echo "   FAIL — errors=$errs and=$ands or=$ors selects=$selects (expected 0 and, 0 or, >0 select)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "12. cap_fold_accumulator.shader (const accumulator folds to a constant)"
+out="$(compile "$here/cap_fold_accumulator.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+adds="$(echo "$out" | grep -c ' add ')"
+muls="$(echo "$out" | grep -c ' mul ')"
+errs="$(echo "$out" | grep -ci error)"
+# `var acc = 0.0; acc += 0.1` ×4 — the general compiler does no const-propagation across
+# the reassignments, and the backend rejects the self-referential accumulator outright
+# (50503). flatten SSA-renames acc to single-def versions and const-props the chain to
+# one constant, so it compiles with ZERO `add` nodes and result = `base * <const>`.
+if [[ "$errs" -eq 0 && "$adds" -eq 0 && "$muls" -ge 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), 0 add (accumulator folded), $muls mul (base*const)"
+else
+    echo "   FAIL — errors=$errs adds=$adds muls=$muls (expected 0 add, >=1 mul)"
     echo "$out" | grep -i error | head
     fail=1
 fi

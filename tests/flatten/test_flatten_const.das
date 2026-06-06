@@ -182,15 +182,83 @@ def f_sel_early(c : bool; g : bool) : bool {
     return c ? false : true
 }
 
+// ----- const-propagation of single-def locals via SSA-rename (#2) -----
+//
+// A reassigned local is SSA-renamed to single-def versions at cycle 1, then the post-
+// infer const-prop folds the chain. Differential proves the fold is value-preserving
+// (an unfolded accumulator computes the same), incl. the soundness case where the
+// accumulator depends on a parameter and must NOT fold. The cap_fold_accumulator shader
+// proves it actually fires (0 add nodes reach the backend).
+
+// Pure const accumulator chain -> a constant.
+[flatten]
+def f_acc_const : int {
+    var acc = 5
+    acc = acc + 3
+    acc = acc * 2
+    return acc
+}
+
+// Const loop accumulator (unrolled then folded): 0+0+1+2+3 = 6.
+[flatten]
+def f_acc_loop : int {
+    var acc = 0
+    for (i in range(4)) {
+        acc = acc + i
+    }
+    return acc
+}
+
+// Const prefix folds, runtime tail stays: 30 + x.
+[flatten]
+def f_acc_mixed(x : int) : int {
+    var acc = 1
+    acc = acc + 2
+    acc = acc * 10
+    return acc + x
+}
+
+// Accumulator seeded from a parameter must NOT fold: (x + 5) * 2.
+[flatten]
+def f_acc_runtime(x : int) : int {
+    var acc = x
+    acc = acc + 5
+    acc = acc * 2
+    return acc
+}
+
+// Float const loop accumulator: 0.25 * 4 = 1.0.
+[flatten]
+def f_acc_float : float {
+    var acc = 0.0
+    for (_i in range(4)) {
+        acc = acc + 0.25
+    }
+    return acc
+}
+
+// Const accumulator across an early return: g ? 10 : 15.
+[flatten]
+def f_acc_early(g : bool) : int {
+    var acc = 10
+    if (g) {
+        return acc
+    }
+    acc = acc + 5
+    return acc
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
 var BOOLS : array<bool>
+var IGRID : array<int>
 
 [init]
 def fill_grid {
     GRID <- [-100.0, -3.5, -1.0, -0.0, 0.0, 1.0, 2.5, 7.0, 100.0]
     BOOLS <- [true, false]
+    IGRID <- [-100, -7, -1, 0, 1, 3, 42, 1000]
 }
 
 [test]
@@ -321,6 +389,35 @@ def test_flatten_const(t : T?) {
                 t |> equal(f_and_early_flat(b, g), f_and_early(b, g))
                 t |> equal(f_sel_early_flat(b, g), f_sel_early(b, g))
             }
+        }
+    }
+    t |> run("const accumulator chain -> constant") @(t : T?) {
+        t |> equal(f_acc_const_flat(), f_acc_const())
+        t |> equal(f_acc_const_flat(), 16)
+    }
+    t |> run("const loop accumulator -> constant") @(t : T?) {
+        t |> equal(f_acc_loop_flat(), f_acc_loop())
+        t |> equal(f_acc_loop_flat(), 6)
+    }
+    t |> run("const prefix folds, runtime tail stays") @(t : T?) {
+        for (x in IGRID) {
+            t |> equal(f_acc_mixed_flat(x), f_acc_mixed(x))
+            t |> equal(f_acc_mixed_flat(x), 30 + x)
+        }
+    }
+    t |> run("param-seeded accumulator must NOT fold (soundness)") @(t : T?) {
+        for (x in IGRID) {
+            t |> equal(f_acc_runtime_flat(x), f_acc_runtime(x))
+            t |> equal(f_acc_runtime_flat(x), (x + 5) * 2)
+        }
+    }
+    t |> run("float const loop accumulator -> 1.0") @(t : T?) {
+        t |> equal(f_acc_float_flat(), f_acc_float())
+        t |> equal(f_acc_float_flat(), 1.0)
+    }
+    t |> run("const accumulator across early return") @(t : T?) {
+        for (g in BOOLS) {
+            t |> equal(f_acc_early_flat(g), f_acc_early(g))
         }
     }
 }
