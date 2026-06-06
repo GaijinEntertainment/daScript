@@ -573,6 +573,7 @@ add_custom_target(test_aot_fio)
 SET(FIO_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FIO_FILES}" FIO_AOT_GENERATED_SRC test_aot_fio daslang)
 
+add_custom_target(test_aot_flatten)
 SET(FLATTEN_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FLATTEN_FILES}" FLATTEN_AOT_GENERATED_SRC test_aot_flatten daslang)
 
