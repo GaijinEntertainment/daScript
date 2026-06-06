@@ -142,6 +142,12 @@ def test_large_string(t : T?) {
     t |> equal(key_exists(tab, dkey(13)), false)
     t |> equal(tab?[dkey(14)] ?? -1, 98)
     t |> equal(length(tab), 39)
+    // reinsert after erase: a new key reuses the freed tombstone slot (no grow)
+    unsafe(tab[dkey(1000)]) = 7000
+    t |> equal(length(tab), 40)
+    t |> equal(tab?[dkey(1000)] ?? -1, 7000)
+    t |> equal(tab?[dkey(13)] ?? -1, -1)
+    t |> equal(tab?[dkey(0)] ?? -1, 0)
     unsafe { delete tab; }
 }
 
