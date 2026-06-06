@@ -70,6 +70,31 @@ def f_vec0(x : float3) : float3 {
     return x * 0.0
 }
 
+// ----- const-constructor folding (#1c): vector ctors over const args fold to a
+// single const literal (the typer leaves them; flatten collapses them) -----
+
+[flatten]
+def f_ctor_zero : float3 {
+    return float3(0.0)
+}
+
+[flatten]
+def f_ctor_arith : float3 {
+    return float3(2.0 * 3.0)
+}
+
+[flatten]
+def f_ctor_mixed : float3 {
+    return float3(1.0, 2.0, 3.0)
+}
+
+// A const ctor buried under arithmetic with a runtime operand: the ctor folds, the
+// surrounding add stays.
+[flatten]
+def f_ctor_mixed_rt(x : float3) : float3 {
+    return x + float3(0.5)
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
@@ -137,6 +162,28 @@ def test_flatten_const(t : T?) {
             t |> equal(a.x, b.x)
             t |> equal(a.y, b.y)
             t |> equal(a.z, b.z)
+        }
+    }
+    t |> run("const ctor float3(0.0) folds to a const") @(t : T?) {
+        let a = f_ctor_zero()
+        let b = f_ctor_zero_flat()
+        t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+    }
+    t |> run("const ctor float3(2*3) folds to float3(6)") @(t : T?) {
+        let a = f_ctor_arith()
+        let b = f_ctor_arith_flat()
+        t |> equal(a.x, b.x); t |> equal(b.x, 6.0)
+    }
+    t |> run("const ctor float3(1,2,3) folds") @(t : T?) {
+        let a = f_ctor_mixed()
+        let b = f_ctor_mixed_flat()
+        t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+    }
+    t |> run("const ctor under runtime add") @(t : T?) {
+        for (v in GRID) {
+            let a = f_ctor_mixed_rt(float3(v, v + 1.0, v - 1.0))
+            let b = f_ctor_mixed_rt_flat(float3(v, v + 1.0, v - 1.0))
+            t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
         }
     }
 }

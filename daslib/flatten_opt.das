@@ -496,6 +496,21 @@ class private FoldVisitor : AstVisitor {
         }
         return that
     }
+    def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
+        // A fully-constant, side-effect-free call — a vector constructor (`float3(0)`
+        // stays `float3(0f,0f,0f)`, never a const) or a pure builtin over const args —
+        // folds to a single const literal. The typer folds scalar const ARITHMETIC
+        // during re-infer (`2*3 → 6`) but leaves const CONSTRUCTORS; this collapses
+        // them. Post-order, so const-folded args are visible here.
+        if (is_all_const(that)) {
+            var folded = eval_to_const(that)
+            if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
+                changed = true
+                return folded
+            }
+        }
+        return that
+    }
 }
 
 // A scalar zero/default literal: `default<T>` for every workhorse scalar is the
@@ -565,6 +580,58 @@ def private same_base_type(a, b : ExpressionPtr) : bool {
 
 def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
+}
+
+// True if `e` is built only from const literals and pure ops over them — NO variable
+// or global reference anywhere. eval_single_expression runs in a bare context with no
+// globals (a global read dereferences null), so a literal-only tree is mandatory
+// before evaluating. Conservative: an unknown node kind returns false.
+def private is_all_const(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e |> is_expr_const()) return true
+    if (e is ExprVar) return false
+    if (e is ExprOp1) return is_all_const((e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return is_all_const(o.left) && is_all_const(o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return is_all_const(o.subexpr) && is_all_const(o.left) && is_all_const(o.right)
+    }
+    if (e is ExprCall) {
+        if (has_sideeffects(e)) return false
+        for (a in (e as ExprCall).arguments) {
+            if (!is_all_const(a)) return false
+        }
+        return true
+    }
+    return false
+}
+
+// Evaluate a literal-only (is_all_const) inferred expression to one const literal of
+// its type, via the exact runtime evaluator. Returns `e` unchanged if eval fails or
+// the type is unsupported. The fresh const is un-inferred; the macro re-infers it.
+def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
+    if (e == null || e._type == null) return e
+    var ok = false
+    var val : float4
+    unsafe {
+        val = eval_single_expression(e, ok)
+    }
+    if (!ok) return e
+    let bt = e._type.baseType
+    if (bt == Type.tFloat) return new ExprConstFloat(at = e.at, value = val.x)
+    if (bt == Type.tFloat2) return new ExprConstFloat2(at = e.at, value = float2(val.x, val.y))
+    if (bt == Type.tFloat3) return new ExprConstFloat3(at = e.at, value = float3(val.x, val.y, val.z))
+    if (bt == Type.tFloat4) return new ExprConstFloat4(at = e.at, value = val)
+    unsafe {
+        if (bt == Type.tInt) return new ExprConstInt(at = e.at, value = reinterpret<int>(val.x))
+        if (bt == Type.tInt2) return new ExprConstInt2(at = e.at, value = int2(reinterpret<int>(val.x), reinterpret<int>(val.y)))
+        if (bt == Type.tInt3) return new ExprConstInt3(at = e.at, value = int3(reinterpret<int>(val.x), reinterpret<int>(val.y), reinterpret<int>(val.z)))
+        if (bt == Type.tInt4) return new ExprConstInt4(at = e.at, value = int4(reinterpret<int>(val.x), reinterpret<int>(val.y), reinterpret<int>(val.z), reinterpret<int>(val.w)))
+    }
+    return e
 }
 
 def public fold_body(var func : FunctionPtr) : bool {

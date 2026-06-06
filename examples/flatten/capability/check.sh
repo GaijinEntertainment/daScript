@@ -36,6 +36,10 @@
 #      The general compiler leaves them (gain is a runtime prop) and the backend has
 #      no const-fold; flatten's fold removes them, so the graph has only the genuine
 #      `base*gain` multiply: exactly 1 mul, 0 add.
+#
+#  10. cap_fold_ctor.shader (const vector ctor `float3(0.5)`) -> a const. The typer
+#      folds scalar const arithmetic but leaves const CONSTRUCTORS; flatten collapses
+#      it to a single `float3Const` node.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -171,6 +175,22 @@ if [[ "$errs" -eq 0 && "$muls" -eq 1 && "$adds" -eq 0 ]]; then
     echo "   ok — compiles ($nodes nodes), 1 mul (base*gain), 0 add (identities folded)"
 else
     echo "   FAIL — errors=$errs muls=$muls adds=$adds (expected 1 mul, 0 add)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "10. cap_fold_ctor.shader (const vector ctor float3(0.5) folds to a const)"
+out="$(compile "$here/cap_fold_ctor.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+f3c="$(echo "$out" | grep -c ' float3Const ')"
+errs="$(echo "$out" | grep -ci error)"
+# The typer leaves `float3(0.5)` as a ctor (const constructors aren't infer-folded);
+# flatten collapses it to a single float3Const node. Without the fold there is no
+# float3Const for this expression (it'd be a vector ctor + floatConst inputs).
+if [[ "$errs" -eq 0 && "$f3c" -ge 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), $f3c float3Const node(s) (const ctor folded)"
+else
+    echo "   FAIL — errors=$errs float3Const=$f3c (expected >=1 float3Const)"
     echo "$out" | grep -i error | head
     fail=1
 fi
