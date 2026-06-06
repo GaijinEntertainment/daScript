@@ -71,13 +71,16 @@ namespace das
         return tab.hashes[i] > HASH_KILLED64;
     }
 
-    // Bytes per hash slot, a pure function of capacity for the type-erased table-size
-    // computations (free / GC range) that only have sizes, not a C++ KeyType. PACKED tables hold
-    // 64-bit hashes (so the string find can compare the full hash with no strcmp; non-string keys
-    // store but ignore it — reclaimed in a follow-up), LARGE tables 32-bit. Must agree with
-    // PackedPolicy<KeyType>::hashBytes.
-    __forceinline uint64_t tableHashSlotBytes ( uint64_t capacity ) {
-        return ( capacity <= TABLE_MAX_LINEAR_CAPACITY ) ? uint64_t(sizeof(uint64_t)) : uint64_t(sizeof(TableHashKey));
+    // Bytes per hash slot for the type-erased table-size computations (free / GC range) that have
+    // no C++ KeyType. The width is NOT a pure function of capacity: a non-string key stores no
+    // per-slot hash (tableNoHash flag, set in reserveInternal from PackedPolicy::storesHash), so two
+    // same-capacity tables can differ. PACKED string = 64-bit (full-hash compare, no strcmp); PACKED
+    // non-string = none. LARGE string = 32-bit; LARGE non-string = 0 (commit B: 1-byte control).
+    // Must agree with PackedPolicy<KeyType>::hashBytes and the large-table store width.
+    __forceinline uint64_t tableHashSlotBytes ( const Table & tab ) {
+        if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY )
+            return tab.tableNoHash ? uint64_t(0) : uint64_t(sizeof(uint64_t));
+        return uint64_t(sizeof(TableHashKey));
     }
 
     // Packed tables store 64-bit hashes in the `hashes` block (declared TableHashKey*=uint32_t*).
@@ -117,7 +120,8 @@ namespace das
     //    a 64-bit collision is treated as impossible.
     template <typename KeyType>
     struct PackedPolicy {
-        static constexpr uint32_t hashBytes = sizeof(uint64_t);
+        static constexpr bool storesHash = false;     // non-string packed: no per-slot hash at all
+        static constexpr uint32_t hashBytes = 0;
         static __forceinline int64_t find ( const Table & tab, const KeyType & key, uint64_t ) {
             auto pKeys = (const KeyType *) tab.keys;
             uint32_t sz = (uint32_t) tab.size;
@@ -126,23 +130,18 @@ namespace das
             }
             return -1;
         }
-        static __forceinline void insertHash ( Table & tab, uint64_t slot, uint64_t hash ) {
-            storeHash64(tab.hashes, slot, hash);
-        }
-        static __forceinline void moveHash ( Table & tab, uint64_t to, uint64_t from ) {
-            storeHash64(tab.hashes, to, loadHash64(tab.hashes, from));
-        }
-        static __forceinline void clearHash ( Table & tab, uint64_t slot ) {
-            storeHash64(tab.hashes, slot, 0);
-        }
-        // 64-bit key used to re-bucket into the large (32-bit) target during promotion.
-        static __forceinline uint64_t promoteHash ( const Table & tab, uint64_t slot, const KeyType &, Context * ) {
-            return loadHash64(tab.hashes, slot);
+        static __forceinline void insertHash ( Table &, uint64_t, uint64_t ) {}
+        static __forceinline void moveHash ( Table &, uint64_t, uint64_t ) {}
+        static __forceinline void clearHash ( Table &, uint64_t ) {}
+        // No stored hash: re-derive it from the key to re-bucket into the large target on promotion.
+        static __forceinline uint64_t promoteHash ( const Table &, uint64_t, const KeyType & key, Context * ctx ) {
+            return hash_function(*ctx, key);
         }
     };
 
     template <>
     struct PackedPolicy<char *> {
+        static constexpr bool storesHash = true;
         static constexpr uint32_t hashBytes = sizeof(uint64_t);
         static __forceinline int64_t find ( const Table & tab, char * const &, uint64_t hash ) {
             // All-8 scan: the tail is always 0 (alloc / erase / table_clear clear the full 64-bit
@@ -170,6 +169,7 @@ namespace das
 
     template <>
     struct PackedPolicy<const char *> {
+        static constexpr bool storesHash = true;
         static constexpr uint32_t hashBytes = sizeof(uint64_t);
         static __forceinline int64_t find ( const Table & tab, const char * const &, uint64_t hash ) {
             for ( uint32_t i=0; i!=TABLE_MAX_LINEAR_CAPACITY; ++i ) {
@@ -426,6 +426,11 @@ namespace das
             newTab.lock = tab.lock;
             newTab.magic = 0;
             newTab.flags = tab.flags;
+            // Record the per-slot-hash representation on the instance so the type-erased
+            // tableHashSlotBytes / tableLiveSlot can read it without a KeyType. Constant per
+            // KeyType, so this is idempotent across reallocs (and corrects a fresh table whose
+            // flags started at 0).
+            newTab.tableNoHash = !PackedPolicy<KeyType>::storesHash;
             newTab.tombstones = 0;
             if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));
             auto pHashes = newTab.hashes;

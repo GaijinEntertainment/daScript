@@ -166,6 +166,7 @@ namespace das {
                 bool shared : 1;
                 bool hopeless : 1;          // needs to be deleted without fuss (exceptions)
                 bool forego_lock_check : 1; // don't need to check if elements are locked
+                bool tableNoHash : 1;       // Table only: key type stores no per-slot hash (non-string) - see tableHashSlotBytes
             };
             uint32_t flags;
         };
