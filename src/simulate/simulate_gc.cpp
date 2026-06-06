@@ -391,8 +391,8 @@ namespace das
             popRange();
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
-            auto tsize = (ti->firstType->size + ti->secondType->size) * PT->capacity + tableHashSlotBytes(PT->capacity)*PT->capacity;
-            DAS_ASSERT(tsize==(getTypeSize(ti->firstType)+getTypeSize(ti->secondType))*PT->capacity + tableHashSlotBytes(PT->capacity)*PT->capacity);
+            auto tsize = (ti->firstType->size + ti->secondType->size) * PT->capacity + tableHashSlotBytes(*PT)*PT->capacity;
+            DAS_ASSERT(tsize==(getTypeSize(ti->firstType)+getTypeSize(ti->secondType))*PT->capacity + tableHashSlotBytes(*PT)*PT->capacity);
             char * pa = PT->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
@@ -787,7 +787,7 @@ namespace das
             popRange();
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
-            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size)*size_t(PT->capacity) + size_t(tableHashSlotBytes(PT->capacity))*size_t(PT->capacity));
+            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size)*size_t(PT->capacity) + size_t(tableHashSlotBytes(*PT))*size_t(PT->capacity));
             markAndPushRange(rdata);
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {
@@ -1105,7 +1105,7 @@ namespace das
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
                 if ( !pa->isLocked() || pa->hopeless ) {
-                    uint64_t oldSize = pa->capacity*uint64_t(ti->firstType->size+ti->secondType->size) + pa->capacity*tableHashSlotBytes(pa->capacity);
+                    uint64_t oldSize = pa->capacity*uint64_t(ti->firstType->size+ti->secondType->size) + pa->capacity*tableHashSlotBytes(*pa);
                     __context__->free(pa->data, oldSize, __at__);
                 } else {
                     __context__->throw_error_at(__at__, "can't delete locked table");
