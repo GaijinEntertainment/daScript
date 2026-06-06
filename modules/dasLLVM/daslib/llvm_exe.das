@@ -49,7 +49,6 @@ class CollectExternVisitor : AstVisitor {
     tab_find_wh_accessor : LLVMOpaqueValue?
     tab_at_wh_accessor : LLVMOpaqueValue?
     tab_at_apm_accessor : LLVMOpaqueValue?
-    tab_at_apm_typed_accessor : LLVMOpaqueValue?
     reg_extern_tab_type : LLVMOpaqueType?
     reg_extern_tab_wh_type : LLVMOpaqueType?
     trap_typ : LLVMOpaqueType?
@@ -158,12 +157,10 @@ class CollectExternVisitor : AstVisitor {
         tab_find_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_find_with_hash", reg_extern_tab_wh_type)
         tab_at_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_with_hash", reg_extern_tab_wh_type)
 
-        // Insert-after-packed-miss globals (the inline packed find calls these on a miss). The
-        // string accessor is nullary; the per-type one shares get_jit_table_at's (baseType,ctx,at)
-        // shape. Without baking these in the exe, the glob keeps its compile-process address and
-        // faults under ASLR (works on Windows only because the DLL loads at the same base).
+        // String insert-after-packed-miss global (the inline packed string find calls it on a
+        // miss; nullary accessor). Without baking it in the exe, the glob keeps its compile-process
+        // address and faults under ASLR (works on Windows only because the DLL loads at the same base).
         tab_at_apm_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_after_packed_miss", reg_extern_tab_wh_type)
-        tab_at_apm_typed_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_at_after_packed_miss", reg_extern_tab_type)
 
         trap_typ = LLVMFunctionType(types.t_void, [])
         trap_ptr = LLVMAddFunctionWithType(g_mod, "jit_trap", trap_typ)
@@ -481,17 +478,6 @@ class CollectExternVisitor : AstVisitor {
 
         let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT(typ)).glob())
         LLVMBuildStore(builder, tab_ptr, tab_method)
-
-        // SIMD-packed integer keys run an inline packed find that, on a miss, calls the
-        // after-packed-miss insert helper — bake that glob too (see bind_jit_table_at_glob)
-        if (is_simd_packed_key(typ)) {
-            var apm_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
-            let apm_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_at_apm_typed_accessor, apm_args, "")
-            let apm_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT_AFTER_PACKED_MISS(typ)).glob())
-            if (apm_method != null) {
-                LLVMBuildStore(builder, apm_ptr, apm_method)
-            }
-        }
     }
 
     def add_table_find_call(index_t : TypeDeclPtr) {

@@ -36,13 +36,10 @@ require llvm/llvm_debug
 
 var active_filenames : table<string>
 
-// Packed-find codegen per key type (measured on benchmarks/core/small_table, JIT):
-//  - INT keys: SIMD wins. 8xi32 is one cheap 256-bit vpcmpeqd, and it crushes early-out on a
-//    miss (early-out scans all 8 with an i<sz guard, no early exit).
-//  - STRING keys: early-out wins. 8xi64 is 512 bits -> 2x vpcmpeqq + mask reduction (heavy);
-//    the scalar early-out exits on the first hit and has no size guard. json_find -35%.
-// Flip + bump LLVM_JIT_CODEGEN_VERSION to re-A/B.
-let JIT_PACKED_FIND_INT_EARLY_OUT = false
+// Packed-find codegen for STRING keys (the only key type that still packs; non-string keys are
+// open-addressed at every capacity — see build_workhorse_table_find). Early-out wins for strings:
+// 8xi64 SIMD is 512 bits -> 2x vpcmpeqq + mask reduction (heavy), while the scalar early-out exits
+// on the first hit and needs no size guard. json_find -35%. Flip + bump CODEGEN_VERSION to re-A/B.
 let JIT_PACKED_FIND_STR_EARLY_OUT = true
 
 // VarInfo annotation type on c++ side is `vector`.
@@ -326,18 +323,12 @@ bitfield public LlvmJitFlags {
     need_di,
 }
 
-// Integer key types the SIMD packed key-scan handles (plain icmp eq). float/double/struct
-// keys keep the C++ path — fcmp / custom KeyCompare aren't worth a special case. Free
-// function so both the codegen visitor and the extern-resolver (glob binding) can call it.
-def public is_simd_packed_key(t : Type) : bool {
-    return (t == Type.tInt || t == Type.tUInt || t == Type.tInt64 || t == Type.tUInt64
-        || t == Type.tInt8 || t == Type.tUInt8 || t == Type.tInt16 || t == Type.tUInt16)
-}
-
 // Non-string workhorse key types that get the inline open-addressed find/at (build_workhorse_*):
 // the integer family plus bool / float / double. Everything else routes to the C++ table find/at.
 def public is_workhorse_table_key(t : Type) : bool {
-    return is_simd_packed_key(t) || t == Type.tBool || t == Type.tFloat || t == Type.tDouble
+    return (t == Type.tInt || t == Type.tUInt || t == Type.tInt64 || t == Type.tUInt64
+        || t == Type.tInt8 || t == Type.tUInt8 || t == Type.tInt16 || t == Type.tUInt16
+        || t == Type.tBool || t == Type.tFloat || t == Type.tDouble)
 }
 
 [macro]
@@ -1947,34 +1938,6 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMBuildSelect(g_builder, none, types.ConstI32(uint64(-1)), ctz32, "lane.idx")
     }
 
-    // Packed find as one <N x T> SIMD compare over [0,size): load the slots (key DATA for
-    // workhorse keys, or the 64-bit hash array for string keys), splat the query value, icmp eq,
-    // AND a liveness mask (lane i live iff i < size, since the tail is not relied on to be clean),
-    // bitcast to i8, cttz -> first set lane; no match -> -1. Used by both the integer key-scan and
-    // the string 64-bit-hash scan (keyElemTy = i64, keysPtr = the hashes array).
-    def packed_find_vector_keys(keysPtr : LLVMOpaqueValue?; keyVal : LLVMOpaqueValue?; keyElemTy : LLVMOpaqueType?; sizeI32 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        if (JIT_PACKED_FIND_INT_EARLY_OUT) {
-            return packed_find_earlyout(keysPtr, keyVal, keyElemTy, sizeI32, true, 1u)
-        }
-        var keyVecTy = LLVMVectorType(keyElemTy, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
-        var i32VecTy = LLVMVectorType(types.t_int32, uint(JIT_TABLE_MAX_LINEAR_CAPACITY))
-        var kvp = LLVMBuildPointerCast(g_builder, keysPtr, LLVMPointerType(keyVecTy, 0u), "k.vp")
-        var kv = LLVMBuildLoad2(g_builder, keyVecTy, kvp, "k.vec")
-        LLVMSetAlignment(kv, 1u)
-        var kins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(keyVecTy), keyVal, LLVMConstInt(types.t_int32, 0ul, 0), "k.ins")
-        var ksplat = LLVMBuildShuffleVector(g_builder, kins, LLVMGetUndef(keyVecTy), LLVMConstNull(i32VecTy), "k.splat")
-        var eqv = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, kv, ksplat, "k.eqv")
-        var idxConsts <- [for (i in range(JIT_TABLE_MAX_LINEAR_CAPACITY)); LLVMConstInt(types.t_int32, uint64(i), 0)]
-        var idxVec = LLVMConstVector(array_data_ptr(idxConsts), uint(length(idxConsts)))
-        unsafe { delete idxConsts; }
-        var sins = LLVMBuildInsertElement(g_builder, LLVMGetUndef(i32VecTy), sizeI32, LLVMConstInt(types.t_int32, 0ul, 0), "sz.ins")
-        var ssplat = LLVMBuildShuffleVector(g_builder, sins, LLVMGetUndef(i32VecTy), LLVMConstNull(i32VecTy), "sz.splat")
-        var live = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, idxVec, ssplat, "k.live")
-        var both = LLVMBuildAnd(g_builder, eqv, live, "k.both")
-        return first_set_lane_or_neg1(LLVMBuildBitCast(g_builder, both, types.t_int8, "k.mask"))
-    }
-
-
     // String packed find: one <N x i64> SIMD compare of the 64-bit hash array, no liveness mask.
     // The packed-string hash tail is always 0 (alloc / erase / table_clear all clear the full
     // 64-bit width) and a real hash is >1, so the tail never matches — unlike the integer key-data
@@ -2106,22 +2069,6 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
         LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
         LLVMAddCallSiteAttribute(ccall, 5u, attributes.nocapture)
-        return ccall
-    }
-
-    def build_table_at_after_packed_miss(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
-        var params = fixed_array(
-            tab, key,
-            types.ConstI32(uint64(valueTypeSize)),
-            get_context_param(),
-            get_line_info_ptr(at)
-        )
-        var (tab_fun, typ) = get_table_at_after_packed_miss(g_builder, g_mod, ttype, types)
-        let ccall = LLVMBuildCall2(g_builder, typ, tab_fun, params, "")
-        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)
-        LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
-        LLVMAddCallSiteAttribute(ccall, 1u, attributes.nocapture)
-        LLVMAddCallSiteAttribute(ccall, 4u, attributes.nocapture)
         return ccall
     }
 
