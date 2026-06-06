@@ -486,3 +486,57 @@ loop unrolls scalar, `/Qvec-report` reason 1100), and a branchless rewrite measu
 *slower* there (no SIMD + loses the hit early-exit). Even under clang the branchless form
 ties-or-loses the early-out, and `[[likely]]`/`[[unlikely]]` is a no-op (ignored in C++17,
 identical codegen in C++20 — MSVC already lays the match out as a cold forward branch).
+
+## Non-string no-hash — master-vs-branch MEASURED (the workhorse follow-up)
+
+Two commits drop the per-slot hash for NON-STRING keys (strings keep it — they need the
+strcmp skip): **(A)** packed (cap ≤ 8) non-string store no hash at all; **(B)** large
+(cap > 8) non-string replace the 32-bit hash with a 1-byte control state (EMPTY/TOMBSTONE/
+OCCUPIED) and compare keys directly. master = `origin/master` (pre-PR), branch = A+B, same
+machine, same bench files. B/op is the deterministic headline (memory); ns is JIT warm.
+
+### Large tables — `core/table/test02` (N = 64 / 256 / 1024, cache-resident), JIT
+
+| lane | master ns (B/op) | branch ns (B/op) | Δ |
+|---|---|---|---|
+| int_build/64   | 22.2 (44) | 21.4 (**33**) | B/op −25% |
+| int_build/256  | 18.1 (47) | 17.7 (**36**) | B/op −23% |
+| int_build/1024 | 18.0 (48) | 16.4 (**36**) | B/op −25%, −9% ns |
+| int_hit/64     | 6.2 | **5.1** | −18% |
+| int_hit/256    | 6.5 | **6.0** | −8% |
+| int_hit/1024   | 8.7 | **7.9** | −9% |
+| int_miss/64    | 6.7 | **4.9** | −27% |
+| int_miss/256   | 6.2 | **5.1** | −18% |
+| int_miss/1024  | 10.1 | **8.7** | −14% |
+| str_build/1024 | 22.0 (64) | 21.8 (64) | flat (no regression) |
+| str_hit/1024   | 13.4 | 13.8 | flat |
+| str_miss/1024  | 8.2 | 8.7 | flat |
+
+Per-slot int/int large goes 4(val)+4(key)+**4**(hash) → 4+4+**1**(control), i.e. 12→9
+bytes — the **−25% B/op** confirms it (the residual >25% B/op is the grow-chain's
+intermediate allocations). Find/miss drop **−8 to −27%** purely from the denser control
+array (fewer cache lines walked per probe — a cache win, not ALU; the `KeyCompare` is the
+same int `==`). Strings are flat: they keep the 32-bit hash, and the `if constexpr` split
+adds no runtime branch. INTERP shows the same B/op (44→33, −25%) with the per-SimNode
+dispatch floor compressing the ns deltas (e.g. int_miss/64 14.8→12.7).
+
+### Packed tables — `small_table/test04` (4096 × 8) + `test07`, JIT
+
+| lane | master B/op | branch B/op | Δ |
+|---|---|---|---|
+| int_build/8 (t04) | 24 | **16** | **−33%** |
+| str_build/8 (t04) | 28 | 28 | flat (string keeps hash) |
+
+Packed int memory drops **−33%** (the 64-bit hash, 8 bytes/slot, is gone); string packed is
+unchanged. The timing micro-lanes (int/str hit/miss/query/update, 2–19 ns) are dominated by
+run-to-run variance on this machine — repeated warm passes swing ±5 ns and straddle the master
+numbers in both directions (e.g. int_update/8 read 4.5 / 4.4 / 4.7 across one warm triple, then
+3.4 on the next pass, vs master 3.2; str_build/8 similarly 13–19), so there is no measurable
+timing change to report there. Expected: no hot-path code changed — the int packed find already
+read keys (not the hash), and insert delegates to the C++ after-packed-miss helper whose hash
+store is now a no-op. The packed win is memory. (One caveat parked for later: int_update/8 reads
+slightly high on some warm passes with no code mechanism — identical JIT IR, no C++ call on a
+hit — so it looks like DLL-placement noise, but a warm master-vs-branch confirm was deferred.)
+
+**Net:** non-string table memory **−25% (large) / −33% (packed)**, large-table find/miss
+**−8 to −27%**, no string regression on any tier.
