@@ -248,6 +248,43 @@ def f_acc_early(g : bool) : int {
     return acc
 }
 
+// ----- const type-conversion folding -----
+//
+// A pure builtin (cast / vector ctor) with all-const args is a compile-time constant, so
+// it folds regardless of the whitelist — without that, these leaf builtins (`float`,
+// `int`, `float2`) are rejected as non-GPU-expressible and the functions would NOT
+// COMPILE. So compiling at all proves the gate relaxed; the differential proves the value.
+
+[flatten]
+def f_cast_float : float {
+    return float(7)
+}
+
+[flatten]
+def f_cast_int : int {
+    return int(3.9)
+}
+
+[flatten]
+def f_cast_expr : float {
+    return float(3) * 2.0 + float(1)
+}
+
+[flatten]
+def f_cast_vec : float2 {
+    return float2(float(1), float(2))
+}
+
+// The motivating case: a const cast inside a loop accumulator (was whitelist-rejected).
+[flatten]
+def f_cast_accum : float {
+    var acc = 0.0
+    for (i in range(4)) {
+        acc += float(i) * 0.1
+    }
+    return acc
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
@@ -419,5 +456,23 @@ def test_flatten_const(t : T?) {
         for (g in BOOLS) {
             t |> equal(f_acc_early_flat(g), f_acc_early(g))
         }
+    }
+    t |> run("const cast float(7) / int(3.9) fold") @(t : T?) {
+        t |> equal(f_cast_float_flat(), f_cast_float())
+        t |> equal(f_cast_float_flat(), 7.0)
+        t |> equal(f_cast_int_flat(), f_cast_int())
+        t |> equal(f_cast_int_flat(), 3)
+    }
+    t |> run("const casts inside an expression fold") @(t : T?) {
+        t |> equal(f_cast_expr_flat(), f_cast_expr())
+        t |> equal(f_cast_expr_flat(), 7.0)
+    }
+    t |> run("const vector ctor over casts folds") @(t : T?) {
+        let a = f_cast_vec_flat()
+        t |> equal(a.x, 1.0)
+        t |> equal(a.y, 2.0)
+    }
+    t |> run("const cast in accumulator folds (was whitelist-rejected)") @(t : T?) {
+        t |> equal(f_cast_accum_flat(), f_cast_accum())
     }
 }

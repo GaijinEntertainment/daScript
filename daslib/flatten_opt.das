@@ -697,11 +697,12 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// True if `e` is built only from const literals and pure ops over them — NO variable
-// or global reference anywhere. eval_single_expression runs in a bare context with no
-// globals (a global read dereferences null), so a literal-only tree is mandatory
-// before evaluating. Conservative: an unknown node kind returns false.
-def private is_all_const(e : ExpressionPtr) : bool {
+// True if `e` is built only from const literals and pure ops/builtins over them — NO
+// variable/global reference and NO user call anywhere. eval_single_expression runs in a
+// bare context with no globals (a global read dereferences null) and no user functions
+// linked (a user call can't be evaluated), so the tree must bottom out in literals and
+// pure builtins. Conservative: an unknown node kind returns false.
+def public is_all_const(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e |> is_expr_const()) return true
     if (e is ExprVar) return false
@@ -715,13 +716,25 @@ def private is_all_const(e : ExpressionPtr) : bool {
         return is_all_const(o.subexpr) && is_all_const(o.left) && is_all_const(o.right)
     }
     if (e is ExprCall) {
-        if (has_sideeffects(e)) return false
-        for (a in (e as ExprCall).arguments) {
+        let c = e as ExprCall
+        // Reject a user/unresolved call (not evaluable) or any side-effecting builtin.
+        if (c.func == null || !c.func.flags.builtIn || has_sideeffects(e)) return false
+        for (a in c.arguments) {
             if (!is_all_const(a)) return false
         }
         return true
     }
     return false
+}
+
+// True if a constant of this type can be rebuilt as a literal by eval_to_const — the
+// float4-based evaluator covers the float/int scalar + vector family. Gates the cycle-1
+// const-builtin allowance so only foldable-type calls bypass the whitelist.
+def public eval_to_const_supported(t : TypeDeclPtr) : bool {
+    if (t == null) return false
+    let bt = t.baseType
+    return (bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4 ||
+        bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4)
 }
 
 // Evaluate a literal-only (is_all_const) inferred expression to one const literal of

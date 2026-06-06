@@ -271,6 +271,20 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         if (is_user_call(e)) {
             return inline_call(ctx, c, structPred, out)
         }
+        // A pure builtin with all-constant arguments (e.g. `float(2)`, `float3(0.5)`,
+        // `min(2,3)`) is a compile-time constant — eval_to_const collapses it at the
+        // post-infer fold, so no runtime primitive reaches the backend and the
+        // (runtime-primitive) whitelist does not apply. Keep it, lifting any nested
+        // calls in its args. Gated to the evaluator's foldable types so a non-foldable
+        // const builtin still errors here rather than leaking past the fold.
+        if (is_all_const(e) && eval_to_const_supported(e._type)) {
+            var n = clone_expression(e)
+            var o = n as ExprCall
+            for (ai in range(length(c.arguments))) {
+                o.arguments[ai] = lift_expr(ctx, c.arguments[ai], structPred, out)
+            }
+            return n
+        }
         // Otherwise: a non-whitelisted leaf/builtin — not backend-expressible.
         ctx.ok = false
         ctx.err = "flatten: builtin '{bname}' is not on the whitelist (not GPU-expressible / may have side effects)"
