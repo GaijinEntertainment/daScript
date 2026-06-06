@@ -334,6 +334,12 @@ def public is_simd_packed_key(t : Type) : bool {
         || t == Type.tInt8 || t == Type.tUInt8 || t == Type.tInt16 || t == Type.tUInt16)
 }
 
+// Non-string workhorse key types that get the inline open-addressed find/at (build_workhorse_*):
+// the integer family plus bool / float / double. Everything else routes to the C++ table find/at.
+def public is_workhorse_table_key(t : Type) : bool {
+    return is_simd_packed_key(t) || t == Type.tBool || t == Type.tFloat || t == Type.tDouble
+}
+
 [macro]
 class public LlvmJitVisitor : AstVisitor {
     adapter : VisitorAdapter?
@@ -1890,7 +1896,7 @@ class public LlvmJitVisitor : AstVisitor {
     def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         if (ttype == Type.tString) {
             return build_string_table_at_fast(tab, key, valueTypeSize, at)
-        } elif (is_simd_packed_key(ttype)) {
+        } elif (is_workhorse_table_key(ttype)) {
             return build_int_table_at_fast(ttype, tab, key, valueTypeSize, at)
         }
         return build_table_at_call(ttype, tab, key, valueTypeSize, at)
@@ -1901,7 +1907,7 @@ class public LlvmJitVisitor : AstVisitor {
     def build_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
         if (ttype == Type.tString) {
             return build_string_table_find_with_hash(tab, key, valueTypeSize)
-        } elif (is_simd_packed_key(ttype)) {
+        } elif (is_workhorse_table_key(ttype)) {
             return build_int_table_find(ttype, tab, key, valueTypeSize)
         }
         return build_table_find_call(ttype, tab, key, valueTypeSize)
@@ -2165,73 +2171,235 @@ class public LlvmJitVisitor : AstVisitor {
         return res
     }
 
-    // Integer tab?[key] / find: packed -> SIMD key-scan (no hash); large/empty -> C++ find.
-    def build_int_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+    // Inline wymix hash for a workhorse (non-string) key, bit-identical to hash_uint32 / hash_uint64
+    // (anyhash.h): adapt the key to u64 (zext / bitcast, matching the C++ implicit conversions), then
+    // h = lo(key*SEED) ^ hi(key*SEED) over the 128-bit product, clamped h<=1 -> FNV prime so the result
+    // never collides with the EMPTY(0)/KILLED(1) control sentinels (the table asserts hash>1).
+    def build_workhorse_hash(key : LLVMOpaqueValue?; ttype : Type) : LLVMOpaqueValue? {
+        var u64 : LLVMOpaqueValue?
+        if (ttype == Type.tInt64 || ttype == Type.tUInt64) {
+            u64 = key
+        } elif (ttype == Type.tDouble) {
+            u64 = LLVMBuildBitCast(g_builder, key, types.t_int64, "wh.dbits")
+        } elif (ttype == Type.tFloat) {
+            var fb = LLVMBuildBitCast(g_builder, key, types.t_int32, "wh.fbits")
+            u64 = LLVMBuildZExt(g_builder, fb, types.t_int64, "wh.fu64")
+        } elif (ttype == Type.tInt8 || ttype == Type.tInt16) {
+            // signed sub-32: C++ converts via int (sign-extend) to uint32, then to u64
+            var s32 = LLVMBuildSExt(g_builder, key, types.t_int32, "wh.s32")
+            u64 = LLVMBuildZExt(g_builder, s32, types.t_int64, "wh.su64")
+        } else {  // tInt / tUInt (i32), tBool (i1), tUInt8 / tUInt16: zero-extend
+            u64 = LLVMBuildZExt(g_builder, key, types.t_int64, "wh.zu64")
+        }
+        var seed = LLVMConstInt(types.t_int64, 0x1234567890abcdeful, 0)
+        var A = LLVMBuildZExt(g_builder, u64, types.t_int128, "wh.a128")
+        var B = LLVMBuildZExt(g_builder, seed, types.t_int128, "wh.b128")
+        var ab = LLVMBuildMul(g_builder, A, B, "wh.prod")
+        var lo = LLVMBuildTrunc(g_builder, ab, types.t_int64, "wh.lo")
+        var hi = LLVMBuildTrunc(g_builder, LLVMBuildLShr(g_builder, ab, LLVMConstInt(types.t_int128, 64ul, 0), "wh.shr"), types.t_int64, "wh.hi")
+        var h = LLVMBuildXor(g_builder, lo, hi, "wh.h")
+        var killed = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULE, h, LLVMConstInt(types.t_int64, 1ul, 0), "wh.killed")
+        return LLVMBuildSelect(g_builder, killed, LLVMConstInt(types.t_int64, 1099511628211ul, 0), h, "wh.hash")
+    }
+
+    // Inline open-addressed find for a non-string (workhorse) key. Mirrors TableHash::find's non-string
+    // branch (runtime_table.h): idx = hash & mask, probe the 1-byte control array — EMPTY(0) -> miss,
+    // OCCUPIED(2) + key match -> hit, TOMBSTONE(1)/mismatch -> advance. Returns the i32 slot index, or -1.
+    def build_workhorse_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var hash = build_workhorse_hash(key, ttype)
         var hdr = load_table_header(tab)
         var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
         var keysV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.KEYS), "keys.v")
-        var sizeI32 = LLVMBuildTrunc(g_builder, LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.SIZE), "size"), types.t_int32, "size32")
+        var ctrlV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "ctrl.v")
         var keyElemTy = base_type_to_llvm_type(ttype)
-        var isSmall = packed_cap_cond(cap)
+        let i8ptr = LLVMPointerType(types.t_int8, 0u)
+        var ctrlPtr = LLVMBuildPointerCast(g_builder, ctrlV, i8ptr, "ctrl.p")
+        var keysPtr = LLVMBuildPointerCast(g_builder, keysV, LLVMPointerType(keyElemTy, 0u), "keys.p")
 
-        var find_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
-        var bb_small = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "ifind.small")
-        var bb_large = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "ifind.large")
-        var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, find_parent, "ifind.merge")
-        LLVMBuildCondBr(g_builder, isSmall, bb_small, bb_large)
+        var parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
+        var bb_init = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.init")
+        var bb_loop = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.loop")
+        var bb_match = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.match")
+        var bb_adv = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.adv")
+        var bb_found = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.found")
+        var bb_nf = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.nf")
+        var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, parent, "oa.merge")
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_small)
-        var idxSmall = packed_find_vector_keys(keysV, key, keyElemTy, sizeI32)
-        var smallEnd = LLVMGetInsertBlock(g_builder)
+        var capz = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, cap, LLVMConstInt(types.t_int64, 0ul, 0), "oa.capz")
+        LLVMBuildCondBr(g_builder, capz, bb_nf, bb_init)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_init)
+        var mask = LLVMBuildSub(g_builder, cap, LLVMConstInt(types.t_int64, 1ul, 0), "oa.mask")
+        var idx0 = LLVMBuildAnd(g_builder, hash, mask, "oa.idx0")
+        LLVMBuildBr(g_builder, bb_loop)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_loop)
+        var idx = LLVMBuildPhi(g_builder, types.t_int64, "oa.idx")
+        var cp = LLVMBuildGEP2(g_builder, types.t_int8, ctrlPtr, idx, "oa.cp")
+        var c = LLVMBuildLoad2(g_builder, types.t_int8, cp, "oa.c")
+        var isEmpty = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, c, LLVMConstInt(types.t_int8, 0ul, 0), "oa.empty")
+        LLVMBuildCondBr(g_builder, isEmpty, bb_nf, bb_match)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_match)
+        var isOcc = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, c, LLVMConstInt(types.t_int8, 2ul, 0), "oa.occ")
+        var kp = LLVMBuildGEP2(g_builder, keyElemTy, keysPtr, idx, "oa.kp")
+        var k = LLVMBuildLoad2(g_builder, keyElemTy, kp, "oa.k")
+        var keyEq : LLVMOpaqueValue?
+        if (ttype == Type.tFloat || ttype == Type.tDouble) {
+            keyEq = LLVMBuildFCmp(g_builder, LLVMRealPredicate.LLVMRealOEQ, k, key, "oa.keq")
+        } else {
+            keyEq = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, k, key, "oa.keq")
+        }
+        var hit = LLVMBuildAnd(g_builder, isOcc, keyEq, "oa.hit")
+        LLVMBuildCondBr(g_builder, hit, bb_found, bb_adv)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_adv)
+        var inc = LLVMBuildAdd(g_builder, idx, LLVMConstInt(types.t_int64, 1ul, 0), "oa.inc")
+        var idxn = LLVMBuildAnd(g_builder, inc, mask, "oa.idxn")
+        var advEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_loop)
+
+        LLVMAddIncoming(idx, [idx0, idxn], [bb_init, advEnd])
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_found)
+        var foundIdx = LLVMBuildTrunc(g_builder, idx, types.t_int32, "oa.fidx")
         LLVMBuildBr(g_builder, bb_merge)
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_large)
-        var idxLarge = build_table_find_call(ttype, tab, key, valueTypeSize)
-        var largeEnd = LLVMGetInsertBlock(g_builder)
+        LLVMPositionBuilderAtEnd(g_builder, bb_nf)
         LLVMBuildBr(g_builder, bb_merge)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_merge)
-        var res = LLVMBuildPhi(g_builder, types.t_int32, "ifind.idx")
-        LLVMAddIncoming(res, [ idxSmall, idxLarge ], [ smallEnd, largeEnd ])
+        var res = LLVMBuildPhi(g_builder, types.t_int32, "oa.res")
+        LLVMAddIncoming(res, [foundIdx, types.ConstI32(uint64(-1))], [bb_found, bb_nf])
         return res
     }
 
-    // Integer tab[key]: packed -> SIMD key-scan; found returns the slot, miss inserts via the
-    // skip-packed reserve; large/empty -> full C++ at.
+    // Integer / workhorse tab?[key] / find: inline open-addressed probe (non-string tables are
+    // open-addressed at every capacity — see runtime_table.h; no packed regime, no C++ interop).
+    def build_int_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+        return build_workhorse_table_find(ttype, tab, key)
+    }
+
+    // Integer / workhorse tab[key] (insert-or-get): the whole operation is inlined EXCEPT a grow.
+    // Mirrors TableHash::reserve's non-string branch (runtime_table.h). Up front we route to the C++
+    // at only when an in-place insert is impossible: the table is locked (must throw, like the
+    // interpreter's SimNode_TableIndex), needs to grow (size >= cap/2, which also catches cap==0), or
+    // needs to rehash for tombstone bloat ((cap-size)/2 < tombstones). Otherwise we probe the 1-byte
+    // control array inline and either return the slot on a dedup hit, or commit the insert in place
+    // (reuse the first tombstone if any, else the EMPTY slot; ctrl=OCCUPIED, store key, size++,
+    // tombstones-- on reuse) — no C++ interop on the steady-state insert path. The freed/empty slot's
+    // value is already zeroed (alloc + erase memset it), so the caller's value write needs no clear.
     def build_int_table_at_fast(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
-        var hdr = load_table_header(tab)
-        var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
-        var keysV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.KEYS), "keys.v")
-        var sizeI32 = LLVMBuildTrunc(g_builder, LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.SIZE), "size"), types.t_int32, "size32")
+        var hash = build_workhorse_hash(key, ttype)
+        let hdrTy = table_header_llvm_type(types)
+        var tabHdrP = LLVMBuildPointerCast(g_builder, tab, LLVMPointerType(hdrTy, 0u), "iat.hdrp")
+        var hdr = LLVMBuildLoad2(g_builder, hdrTy, tabHdrP, "iat.hdr")
+        var cap   = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "iat.cap")
+        var size  = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.SIZE), "iat.size")
+        var tomb  = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.TOMBSTONES), "iat.tomb")
+        var lockv = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.LOCK), "iat.lock")
+        var keysV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.KEYS), "iat.keys.v")
+        var ctrlV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "iat.ctrl.v")
+
         var keyElemTy = base_type_to_llvm_type(ttype)
-        var isSmall = packed_cap_cond(cap)
+        let i8ptr = LLVMPointerType(types.t_int8, 0u)
+        var ctrlPtr = LLVMBuildPointerCast(g_builder, ctrlV, i8ptr, "iat.ctrl.p")
+        var keysPtr = LLVMBuildPointerCast(g_builder, keysV, LLVMPointerType(keyElemTy, 0u), "iat.keys.p")
+        var neg1 = LLVMConstInt(types.t_int64, 0xFFFFFFFFFFFFFFFFul, 0)  // insertI "unset" sentinel (~0)
+        let one64 = LLVMConstInt(types.t_int64, 1ul, 0)
 
-        var at_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
-        var bb_packed = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "iat.packed")
-        var bb_miss = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "iat.miss")
-        var bb_large = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "iat.large")
-        var bb_merge = LLVMAppendBasicBlockInContext(g_ctx, at_parent, "iat.merge")
-        LLVMBuildCondBr(g_builder, isSmall, bb_packed, bb_large)
+        // needsCpp = locked || (size >= cap/2) || ((cap-size)/2 < tombstones). cap==0 -> size>=0 true.
+        var capHalf = LLVMBuildLShr(g_builder, cap, one64, "iat.caphalf")
+        var growNeeded = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntUGE, size, capHalf, "iat.grow")
+        var room = LLVMBuildSub(g_builder, cap, size, "iat.room")
+        var roomHalf = LLVMBuildLShr(g_builder, room, one64, "iat.roomhalf")
+        var rehashNeeded = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, roomHalf, tomb, "iat.rehash")
+        var locked = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, lockv, LLVMConstInt(types.t_int32, 0ul, 0), "iat.locked")
+        var needsCpp = LLVMBuildOr(g_builder, LLVMBuildOr(g_builder, growNeeded, rehashNeeded, "iat.gr"), locked, "iat.needscpp")
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_packed)
-        var idxFound = packed_find_vector_keys(keysV, key, keyElemTy, sizeI32)
-        var isMiss = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, idxFound, types.ConstI32(uint64(-1)), "iat.ismiss")
-        var packedEnd = LLVMGetInsertBlock(g_builder)
-        LLVMBuildCondBr(g_builder, isMiss, bb_miss, bb_merge)
+        var parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
+        var bb_cpp    = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.cpp")
+        var bb_init   = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.init")
+        var bb_loop   = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.loop")
+        var bb_ne     = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.ne")
+        var bb_adv    = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.adv")
+        var bb_commit = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.commit")
+        var bb_dedup  = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.dedup")
+        var bb_merge  = LLVMAppendBasicBlockInContext(g_ctx, parent, "iat.merge")
+        LLVMBuildCondBr(g_builder, needsCpp, bb_cpp, bb_init)
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_miss)
-        var idxMiss = build_table_at_after_packed_miss(ttype, tab, key, valueTypeSize, at)
-        var missEnd = LLVMGetInsertBlock(g_builder)
+        // grow / rehash / locked -> full C++ at (handles alloc, rehash, lock-throw, dedup, insert)
+        LLVMPositionBuilderAtEnd(g_builder, bb_cpp)
+        var idxCpp = build_table_at_call(ttype, tab, key, valueTypeSize, at)
+        var cppEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
 
-        LLVMPositionBuilderAtEnd(g_builder, bb_large)
-        var idxLarge = build_table_at_call(ttype, tab, key, valueTypeSize, at)
-        var largeEnd = LLVMGetInsertBlock(g_builder)
+        // inline probe init: mask = cap-1, idx0 = hash & mask, insertI = unset
+        LLVMPositionBuilderAtEnd(g_builder, bb_init)
+        var mask = LLVMBuildSub(g_builder, cap, one64, "iat.mask")
+        var idx0 = LLVMBuildAnd(g_builder, hash, mask, "iat.idx0")
+        LLVMBuildBr(g_builder, bb_loop)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_loop)
+        var idx = LLVMBuildPhi(g_builder, types.t_int64, "iat.idx.phi")
+        var insI = LLVMBuildPhi(g_builder, types.t_int64, "iat.insI.phi")
+        var cp = LLVMBuildGEP2(g_builder, types.t_int8, ctrlPtr, idx, "iat.cp")
+        var c = LLVMBuildLoad2(g_builder, types.t_int8, cp, "iat.c")
+        var isEmpty = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, c, LLVMConstInt(types.t_int8, 0ul, 0), "iat.isempty")
+        LLVMBuildCondBr(g_builder, isEmpty, bb_commit, bb_ne)
+
+        // not empty: dedup if OCCUPIED && key match, else advance (recording first tombstone)
+        LLVMPositionBuilderAtEnd(g_builder, bb_ne)
+        var isOcc = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, c, LLVMConstInt(types.t_int8, 2ul, 0), "iat.isocc")
+        var kp = LLVMBuildGEP2(g_builder, keyElemTy, keysPtr, idx, "iat.kp")
+        var k = LLVMBuildLoad2(g_builder, keyElemTy, kp, "iat.k")
+        var keyEq : LLVMOpaqueValue?
+        if (ttype == Type.tFloat || ttype == Type.tDouble) {
+            keyEq = LLVMBuildFCmp(g_builder, LLVMRealPredicate.LLVMRealOEQ, k, key, "iat.keq")
+        } else {
+            keyEq = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, k, key, "iat.keq")
+        }
+        var hit = LLVMBuildAnd(g_builder, isOcc, keyEq, "iat.hit")
+        LLVMBuildCondBr(g_builder, hit, bb_dedup, bb_adv)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_adv)
+        var isTomb = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, c, LLVMConstInt(types.t_int8, 1ul, 0), "iat.istomb")
+        var insUnset = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, insI, neg1, "iat.insunset")
+        var setNow = LLVMBuildAnd(g_builder, isTomb, insUnset, "iat.setnow")
+        var insIn = LLVMBuildSelect(g_builder, setNow, idx, insI, "iat.insIn")
+        var inc = LLVMBuildAdd(g_builder, idx, one64, "iat.inc")
+        var idxn = LLVMBuildAnd(g_builder, inc, mask, "iat.idxn")
+        var advEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_loop)
+
+        LLVMAddIncoming(idx, [idx0, idxn], [bb_init, advEnd])
+        LLVMAddIncoming(insI, [neg1, insIn], [bb_init, advEnd])
+
+        // commit: insert at the first tombstone if one was seen, else the EMPTY slot
+        LLVMPositionBuilderAtEnd(g_builder, bb_commit)
+        var reuse = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, insI, neg1, "iat.reuse")
+        var target = LLVMBuildSelect(g_builder, reuse, insI, idx, "iat.target")
+        var tcp = LLVMBuildGEP2(g_builder, types.t_int8, ctrlPtr, target, "iat.tcp")
+        LLVMBuildStore(g_builder, LLVMConstInt(types.t_int8, 2ul, 0), tcp)        // ctrl[target] = OCCUPIED
+        var tkp = LLVMBuildGEP2(g_builder, keyElemTy, keysPtr, target, "iat.tkp")
+        LLVMBuildStore(g_builder, key, tkp)                                       // keys[target] = key
+        var sizePtr = LLVMBuildStructGEP2(g_builder, hdrTy, tabHdrP, uint(JIT_TABLE.SIZE), "iat.sizep")
+        LLVMBuildStore(g_builder, LLVMBuildAdd(g_builder, size, one64, "iat.size1"), sizePtr)   // size++
+        var tombDec = LLVMBuildSub(g_builder, tomb, LLVMBuildZExt(g_builder, reuse, types.t_int64, "iat.reuse64"), "iat.tombdec")
+        var tombPtr = LLVMBuildStructGEP2(g_builder, hdrTy, tabHdrP, uint(JIT_TABLE.TOMBSTONES), "iat.tombp")
+        LLVMBuildStore(g_builder, tombDec, tombPtr)                               // tombstones -= reuse?1:0
+        var commitIdx = LLVMBuildTrunc(g_builder, target, types.t_int32, "iat.commitIdx")
+        var commitEnd = LLVMGetInsertBlock(g_builder)
+        LLVMBuildBr(g_builder, bb_merge)
+
+        LLVMPositionBuilderAtEnd(g_builder, bb_dedup)
+        var dedupIdx = LLVMBuildTrunc(g_builder, idx, types.t_int32, "iat.dedupIdx")
+        var dedupEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildBr(g_builder, bb_merge)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_merge)
-        var res = LLVMBuildPhi(g_builder, types.t_int32, "iat.idx")
-        LLVMAddIncoming(res, [ idxFound, idxMiss, idxLarge ], [ packedEnd, missEnd, largeEnd ])
+        var res = LLVMBuildPhi(g_builder, types.t_int32, "iat.res")
+        LLVMAddIncoming(res, [idxCpp, commitIdx, dedupIdx], [cppEnd, commitEnd, dedupEnd])
         return res
     }
 
@@ -6863,10 +7031,9 @@ class public ResolveExternVisitor : AstVisitor {
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
             dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()), get_jit_string_table_at_after_packed_miss())
         } else {
+            // Non-string keys are open-addressed: the inline probe handles find/at hits and routes a
+            // miss to the regular C++ at (FN_JIT_TABLE_AT) — no packed after-miss helper needed.
             dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
-            if (is_simd_packed_key(t)) {
-                dll.set_glob_address(DllName(FN_JIT_TABLE_AT_AFTER_PACKED_MISS(t)), get_jit_table_at_after_packed_miss(unsafe(reinterpret<int> t)))
-            }
         }
     }
 
