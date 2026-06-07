@@ -75,7 +75,8 @@ namespace das
     // this: representation varies by capacity AND key type (a packed string table stores 64-bit
     // hashes), so a raw 32-bit `hashes[i] > KILLED` read would misindex it.
     __forceinline bool tableLiveSlot ( const Table & tab, uint64_t i ) {
-        if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) return i < tab.size;
+        // Only STRING tables pack (dense [0,size)); non-string keys are open-addressed at every capacity.
+        if ( !tab.tableNoHash && tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) return i < tab.size;
         if ( tab.tableNoHash ) return ((const uint8_t *) tab.hashes)[i] > CTRL_TOMBSTONE;
         return tab.hashes[i] > HASH_KILLED64;
     }
@@ -87,8 +88,10 @@ namespace das
     // non-string = none. LARGE string = 32-bit hash; LARGE non-string = 1-byte control (CTRL_*).
     // Must agree with PackedPolicy<KeyType>::hashBytes and reserveInternal's large store width.
     __forceinline uint64_t tableHashSlotBytes ( const Table & tab ) {
-        if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY )
-            return tab.tableNoHash ? uint64_t(0) : uint64_t(sizeof(uint64_t));
+        // Only STRING tables pack (64-bit hash). Non-string keys are open-addressed at every capacity
+        // (1-byte control); large string is 32-bit hash.
+        if ( !tab.tableNoHash && tab.capacity <= TABLE_MAX_LINEAR_CAPACITY )
+            return uint64_t(sizeof(uint64_t));
         return tab.tableNoHash ? uint64_t(1) : uint64_t(sizeof(TableHashKey));
     }
 
@@ -216,13 +219,13 @@ namespace das
         __forceinline int64_t find ( const Table & tab, KeyType key, uint64_t hash ) const {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
-            if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: exact (string 64-bit hash / other data)
-                return PackedPolicy<KeyType>::find(tab, key, hash);
-            }
             auto pKeys = (const KeyType *) tab.keys;
-            uint64_t mask = tab.capacity - 1;
-            uint64_t index = hash & mask;
-            if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // string: 32-bit hash reject + confirm
+            if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // string: packed (cap<=MAX) or large open-addressed
+                if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: exact 64-bit hash
+                    return PackedPolicy<KeyType>::find(tab, key, hash);
+                }
+                uint64_t mask = tab.capacity - 1;
+                uint64_t index = hash & mask;
                 auto hashKey = hashToHashKey(TableHashKey(hash));
                 auto pHashes = tab.hashes;
                 while ( true ) {
@@ -234,7 +237,9 @@ namespace das
                     }
                     index = (index + 1) & mask;
                 }
-            } else {  // non-string: 1-byte control + direct key compare
+            } else {  // non-string: always open-addressed (1-byte control + direct key compare)
+                uint64_t mask = tab.capacity - 1;
+                uint64_t index = hash & mask;
                 auto pCtrl = (const uint8_t *) tab.hashes;
                 while ( true ) {
                     auto c = pCtrl[index];
@@ -253,25 +258,33 @@ namespace das
             // A promote/alloc re-dispatches by looping back here, not by a recursive call:
             // gcc -flto rejects a recursive always_inline function (MSVC tolerates it).
           retry:
-            if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: dense, load factor 1.0
-                if ( tab.capacity != 0 ) {  // dedup against existing (skip on an unallocated table)
-                    int64_t idx = PackedPolicy<KeyType>::find(tab, key, hash);  // exact (no confirm needed)
-                    if ( idx>=0 ) return idx;
+            if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // string: packed regime for cap<=MAX
+                if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: dense, load factor 1.0
+                    if ( tab.capacity != 0 ) {  // dedup against existing (skip on an unallocated table)
+                        int64_t idx = PackedPolicy<KeyType>::find(tab, key, hash);  // exact (no confirm needed)
+                        if ( idx>=0 ) return idx;
+                    }
+                    if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
+                    // A full packed table promotes to open addressing. *4 gives the hashed table
+                    // load-factor headroom so it does not immediately re-grow (cap*2 would land exactly
+                    // on the 0.5 trigger). cap-0 -> first allocation (stays packed).
+                    if ( tab.size >= tab.capacity ) {
+                        uint64_t newCapacity = (tab.capacity == 0) ? minCapacity : tab.capacity*4;
+                        reserveInternal(tab, newCapacity, at);
+                        goto retry;  // re-dispatch: now hashed (or the freshly allocated packed table)
+                    }
+                    uint64_t i = tab.size;
+                    PackedPolicy<KeyType>::insertHash(tab, i, hash);
+                    ((KeyType *) tab.keys)[i] = key;
+                    tab.size++;
+                    return (int64_t) i;
                 }
-                if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
-                // A full packed table promotes to open addressing. *4 gives the hashed table
-                // load-factor headroom so it does not immediately re-grow (cap*2 would land exactly
-                // on the 0.5 trigger). cap-0 -> first allocation (stays packed).
-                if ( tab.size >= tab.capacity ) {
-                    uint64_t newCapacity = (tab.capacity == 0) ? minCapacity : tab.capacity*4;
-                    reserveInternal(tab, newCapacity, at);
-                    goto retry;  // re-dispatch: now hashed (or the freshly allocated packed table)
+            } else {  // non-string: open-addressed from the first insert (no packed regime)
+                if ( tab.capacity == 0 ) {
+                    if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
+                    reserveInternal(tab, minCapacity, at);  // cap-0 -> open-addressed minCapacity slots
+                    goto retry;
                 }
-                uint64_t i = tab.size;
-                PackedPolicy<KeyType>::insertHash(tab, i, hash);
-                ((KeyType *) tab.keys)[i] = key;
-                tab.size++;
-                return (int64_t) i;
             }
             if ( tab.size >= (tab.capacity/2) ) grow(tab, at);
             else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab, at);
@@ -354,21 +367,23 @@ namespace das
         __forceinline int64_t erase ( Table & tab, KeyType key, uint64_t hash ) {
             DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
-            if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: locate, then swap-remove the last live slot into the hole
-                int64_t fidx = PackedPolicy<KeyType>::find(tab, key, hash);  // exact
-                if ( fidx<0 ) return -1;
-                auto pKeys = (KeyType *) tab.keys;
-                uint64_t i = (uint64_t) fidx;
-                uint64_t last = tab.size - 1;
-                if ( i != last ) {
-                    PackedPolicy<KeyType>::moveHash(tab, i, last);
-                    pKeys[i] = pKeys[last];
-                    memcpy(tab.data + i*valueTypeSize, tab.data + last*valueTypeSize, valueTypeSize);
+            if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // string only: packed swap-remove
+                if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed: locate, then swap-remove the last live slot into the hole
+                    int64_t fidx = PackedPolicy<KeyType>::find(tab, key, hash);  // exact
+                    if ( fidx<0 ) return -1;
+                    auto pKeys = (KeyType *) tab.keys;
+                    uint64_t i = (uint64_t) fidx;
+                    uint64_t last = tab.size - 1;
+                    if ( i != last ) {
+                        PackedPolicy<KeyType>::moveHash(tab, i, last);
+                        pKeys[i] = pKeys[last];
+                        memcpy(tab.data + i*valueTypeSize, tab.data + last*valueTypeSize, valueTypeSize);
+                    }
+                    PackedPolicy<KeyType>::clearHash(tab, last);
+                    memset(tab.data + last*valueTypeSize, 0, valueTypeSize);
+                    tab.size--;
+                    return (int64_t) i;
                 }
-                PackedPolicy<KeyType>::clearHash(tab, last);
-                memset(tab.data + last*valueTypeSize, 0, valueTypeSize);
-                tab.size--;
-                return (int64_t) i;
             }
             auto pKeys = (KeyType *) tab.keys;
             uint64_t mask = tab.capacity - 1;
@@ -476,7 +491,7 @@ namespace das
             // Hash-region width by (regime x key type): packed string = 64-bit hash, packed non-string
             // = none (PackedPolicy::hashBytes); large string = 32-bit hash, large non-string = 1-byte
             // control. Must agree with tableHashSlotBytes.
-            bool newPacked = newCapacity <= TABLE_MAX_LINEAR_CAPACITY;
+            bool newPacked = PackedPolicy<KeyType>::storesHash && newCapacity <= TABLE_MAX_LINEAR_CAPACITY;  // only string packs
             uint64_t newHashBytes = newPacked ? uint64_t(PackedPolicy<KeyType>::hashBytes)
                 : (PackedPolicy<KeyType>::storesHash ? uint64_t(sizeof(TableHashKey)) : uint64_t(1));
             uint64_t perSlot = uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + newHashBytes;
@@ -514,30 +529,28 @@ namespace das
                 auto pOldValues = tab.data;
                 auto pValues = newTab.data;
                 auto pOldKeys = (const KeyType *) tab.keys;
-                if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed source: dense [0,size)
-                    for ( uint64_t i=0, is=tab.size; i!=is; ++i ) {
-                        uint64_t hash = PackedPolicy<KeyType>::promoteHash(tab, i, pOldKeys[i], context);
-                        int64_t index = insertNew(newTab, hash);
-                        if constexpr ( PackedPolicy<KeyType>::storesHash ) {
-                            pHashes[index] = hashToHashKey(TableHashKey(hash));
-                        } else {
-                            ((uint8_t *) newTab.hashes)[index] = CTRL_OCCUPIED;
-                        }
-                        pKeys[index] = pOldKeys[i];
-                        memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );
-                    }
-                } else if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // large string source: 32-bit hashes
-                    auto pOldHashes = tab.hashes;
-                    for ( uint64_t i=0, is=tab.capacity; i!=is; ++i ) {
-                        auto hash = pOldHashes[i];
-                        if ( hash>HASH_KILLED64 ) {
+                if constexpr ( PackedPolicy<KeyType>::storesHash ) {  // string source: packed (dense) or large (32-bit hashes)
+                    if ( tab.capacity <= TABLE_MAX_LINEAR_CAPACITY ) {  // packed string source: dense [0,size)
+                        for ( uint64_t i=0, is=tab.size; i!=is; ++i ) {
+                            uint64_t hash = PackedPolicy<KeyType>::promoteHash(tab, i, pOldKeys[i], context);
                             int64_t index = insertNew(newTab, hash);
-                            pHashes[index] = hash;
+                            pHashes[index] = hashToHashKey(TableHashKey(hash));
                             pKeys[index] = pOldKeys[i];
                             memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );
                         }
+                    } else {  // large string source: 32-bit hashes
+                        auto pOldHashes = tab.hashes;
+                        for ( uint64_t i=0, is=tab.capacity; i!=is; ++i ) {
+                            auto hash = pOldHashes[i];
+                            if ( hash>HASH_KILLED64 ) {
+                                int64_t index = insertNew(newTab, hash);
+                                pHashes[index] = hash;
+                                pKeys[index] = pOldKeys[i];
+                                memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );
+                            }
+                        }
                     }
-                } else {  // large non-string source: 1-byte control, recompute the hash to re-bucket
+                } else {  // non-string source: always open-addressed (1-byte control), recompute the hash to re-bucket
                     auto pOldCtrl = (const uint8_t *) tab.hashes;
                     for ( uint64_t i=0, is=tab.capacity; i!=is; ++i ) {
                         if ( pOldCtrl[i] > CTRL_TOMBSTONE ) {
@@ -551,7 +564,7 @@ namespace das
                 }
             }
             if (tab.capacity && !context->verySafeContext) {
-                uint64_t oldHashBytes = (tab.capacity <= TABLE_MAX_LINEAR_CAPACITY) ? uint64_t(PackedPolicy<KeyType>::hashBytes)
+                uint64_t oldHashBytes = (PackedPolicy<KeyType>::storesHash && tab.capacity <= TABLE_MAX_LINEAR_CAPACITY) ? uint64_t(PackedPolicy<KeyType>::hashBytes)
                     : (PackedPolicy<KeyType>::storesHash ? uint64_t(sizeof(TableHashKey)) : uint64_t(1));
                 uint64_t oldSize = tab.capacity * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + oldHashBytes);
                 context->free(tab.data, oldSize, at);

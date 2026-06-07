@@ -21,6 +21,8 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test10.das` | Pure insert of 1M unique random numbers — insert-only (no read, no clear) |
 | `test11.das` | SlotMap adapter insert of 1M random numbers — monotonic uint64 IDs, entity allocation pattern |
 | `test12.das` | Pathological key distribution — 8K sequential + random keys (100K total) with deliberately bad hash |
+| `test13.das` | `hash(string)` microbenchmark — short vs long keys; inlined FNV intrinsic (JIT) vs bound C++ builtin (interp) |
+| `test14.das` | Large string-keyed builtin table (open-addressed, inlined find/at) vs int reference — sizes the large-string lookup against the int reference; `_fresh`/`_same` isolate strcmp |
 
 ## core/gc/
 
@@ -121,7 +123,6 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `groupby_sum.das` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
 | `groupby_where_count.das` | `_where + _group_by + _select(N = length)` |
 | `groupby_where_sum.das` | `_where + _group_by + _select(TotalPrice = sum)` |
-| `indexed_lookup.das` | `_where(_.id == K)` against the PRIMARY KEY — SQLite uses PK b-tree; Array/Decs scan linearly |
 | `join_count.das` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
 | `last_match.das` | `_where + last()` — carry-last terminator |
 | `long_count_aggregate.das` | `long_count()` — int64 counter |

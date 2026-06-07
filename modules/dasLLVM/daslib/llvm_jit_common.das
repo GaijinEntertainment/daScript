@@ -224,16 +224,8 @@ def public FN_JIT_TABLE_FIND(t : Type) {
     return "`jit`table_find`{t}`"
 }
 
-// Insert that skips the C++ packed dedup (the JIT already ran the packed find and missed).
-def public FN_JIT_TABLE_AT_AFTER_PACKED_MISS(t : Type) {
-    return "`jit`table_at_after_packed_miss`{t}`"
-}
-
-// String-key find/at that take a precomputed hash (string-only, no per-type matrix).
-def public FN_JIT_STRING_TABLE_FIND_WITH_HASH() {
-    return "`jit`string_table_find_with_hash`"
-}
-
+// String-key at that takes a precomputed hash (string-only, no per-type matrix; the grow fallback
+// for the inline large-string at). String find is fully inline — no C++ helper.
 def public FN_JIT_STRING_TABLE_AT_WITH_HASH() {
     return "`jit`string_table_at_with_hash`"
 }
@@ -284,23 +276,6 @@ def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaque
     return (tab_fun, at_type)
 }
 
-def public get_table_at_after_packed_miss(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
-    assume fn_ptr = get_jit_table_at_after_packed_miss(unsafe(reinterpret<int> t))
-    // int32_t jit_table_at_after_packed_miss ( Table*, KeyType key, int32_t valueTypeSize, Context*, LineInfoArg* ) — same shape as jit_table_at
-    assume at_type = LLVMFunctionType(types.t_int32,
-        fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), // table ptr
-        base_type_to_llvm_type(t),                           // key
-        types.t_int32,                                    // valueTypeSize
-        types.LLVMVoidPtrType(),                          // context
-        types.LLVMVoidPtrType(),                          // at
-    ))
-    let fn_name = DllName(FN_JIT_TABLE_AT_AFTER_PACKED_MISS(t))
-    var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
-    assert(tab_fun != null)
-    tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at_apm")
-    return (tab_fun, at_type)
-}
-
 def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
     assume fn_ptr = get_jit_table_find(unsafe(reinterpret<int> t))
     // int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
@@ -314,23 +289,6 @@ def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaq
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, find_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(find_type, 0u), tab_fun, "func_find")
-    return (tab_fun, find_type)
-}
-
-def public get_string_table_find_with_hash(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?) {
-    assume fn_ptr = get_jit_string_table_find_with_hash()
-    // int32_t jit_string_table_find_with_hash ( Table * tab, char * key, uint64_t hfn, int32_t valueTypeSize, Context * context )
-    let find_type = LLVMFunctionType(types.t_int32,   // int32_t result
-            fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
-            base_type_to_llvm_type(Type.tString),               // key
-            types.t_int64,                                    // precomputed hash
-            types.t_int32,                                    // valueTypeSize
-            types.LLVMVoidPtrType()                 // context
-            ))
-    let fn_name = DllName(FN_JIT_STRING_TABLE_FIND_WITH_HASH())
-    var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, find_type, fn_ptr)
-    assert(tab_fun != null)
-    tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(find_type, 0u), tab_fun, "func_find_wh")
     return (tab_fun, find_type)
 }
 
