@@ -910,8 +910,11 @@ def private subst_consts(var e : ExpressionPtr; constmap : table<string; Express
     if (e == null) return null
     var tmpl : Template
     for (nm in keys(constmap)) {
-        let ex = unsafe(constmap?[nm]) ?? null     // non-inserting read (keys() locks the table)
-        tmpl |> replaceVariable(nm, clone_expression(ex))
+        // ?[] yields a const view (non-inserting; keys() locks the table) but the pointed-to
+        // node is genuinely mutable. apply_template clones it per use, so const-strip the raw
+        // pointer instead of pre-cloning (which would orphan a copy every substitution).
+        var ex = unsafe(reinterpret<Expression? -const>(constmap?[nm] ?? null))
+        tmpl |> replaceVariable(nm, ex)
     }
     var res = apply_template(tmpl, e.at, e, false)
     unsafe { delete tmpl }
@@ -943,8 +946,13 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
-                var folded = eval_to_const(clone_expression(lc.variables[0].init))
-                if (folded |> is_expr_const()) {
+                // eval_single_expression only READS the tree (throwaway context), so fold the
+                // init in place — no defensive clone. On success the old init subtree is
+                // orphaned (replaced by the folded const); reclaim it now.
+                var oldInit = lc.variables[0].init
+                var folded = eval_to_const(oldInit)
+                if (folded |> is_expr_const() && folded != oldInit) {
+                    reclaim_expression(oldInit)
                     lc.variables[0].init = folded
                     constmap["{lc.variables[0].name}"] = folded
                     changed = true
