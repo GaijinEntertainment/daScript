@@ -12,6 +12,7 @@ module opengl_live shared public
 //!   screenshot — captures the current framebuffer to a PNG file
 
 require opengl/opengl
+require glfw
 require live/glfw_live
 require math
 require stbimage
@@ -194,6 +195,16 @@ struct RecordStartResult {
     pbo_count   : int
 }
 
+def private gl_string(name : uint) : string {
+    let p = glGetString(name)
+    return "?" if (p == null)
+    return clone_string(unsafe(reinterpret<string>(p)))
+}
+
+def private log_gl_backend() {
+    to_log(LOG_INFO, "[opengl_live] GL_VENDOR='{gl_string(GL_VENDOR)}' GL_RENDERER='{gl_string(GL_RENDERER)}' GL_VERSION='{gl_string(GL_VERSION)}'")
+}
+
 [live_command(description = "Begin APNG recording. Args: file, fps, max_seconds, pbo_count.")]
 def record_start(input : JsonValue?) : JsonValue? {
     return JV((error = "already recording")) if (recorder_active)
@@ -272,6 +283,13 @@ def record_start(input : JsonValue?) : JsonValue? {
     // the synchronous encode allows; wall-clock speed no longer matters. record_stop
     // restores wall-clock.
     set_fixed_dt(recorder.frame_interval_s)
+    // Drop vsync for the session: a swap must never block on an absent vblank when the
+    // window is offscreen / occluded (macOS headless-runner throttle, dasImgui #190).
+    // record_stop restores it.
+    glfwSwapInterval(0)
+    // Log the GL backend so CI surfaces the recording host's actual video hardware / driver —
+    // diagnostic for the macOS recording-throttle issue (dasImgui #190).
+    log_gl_backend()
     return JV(RecordStartResult(
         file        = args.file,
         fps         = effective_fps,
@@ -319,6 +337,8 @@ def record_stop(_input : JsonValue?) : JsonValue? {
     // Return the host clock to wall-clock immediately, so the drain + any
     // post-record frames run at real time again.
     set_fixed_dt(0.0f)
+    // Restore vsync (record_start dropped it for the recording session).
+    glfwSwapInterval(1)
 
     // Drain any PBOs still in flight (frames seen but not yet read back).
     // Best effort: a failed harvest here breaks the drain loop and leaves the

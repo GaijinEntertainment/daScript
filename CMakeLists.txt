@@ -1259,6 +1259,8 @@ if (NOT ${DAS_TOOLS_DISABLED})
             INSTALL_RPATH "@loader_path/../lib"
             CMAKE_MACOSX_RPATH ON
         )
+        # Foundation: NSProcessInfo, used to disable App Nap at startup (dasImgui #190).
+        TARGET_LINK_LIBRARIES(daslang-live "-framework Foundation")
     elseif(UNIX)
         SET_TARGET_PROPERTIES(daslang-live PROPERTIES
             INSTALL_RPATH "\$ORIGIN/../lib"

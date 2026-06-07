@@ -27,6 +27,12 @@
 #include <dlfcn.h>
 #endif
 
+#if defined(__APPLE__)
+#include <objc/objc.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
+#endif
+
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -746,6 +752,36 @@ static void release_single_instance() {
 
 // --- Entry point ---
 
+#if defined(__APPLE__)
+// Disable macOS App Nap for this process. On a headless / offscreen CI runner the
+// daslang-live window is unfocused, so macOS throttles the process during input-less
+// recording holds — the render loop stalls and frame capture flatlines (dasImgui #190).
+// beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep keeps the process
+// at full scheduling for its lifetime (idle *system* sleep is still permitted). Driven via
+// the objc runtime so main.cpp stays plain C++ (no .mm); Foundation is linked on Apple in
+// CMakeLists. No-op if Foundation / NSProcessInfo can't be resolved.
+static void disable_app_nap_macos() {
+    Class piClass = objc_getClass("NSProcessInfo");
+    if (!piClass) return;
+    id processInfo = ((id(*)(Class, SEL))objc_msgSend)(piClass, sel_registerName("processInfo"));
+    if (!processInfo) return;
+    Class strClass = objc_getClass("NSString");
+    if (!strClass) return;
+    id reason = ((id(*)(Class, SEL, const char*))objc_msgSend)(
+        strClass, sel_registerName("stringWithUTF8String:"),
+        "daslang-live: continuous render for recording capture (#190)");
+    const unsigned long long NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFULL;
+    id activity = ((id(*)(id, SEL, unsigned long long, id))objc_msgSend)(
+        processInfo, sel_registerName("beginActivityWithOptions:reason:"),
+        NSActivityUserInitiatedAllowingIdleSystemSleep, reason);
+    if (activity) {
+        // Retain for the process lifetime (no ARC); intentionally never released.
+        ((id(*)(id, SEL))objc_msgSend)(activity, sel_registerName("retain"));
+        tout << "daslang-live: macOS App Nap disabled (NSActivityUserInitiatedAllowingIdleSystemSleep)\n";
+    }
+}
+#endif
+
 int main(int argc, char * argv[]) {
 #if defined(_WIN32) && defined(_DEBUG)
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
@@ -753,6 +789,10 @@ int main(int argc, char * argv[]) {
 
     install_das_crash_handler();
     das::arm_alloc_tracking();
+
+#if defined(__APPLE__)
+    disable_app_nap_macos();
+#endif
 
     // Forward full argv so scripts can read get_user_args() (post-`--` slice).
     // Matches daslang.exe's behavior — daslang-live ignores everything after
