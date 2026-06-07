@@ -98,6 +98,26 @@ def private get_flatten_strict(func : FunctionPtr) : bool {
     return false
 }
 
+//! Default cap on the product of nested constant-loop iteration counts a twin may
+//! unroll to. Unrolling multiplies across nesting (`range(20)^4` = 160k body copies),
+//! so without a bound deep nests blow the heap. 4096 is generous for real shader
+//! unrolling yet far below the blowup zone; `[flatten(max_unroll=N)]` overrides it
+//! per-function, and direct `flatten_function` callers pass their own.
+let public FLATTEN_MAX_UNROLL = 4096
+
+def private get_flatten_max_unroll(func : FunctionPtr) : int {
+    //! Reads the opt-in `[flatten(max_unroll=N)]` argument: the cap on the product of
+    //! nested constant-loop iteration counts the twin may unroll to. Exceeding it is a
+    //! clean compile error, not an exponential-expansion blowup. Default FLATTEN_MAX_UNROLL.
+    for (ann in func.annotations) {
+        if (ann.annotation.name == "flatten") {
+            let mv = find_arg(ann.arguments, "max_unroll")
+            if (mv is tInt) return mv as tInt
+        }
+    }
+    return FLATTEN_MAX_UNROLL
+}
+
 // ===== Predicated lowering (return-elim + if-conversion + call inlining) =====
 //
 // Shared state lives on FlatCtx (one instance per twin, threaded by pointer so
@@ -123,6 +143,8 @@ class private FlatCtx {
     worklist  : array<string>
     loopMasks : array<LoopMask>   // enclosing loops' break/continue masks (innermost last)
     whitelist : table<string>     // leaf-builtin names allowed to survive (backend-supplied)
+    unrollFactor : int            // running product of enclosing loop iteration counts (1 at top)
+    maxUnroll : int               // cap on unrollFactor*count before bailing (FLATTEN_MAX_UNROLL default)
     ok        : bool
     err      : string
 }
@@ -653,6 +675,18 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
         }
         substs <- [for (v in mk.values); clone_expression(v)]
     }
+    // Unrolling multiplies across nesting: this loop emits `length(substs)` body copies
+    // per enclosing iteration, so the running product (int64, overflow-safe) is the true
+    // expansion. Bail BEFORE the clones if it exceeds the cap — converts a heap blowup
+    // into a clean error. Restore the factor on exit so sibling loops start fresh.
+    let projected = int64(ctx.unrollFactor) * int64(length(substs))
+    if (projected > int64(ctx.maxUnroll)) {
+        ctx.ok = false
+        ctx.err = "flatten: loop unrolling exceeds max_unroll={ctx.maxUnroll} (would expand to {projected} iterations); reduce the range/nesting or raise [flatten(max_unroll=N)]"
+        return
+    }
+    let savedFactor = ctx.unrollFactor
+    ctx.unrollFactor = int(projected)
     let van = "{efor.iterators[0]}"
     let localNames <- collect_let_names(efor.body)
     // Allocate break/continue masks only if THIS loop uses them (depth-0 scan).
@@ -691,28 +725,32 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
             if (pushed) {
                 ctx.loopMasks |> pop()
             }
+            ctx.unrollFactor = savedFactor
             return
         }
     }
     if (pushed) {
         ctx.loopMasks |> pop()
     }
+    ctx.unrollFactor = savedFactor
 }
 
 [macro_function]
-def public flatten_function(var func : FunctionPtr; whitelist : table<string>) : FlatCtx? {
+def public flatten_function(var func : FunctionPtr; whitelist : table<string>; maxUnroll : int = FLATTEN_MAX_UNROLL) : FlatCtx? {
     //! Flatten `func`'s body in place to branchless, call-free form: every user
     //! call inlined, all control flow lowered to predicated `?:` selects, early
     //! `return` to a runtime live mask. `whitelist` is the set of leaf-builtin
     //! names permitted to survive into the output (must be pure / branch-safe /
-    //! backend-expressible). Returns the FlatCtx — inspect `.ok` and `.err`.
+    //! backend-expressible). `maxUnroll` caps the product of nested constant-loop
+    //! iteration counts (exceeding it is a clean error, not a heap blowup). Returns
+    //! the FlatCtx — inspect `.ok` and `.err`.
     //!
     //! Backends call this directly with their own primitive set, before their own
     //! macro walks the result; `[flatten]` calls it with the std default. The
     //! body is uninferred after this — re-infer (e.g. via patch + astChanged)
     //! before reading types or running the shape check.
     var ctx = new FlatCtx(counter = 0, liveName = "__flat_live", retName = "__flat_ret",
-        hasRet = !func.result.isVoid, ok = true)
+        hasRet = !func.result.isVoid, unrollFactor = 1, maxUnroll = maxUnroll, ok = true)
     ctx.whitelist := whitelist
     if (!(func.body is ExprBlock)) return ctx
     let bodyBlk = func.body as ExprBlock
@@ -880,7 +918,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // Cycle 1: lower the twin with the std whitelist, then re-infer so
             // call.func resolves. (Backends call flatten_function directly with
             // their own primitive set instead of going through this annotation.)
-            var ctx = flatten_function(twin, STD_WHITELIST)
+            var ctx = flatten_function(twin, STD_WHITELIST, get_flatten_max_unroll(func))
             if (!ctx.ok) {
                 errors := ctx.err
                 return false

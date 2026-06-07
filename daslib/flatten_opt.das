@@ -231,7 +231,10 @@ class private FlatVarRef : AstVisitor {
     name  : string
     count : int
     def override preVisitExprVar(expr : ExprVar?) : void {
-        if ("{expr.name}" == name) count ++
+        // das_string compares with string directly — never build a temp string here:
+        // count_refs walks the whole tree per candidate, so a per-ExprVar allocation
+        // is O(n^2) persistent strings on large bodies (the heap-overflow amplifier).
+        if (expr.name == name) count ++
     }
 }
 
@@ -310,7 +313,7 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             // Single definition: decl-init + no stores, OR no-init decl + one store.
             let stores <- [for (j in range(n)); j;
                 where out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar &&
-                    "{((out[j] as ExprCopy).left as ExprVar).name}" == nm]
+                    ((out[j] as ExprCopy).left as ExprVar).name == nm]
             var src : ExpressionPtr = null
             var si = -1
             if (lc.variables[0].init != null && empty(stores)) {
