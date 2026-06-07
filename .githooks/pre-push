@@ -41,9 +41,16 @@ fi
 
 echo "pre-push: using $DASLANG"
 
-# Formatter: whole tree, verify-only (CI parity).
+# Formatter: whole tree, verify-only (CI parity). Skip build/ and _build/ output
+# dirs — a locally junctioned module's build output (CMake build/, Sphinx _build/
+# with its _downloads copies) is gitignored and never present in CI's fresh clone,
+# but the whole-tree walk would otherwise trip on it. Masks are SEGMENT-bounded
+# (slashes on both sides) so they match the dirs, not source files like
+# string_builder.das; both slash forms cover Windows (\build\) and POSIX (/build/).
 echo "pre-push: formatter --verify ..."
-"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --path "$ROOT" --verify
+"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --path "$ROOT" --verify \
+    --exclude-mask "/build/" --exclude-mask '\build\' \
+    --exclude-mask "/_build/" --exclude-mask '\_build\'
 
 # Lint: only .das files changed in the pushed range vs remote tip
 # (mirrors CI's `git diff origin/<base>...HEAD`).
