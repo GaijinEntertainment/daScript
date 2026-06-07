@@ -21,6 +21,48 @@ def private is_flat_temp(name : das_string) : bool {
     return name |> starts_with("__flat_")
 }
 
+// Reclaim walker: free the expression + TypeDecl nodes of an orphaned subtree now, instead
+// of leaving them for the gc_guard sweep at the end of the (long) flatten pass. The visitor
+// collects every owned expression and type but never follows ExprVar.variable, so shared
+// bindings are untouched; deleting an ExprVar node frees only the node, not the Variable it
+// points at. The seen-set dedups the visitor's double-presentation of some nodes (a single
+// gc_unlink+delete twice would be a double-free). Caller must own the subtree exclusively.
+class private ReclaimWalker : AstVisitor {
+    exprs : array<ExpressionPtr>
+    types : array<TypeDeclPtr>
+    seen : table<uint64>
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        let key = unsafe(reinterpret<uint64>(expr))
+        if (!key_exists(seen, key)) {
+            seen |> insert(key)
+            exprs |> push(unsafe(reinterpret<ExpressionPtr>(expr)))
+        }
+    }
+    def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
+        let key = unsafe(reinterpret<uint64>(typ))
+        if (!key_exists(seen, key)) {
+            seen |> insert(key)
+            types |> push(unsafe(reinterpret<TypeDeclPtr>(typ)))
+        }
+    }
+}
+
+def private reclaim_expression(var e : ExpressionPtr) {
+    if (e == null) return
+    var w = new ReclaimWalker()
+    make_visitor(*w) $(adapter) {
+        visit(e, adapter)
+    }
+    for (n in w.exprs) {
+        unsafe { delete_expression(n) }
+    }
+    for (t in w.types) {
+        unsafe { delete_type(t) }
+    }
+    delete w.seen
+    unsafe { delete w }
+}
+
 // ===== Dead-store elimination =====
 //
 // The lowered body is straight-line (no branches), so liveness is a single
@@ -189,7 +231,11 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
             }
         }
     }
-    if (empty(constmap)) return
+    delete reassigned
+    if (empty(constmap)) {
+        delete constmap
+        return
+    }
     var i = 0
     while (i < length(out)) {
         var s = out[i]
@@ -213,6 +259,7 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
         }
         i ++
     }
+    delete constmap
 }
 
 // ===== Copy propagation of single-assignment flatten temps =====
@@ -331,20 +378,25 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             }
         }
         var srcReads : table<uint64>
+        var useJs : array<int>   // hoisted: cleared per candidate, freed once per pass
         for (k in range(n)) {
             if (!(out[k] is ExprLet)) continue
-            let lc = out[k] as ExprLet
+            var lc = out[k] as ExprLet
             if (length(lc.variables) != 1 || !is_flat_temp(lc.variables[0].name)) continue
             let hk = hash(lc.variables[0].name)
             let nStores = key_exists(storeIdx, hk) ? length(storeIdx[hk]) : 0
-            // Single definition: decl-init + no stores, OR no-init decl + one store.
+            // Single definition: decl-init + no stores, OR no-init decl + one store. Use the
+            // ORIGINAL source (no clone) — apply_template clones it per use, and the original
+            // lives in out[k]/out[si], reclaimed when we drop them. Cloning here would orphan a
+            // copy on every non-folding candidate (re-examined each while-restart → millions).
             var src : ExpressionPtr = null
             var si = -1
             if (lc.variables[0].init != null && nStores == 0) {
-                src = clone_expression(lc.variables[0].init)   // decl-init is the single definition
+                src = lc.variables[0].init                    // decl-init is the single definition
             } elif (lc.variables[0].init == null && nStores == 1) {
                 si = storeIdx[hk][0]
-                src = clone_expression((out[si] as ExprCopy).right)   // no-init decl + single store
+                var cp = out[si] as ExprCopy
+                src = cp.right                                // no-init decl + single store
             } else {
                 continue                                      // multi-def (e.g. early-return mask) — leave it
             }
@@ -358,7 +410,7 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             let refCount = (key_exists(ub.nameCount, hk) ? ub.nameCount[hk] : 0) - (si >= 0 ? 1 : 0)
             var firstRef = n
             var maxUseIdx = -1
-            var useJs : array<int>
+            clear(useJs)
             if (key_exists(ub.nameUses, hk)) {
                 for (j in ub.nameUses[hk]) {
                     if (j == k || j == si) continue
@@ -389,9 +441,16 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             // Inline the source at every use, then drop the def (+ store).
             let nm = "{lc.variables[0].name}"
             var rules : Template
-            rules |> replaceVariable(nm, clone_expression(src))
+            rules |> replaceVariable(nm, src)   // store src directly; apply_template clones per use
             for (j in useJs) {
                 out[j] = apply_template(rules, out[j].at, out[j], false)   // only statements that reference nm
+            }
+            unsafe { delete rules }
+            // Reclaim the dropped def (+ store) subtrees now (their original source was just
+            // inlined as clones), rather than waiting for the gc_guard sweep.
+            reclaim_expression(out[k])
+            if (si >= 0) {
+                reclaim_expression(out[si])
             }
             out <- [for (j in range(n)); out[j]; where j != k && j != si]
             changed = true
@@ -399,6 +458,7 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
         }
         delete srcReads
         delete storeIdx
+        delete useJs
         unsafe {
             delete ub
         }
@@ -418,16 +478,17 @@ def public dse_pass(var out : array<ExpressionPtr>) {
     }
     var live : table<uint64>
     var dead : table<int>
+    var reads : table<uint64>   // hoisted: one scratch table, cleared per statement (was n allocations)
     var i = n - 1
     while (i >= 0) {
         var stmt = out[i]
         var handled = false
+        clear(reads)
         if (stmt is ExprCopy) {
             var cp = stmt as ExprCopy
             if (cp.left is ExprVar && is_flat_temp((cp.left as ExprVar).name)) {
                 handled = true
                 let lh = hash((cp.left as ExprVar).name)
-                var reads : table<uint64>
                 var risky = false
                 scan_flat(cp.right, reads, risky)
                 if (!key_exists(live, lh) && !risky) {
@@ -445,7 +506,6 @@ def public dse_pass(var out : array<ExpressionPtr>) {
             if (length(lc.variables) == 1 && is_flat_temp(lc.variables[0].name)) {
                 handled = true
                 let dh = hash(lc.variables[0].name)
-                var reads : table<uint64>
                 var risky = false
                 scan_flat(lc.variables[0].init, reads, risky)
                 if (!key_exists(live, dh) && !key_exists(storeTargets, dh) && !risky) {
@@ -461,7 +521,6 @@ def public dse_pass(var out : array<ExpressionPtr>) {
         if (!handled) {
             // Decl / return / global write / bare expr — over-approximate: every
             // flat var it mentions becomes live (never wrongly removes a store).
-            var reads : table<uint64>
             var risky = false
             scan_flat(stmt, reads, risky)
             for (nm in keys(reads)) {
@@ -470,8 +529,15 @@ def public dse_pass(var out : array<ExpressionPtr>) {
         }
         i --
     }
-    if (empty(dead)) return
+    delete storeTargets
+    delete live
+    delete reads
+    if (empty(dead)) {
+        delete dead
+        return
+    }
     out <- [for (j in range(n)); out[j]; where !key_exists(dead, j)]
+    delete dead
 }
 
 // ===== SSA-rename of reassigned user locals =====
@@ -496,7 +562,9 @@ def private rename_reads(var e : ExpressionPtr; current : table<string; string>)
         any = true
     }
     if (!any) return e
-    return apply_template(tmpl, e.at, e, false)
+    var res = apply_template(tmpl, e.at, e, false)
+    unsafe { delete tmpl }
+    return res
 }
 
 def public ssa_rename_pass(var out : array<ExpressionPtr>) {
@@ -508,7 +576,10 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
             if (!is_flat_temp(v.name) && v.init != null) declaredInit |> insert(hash(v.name))
         }
     }
-    if (empty(declaredInit)) return
+    if (empty(declaredInit)) {
+        delete declaredInit
+        return
+    }
     // (2) of those, the ones reassigned via a plain `var = ...` (multi-def)
     var ssaNames : table<uint64>
     for (s in out) {
@@ -517,7 +588,11 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
             if (key_exists(declaredInit, h)) ssaNames |> insert(h)
         }
     }
-    if (empty(ssaNames)) return
+    delete declaredInit
+    if (empty(ssaNames)) {
+        delete ssaNames
+        return
+    }
     // (3) forward rename: each read maps to the current version; each write mints a new
     // version (after resolving the RHS reads, so a self-ref reads the prior version).
     var current : table<string; string>
@@ -546,6 +621,8 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
         }
         i ++
     }
+    delete ssaNames
+    delete current
 }
 
 class private FoldVisitor : AstVisitor {
@@ -836,7 +913,9 @@ def private subst_consts(var e : ExpressionPtr; constmap : table<string; Express
         let ex = unsafe(constmap?[nm]) ?? null     // non-inserting read (keys() locks the table)
         tmpl |> replaceVariable(nm, clone_expression(ex))
     }
-    return apply_template(tmpl, e.at, e, false)
+    var res = apply_template(tmpl, e.at, e, false)
+    unsafe { delete tmpl }
+    return res
 }
 
 def private body_read_count(var blk : ExprBlock?; nm : string) : int {
@@ -897,6 +976,7 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
             }
             changed = true
         }
+        delete dead
     }
     return changed
 }
