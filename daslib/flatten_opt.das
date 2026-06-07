@@ -288,55 +288,80 @@ def private scan_src(var e : ExpressionPtr; var reads : table<uint64>; var risky
     }
 }
 
+// Per-pass reference index: name-hash -> the statement indices that reference it
+// (deduped per statement) plus the total occurrence count. Built once per copy_prop
+// pass in a single walk, replacing the old per-candidate count_refs sweep that made
+// the pass O(n^3) on large bodies (one full-body walk per candidate per fold-restart).
+class private FlatUsesBuilder : AstVisitor {
+    nameUses : table<uint64; array<int>>
+    nameCount : table<uint64; int>
+    seen : table<uint64>
+    j : int
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        let h = hash(expr.name)
+        nameCount[h] ++
+        if (!key_exists(seen, h)) {
+            seen |> insert(h)
+            nameUses[h] |> push(j)
+        }
+    }
+}
+
 def public copy_prop_pass(var out : array<ExpressionPtr>) {
     var changed = true
     while (changed) {
         changed = false
         let n = length(out)
-        // Map every assignment target to its store indices. A source reading var V
-        // is only unsafe if V is reassigned BETWEEN this temp's def and a use — a
-        // reassignment fully before the def (e.g. an accumulator finalized into the
-        // return temp) leaves the captured value intact, so it must not block.
+        // Precompute once per pass (not per candidate): every store target's indices,
+        // and a name -> (referencing statements, occurrence count) index. A source
+        // reading var V is only unsafe if V is reassigned BETWEEN this temp's def and a
+        // use — a reassignment fully before the def leaves the captured value intact.
         var storeIdx : table<uint64; array<int>>
         for (j in range(n)) {
             if (out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar) {
                 storeIdx[hash(((out[j] as ExprCopy).left as ExprVar).name)] |> push(j)
             }
         }
+        var ub = new FlatUsesBuilder()
+        make_visitor(*ub) $(adapter) {
+            for (j in range(n)) {
+                ub.j = j
+                clear(ub.seen)
+                visit(out[j], adapter)
+            }
+        }
+        var srcReads : table<uint64>
         for (k in range(n)) {
             if (!(out[k] is ExprLet)) continue
             let lc = out[k] as ExprLet
             if (length(lc.variables) != 1 || !is_flat_temp(lc.variables[0].name)) continue
-            let nm = "{lc.variables[0].name}"
+            let hk = hash(lc.variables[0].name)
+            let nStores = key_exists(storeIdx, hk) ? length(storeIdx[hk]) : 0
             // Single definition: decl-init + no stores, OR no-init decl + one store.
-            let stores <- [for (j in range(n)); j;
-                where out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar &&
-                    ((out[j] as ExprCopy).left as ExprVar).name == nm]
             var src : ExpressionPtr = null
             var si = -1
-            if (lc.variables[0].init != null && empty(stores)) {
+            if (lc.variables[0].init != null && nStores == 0) {
                 src = clone_expression(lc.variables[0].init)   // decl-init is the single definition
-            } elif (lc.variables[0].init == null && length(stores) == 1) {
-                si = stores[0]
+            } elif (lc.variables[0].init == null && nStores == 1) {
+                si = storeIdx[hk][0]
                 src = clone_expression((out[si] as ExprCopy).right)   // no-init decl + single store
             } else {
-                continue                                   // multi-def (e.g. early-return mask) — leave it
+                continue                                      // multi-def (e.g. early-return mask) — leave it
             }
             let defIdx = si >= 0 ? si : k
-            var srcReads : table<uint64>
+            clear(srcReads)
             var srcRisky = false
             scan_src(src, srcReads, srcRisky)
-            if (key_exists(srcReads, hash(lc.variables[0].name))) continue         // self-referential source — never fold
-            // Uses must follow the def; track the last one for the reassignment window.
-            var refCount = 0
+            if (key_exists(srcReads, hk)) continue            // self-referential source — never fold
+            // Uses (excluding def k and store si) straight from the precomputed index.
+            // nameCount includes the store's lvalue occurrence (1), which is not a use.
+            let refCount = (key_exists(ub.nameCount, hk) ? ub.nameCount[hk] : 0) - (si >= 0 ? 1 : 0)
             var firstRef = n
             var maxUseIdx = -1
             var useJs : array<int>
-            for (j in range(n)) {
-                if (j == k || j == si) continue
-                let c = count_refs(out[j], nm)
-                if (c > 0) {
-                    refCount += c
+            if (key_exists(ub.nameUses, hk)) {
+                for (j in ub.nameUses[hk]) {
+                    if (j == k || j == si) continue
                     useJs |> push(j)
                     if (j < firstRef) {
                         firstRef = j
@@ -362,17 +387,20 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             }
             if (blocked) continue
             // Inline the source at every use, then drop the def (+ store).
+            let nm = "{lc.variables[0].name}"
             var rules : Template
             rules |> replaceVariable(nm, clone_expression(src))
             for (j in useJs) {
                 out[j] = apply_template(rules, out[j].at, out[j], false)   // only statements that reference nm
             }
-            var dead : table<int>
-            dead |> insert(k)
-            if (si >= 0) dead |> insert(si)
-            out <- [for (j in range(n)); out[j]; where !key_exists(dead, j)]
+            out <- [for (j in range(n)); out[j]; where j != k && j != si]
             changed = true
             break
+        }
+        delete srcReads
+        delete storeIdx
+        unsafe {
+            delete ub
         }
     }
 }
