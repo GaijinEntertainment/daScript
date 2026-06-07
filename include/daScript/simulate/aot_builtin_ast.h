@@ -515,6 +515,8 @@ namespace das {
     __forceinline void verify_expression_gc ( ExpressionPtr value ) { if ( value ) value->gc_verify(); }
     __forceinline StructurePtr clone_structure ( const Structure * value ) { return value ? value->clone() : nullptr; }
     __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value ? value->clone() : nullptr; }
+    DAS_API void delete_expression ( ExpressionPtr expr );
+    DAS_API void delete_type ( TypeDeclPtr typ );
     DAS_API void forceAtRaw ( Expression * expr, const LineInfo & at );
     DAS_API void getAstContext ( smart_ptr_raw<Program> prog, Expression * expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at );
     DAS_API char * get_mangled_name ( Function * func, Context * context, LineInfoArg * at );

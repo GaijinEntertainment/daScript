@@ -1,0 +1,1 @@
+Frees a single orphaned AST TypeDecl node mid-compile (sibling of delete_expression); only the node itself is freed, not its sub-types or the shared structType/enumType it points at. Unsafe: the caller must own the node exclusively.
