@@ -481,16 +481,19 @@ class CollectExternVisitor : AstVisitor {
 
     def add_table_find_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
-        // String find is fully inline (no glob to bake). Non-string binds the per-type C++ find glob,
-        // still used by non-workhorse keys (vectors / structs) routed through build_table_find_call.
+        // String + workhorse find are fully inline (no glob to bake). The per-type C++ find glob is
+        // only created when build_table_find_call codegens a non-workhorse find (vectors / structs),
+        // so when GetNamedGlobal misses there is no consumer and nothing to bake.
         if (typ == Type.tString) {
+            return
+        }
+        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_FIND(typ)).glob())
+        if (tab_method == null) {
             return
         }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_find_accessor, call_args, "")
-
-        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_FIND(typ)).glob())
         LLVMBuildStore(builder, tab_ptr, tab_method)
     }
 

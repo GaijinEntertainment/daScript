@@ -2,8 +2,8 @@ options gen2
 options persistent_heap
 
 // Large (open-addressed) string-keyed builtin table vs an int reference, same SSIZE and ops.
-// The LARGE string find/at is the only builtin-table path still calling C++ from JIT (non-string
-// and packed-string keys are inlined); this sizes that path's cost to judge an inline rewrite.
+// All builtin-table find/at are inlined under JIT now (non-string, packed-string and large-string
+// keys); this sizes the large-string path against the int reference to confirm the rewrite holds.
 // get_sum uses the block-callback get() so the lookup is NOT dead-code-eliminated — a plain
 // sum/key_exists whose result is unused folds to 0 ns under JIT (see test08 vs test09). The
 // _fresh lane queries with clone_string copies so the find runs a real strcmp behind the 32-bit
