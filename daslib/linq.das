@@ -3,7 +3,7 @@ options indenting = 4
 
 module linq shared public
 
-require math
+require math // nolint:STYLE030 — math::min(int,int) is used (zip_impl reserve, take helpers); linq's own min/max overloads shadow it so the usage scan misses it
 require daslib/option public
 require daslib/sort_boost
 
@@ -3470,7 +3470,7 @@ def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tup
         buffer |> reserve(min(length(a), length(b)))
     }
     for (itA, itB in a, b) {
-        buffer.emplace((itA, itB))
+        buffer.emplace((itA, itB)) // nolint:PERF006 — iterator sources have no length to reserve; the array/dim case reserves above
     }
     return <- buffer
 }
