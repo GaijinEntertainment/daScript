@@ -11,7 +11,7 @@ module opengl_live shared public
 //! Provides live commands for OpenGL applications:
 //!   screenshot — captures the current framebuffer to a PNG file
 
-require opengl/opengl_boost
+require opengl/opengl
 require live/glfw_live
 require math
 require stbimage
@@ -143,9 +143,12 @@ def screenshot(input : JsonValue?) : JsonValue? {
 // by now) and feed it to stbi_apng_frame. record_stop drains the remaining
 // N-1 in-flight buffers in order before glDeleteBuffers.
 //
-// Encode + file I/O happen on a worker thread inside the C++ writer (bounded
-// queue, drops oldest on overflow). With the PBO ring the render loop never
-// blocks on the GPU — sync glReadPixels was the bottleneck at 1280x720+.
+// Encode + file I/O are SYNCHRONOUS inside the C++ writer (no worker thread, no
+// queue — stbi_apng_frame blocks the GL thread for the zlib compress and never
+// drops, so frames_written is exact). The PBO ring only pipelines the GPU
+// readback (sync glReadPixels was the bottleneck at 1280x720+); the encode is
+// the per-frame stall, which under lockstep recording is exactly the intended
+// backpressure (the app slows to encode speed; content-time stays uniform).
 
 var public capture_pbo_count : int = 4
     //! Number of GL_PIXEL_PACK_BUFFER PBOs in the readback ring. Higher = more
@@ -157,6 +160,7 @@ struct RecorderState {
     writer            : void?    // StbiApngWriter* opaque handle
     fps               : float
     frame_interval_s  : float
+    lockstep          : bool     // recording always drives the fixed-dt clock; capture every frame
     next_capture_t    : float
     max_seconds       : float
     start_t           : float
@@ -259,7 +263,15 @@ def record_start(input : JsonValue?) : JsonValue? {
     recorder.pbo_size         = pbo_size
     recorder.pbo_delays_ms |> resize(n)
     recorder.prev_png_level   = prev_png_level
+    recorder.lockstep         = true
     recorder_active           = true
+    // Lockstep: put the host clock into fixed-dt mode at exactly the capture interval.
+    // Every rendered frame then advances content time by 1/fps; record_tick captures
+    // every frame (the throttle gate is bypassed in lockstep), so animation + cursor
+    // lerp + the convert grid all sit on one uniform clock. The app renders as fast as
+    // the synchronous encode allows; wall-clock speed no longer matters. record_stop
+    // restores wall-clock.
+    set_fixed_dt(recorder.frame_interval_s)
     return JV(RecordStartResult(
         file        = args.file,
         fps         = effective_fps,
@@ -303,6 +315,10 @@ def private harvest_one_pbo() : bool {
 [live_command(description = "Stop APNG recording. Returns saved path + frame count.")]
 def record_stop(_input : JsonValue?) : JsonValue? {
     return JV((error = "not recording")) if (!recorder_active)
+
+    // Return the host clock to wall-clock immediately, so the drain + any
+    // post-record frames run at real time again.
+    set_fixed_dt(0.0f)
 
     // Drain any PBOs still in flight (frames seen but not yet read back).
     // Best effort: a failed harvest here breaks the drain loop and leaves the
@@ -381,18 +397,16 @@ def record_tick() {
         record_stop(null)
         return
     }
-    return if (now < recorder.next_capture_t)
-    // Skip-missed scheduling: after a stall (long frame, gc pause, etc.) resync
-    // the deadline to `now + interval` instead of catching up frame by frame.
-    // Each frame gets the SAME nominal delay (1/fps, quantized to whole ms by the
-    // writer API -- e.g. 33ms at 30fps) instead of the measured gap, so the APNG is
-    // a UNIFORMLY spaced grid. That internal delay is not the playback clock:
-    // convert_recording.das discards it (forces `-r fps_eff` before `-i`, with
-    // fps_eff = frames / wall-clock-duration -- the real effective capture rate,
-    // which the synchronous zlib encode pushes below nominal) and anchors voiceovers
-    // on that same measured grid. The load-bearing properties are uniform spacing +
-    // a synchronous writer that never drops (frames_written exact), which is what
-    // lets fps_eff recover the true timeline; the per-frame ms tag itself is nominal.
+    // Lockstep recording (always on here) captures EVERY rendered frame — the
+    // wall-clock throttle gate is bypassed. The host clock advances exactly
+    // frame_interval_s per frame, so frames == content-time/interval and the recorder's
+    // reported duration is content-time = frames/fps; the dasImgui converter's
+    // fps_eff = frames/duration then resolves to exactly fps, and voiceovers (anchored
+    // by frame index) land on that same uniform grid. (The gate remains for a potential
+    // non-lockstep wall-clock-throttled capture mode; recording never uses it.) Each
+    // frame carries the same nominal 1/fps delay (whole-ms-quantized by the writer).
+    // Load-bearing: one-capture-per-frame + a synchronous writer that never drops.
+    return if (!recorder.lockstep && now < recorder.next_capture_t)
     recorder.next_capture_t = now + recorder.frame_interval_s
     let n = length(recorder.pbos)
 
