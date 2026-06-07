@@ -123,7 +123,6 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `groupby_sum.das` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
 | `groupby_where_count.das` | `_where + _group_by + _select(N = length)` |
 | `groupby_where_sum.das` | `_where + _group_by + _select(TotalPrice = sum)` |
-| `indexed_lookup.das` | `_where(_.id == K)` against the PRIMARY KEY — SQLite uses PK b-tree; Array/Decs scan linearly |
 | `join_count.das` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
 | `last_match.das` | `_where + last()` — carry-last terminator |
 | `long_count_aggregate.das` | `long_count()` — int64 counter |
