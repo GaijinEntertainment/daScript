@@ -82,7 +82,9 @@ Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the la
 
 ## sql/
 
-Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice vs XML (`from_xml_node`) vs JSON (`from_json`). Each bench builds the same data several ways via `_common.das` fixtures and runs the same query expression through each lane. See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
+Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice vs XML (`from_xml_node`) vs JSON (`from_json`). See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
+
+**Layout: one file per source.** Each source lane lives in its own file (`array.das`, `decs.das`, `xml.das`, `json.das`, `sql.das`); the shared fixture for that source (the `array<Car>`, the parsed DOM, the decs world, the `JsonValue?` tree, the `:memory:` DB) is built **once** in `[init]` and freed in `[finalize]`, so every query in the file reuses the same data. The sweep runs one process per file, isolating each source — this removes the cross-source instruction-cache contamination that made the JIT column jittery when all five lanes shared one process. Benchmark functions are named `<family>_<lane>` (e.g. `count_aggregate_m5f`) so `_update_results.das` pivots them into the `(family x source)` matrix unchanged.
 
 | Lane | Source | Form |
 |---|---|---|
@@ -94,61 +96,60 @@ Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` S
 
 The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 
-| File | Description |
+| Query family | Description |
 |---|---|
-| `_common.das` | Shared `Car` `[sql_table]` + `[decs_template]` + `Dealer` schema + fixture builders (not a benchmark) |
-| `aggregate_match.das` | `_where + aggregate(seed, op)` — user-supplied binary reducer over a filtered slice |
-| `all_match.das` | `all(P)` with always-true predicate — full scan, returns true |
-| `any_match.das` | `any(P)` — first-hit early exit |
-| `average_aggregate.das` | `average(_.price)` — single-row scalar reduce |
-| `bare_order_where.das` | `_where + _order_by(_.price)` — fused prefilter + sort, no take |
-| `chained_where.das` | `_where + _where + count` — two filter stages then count |
-| `contains_match.das` | `contains(needle)` — early-exit equality scan |
-| `count_aggregate.das` | `count()` — engine pushes `COUNT(*)`; array/decs fuse where+count |
-| `distinct_by_count.das` | `_distinct_by(_.brand) \|> count()` (Array/Decs only; SQL TODO) |
-| `distinct_count.das` | `_select(_.brand).distinct() \|> count()` — projection then dedup |
-| `distinct_take.das` | `_select(_.brand).distinct().take(N)` — early-exit dedup |
-| `element_at_match.das` | `_where + element_at(N)` — skip then take 1 |
-| `first_match.das` | `_where + first()` — first-hit |
-| `first_or_default_match.das` | `_where + first_or_default(d)` — first-hit with default |
-| `groupby_average.das` | `_group_by(_.brand) + _select(AvgPrice = avg)` |
-| `groupby_count.das` | `_group_by(_.brand) + _select(N = count)` |
-| `groupby_first.das` | `_group_by(_.brand) + _select(FirstCar = first per group)` (Array/Decs only; SQL TODO) |
-| `groupby_having_count.das` | `_group_by + _having(length >= 5) + _select` |
-| `groupby_having_hidden_sum.das` | `_group_by + _having(sum > 50000) + _select` |
-| `groupby_max.das` | `_group_by(_.brand) + _select(MaxPrice = max)` |
-| `groupby_min.das` | `_group_by(_.brand) + _select(MinPrice = min)` |
-| `groupby_multi_reducer.das` | `_group_by + 4-slot named tuple` — count + sum + max + … fused |
-| `groupby_select_sum.das` | `_select(_.price) + _group_by(_ % 100) + _select((K, S=sum))` (Array/Decs only; SQL TODO — expression keys) |
-| `groupby_sum.das` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
-| `groupby_where_count.das` | `_where + _group_by + _select(N = length)` |
-| `groupby_where_sum.das` | `_where + _group_by + _select(TotalPrice = sum)` |
-| `join_count.das` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
-| `last_match.das` | `_where + last()` — carry-last terminator |
-| `long_count_aggregate.das` | `long_count()` — int64 counter |
-| `max_aggregate.das` | `max(_.price)` — streaming max |
-| `min_aggregate.das` | `min(_.price)` — streaming min |
-| `order_by_multi_key.das` | `_where + _order_by_keys((_.brand, _.price), mask)` — multi-key composite stable_sort, no take (single-key stays unstable; SQL pushes `ORDER BY c1, c2`) |
-| `order_take_desc.das` | `_order_by_descending(_.price) + take(N)` — top-N largest |
-| `reverse_take.das` | `reverse + take(N)` — tail N rows |
-| `select_count.das` | `_select + count` — projection then counter (DCE'd in some lanes) |
-| `select_where.das` | `_where + _select` — filter then project |
-| `select_where_count.das` | `_select(2*price) + _where(> T) + count` — where-after-select |
-| `select_where_order_take.das` | `_where + _select + _order_by + take(N)` — full chain |
-| `select_where_sum.das` | `_select(2*price) + _where(> T) + sum` — where-after-select fused with accumulator |
-| `single_match.das` | `single` — assert-one-element with full scan |
-| `skip_take.das` | `skip(M) + take(K) + to_array` — windowing |
-| `skip_while_match.das` | `skip_while(P) + count` — predicate-driven skip |
-| `sort_first.das` | `_order_by + first` — streaming-min (no buffer) |
-| `sort_take.das` | `_order_by + take(N)` — bounded-heap (size N) |
-| `sum_aggregate.das` | `sum(_.price)` — engine pushes `SUM(price)`; array/decs accumulator |
-| `sum_where.das` | `_where + _select + sum` — three-stage |
-| `take_count.das` | `take(N) + to_array` — bounded materialization |
-| `take_count_filtered.das` | `_where + take(N) + count` (Array/Decs only; SQL semantically distinct — LIMIT-on-aggregate) |
-| `take_sum_aggregate.das` | `take(N) + sum` (Array/Decs only; SQL semantically distinct) |
-| `take_while_match.das` | `take_while(P) + count` — predicate-driven take |
-| `to_array_filter.das` | `_where + _select + to_array` — three-stage materialize |
-| `zip_dot_product.das` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |
+| `aggregate_match` | `_where + aggregate(seed, op)` — user-supplied binary reducer over a filtered slice |
+| `all_match` | `all(P)` with always-true predicate — full scan, returns true |
+| `any_match` | `any(P)` — first-hit early exit |
+| `average_aggregate` | `average(_.price)` — single-row scalar reduce |
+| `bare_order_where` | `_where + _order_by(_.price)` — fused prefilter + sort, no take |
+| `chained_where` | `_where + _where + count` — two filter stages then count |
+| `contains_match` | `contains(needle)` — early-exit equality scan |
+| `count_aggregate` | `count()` — engine pushes `COUNT(*)`; array/decs fuse where+count |
+| `distinct_by_count` | `_distinct_by(_.brand) \|> count()` (Array/Decs only; SQL TODO) |
+| `distinct_count` | `_select(_.brand).distinct() \|> count()` — projection then dedup |
+| `distinct_take` | `_select(_.brand).distinct().take(N)` — early-exit dedup |
+| `element_at_match` | `_where + element_at(N)` — skip then take 1 |
+| `first_match` | `_where + first()` — first-hit |
+| `first_or_default_match` | `_where + first_or_default(d)` — first-hit with default |
+| `groupby_average` | `_group_by(_.brand) + _select(AvgPrice = avg)` |
+| `groupby_count` | `_group_by(_.brand) + _select(N = count)` |
+| `groupby_first` | `_group_by(_.brand) + _select(FirstCar = first per group)` (Array/Decs only; SQL TODO) |
+| `groupby_having_count` | `_group_by + _having(length >= 5) + _select` |
+| `groupby_having_hidden_sum` | `_group_by + _having(sum > 50000) + _select` |
+| `groupby_max` | `_group_by(_.brand) + _select(MaxPrice = max)` |
+| `groupby_min` | `_group_by(_.brand) + _select(MinPrice = min)` |
+| `groupby_multi_reducer` | `_group_by + 4-slot named tuple` — count + sum + max + … fused |
+| `groupby_select_sum` | `_select(_.price) + _group_by(_ % 100) + _select((K, S=sum))` (Array/Decs only; SQL TODO — expression keys) |
+| `groupby_sum` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
+| `groupby_where_count` | `_where + _group_by + _select(N = length)` |
+| `groupby_where_sum` | `_where + _group_by + _select(TotalPrice = sum)` |
+| `join_count` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
+| `last_match` | `_where + last()` — carry-last terminator |
+| `long_count_aggregate` | `long_count()` — int64 counter |
+| `max_aggregate` | `max(_.price)` — streaming max |
+| `min_aggregate` | `min(_.price)` — streaming min |
+| `order_by_multi_key` | `_where + _order_by_keys((_.brand, _.price), mask)` — multi-key composite stable_sort, no take (single-key stays unstable; SQL pushes `ORDER BY c1, c2`) |
+| `order_take_desc` | `_order_by_descending(_.price) + take(N)` — top-N largest |
+| `reverse_take` | `reverse + take(N)` — tail N rows |
+| `select_count` | `_select + count` — projection then counter (DCE'd in some lanes) |
+| `select_where` | `_where + _select` — filter then project |
+| `select_where_count` | `_select(2*price) + _where(> T) + count` — where-after-select |
+| `select_where_order_take` | `_where + _select + _order_by + take(N)` — full chain |
+| `select_where_sum` | `_select(2*price) + _where(> T) + sum` — where-after-select fused with accumulator |
+| `single_match` | `single` — assert-one-element with full scan |
+| `skip_take` | `skip(M) + take(K) + to_array` — windowing |
+| `skip_while_match` | `skip_while(P) + count` — predicate-driven skip |
+| `sort_first` | `_order_by + first` — streaming-min (no buffer) |
+| `sort_take` | `_order_by + take(N)` — bounded-heap (size N) |
+| `sum_aggregate` | `sum(_.price)` — engine pushes `SUM(price)`; array/decs accumulator |
+| `sum_where` | `_where + _select + sum` — three-stage |
+| `take_count` | `take(N) + to_array` — bounded materialization |
+| `take_count_filtered` | `_where + take(N) + count` (Array/Decs only; SQL semantically distinct — LIMIT-on-aggregate) |
+| `take_sum_aggregate` | `take(N) + sum` (Array/Decs only; SQL semantically distinct) |
+| `take_while_match` | `take_while(P) + count` — predicate-driven take |
+| `to_array_filter` | `_where + _select + to_array` — three-stage materialize |
+| `zip_dot_product` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |
 
 ## micro/
 

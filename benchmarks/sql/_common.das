@@ -153,6 +153,32 @@ def public fixture_decs_cars_and_dealers(n : int) {
     }
 }
 
+// Combined world for the per-source decs benchmark file: Car + Dealer + Brand archetypes coexist
+// (separate archetypes, queries are archetype-scoped) so one [init] world serves every decs lane
+// (plain car walks, joins, and the DecsBrand distinct/order lane) with no per-benchmark restart().
+def public fixture_decs_all(n : int) {
+    restart()
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsCar(
+            id = i + 1,
+            name = "Car{i}",
+            price = (i * 37) % 1000,
+            brand = i % BRAND_COUNT,
+            year = 2010 + (i * 7) % 16,
+            dealer_id = (i % DEALER_COUNT) + 1
+        ))
+    }
+    create_entities(DEALER_COUNT) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsDealer(
+            id = i + 1,
+            name = "Dealer{i}"
+        ))
+    }
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, DecsBrand(value = i % BRAND_COUNT))
+    }
+}
+
 // Duplicate-prone single-field template for decs distinct/order benches.
 // Populated with `i % BRAND_COUNT` so n=100k has dense duplicates per value,
 // matching the array-side `make_brands(n)` helper in order_distinct_take.das.
