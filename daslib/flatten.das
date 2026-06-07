@@ -221,6 +221,18 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
         out |> push <| qmacro_expr(${ var $i(argN) = $e(lifted); })
         subst |> replaceVariable(string(p.name)) <| qmacro($i(argN))
     }
+    // Uniquify the callee's own locals per inline. Inlining the same helper at
+    // multiple sites — distinct call sites, or one site multiplied by loop
+    // unrolling — would otherwise emit colliding `var` decls in the single
+    // flattened scope (error[30704]). Mirrors lower_for's per-copy local rename.
+    var seenLocals : array<string>
+    let calleeLocals <- collect_let_names(callee.body)
+    for (ln in calleeLocals) {
+        if (!(seenLocals |> contains(ln))) {
+            seenLocals |> push(ln)
+            subst |> renameVariable(ln, fresh(ctx, "__flat_loc"))
+        }
+    }
     // The callee runs where the caller's full predicate holds — funcLive AND every
     // enclosing loop's break/continue masks AND structPred — all baked into the frame
     // seed. The callee body then lowers with this seed as its base mask and an EMPTY

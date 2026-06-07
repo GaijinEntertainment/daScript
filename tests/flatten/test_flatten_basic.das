@@ -79,6 +79,30 @@ def with_builtin(x : int) : int {
     return max(x, 0) + min(x, 5)
 }
 
+// helper WITH a local — inlining it at multiple sites (loop unroll, or two direct
+// call sites) must uniquify the callee's locals, else the copies emit a colliding
+// `var t` in the single flattened scope (error[30704]). Every other helper here is
+// a single-expression return with no locals, so this case was previously uncovered.
+def withlocal(a : int) : int {
+    let t = a * 3
+    let u = t + 1
+    return u * t
+}
+
+[flatten]
+def inline_loop(x : int) : int {
+    var acc = 0
+    for (i in range(3)) {
+        acc += withlocal(x + i)
+    }
+    return acc
+}
+
+[flatten]
+def inline_twice(x : int) : int {
+    return withlocal(x) + withlocal(x + 1)
+}
+
 // ----- differential driver -----
 
 var GRID : array<int>
@@ -118,6 +142,16 @@ def test_flatten_equivalence(t : T?) {
     t |> run("whitelisted builtins") @(t : T?) {
         for (v in GRID) {
             t |> equal(with_builtin_flat(v), with_builtin(v))
+        }
+    }
+    t |> run("helper-with-local inlined across an unrolled loop") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(inline_loop_flat(v), inline_loop(v))
+        }
+    }
+    t |> run("helper-with-local inlined at two direct call sites") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(inline_twice_flat(v), inline_twice(v))
         }
     }
 }
