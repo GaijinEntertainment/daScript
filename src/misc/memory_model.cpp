@@ -96,9 +96,9 @@ namespace das {
 #endif
     }
 
-    uint32_t MemoryModel::grow ( uint32_t si ) {
+    uint64_t MemoryModel::grow ( uint32_t si ) {
         if ( shoe.chunks[si] ) {
-            uint32_t size = shoe.chunks[si]->total;
+            uint64_t size = shoe.chunks[si]->total;
             if ( customGrow ) {
                 size = customGrow(size);
             } else {
@@ -109,11 +109,9 @@ namespace das {
             if ( !initialSize ) {
                 initialSize = default_initial_size;
             }
-            // Shoe per-chunk byte total is 32-bit bounded (max 256B per element,
-            // total chunk size capped). If initialSize > UINT32_MAX*divisor (>68GB),
-            // clamp so the shoe still gets a workable chunk size.
-            uint64_t per = initialSize / ((uint64_t(si)+1)<<4);
-            return per > uint64_t(UINT32_MAX) ? UINT32_MAX : uint32_t(per);
+            // Entry count for the first chunk of this size-class. 64-bit throughout
+            // (Deck::total and totalBytes are 64-bit), so no UINT32 clamp is needed.
+            return initialSize / ((uint64_t(si)+1)<<4);
         }
     }
 
@@ -140,7 +138,7 @@ namespace das {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
             uint32_t si = uint32_t((size >> 4) - 1);
-            uint32_t total = grow(si);
+            uint64_t total = grow(si);
             shoe.chunks[si] = new Deck(total, uint32_t(size), shoe.chunks[si]);
             return shoe.chunks[si]->allocate();
         }
@@ -267,9 +265,9 @@ namespace das {
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {   // we re-track all small allocations
             for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
                 ch->afterGC();
-                uint32_t utotal = ch->total / 32;
+                uint64_t utotal = ch->total / 32;
 #if DAS_SANITIZER
-                for ( uint32_t i=0; i!=utotal; ++i ) {
+                for ( uint64_t i=0; i!=utotal; ++i ) {
                     uint32_t b = ch->bits[i];
                     for ( uint32_t j=0; j!=32; ++j ) {
                         if ( b & (1<<j) ) {
@@ -280,11 +278,11 @@ namespace das {
                     }
                 }
 #else
-                uint32_t live = 0;                              // popcount instead of per-bit scan
-                for ( uint32_t i=0; i!=utotal; ++i ) {
+                uint64_t live = 0;                              // popcount instead of per-bit scan
+                for ( uint64_t i=0; i!=utotal; ++i ) {
                     live += das_popcount(ch->bits[i]);
                 }
-                totalAllocated += uint64_t(live) * ch->size;
+                totalAllocated += live * ch->size;
 #endif
             }
         }
@@ -329,7 +327,10 @@ namespace das {
     }
 
     uint32_t LinearChunkAllocator::grow ( uint32_t size ) {
-        return customGrow ? customGrow(size) : size * 2;
+        // HeapChunk is uint32-bounded by design (see allocate's DAS_VERIFYF); the
+        // grow hook is 64-bit, so clamp its result back into the per-chunk cap.
+        uint64_t ng = customGrow ? customGrow(size) : uint64_t(size) * 2;
+        return uint32_t(das::min(ng, uint64_t(UINT32_MAX)));
     }
 
     char * LinearChunkAllocator::allocate ( uint64_t s ) {
