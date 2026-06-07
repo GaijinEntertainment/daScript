@@ -737,7 +737,7 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-news__row {
     display: grid;
-    grid-template-columns: 120px 90px 1fr;
+    grid-template-columns: 120px 150px 1fr;
     gap: 18px;
     padding: 18px 0;
     border-top: 1px solid var(--rule);
@@ -755,6 +755,9 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     text-transform: lowercase;
 }
 .forge-news__title { color: var(--fg); font-size: 14.5px; line-height: 1.4; }
+/* Long module-name tags (e.g. dasImguiNodeEditor) must stay inside their grid
+   track — cap at the column width and break rather than overlap the title. */
+.forge-news__row .forge-news__tag { max-width: 100%; overflow-wrap: anywhere; }
 
 /* ───── Blog: listing + post ───── */
 
