@@ -9,3 +9,5 @@ module does and where its docs live.
    :maxdepth: 1
 
    dasimgui
+   dasimguinodeeditor
+   dasimguiimplot
