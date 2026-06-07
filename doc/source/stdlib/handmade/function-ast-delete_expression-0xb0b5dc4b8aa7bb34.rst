@@ -1,0 +1,1 @@
+Frees a single orphaned AST expression node mid-compile instead of waiting for the enclosing ast_gc_guard to sweep it; only the node itself is freed (its children remain on the gc root, so a caller-side walker must delete them too). Unsafe: the caller must own the node exclusively.
