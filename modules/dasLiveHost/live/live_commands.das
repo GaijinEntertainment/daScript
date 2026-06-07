@@ -34,7 +34,7 @@ def private live_help_json() : string {
     let commands : table<string; string> <- {for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)); name => desc}
     var tab : table<string; JsonValue?>
     tab |> insert("commands", JV(commands))
-    return write_json(JV(tab))
+    return take_json(JV(tab))
 }
 
 // --- Dispatch (called from [before_update]) ---

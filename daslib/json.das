@@ -628,26 +628,31 @@ def delete_json(var jsv : JsonValue?) {
     //! ``unsafe`` plus a null guard, and names the intent at call sites. Pass an owned
     //! tree you are done with (a parsed ``read_json`` input, a built result, a per-frame
     //! payload); assumes unique ownership — do not call on a shared/aliased tree. No-op
-    //! on null or on the shared missing-key sentinel (:ref:`json_null_sentinel
-    //! <function-json-json_null_sentinel>`), so freeing a tree that a careless caller
-    //! navigated into is still safe.
+    //! on null or on the shared missing-key sentinel (``json_null_sentinel``), so freeing
+    //! a tree that a careless caller navigated into is still safe.
     if (jsv == null || jsv == g_json_null_sentinel) return
     unsafe { delete jsv; }
 }
 
 def update(var obj : JsonValue?; key : string; var jsv : JsonValue?) {
-    //! Set object field ``key`` to ``jsv``, first freeing (via :ref:`delete_json
-    //! <function-json-delete_json>`) whatever JsonValue was stored at ``key``. Use this
+    //! Set object field ``key`` to ``jsv``, first freeing (via ``delete_json``) whatever
+    //! JsonValue was stored at ``key``. Use this
     //! instead of a bare insert when overwriting a field on a reused/long-lived object
     //! every frame — a bare ``insert`` drops the old value on the heap. No-op when
     //! ``obj`` is null or not an ``_object``.
     if (obj == null || !(obj.value is _object)) return
-    if (key_exists(obj.value as _object, key)) {
+    // Never store a raw null (write_json deref's object values) or the shared sentinel
+    // (a later cascade-free would delete it out from under everyone) into a tree —
+    // substitute a fresh owned null for both.
+    if (jsv == null || jsv == g_json_null_sentinel) {
+        jsv = JVNull()
+    }
+    // Free the previous value, unless the caller passed back the very pointer already
+    // stored here (freeing then re-inserting it would be a use-after-free).
+    if (key_exists(obj.value as _object, key) && (obj.value as _object)[key] != jsv) {
         delete_json((obj.value as _object)[key])
     }
-    // Never store the shared sentinel into a tree — a later cascade-free would
-    // delete it out from under everyone. Substitute a fresh owned null.
-    (obj.value as _object) |> insert(key, jsv == g_json_null_sentinel ? JVNull() : jsv)
+    (obj.value as _object) |> insert(key, jsv)
 }
 
 def try_fixing_broken_json(var bad : string) {
