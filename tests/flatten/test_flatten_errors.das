@@ -50,4 +50,12 @@ def test_flatten_boundaries(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_move.das")
         t |> success(find(issues, "cannot be predicated") >= 0, "expected move/clone error, got: {issues}")
     }
+    t |> run("over-cap loop unrolling is rejected") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_unroll.das")
+        t |> success(find(issues, "exceeds max_unroll") >= 0, "expected unroll-cap error, got: {issues}")
+    }
+    t |> run("[flatten(max_unroll=N)] override is honored") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_unroll_override.das")
+        t |> success(find(issues, "exceeds max_unroll=8") >= 0, "expected lowered-cap error, got: {issues}")
+    }
 }

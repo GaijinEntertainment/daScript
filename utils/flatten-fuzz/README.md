@@ -70,9 +70,18 @@ offending unit is bisected out and dumped as a standalone reproducer
 - The inlined-callee-local shadowing bug (`inline_call` not uniquifying callee
   locals across multiple inline sites) — fixed in the same change that added
   this tool.
-- At `--depth 4+`, deeply-nested constant `for` loops unroll without any
-  expansion cap, so the flattened twin grows exponentially → very slow compiles
-  and a heap-layout-dependent SIGSEGV during the macro. Diagnosis: `lower_for`
-  has no unroll-size guard; the flatten opt passes are bounded but super-linear
-  in body size. The compiler's own `max_infer_passes` (default 50) bounds infer,
-  so this is blowup, not an infinite loop. Default depth is 3 (clean at scale).
+- Unbounded loop unrolling: deeply-nested constant `for` loops unroll
+  multiplicatively (`range(20)^4` = 160k body copies) with no expansion cap, so
+  the flattened twin blows the heap to multiple GB. **Fixed** — `lower_for` now
+  caps the product of nested iteration counts (`FLATTEN_MAX_UNROLL`, default 4096;
+  `[flatten(max_unroll=N)]` overrides), bailing with a clean error before cloning.
+- A deterministic compiler crash (the SIGSEGV/SIGBUS whose faulting address was
+  always ASCII bytes of a flatten-generated name like `__flat_loop` / `v46_0`).
+  Root cause was **not** in flatten: an incomplete 64-bit migration of the core
+  shoe allocator (`MemoryModel::Deck`) — `total * size` (entry count × element
+  size) overflowed `uint32_t` once a string-heap size-class grew past 4 GB, so
+  `das_aligned_alloc16(0)` returned a degenerate pointer the next string
+  overwrote. **Fixed** by widening the allocator's byte/count fields to 64-bit
+  (regression: `tests-cpp/big/memory_model_4gb`). flatten amplified it via a
+  per-`ExprVar` `"{name}"` string built inside the O(n²) opt-pass tree walks;
+  that churn is now allocation-free (`das_string` compares). Default depth is 3.

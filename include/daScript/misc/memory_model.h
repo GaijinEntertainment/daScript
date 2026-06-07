@@ -22,8 +22,11 @@ namespace das {
     struct LineInfo;
 
     struct Deck {
-        Deck( uint32_t ne, uint32_t es, Deck * n ) {
-            total = (ne+31) & ~31;
+        // ne (entry count) and the byte totals are 64-bit: with geometric chunk
+        // growth a single size-class chunk can exceed 4 GB, and `total * size` must
+        // not wrap (the missed 64-bit migration that produced das_aligned_alloc16(0)).
+        Deck( uint64_t ne, uint32_t es, Deck * n ) {
+            total = (ne+31) & ~uint64_t(31);
             size = es;
             totalBytes = total * size;
             data = (char*) das_aligned_alloc16(totalBytes);
@@ -70,23 +73,23 @@ namespace das {
         __forceinline bool isAllocatedPtr ( char * ptr ) {
             ptrdiff_t idx = (ptr - data) / size;
             DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
-            uint32_t uidx = uint32_t(idx);
-            uint32_t i = uidx >> 5;
-            uint32_t j = uidx & 31;
+            uint64_t uidx = uint64_t(idx);
+            uint64_t i = uidx >> 5;
+            uint32_t j = uint32_t(uidx & 31);
             uint32_t b = bits[i];
             return ((b & (1u<<j))!=0);
         }
         __forceinline char * allocate ( ) {
             if ( allocated == total ) return nullptr;
-            uint32_t maxt = total / 32;
-            for ( uint32_t t=0; t!=maxt; ++t ) {
+            uint64_t maxt = total / 32;
+            for ( uint64_t t=0; t!=maxt; ++t ) {
                 uint32_t b = bits[look];
                 uint32_t nb = ~b;
                 if ( nb ) {
                     uint32_t j = 31 - das_clz(nb);
                     bits[look] = b | (1u<<j);
                     allocated ++;
-                    uint32_t ofs = (look * 32 + j);
+                    uint64_t ofs = (look * 32 + j);
                     DAS_ASSERT(ofs < total);
                     return data + ofs * size;
                 }
@@ -99,9 +102,9 @@ namespace das {
         __forceinline void free ( char * ptr ) {
             ptrdiff_t idx = (ptr - data) / size;
             DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
-            uint32_t uidx = uint32_t(idx);
-            uint32_t i = uidx >> 5;
-            uint32_t j = uidx & 31;
+            uint64_t uidx = uint64_t(idx);
+            uint64_t i = uidx >> 5;
+            uint32_t j = uint32_t(uidx & 31);
             uint32_t b = bits[i];
             DAS_ASSERT((b & (1u<<j))!=0 && "calling free on the pointer, which is already free");
             bits[i] = b ^ (1u<<j);
@@ -111,9 +114,9 @@ namespace das {
         __forceinline bool mark ( char * ptr ) {
             ptrdiff_t idx = (ptr - data) / size;
             DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
-            uint32_t uidx = uint32_t(idx);
-            uint32_t i = uidx >> 5;
-            uint32_t j = uidx & 31;
+            uint64_t uidx = uint64_t(idx);
+            uint64_t i = uidx >> 5;
+            uint32_t j = uint32_t(uidx & 31);
             uint32_t b = gc_bits[i];
             if ( !(b & (1u<<j)) ) {
                 gc_bits[i] = b | (1u<<j);
@@ -123,14 +126,14 @@ namespace das {
             return false;
         }
         char *      data = nullptr;
-        uint32_t *  bits = nullptr;
+        uint32_t *  bits = nullptr;          // 32-bit bitset words; indices are 64-bit
         uint32_t *  gc_bits = nullptr;
-        uint32_t    total = 0;
-        uint32_t    size = 0;
-        uint32_t    totalBytes = 0;
-        uint32_t    look = 0;
-        uint32_t    allocated = 0;
-        uint32_t    gc_allocated = 0;
+        uint64_t    total = 0;               // entry count (can exceed 2^32 via growth)
+        uint32_t    size = 0;                // element size in bytes (<= DAS_MAX_SHOE_ALLOCATION)
+        uint64_t    totalBytes = 0;          // total * size — 64-bit so it cannot wrap
+        uint64_t    look = 0;
+        uint64_t    allocated = 0;
+        uint64_t    gc_allocated = 0;
         Deck *      next = nullptr;
     };
 
@@ -269,7 +272,7 @@ namespace das {
         mutable Deck *  lastChunk;
     };
 
-    typedef function<int(int)> CustomGrowFunction;
+    typedef function<uint64_t(uint64_t)> CustomGrowFunction;
 
     struct DAS_API MemoryModel : ptr_ref_count {
         enum { default_initial_size = 65536 };
@@ -280,7 +283,7 @@ namespace das {
         virtual void reset();
         virtual void shrink();
         void setInitialSize ( uint64_t size );
-        uint32_t grow ( uint32_t si );
+        uint64_t grow ( uint32_t si );
         virtual void sweep();
         char * allocate ( uint64_t size );
         bool free ( char * ptr, uint64_t size );

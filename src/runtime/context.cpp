@@ -408,7 +408,7 @@ namespace das
         SimNodeRelocator rel;
         rel.context = this;
         rel.newCode = make_shared<NodeAllocator>();
-        rel.newCode->customGrow = [&](int ) { return 4000; };   // because SimNode_Aot is 80 bytes
+        rel.newCode->customGrow = [&](uint64_t ) { return uint64_t(4000); };   // because SimNode_Aot is 80 bytes
         uint32_t codeSize = uint32_t(code->bytesAllocated());
         if ( code->prefixWithHeader && !pwh ) {
             // printf("[REL] %i adjusting\n", code->totalNodesAllocated);
