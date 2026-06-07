@@ -224,8 +224,14 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
             if (!is_flat_temp(v.name) || key_exists(reassigned, h) || key_exists(constmap, h) || v.init == null) {
                 continue
             }
+            // fold_const builds a fully-fresh clone tree just to test for a const bool; in a
+            // while(changed) sweep those probe clones otherwise pile up to the end-of-pass
+            // gc_guard sweep. Reclaim each probe the moment we've read its verdict.
             var bv = false
-            if (const_bool(fold_const(v.init, constmap), bv)) {
+            var probe = fold_const(v.init, constmap)
+            let isConst = const_bool(probe, bv)
+            reclaim_expression(probe)
+            if (isConst) {
                 constmap[h] = bv
                 changed = true
             }
@@ -236,26 +242,35 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
         delete constmap
         return
     }
+    // fold_const returns a fresh tree, orphaning the input subtree; reclaim each old subtree
+    // now rather than leaving it for the end-of-pass sweep.
     var i = 0
     while (i < length(out)) {
         var s = out[i]
         if (s is ExprCopy) {
             var cp = s as ExprCopy
-            cp.right = fold_const(cp.right, constmap)
+            var old = cp.right
+            cp.right = fold_const(old, constmap)
+            reclaim_expression(old)
         } elif (s is ExprLet) {
             var lc = s as ExprLet
             for (v in lc.variables) {
                 if (v.init != null) {
-                    v.init = fold_const(v.init, constmap)
+                    var old = v.init
+                    v.init = fold_const(old, constmap)
+                    reclaim_expression(old)
                 }
             }
         } elif (s is ExprReturn) {
             var r = s as ExprReturn
             if (r.subexpr != null) {
-                r.subexpr = fold_const(r.subexpr, constmap)
+                var old = r.subexpr
+                r.subexpr = fold_const(old, constmap)
+                reclaim_expression(old)
             }
         } else {
             out[i] = fold_const(s, constmap)
+            reclaim_expression(s)
         }
         i ++
     }
@@ -535,6 +550,11 @@ def public dse_pass(var out : array<ExpressionPtr>) {
     if (empty(dead)) {
         delete dead
         return
+    }
+    // Reclaim the dead statements now (the comprehension below drops them from `out`,
+    // orphaning them to the end-of-pass sweep otherwise). Safe: the rebuild skips dead j.
+    for (j in keys(dead)) {
+        reclaim_expression(out[j])
     }
     out <- [for (j in range(n)); out[j]; where !key_exists(dead, j)]
     delete dead
