@@ -67,6 +67,7 @@ static BoolFn  dll_files_changed = nullptr;
 static SetFloatFn dll_set_dt = nullptr;
 static SetFloatFn dll_set_uptime = nullptr;
 static SetFloatFn dll_set_fps = nullptr;
+static SetFloatFn dll_advance_clock = nullptr;
 static SetBoolFn  dll_set_is_reload = nullptr;
 static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
@@ -107,6 +108,7 @@ static bool load_live_host_functions() {
     dll_set_dt            = (SetFloatFn)get_dll_symbol("live_host_set_dt");
     dll_set_uptime        = (SetFloatFn)get_dll_symbol("live_host_set_uptime");
     dll_set_fps           = (SetFloatFn)get_dll_symbol("live_host_set_fps");
+    dll_advance_clock     = (SetFloatFn)get_dll_symbol("live_host_advance_clock");
     dll_set_is_reload     = (SetBoolFn)get_dll_symbol("live_host_set_is_reload");
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
@@ -392,12 +394,19 @@ static int run_lifecycle(const string & fn) {
     // Main loop
     while (!(dll_exit_requested && dll_exit_requested())) {
         double now = get_time_sec();
-        float dt = float(now - lastTime);
-        float uptime = float(now - startTime);
+        float wall_dt = float(now - lastTime);
         lastTime = now;
 
-        if (dll_set_dt) dll_set_dt(dt);
-        if (dll_set_uptime) dll_set_uptime(uptime);
+        // Single source of truth for the frame clock. advance_clock applies the
+        // recorder's fixed-dt lockstep when set, wall-clock otherwise, and owns the
+        // uptime accumulator — so capture, animation, and convert share one grid.
+        // Fall back to the legacy set_dt/set_uptime pair on an older DLL.
+        if (dll_advance_clock) {
+            dll_advance_clock(wall_dt);
+        } else {
+            if (dll_set_dt) dll_set_dt(wall_dt);
+            if (dll_set_uptime) dll_set_uptime(float(now - startTime));
+        }
 
         // FPS calculation
         frameCount++;

@@ -25,10 +25,19 @@ namespace das {
 
         // Timing (set by host, or computed internally)
         float dt = 0.0f;
-        float uptime = 0.0f;
+        float uptime = 0.0f;        // float mirror of uptime_accum (the daslang-visible value)
+        // Accumulate uptime in double to avoid cumulative float rounding drift over long
+        // sessions (float ulp at ~1h is ~5e-4s, which drifts seconds across ~200k frames).
+        // `uptime` is kept as float(uptime_accum) for the get_uptime() binding.
+        double uptime_accum = 0.0;
         float fps = 0.0f;
         std::chrono::steady_clock::time_point last_time;
         bool time_initialized = false;
+        // Lockstep recording: 0 = wall-clock (normal), > 0 = fixed dt per frame.
+        // When set, the host advances the clock by exactly fixed_dt each frame
+        // instead of measured wall time, so capture cadence, animation, and the
+        // convert grid all sit on one uniform content clock. Set by the recorder.
+        float fixed_dt = 0.0f;
 
         // Error (set by host)
         string last_error;
@@ -68,6 +77,7 @@ namespace das {
     float live_get_dt();
     float live_get_uptime();
     float live_get_fps();
+    void live_set_fixed_dt(float v);
     bool live_is_paused();
     void live_set_paused(bool v);
     const char * live_get_last_error(Context * ctx);

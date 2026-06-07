@@ -44,8 +44,23 @@ extern "C" {
     DAS_EXPORT_DLL void live_host_set_live_mode(bool v)  { g_state.live_mode = v; }
 
     DAS_EXPORT_DLL void live_host_set_dt(float v)       { g_state.dt = v; }
-    DAS_EXPORT_DLL void live_host_set_uptime(float v)   { g_state.uptime = v; }
+    // Keep the double accumulator in sync with any absolute set (legacy fallback path
+    // and resets), so a later advance_clock continues from the same point.
+    DAS_EXPORT_DLL void live_host_set_uptime(float v)   { g_state.uptime_accum = v; g_state.uptime = v; }
     DAS_EXPORT_DLL void live_host_set_fps(float v)      { g_state.fps = v; }
+
+    // Single per-frame clock advance for the host loop. The fixed-vs-wall branch
+    // lives here (one place) so the clock has a single source of truth: when the
+    // recorder has set fixed_dt > 0, the content clock steps by exactly fixed_dt
+    // each frame regardless of how long the frame actually took (encode stall,
+    // vsync, gc); otherwise it steps by the measured wall dt. Uptime accumulates
+    // in both modes.
+    DAS_EXPORT_DLL void live_host_advance_clock(float wall_dt) {
+        float step = (g_state.fixed_dt > 0.0f) ? g_state.fixed_dt : wall_dt;
+        g_state.dt = step;
+        g_state.uptime_accum += step;          // double accumulator — drift-free over long sessions
+        g_state.uptime = float(g_state.uptime_accum);
+    }
     DAS_EXPORT_DLL void live_host_set_is_reload(bool v) { g_state.is_reload = v; }
     DAS_EXPORT_DLL void live_host_set_paused(bool v)    { g_state.paused = v; }
     DAS_EXPORT_DLL void live_host_bump_reload_generation() { g_state.reload_generation++; }
@@ -156,13 +171,21 @@ float live_get_dt() {
         float dt = std::chrono::duration<float>(now - g_state.last_time).count();
         g_state.last_time = now;
         g_state.dt = dt;
-        g_state.uptime += dt;
+        g_state.uptime_accum += dt;            // double accumulator — drift-free over long sessions
+        g_state.uptime = float(g_state.uptime_accum);
     }
     return g_state.dt;
 }
 
 float live_get_uptime() {
     return g_state.uptime;
+}
+
+// Recorder lockstep toggle (daslang-facing). dt > 0 puts the host clock into
+// fixed-step mode at that dt; dt <= 0 returns to wall-clock. The recorder calls
+// this with 1/fps at record_start and 0 at record_stop.
+void live_set_fixed_dt(float v) {
+    g_state.fixed_dt = v > 0.0f ? v : 0.0f;
 }
 
 float live_get_fps() {
@@ -398,6 +421,9 @@ public:
             SideEffects::accessGlobal, "das::live_get_uptime");
         addExtern<DAS_BIND_FUN(live_get_fps)>(*this, lib, "get_fps",
             SideEffects::accessGlobal, "das::live_get_fps");
+        addExtern<DAS_BIND_FUN(live_set_fixed_dt)>(*this, lib, "set_fixed_dt",
+            SideEffects::modifyExternal, "das::live_set_fixed_dt")
+                ->args({"dt"});
 
         // Error state
         addExtern<DAS_BIND_FUN(live_is_paused)>(*this, lib, "is_paused",
