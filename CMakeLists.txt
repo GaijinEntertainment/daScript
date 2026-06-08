@@ -761,6 +761,7 @@ src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_inscope_pod.cpp
+src/ast/ast_escape_analysis.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp

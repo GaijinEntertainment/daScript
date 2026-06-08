@@ -1157,4 +1157,17 @@ namespace das
         }
         return v_zero();
     }
+
+    vec4f builtin_scope_free ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( context.persistent ) {  // only persistent heaps free individually
+            auto ptr = cast<char *>::to(args[0]);
+            if ( ptr ) {
+                GcPod gcpod(&context, &call->debugInfo);
+                gcpod.walk(args[0], call->types[0]->firstType);  // free owned arrays/tables in the pointee
+                auto tsize = cast<uint32_t>::to(args[1]);
+                context.free(ptr, tsize, &call->debugInfo);
+            }
+        }
+        return v_zero();
+    }
 }

@@ -383,6 +383,11 @@ namespace das
                 bool    pod_delete_gen : 1;         // pod delete has been generated
                 bool    single_return_via_move : 1; // this variable is returned via move, where function has only 1 return path (only set if force_pod_inscope is set)
                 bool    consumed : 1;               // this variable has been passed via consume (only set if force_pod_inscope is set)
+                // escape-analysis RESULT (exactly one of the four is set once a local is analyzed):
+                bool    does_not_escape : 1;        // provably does not escape its scope (freeable at scope exit)
+                bool    escapes_return : 1;         // escapes via a return
+                bool    escapes_argument : 1;       // escapes by being passed as a call/operator argument
+                bool    escapes_global : 1;         // escapes by being stored (assignment, into a global/outer location)
             };
             uint32_t flags = 0;
         };
@@ -689,6 +694,7 @@ namespace das
         virtual bool rtti_isFakeContext() const { return false; }
         virtual bool rtti_isFakeLineInfo() const { return false; }
         virtual bool rtti_isAscend() const { return false; }
+        virtual bool rtti_isNewExpr() const { return false; }
         virtual bool rtti_isTypeDecl() const { return false; }
         virtual bool rtti_isNullPtr() const { return false; }
         virtual bool rtti_isCopy() const { return false; }
@@ -1582,6 +1588,8 @@ namespace das
         /*option*/ bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
         /*option*/ bool force_inscope_pod = false;                 // force in-scope for POD-like types
         /*option*/ bool log_inscope_pod = false;                   // log in-scope for POD-like types
+        /*option*/ bool force_escape_free = false;                 // escape analysis: statically free non-escaping new-pointer locals at scope exit
+        /*option*/ bool log_escape_analysis = false;               // log escape-analysis static frees
         /*option*/ bool log_gc_time = false;                       // log gc time
     // debugger
         //  when enabled
@@ -1697,6 +1705,8 @@ namespace das
         void validateAst();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
         bool inScopePodAnalysis(TextWriter & logs);
+        bool escapeAnalysis(TextWriter & logs);             // pure analysis: sets Variable::does_not_escape
+        bool scopeFreeOptimization(TextWriter & logs);      // consumes the analysis result: emits scope-exit frees
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);
