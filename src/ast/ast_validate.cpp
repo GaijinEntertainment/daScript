@@ -284,7 +284,7 @@ namespace das {
         }
         // Phase 3: gc_root cross-check
         for ( auto mod : modules ) {
-            for ( auto node = mod->module_gc_root.gc_first; node; node = node->gc_next ) {
+            for ( auto node = mod->module_gc_root->gc_first; node; node = node->gc_next ) {
                 auto tag = node->gc_type_tag();
                 if ( tag == GC_TAG_TYPEDECL ) {
                     if ( vis.getSeen().find((void *)node) == vis.getSeen().end() ) {

@@ -1186,7 +1186,7 @@ namespace das
         void serialize( AstSerializer & ser, bool already_exists );
         void setModuleName ( const string & n );
         FileInfo * getFileInfo() const;
-        void gc_collect ( gc_root * from = nullptr );  // move reachable TypeDecl from 'from' root to module_gc_root
+        void gc_collect ( gc_root * from = nullptr, gc_root * target = nullptr );  // move reachable nodes from 'from' to 'target' (default module_gc_root)
     public:
         template <typename RecAnn>
         void initRecAnnotation ( RecAnn * rec, ModuleLibrary & lib ) {
@@ -1242,7 +1242,7 @@ namespace das
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_insert_only_hash_map<string,Type>       options;            // options
-        gc_root                                     module_gc_root;     // gc_node root for this module's gc-managed AST nodes
+        unique_ptr<gc_root>                         module_gc_root = make_unique<gc_root>();  // this module's gc-managed AST nodes; a pointer so it can be swapped O(1) during compile (collect live into a fresh root, swap, drop the old)
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
         string                                      cppClassName;       // C++ class name (e.g. "Module_Math"), set by REGISTER_MODULE
@@ -1532,6 +1532,12 @@ namespace das
                                                         // this is slightly faster, but prohibits AOT or patches
         bool        macro_context_persistent_heap = true;   // if true, then persistent heap is used for macro context
         bool        macro_context_collect = false;          // GC collect macro context after major passes
+    // per-pass AST gc during infer: collect the working root's live tree into a fresh root and
+    // swap it in (O(1)), letting the old root's dtor sweep that pass's garbage. Caps the compile
+    // memory peak (infer churns many throwaway TypeDecls/Expressions) at ~no time cost.
+        /*option*/ bool        gc_infer_collect = true;            // enable per-pass collect+swap during inference
+        /*option*/ int32_t     gc_infer_collect_nodes = 25000;     // fire when the root grew by this many nodes since the last collect (~2 MB)
+        /*option*/ int32_t     gc_infer_collect_pct = 50;          // ...or by this percent of the live set, whichever comes first
         uint64_t    max_static_variables_size = 0x100000000;   // 4GB
         /*option*/ uint64_t    max_heap_allocated = 0;
         /*option*/ uint64_t    max_string_heap_allocated = 0;
