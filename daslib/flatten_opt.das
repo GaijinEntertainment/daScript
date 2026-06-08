@@ -27,23 +27,40 @@ def private is_flat_temp(name : das_string) : bool {
 // bindings are untouched; deleting an ExprVar node frees only the node, not the Variable it
 // points at. The seen-set dedups the visitor's double-presentation of some nodes (a single
 // gc_unlink+delete twice would be a double-free). Caller must own the subtree exclusively.
+//
+// The visitor only descends into SOURCE-level type fields (castType, makeType, var type, …),
+// not the inferred `_type` hanging off every typed expression — so collectType walks that
+// per-expression tree manually. The whole flatten twin is built by cloning, and
+// Expression::clone makes a fresh `new TypeDecl(*type)` whose firstType/secondType/argTypes
+// are deep-copied (AST invariant: no duplicated TypeDecl nodes), so each inferred type is
+// uniquely owned and safe to free. structType/enumType are shared entity pointers — we never
+// follow them, and delete_type frees only the node.
 class private ReclaimWalker : AstVisitor {
     exprs : array<ExpressionPtr>
     types : array<TypeDeclPtr>
     seen : table<uint64>
+    def collectType(var t : TypeDeclPtr) : void {
+        if (t == null) return
+        let key = unsafe(reinterpret<uint64>(t))
+        if (key_exists(seen, key)) return
+        seen |> insert(key)
+        types |> push(t)
+        collectType(t.firstType)
+        collectType(t.secondType)
+        for (i in range(length(t.argTypes))) {
+            collectType(t.argTypes[i])
+        }
+    }
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let key = unsafe(reinterpret<uint64>(expr))
         if (!key_exists(seen, key)) {
             seen |> insert(key)
             exprs |> push(unsafe(reinterpret<ExpressionPtr>(expr)))
         }
+        collectType(unsafe(reinterpret<TypeDecl? -const>(expr._type)))
     }
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        let key = unsafe(reinterpret<uint64>(typ))
-        if (!key_exists(seen, key)) {
-            seen |> insert(key)
-            types |> push(unsafe(reinterpret<TypeDeclPtr>(typ)))
-        }
+        collectType(unsafe(reinterpret<TypeDecl? -const>(typ)))
     }
 }
 
