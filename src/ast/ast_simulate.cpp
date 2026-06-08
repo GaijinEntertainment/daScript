@@ -3173,8 +3173,28 @@ namespace das
             bool NF = flagsE == 0;
             SimNode_ForBase * result;
             DAS_ASSERT(expr->body->rtti_isBlock() && "there would be internal error otherwise");
-            auto subB = static_cast<ExprBlock*>(expr->body);
-            bool loop1 = (subB->list.size() == 1);
+            // Simulate the body FIRST into a scratch block to learn how many SimNodes it
+            // actually produces. A dead single statement (`var v = <const>`) is 1 AST node but
+            // 0 SimNodes, and the fused single-statement (`loop1`) for-node reads list[0]
+            // unconditionally -- so the fused/general choice must follow the SIMULATED count,
+            // not the AST count. The body is already simulated bottom-up; this only collects it.
+            SimNode_Block forBody(at);
+            sv_whileSimulateFinal(expr->body, &forBody);
+            bool loop1 = (forBody.total == 1);
+            // An empty body (no statements, no finally) over side-effect-free sources is a pure
+            // no-op -- emit nothing (the enclosing block's collectExpressions skips a null node).
+            // A side-effecting source falls through to the general node, which still evaluates it
+            // and zero-iterates.
+            if ( forBody.total==0 && forBody.totalFinal==0 ) {
+                bool pureSources = true;
+                for ( auto & src : expr->sources ) {
+                    if ( !src->noSideEffects ) { pureSources = false; break; }
+                }
+                if ( pureSources ) {
+                    setE(expr, nullptr);
+                    return expr;
+                }
+            }
 #if DAS_DEBUGGER
             if ( context.debugger ) {
                 if ( dynamicArrays ) {
@@ -3295,7 +3315,13 @@ namespace das
                 result->stackTop[t] = expr->iteratorVariables[t]->stackTop;
             }
             result->size = fixedSize;
-            sv_whileSimulateFinal(expr->body, result);
+            // carry the already-simulated body into the chosen node (do not re-simulate)
+            result->list = forBody.list;
+            result->total = forBody.total;
+            result->labels = forBody.labels;
+            result->totalLabels = forBody.totalLabels;
+            result->finalList = forBody.finalList;
+            result->totalFinal = forBody.totalFinal;
             setE(expr, result);
         }
         return expr;
