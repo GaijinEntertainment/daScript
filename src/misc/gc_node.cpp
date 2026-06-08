@@ -11,6 +11,9 @@ namespace das {
 
     static uint64_t gc_break_on_id = 0;
 
+    // installed by the AST layer (ast_gc_report.cpp); see gc_node.h
+    DAS_API gc_describe_fn gc_node_describe_hook = nullptr;
+
     // ---- gc_root statics ----
 
     static thread_local gc_root     s_gc_thread_root;
@@ -115,10 +118,13 @@ namespace das {
 
     void gc_root::gc_report() const {
         DAS_FATAL_LOG("gc_root %p: count=%" PRIu64 "\n", (const void *)this, gc_count);
+        char atbuf[256];
         auto node = gc_first;
         while ( node ) {
-            DAS_FATAL_LOG("  node %p: id=%" PRIu64 " type=%s magic=0x%08x\n",
-                (const void *)node, node->gc_id, node->gc_type_name(), node->gc_magic);
+            atbuf[0] = 0;
+            if ( gc_node_describe_hook ) gc_node_describe_hook(node, atbuf, (int)sizeof(atbuf));
+            DAS_FATAL_LOG("  node %p: id=%" PRIu64 " type=%s magic=0x%08x %s\n",
+                (const void *)node, node->gc_id, node->gc_type_name(), node->gc_magic, atbuf);
             node = node->gc_next;
         }
     }

@@ -70,6 +70,13 @@ namespace das {
         __forceinline unsigned int use_count() const { return 1; }
     };
 
+    // Optional diagnostic hook: given a node, write a short source location
+    // ("file.das:line:col") into buf. Installed by the AST layer (ast_gc_report.cpp),
+    // which alone can downcast to the concrete subclass and read its `at`. nullptr by
+    // default. Used by gc_root::gc_report so the low-level dump shows where nodes were born.
+    typedef void (*gc_describe_fn)(const gc_node * node, char * buf, int buflen);
+    extern DAS_API gc_describe_fn gc_node_describe_hook;
+
     // gc_root — owns a doubly-linked list of gc_nodes.
     // Thread-local root is the default allocation target.
     // Module has its own root. gc_sweep() deletes all remaining nodes.

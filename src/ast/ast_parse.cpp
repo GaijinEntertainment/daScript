@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_gc_report.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
@@ -816,6 +817,7 @@ namespace das {
             if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
                 program->thisModule->isSolidContext = true;
             }
+            gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "parse", logs);
             callCompilationCallback(moduleName, fileName, "infer");
             // restartInfer: timer must be inside the label so each leg is timed independently.
             // The pre-edit form (timeI set ONCE before the label) over-counted *totInfer on
@@ -839,6 +841,7 @@ namespace das {
                     goto restartInfer;
                 }
             }
+            gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "infer", logs);
             if ( !program->failed() ) {
                 program->normalizeOptionTypes();
                 if (!program->failed())
@@ -858,6 +861,7 @@ namespace das {
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 myOptT = get_time_usec(timeO);
                 *totOpt += myOptT;
+                gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "optimize", logs);
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed()) {
@@ -878,6 +882,7 @@ namespace das {
                     program->finalizeAnnotations();
                 if (!program->failed())
                     program->updateSemanticHash();
+                gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "finalize", logs);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             }
             if (!program->failed()) {

@@ -760,6 +760,7 @@ src/ast/ast_derive_alias.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
+src/ast/ast_gc_report.cpp
 src/ast/ast_inscope_pod.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
@@ -775,6 +776,7 @@ include/daScript/ast/ast_typefactory.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_visitor.h
+include/daScript/ast/ast_gc_report.h
 include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_match.h
 include/daScript/ast/ast_interop.h
