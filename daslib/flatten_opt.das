@@ -138,11 +138,10 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         var sub = fold_const((e as ExprOp1).subexpr, constmap)
         var bv = false
         if ((e as ExprOp1).op == "!" && const_bool(sub, bv)) {
+            reclaim_expression(sub)
             return new ExprConstBool(at = e.at, value = !bv)
         }
-        var n = clone_expression(e)
-        (n as ExprOp1).subexpr = sub
-        return n
+        return new ExprOp1(at = e.at, op := (e as ExprOp1).op, subexpr = sub)
     }
     if (e is ExprOp2) {
         let o = e as ExprOp2
@@ -154,47 +153,56 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         let rc = const_bool(r, rb)
         if (o.op == "&&") {
             if (lc) {
-                if (lb) return r
+                if (lb) { reclaim_expression(l); return r }
+                reclaim_expression(l)
+                reclaim_expression(r)
                 return new ExprConstBool(at = e.at, value = false)
             }
             if (rc) {
-                if (rb) return l
+                if (rb) { reclaim_expression(r); return l }
+                reclaim_expression(l)
+                reclaim_expression(r)
                 return new ExprConstBool(at = e.at, value = false)
             }
         } elif (o.op == "||") {
             if (lc) {
-                if (lb) return new ExprConstBool(at = e.at, value = true)
+                if (lb) {
+                    reclaim_expression(l)
+                    reclaim_expression(r)
+                    return new ExprConstBool(at = e.at, value = true)
+                }
+                reclaim_expression(l)
                 return r
             }
             if (rc) {
-                if (rb) return new ExprConstBool(at = e.at, value = true)
+                if (rb) {
+                    reclaim_expression(l)
+                    reclaim_expression(r)
+                    return new ExprConstBool(at = e.at, value = true)
+                }
+                reclaim_expression(r)
                 return l
             }
         }
-        var n = clone_expression(e)
-        (n as ExprOp2).left = l
-        (n as ExprOp2).right = r
-        return n
+        return new ExprOp2(at = e.at, op := o.op, left = l, right = r)
     }
     if (e is ExprOp3) {
         let o = e as ExprOp3
         var c = fold_const(o.subexpr, constmap)
         var cb = false
         if (const_bool(c, cb)) {
+            reclaim_expression(c)
             return cb ? fold_const(o.left, constmap) : fold_const(o.right, constmap)
         }
-        var n = clone_expression(e)
-        (n as ExprOp3).subexpr = c
-        (n as ExprOp3).left = fold_const(o.left, constmap)
-        (n as ExprOp3).right = fold_const(o.right, constmap)
-        return n
+        return new ExprOp3(at = e.at, op := o.op, subexpr = c,
+            left = fold_const(o.left, constmap),
+            right = fold_const(o.right, constmap))
     }
     if (e is ExprCall) {
         let o = e as ExprCall
-        var n = clone_expression(e)
-        var nc = n as ExprCall
+        var n = new ExprCall(at = e.at, name := o.name)
         for (ai in range(length(o.arguments))) {
-            nc.arguments[ai] = fold_const(o.arguments[ai], constmap)
+            emplace_new(n.arguments) <| fold_const(o.arguments[ai], constmap)
         }
         return n
     }
