@@ -22,7 +22,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/rtti
 require strings
-require flatten_opt
+require daslib/flatten_opt
 
 // Phase token carried as the "phase" argument of the [flatten] annotation on
 // the ORIGINAL function (which we own and may mutate in place). Cycle 1 lowers
@@ -633,28 +633,19 @@ def private scan_break_continue(body : ExpressionPtr; var hasBreak : bool&; var 
     }
 }
 
-// Fixed-count loop unrolling (M4). A `for` over a constant `range(N)` or an array
-// literal has a compile-time-known iteration count: clone the body once per
-// iteration, substitute the loop variable with that iteration's constant, and lower
-// each unrolled copy under the SAME predicate (an unrolled body always executes).
-// Per-iteration locals are renamed (`o` → `o_0`, `o_1`, …) so the copies don't
-// shadow each other in the flattened scope. Mirrors daslib/unroll.das. break /
-// continue (M4.1) allocate runtime masks — loopLive (persists across copies) for
-// break, a per-copy iterLive for continue — pushed on ctx.loopMasks for the body to
-// narrow; absent both, the loop is byte-identical to the pre-M4.1 output. while
-// loops and non-constant sources error.
-def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
-    if (length(efor.iterators) != 1 || length(efor.sources) != 1) {
-        ctx.ok = false
-        ctx.err = "flatten: only single-variable, single-source for loops can be flattened"
-        return
-    }
-    let src = efor.sources[0]
-    // Build one substitution expression per iteration (the loop var's value).
+// Build one substitution expression per iteration for a single for-source — a
+// constant `range`/`urange` (the index) or an array literal (each element). Sets
+// ctx.ok=false + ctx.err and returns an empty list on an unrollable source.
+def private for_source_substs(var ctx : FlatCtx?; src : Expression?; at : LineInfo) : array<ExpressionPtr> {
     var substs : array<ExpressionPtr>
     if (src is ExprConstRange) {
         for (i in (src as ExprConstRange).value) {
-            var e : ExpressionPtr = new ExprConstInt(at = efor.at, value = i)
+            var e : ExpressionPtr = new ExprConstInt(at = at, value = i)
+            substs |> push(e)   // nolint:PERF006 -- macro-time, count is the (small) unroll bound
+        }
+    } elif (src is ExprConstURange) {
+        for (i in (src as ExprConstURange).value) {
+            var e : ExpressionPtr = new ExprConstUInt(at = at, value = i)
             substs |> push(e)   // nolint:PERF006 -- macro-time, count is the (small) unroll bound
         }
     } else {
@@ -670,16 +661,56 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
         }
         if (mk == null) {
             ctx.ok = false
-            ctx.err = "flatten: for loop source must be a constant range(N) or an array literal"
-            return
+            ctx.err = "flatten: for loop source must be a constant range(N)/urange(N) or an array literal"
+            return <- substs
         }
         substs <- [for (v in mk.values); clone_expression(v)]
     }
-    // Unrolling multiplies across nesting: this loop emits `length(substs)` body copies
+    return <- substs
+}
+
+// Fixed-count loop unrolling (M4). A `for` over a constant `range(N)` or an array
+// literal has a compile-time-known iteration count: clone the body once per
+// iteration, substitute the loop variable with that iteration's constant, and lower
+// each unrolled copy under the SAME predicate (an unrolled body always executes).
+// Per-iteration locals are renamed (`o` → `o_0`, `o_1`, …) so the copies don't
+// shadow each other in the flattened scope. Mirrors daslib/unroll.das. break /
+// continue (M4.1) allocate runtime masks — loopLive (persists across copies) for
+// break, a per-copy iterLive for continue — pushed on ctx.loopMasks for the body to
+// narrow; absent both, the loop is byte-identical to the pre-M4.1 output. while
+// loops and non-constant sources error.
+def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
+    let nIter = length(efor.iterators)
+    if (nIter == 0 || length(efor.sources) != nIter) {
+        ctx.ok = false
+        ctx.err = "flatten: a for loop needs one source per iterator"
+        return
+    }
+    // Build the per-iteration value list for each source. Multiple iterators
+    // (`for (a, b in [...], [...])`) unroll in lockstep, so every source must
+    // yield the same count. perSource[v][k] is iterator v's value for copy k.
+    var perSource : array<array<ExpressionPtr>>
+    perSource |> reserve(nIter)
+    var count = -1
+    for (si in range(nIter)) {
+        var s <- for_source_substs(ctx, efor.sources[si], efor.at)
+        if (!ctx.ok) {
+            return
+        }
+        if (count >= 0 && length(s) != count) {
+            ctx.ok = false
+            ctx.err = "flatten: parallel for sources must all have the same length ({count} vs {length(s)})"
+            return
+        }
+        count = length(s)
+        perSource |> emplace(s)
+    }
+    // `count` is the (shared) iteration count of every source.
+    // Unrolling multiplies across nesting: this loop emits `count` body copies
     // per enclosing iteration, so the running product (int64, overflow-safe) is the true
     // expansion. Bail BEFORE the clones if it exceeds the cap — converts a heap blowup
     // into a clean error. Restore the factor on exit so sibling loops start fresh.
-    let projected = int64(ctx.unrollFactor) * int64(length(substs))
+    let projected = int64(ctx.unrollFactor) * int64(count)
     if (projected > int64(ctx.maxUnroll)) {
         ctx.ok = false
         ctx.err = "flatten: loop unrolling exceeds max_unroll={ctx.maxUnroll} (would expand to {projected} iterations); reduce the range/nesting or raise [flatten(max_unroll=N)]"
@@ -687,7 +718,6 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
     }
     let savedFactor = ctx.unrollFactor
     ctx.unrollFactor = int(projected)
-    let van = "{efor.iterators[0]}"
     let localNames <- collect_let_names(efor.body)
     // Allocate break/continue masks only if THIS loop uses them (depth-0 scan).
     var hasBreak = false
@@ -703,7 +733,7 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
         ctx.loopMasks |> push(LoopMask(loopLive = loopName, iterLive = ""))
         pushed = true
     }
-    for (k in range(length(substs))) {
+    for (k in range(count)) {
         if (pushed && hasContinue) {
             // Fresh per-copy continue mask, reset to true at this copy's head.
             let iterName = fresh(ctx, "__flat_iter")
@@ -711,9 +741,14 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
             ctx.loopMasks[length(ctx.loopMasks) - 1].iterLive = iterName
         }
         var iblk = clone_expression(efor.body)
-        remove_deref(van, iblk)               // strip ExprRef2Value around the workhorse loop var
         var rules : Template
-        rules |> replaceVariable(van) <| substs[k]
+        // Substitute every iterator with its value for copy k (one iterator for a
+        // plain loop, several for `for (a, b in [...], [...])` unrolled in lockstep).
+        for (vi in range(nIter)) {
+            let van = "{efor.iterators[vi]}"
+            remove_deref(van, iblk)            // strip ExprRef2Value around the workhorse loop var
+            rules |> replaceVariable(van) <| perSource[vi][k]
+        }
         // Rename this copy's locals uniquely so the unrolled bodies don't shadow
         // each other once flattened into one scope.
         for (ln in localNames) {

@@ -225,9 +225,38 @@ def gen_loop_source(var g : Gen&) : string {
     return "[{rnd(g, 9) - 4}, {rnd(g, 9) - 4}, {rnd(g, 9) - 4}]"
 }
 
+// A loop source of EXACTLY length n, so parallel sources line up. Same shapes as
+// gen_loop_source (range / range(a,b) / array literal) but length-controlled.
+def gen_loop_source_n(var g : Gen&; n : int) : string {
+    let k = rnd(g, 3)
+    if (k == 0) {
+        return "range({n})"
+    }
+    if (k == 1) {
+        let a = rnd(g, 3)
+        return "range({a}, {a + n})"
+    }
+    return build_string() $(var w) {
+        write(w, "[")
+        for (e in range(n)) {
+            write(w, "{e == 0 ? "" : ", "}{rnd(g, 9) - 4}")
+        }
+        write(w, "]")
+    }
+}
+
 // loop bodies never bare-exit at top level (allowExit=false) so control always
 // falls through the loop; nested if-branches inside may still break/continue/return.
 def gen_for(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; indent : string) : string {
+    let shape = rnd(g, 100)
+    // urange needs the int() binding to feed the integer body, so it's int-domain only.
+    if (!g.cfg.boolDomain && shape < 18) {
+        return gen_for_urange(g, scope, depth, loopDepth, indent)
+    }
+    // parallel multi-source `for (a, b in S1, S2)` — unrolled in lockstep, both domains.
+    if (shape < 40) {
+        return gen_for_parallel(g, scope, depth, loopDepth, indent)
+    }
     // The loop counter is always int. In bool domain it can't feed a bool expr, so it stays
     // out of the value scope (unused, hence `_`-prefixed); the body still accumulates across
     // iterations over the enclosing bool vars, exercising loop-carried (break/continue) masks.
@@ -239,6 +268,61 @@ def gen_for(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; indent
     if (!g.cfg.boolDomain) {
         scope |> push(Var(name = iv, mutable = false))
     }
+    let br = gen_branch(g, scope, depth - 1, loopDepth + 1, inner, false)
+    s += br._0
+    resize(scope, mark)
+    s += "{indent}\}\n"
+    return s
+}
+
+// urange(N) source — the loop var is uint, bound through int() into a per-copy local so the
+// integer-domain body can use it. Exercises the ExprConstURange -> ExprConstUInt unroll path
+// plus the int(const) fold; the per-copy `let` rides the per-iteration-local rename.
+def gen_for_urange(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; indent : string) : string {
+    let uv = "_u{next_id(g)}"
+    let iv = "i{next_id(g)}"
+    let n = 1 + rnd(g, 4)
+    let inner = "{indent}    "
+    let mark = length(scope)
+    var s = "{indent}for ({uv} in urange({n}u)) \{\n{inner}let {iv} = int({uv})\n"
+    scope |> push(Var(name = iv, mutable = false))
+    let br = gen_branch(g, scope, depth - 1, loopDepth + 1, inner, false)
+    s += br._0
+    resize(scope, mark)
+    s += "{indent}\}\n"
+    return s
+}
+
+// Parallel multi-source loop `for (a, b in S1, S2)`: 2-3 sources sharing one length,
+// unrolled in lockstep (count = the shared length, NOT the product). In bool domain the
+// vars are unused (`_`-prefixed) but the multi-iterator unroll + masks still get exercised.
+def gen_for_parallel(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; indent : string) : string {
+    let nSrc = 2 + rnd(g, 2)
+    let n = 1 + rnd(g, 3)
+    let inner = "{indent}    "
+    let mark = length(scope)
+    // `i`/`_i` prefix (like the single-source loop) + the unique next_id keeps these clear of
+    // the hardcoded params `a`/`b`/`c` and helper `p0`/`p1` — a loop var shadowing a function
+    // argument is error[30708], an invalid program that never reaches flatten.
+    var names <- [for (_v in range(nSrc)); g.cfg.boolDomain ? "_i{next_id(g)}" : "i{next_id(g)}"]
+    let header = build_string() $(var w) {
+        write(w, "{indent}for (")
+        for (vi in range(nSrc)) {
+            write(w, "{vi == 0 ? "" : ", "}{names[vi]}")
+        }
+        write(w, " in ")
+        for (vi in range(nSrc)) {
+            write(w, "{vi == 0 ? "" : ", "}{gen_loop_source_n(g, n)}")
+        }
+        write(w, ") \{\n")
+    }
+    if (!g.cfg.boolDomain) {
+        scope |> reserve(length(scope) + nSrc)
+        for (nm in names) {
+            scope |> push(Var(name = nm, mutable = false))
+        }
+    }
+    var s = header
     let br = gen_branch(g, scope, depth - 1, loopDepth + 1, inner, false)
     s += br._0
     resize(scope, mark)

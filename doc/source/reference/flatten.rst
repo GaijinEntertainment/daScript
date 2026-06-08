@@ -82,10 +82,12 @@ core rules:
   lowered recursively. Inlining is transitive.
 - A **whitelisted leaf primitive** (see below) is kept, its arguments lowered.
 
-**Loop unrolling** turns a fixed-count ``for`` (over a constant ``range`` or an
-array literal) into straight-line copies — the loop variable is substituted by
-each iteration's constant and each copy is lowered under the same predicate.
-Per-iteration locals are renamed so the copies don't collide.
+**Loop unrolling** turns a fixed-count ``for`` (over a constant ``range`` /
+``urange`` or an array literal) into straight-line copies — the loop variable is
+substituted by each iteration's constant and each copy is lowered under the same
+predicate. Per-iteration locals are renamed so the copies don't collide. Parallel
+multi-source loops (``for (a, b in xs, ys)``) unroll in lockstep — every source
+must have the same constant length — substituting each loop variable per copy.
 
 **break / continue** lower to predication, not jumps:
 
@@ -139,7 +141,9 @@ Supported subset
    * - user function call
      - inlined transitively; parameters bound to value temps
    * - fixed-count ``for``
-     - unrolled — ``range(CONST)``, ``range(A, B)``, or an array literal ``[a, b, c]``
+     - unrolled — ``range(CONST)``, ``range(A, B)``, ``urange(…)``, or an array literal ``[a, b, c]``
+   * - parallel multi-source ``for (a, b in xs, ys)``
+     - unrolled in lockstep; every source must share one constant length
    * - ``break`` / ``continue``
      - loop-scoped (persistent) / per-iteration (per-copy) bool masks
    * - ``+=`` ``-=`` ``*=`` … and ``++`` / ``--``
@@ -166,7 +170,9 @@ Everything outside the supported subset is rejected with a specific
    * - ``while`` loops
      - no compile-time iteration count — not unrollable
    * - ``for`` over a non-constant range
-     - same — the bound must be a constant ``range`` or an array literal
+     - same — the bound must be a constant ``range`` / ``urange`` or an array literal
+   * - parallel ``for`` sources of unequal length
+     - lockstep unroll needs one shared count; mismatched lengths are rejected
    * - move ``<-`` / clone ``:=``
      - predication is copy-only; a move/clone cannot be predicated
    * - recursion

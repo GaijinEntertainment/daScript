@@ -74,9 +74,11 @@ Two value domains, selected by `--bool`:
 
 ## Design
 
-- **Mask-biased grammar** — if/elif/else, early return, `range`/const-array
-  loops, break/continue, nested loops, helper inlining, compound assignment.
-  That combinatorial surface is where flatten bugs live.
+- **Mask-biased grammar** — if/elif/else, early return, loops over
+  `range`/`urange`/const-array sources (single-source and parallel multi-source
+  `for (a, b in xs, ys)`, unrolled in lockstep), break/continue, nested loops,
+  helper inlining, compound assignment. That combinatorial surface is where
+  flatten bugs live.
 - **Pure-functional** — params + locals + return value; no globals (yet).
 - **Domain-agnostic harness** — the in-process compile → simulate → invoke →
   bisect → reproducer-dump pipeline is identical for both domains; a bool
