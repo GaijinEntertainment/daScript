@@ -26,6 +26,7 @@ struct GenCfg {
     maxStmts : int      // max statements per block
     literalPct : int    // leaf literal probability (vs in-scope var)
     constBias : int     // 0..100 — bias toward const subtrees (strict_fold mode)
+    boolDomain : bool   // pure-bool grammar + exhaustive truth-table oracle (vs integer)
 }
 
 struct Var {
@@ -56,16 +57,43 @@ def next_id(var g : Gen&) : int {
     return i
 }
 
-// ===== expressions / conditions (trap-free integer) =====
+// ===== expressions / conditions (trap-free: integer or pure-bool) =====
 
 def gen_leaf(var g : Gen&; scope : array<Var>) : string {
     if (empty(scope) || rnd(g, 100) < max(g.cfg.literalPct, g.cfg.constBias)) {
+        if (g.cfg.boolDomain) {
+            return rnd(g, 2) == 0 ? "true" : "false"
+        }
         return "{rnd(g, 21) - 10}"
     }
     return scope[rnd(g, length(scope))].name
 }
 
+// Pure-bool value tree: &&/||/==/!= and !. &&/|| short-circuit in the original but the
+// predicated twin evaluates both arms eagerly — value-equivalent for side-effect-free bools,
+// so any divergence is a real flatten bug. Same operators the live/break/continue masks use.
+def gen_bool_expr(var g : Gen&; scope : array<Var>; depth : int) : string {
+    if (depth <= 0 || chance(g, g.cfg.constBias / 2)) {
+        return gen_leaf(g, scope)
+    }
+    let k = rnd(g, 100)
+    if (k < 60) {
+        let ops = fixed_array("&&", "||", "==", "!=")
+        let op = ops[rnd(g, length(ops))]
+        let l = gen_bool_expr(g, scope, depth - 1)
+        let r = gen_bool_expr(g, scope, depth - 1)
+        return "({l} {op} {r})"
+    } elif (k < 82) {
+        let e = gen_bool_expr(g, scope, depth - 1)
+        return "(!{e})"
+    }
+    return gen_leaf(g, scope)
+}
+
 def gen_expr(var g : Gen&; scope : array<Var>; depth : int) : string {
+    if (g.cfg.boolDomain) {
+        return gen_bool_expr(g, scope, depth)
+    }
     if (depth <= 0 || chance(g, g.cfg.constBias / 2)) {
         return gen_leaf(g, scope)
     }
@@ -98,6 +126,9 @@ def gen_cmp(var g : Gen&; scope : array<Var>) : string {
 }
 
 def gen_cond(var g : Gen&; scope : array<Var>; depth : int) : string {
+    if (g.cfg.boolDomain) {
+        return gen_bool_expr(g, scope, depth + 1)
+    }
     if (depth <= 0) {
         return gen_cmp(g, scope)
     }
@@ -197,12 +228,17 @@ def gen_loop_source(var g : Gen&) : string {
 // loop bodies never bare-exit at top level (allowExit=false) so control always
 // falls through the loop; nested if-branches inside may still break/continue/return.
 def gen_for(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; indent : string) : string {
-    let iv = "i{next_id(g)}"
+    // The loop counter is always int. In bool domain it can't feed a bool expr, so it stays
+    // out of the value scope (unused, hence `_`-prefixed); the body still accumulates across
+    // iterations over the enclosing bool vars, exercising loop-carried (break/continue) masks.
+    let iv = g.cfg.boolDomain ? "_i{next_id(g)}" : "i{next_id(g)}"
     let src = gen_loop_source(g)
     let inner = "{indent}    "
     var s = "{indent}for ({iv} in {src}) \{\n"
     let mark = length(scope)
-    scope |> push(Var(name = iv, mutable = false))
+    if (!g.cfg.boolDomain) {
+        scope |> push(Var(name = iv, mutable = false))
+    }
     let br = gen_branch(g, scope, depth - 1, loopDepth + 1, inner, false)
     s += br._0
     resize(scope, mark)
@@ -219,7 +255,8 @@ def make_helper(var g : Gen&) : string {
     let br = gen_branch(g, hscope, min(2, g.cfg.maxDepth), 0, "    ", false)
     let fin = gen_expr(g, hscope, 2)
     g.noHelpers = savedNo
-    g.helperDefs |> push("def {hn}(p0, p1 : int) : int \{\n{br._0}    return {fin}\n\}\n\n")
+    let ty = g.cfg.boolDomain ? "bool" : "int"
+    g.helperDefs |> push("def {hn}(p0, p1 : {ty}) : {ty} \{\n{br._0}    return {fin}\n\}\n\n")
     return hn
 }
 
@@ -236,6 +273,9 @@ def gen_stmt(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; inden
         return gen_for(g, scope, depth, loopDepth, indent)
     }
     if (canAssign && k < 56) {
+        if (g.cfg.boolDomain) {
+            return "{indent}{mut} = {gen_expr(g, scope, 2)}\n"
+        }
         let kk = rnd(g, 6)
         if (kk == 4) {
             return "{indent}{mut}++\n"
@@ -281,15 +321,20 @@ def gen_unit(var g : Gen&; idx : int; strict : bool) : string {
     resize(g.helperDefs, 0)
     let body = gen_function_body(g)
     let ann = strict ? "[flatten(strict_fold=true)]" : "[flatten]"
+    let ty = g.cfg.boolDomain ? "bool" : "int"
+    // The driver always takes/returns int so the harness (int3 inputs, int out-params, exact
+    // int compare) stays domain-agnostic; a bool candidate marshals 0/1 at the boundary.
+    let call = g.cfg.boolDomain ? "(a != 0, b != 0, c != 0)" : "(a, b, c)"
+    let wrap = g.cfg.boolDomain ? " ? 1 : 0" : ""
     return build_string() $(var w) {
         for (h in g.helperDefs) {
             write(w, h)
         }
-        write(w, "{ann}\ndef cand_{idx}(a, b, c : int) : int \{\n{body}\}\n\n")
+        write(w, "{ann}\ndef cand_{idx}(a, b, c : {ty}) : {ty} \{\n{body}\}\n\n")
         write(w, "[export, pinvoke]\ndef drive_{idx}(a, b, c : int; var o_orig : int?; var o_flat : int?) \{\n")
         write(w, "    unsafe \{\n")
-        write(w, "        *o_orig = cand_{idx}(a, b, c)\n")
-        write(w, "        *o_flat = cand_{idx}_flat(a, b, c)\n")
+        write(w, "        *o_orig = cand_{idx}{call}{wrap}\n")
+        write(w, "        *o_flat = cand_{idx}_flat{call}{wrap}\n")
         write(w, "    \}\n\}\n\n")
     }
 }
@@ -342,6 +387,13 @@ def gen_inputs(var g : Gen&; n : int) : array<int3> {
         res |> push(int3(rnd(g, 201) - 100, rnd(g, 201) - 100, rnd(g, 201) - 100))
     }
     return <- res
+}
+
+// All 2^3 bool assignments (0/1 per param). Bool mode tests the COMPLETE input space of each
+// generated 3-bool-input function, so the differential is exhaustive, not sampled.
+def enum_bool_inputs() : array<int3> {
+    return <- [int3(0, 0, 0), int3(0, 0, 1), int3(0, 1, 0), int3(0, 1, 1),
+        int3(1, 0, 0), int3(1, 0, 1), int3(1, 1, 0), int3(1, 1, 1)]
 }
 
 def try_compile(src : string; var issues : string&) : bool {
@@ -456,7 +508,12 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; keep :
 def fuzz_one(seedArg, nUnits, nInputs : int; cfg : GenCfg; strict, keep : bool) : bool {
     var g = Gen(seed = random_seed(seedArg), cfg = cfg)
     let units <- [for (i in range(nUnits)); gen_unit(g, i, strict)]
-    let inputs <- gen_inputs(g, nInputs)
+    var inputs : array<int3>
+    if (cfg.boolDomain) {
+        inputs <- enum_bool_inputs()
+    } else {
+        inputs <- gen_inputs(g, nInputs)
+    }
     let r = run_batch(units, inputs, seedArg, keep)
     if (!r._1) {
         to_log(LOG_ERROR, "seed {seedArg}: batch compile failed — isolating\n")
@@ -505,6 +562,11 @@ struct Config {
     @clarg_doc = "Emit 'options log_infer_passes' in generated source (diagnose compiler infer)"
     log_infer : bool
 
+    @clarg_short = "B"
+    @clarg_name = "bool"
+    @clarg_doc = "Pure-bool domain: bool params/locals/return, exhaustive 2^3 truth-table oracle (ignores --inputs)"
+    bool_domain : bool
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -532,9 +594,10 @@ def main : int {
     let strict = cfg_args.strict_fold
     g_log_infer = cfg_args.log_infer
     g_tmp_suffix = "{ref_time_ticks()}"
-    let cfg = GenCfg(maxDepth = depth, maxStmts = 4, literalPct = 40, constBias = strict ? 55 : 0)
+    let cfg = GenCfg(maxDepth = depth, maxStmts = 4, literalPct = 40, constBias = strict ? 55 : 0, boolDomain = cfg_args.bool_domain)
+    let domain = cfg_args.bool_domain ? "bool(exhaustive 2^3)" : "int(sampled ~{nInputs})"
 
-    to_log(LOG_INFO, "flatten-fuzz: seeds {baseSeed}..{baseSeed + batches - 1} units={nUnits} inputs/unit~{nInputs} depth={depth} strict_fold={strict}\n")
+    to_log(LOG_INFO, "flatten-fuzz: seeds {baseSeed}..{baseSeed + batches - 1} units={nUnits} domain={domain} depth={depth} strict_fold={strict}\n")
     var failed = 0
     for (b in range(batches)) {
         if (!fuzz_one(baseSeed + b, nUnits, nInputs, cfg, strict, cfg_args.keep)) {
