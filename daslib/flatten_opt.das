@@ -27,23 +27,40 @@ def private is_flat_temp(name : das_string) : bool {
 // bindings are untouched; deleting an ExprVar node frees only the node, not the Variable it
 // points at. The seen-set dedups the visitor's double-presentation of some nodes (a single
 // gc_unlink+delete twice would be a double-free). Caller must own the subtree exclusively.
+//
+// The visitor only descends into SOURCE-level type fields (castType, makeType, var type, …),
+// not the inferred `_type` hanging off every typed expression — so collectType walks that
+// per-expression tree manually. The whole flatten twin is built by cloning, and
+// Expression::clone makes a fresh `new TypeDecl(*type)` whose firstType/secondType/argTypes
+// are deep-copied (AST invariant: no duplicated TypeDecl nodes), so each inferred type is
+// uniquely owned and safe to free. structType/enumType are shared entity pointers — we never
+// follow them, and delete_type frees only the node.
 class private ReclaimWalker : AstVisitor {
     exprs : array<ExpressionPtr>
     types : array<TypeDeclPtr>
     seen : table<uint64>
+    def collectType(var t : TypeDeclPtr) : void {
+        if (t == null) return
+        let key = unsafe(reinterpret<uint64>(t))
+        if (key_exists(seen, key)) return
+        seen |> insert(key)
+        types |> push(t)
+        collectType(t.firstType)
+        collectType(t.secondType)
+        for (i in range(length(t.argTypes))) {
+            collectType(t.argTypes[i])
+        }
+    }
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let key = unsafe(reinterpret<uint64>(expr))
         if (!key_exists(seen, key)) {
             seen |> insert(key)
             exprs |> push(unsafe(reinterpret<ExpressionPtr>(expr)))
         }
+        collectType(unsafe(reinterpret<TypeDecl? -const>(expr._type)))
     }
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        let key = unsafe(reinterpret<uint64>(typ))
-        if (!key_exists(seen, key)) {
-            seen |> insert(key)
-            types |> push(unsafe(reinterpret<TypeDeclPtr>(typ)))
-        }
+        collectType(unsafe(reinterpret<TypeDecl? -const>(typ)))
     }
 }
 
@@ -135,14 +152,15 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         return clone_expression(e)
     }
     if (e is ExprOp1) {
-        var sub = fold_const((e as ExprOp1).subexpr, constmap)
+        let o = e as ExprOp1
+        var sub = fold_const(o.subexpr, constmap)
         var bv = false
-        if ((e as ExprOp1).op == "!" && const_bool(sub, bv)) {
+        if (o.op == "!" && const_bool(sub, bv)) {
+            reclaim_expression(sub)
             return new ExprConstBool(at = e.at, value = !bv)
         }
-        var n = clone_expression(e)
-        (n as ExprOp1).subexpr = sub
-        return n
+        return new ExprOp1(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, subexpr = sub)
     }
     if (e is ExprOp2) {
         let o = e as ExprOp2
@@ -154,47 +172,58 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         let rc = const_bool(r, rb)
         if (o.op == "&&") {
             if (lc) {
-                if (lb) return r
+                if (lb) { reclaim_expression(l); return r }
+                reclaim_expression(l)
+                reclaim_expression(r)
                 return new ExprConstBool(at = e.at, value = false)
             }
             if (rc) {
-                if (rb) return l
+                if (rb) { reclaim_expression(r); return l }
+                reclaim_expression(l)
+                reclaim_expression(r)
                 return new ExprConstBool(at = e.at, value = false)
             }
         } elif (o.op == "||") {
             if (lc) {
-                if (lb) return new ExprConstBool(at = e.at, value = true)
+                if (lb) {
+                    reclaim_expression(l)
+                    reclaim_expression(r)
+                    return new ExprConstBool(at = e.at, value = true)
+                }
+                reclaim_expression(l)
                 return r
             }
             if (rc) {
-                if (rb) return new ExprConstBool(at = e.at, value = true)
+                if (rb) {
+                    reclaim_expression(l)
+                    reclaim_expression(r)
+                    return new ExprConstBool(at = e.at, value = true)
+                }
+                reclaim_expression(r)
                 return l
             }
         }
-        var n = clone_expression(e)
-        (n as ExprOp2).left = l
-        (n as ExprOp2).right = r
-        return n
+        return new ExprOp2(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, left = l, right = r)
     }
     if (e is ExprOp3) {
         let o = e as ExprOp3
         var c = fold_const(o.subexpr, constmap)
         var cb = false
         if (const_bool(c, cb)) {
+            reclaim_expression(c)
             return cb ? fold_const(o.left, constmap) : fold_const(o.right, constmap)
         }
-        var n = clone_expression(e)
-        (n as ExprOp3).subexpr = c
-        (n as ExprOp3).left = fold_const(o.left, constmap)
-        (n as ExprOp3).right = fold_const(o.right, constmap)
-        return n
+        return new ExprOp3(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, subexpr = c,
+            left = fold_const(o.left, constmap),
+            right = fold_const(o.right, constmap))
     }
     if (e is ExprCall) {
         let o = e as ExprCall
-        var n = clone_expression(e)
-        var nc = n as ExprCall
+        var n = new ExprCall(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags, name := o.name)
         for (ai in range(length(o.arguments))) {
-            nc.arguments[ai] = fold_const(o.arguments[ai], constmap)
+            emplace_new(n.arguments) <| fold_const(o.arguments[ai], constmap)
         }
         return n
     }
