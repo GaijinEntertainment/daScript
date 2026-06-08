@@ -692,15 +692,7 @@ def length(a : auto | #) : int {
     return typeinfo dim(a)
 }
 
-def empty(a : array<auto> | #) : bool {
-    return length(a) == 0
-}
-
 // table
-
-def empty(a : table<auto; auto> | #) : bool {
-    return length(a) == 0
-}
 
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
     return if (newSize < 0)

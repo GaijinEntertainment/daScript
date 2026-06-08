@@ -26,6 +26,7 @@ let g_intrin_lookup <- {
 // $, aka builtin
     // misc
         "$::length" => @@intrinsic_builtin_length,
+        "$::empty" => @@intrinsic_builtin_empty,
         "$::is_standalone_exe" => @@intrinsic_is_standalone_exe,
         "$::hash" => @@intrinsic_builtin_hash_string,
     // pointer math
@@ -139,6 +140,7 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     // $::hash is inlined for string keys; build_string_hash picks the fast (2-byte) or
     // safe (1-byte) round body by is_safe_hash() so it matches the host runtime exactly.
     if ((call_name == "$::length" && !argType.isGoodArrayType)
+        || (call_name == "$::empty" && !(argType.isGoodArrayType || argType.isGoodTableType))
         || (call_name == "$::hash" && argType.baseType != Type.tString)
         || (!expr.arguments |> empty() && argType.isHandle)) return false
     g_intrin_lookup |> get(call_name) $(_pfun) {
@@ -176,6 +178,19 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
         // builtin length() returns int32; Array.size is uint64. Truncate.
         // TODO Phase 7: emit panic if size > INT32_MAX to match C++ builtin_array_size.
         return LLVMBuildTruncOrBitCast(ctx.builder, size_i64, ctx.types.t_int32, "array.size.i32")
+    } else {
+        return null
+    }
+}
+
+// empty(array) / empty(table) -> size == 0. SIZE is field 1 in both the Array and Table LLVM
+// structs (Table inherits Array), so one body covers both. Returns i1 directly (no truncation).
+def intrinsic_builtin_empty(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.isGoodArrayType || argType.isGoodTableType) {
+        var cont = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "cont")
+        var size_i64 = LLVMBuildExtractValue(ctx.builder, cont, uint(JIT_ARRAY.SIZE), "cont.size")
+        return LLVMBuildICmp(ctx.builder, LLVMIntPredicate.LLVMIntEQ, size_i64, LLVMConstInt(ctx.types.t_int64, 0ul, 0), "cont.empty")
     } else {
         return null
     }

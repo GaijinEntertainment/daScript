@@ -44,6 +44,7 @@ namespace das {
     DAS_API void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo );
     DAS_API void builtin_terminate ( Context * context, LineInfoArg * lineInfo );
     DAS_API int builtin_table_size ( const Table & arr );
+    DAS_API bool builtin_table_empty ( const Table & arr );
     DAS_API int builtin_table_capacity ( const Table & arr );
     DAS_API int64_t builtin_table_long_size ( const Table & arr );
     DAS_API int64_t builtin_table_long_capacity ( const Table & arr );
@@ -74,6 +75,7 @@ namespace das {
     DAS_API void builtin_table_unlock ( Table & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_table_clear_lock ( const Table & arr, Context * context );
     DAS_API int builtin_array_size ( const Array & arr );
+    DAS_API bool builtin_array_empty ( const Array & arr );
     DAS_API int builtin_array_capacity ( const Array & arr );
     DAS_API int64_t builtin_array_long_size ( const Array & arr );
     DAS_API int64_t builtin_array_long_capacity ( const Array & arr );
