@@ -4,6 +4,7 @@
 // null body list, then read list[0]. Compiling this file is the test; the differential
 // confirms the flattened twin still matches the pristine original.
 options gen2
+options indenting = 4
 options no_unused_function_arguments = false
 require dastest/testing_boost public
 require daslib/flatten

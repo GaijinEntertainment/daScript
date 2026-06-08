@@ -3180,12 +3180,16 @@ namespace das
             // not the AST count. The body is already simulated bottom-up; this only collects it.
             SimNode_Block forBody(at);
             sv_whileSimulateFinal(expr->body, &forBody);
-            bool loop1 = (forBody.total == 1);
-            // An empty body (no statements, no finally) over side-effect-free sources is a pure
-            // no-op -- emit nothing (the enclosing block's collectExpressions skips a null node).
-            // A side-effecting source falls through to the general node, which still evaluates it
-            // and zero-iterates.
-            if ( forBody.total==0 && forBody.totalFinal==0 ) {
+            // The fused single-statement (`loop1`) for-node reads list[0] unconditionally and
+            // its eval uses DAS_PROCESS_LOOP1_FLAGS, which has no jumpToLabel arm -- so a body
+            // carrying labels (`goto` targets) must take the general labeled node. Labels are AST
+            // nodes but not body SimNodes, so they don't show in `total`; gate on totalLabels too.
+            bool loop1 = (forBody.total == 1 && forBody.totalLabels == 0);
+            // An empty body (no statements, no labels, no finally) over side-effect-free sources is
+            // a pure no-op -- emit nothing (the enclosing block's collectExpressions skips a null
+            // node). A side-effecting source, or a label, falls through to the general node, which
+            // still evaluates the source and zero-iterates / preserves the label machinery.
+            if ( forBody.total==0 && forBody.totalFinal==0 && forBody.totalLabels==0 ) {
                 bool pureSources = true;
                 for ( auto & src : expr->sources ) {
                     if ( !src->noSideEffects ) { pureSources = false; break; }
