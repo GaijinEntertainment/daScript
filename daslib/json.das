@@ -57,6 +57,21 @@ def JVNull {
     return new JsonValue(value <- JsValue(_null = null))
 }
 
+var private g_json_null_sentinel : JsonValue?
+
+def json_null_sentinel : JsonValue ? {
+    //! Shared, per-context ``null`` JsonValue returned by ``operator ?[]`` / ``?.`` when a
+    //! key/index is absent — so missing-key navigation allocates nothing (a fresh ``JVNull()``
+    //! per miss was a steady GC-pressure source). It preserves the "``?[]`` is never null"
+    //! contract callers rely on. INTERNAL: it is shared and must never be freed, mutated, or
+    //! stored into a tree. ``delete_json`` and ``update`` guard against it; do not ``delete`` a
+    //! ``?[]`` result directly or ``insert`` it into an object/array.
+    if (g_json_null_sentinel == null) {
+        g_json_null_sentinel = JVNull()
+    }
+    return g_json_null_sentinel
+}
+
 def JV(v : string) {
     //! Creates `JsonValue` out of string value.
     return new JsonValue(value <- JsValue(_string = v))
@@ -603,6 +618,41 @@ def write_json(val : JsonValue?#) : string {
     unsafe {// Fine, as json doesn't escape the function
         return write_json(reinterpret<JsonValue?> val)
     }
+}
+
+def delete_json(var jsv : JsonValue?) {
+    //! Free a JsonValue tree. ``JsonValue?`` is owned (this module is
+    //! ``strict_smart_pointers``), so ``delete`` already recurses — finalizing the
+    //! ``_object`` table / ``_array`` deletes the child nodes in turn — and one
+    //! top-level ``delete`` frees the whole tree. This wraps that in the required
+    //! ``unsafe`` plus a null guard, and names the intent at call sites. Pass an owned
+    //! tree you are done with (a parsed ``read_json`` input, a built result, a per-frame
+    //! payload); assumes unique ownership — do not call on a shared/aliased tree. No-op
+    //! on null or on the shared missing-key sentinel (``json_null_sentinel``), so freeing
+    //! a tree that a careless caller navigated into is still safe.
+    if (jsv == null || jsv == g_json_null_sentinel) return
+    unsafe { delete jsv; }
+}
+
+def update(var obj : JsonValue?; key : string; var jsv : JsonValue?) {
+    //! Set object field ``key`` to ``jsv``, first freeing (via ``delete_json``) whatever
+    //! JsonValue was stored at ``key``. Use this
+    //! instead of a bare insert when overwriting a field on a reused/long-lived object
+    //! every frame — a bare ``insert`` drops the old value on the heap. No-op when
+    //! ``obj`` is null or not an ``_object``.
+    if (obj == null || !(obj.value is _object)) return
+    // Never store a raw null (write_json deref's object values) or the shared sentinel
+    // (a later cascade-free would delete it out from under everyone) into a tree —
+    // substitute a fresh owned null for both.
+    if (jsv == null || jsv == g_json_null_sentinel) {
+        jsv = JVNull()
+    }
+    // Free the previous value, unless the caller passed back the very pointer already
+    // stored here (freeing then re-inserting it would be a use-after-free).
+    if (key_exists(obj.value as _object, key) && (obj.value as _object)[key] != jsv) {
+        delete_json((obj.value as _object)[key])
+    }
+    (obj.value as _object) |> insert(key, jsv)
 }
 
 def try_fixing_broken_json(var bad : string) {

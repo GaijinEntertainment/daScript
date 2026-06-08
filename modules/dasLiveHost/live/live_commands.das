@@ -21,7 +21,6 @@ require daslib/json
 require daslib/json_boost
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/strings_boost
 require live_host
 
 // --- Registry ---
@@ -32,37 +31,55 @@ var public live_command_descriptions : table<string; string>
 // --- Help ---
 
 def private live_help_json() : string {
-    var commands : table<string; string>
-    for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)) {
-        commands[name] = desc
-    }
+    let commands : table<string; string> <- {for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)); name => desc}
     var tab : table<string; JsonValue?>
     tab |> insert("commands", JV(commands))
-    return write_json(JV(tab))
+    return take_json(JV(tab))
 }
 
 // --- Dispatch (called from [before_update]) ---
+
+// Serialize `jsv` to a JSON string and free it. Centralizes the "build a
+// throwaway JsonValue, write it, drop it" pattern for the dispatch's reply
+// values so none of them leak per command.
+def private take_json(var jsv : JsonValue?) : string {
+    let out = write_json(jsv)
+    delete_json(jsv)
+    return out
+}
 
 [export]
 def public live_dispatch_command(command_json : string) : string {
     //! Parses a command JSON string, looks up the command name in the registry,
     //! calls the handler, and returns the response as a JSON string.
+    //! The parsed input tree and the handler's result tree are both freed before
+    //! returning — every live command thus costs zero net JsonValue heap. This relies
+    //! on the handler contract: a handler returns a freshly-owned tree and never
+    //! retains/returns its `input` (audited across the imgui stack + dasLiveHost).
     var parse_error = ""
     var js = read_json(command_json, parse_error)
-    if (js == null) return write_json(JV("parse error: {parse_error}"))
+    if (js == null) return take_json(JV("parse error: {parse_error}"))
+    var out : string
     let name = js?.name ?? ""
-    if (empty(name)) return write_json(JV("missing command name"))
-    if (name == "help") return live_help_json()
-    if (!key_exists(live_command_registry, name)) return write_json(JV("unknown command: {name}"))
-    var args : JsonValue?
-    if (js.value is _object) {
-        let tab & = unsafe(js.value as _object)
-        args = unsafe(reinterpret<JsonValue?>(tab?["args"] ?? null))
+    if (empty(name)) {
+        out = take_json(JV("missing command name"))
+    } elif (name == "help") {
+        out = live_help_json()
+    } elif (!key_exists(live_command_registry, name)) {
+        out = take_json(JV("unknown command: {name}"))
+    } else {
+        // `args` is a borrowed sub-node of `js` (freed below with the rest of js).
+        var args : JsonValue?
+        if (js.value is _object) {
+            let tab & = unsafe(js.value as _object)
+            args = unsafe(reinterpret<JsonValue?>(tab?["args"] ?? null))
+        }
+        let handler = live_command_registry[name]
+        var result = invoke(handler, args)
+        out = result != null ? take_json(result) : take_json(JV(true))
     }
-    let handler = live_command_registry[name]
-    var result = invoke(handler, args)
-    if (result != null) return write_json(result)
-    return write_json(JV(true))
+    delete_json(js)   // frees the input tree incl. the borrowed `args` sub-node
+    return out
 }
 
 // --- Macro ---

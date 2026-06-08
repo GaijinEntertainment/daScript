@@ -27,32 +27,32 @@ require daslib/constant_expression
 
 def operator ?[] (a : json::JsonValue const? ==const; key : string) : JsonValue? const {
     //! Returns the value of the key in the JSON object, if it exists.
-    return a != null && a.value is _object ? (a.value as _object)?[key] ?? JVNull() : JVNull()
+    return a != null && a.value is _object ? (a.value as _object)?[key] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def operator ?[] (var a : json::JsonValue? ==const; key : string) : JsonValue? {
     //! Returns the value of the key in the JSON object, if it exists.
-    return a != null && a.value is _object ? (a.value as _object)?[key] ?? JVNull() : JVNull()
+    return a != null && a.value is _object ? (a.value as _object)?[key] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def operator ?.(a : json::JsonValue const? ==const; key : string) : JsonValue? const {
     //! Returns the value of the key in the JSON object, if it exists.
-    return a != null && a.value is _object ? (a.value as _object)?[key] ?? JVNull() : JVNull()
+    return a != null && a.value is _object ? (a.value as _object)?[key] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def operator ?.(var a : json::JsonValue? ==const; key : string) : JsonValue? {
     //! Returns the value of the key in the JSON object, if it exists.
-    return a != null && a.value is _object ? (a.value as _object)?[key] ?? JVNull() : JVNull()
+    return a != null && a.value is _object ? (a.value as _object)?[key] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def operator ?[] (a : json::JsonValue const? ==const; idx : int) : JsonValue? const {
     //! Returns the value of the index in the JSON array, if it exists.
-    return a != null && a.value is _array ? (a.value as _array)?[idx] ?? JVNull() : JVNull()
+    return a != null && a.value is _array ? (a.value as _array)?[idx] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def operator ?[] (var a : json::JsonValue? ==const; idx : int) : JsonValue? {
     //! Returns the value of the index in the JSON array, if it exists.
-    return a != null && a.value is _array ? (a.value as _array)?[idx] ?? JVNull() : JVNull()
+    return a != null && a.value is _array ? (a.value as _array)?[idx] ?? json_null_sentinel() : json_null_sentinel()
 }
 
 def private null_coalescing(a : json::JsonValue const?; val : auto(TT)) : TT {
