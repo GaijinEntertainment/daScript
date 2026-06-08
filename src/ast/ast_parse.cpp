@@ -675,11 +675,20 @@ namespace das {
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
+        TextWriter * logs = nullptr;
         GcCollectOnExit(gc_guard & s) : scope(s) {}
         GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
         ~GcCollectOnExit() {
             if ( prog ) {
                 prog->thisModule->gc_collect(&scope.guard_root);
+                // After the collect: module_gc_root holds the live survivors, guard_root holds
+                // the garbage about to be swept. The split = irreducible-live vs reclaimable.
+                if ( logs && gcStageReportEnabled() ) {
+                    *logs << "=== gc survivors @ " << prog->thisModule->name << " : live="
+                          << prog->thisModule->module_gc_root.gc_count << " garbage="
+                          << scope.guard_root.gc_count << " ===\n";
+                    gcReportHistogram(prog->thisModule->module_gc_root, "live", *logs, 200);
+                }
             }
             clearAllFunctionLookups();
         }
@@ -697,6 +706,7 @@ namespace das {
         ProgramPtr program = make_smart<Program>();
         gc_guard parse_gc_scope;
         GcCollectOnExit parse_gc_collect(parse_gc_scope, program.get());
+        parse_gc_collect.logs = &logs;
         program->library.renameModule(program->thisModule.get(), moduleName);
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
