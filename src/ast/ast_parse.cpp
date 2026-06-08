@@ -672,26 +672,53 @@ namespace das {
         });
     }
 
+    // compileDaScript runs its top-level post-parse steps (deriveAliases/allocateStack/...)
+    // on a transient gc_guard root; on exit this merges that scratch into the program's
+    // module root, then clears the function/generic lookup caches before the gc_guard
+    // sweeps the rest (see clearAllFunctionLookups above for why). Only the top program
+    // sets prog; per-module parse uses ModuleGcFinalize instead.
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
-        TextWriter * logs = nullptr;
-        GcCollectOnExit(gc_guard & s) : scope(s) {}
-        GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
+        explicit GcCollectOnExit ( gc_guard & s ) : scope(s) {}
         ~GcCollectOnExit() {
             if ( prog ) {
                 prog->thisModule->gc_collect(&scope.guard_root);
-                // After the collect: module_gc_root holds the live survivors, guard_root holds
-                // the garbage about to be swept. The split = irreducible-live vs reclaimable.
-                if ( logs && gcStageReportEnabled() ) {
-                    *logs << "=== gc survivors @ " << prog->thisModule->name << " : live="
-                          << prog->thisModule->module_gc_root.gc_count << " garbage="
-                          << scope.guard_root.gc_count << " ===\n";
-                    gcReportHistogram(prog->thisModule->module_gc_root, "live", *logs, 200);
-                }
             }
             clearAllFunctionLookups();
         }
+        GcCollectOnExit ( const GcCollectOnExit & ) = delete;
+        GcCollectOnExit & operator = ( const GcCollectOnExit & ) = delete;
+    };
+
+    // parseDaScript runs with the module's own gc_root as the working/active root (via
+    // gc_active_scope), so live nodes accumulate directly on module_gc_root and per-pass
+    // swaps can replace it O(1). At scope exit this does the final collect+swap: walk the
+    // live tree into a fresh root, repoint active to it, then drop the old root (its dtor
+    // sweeps the remaining garbage). module_gc_root ends holding only the live survivors.
+    struct ModuleGcFinalize {
+        Program *   prog = nullptr;
+        TextWriter * logs = nullptr;
+        explicit ModuleGcFinalize ( Program * p ) : prog(p) {}
+        ~ModuleGcFinalize() {
+            if ( prog ) {
+                auto m = prog->thisModule.get();
+                gc_root * oldRoot = m->module_gc_root.get();
+                auto fresh = make_unique<gc_root>();
+                m->gc_collect(oldRoot, fresh.get());   // live oldRoot -> fresh; garbage stays on oldRoot
+                if ( logs && gcStageReportEnabled() ) {
+                    *logs << "=== gc survivors @ " << m->name << " : live="
+                          << fresh->gc_count << " garbage=" << oldRoot->gc_count << " ===\n";
+                    gcReportHistogram(*fresh, "live", *logs, 200);
+                }
+                gc_root * liveRoot = fresh.get();
+                gc_root::gc_get_active_root() = liveRoot;   // repoint active before the move frees oldRoot
+                m->module_gc_root = das::move(fresh);        // deletes oldRoot -> sweeps garbage
+            }
+            clearAllFunctionLookups();
+        }
+        ModuleGcFinalize ( const ModuleGcFinalize & ) = delete;
+        ModuleGcFinalize & operator = ( const ModuleGcFinalize & ) = delete;
     };
 
     ProgramPtr parseDaScript ( const string & fileName,
@@ -704,8 +731,11 @@ namespace das {
                               CodeOfPolicies policies ) {
         CompilationCallbackGuard compilationCallbackGuard(moduleName, fileName);
         ProgramPtr program = make_smart<Program>();
-        gc_guard parse_gc_scope;
-        GcCollectOnExit parse_gc_collect(parse_gc_scope, program.get());
+        // The module's own root is the working/active root for the whole compile, so live
+        // nodes land on module_gc_root and per-pass collects can swap it O(1). The scope
+        // restores the previous active root on exit without sweeping (the module owns it).
+        gc_active_scope parse_gc_scope(program->thisModule->module_gc_root.get());
+        ModuleGcFinalize parse_gc_collect(program.get());
         parse_gc_collect.logs = &logs;
         program->library.renameModule(program->thisModule.get(), moduleName);
         ReuseCacheGuard rcg;

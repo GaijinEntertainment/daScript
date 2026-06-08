@@ -384,8 +384,8 @@ namespace das {
         }
     }
 
-    void Module::gc_collect ( gc_root * from ) {
-        auto target = &module_gc_root;
+    void Module::gc_collect ( gc_root * from, gc_root * targetArg ) {
+        auto target = targetArg ? targetArg : module_gc_root.get();
         // collect alias types
         aliasTypes.foreach([&](auto td) {
             if ( td ) td->gc_collect(target, from);
@@ -821,7 +821,7 @@ namespace das {
         ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
         auto result = appendBuiltinModuleContent(this, program, modName);
-        program->thisModule->module_gc_root.gc_dump_to_thread_root();
+        program->thisModule->module_gc_root->gc_dump_to_thread_root();
         return result;
     }
 

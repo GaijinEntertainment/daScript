@@ -139,4 +139,19 @@ namespace das {
         gc_guard & operator = ( const gc_guard & ) = delete;
     };
 
+    // gc_active_scope — redirect the active root to an existing root for the scope,
+    // restoring the previous active root on exit. Unlike gc_guard it neither owns nor
+    // sweeps the root: the root lives elsewhere (e.g. a Module's module_gc_root, which
+    // may be swapped under us per-pass) and must survive the scope. The compile pipeline
+    // uses this so allocations land directly on the module's own root.
+    struct DAS_API gc_active_scope {
+        gc_root *   saved_active;
+
+        explicit gc_active_scope ( gc_root * use );
+        ~gc_active_scope();
+
+        gc_active_scope ( const gc_active_scope & ) = delete;
+        gc_active_scope & operator = ( const gc_active_scope & ) = delete;
+    };
+
 }

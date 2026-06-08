@@ -299,4 +299,13 @@ namespace das {
         guard_root.gc_sweep();
     }
 
+    gc_active_scope::gc_active_scope ( gc_root * use ) {
+        saved_active = gc_root::gc_get_active_root();
+        gc_root::gc_get_active_root() = use;
+    }
+
+    gc_active_scope::~gc_active_scope() {
+        gc_root::gc_get_active_root() = saved_active;
+    }
+
 }

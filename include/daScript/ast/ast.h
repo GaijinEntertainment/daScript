@@ -1186,7 +1186,7 @@ namespace das
         void serialize( AstSerializer & ser, bool already_exists );
         void setModuleName ( const string & n );
         FileInfo * getFileInfo() const;
-        void gc_collect ( gc_root * from = nullptr );  // move reachable TypeDecl from 'from' root to module_gc_root
+        void gc_collect ( gc_root * from = nullptr, gc_root * target = nullptr );  // move reachable nodes from 'from' to 'target' (default module_gc_root)
     public:
         template <typename RecAnn>
         void initRecAnnotation ( RecAnn * rec, ModuleLibrary & lib ) {
@@ -1242,7 +1242,7 @@ namespace das
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_insert_only_hash_map<string,Type>       options;            // options
-        gc_root                                     module_gc_root;     // gc_node root for this module's gc-managed AST nodes
+        unique_ptr<gc_root>                         module_gc_root = make_unique<gc_root>();  // this module's gc-managed AST nodes; a pointer so it can be swapped O(1) during compile (collect live into a fresh root, swap, drop the old)
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
         string                                      cppClassName;       // C++ class name (e.g. "Module_Math"), set by REGISTER_MODULE
