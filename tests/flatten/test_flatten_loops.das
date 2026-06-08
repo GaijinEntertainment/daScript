@@ -177,6 +177,80 @@ def f_loop_negidx(x : int) : int {
     return acc
 }
 
+// ----- urange source (ExprConstURange -> ExprConstUInt) -----
+// urange yields uint; cast per copy. i=0 folds the `x*int(i)` store away, i=1 -> x.
+[flatten]
+def f_urange(x : int) : int {
+    var acc = 0
+    for (i in urange(4u)) {
+        acc += x * int(i)
+    }
+    return acc
+}
+
+// ----- urange with a non-zero start (urange(a, b)) -----
+[flatten]
+def f_urange_start(x : int) : int {
+    var acc = 0
+    for (i in urange(2u, 6u)) {
+        acc += x + int(i)
+    }
+    return acc
+}
+
+// ----- parallel multi-source: two array literals unrolled in lockstep -----
+[flatten]
+def f_parallel(x : int) : int {
+    var acc = 0
+    for (a, b in [1, 2, 3], [10, 20, 30]) {
+        acc += x + a * b
+    }
+    return acc
+}
+
+// ----- parallel mixed sources: range + array, in lockstep -----
+[flatten]
+def f_parallel_mix(x : int) : int {
+    var acc = 0
+    for (i, k in range(3), [5, 6, 7]) {
+        acc += x + i * 100 + k
+    }
+    return acc
+}
+
+// ----- three parallel sources -----
+[flatten]
+def f_parallel_three(x : int) : int {
+    var acc = 0
+    for (a, b, c in [1, 2], [3, 4], range(2)) {
+        acc += x + a * 10 + b + c * 100
+    }
+    return acc
+}
+
+// ----- parallel loop with a per-iteration local (multi-iterator rename path) -----
+[flatten]
+def f_parallel_local(x : int) : int {
+    var acc = 0
+    for (a, b in [2, 3, 5], [7, 11, 13]) {
+        let prod = a * b + x
+        acc += prod * prod
+    }
+    return acc
+}
+
+// ----- parallel loop containing a nested loop (recursion under multi-iterator) -----
+[flatten]
+def f_parallel_nested(x : int) : int {
+    var acc = 0
+    for (a, b in [1, 2, 3], [4, 5, 6]) {
+        for (j in range(2)) {
+            acc += x + a * b + j
+        }
+    }
+    return acc
+}
+
 // ----- driver -----
 
 var GRID : array<int>
@@ -251,6 +325,41 @@ def test_flatten_loops(t : T?) {
     t |> run("identity fold: x*-1 -> -x (negative loop index)") @(t : T?) {
         for (v in GRID) {
             t |> equal(f_loop_negidx_flat(v), f_loop_negidx(v))
+        }
+    }
+    t |> run("urange source (uint loop var, cast per copy)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_urange_flat(v), f_urange(v))
+        }
+    }
+    t |> run("urange with non-zero start") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_urange_start_flat(v), f_urange_start(v))
+        }
+    }
+    t |> run("parallel multi-source (two arrays, lockstep)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_parallel_flat(v), f_parallel(v))
+        }
+    }
+    t |> run("parallel mixed sources (range + array)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_parallel_mix_flat(v), f_parallel_mix(v))
+        }
+    }
+    t |> run("three parallel sources") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_parallel_three_flat(v), f_parallel_three(v))
+        }
+    }
+    t |> run("parallel loop with per-iteration local (multi-iterator rename)") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_parallel_local_flat(v), f_parallel_local(v))
+        }
+    }
+    t |> run("parallel loop containing a nested loop") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(f_parallel_nested_flat(v), f_parallel_nested(v))
         }
     }
 }

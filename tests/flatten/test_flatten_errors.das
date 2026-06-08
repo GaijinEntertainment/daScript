@@ -58,4 +58,8 @@ def test_flatten_boundaries(t : T?) {
         let issues = compile_issues("{get_das_root()}/tests/flatten/_err_unroll_override.das")
         t |> success(find(issues, "exceeds max_unroll=8") >= 0, "expected lowered-cap error, got: {issues}")
     }
+    t |> run("parallel for sources of unequal length are rejected") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/flatten/_err_parallel_len.das")
+        t |> success(find(issues, "same length") >= 0, "expected parallel-length error, got: {issues}")
+    }
 }
