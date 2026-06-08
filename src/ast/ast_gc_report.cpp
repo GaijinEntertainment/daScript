@@ -92,7 +92,7 @@ namespace das {
     static void gc_format_breakdown ( const TagCounts & c, TextWriter & out ) {
         vector<pair<uint16_t,uint64_t>> v;
         for ( uint16_t t=0; t<16; ++t ) if ( c.n[t] ) v.push_back({t, c.n[t]});
-        std::sort(v.begin(), v.end(), [](const pair<uint16_t,uint64_t> & a, const pair<uint16_t,uint64_t> & b){
+        sort(v.begin(), v.end(), [](const pair<uint16_t,uint64_t> & a, const pair<uint16_t,uint64_t> & b){
             return a.second > b.second;
         });
         out << "[";
@@ -109,7 +109,7 @@ namespace das {
         // files, descending by total count
         vector<const pair<const string, FileBucket>*> files;
         for ( auto & kv : histo ) files.push_back(&kv);
-        std::sort(files.begin(), files.end(),
+        sort(files.begin(), files.end(),
             [](const pair<const string, FileBucket>* a, const pair<const string, FileBucket>* b){
                 return a->second.total.total > b->second.total.total;
             });
@@ -121,7 +121,7 @@ namespace das {
             out << "\n";
             vector<const pair<const uint32_t, TagCounts>*> lines;
             for ( auto & lkv : fp->second.byLine ) lines.push_back(&lkv);
-            std::sort(lines.begin(), lines.end(),
+            sort(lines.begin(), lines.end(),
                 [](const pair<const uint32_t, TagCounts>* a, const pair<const uint32_t, TagCounts>* b){
                     return a->second.total > b->second.total;
                 });
@@ -153,7 +153,7 @@ namespace das {
     static void gc_format_signed ( const SignedCounts & c, TextWriter & out ) {
         vector<pair<uint16_t,int64_t>> v;
         for ( uint16_t t=0; t<16; ++t ) if ( c.n[t] ) v.push_back({t, c.n[t]});
-        std::sort(v.begin(), v.end(), [](const pair<uint16_t,int64_t> & a, const pair<uint16_t,int64_t> & b){
+        sort(v.begin(), v.end(), [](const pair<uint16_t,int64_t> & a, const pair<uint16_t,int64_t> & b){
             return llabs(a.second) > llabs(b.second);
         });
         out << "[";
@@ -207,7 +207,7 @@ namespace das {
             }
             if ( fd.total.total != 0 ) deltas.push_back(std::move(fd));
         }
-        std::sort(deltas.begin(), deltas.end(), [](const FileDelta & a, const FileDelta & b){
+        sort(deltas.begin(), deltas.end(), [](const FileDelta & a, const FileDelta & b){
             return llabs(a.total.total) > llabs(b.total.total);
         });
         if ( deltas.empty() ) {
@@ -222,7 +222,7 @@ namespace das {
             out << "  " << fd.name << "  " << (fd.total.total>0?"+":"") << fd.total.total << "  ";
             gc_format_signed(fd.total, out);
             out << "\n";
-            std::sort(fd.lines.begin(), fd.lines.end(),
+            sort(fd.lines.begin(), fd.lines.end(),
                 [](const pair<uint32_t,SignedCounts> & a, const pair<uint32_t,SignedCounts> & b){
                     return llabs(a.second.total) > llabs(b.second.total);
                 });
