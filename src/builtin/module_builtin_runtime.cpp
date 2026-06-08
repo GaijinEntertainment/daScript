@@ -814,6 +814,10 @@ namespace das
         return int(arr.size);
     }
 
+    bool builtin_table_empty ( const Table & arr ) {
+        return arr.size == 0;
+    }
+
     int builtin_table_capacity ( const Table & arr ) {
         DAS_VERIFYF(arr.capacity <= uint64_t(INT32_MAX), "table capacity %llu exceeds INT_MAX; use long_capacity() instead", (unsigned long long)arr.capacity);
         return int(arr.capacity);
@@ -2113,6 +2117,9 @@ namespace das
                 ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
             SideEffects::none, "builtin_table_size")
+                ->arg("table");
+        addExtern<DAS_BIND_FUN(builtin_table_empty)>(*this, lib, "empty",
+            SideEffects::none, "builtin_table_empty")
                 ->arg("table");
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity",
             SideEffects::none, "builtin_table_capacity")

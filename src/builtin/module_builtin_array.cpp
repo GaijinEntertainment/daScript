@@ -18,6 +18,10 @@ namespace das {
         return int(arr.size);
     }
 
+    bool builtin_array_empty ( const Array & arr ) {
+        return arr.size == 0;
+    }
+
     int builtin_array_capacity ( const Array & arr ) {
         DAS_VERIFYF(arr.capacity <= uint64_t(INT32_MAX), "array capacity %llu exceeds INT_MAX; use long_capacity() instead", (unsigned long long)arr.capacity);
         return int(arr.capacity);
@@ -152,6 +156,9 @@ namespace das {
                 ->args({"array","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length",
             SideEffects::none, "builtin_array_size")
+                ->arg("array");
+        addExtern<DAS_BIND_FUN(builtin_array_empty)>(*this, lib, "empty",
+            SideEffects::none, "builtin_array_empty")
                 ->arg("array");
         addExtern<DAS_BIND_FUN(builtin_array_capacity)>(*this, lib, "capacity",
             SideEffects::none, "builtin_array_capacity")

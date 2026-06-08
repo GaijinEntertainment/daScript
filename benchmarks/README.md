@@ -74,6 +74,12 @@ Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the la
 |---|---|
 | `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs `[skip_field_lock_check]` struct elements — measures array lock overhead |
 
+## core/builtin_ops/
+
+| File | Description |
+|---|---|
+| `test01.das` | `empty()` / `length()` call throughput on `array<int>` and `table<int;int>` — walks a prebuilt vector of half-filled/half-empty containers (no const-fold). `empty/*` lanes vs `length/*` reference lanes isolate the cost of the native `empty` extern; INTERP is the apples-to-apples target (JIT lanes are asymmetric — `length(table)` is not JIT-inlined) |
+
 ## fusion/
 
 | File | Description |
