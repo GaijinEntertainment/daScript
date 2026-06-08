@@ -5830,9 +5830,8 @@ namespace das {
                                 return newCall;
                             }
                         }
-                        // note: gc will collect, but why waste memory
-                        newCall->gc_unlink(); delete newCall;
-                        self->gc_unlink(); delete self;
+                        // newCall + self are orphaned here; the gc_guard sweep reclaims them
+                        // (per-pass GC replaces the old manual gc_unlink+delete).
                     }
                 }
             }

@@ -21,65 +21,6 @@ def private is_flat_temp(name : das_string) : bool {
     return name |> starts_with("__flat_")
 }
 
-// Reclaim walker: free the expression + TypeDecl nodes of an orphaned subtree now, instead
-// of leaving them for the gc_guard sweep at the end of the (long) flatten pass. The visitor
-// collects every owned expression and type but never follows ExprVar.variable, so shared
-// bindings are untouched; deleting an ExprVar node frees only the node, not the Variable it
-// points at. The seen-set dedups the visitor's double-presentation of some nodes (a single
-// gc_unlink+delete twice would be a double-free). Caller must own the subtree exclusively.
-//
-// The visitor only descends into SOURCE-level type fields (castType, makeType, var type, …),
-// not the inferred `_type` hanging off every typed expression — so collectType walks that
-// per-expression tree manually. The whole flatten twin is built by cloning, and
-// Expression::clone makes a fresh `new TypeDecl(*type)` whose firstType/secondType/argTypes
-// are deep-copied (AST invariant: no duplicated TypeDecl nodes), so each inferred type is
-// uniquely owned and safe to free. structType/enumType are shared entity pointers — we never
-// follow them, and delete_type frees only the node.
-class private ReclaimWalker : AstVisitor {
-    exprs : array<ExpressionPtr>
-    types : array<TypeDeclPtr>
-    seen : table<uint64>
-    def collectType(var t : TypeDeclPtr) : void {
-        if (t == null) return
-        let key = unsafe(reinterpret<uint64>(t))
-        if (key_exists(seen, key)) return
-        seen |> insert(key)
-        types |> push(t)
-        collectType(t.firstType)
-        collectType(t.secondType)
-        for (i in range(length(t.argTypes))) {
-            collectType(t.argTypes[i])
-        }
-    }
-    def override preVisitExpression(expr : ExpressionPtr) : void {
-        let key = unsafe(reinterpret<uint64>(expr))
-        if (!key_exists(seen, key)) {
-            seen |> insert(key)
-            exprs |> push(unsafe(reinterpret<ExpressionPtr>(expr)))
-        }
-        collectType(unsafe(reinterpret<TypeDecl? -const>(expr._type)))
-    }
-    def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        collectType(unsafe(reinterpret<TypeDecl? -const>(typ)))
-    }
-}
-
-def private reclaim_expression(var e : ExpressionPtr) {
-    if (e == null) return
-    var w = new ReclaimWalker()
-    make_visitor(*w) $(adapter) {
-        visit(e, adapter)
-    }
-    for (n in w.exprs) {
-        unsafe { delete_expression(n) }
-    }
-    for (t in w.types) {
-        unsafe { delete_type(t) }
-    }
-    delete w.seen
-    unsafe { delete w }
-}
-
 // ===== Dead-store elimination =====
 //
 // The lowered body is straight-line (no branches), so liveness is a single
@@ -156,7 +97,6 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         var sub = fold_const(o.subexpr, constmap)
         var bv = false
         if (o.op == "!" && const_bool(sub, bv)) {
-            reclaim_expression(sub)
             return new ExprConstBool(at = e.at, value = !bv)
         }
         return new ExprOp1(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
@@ -172,34 +112,20 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         let rc = const_bool(r, rb)
         if (o.op == "&&") {
             if (lc) {
-                if (lb) { reclaim_expression(l); return r }
-                reclaim_expression(l)
-                reclaim_expression(r)
+                return r if (lb)
                 return new ExprConstBool(at = e.at, value = false)
             }
             if (rc) {
-                if (rb) { reclaim_expression(r); return l }
-                reclaim_expression(l)
-                reclaim_expression(r)
+                return l if (rb)
                 return new ExprConstBool(at = e.at, value = false)
             }
         } elif (o.op == "||") {
             if (lc) {
-                if (lb) {
-                    reclaim_expression(l)
-                    reclaim_expression(r)
-                    return new ExprConstBool(at = e.at, value = true)
-                }
-                reclaim_expression(l)
+                return new ExprConstBool(at = e.at, value = true) if (lb)
                 return r
             }
             if (rc) {
-                if (rb) {
-                    reclaim_expression(l)
-                    reclaim_expression(r)
-                    return new ExprConstBool(at = e.at, value = true)
-                }
-                reclaim_expression(r)
+                return new ExprConstBool(at = e.at, value = true) if (rb)
                 return l
             }
         }
@@ -211,7 +137,6 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         var c = fold_const(o.subexpr, constmap)
         var cb = false
         if (const_bool(c, cb)) {
-            reclaim_expression(c)
             return cb ? fold_const(o.left, constmap) : fold_const(o.right, constmap)
         }
         return new ExprOp3(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
@@ -253,13 +178,9 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
             if (!is_flat_temp(v.name) || key_exists(reassigned, h) || key_exists(constmap, h) || v.init == null) {
                 continue
             }
-            // fold_const builds a fully-fresh clone tree just to test for a const bool; in a
-            // while(changed) sweep those probe clones otherwise pile up to the end-of-pass
-            // gc_guard sweep. Reclaim each probe the moment we've read its verdict.
             var bv = false
             var probe = fold_const(v.init, constmap)
             let isConst = const_bool(probe, bv)
-            reclaim_expression(probe)
             if (isConst) {
                 constmap[h] = bv
                 changed = true
@@ -271,35 +192,26 @@ def public const_prop_pass(var out : array<ExpressionPtr>) {
         delete constmap
         return
     }
-    // fold_const returns a fresh tree, orphaning the input subtree; reclaim each old subtree
-    // now rather than leaving it for the end-of-pass sweep.
     var i = 0
     while (i < length(out)) {
         var s = out[i]
         if (s is ExprCopy) {
             var cp = s as ExprCopy
-            var old = cp.right
-            cp.right = fold_const(old, constmap)
-            reclaim_expression(old)
+            cp.right = fold_const(cp.right, constmap)
         } elif (s is ExprLet) {
             var lc = s as ExprLet
             for (v in lc.variables) {
                 if (v.init != null) {
-                    var old = v.init
-                    v.init = fold_const(old, constmap)
-                    reclaim_expression(old)
+                    v.init = fold_const(v.init, constmap)
                 }
             }
         } elif (s is ExprReturn) {
             var r = s as ExprReturn
             if (r.subexpr != null) {
-                var old = r.subexpr
-                r.subexpr = fold_const(old, constmap)
-                reclaim_expression(old)
+                r.subexpr = fold_const(r.subexpr, constmap)
             }
         } else {
             out[i] = fold_const(s, constmap)
-            reclaim_expression(s)
         }
         i ++
     }
@@ -490,12 +402,6 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
                 out[j] = apply_template(rules, out[j].at, out[j], false)   // only statements that reference nm
             }
             unsafe { delete rules }
-            // Reclaim the dropped def (+ store) subtrees now (their original source was just
-            // inlined as clones), rather than waiting for the gc_guard sweep.
-            reclaim_expression(out[k])
-            if (si >= 0) {
-                reclaim_expression(out[si])
-            }
             out <- [for (j in range(n)); out[j]; where j != k && j != si]
             changed = true
             break
@@ -579,11 +485,6 @@ def public dse_pass(var out : array<ExpressionPtr>) {
     if (empty(dead)) {
         delete dead
         return
-    }
-    // Reclaim the dead statements now (the comprehension below drops them from `out`,
-    // orphaning them to the end-of-pass sweep otherwise). Safe: the rebuild skips dead j.
-    for (j in keys(dead)) {
-        reclaim_expression(out[j])
     }
     out <- [for (j in range(n)); out[j]; where !key_exists(dead, j)]
     delete dead
@@ -996,12 +897,10 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
                 // eval_single_expression only READS the tree (throwaway context), so fold the
-                // init in place — no defensive clone. On success the old init subtree is
-                // orphaned (replaced by the folded const); reclaim it now.
+                // init in place — no defensive clone.
                 var oldInit = lc.variables[0].init
                 var folded = eval_to_const(oldInit)
                 if (folded |> is_expr_const() && folded != oldInit) {
-                    reclaim_expression(oldInit)
                     lc.variables[0].init = folded
                     constmap["{lc.variables[0].name}"] = folded
                     changed = true
