@@ -124,6 +124,7 @@ Standalone examples that don't fit neatly into other categories.
 |------|-------------|
 | `base64_generators.das` | Base64 encoder built as a chain of composable generators (deliberately slow — demonstrates generator composition, not production encoding) |
 | `shader_like_validation.das` | Shader-like mode demo — shows how `options shader_like` rejects heap-allocating constructs (arrays, lambdas, `new`) at simulation time |
+| `describe_function.das` | AST introspection — compiles a program at runtime and pretty-prints each function back to gen2 source via `describe_function` (daslib/ast) |
 
 ## hv/ — WebSocket Chat Example
 
