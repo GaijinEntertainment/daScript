@@ -31,9 +31,13 @@ var public live_command_descriptions : table<string; string>
 // --- Help ---
 
 def private live_help_json() : string {
-    let commands : table<string; string> <- {for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)); name => desc}
+    // Build a table<string;JsonValue?> directly so JV() MOVES it into the tree
+    // (its `_object <- v`) rather than COPYING (JV's is_table path copies a
+    // table<string;string> and leaves the source to leak). cmds/tab are freed
+    // by take_json's delete_json.
+    var cmds <- {for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)); name => JV(desc)}
     var tab : table<string; JsonValue?>
-    tab |> insert("commands", JV(commands))
+    tab |> insert("commands", JV(cmds))
     return take_json(JV(tab))
 }
 

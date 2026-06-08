@@ -1693,11 +1693,22 @@ def to_table_move(a : auto(keyT)[]) : table<keyT -const> {
     return <- tab
 }
 
-def to_table_move(a : array<auto(keyT)>) : table<keyT -const> {
+def to_table_move(var a : array<auto(keyT)>) : table<keyT -const> {
     var tab : table<keyT -const>
     for (at in a) {
         __builtin_table_set_insert(tab, at)
     }
+    // Reclaim the (comprehension-owned) temp array; honors the "move" name and
+    // frees what the table comprehension would otherwise orphan. tab clones
+    // owned-heap keys (string/array/...) so delete must finalize those, but it
+    // only aliases raw-pointer keys — null those first, or delete would free the
+    // caller-owned pointee tab still references and dangle tab's keys.
+    static_if (typeinfo is_pointer(type<keyT>)) {
+        for (k in a) {
+            k = null
+        }
+    }
+    unsafe { delete a; }
     return <- tab
 }
 
@@ -1737,17 +1748,32 @@ def to_table_move(var a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; 
 
 def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
-    static_if (typeinfo can_copy(type<valT>)) {
-        for (x in a) {
-            unsafe(tab[x._0]) = x._1
-        }
-    } static_elif (typeinfo can_move(type<valT>)) {
+    static_if (typeinfo can_move(type<valT>)) {
+        // Always MOVE the value out (we own `a` and free it below). Moving —
+        // not copying — is what makes the source-free safe: a copy of a pointer
+        // value would alias the same node, and `delete a` would then free the
+        // node the table holds (use-after-free). After the move the element is
+        // empty, so delete only reclaims husks + the temp buffer.
         for (x in a) {
             unsafe(tab[x._0]) <- x._1
+        }
+    } static_elif (typeinfo can_copy(type<valT>)) {
+        for (x in a) {
+            unsafe(tab[x._0]) = x._1
         }
     } else {
         concept_assert(false, "this array can't be copied or moved")
     }
+    // Moved-out values are already empty. Keys are copied into tab: owned-heap
+    // keys are cloned (delete must finalize the source copy) but raw-pointer keys
+    // are only aliased — null those before delete so it frees just the temp
+    // buffer, not the caller-owned pointee tab now references.
+    static_if (typeinfo is_pointer(type<keyT>)) {
+        for (x in a) {
+            x._0 = null
+        }
+    }
+    unsafe { delete a; }
     return <- tab
 }
 
