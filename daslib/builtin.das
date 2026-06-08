@@ -1698,9 +1698,16 @@ def to_table_move(var a : array<auto(keyT)>) : table<keyT -const> {
     for (at in a) {
         __builtin_table_set_insert(tab, at)
     }
-    // Free the (comprehension-owned) source array; honors the "move" name and
-    // reclaims the temp the table comprehension would otherwise orphan. unsafe
-    // because keyT may be a pointer — safe here: the set stores its own keys.
+    // Reclaim the (comprehension-owned) temp array; honors the "move" name and
+    // frees what the table comprehension would otherwise orphan. tab clones
+    // owned-heap keys (string/array/...) so delete must finalize those, but it
+    // only aliases raw-pointer keys — null those first, or delete would free the
+    // caller-owned pointee tab still references and dangle tab's keys.
+    static_if (typeinfo is_pointer(type<keyT>)) {
+        for (k in a) {
+            k = null
+        }
+    }
     unsafe { delete a; }
     return <- tab
 }
@@ -1757,9 +1764,15 @@ def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -co
     } else {
         concept_assert(false, "this array can't be copied or moved")
     }
-    // Free the (comprehension-owned) source array; honors the "move" name and
-    // reclaims the temp the table comprehension would otherwise orphan. unsafe
-    // because keyT/valT may be pointers.
+    // Moved-out values are already empty. Keys are copied into tab: owned-heap
+    // keys are cloned (delete must finalize the source copy) but raw-pointer keys
+    // are only aliased — null those before delete so it frees just the temp
+    // buffer, not the caller-owned pointee tab now references.
+    static_if (typeinfo is_pointer(type<keyT>)) {
+        for (x in a) {
+            x._0 = null
+        }
+    }
     unsafe { delete a; }
     return <- tab
 }

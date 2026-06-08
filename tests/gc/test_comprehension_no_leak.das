@@ -20,6 +20,10 @@ options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 
+struct PtrKeyNode {
+    x : int
+}
+
 // --- set overload: to_table_move(var a : array<keyT>) ---
 
 [test]
@@ -63,6 +67,44 @@ def test_to_table_move_map_heap_key_value(t : T?) {
     t |> equal(tab?["k1"] ?? "?", "v1")
     t |> equal(tab?["k2"] ?? "?", "v2")
     delete tab
+}
+
+// --- pointer keys must NOT be freed by the source-reclaim ---
+
+// A table copies its key as a bare pointer value (it does not clone the
+// pointee). Reclaiming the temp array must therefore leave pointer-key pointees
+// alive, or the table's keys dangle and the caller's data is corrupted. The
+// caller retains ownership of the pointees.
+[test]
+def test_to_table_move_pointer_keys_not_dangling(t : T?) {
+    var n0 = new PtrKeyNode(x = 11)
+    var n1 = new PtrKeyNode(x = 22)
+
+    // set overload (array<keyT>)
+    var ks <- [n0, n1]
+    var s <- to_table_move(ks)
+    var ssum = 0
+    for (k in keys(s)) {
+        ssum += k.x
+    }
+    t |> equal(ssum, 33)                // keys still reference live nodes
+    delete s
+
+    // map overload (array<tuple<keyT;valT>>), pointer key + int value
+    var kvs <- [(n0, 100), (n1, 200)]
+    var m <- to_table_move(kvs)
+    var ksum = 0
+    for (k in keys(m)) {
+        ksum += k.x
+    }
+    t |> equal(ksum, 33)
+    t |> equal(m?[n0] ?? -1, 100)
+    delete m
+
+    unsafe {
+        delete n0
+        delete n1
+    }                                   // caller owns the pointees
 }
 
 // --- end-to-end: the comprehension forms that lower to the overloads above ---
