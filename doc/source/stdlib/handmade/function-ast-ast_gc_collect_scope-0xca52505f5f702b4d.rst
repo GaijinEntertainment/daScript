@@ -1,0 +1,1 @@
+Runs ``block`` — which is expected to build the body of ``function`` — on a temporary gc-node scope, then keeps the nodes reachable from the function's body and sweeps the rest. Use it to bound the AST-node memory of a tool or macro that constructs a function body at runtime, the way the flatten macro scopes its lowering.
