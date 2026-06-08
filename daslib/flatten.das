@@ -966,17 +966,23 @@ class FlattenAnnotation : AstFunctionAnnotation {
             astChanged = true
             return true
         }
-        if (ph == PHASE_LOWERED) {
-            // Cycle 2: the twin is inferred — collapse const-condition selects and
-            // drop the resulting pure self-assigns. Re-infer if anything changed so
-            // the verify scan and codegen see clean types.
+        if (ph == PHASE_LOWERED || ph == PHASE_FOLDED) {
+            // Cycle 2+: the twin is inferred — collapse const-condition selects, fold
+            // algebraic identities, and drop the resulting pure self-assigns. Re-infer
+            // if anything changed so the verify scan and codegen see clean types.
+            //
+            // Iterate to a fixpoint: flatten_fold folds runtime-operand identities the
+            // typer will not (`0*b → 0`, `x*-1 → -x`); the re-infer between passes then
+            // const-folds the freshly-constant operands (`24 >> (24 & 31) → 0`), which
+            // can expose a new identity (`x - 0`) for the next pass. A single fold pass
+            // is therefore not enough — re-run until nothing folds.
             let folded = flatten_fold(twin)
             set_flatten_phase(func, PHASE_FOLDED)
             if (folded) {
                 astChanged = true
                 return true
             }
-            // Nothing to fold — fall through to the shape check this cycle.
+            // Nothing left to fold — fall through to the shape check this cycle.
         }
         // Final cycle: verify the twin is branchless and call-free (and, under
         // strict_fold, free of const-foldable residuals).
