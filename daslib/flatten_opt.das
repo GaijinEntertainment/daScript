@@ -152,13 +152,15 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
         return clone_expression(e)
     }
     if (e is ExprOp1) {
-        var sub = fold_const((e as ExprOp1).subexpr, constmap)
+        let o = e as ExprOp1
+        var sub = fold_const(o.subexpr, constmap)
         var bv = false
-        if ((e as ExprOp1).op == "!" && const_bool(sub, bv)) {
+        if (o.op == "!" && const_bool(sub, bv)) {
             reclaim_expression(sub)
             return new ExprConstBool(at = e.at, value = !bv)
         }
-        return new ExprOp1(at = e.at, op := (e as ExprOp1).op, subexpr = sub)
+        return new ExprOp1(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, subexpr = sub)
     }
     if (e is ExprOp2) {
         let o = e as ExprOp2
@@ -201,7 +203,8 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
                 return l
             }
         }
-        return new ExprOp2(at = e.at, op := o.op, left = l, right = r)
+        return new ExprOp2(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, left = l, right = r)
     }
     if (e is ExprOp3) {
         let o = e as ExprOp3
@@ -211,13 +214,14 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
             reclaim_expression(c)
             return cb ? fold_const(o.left, constmap) : fold_const(o.right, constmap)
         }
-        return new ExprOp3(at = e.at, op := o.op, subexpr = c,
+        return new ExprOp3(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags,
+            op := o.op, subexpr = c,
             left = fold_const(o.left, constmap),
             right = fold_const(o.right, constmap))
     }
     if (e is ExprCall) {
         let o = e as ExprCall
-        var n = new ExprCall(at = e.at, name := o.name)
+        var n = new ExprCall(at = e.at, atEnclosure = o.atEnclosure, genFlags = o.genFlags, name := o.name)
         for (ai in range(length(o.arguments))) {
             emplace_new(n.arguments) <| fold_const(o.arguments[ai], constmap)
         }
