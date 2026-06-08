@@ -92,6 +92,8 @@ namespace das {
                 node->~gc_node();
 #ifdef _MSC_VER
                 auto sz = _msize(node);
+#elif defined(__APPLE__)
+                auto sz = malloc_size(node);
 #else
                 auto sz = malloc_usable_size(node);
 #endif
