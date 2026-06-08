@@ -408,6 +408,20 @@ namespace das {
         das_invoke<void>::invoke(context,at,block);
     }
 
+    // Build fn->body inside `block` on a fresh scoped gc root; on exit, promote the body's
+    // subtree to the enclosing root and sweep the rest (the lowering intermediates). For
+    // macros that rebuild fn->body wholesale (e.g. [flatten]) and want their transient AST
+    // reclaimed immediately instead of waiting for the end-of-module sweep. We start the walk
+    // at fn->body, not fn: fn already lives on the enclosing root, so fn->gc_collect would hit
+    // the gc_owner==target early-out and collect nothing.
+    void ast_gc_collect_scope ( FunctionPtr fn, const TBlock<void> & block, Context * context, LineInfoArg * at ) {
+        gc_guard scope;
+        das_invoke<void>::invoke(context,at,block);
+        if ( fn && fn->body ) {
+            fn->body->gc_collect(scope.saved_thread_root, &scope.guard_root);
+        }
+    }
+
     // Free a SINGLE orphaned AST expression node mid-compile, instead of waiting for the
     // enclosing gc_guard to sweep it. gc nodes live flat on a root list, so this frees
     // only `expr` itself — its children stay on the root (a caller-side reclaim walker
@@ -1166,6 +1180,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_gc_guard)>(*this, lib,  "ast_gc_guard",
             SideEffects::modifyExternal, "ast_gc_guard")
                 ->args({"block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_gc_collect_scope)>(*this, lib,  "ast_gc_collect_scope",
+            SideEffects::modifyExternal, "ast_gc_collect_scope")
+                ->args({"function","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_module)>(*this, lib,  "for_each_module",
             SideEffects::accessExternal, "for_each_module")
                 ->args({"program","block","context","line"});

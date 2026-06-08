@@ -754,29 +754,33 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>; m
     ctx.whitelist := whitelist
     if (!(func.body is ExprBlock)) return ctx
     let bodyBlk = func.body as ExprBlock
-    var out : array<ExpressionPtr>
-    out |> push <| qmacro_expr(${ var $i(ctx.liveName) = true; })
-    if (ctx.hasRet) {
-        var rt = clone_type(func.result)
-        rt.flags.constant = false
-        out |> push <| qmacro_expr(${ var $i(ctx.retName) : $t(rt); })
+    // Build the lowered body on a scoped gc root: the unroll/fold intermediates are swept on
+    // scope exit, only the live twin body (func.body) is promoted to the enclosing root.
+    ast_gc_collect_scope(func) {
+        var out : array<ExpressionPtr>
+        out |> push <| qmacro_expr(${ var $i(ctx.liveName) = true; })
+        if (ctx.hasRet) {
+            var rt = clone_type(func.result)
+            rt.flags.constant = false
+            out |> push <| qmacro_expr(${ var $i(ctx.retName) : $t(rt); })
+        }
+        lower_list(ctx, bodyBlk, null, out)
+        if (ctx.hasRet) {
+            out |> push <| qmacro_expr(${ return $i(ctx.retName); })
+        }
+        if (ctx.ok) {
+            dse_pass(out)          // drop dead mask-kills (`__flat_live = false`) first…
+            const_prop_pass(out)   // …so an unreassigned `__flat_live` reads as const true → collapse
+            copy_prop_pass(out)    // inline single-def temps (`__flat_ret = c; return __flat_ret` → `return c`)
+            dse_pass(out)          // remove anything left dead (collapsed mask decls, folded temps)
+            ssa_rename_pass(out)   // single-def-ify reassigned user locals → fold_body const-props the chain
+        }
+        var newBody = new ExprBlock(at = func.body.at)
+        for (s in out) {
+            newBody.list |> emplace(s)
+        }
+        func.body = newBody
     }
-    lower_list(ctx, bodyBlk, null, out)
-    if (ctx.hasRet) {
-        out |> push <| qmacro_expr(${ return $i(ctx.retName); })
-    }
-    if (ctx.ok) {
-        dse_pass(out)          // drop dead mask-kills (`__flat_live = false`) first…
-        const_prop_pass(out)   // …so an unreassigned `__flat_live` reads as const true → collapse
-        copy_prop_pass(out)    // inline single-def temps (`__flat_ret = c; return __flat_ret` → `return c`)
-        dse_pass(out)          // remove anything left dead (collapsed mask decls, folded temps)
-        ssa_rename_pass(out)   // single-def-ify reassigned user locals → fold_body const-props the chain
-    }
-    var newBody = new ExprBlock(at = func.body.at)
-    for (s in out) {
-        newBody.list |> emplace(s)
-    }
-    func.body = newBody
     return ctx
 }
 
