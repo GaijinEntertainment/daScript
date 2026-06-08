@@ -6014,7 +6014,43 @@ namespace das {
             logs << "INITIAL CODE:\n"
                  << *this;
         }
+        // Per-pass collect+swap: infer mints a lot of throwaway TypeDecls/Expressions. When a
+        // pass grows the working root enough, collect the live tree into a fresh root and swap
+        // it in (O(1)); the old root's dtor sweeps that pass's garbage. Fire when growth since
+        // the last collect crosses a node threshold (~2 MB) OR a fraction of the live set.
+        bool gcInferCollect = options.getBoolOption("gc_infer_collect", policies.gc_infer_collect);
+        int32_t gcInferNodes = options.getIntOption("gc_infer_collect_nodes", policies.gc_infer_collect_nodes);
+        int32_t gcInferPct = options.getIntOption("gc_infer_collect_pct", policies.gc_infer_collect_pct);
+        bool gcInferLog = options.getBoolOption("log_gc_infer_collect", false);
+        uint64_t gcLastCount = gc_root::gc_get_active_root()->gc_count;
+        // Collect the module's working root into a fresh root and swap it in (O(1)); the old
+        // root's dtor sweeps the garbage. Returns the live count. No-op outside the normal
+        // compile flow (the active root must BE the module's root) so tool/macro re-infer is safe.
+        auto gcCollectAndSwap = [&]() -> uint64_t {
+            gc_root * cur = gc_root::gc_get_active_root();
+            if ( cur != thisModule->module_gc_root.get() ) return gcLastCount;
+            auto fresh = make_unique<gc_root>();
+            thisModule->gc_collect(cur, fresh.get());        // live cur -> fresh (fresh target: full walk, no early-out)
+            gc_root * live = fresh.get();
+            gc_root::gc_get_active_root() = live;
+            thisModule->module_gc_root = das::move(fresh);   // deletes cur -> sweeps the garbage
+            return live->gc_count;
+        };
         for (pass = 0; pass < maxInferPasses; ++pass) {
+            if ( gcInferCollect && pass > 0 ) {
+                uint64_t curCount = gc_root::gc_get_active_root()->gc_count;
+                uint64_t grown = curCount >= gcLastCount ? curCount - gcLastCount : 0;
+                bool fire = grown >= uint64_t(gcInferNodes)
+                         || ( gcLastCount && grown * 100 >= gcLastCount * uint64_t(gcInferPct) );
+                if ( gcInferLog ) {
+                    logs << "[gc-infer] " << thisModule->name << " pass " << pass
+                         << " live=" << curCount << " grown=" << grown
+                         << " (" << (gcLastCount ? grown * 100 / gcLastCount : 0) << "%)"
+                         << (fire ? " -> COLLECT" : "") << "\n";
+                }
+                if ( fire )
+                    gcLastCount = gcCollectAndSwap();
+            }
             if (macroException)
                 break;
             inferPassesUsed++;   // count each body invocation; avoids undercount when loop breaks early (pass is 0-based)
@@ -6072,5 +6108,10 @@ namespace das {
                   "", "",
                   LineInfo(), CompilationError::exceeds_infer_passes);
         }
+        // End-of-leg collect: sweep this leg's accumulated garbage so the next inferTypes
+        // leg (macro restart / restartInfer) inherits only live nodes, not a compounding
+        // garbage pile. This is the lever that pulls the peak below one leg's worth.
+        if ( gcInferCollect )
+            gcCollectAndSwap();
     }
 }

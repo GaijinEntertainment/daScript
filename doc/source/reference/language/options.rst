@@ -213,6 +213,21 @@ Memory
      - bool
      - false
      - Context does not release old memory from array or table growth (leaves it to the GC).
+   * - ``gc_infer_collect``
+     - bool
+     - true
+     - Collects the compiler's working AST root during type inference — moves the live tree
+       into a fresh root, swaps it in, and sweeps the rest — capping compile-time memory.
+       Set to ``false`` to keep all infer-time nodes until the module finishes compiling.
+   * - ``gc_infer_collect_nodes``
+     - int
+     - 25000
+     - Collect once the working root has grown by this many nodes since the last collect
+       (roughly 2 MB worth).
+   * - ``gc_infer_collect_pct``
+     - int
+     - 50
+     - ...or once it has grown by this percent of the live set, whichever comes first.
 
 --------------------
 AOT
