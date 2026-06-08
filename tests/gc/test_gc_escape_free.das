@@ -11,6 +11,7 @@ options no_aot
 options force_escape_free = true
 
 require dastest/testing_boost public
+require UnitTest
 
 struct Node {
     x : int
@@ -64,6 +65,12 @@ def capture_into_global(i : int) {
 def make_node(i : int) : Node? {
     var p = new Node(x = i, y = i)
     return p
+}
+
+// `p` passed to an impure (modifyExternal) bound C++ function that retains it -> must NOT be freed
+def pass_to_retaining(i : int) {
+    var p = new Node(x = i, y = i)
+    test_escape_keep(p)
 }
 
 def push_into_global(i : int) {
@@ -126,6 +133,19 @@ def test_escape_free_does_not_free_captured(t : T?) {
     capture_into_global(55)
     unsafe { heap_collect(true, true) }
     t |> equal(invoke(g_lam), 55)
+}
+
+// a pointer passed to an impure (retaining) bound C++ function must NOT be freed. After retaining
+// it, we churn freeable allocations that would reuse its slot if it had been wrongly freed, then
+// confirm the retained value is intact.
+[test]
+def test_escape_free_does_not_free_retained(t : T?) {
+    pass_to_retaining(42)
+    for (_i in range(1000)) {
+        var z = new Node(x = -1, y = -1)
+        let _ = test_escape_pure(z)     // freeable -> reuses slots
+    }
+    t |> equal(test_escape_retained_first_int(), 42)   // retained pointer survived -> not freed
 }
 
 // GC-equivalence: the optimization frees via a raw collect (no `delete`), so even a type with a

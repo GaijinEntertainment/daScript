@@ -63,6 +63,18 @@ namespace das {
         return nullptr;
     }
 
+    // Passing the pointer to such a call cannot let it escape: the callee is a built-in (C++) that is
+    // fully pure (no declared side effects, not unsafe, so it can't store the argument anywhere) and
+    // whose return can't carry the pointer back out (non-ref, void-or-workhorse). Restricted to
+    // built-ins because their SideEffects are declared at bind time and reliable here; script-function
+    // side effects are only inferred in a later pass (ast_unused), so script calls stay conservative.
+    static bool isEscapeNeutralCall ( ExprCall * call ) {
+        auto fn = call->func;
+        if ( !fn || !fn->builtIn || fn->sideEffectFlags != 0 || fn->unsafeOperation ) return false;
+        auto res = fn->result;
+        return res && !res->ref && (res->isVoid() || res->isWorkhorseType());
+    }
+
     static bool escapeDecided ( Variable * var ) {
         return var->does_not_escape || var->escapes_return || var->escapes_argument
             || var->escapes_global;
@@ -166,6 +178,10 @@ namespace das {
         virtual ExpressionPtr visit ( ExprReturn * expr ) override { returnDepth--; return Visitor::visit(expr); }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last); argDepth++;
+            // a pointer passed directly to a pure, non-aliasing-return call can't escape through it
+            if ( isEscapeNeutralCall(call) ) {
+                if ( auto v = derefBaseVar(arg) ) safeBase.insert(v);
+            }
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             argDepth--; return Visitor::visitCallArg(call, arg, last);

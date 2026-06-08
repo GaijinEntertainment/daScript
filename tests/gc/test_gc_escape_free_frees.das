@@ -17,6 +17,7 @@ options no_optimization
 options force_escape_free = true
 
 require dastest/testing_boost public
+require UnitTest
 
 let N = 2000
 
@@ -63,6 +64,16 @@ def sum_with_try() : int {
     return total
 }
 
+// passed only to a pure built-in (test_escape_pure: no side effects, scalar return) -> freed
+def sum_pure_builtin() : int {
+    var total = 0
+    for (i in range(N)) {
+        var p = new Node(x = i, y = i * 2)
+        total += test_escape_pure(p)
+    }
+    return total
+}
+
 // non-escaping owner of a heap field; the raw collect frees the owned array too
 def sum_owning() : int {
     var total = 0
@@ -100,6 +111,16 @@ def test_escape_free_multi_var(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_multi()
     let grew = heap_bytes_allocated() - before
+    t |> success(grew < uint64(40 * (typeinfo sizeof(type<Node>))))
+}
+
+// passed only to a pure (SideEffects::none) bound C++ function -> can't escape -> freed
+[test]
+def test_escape_free_pure_call(t : T?) {
+    let before = heap_bytes_allocated()
+    let s = sum_pure_builtin()
+    let grew = heap_bytes_allocated() - before
+    t |> equal(s, 0)
     t |> success(grew < uint64(40 * (typeinfo sizeof(type<Node>))))
 }
 
