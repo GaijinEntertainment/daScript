@@ -1666,6 +1666,54 @@ def private cse_body(var blk : ExprBlock?) : bool {
     return anyChange
 }
 
+// ===== Pure-alias elimination =====
+// Collapse `let X = <bare var V>` copies (V not reassigned) into direct refs to V and drop the let —
+// clears CSE's `_cse_a = _cse_b` leftovers and unroll/fold's `p_0 = ro`. General, not CSE-specific.
+
+// The bare ExprVar under any chain of ExprRef2Value wrappers, else null.
+def private alias_source(e : Expression const?) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprRef2Value) return alias_source((e as ExprRef2Value).subexpr)
+    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+}
+
+def private eliminate_aliases(var blk : ExprBlock?) : bool {
+    var mutableVars <- collect_mutable(blk)
+    var rename : table<string; ExpressionPtr>
+    var body : array<ExpressionPtr>
+    var changed = false
+    for (s0 in blk.list) {
+        // Resolve already-collapsed aliases first, so chains (let a = b; let b = c) fold in one pass.
+        var s = !empty(rename) && reads_any(s0, rename) ? subst_consts(s0, rename) : s0
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            let lvName = "{(s as ExprLet).variables[0].name}"
+            let src = alias_source((s as ExprLet).variables[0].init)
+            // Skip if either the alias var X or the source V is reassigned — renaming a reassigned X rewrites its stores onto the const source.
+            if (src != null && !key_exists(mutableVars, lvName) &&
+                    !key_exists(mutableVars, "{(src as ExprVar).name}")) {
+                rename[lvName] = clone_expression(src)
+                changed = true
+                continue
+            }
+        }
+        body |> push(s)
+    }
+    if (changed) {
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (b in body) {
+            blk.list |> emplace(b)
+        }
+    }
+    delete mutableVars
+    unsafe {
+        delete rename
+        delete body
+    }
+    return changed
+}
+
 // ===== Completeness oracle (test-framework facing) =====
 // Mirrors flatten.das FoldResidualVisitor: flags a uniform subtree still inline in the varying body
 // or a pure subtree computed >=2x un-shared. Empty ⇒ complete; checked over the COMPILED twin.
@@ -1765,6 +1813,19 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
             break
         }
     }
+    // Alias residual: a pure single-def `let X = <bare var V>` copy (neither X nor V reassigned)
+    // the cleanup should collapse. A reassigned X (`var X = V` reused across copies) is a real var.
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            let lvName = "{(s as ExprLet).variables[0].name}"
+            let src = alias_source((s as ExprLet).variables[0].init)
+            if (src != null && !key_exists(pe.mutableVars, lvName) &&
+                    !key_exists(pe.mutableVars, "{(src as ExprVar).name}")) {
+                res |> push("a pure alias let '{lvName}' = '{(src as ExprVar).name}'")
+                break
+            }
+        }
+    }
     delete pe.paramNames
     delete pe.localColor
     delete pe.mutableVars
@@ -1780,6 +1841,11 @@ def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>
     var blk = func.body as ExprBlock
     var changed = extract_preshader(func, blk, barriers)
     if (cse_body(blk)) {
+        changed = true
+    }
+    // Collapse every pure copy-let — CSE's `_cse_a = _cse_b` leftovers AND the unroll/fold's
+    // `p_0 = ro`. `eliminate_aliases` is general, so one post-CSE sweep clears them all.
+    if (eliminate_aliases(blk)) {
         changed = true
     }
     return changed

@@ -167,6 +167,12 @@ common-subexpression elimination (``flatten_optimize``):
   reassociation pass's canonical operand order is what makes the key match across
   ``a + b`` and ``b + a``; a uniform repeat routes to the preshader
   (``_preshader_cse_``), a varying one stays in the body (``_cse_``).
+* **Alias elimination** then collapses every pure ``let X = <bare var V>`` copy (with
+  ``V`` not reassigned) into direct references to ``V`` and drops the ``let``. CSE can
+  leave such copies (a later round rewrites an earlier ``_cse_`` let's whole RHS down to
+  a bare var) and the unroll / fold can leave them (``let p_0 = ro``); both are
+  pass-through graph nodes for nothing. CSE and alias elimination iterate to a fixpoint,
+  since an eliminated alias can canonicalise a variable and expose a fresh dup.
 
 Both passes are **value-exact** — they only hoist and share existing subtrees, never
 regroup or round — and both exclude any subtree that reads a **reassigned** variable
@@ -284,7 +290,8 @@ Public API
 
 ``flatten_optimize(var func, barriers : table<string>) : bool``
     The post-fold optimize pass: hoist maximal uniform subtrees to per-draw
-    ``_preshader_`` lets, then CSE-dedup repeated subtrees. Run it **once** after
+    ``_preshader_`` lets, CSE-dedup repeated subtrees, then collapse pure-alias
+    ``let`` copies — CSE and alias elimination iterating to a fixpoint. Run it **once** after
     the ``flatten_fold`` fixpoint converges (and *not* before — reassociation runs
     in the fold and would reorder a hoisted reference back into a fresh uniform
     subtree). ``barriers`` is the backend's sampler / intrinsic call-name set
@@ -294,8 +301,9 @@ Public API
 ``flatten_opt_residuals(var func) : array<string>``
     The optimize-completeness oracle (sibling of ``flatten_fold_residuals``):
     walks a compiled twin and returns a description for each missed optimization —
-    a maximal uniform subtree still inline in the varying body, or a pure subtree
-    computed twice or more left un-shared. Empty means complete. Drives the same
+    a maximal uniform subtree still inline in the varying body, a pure subtree
+    computed twice or more left un-shared, or a pure-alias ``let`` copy left
+    uncollapsed. Empty means complete. Drives the same
     ``tests/flatten/test_flatten_fold.das`` corpus and the ``flatten-fuzz``
     strict mode.
 

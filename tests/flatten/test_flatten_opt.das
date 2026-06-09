@@ -18,6 +18,11 @@ require math
 var G_GAIN = 2.5
 var G_BIAS = -0.75
 var G_TINT = float3(0.3, 0.59, 0.11)
+var G_SEED = 5
+
+def gi(p : int) : int {
+    return p * 3 + 1
+}
 
 // ----- preshader extraction: whole-uniform let -----
 [flatten]
@@ -71,6 +76,27 @@ def c_uni(x : float) : float {
     return x * p + x * q
 }
 
+// ----- alias elimination: a pure `let b = a` copy must collapse (b -> a), value unchanged -----
+[flatten]
+def c_alias(x : float) : float {
+    let a = x * x + 1.0
+    let b = a
+    return a * 2.0 + b * 3.0
+}
+
+// ----- value coverage: a uniform helper call reused inside an unrolled loop. The inliner can emit
+// a reassigned `var __flat_loc = _preshader` slot; alias elimination must leave it alone (collapsing
+// a reassigned var onto its const source is a compile error — the deterministic repro is flatten-fuzz
+// seed 3, fixed by the X-mutability guard in eliminate_aliases). -----
+[flatten]
+def c_loop_uni(x : int) : int {
+    var acc = 0
+    for (_i in range(2)) {
+        acc += gi(G_SEED) + x
+    }
+    return acc
+}
+
 var GRID : array<float>
 
 [init]
@@ -117,6 +143,17 @@ def test_flatten_opt(t : T?) {
     t |> run("CSE: uniform dup -> preshader region") @(t : T?) {
         for (v in GRID) {
             t |> equal(c_uni_flat(v), c_uni(v))
+        }
+    }
+    t |> run("alias: pure copy let collapses") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(c_alias_flat(v), c_alias(v))
+        }
+    }
+    t |> run("alias: reassigned var from uniform is NOT collapsed") @(t : T?) {
+        for (v in GRID) {
+            let n = int(v)
+            t |> equal(c_loop_uni_flat(n), c_loop_uni(n))
         }
     }
 }
