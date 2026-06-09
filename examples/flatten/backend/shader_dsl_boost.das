@@ -1651,7 +1651,7 @@ def extract_float(expr : Expression?&, var res : float&, var errors : string?) :
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_float(v.variable.init, res, errors)
         }
     }
@@ -1677,7 +1677,7 @@ def extract_float2(expr : Expression?&, var res : float2&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_float2(v.variable.init, res, errors)
         }
     }
@@ -1703,7 +1703,7 @@ def extract_float3(expr : Expression?&, var res : float3&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_float3(v.variable.init, res, errors)
         }
     }
@@ -1729,7 +1729,7 @@ def extract_float4(expr : Expression?&, var res : float4&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_float4(v.variable.init, res, errors)
         }
     }
@@ -1755,7 +1755,7 @@ def extract_string(expr : Expression?&, var res : string&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_string(v.variable.init, res, errors)
         }
     }
@@ -1783,7 +1783,7 @@ def extract_sampler2d(expr : Expression?&, var res : string&, var errors : strin
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            // retrive constant values from global variables
+            // retrieve constant values from global variables
             return extract_sampler2d(v.variable.init, res, errors)
         }
     }
