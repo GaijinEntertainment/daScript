@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 require daslib/flatten
+require math
 
 //! Verification net for the flatten const-optimization arc — two layers per case
 //! (numbered per the arc's 5-layer verification framework; Layer 1, the randomized
@@ -519,6 +520,78 @@ def f_fix_inline(b : int) : int {
     return fix_callee((0 * b) + 24, b + 7)
 }
 
+// ----- reassociation (#1c): scattered consts gather into one folded literal -----
+//
+// `0.5 + x + 0.6` is NOT foldable by the typer (consts are non-adjacent; the typer folds only
+// adjacent const arithmetic and never reassociates). flatten reassociates under fast-math, so the
+// twin collapses to `x + 1.1` / `x * 6` / `x + 5` etc. Float arms use the relative-tolerance
+// `fapprox` (reassoc genuinely changes rounding); integer arms are exact (`+`/`*` are associative).
+
+[flatten]
+def f_re_add(x : float) : float {
+    return 0.5 + x + 0.6
+}
+
+[flatten]
+def f_re_add2(x : float; y : float) : float {
+    return 0.5 + x + y + 0.6
+}
+
+[flatten]
+def f_re_sub(x : float) : float {
+    return x - 0.3 - 0.2
+}
+
+[flatten]
+def f_re_mul(x : float) : float {
+    return 2.0 * x * 3.0
+}
+
+// Scalar consts broadcast over a vector var: `0.5 * 2.0 = 1.0`, then `v * 1.0 → v`. Reassoc must
+// preserve the float3 result type through the gather (the `*1` cleanup carries its own
+// same_base_type gate). Exact (1.0 is exact).
+[flatten]
+def f_re_broad(v : float3) : float3 {
+    return v * 0.5 * 2.0
+}
+
+// Vector-const operands gather + fold via the all-const ExprOp2 arm (the typer leaves vector const
+// arithmetic). `float3(0.5) + v + float3(0.6) → v + float3(1.1)`.
+[flatten]
+def f_re_vec(v : float3) : float3 {
+    return float3(0.5) + v + float3(0.6)
+}
+
+[flatten]
+def f_re_iadd(x : int) : int {
+    return 2 + x + 3
+}
+
+[flatten]
+def f_re_imul(x : int) : int {
+    return 2 * x * 3
+}
+
+[flatten]
+def f_re_isub(x : int) : int {
+    return x - 3 - 2
+}
+
+// Var terms are sorted into a canonical (structural) order so commutative chains converge to one
+// form (for a later CSE). Vars written out of order here (c, a, b) + scattered consts must give
+// the same value as the original; the twin gathers to a sorted `((a + b) + c) + <const>`.
+[flatten]
+def f_re_sort(a : int; b : int; c : int) : int {
+    return c + 3 + a + 1 + b
+}
+
+// Subtraction with out-of-order vars: sorting must carry the sign (`b - a` canonicalizes via
+// `-a + b`), so the value is preserved.
+[flatten]
+def f_re_sortsub(a : int; b : int) : int {
+    return b - a + 10 - 4
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
@@ -545,6 +618,17 @@ def cmp3i(t : T?; a, b : int3) {
 
 def cmp3u(t : T?; a, b : uint3) {
     t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+}
+
+// Relative-tolerance float compare for the reassociation arms, where the regrouped twin rounds
+// differently from the left-to-right original (the fast-math contract reassoc trades on).
+def fapprox(t : T?; a, b : float) {
+    let m = max(max(abs(a), abs(b)), 1.0)
+    t |> success(abs(a - b) <= 1.0e-4 * m, "reassoc approx mismatch: {a} vs {b}")
+}
+
+def cmp3f_approx(t : T?; a, b : float3) {
+    fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
 }
 
 [test]
@@ -813,6 +897,42 @@ def test_flatten_const(t : T?) {
             t |> equal(f_fix_local_flat(n), n + 7)
             t |> equal(f_fix_inline_flat(n), f_fix_inline(n))
             t |> equal(f_fix_inline_flat(n), n + 7)
+        }
+    }
+    t |> run("reassoc: scattered float consts gather (approx — rounding differs)") @(t : T?) {
+        for (v in GRID) {
+            fapprox(t, f_re_add_flat(v), f_re_add(v))
+            fapprox(t, f_re_sub_flat(v), f_re_sub(v))
+            fapprox(t, f_re_mul_flat(v), f_re_mul(v))
+            for (w in GRID) {
+                fapprox(t, f_re_add2_flat(v, w), f_re_add2(v, w))
+            }
+        }
+    }
+    t |> run("reassoc: scalar broadcast (v*0.5*2.0 -> v) + vector-const gather") @(t : T?) {
+        for (v in GRID) {
+            let vv = float3(v, v * 2.0, -v)
+            cmp3f(t, f_re_broad_flat(vv), f_re_broad(vv))
+            cmp3f_approx(t, f_re_vec_flat(vv), f_re_vec(vv))
+        }
+    }
+    t |> run("reassoc: integer chains are exact") @(t : T?) {
+        for (n in IGRID) {
+            t |> equal(f_re_iadd_flat(n), f_re_iadd(n))
+            t |> equal(f_re_iadd_flat(n), n + 5)
+            t |> equal(f_re_imul_flat(n), f_re_imul(n))
+            t |> equal(f_re_imul_flat(n), n * 6)
+            t |> equal(f_re_isub_flat(n), f_re_isub(n))
+            t |> equal(f_re_isub_flat(n), n - 5)
+        }
+    }
+    t |> run("reassoc: out-of-order vars are sorted, value preserved") @(t : T?) {
+        for (a in IGRID) {
+            for (b in IGRID) {
+                t |> equal(f_re_sort_flat(a, b, 0), f_re_sort(a, b, 0))
+                t |> equal(f_re_sortsub_flat(a, b), f_re_sortsub(a, b))
+                t |> equal(f_re_sortsub_flat(a, b), b - a + 6)
+            }
         }
     }
 }

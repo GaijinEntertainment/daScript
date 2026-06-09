@@ -554,6 +554,16 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        // A fully-constant arithmetic ExprOp2 the typer left unfolded — it folds scalar const
+        // arithmetic during re-infer (`2+3→6`) but leaves vector const arithmetic
+        // (`float3(2)+float3(3)`), which survives here and is what reassoc's gathered const
+        // groups become. Fold to one literal via the evaluator (mirrors the visitExprCall arm).
+        // eval_to_const_supported is null-safe, so an un-inferred node (the group reassoc just
+        // built this pass) is skipped and folded on the next re-infer cycle.
+        if (is_all_const(that) && eval_to_const_supported(that._type)) {
+            var folded = eval_to_const(that)
+            if (folded |> is_expr_const()) { changed = true; return folded }
+        }
         // Algebraic identities over the scalar + vector (float/int/uint) family. Integer
         // arms are exact (two's-complement, `e*-1==-e` even at INT_MIN); float arms fire
         // under flatten's fast-math assumption (every consumer is a shader backend) — `x*1`/
@@ -870,11 +880,44 @@ def public eval_to_const_supported(t : TypeDeclPtr) : bool {
         bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4)
 }
 
+// True if every operator / call node in the subtree carries a settled type. eval_single_expression
+// builds sim-nodes assuming inference is complete — an un-inferred operator node has a null `.func`
+// and crashes the simulator. Const literals need no inference (exempt); a var would already have
+// failed is_all_const. Guards eval against a not-yet-re-inferred subtree — e.g. an is_all_const
+// tree whose inferred root has an operand the fold replaced this same pass with a fresh (un-typed)
+// const-arithmetic node.
+def private fully_inferred(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprOp1) {
+        return e._type != null && fully_inferred((e as ExprOp1).subexpr)
+    }
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return e._type != null && fully_inferred(o.left) && fully_inferred(o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return e._type != null && fully_inferred(o.subexpr) && fully_inferred(o.left) && fully_inferred(o.right)
+    }
+    if (e is ExprCall) {
+        if (e._type == null) {
+            return false
+        }
+        for (a in (e as ExprCall).arguments) {
+            if (!fully_inferred(a)) {
+                return false
+            }
+        }
+        return true
+    }
+    return true
+}
+
 // Evaluate a literal-only (is_all_const) inferred expression to one const literal of
 // its type, via the exact runtime evaluator. Returns `e` unchanged if eval fails or
 // the type is unsupported. The fresh const is un-inferred; the macro re-infers it.
 def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
-    if (e == null || e._type == null) return e
+    if (e == null || e._type == null || !fully_inferred(e)) return e
     var ok = false
     var val : float4
     unsafe {
@@ -1006,12 +1049,231 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
     return changed
 }
 
+// ===== Constant reassociation =====
+//
+// Gather scattered constants in associative/commutative `+`/`-` and `*` chains into one
+// adjacent group: `0.5 + a + b + 0.6` → `a + b + (0.5 + 0.6)`, `2.0 * a * 3.0` → `a * (2.0 * 3.0)`.
+// Reassoc only REORDERS (structural) — the FoldVisitor all-const arm + the typer's re-infer then
+// collapse the grouped const sub-expression to one literal. The typer folds only ADJACENT const
+// arithmetic and never reassociates (float rounding); flatten assumes fast-math, so it can.
+// Integer `+`/`*` are exact; integer `/` is non-associative (no `/` here — reciprocal grouping
+// is a follow-up). Const terms are side-effect-free (is_all_const), so gathering them to the tail
+// is unconditional; the var terms are additionally sorted into a canonical (describe) order so
+// commutative chains converge to one form for a later CSE — gated on every var term being
+// side-effect-free, so a side-effecting term's evaluation order is never observably reordered.
+
+struct private ReTerm {
+    neg : bool          //!< additive term is subtracted (always false for the `*` monoid in v1)
+    e : ExpressionPtr
+}
+
+// Flatten a maximal additive chain into signed terms (left-to-right = source order). Descends
+// `+`/`-` ExprOp2 and unary `-`; everything else (vars, calls, `*`/`/` sub-exprs, const literals)
+// is a leaf. No same-base-type gate: vector±scalar does not compile, so an additive chain is
+// always same-type.
+def private collect_add(var e : ExpressionPtr; neg : bool; var terms : array<ReTerm>) {
+    if (e == null) return
+    if (e is ExprOp2) {
+        var o = e as ExprOp2
+        if (o.op == "+" || o.op == "-") {
+            collect_add(o.left, neg, terms)
+            collect_add(o.right, o.op == "-" ? !neg : neg, terms)
+            return
+        }
+    } elif (e is ExprOp1) {
+        var o = e as ExprOp1
+        if (o.op == "-") {
+            collect_add(o.subexpr, !neg, terms)
+            return
+        }
+    }
+    terms |> push(ReTerm(neg = neg, e = e))
+}
+
+// Flatten a maximal `*` chain into factors (no `/` in v1). Descends `*` ExprOp2 only.
+def private collect_mul(var e : ExpressionPtr; var terms : array<ReTerm>) {
+    if (e == null) return
+    if (e is ExprOp2) {
+        var o = e as ExprOp2
+        if (o.op == "*") {
+            collect_mul(o.left, terms)
+            collect_mul(o.right, terms)
+            return
+        }
+    }
+    terms |> push(ReTerm(neg = false, e = e))
+}
+
+// True if the chain rooted at `e` (walked over `addOp`'s monoid: `+`/`-` for "+", `*` for "*")
+// has any const leaf. Backs the already-grouped check.
+def private chain_has_const(e : ExpressionPtr; addOp : string) : bool {
+    if (e == null) return false
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        let isChainOp = addOp == "+" ? (o.op == "+" || o.op == "-") : (o.op == addOp)
+        if (isChainOp) {
+            return chain_has_const(o.left, addOp) || chain_has_const(o.right, addOp)
+        }
+    } elif (e is ExprOp1) {
+        let o = e as ExprOp1
+        if (addOp == "+" && o.op == "-") {
+            return chain_has_const(o.subexpr, addOp)
+        }
+    }
+    return is_all_const(e)
+}
+
+// The canonical reassoc output is `<vars> addOp <all-const-group>` with no const in the var
+// part. Recognizing it makes reassoc idempotent — a fired chain lands here and never re-fires,
+// so the macro's fixpoint terminates. (The const group is folded separately by FoldVisitor.)
+def private already_grouped(that : ExprOp2?; addOp : string) : bool {
+    return that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
+}
+
+// Build a left-leaning `<t0> op <t1> op …` tree from non-empty `terms`, REUSING the operand
+// nodes (each leaf appears once in the flattened term list, so it lands in exactly one slot of
+// the rebuilt tree; the old chain wrappers are dropped when the visitor replaces `that` with the
+// result — the same move-not-clone pattern FoldVisitor uses returning `that.left`). A negative
+// first term becomes a unary `-`; subsequent terms pick addOp/subOp by sign.
+def private build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp : string) : ExpressionPtr {
+    var acc = terms[0].neg ? negate(terms[0].e) : terms[0].e
+    for (i in range(1, length(terms))) {
+        acc = new ExprOp2(at = at, op := terms[i].neg ? subOp : addOp, left = acc, right = terms[i].e)
+    }
+    return acc
+}
+
+// True if the var terms are already in canonical (describe-ascending) order. Lets the sort fire
+// only when needed, so a canonicalized chain is a no-op (idempotent → the macro fixpoint ends).
+def private vars_sorted(vars : array<ReTerm>) : bool {
+    for (i in range(1, length(vars))) {
+        if (describe(vars[i].e) < describe(vars[i - 1].e)) {
+            return false
+        }
+    }
+    return true
+}
+
+// Partition `terms` into var/const and rebuild as `<vars> addOp <consts>` (consts to the tail).
+// Two canonicalizations: gather ≥2 scattered consts into one group (folded by the all-const arm /
+// re-infer), and SORT the var terms into a structural (describe) order so commutative chains
+// converge to one form (`b + a` and `a + b` both → `a + b`) — which lets a later CSE pass match
+// them. Sorting reorders var terms relative to each other, so it is gated on every var term being
+// side-effect-free (shaders are pure, so this always holds there); const terms are pure, so the
+// gather is unconditional. Returns null when neither canonicalization applies, or the chain is
+// all-const (the all-const ExprOp2 arm folds that).
+def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : string) : ExpressionPtr {
+    var vars : array<ReTerm>
+    var consts : array<ReTerm>
+    for (t in terms) {
+        if (is_all_const(t.e)) {
+            consts |> push(t)
+        } else {
+            vars |> push(t)
+        }
+    }
+    if (empty(vars)) {
+        return null
+    }
+    var pure = true
+    for (t in vars) {
+        if (has_sideeffects(t.e)) {
+            pure = false
+            break
+        }
+    }
+    let needs_gather = length(consts) >= 2 && !already_grouped(that, addOp)
+    let needs_sort = pure && length(vars) >= 2 && !vars_sorted(vars)
+    if (!needs_gather && !needs_sort) {
+        return null
+    }
+    if (pure) {
+        sort(vars) $(a, b : ReTerm) : bool {
+            return describe(a.e) < describe(b.e)
+        }
+    }
+    var vt = build_chain(vars, that.at, addOp, subOp)
+    if (empty(consts)) {
+        return vt
+    }
+    var ct = build_chain(consts, that.at, addOp, subOp)
+    return new ExprOp2(at = that.at, op := addOp, left = vt, right = ct)
+}
+
+// Count the var / const terms in a chain (walked over `addOp`'s monoid) without building a term
+// list — const-friendly, since the residual oracle only needs the tallies.
+def private count_terms(e : ExpressionPtr; addOp : string; var nv : int&; var nc : int&) {
+    if (e == null) return
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        let isChainOp = addOp == "+" ? (o.op == "+" || o.op == "-") : (o.op == addOp)
+        if (isChainOp) {
+            count_terms(o.left, addOp, nv, nc)
+            count_terms(o.right, addOp, nv, nc)
+            return
+        }
+    } elif (e is ExprOp1) {
+        let o = e as ExprOp1
+        if (addOp == "+" && o.op == "-") {
+            count_terms(o.subexpr, addOp, nv, nc)
+            return
+        }
+    }
+    if (is_all_const(e)) {
+        nc ++
+    } else {
+        nv ++
+    }
+}
+
+// True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered const terms, not already
+// grouped. The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's
+// exact gate through this, so it flags only genuine misses — never a chain reassoc legitimately
+// leaves alone (single const, already grouped, no var).
+def public has_scattered_consts(that : ExprOp2?) : bool {
+    if (that == null) return false
+    var nv = 0
+    var nc = 0
+    if (that.op == "+" || that.op == "-") {
+        if (already_grouped(that, "+")) return false
+        count_terms(that, "+", nv, nc)
+    } elif (that.op == "*") {
+        if (already_grouped(that, "*")) return false
+        count_terms(that, "*", nv, nc)
+    } else {
+        return false
+    }
+    return nv >= 1 && nc >= 2
+}
+
+class private ReassocVisitor : AstVisitor {
+    changed : bool
+    def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        var res : ExpressionPtr = null
+        if (that.op == "*") {
+            var terms : array<ReTerm>
+            collect_mul(that, terms)
+            res = regroup(that, terms, "*", "/")
+        } elif (that.op == "+" || that.op == "-") {
+            var terms : array<ReTerm>
+            collect_add(that, false, terms)
+            res = regroup(that, terms, "+", "-")
+        }
+        if (res != null) {
+            changed = true
+            return res
+        }
+        return that
+    }
+}
+
 def public fold_body(var func : FunctionPtr) : bool {
     //! Post-infer fold over a flattened body: const-propagate single-def user locals
-    //! (accumulator chains → a constant), collapse `const ? a : b` to the live arm,
-    //! fold algebraic / boolean identities and const constructors, drop the
-    //! side-effect-free `lhs = lhs` self-assigns a folded false-select leaves behind,
-    //! and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
+    //! (accumulator chains → a constant), reassociate scattered constants in `+`/`-`/`*`
+    //! chains into one adjacent group (folded by the all-const arm / re-infer), collapse
+    //! `const ? a : b` to the live arm, fold algebraic / boolean identities and const
+    //! constructors, drop the side-effect-free `lhs = lhs` self-assigns a folded false-select
+    //! leaves behind, and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
     //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
     //! A SINGLE pass — multi-step cascades that route through re-inference (a folded
     //! `0*s → 0` makes a local const, which the next re-infer settles so it can be
@@ -1019,6 +1281,19 @@ def public fold_body(var func : FunctionPtr) : bool {
     //! caller's re-infer loop (see [flatten]'s patch and the [pixel_shader] patch).
     if (!(func.body is ExprBlock)) return false
     var changed = const_prop_locals(func.body as ExprBlock)
+    // Reassociate BEFORE the fold — gather scattered consts into one adjacent group so the
+    // FoldVisitor all-const arm (and the typer's re-infer) can collapse them. After const-prop,
+    // which is what scatters consts (a substituted single-def local lands mid-chain).
+    var rv = new ReassocVisitor()
+    make_visitor(*rv) $(adapter) {
+        visit(func.body, adapter)
+    }
+    if (rv.changed) {
+        changed = true
+    }
+    unsafe {
+        delete rv
+    }
     var v = new FoldVisitor()
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
