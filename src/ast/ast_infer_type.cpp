@@ -5991,6 +5991,17 @@ namespace das {
                 }
                 continue;
             }
+            escapeAnalysis(logs);   // pure analysis: annotate Variable::does_not_escape (idempotent, no AST change)
+            if (scopeFreeOptimization(logs)) {
+                anyMacrosDidWork = true;
+                reportingInferErrors = true;
+                inferTypesDirty(logs, true);
+                reportingInferErrors = false;
+                if (failed()) {
+                    error("internal compiler error: escape free optimization infer to fail", "", "", LineInfo(), CompilationError::internal_pod_analysis_infer);
+                }
+                continue;
+            }
         } while (!failed() && anyMacrosDidWork);
     failed_to_infer:;
         if (failed() && !anyMacrosFailedToInfer && !macroException) {

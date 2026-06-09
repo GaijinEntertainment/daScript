@@ -72,6 +72,8 @@ Disables fast call optimization.
 Reuse stack memory after variables go out of scope.
 Force in-scope for POD-like types.
 Log in-scope for POD-like types.
+Escape analysis: free non-escaping ``new`` pointer locals at scope exit (GC-equivalent raw collect, no finalizer).
+Log escape-analysis static frees.
 Enables debugger support.
 Enables debug inference flag.
 Enables profiler support.

@@ -1296,6 +1296,7 @@ namespace das
         ExprNew() { __rtti = "ExprNew"; };
         ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
             : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
+        virtual bool rtti_isNewExpr() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void dispatch( Visitor & vis ) override;
