@@ -68,13 +68,14 @@ def private scan_flat(var e : ExpressionPtr; var reads : table<uint64>; var risk
     }
 }
 
-// ===== Constant propagation of always-true live masks =====
+// ===== Boolean const-fold of live masks =====
 //
-// When a function has no early returns, `__flat_live` is never reassigned, so it
-// is constant `true` — and so is every per-frame `__flat_live_N` derived from it.
-// Propagating that and folding the selects (`true ? a : b → a`, `true && x → x`)
-// collapses the whole mask scaffolding, leaving clean dataflow. We only ever
-// substitute `__flat_*` bool temps proven constant — never user/global vars.
+// When a function has no early returns, `__flat_live` is never reassigned, so it is
+// constant `true` — and so is every per-frame `__flat_live_N` derived from it. copy_prop
+// inlines such a single-def mask, then `fold_stmt` collapses the selects it exposes
+// (`true ? a : b → a`, `true && x → x`), unwinding the whole mask scaffolding into clean
+// dataflow. fold_const / const_bool / fold_stmt are copy_prop's folding helpers; they only
+// simplify literal const-bools, never user/global vars.
 
 def private const_bool(e : ExpressionPtr; var val : bool&) : bool {
     if (e == null) return false
@@ -155,67 +156,30 @@ def private fold_const(e : ExpressionPtr; constmap : table<uint64; bool>) : Expr
     return clone_expression(e)
 }
 
-def public const_prop_pass(var out : array<ExpressionPtr>) {
-    // A `__flat_*` bool temp is constant when it is declared with a const-foldable
-    // init and never reassigned. Reassigned temps (early-return live masks) stay.
-    var reassigned : table<uint64>
-    for (s in out) {
-        if (s is ExprCopy && (s as ExprCopy).left is ExprVar) {
-            let lv = (s as ExprCopy).left as ExprVar
-            if (is_flat_temp(lv.name)) reassigned |> insert(hash(lv.name))
-        }
-    }
-    var constmap : table<uint64; bool>
-    var changed = true
-    while (changed) {
-        changed = false
-        for (s in out) {
-            if (!(s is ExprLet)) continue
-            let lc = s as ExprLet
-            if (length(lc.variables) != 1) continue
-            let v = lc.variables[0]
-            let h = hash(v.name)
-            if (!is_flat_temp(v.name) || key_exists(reassigned, h) || key_exists(constmap, h) || v.init == null) {
-                continue
-            }
-            var bv = false
-            var probe = fold_const(v.init, constmap)
-            let isConst = const_bool(probe, bv)
-            if (isConst) {
-                constmap[h] = bv
-                changed = true
+// Apply fold_const at the STATEMENT level: fold the sub-expression of an assignment /
+// decl-init / return in place (fold_const itself only folds expression trees, not the
+// ExprCopy/ExprLet/ExprReturn wrappers). Used by copy_prop after it inlines a const mask.
+def private fold_stmt(var s : ExpressionPtr; constmap : table<uint64; bool>) : ExpressionPtr {
+    if (s is ExprCopy) {
+        var cp = s as ExprCopy
+        cp.right = fold_const(cp.right, constmap)
+        return s
+    } elif (s is ExprLet) {
+        var lc = s as ExprLet
+        for (v in lc.variables) {
+            if (v.init != null) {
+                v.init = fold_const(v.init, constmap)
             }
         }
-    }
-    delete reassigned
-    if (empty(constmap)) {
-        delete constmap
-        return
-    }
-    var i = 0
-    while (i < length(out)) {
-        var s = out[i]
-        if (s is ExprCopy) {
-            var cp = s as ExprCopy
-            cp.right = fold_const(cp.right, constmap)
-        } elif (s is ExprLet) {
-            var lc = s as ExprLet
-            for (v in lc.variables) {
-                if (v.init != null) {
-                    v.init = fold_const(v.init, constmap)
-                }
-            }
-        } elif (s is ExprReturn) {
-            var r = s as ExprReturn
-            if (r.subexpr != null) {
-                r.subexpr = fold_const(r.subexpr, constmap)
-            }
-        } else {
-            out[i] = fold_const(s, constmap)
+        return s
+    } elif (s is ExprReturn) {
+        var r = s as ExprReturn
+        if (r.subexpr != null) {
+            r.subexpr = fold_const(r.subexpr, constmap)
         }
-        i ++
+        return s
     }
-    delete constmap
+    return fold_const(s, constmap)
 }
 
 // ===== Copy propagation of single-assignment flatten temps =====
@@ -311,6 +275,10 @@ class private FlatUsesBuilder : AstVisitor {
 }
 
 def public copy_prop_pass(var out : array<ExpressionPtr>) {
+    // Empty map: fold_const with no var bindings still simplifies LITERAL const-bools
+    // (`true && c → c`, `true ? a : b → a`) freshly inlined below. This is how copy-prop
+    // subsumes the old const_prop_pass: inline a proven-const mask, then collapse its uses.
+    var emptyConstMap : table<uint64; bool>
     var changed = true
     while (changed) {
         changed = false
@@ -398,8 +366,12 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             let nm = "{lc.variables[0].name}"
             var rules : Template
             rules |> replaceVariable(nm, src)   // store src directly; apply_template clones per use
+            let constSrc = src is ExprConstBool
             for (j in useJs) {
                 out[j] = apply_template(rules, out[j].at, out[j], false)   // only statements that reference nm
+                if (constSrc) {
+                    out[j] = fold_stmt(out[j], emptyConstMap)   // collapse the now-literal mask: true && c → c
+                }
             }
             unsafe { delete rules }
             out <- [for (j in range(n)); out[j]; where j != k && j != si]
@@ -413,6 +385,7 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             delete ub
         }
     }
+    delete emptyConstMap
 }
 
 def public dse_pass(var out : array<ExpressionPtr>) {
@@ -498,7 +471,7 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 // `var __ssa_acc_2 = __ssa_acc_1 + 3`) makes every local single-definition, which lets the
 // post-infer const-prop (fold_body) fold the chain through the existing single-def
 // path. We rename only user locals that are declared WITH an initializer (single-var)
-// and reassigned at least once — never `__flat_*` masks (handled by const_prop_pass),
+// and reassigned at least once — never `__flat_*` masks (folded by copy_prop),
 // globals (observable), or params (not declared here). A self-referential select
 // (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version. The `__ssa_`
 // prefix is compiler-reserved (a user can't declare `__`-names), so the versions never
@@ -933,8 +906,8 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
 // one forward pass folds a whole accumulator chain: each link's init is substituted
 // with the prior constants and evaluated exactly via the shared runtime evaluator
 // (types are present post-infer), so `var __ssa_acc_1=5; var __ssa_acc_2=__ssa_acc_1+3; …` collapses
-// to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are left
-// to const_prop_pass; globals/fields are never substituted (only their read operands).
+// to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are folded
+// by copy_prop (pre-infer); globals/fields are never substituted (only their read operands).
 
 def private reads_any(var e : ExpressionPtr; names : table<string; ExpressionPtr>) : bool {
     for (nm in keys(names)) {
