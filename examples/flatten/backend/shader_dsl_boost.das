@@ -1578,15 +1578,24 @@ class PixelShaderMacro : AstFunctionAnnotation {
             return true
         }
         if (shader_annotation_arg(func, "flattened")) {
-            // Cycle 2 (re-inferred after flattening): collapse const-condition selects
+            // Cycle 2+ (re-inferred after flattening): collapse const-condition selects
             // and drop the resulting pure self-assigns (`acc = acc`) — without this a
             // loop-var-gated accumulate leaves a self-referential accumulator the IR
-            // builder cannot resolve. Re-infer once more if anything changed.
-            let folded = flatten_fold(func)
-            set_shader_annotation_flag(func, "folded")
-            if (folded) {
+            // builder cannot resolve.
+            //
+            // Iterate to a FIXPOINT, not a single fold pass: a fold can route through
+            // re-inference. `float(x-1)*s` at the center tap folds to `0*s → 0`, which makes
+            // the offset constant; the re-infer settles it so const-prop inlines it, and only
+            // THEN does the revealed `uv + float2(0,0)` identity appear for the next fold pass
+            // to collapse. So re-infer (astChanged) and re-enter while flatten_fold keeps
+            // folding; mark "folded" (terminal) only once it reports no further change.
+            // Mirrors daslib/flatten's own patch loop (daScript #3048) — without it, shaders
+            // leave const-foldable residuals the branchless backend then has to emit.
+            if (flatten_fold(func)) {
                 astChanged = true
+                return true
             }
+            set_shader_annotation_flag(func, "folded")
             return true
         }
         // Cycle 1: flatten does ALL lowering — inline helper calls, if/else -> ?:,

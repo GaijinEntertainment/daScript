@@ -240,7 +240,21 @@ Public API
     *after* re-inference (the constant conditions must already be folded to
     ``ExprConstBool``). ``[flatten]`` runs it automatically; a backend calling
     ``flatten_function`` runs it after its own re-infer, before consuming the
-    twin.
+    twin. A single call is **one shallow pass — it is not self-converging**.
+    A multi-step *reveal* cascade (a folded ``0*s → 0`` makes a local constant
+    that the next re-infer settles for const-prop, exposing a fresh ``v + 0``
+    identity) only fully collapses if the backend **re-enters the fold across
+    re-inference until it reports no change** — exactly as ``[flatten]``'s own
+    patch does (and as the ``[pixel_shader]`` backend now does).
+
+``flatten_fold_residuals(var func) : array<string>``
+    Test-framework / fuzzer introspection: walks a compiled twin's final body
+    and returns a description for each const-foldable residual a complete fold
+    should have collapsed (the same set ``strict_fold`` rejects). Empty means
+    clean. Unlike the ``strict_fold`` *compile-time* flag it runs over the
+    *compiled* output, so it also covers backend paths (e.g.
+    ``[pixel_shader]``) the flag never reaches. ``tests/flatten/test_flatten_fold.das``
+    uses it to verify both the ``[flatten]`` corpus and every example shader.
 
 A backend's typical pipeline is therefore: ``flatten_function`` → re-infer →
 ``flatten_fold`` → re-infer → walk the now-branchless, call-free twin and emit

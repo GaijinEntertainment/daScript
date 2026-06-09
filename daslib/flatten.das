@@ -919,6 +919,62 @@ def private verify_flat(var twin : FunctionPtr; strict : bool) : string {
     return msg
 }
 
+// ===== Fold-completeness validation (test-framework facing) =====
+//
+// `flatten_fold_residuals` is the test-framework / fuzzer check for fold completeness:
+// it walks a COMPILED twin's final AST and collects every const-foldable residual a
+// complete fold should have collapsed — an unconditional algebraic identity
+// (`x*1`/`x+0`/`x-0`/`x*-1`, scalar or vector), an all-const call of an eval-foldable
+// type, a const-condition `?:`, a const `!`. Empty result = clean. Unlike the opt-in
+// `[flatten(strict_fold=true)]` compile-time check, it runs over the ACTUAL compiled
+// output, so it also covers the `[pixel_shader]` backend path that flag never reaches.
+// (Branch / user-call survivors are a DIFFERENT class — a lowering failure — and stay a
+// hard compile error in patch via verify_flat; they never reach a successfully compiled
+// unit.)
+
+class private FoldResidualVisitor : AstVisitor {
+    found : array<string>
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        if (expr.func != null && expr.func.flags.builtIn && is_all_const(expr) && eval_to_const_supported(expr._type)) {
+            found |> push("an unfolded all-const call '{expr.name}'")
+        }
+    }
+    def override preVisitExprOp3(expr : ExprOp3?) : void {
+        if (expr.subexpr is ExprConstBool) {
+            found |> push("an unfolded const-condition select")
+        }
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) : void {
+        if (is_unfolded_identity_op2(expr)) {
+            found |> push("an unfolded algebraic identity ('{expr.op}')")
+        }
+    }
+    def override preVisitExprOp1(expr : ExprOp1?) : void {
+        if (expr.op == "!" && expr.subexpr is ExprConstBool) {
+            found |> push("an unfolded constant '!'")
+        }
+    }
+}
+
+def public flatten_fold_residuals(var func : FunctionPtr) : array<string> {
+    //! Collect the const-foldable residuals left in `func`'s (post-flatten) body — empty
+    //! means the fold is complete. For test-framework / fuzzer verification of a compiled
+    //! flattened twin; reuses the same predicates the macro's own fold uses.
+    var res : array<string>
+    if (func == null || func.body == null) {
+        return <- res
+    }
+    var v = new FoldResidualVisitor()
+    make_visitor(*v) $(adapter) {
+        visit(func.body, adapter)
+    }
+    res <- v.found
+    unsafe {
+        delete v
+    }
+    return <- res
+}
+
 // ===== Annotation entry point =====
 
 [function_macro(name="flatten")]

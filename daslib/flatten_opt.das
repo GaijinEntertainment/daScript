@@ -585,12 +585,15 @@ class private FoldVisitor : AstVisitor {
         // arms are exact (two's-complement, `e*-1==-e` even at INT_MIN); float arms fire
         // under flatten's fast-math assumption (every consumer is a shader backend) — `x*1`/
         // `x*-1` are exact for all floats, while `x*0`/`x+0`/`x-0` are lossy (NaN·0=NaN;
-        // +0.0 flips -0.0) but enabled by decision. The `*1`/`*-1`/`+0`/`-0` arms RETURN the
-        // non-const operand, so they gate on `same_base_type(that, returned)`: a scalar-
-        // broadcast `s:float * float3(1)` is `float3(s,s,s)`, NOT `s`, and must not collapse
-        // to the scalar. `*0` DROPS an operand (purity gate) and returns a zero of the RESULT
-        // type via zero_const_of — so `v * 0.0` / `v * float3(0)` fold to a width-matched
-        // vector zero with no mistype.
+        // +0.0 flips -0.0) but enabled by decision. `*1`/`*-1` RETURN the non-const operand
+        // and so gate on `same_base_type(that, returned)`: scalar*vector broadcast IS valid
+        // (`s:float * float3(1)` is `float3(s,s,s)`, NOT `s`), so dropping the const must not
+        // mistype to the scalar. `+`/`-` need NO such gate — vector±scalar does not compile,
+        // so a valid `+`/`-` always has same-type operands and the non-const operand already
+        // carries the result type; omitting the gate also lets a freshly-inlined (un-inferred,
+        // hence `_type == null`) `v + 0` fold without waiting on a re-infer. `*0` DROPS an
+        // operand (purity gate) and returns a zero of the RESULT type via zero_const_of — so
+        // `v * 0.0` / `v * float3(0)` fold to a width-matched vector zero with no mistype.
         if (that.op == "*") {
             if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
             if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
@@ -605,11 +608,11 @@ class private FoldVisitor : AstVisitor {
                 if (z != null) { changed = true; return z }
             }
         } elif (that.op == "+") {
-            if (is_zero_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
-            if (is_zero_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
+            if (is_zero_const_op(that.right)) { changed = true; return that.left }
+            if (is_zero_const_op(that.left)) { changed = true; return that.right }
         } elif (that.op == "-") {
-            if (is_zero_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
-            if (is_zero_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
+            if (is_zero_const_op(that.right)) { changed = true; return that.left }
+            if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
         } elif (that.op == "&&") {
             // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
             // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
@@ -798,11 +801,11 @@ def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
 
 // True if `e` is an op2 that FoldVisitor's identity arms would have rewritten away:
 // `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x` (scalar OR all-lanes-equal vector
-// const). These RETURN the non-const operand, so this MIRRORS the fold arms' `same_base_type`
-// gate — without it a scalar-broadcast `s * float3(1)` (correctly NOT folded) would be
-// wrongly flagged. `x*0` is excluded — it carries a purity gate, so a survivor is not a miss.
-// The typer never folds a runtime-operand identity, so a survivor here is a const-fold miss:
-// the high-teeth half of the strict_fold verification invariant.
+// const). MIRRORS the fold arms exactly: the `*1`/`*-1` arms carry a `same_base_type` gate
+// (scalar*vector broadcast is valid, so `s * float3(1)` is correctly NOT folded and must not
+// be flagged); `+`/`-` have no gate (vector±scalar does not compile, so they always fold).
+// `x*0` is excluded — it carries a purity gate, so a survivor is not a miss. The typer never
+// folds a runtime-operand identity, so a survivor here is a genuine const-fold miss.
 def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
     if (e == null) return false
     if (e.op == "*") {
@@ -810,8 +813,7 @@ def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
             ((is_one_const_op(e.left) || is_neg_one_const_op(e.left)) && same_base_type(e, e.right)))
     }
     if (e.op == "+" || e.op == "-") {
-        return ((is_zero_const_op(e.right) && same_base_type(e, e.left)) ||
-            (is_zero_const_op(e.left) && same_base_type(e, e.right)))
+        return (is_zero_const_op(e.right) || is_zero_const_op(e.left))
     }
     return false
 }
@@ -981,14 +983,23 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
-                // eval_single_expression only READS the tree (throwaway context), so fold the
-                // init in place — no defensive clone.
                 var oldInit = lc.variables[0].init
-                var folded = eval_to_const(oldInit)
-                if (folded |> is_expr_const() && folded != oldInit) {
-                    lc.variables[0].init = folded
-                    constmap["{lc.variables[0].name}"] = folded
+                if (oldInit |> is_expr_const()) {
+                    // Already a literal — e.g. a fold-produced `0f` whose `0*s` collapsed.
+                    // eval_to_const bails on its null _type, but it IS the constant; map it
+                    // directly so its uses inline (revealing identities like `v + 0`) and the
+                    // dead decl drops. Without this the local survives to the backend.
+                    constmap["{lc.variables[0].name}"] = oldInit
                     changed = true
+                } else {
+                    // A const expression (`2.0 * 3.0`): eval to its literal. eval_single_expression
+                    // only READS the tree (throwaway context), so fold the init in place.
+                    var folded = eval_to_const(oldInit)
+                    if (folded |> is_expr_const() && folded != oldInit) {
+                        lc.variables[0].init = folded
+                        constmap["{lc.variables[0].name}"] = folded
+                        changed = true
+                    }
                 }
             }
         }
@@ -1029,6 +1040,10 @@ def public fold_body(var func : FunctionPtr) : bool {
     //! side-effect-free `lhs = lhs` self-assigns a folded false-select leaves behind,
     //! and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
     //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
+    //! A SINGLE pass — multi-step cascades that route through re-inference (a folded
+    //! `0*s → 0` makes a local const, which the next re-infer settles so it can be
+    //! const-propagated, revealing a fresh identity) are driven to a fixpoint by the
+    //! caller's re-infer loop (see [flatten]'s patch and the [pixel_shader] patch).
     if (!(func.body is ExprBlock)) return false
     var changed = const_prop_locals(func.body as ExprBlock)
     var v = new FoldVisitor()

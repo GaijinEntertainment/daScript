@@ -244,9 +244,10 @@ FILE(GLOB AOT_FIO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/
 
 # AOT for flatten test files
 FILE(GLOB AOT_FLATTEN_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/flatten/*.das")
-# Exclude the _err_ boundary fixtures (they intentionally fail to compile) and the
-# flat_api_macro helper module (a compile-time-only macro, not a test entry point)
-list(FILTER AOT_FLATTEN_FILES EXCLUDE REGEX "_err_|flat_api_macro")
+# Exclude the _err_ boundary fixtures (they intentionally fail to compile), the
+# flat_api_macro helper module (a compile-time-only macro, not a test entry point), and
+# _fold_fixtures (a [flatten] corpus compiled at runtime by test_flatten_fold, not a test)
+list(FILTER AOT_FLATTEN_FILES EXCLUDE REGEX "_err_|flat_api_macro|_fold_fixtures")
 
 # AOT for fs test files
 FILE(GLOB AOT_FS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fs/*.das")
