@@ -339,6 +339,7 @@ def make_helper(var g : Gen&) : string {
     let savedNo = g.noHelpers
     g.noHelpers = true
     var hscope <- [Var(name = "p0", mutable = false), Var(name = "p1", mutable = false)]   // nolint:LINT003 -- gen_branch mutates scope by-ref
+    add_globals(hscope)
     let br = gen_branch(g, hscope, min(2, g.cfg.maxDepth), 0, "    ", false)
     let fin = gen_expr(g, hscope, 2)
     g.noHelpers = savedNo
@@ -396,6 +397,7 @@ def gen_stmt(var g : Gen&; var scope : array<Var>; depth, loopDepth : int; inden
 
 def gen_function_body(var g : Gen&) : string {
     var scope <- [Var(name = "a", mutable = false), Var(name = "b", mutable = false), Var(name = "c", mutable = false)]
+    add_globals(scope)
     let br = gen_branch(g, scope, g.cfg.maxDepth, 0, "    ", false)
     let fin = gen_expr(g, scope, 3)
     return "{br._0}    return {fin}\n"
@@ -436,6 +438,21 @@ def gen_unit(var g : Gen&; idx : int) : string {
 // (non-convergence / oscillation), not just flatten lowering bugs.
 var g_log_infer = false
 
+// Set once in main (int domain only). When true, generated units reference read-only module
+// globals — UNIFORM leaves that exercise preshader extraction (the twin hoists globals-only
+// subtrees to `_preshader_` lets). Read-only, so they never write shared state across the
+// orig/flat differential calls. Bool domain skips them (int globals don't type in a bool expr).
+var g_use_globals = false
+let G_DEFS = "var G0 = 7\nvar G1 = -3\nvar G2 = 11\n\n"
+
+def add_globals(var scope : array<Var>) {
+    if (g_use_globals) {
+        scope |> push(Var(name = "G0", mutable = false))
+        scope |> push(Var(name = "G1", mutable = false))
+        scope |> push(Var(name = "G2", mutable = false))
+    }
+}
+
 // Tally of post-flatten fold residuals seen across all batches in --strict-fold mode.
 // Non-fatal (see run_batch) — reported as a summary line at the end.
 var g_residual_warnings = 0
@@ -456,6 +473,9 @@ def build_file(units : array<string>) : string {
             write(w, "options log_infer_passes = true\n")
         }
         write(w, "require daslib/flatten\n\n")
+        if (g_use_globals) {
+            write(w, G_DEFS)
+        }
         for (u in units) {
             write(w, u)
         }
@@ -585,7 +605,8 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; strict
                             if (func.body == null || func.flags.builtIn || !(func.name |> ends_with("_flat"))) {
                                 return
                             }
-                            let res <- flatten_fold_residuals(func)
+                            var res <- flatten_fold_residuals(func)
+                            res |> push_clone_from(flatten_opt_residuals(func))
                             if (!empty(res)) {
                                 g_residual_warnings ++
                                 to_log(LOG_WARNING, "RESIDUAL (post-flatten, non-fatal) {func.name}: {res}\n")
@@ -720,6 +741,7 @@ def main : int {
     let batches = cfg_args.batches > 0 ? cfg_args.batches : 1
     let strict = cfg_args.strict_fold
     g_log_infer = cfg_args.log_infer
+    g_use_globals = !cfg_args.bool_domain
     g_tmp_suffix = "{ref_time_ticks()}"
     let cfg = GenCfg(maxDepth = depth, maxStmts = 4, literalPct = 40, constBias = strict ? 55 : 0, boolDomain = cfg_args.bool_domain)
     let domain = cfg_args.bool_domain ? "bool(exhaustive 2^3)" : "int(sampled ~{nInputs})"
