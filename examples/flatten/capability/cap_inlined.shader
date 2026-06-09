@@ -11,7 +11,7 @@ var {
     lightDir = float3(0.5, 0.8, 0.3)
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_inlined(inp : PbrInput) : PbrOutput {
     let nDotL = saturate(dot(normalize(inp.worldNormal), normalize(lightDir)))
     let lit = lerp(shadowColor, baseColor, nDotL)

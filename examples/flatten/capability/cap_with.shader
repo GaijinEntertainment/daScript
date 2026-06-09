@@ -13,7 +13,7 @@ var {
     lightDir = float3(0.5, 0.8, 0.3)
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_with(inp : PbrInput) : PbrOutput {
     var lit = float3(0)
     with (inp) {

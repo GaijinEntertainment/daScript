@@ -10,7 +10,7 @@ var {
     albedo_texture = Sampler2D("%builtin_package/logo.png")
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_fold_ctor(inp : PbrInput) : PbrOutput {
     let base = tex2d(albedo_texture, inp.uv).xyz
     let result = base + float3(0.5)
