@@ -185,7 +185,7 @@ def run_sg(pattern, selector, filepath):
         "--json",
         filepath,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, shell=False)
     if result.returncode != 0 or not result.stdout.strip():
         return []
     try:
