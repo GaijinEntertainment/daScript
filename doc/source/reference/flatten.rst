@@ -125,6 +125,14 @@ downstream tiers (it folds constant *arithmetic* but not constant *constructors*
 and never a runtime-operand identity), done here under a shader's fast-math
 assumption (scalar ``x*0 → 0`` always fires).
 
+The fold and the typer's const-fold are *mutually-enabling*, so the fold phase
+**iterates to a fixpoint**. Flattening folds the runtime-operand identities the
+typer will not (``0*b → 0``); the re-infer between passes then const-folds the
+freshly-constant operands the fold does not touch (``24 >> (24 & 31) → 0``),
+which can expose a fresh identity (``x - 0``) for the next pass. A single pass is
+therefore not enough — the fold re-runs until nothing changes before the twin is
+handed to the backend.
+
 Supported subset
 ================
 

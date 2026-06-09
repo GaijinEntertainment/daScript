@@ -356,6 +356,39 @@ def f_cast_accum : float {
     return acc
 }
 
+// ----- fold fixpoint across the typer boundary (#3) -----
+//
+// flatten's fold and the typer's const-fold are mutually-enabling, so the fold phase
+// must iterate to a fixpoint — a single pass is not enough. flatten folds the operands
+// the typer leaves (a const-propagated local `p`, a runtime-operand identity `0*b`);
+// the re-infer THEN const-folds the freshly-constant `p >> (p & 31)` / `24 >> (24 & 31)`
+// to `0` (a shift/mask the FoldVisitor does not touch), which exposes a NEW `x - 0`
+// identity that only a SECOND fold pass can collapse. Under strict_fold the surviving
+// `x - 0` is a hard compile error, so these COMPILING proves the fixpoint loop holds;
+// both reduce to `b + 7`.
+
+// const-prop reveals the constant: `p → 24`, then the typer folds `24 >> (24 & 31) → 0`.
+// `var` (not `let`) is load-bearing: an immutable `let p` is const-propagated early, so
+// the typer folds the shift before fold_body runs and a single pass suffices. `var`
+// defeats that early propagation, forcing the cascade into the post-fold re-infer — the
+// path the fixpoint loop exists to handle.
+[flatten(strict_fold=true)]
+def f_fix_local(b : int) : int {
+    var p = 24   // nolint:LINT003 -- var defeats early const-prop; see note above
+    return (b + 7) - (p >> (p & 31))
+}
+
+// inline-substitution reveals it via a runtime-operand identity flatten folds but the
+// typer will not: `(0 * b) + 24 → 24`, then the typer folds the shift to `0`.
+def fix_callee(p0, q : int) : int {
+    return q - (p0 >> (p0 & 31))
+}
+
+[flatten(strict_fold=true)]
+def f_fix_inline(b : int) : int {
+    return fix_callee((0 * b) + 24, b + 7)
+}
+
 // ----- differential driver -----
 
 var GRID : array<float>
@@ -578,5 +611,13 @@ def test_flatten_const(t : T?) {
     }
     t |> run("const cast in accumulator folds (was whitelist-rejected)") @(t : T?) {
         t |> equal(f_cast_accum_flat(), f_cast_accum())
+    }
+    t |> run("fold reaches a fixpoint across the typer boundary -> b + 7") @(t : T?) {
+        for (n in IGRID) {
+            t |> equal(f_fix_local_flat(n), f_fix_local(n))
+            t |> equal(f_fix_local_flat(n), n + 7)
+            t |> equal(f_fix_inline_flat(n), f_fix_inline(n))
+            t |> equal(f_fix_inline_flat(n), n + 7)
+        }
     }
 }
