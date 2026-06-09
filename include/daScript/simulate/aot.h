@@ -1952,6 +1952,16 @@ namespace das {
         }
     };
 
+    // escape analysis: the pointee lives in the caller's stack frame (allocate_on_stack), so this
+    // copies the built value into the pre-declared storage and hands back a pointer into the frame
+    template <typename TT, typename AT>
+    struct das_ascend_stack {
+        static __forceinline TT * make ( TT & storage, const AT & init ) {
+            memcpy(&storage, &init, sizeof(AT));
+            return &storage;
+        }
+    };
+
     template <bool smart, typename TT>
     struct das_ascend_handle;
 

@@ -89,7 +89,7 @@ namespace das {
     TypeDeclPtr makeExprAscendFlags() {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "ExprAscendFlags";
-        ft->argNames = { "useStackRef", "needTypeInfo", "isMakeLambda" };
+        ft->argNames = { "useStackRef", "needTypeInfo", "allocate_on_stack" };
         return ft;
     }
 

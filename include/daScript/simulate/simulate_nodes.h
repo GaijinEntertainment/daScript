@@ -2622,6 +2622,23 @@ SIM_NODE_AT_VECTOR(Float, float)
         bool        persistent;
     };
 
+    // escape analysis: the pointee lives in the stack frame (allocate_on_stack), so `new` is just
+    // a zero-init of the reserved slot and a pointer into it - no heap touch
+    struct SimNode_NewStack : SimNode {
+        DAS_PTR_NODE;
+        SimNode_NewStack ( const LineInfo & at, uint32_t sp, uint32_t b )
+            : SimNode(at), stackTop(sp), bytes(b) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            char * ptr = context.stack.sp() + stackTop;
+            memset ( ptr, 0, bytes );
+            return ptr;
+        }
+        uint32_t    stackTop;
+        uint32_t    bytes;
+    };
+
     template <bool move>
     struct SimNode_Ascend : SimNode {
         DAS_PTR_NODE;

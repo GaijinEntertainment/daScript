@@ -727,6 +727,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_NewStack::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(NewStack);
+        V_SP(stackTop);
+        V_ARG(bytes);
+        V_END();
+    }
+
     SimNode * SimNode_NewArray::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(NewArray);

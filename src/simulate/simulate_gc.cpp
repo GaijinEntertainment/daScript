@@ -1165,7 +1165,9 @@ namespace das
                 GcPod gcpod(&context, &call->debugInfo);
                 gcpod.walk(args[0], call->types[0]->firstType);  // free owned arrays/tables in the pointee
                 auto tsize = cast<uint32_t>::to(args[1]);
-                context.free(ptr, tsize, &call->debugInfo);
+                if ( !context.stack.is_stack_ptr(ptr) ) {  // the shell may live in the stack frame (allocate_on_stack)
+                    context.free(ptr, tsize, &call->debugInfo);
+                }
             }
         }
         return v_zero();

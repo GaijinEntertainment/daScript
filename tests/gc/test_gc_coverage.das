@@ -23,6 +23,9 @@ struct Holder {
 var g_holder : Holder?
 var g_cycle : CNode?
 var g_big : array<int>
+// storing each allocation through a global makes it escape (heap, not stack-allocated by escape
+// analysis) so this suite keeps exercising the heap GC; cleared to null so it all becomes garbage
+var g_garbage_sink : Holder?
 
 def collect() {
     unsafe {
@@ -32,8 +35,9 @@ def collect() {
 
 def make_garbage(n : int) {
     for (i in range(n)) {
-        var _h = new Holder(name = "garbage_{i}", vals <- [for (x in range(8)); x])
+        g_garbage_sink = new Holder(name = "garbage_{i}", vals <- [for (x in range(8)); x])
     }
+    g_garbage_sink = null
 }
 
 // reclaim garbage; reachable data survives intact

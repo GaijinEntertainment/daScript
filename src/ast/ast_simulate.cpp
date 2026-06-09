@@ -1797,6 +1797,11 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprAscend * expr) {
         const auto &at = expr->at;
         auto se = getE(expr->subexpr);
+        if ( expr->allocate_on_stack && !expr->needTypeInfo ) {
+            // the make-local sub-expression already builds into the frame slot and returns sp+stackTop
+            setE(expr, se);
+            return expr;
+        }
         auto bytes = expr->subexpr->type->getSizeOf();
         TypeInfo * typeInfo = nullptr;
         if ( expr->needTypeInfo ) {
@@ -1856,6 +1861,8 @@ namespace das
                 pCall->cmresEval = nullptr;
                 sv_simulateCall(expr->func, expr, pCall);
                 newNode = pCall;
+            } else if ( expr->allocate_on_stack ) {
+                newNode = context.code->makeNode<SimNode_NewStack>(at, expr->stackTop, uint32_t(bytes));
             } else {
                 newNode = context.code->makeNode<SimNode_New>(at, bytes, persistent);
             }

@@ -1886,7 +1886,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprNew * expr ) {
         serializeCallFunc(expr);
-        ser << expr->typeexpr << expr->initializer;
+        ser << expr->typeexpr << expr->initializer << expr->allocate_on_stack;
     }
 
     void SerializeVisitor::preVisit ( ExprCall * expr ) {
@@ -2697,7 +2697,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 87;
+        static constexpr uint32_t currentVersion = 88;
         return currentVersion;
     }
 

@@ -947,6 +947,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(force_inscope_pod)>("force_inscope_pod");
             addField<DAS_BIND_MANAGED_FIELD(log_inscope_pod)>("log_inscope_pod");
             addField<DAS_BIND_MANAGED_FIELD(force_escape_free)>("force_escape_free");
+            addField<DAS_BIND_MANAGED_FIELD(force_allocate_on_stack)>("force_allocate_on_stack");
             addField<DAS_BIND_MANAGED_FIELD(log_escape_analysis)>("log_escape_analysis");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");

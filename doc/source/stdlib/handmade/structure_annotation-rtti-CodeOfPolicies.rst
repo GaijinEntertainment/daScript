@@ -73,6 +73,7 @@ Reuse stack memory after variables go out of scope.
 Force in-scope for POD-like types.
 Log in-scope for POD-like types.
 Escape analysis: free non-escaping ``new`` pointer locals at scope exit (GC-equivalent raw collect, no finalizer).
+Escape analysis: allocate non-escaping ``new`` pointer locals on the stack frame instead of the heap (size-capped).
 Log escape-analysis static frees.
 Enables debugger support.
 Enables debug inference flag.
