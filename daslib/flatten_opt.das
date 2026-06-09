@@ -1056,14 +1056,9 @@ def public fold_body(var func : FunctionPtr) : bool {
     unsafe {
         delete v
     }
-    // Two statement-level cleanups over the (post-fold) body. Erase in reverse so
-    // earlier indices stay valid as we remove:
-    //   1. Drop pure self-assigns (`acc = acc`) a collapsed false-select leaves behind.
-    //      has_sideeffects gates it — `g[k()] = g[k()]` keeps (the lvalue is not free).
-    //   2. Strip a redundant zero/default initializer: `var acc = 0` → `var acc : int`,
-    //      since the bare decl already zero-inits. This is always a local decl (you can't
-    //      `var` a global), so it never touches observable state. Post-infer the var's
-    //      type is settled, so dropping the init keeps the declared type intact.
+    // Cleanup 1 — drop pure self-assigns (`acc = acc`) a collapsed false-select leaves
+    // behind. has_sideeffects gates it (`g[k()] = g[k()]` keeps — the lvalue isn't free).
+    // Erase in reverse so earlier indices stay valid.
     var blk = func.body as ExprBlock
     var si = length(blk.list) - 1
     while (si >= 0) {
@@ -1074,16 +1069,32 @@ def public fold_body(var func : FunctionPtr) : bool {
                 blk.list |> erase(si)
                 changed = true
             }
-        } elif (s is ExprLet) {
-            var lt = s as ExprLet
-            for (lv in lt.variables) {
-                if (is_zero_const(lv.init)) {
-                    lv.init = null
-                    changed = true
-                }
-            }
         }
         si --
+    }
+    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`,
+    // the bare decl already zero-inits). DEFERRED to a converged pass: a const-folded
+    // scalar local (`let k = 0f`) must keep its init until const_prop_locals propagates
+    // it into the local's uses (`v + k → v + 0 → v`); nulling it earlier strands the use
+    // as a non-foldable read of a now-uninitialized local. So strip only when const-prop
+    // + fold + self-assign-drop made no other change this pass — by then const-prop has
+    // run to completion. Sets changed=true, so the caller re-infers after the strip
+    // (the strip mutates decls; the next quiet pass then converges).
+    if (!changed) {
+        si = length(blk.list) - 1
+        while (si >= 0) {
+            var s = blk.list[si]
+            if (s is ExprLet) {
+                var lt = s as ExprLet
+                for (lv in lt.variables) {
+                    if (is_zero_const(lv.init)) {
+                        lv.init = null
+                        changed = true
+                    }
+                }
+            }
+            si --
+        }
     }
     return changed
 }

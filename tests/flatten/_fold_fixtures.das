@@ -11,13 +11,9 @@ require math
 //! re-infer fold loop: a folded `0*s → 0` makes a local constant, the re-infer settles it
 //! for const-prop, and only THEN does the revealed `uv + vec(0,…)` identity appear for the
 //! next fold pass. Both lanes/widths (float2 1D, float2 2D = the actual 3x3 blur, float4) are
-//! exercised so the width-matched zero arms all fire. The simple one-step identities live in
+//! exercised so the width-matched zero arms all fire, and a SCALAR variant (`fx_scalar`)
+//! guards the same reveal through a plain float local. The simple one-step identities live in
 //! test_flatten_const.das.
-//!
-//! NOTE: a SCALAR value revealed only via a local (`let k = float(i-1)*s; v + k`) does not
-//! yet fold its trailing `v + 0` — a separate, pre-existing fold-pipeline gap that does not
-//! occur in real shaders (offsets are always vectors). Tracked as a follow-up; its fixture
-//! returns here once fixed.
 
 // Center tap, 1D: float(x-1)*s at x=1 -> 0*s -> 0, offset folds to float2(0,0), inlined ->
 // uv + float2(0,0) -> uv. length() is a kept builtin, so uv + offset stays visible.
@@ -51,6 +47,19 @@ def fx_center4(uv : float4; s : float) : float4 {
     for (x in range(3)) {
         let offset = float4(float(x - 1) * s, 0.0, 0.0, 0.0)
         acc += float4(length(uv + offset))
+    }
+    return acc
+}
+
+// Scalar reveal: float(i-1)*s at i=1 -> 0*s -> 0, k folds to a scalar 0, inlined -> v + 0 ->
+// v. Guards the deferred zero-init strip: nulling k's folded init before const-prop runs
+// would strand `v + k` as an unfolded `v + 0`.
+[flatten]
+def fx_scalar(v : float; s : float) : float {
+    var acc = 0.0
+    for (i in range(3)) {
+        let k = float(i - 1) * s
+        acc += abs(v + k)
     }
     return acc
 }
