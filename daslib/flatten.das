@@ -908,6 +908,10 @@ class private FoldResidualVisitor : AstVisitor {
     def override preVisitExprOp2(expr : ExprOp2?) : void {
         if (is_unfolded_identity_op2(expr)) {
             found |> push("an unfolded algebraic identity ('{expr.op}')")
+        } elif (is_all_const(expr) && eval_to_const_supported(expr._type)) {
+            found |> push("an unfolded all-const arithmetic ('{expr.op}')")
+        } elif (has_scattered_consts(expr)) {
+            found |> push("a scattered const chain ('{expr.op}') reassoc should gather")
         }
     }
     def override preVisitExprOp1(expr : ExprOp1?) : void {

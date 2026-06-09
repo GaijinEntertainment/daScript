@@ -128,10 +128,18 @@ zero (``*-1`` is signed-only — an unsigned "-1" is not a negation factor). It 
 the boolean ``true && x``, ``c ? true : false``, ``!const``; collapses constant vector
 constructors (``float3(1, 2, 3)``, ``uint3(1, 2, 3)``) and const-argument pure builtins
 (``float(7)``, ``min(2, 3)``) to literals; and constant-propagates single-definition
-locals — so a fully-constant accumulator loop reduces to its final constant. These are
-exactly the folds the general compiler leaves for the downstream tiers (it folds constant
-*arithmetic* but not constant *constructors*, and never a runtime-operand identity), done
-here under a shader's fast-math assumption (``x*0 → 0`` always fires).
+locals — so a fully-constant accumulator loop reduces to its final constant. It also
+**reassociates** scattered constants in commutative ``+``/``-`` and ``*`` chains —
+``0.5 + x + 0.6 → x + 1.1``, ``2 * x * 3 → x * 6`` — gathering the constant operands the
+general compiler leaves non-adjacent (it folds only *adjacent* constant arithmetic and never
+reassociates, for float rounding) into one adjacent group the all-const fold then collapses.
+The same pass sorts the chain's *variable* terms into a canonical (structural) order, so
+commutative chains converge to one form (``b + a`` and ``a + b`` both become ``a + b``) —
+gated on every term being side-effect-free, and intended to feed a later common-subexpression
+pass. Integer ``+``/``*`` reassociate exactly; integer ``/`` is non-associative and excluded.
+These are exactly the folds the general compiler leaves for the downstream tiers (it folds
+constant *arithmetic* but not constant *constructors*, and never a runtime-operand identity
+or reassociation), done here under a shader's fast-math assumption (``x*0 → 0`` always fires).
 
 The fold and the typer's const-fold are *mutually-enabling*, so the fold phase
 **iterates to a fixpoint**. Flattening folds the runtime-operand identities the

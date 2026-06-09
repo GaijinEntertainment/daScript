@@ -49,6 +49,10 @@
 #      flatten SSA-renames the reassigned accumulator to single-def versions and const-
 #      props the chain to one constant: 0 add nodes, result = base * <const>. Without it
 #      the backend rejects the self-referential accumulator (50503).
+#
+#  13. cap_fold_reassoc.shader (scattered const chain `0.3 + gain + 0.4`) -> `gain + 0.7`.
+#      The typer can't fold non-adjacent consts and never reassociates; flatten does (fast-math),
+#      gathering them so exactly 1 add survives (not the 2 the source spells), + 1 base*k mul.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -236,6 +240,24 @@ if [[ "$errs" -eq 0 && "$adds" -eq 0 && "$muls" -ge 1 ]]; then
     echo "   ok — compiles ($nodes nodes), 0 add (accumulator folded), $muls mul (base*const)"
 else
     echo "   FAIL — errors=$errs adds=$adds muls=$muls (expected 0 add, >=1 mul)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "13. cap_fold_reassoc.shader (scattered const chain 0.3+gain+0.4 -> gain+0.7)"
+out="$(compile "$here/cap_fold_reassoc.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+adds="$(echo "$out" | grep -c ' add ')"
+muls="$(echo "$out" | grep -c ' mul ')"
+errs="$(echo "$out" | grep -ci error)"
+# The source spells two adds (`(0.3 + gain) + 0.4`); the typer can't fold them (consts non-
+# adjacent, gain is a runtime prop) and the backend has no const-fold. flatten reassociates the
+# chain to `gain + 0.7`, so exactly ONE add survives, plus the one genuine `base * k` multiply.
+# Without reassoc this graph carries two adds.
+if [[ "$errs" -eq 0 && "$adds" -eq 1 && "$muls" -eq 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), 1 add (gain+0.7, consts gathered), 1 mul (base*k)"
+else
+    echo "   FAIL — errors=$errs adds=$adds muls=$muls (expected 1 add, 1 mul)"
     echo "$out" | grep -i error | head
     fail=1
 fi
