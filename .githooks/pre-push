@@ -41,16 +41,18 @@ fi
 
 echo "pre-push: using $DASLANG"
 
-# Formatter: whole tree, verify-only (CI parity). Skip build/ and _build/ output
-# dirs — a locally junctioned module's build output (CMake build/, Sphinx _build/
-# with its _downloads copies) is gitignored and never present in CI's fresh clone,
-# but the whole-tree walk would otherwise trip on it. Masks are SEGMENT-bounded
-# (slashes on both sides) so they match the dirs, not source files like
-# string_builder.das; both slash forms cover Windows (\build\) and POSIX (/build/).
+# Formatter: verify only tracked .das files (the git index), fed via --files-from.
+# This is exactly CI's fresh-clone view, so the hook can't diverge from CI: gitignored
+# scratch (examples/wip.das), build/ and _build/ output, and untracked files that
+# aren't being pushed are all skipped — none of them reach CI.
 echo "pre-push: formatter --verify ..."
-"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --path "$ROOT" --verify \
-    --exclude-mask "/build/" --exclude-mask '\build\' \
-    --exclude-mask "/_build/" --exclude-mask '\_build\'
+FMT_LIST="$(mktemp "${TMPDIR:-/tmp}/dasfmt-prepush.XXXXXX")"   # template form: portable across GNU/BSD/macOS/Git Bash
+trap 'rm -f "$FMT_LIST"' EXIT
+git ls-files --cached -- '*.das' > "$FMT_LIST"
+# daslang is a native binary; under Git Bash it needs a Windows path, not /tmp/...
+FMT_LIST_ARG="$FMT_LIST"
+command -v cygpath >/dev/null 2>&1 && FMT_LIST_ARG="$(cygpath -m "$FMT_LIST")"
+"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --files-from "$FMT_LIST_ARG" --verify
 
 # Lint: only .das files changed in the pushed range vs remote tip
 # (mirrors CI's `git diff origin/<base>...HEAD`).

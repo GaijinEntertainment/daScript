@@ -67,8 +67,7 @@ def private collect_input_paths(args : array<string>; key : string; var paths : 
 }
 
 
-def private collect_files(input_paths : array<string>; var files : array<string>) : bool {
-    var cache : table<string; void?>
+def private collect_files(input_paths : array<string>; var cache : table<string; void?>; var files : array<string>) : bool {
     for (path in input_paths) {
         if (path |> ends_with(".das")) {
             if (!cache |> key_exists(path)) {
@@ -82,8 +81,29 @@ def private collect_files(input_paths : array<string>; var files : array<string>
             }
         }
     }
-    delete cache
     return true
+}
+
+
+def private collect_files_from_list(list_file : string; var cache : table<string; void?>; var files : array<string>) : bool {
+    // Read a newline-separated list of file paths to format/verify.
+    var opened = false
+    fopen(list_file, "rb") $(fr) {
+        if (fr != null) {
+            opened = true   // file opened; an empty list is zero files, not an error
+            fmap(fr) $(data) {
+                for (raw_line in split(string(data), "\n")) {
+                    let line = replace(raw_line, "\r", "")
+                    if (!empty(line) && line |> ends_with(".das") && !cache |> key_exists(line)) {
+                        cache.insert(line, null)
+                        files |> push <| line
+                    }
+                }
+            }
+        }
+    }
+    if (!opened) log::error("Unable to open file list '{list_file}'")
+    return opened
 }
 
 
@@ -103,16 +123,30 @@ def main() {
 
     let startTime = ref_time_ticks()
 
+    var seen : table<string; void?>   // shared across --path and --files-from to skip duplicate files
     var inputPaths : array<string>
     collect_input_paths(args, "--path", inputPaths)
     var files : array<string>
-    if (!collect_files(inputPaths, files)) {
+    if (!collect_files(inputPaths, seen, files)) {
         log::error("Unable to collect files list\n")
         unsafe {
             fio::exit(1)
         }
         return
     }
+
+    var listPaths : array<string>
+    collect_input_paths(args, "--files-from", listPaths)
+    for (lf in listPaths) {
+        if (!collect_files_from_list(lf, seen, files)) {
+            log::error("Unable to collect files list\n")
+            unsafe {
+                fio::exit(1)
+            }
+            return
+        }
+    }
+    delete seen
 
     var excludeMasks : array<string>
     collect_input_paths(args, "--exclude-mask", excludeMasks)
