@@ -36,18 +36,26 @@ def private type_name(t : int) : string {
     return "?"
 }
 
+// In AST-dump mode (`run.sh --das`) the opcode graph is suppressed so the
+// flattened daslang stands alone — the node/pin/link plumbing is noise when you
+// just want to read flatten's output. The default `run.sh <shader>` view (and the
+// regression / capability checks that parse `node ` lines) is unaffected.
+
 def sg_ir_reset() {
     //! Begin a fresh shader graph.
+    return if (sg_ir_want_ast_dump())
     print(";; ---- begin shader graph ----\n")
 }
 
 def sg_ir_set_contract(stage : string; contract : string) {
     //! Record the shader stage + I/O contract.
+    return if (sg_ir_want_ast_dump())
     print(";; contract: stage={stage} type={contract}\n")
 }
 
 def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaultTexture : string) {
     //! A material property (from a `var { ... }` block / shader argument).
+    return if (sg_ir_want_ast_dump())
     if (empty(defaultTexture)) {
         print(";; property {name} : {type_name(ptype)} = {defaultValue}\n")
     } else {
@@ -57,6 +65,7 @@ def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaul
 
 def sg_ir_begin_node(id : int; typeId : string; kind : int; constValue : float4; propertyIndex : int) {
     //! Open a graph node. Its pins follow via sg_ir_add_*_pin.
+    return if (sg_ir_want_ast_dump())
     var extra = ""
     if (kind == 3) {   // Const
         extra = "  const={constValue}"
@@ -67,14 +76,17 @@ def sg_ir_begin_node(id : int; typeId : string; kind : int; constValue : float4;
 }
 
 def sg_ir_add_input_pin(id : int; ptype : int) {
+    return if (sg_ir_want_ast_dump())
     print("    in   pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_output_pin(id : int; ptype : int) {
+    return if (sg_ir_want_ast_dump())
     print("    out  pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_link(fromPin : int; toPin : int) {
+    return if (sg_ir_want_ast_dump())
     print("link  pin {fromPin} -> pin {toPin}\n")
 }
 
@@ -87,6 +99,7 @@ def sg_ir_want_ast_dump() : bool {
 
 def sg_ir_set_ast_dump(astText : string) {
     //! Record the flattened daslang source the backend consumed (the branchless
-    //! `?:` rewrite daslib/flatten produced), printed above the opcode graph.
+    //! `?:` rewrite daslib/flatten produced). In `--das` mode this is the sole
+    //! output — the opcode graph is suppressed.
     print(";; ---- flattened daslang ----\n{astText}\n")
 }
