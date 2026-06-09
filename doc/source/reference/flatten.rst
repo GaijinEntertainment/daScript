@@ -149,6 +149,29 @@ which can expose a fresh identity (``x - 0``) for the next pass. A single pass i
 therefore not enough — the fold re-runs until nothing changes before the twin is
 handed to the backend.
 
+**Preshader extraction and CSE.** Once the fold fixpoint converges, a final
+optimize pass runs **once** on the canonical body — preshader extraction then
+common-subexpression elimination (``flatten_optimize``):
+
+* **Preshader extraction** colours each subtree *uniform* (it reads only material
+  props / shader globals + literals) or *varying* (it transitively reads a function
+  parameter). Every maximal uniform subtree is hoisted to a top-of-body
+  ``_preshader_N`` ``let``; a backend recognises the name prefix and routes the node
+  to the **per-draw preshader**, so uniform work the general compiler would re-run
+  per pixel runs once per draw. Sampler / procedural intrinsics (``tex2d``, ``noise``)
+  are *barriers* — they cannot run in a preshader, so a subtree containing one stays
+  per-pixel even when its inputs are uniform.
+* **CSE** value-numbers the (now-canonical) body by structural key and shares any
+  pure subtree computed twice or more into one ``let`` before its first use, so the
+  backend emits one graph node and *N* links instead of *N* recomputations. The
+  reassociation pass's canonical operand order is what makes the key match across
+  ``a + b`` and ``b + a``; a uniform repeat routes to the preshader
+  (``_preshader_cse_``), a varying one stays in the body (``_cse_``).
+
+Both passes are **value-exact** — they only hoist and share existing subtrees, never
+regroup or round — and both exclude any subtree that reads a **reassigned** variable
+(a live/loop mask or a written global), whose value is not stable across the body.
+
 Supported subset
 ================
 
@@ -259,10 +282,27 @@ Public API
     check — there is no compile-time flag; a missed fold is suboptimal, not an
     error, so it is validated by tests rather than gated in the macro.
 
+``flatten_optimize(var func, barriers : table<string>) : bool``
+    The post-fold optimize pass: hoist maximal uniform subtrees to per-draw
+    ``_preshader_`` lets, then CSE-dedup repeated subtrees. Run it **once** after
+    the ``flatten_fold`` fixpoint converges (and *not* before — reassociation runs
+    in the fold and would reorder a hoisted reference back into a fresh uniform
+    subtree). ``barriers`` is the backend's sampler / intrinsic call-name set
+    (``{ "tex2d", "noise" }``) — those stay per-pixel. ``[flatten]`` runs it
+    automatically; the ``[pixel_shader]`` backend runs it after its fold fixpoint.
+
+``flatten_opt_residuals(var func) : array<string>``
+    The optimize-completeness oracle (sibling of ``flatten_fold_residuals``):
+    walks a compiled twin and returns a description for each missed optimization —
+    a maximal uniform subtree still inline in the varying body, or a pure subtree
+    computed twice or more left un-shared. Empty means complete. Drives the same
+    ``tests/flatten/test_flatten_fold.das`` corpus and the ``flatten-fuzz``
+    strict mode.
+
 A backend's typical pipeline is therefore: ``flatten_function`` → re-infer →
-``flatten_fold`` → re-infer → walk the now-branchless, call-free twin and emit
-its dataflow graph (mapping ``?:`` to a *select* node and the bool masks to a
-0/1 selector).
+``flatten_fold`` (to a fixpoint) → re-infer → ``flatten_optimize`` → re-infer →
+walk the now-branchless, call-free twin and emit its dataflow graph (mapping
+``?:`` to a *select* node and the bool masks to a 0/1 selector).
 
 .. seealso::
 
