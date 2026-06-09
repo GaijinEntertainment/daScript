@@ -325,7 +325,9 @@ def document_module_rtti(_root : string) {
         group_by_regex("Tuple and variant access", mod, %regex~(get_tuple_field_offset|get_variant_field_offset)$%%),
         group_by_regex("Lint suppression", mod, %regex~(rtti_get_source_line|rtti_is_nolint_suppressed|is_lint_suppressed|extract_lint_code)$%%),
         group_by_regex("Iteration", mod, %regex~(each)$%%))
-    documents("Runtime type information library", mod, "rtti.rst", groups)
+    // CompilationError's 580-value list blows the search crawler's per-record size cap;
+    // exclude it from search (the symbol + its description stay indexed).
+    documents("Runtime type information library", mod, "rtti.rst", groups, DocsHook(), ["CompilationError"])
 }
 
 def document_module_ast(_root : string) {

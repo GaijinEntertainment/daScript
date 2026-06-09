@@ -39,7 +39,12 @@ new Crawler({
     {
       indexName: "daslang.io crawler",
       pathsToMatch: ["https://daslang.io/doc/**"],
-      recordExtractor: ({ helpers }) => {
+      recordExtractor: ({ helpers, $ }) => {
+        // Drop blocks das2rst marked `.. container:: nosearch` (e.g. rtti's
+        // 580-value CompilationError enum, which alone blew the per-record size
+        // cap): the symbol <dt> + its description stay indexed, only the oversized
+        // value/field table is removed. Toggle by symbol name in das2rst.das.
+        $(".nosearch").remove();
         return helpers.docsearch({
           recordProps: {
             lvl0: {
@@ -49,10 +54,17 @@ new Crawler({
             lvl1: ".rst-content h1",
             lvl2: ".rst-content h2",
             lvl3: ".rst-content h3",
-            lvl4: ".rst-content dt.sig",
+            // [id] = canonical signatures only; overloads carry no id, so they
+            // don't each spawn a level record (this is what kept ast/builtin
+            // from blowing the 750-records-per-page cap).
+            lvl4: ".rst-content dt.sig[id]",
             lvl5: ".rst-content h4",
             lvl6: ".rst-content h5",
-            content: ".rst-content p, .rst-content li",
+            // exclude the nav toctree: index pages embed the sidebar tree as
+            // li.toctree-l1..l4 INSIDE .rst-content, which would otherwise be
+            // counted as content and balloon the record count.
+            content:
+              ".rst-content p, .rst-content li:not(.toctree-l1):not(.toctree-l2):not(.toctree-l3):not(.toctree-l4)",
           },
           indexHeadings: true,
           aggregateContent: true,
@@ -68,7 +80,10 @@ new Crawler({
     {
       indexName: "daslang.io crawler",
       pathsToMatch: ["https://daslang.io/**", "!https://daslang.io/doc/**"],
-      recordExtractor: ({ helpers }) => {
+      recordExtractor: ({ helpers, $ }) => {
+        // Harmless here (the hand-authored site/blog carry no `.nosearch`), kept
+        // identical to Action 1 so the two extractors don't drift.
+        $(".nosearch").remove();
         return helpers.docsearch({
           recordProps: {
             lvl0: { selectors: "", defaultValue: "Documentation" },
