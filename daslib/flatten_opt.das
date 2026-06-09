@@ -1275,6 +1275,7 @@ def private psh_has_compute(e : ExpressionPtr) : bool {
 struct private PEX {
     paramNames : table<string>
     localColor : table<string; bool>    // local name -> uniform (preshader-eligible)?
+    mutableVars : table<string>         // reassigned names (incl. written globals) — never uniform
     top : array<ExpressionPtr>          // hoisted `_preshader_N` lets, in dependency order
     dedup : table<string; string>       // describe(init) -> preshader name
     rename : table<string; ExpressionPtr>   // old local name -> replacement (alias inline / preshader ref)
@@ -1289,6 +1290,7 @@ def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) 
     if (e |> is_expr_const()) return true
     if (e is ExprVar) {
         let nm = "{(e as ExprVar).name}"
+        if (key_exists(pe.mutableVars, nm)) return false   // reassigned (e.g. a written global) → not stable
         if (key_exists(pe.localColor, nm)) return pe.localColor?[nm] ?? false
         return !key_exists(pe.paramNames, nm)   // a non-param, non-local read is a module global → uniform
     }
@@ -1380,6 +1382,7 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")
     }
+    pe.mutableVars <- collect_mutable(blk)
     var body : array<ExpressionPtr>
     for (s0 in blk.list) {
         var s = s0
@@ -1437,6 +1440,7 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
     let result = pe.changed
     delete pe.paramNames
     delete pe.localColor
+    delete pe.mutableVars
     delete pe.dedup
     unsafe {
         delete pe.rename
@@ -1450,12 +1454,49 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
 // The body is one basic block, so LVN is complete. Value-number pure subtrees by `describe()`, dedup
 // any computed >=2x into one shared let before its first use; uniform dups route to the preshader.
 
+// Names reassigned somewhere in the block (live/loop masks `__flat_*`, any reassigned user `var`).
+// A subtree reading one of these is NOT value-stable — CSE must not share it (its value differs
+// per occurrence), so it is excluded from value numbering. Single-def `__ssa_*` / `let` are safe.
+class private MutCollect : AstVisitor {
+    names : table<string>
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        if (expr.left is ExprVar) {
+            names |> insert("{(expr.left as ExprVar).name}")
+        }
+    }
+}
+
+def private collect_mutable(blk : ExprBlock?) : table<string> {
+    var mc = new MutCollect()
+    make_visitor(*mc) $(a) {
+        visit(blk, a)
+    }
+    var r : table<string>
+    for (n in keys(mc.names)) {
+        r |> insert(n)
+    }
+    unsafe {
+        delete mc
+    }
+    return <- r
+}
+
+def private reads_mutable(e : ExpressionPtr; mutableVars : table<string>) : bool {
+    if (empty(mutableVars)) return false
+    var ec = unsafe(reinterpret<Expression? -const>(e))
+    for (nm in keys(mutableVars)) {
+        if (count_refs(ec, nm) > 0) return true
+    }
+    return false
+}
+
 class private CseTally : AstVisitor {
     collectSample : bool        // clone a representative node per key (cse_body only; the oracle just counts)
     counts : table<string; int>
     sample : table<string; ExpressionPtr>
+    mutableVars : table<string>
     def override preVisitExpression(expr : ExpressionPtr) : void {
-        if (psh_has_compute(expr)) {
+        if (psh_has_compute(expr) && !reads_mutable(expr, mutableVars)) {
             let k = "{describe(expr)}"
             counts[k] = (counts?[k] ?? 0) + 1
             if (collectSample && !key_exists(sample, k)) {
@@ -1546,6 +1587,8 @@ def private cse_body(var blk : ExprBlock?) : bool {
     var anyChange = false
     var counter = 0
     var guard = 0
+    // Reassigned vars are stable across rounds (cse only ever adds `let`s), so collect once.
+    var mutableVars <- collect_mutable(blk)
     while (guard < 4096) {
         guard ++
         // Tally every nontrivial subtree across the block, recording its first statement index.
@@ -1555,6 +1598,7 @@ def private cse_body(var blk : ExprBlock?) : bool {
         for (i in range(length(blk.list))) {
             var ct = new CseTally()
             ct.collectSample = true
+            ct.mutableVars := mutableVars
             make_visitor(*ct) $(a) {
                 visit(blk.list[i], a)
             }
@@ -1618,6 +1662,7 @@ def private cse_body(var blk : ExprBlock?) : bool {
         }
         anyChange = true
     }
+    delete mutableVars
     return anyChange
 }
 
@@ -1667,6 +1712,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")
     }
+    pe.mutableVars <- collect_mutable(blk)
     for (s in blk.list) {
         if (s is ExprLet) {
             for (lv in (s as ExprLet).variables) {
@@ -1698,10 +1744,11 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
             break
         }
     }
-    // CSE residual: any pure subtree still computed >=2x across the block.
+    // CSE residual: any pure subtree (no mutable read) still computed >=2x across the block.
     var counts : table<string; int>
     for (i in range(length(blk.list))) {
         var ct = new CseTally()
+        ct.mutableVars := pe.mutableVars
         make_visitor(*ct) $(a) {
             visit(blk.list[i], a)
         }
@@ -1720,6 +1767,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
     }
     delete pe.paramNames
     delete pe.localColor
+    delete pe.mutableVars
     delete counts
     return <- res
 }
