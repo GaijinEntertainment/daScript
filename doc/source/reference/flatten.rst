@@ -124,7 +124,7 @@ constant operand either a scalar or an all-lanes-equal vector literal (``x * flo
 matching result type so a scalar-broadcast ``s * float3(1)`` (which is ``float3(s,s,s)``,
 not ``s``) is left intact rather than collapsing to the scalar. ``x*0`` returns a zero of
 the **result type**, so both ``v * 0`` and ``v * float3(0)`` fold to a width-matched vector
-zero (``*-1`` is signed-only — an unsigned "−1" is not a negation factor). It also folds
+zero (``*-1`` is signed-only — an unsigned "-1" is not a negation factor). It also folds
 the boolean ``true && x``, ``c ? true : false``, ``!const``; collapses constant vector
 constructors (``float3(1, 2, 3)``, ``uint3(1, 2, 3)``) and const-argument pure builtins
 (``float(7)``, ``min(2, 3)``) to literals; and constant-propagates single-definition

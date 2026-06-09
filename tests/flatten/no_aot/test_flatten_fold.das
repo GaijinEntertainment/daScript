@@ -17,7 +17,11 @@ require daslib/fio
 //! backend path (the single-fold + re-infer loop the flag never reached — the center-tap
 //! `uv + float2(0,0)` bug). Two unit kinds:
 //!   • every example shader (project-resolved) — the `@pixel_shader` entry function;
-//!   • tests/flatten/_fold_fixtures.das — the `[flatten]` reveal-cascade corpus (`*_flat`).
+//!   • _fold_fixtures.das (this dir) — the `[flatten]` reveal-cascade corpus (`*_flat`).
+//!
+//! Lives in tests/flatten/no_aot/ (excluded from test_aot via tests/.das_test): it requires
+//! daslib/flatten at runtime, pulling macro_boost generic instantiations that don't AOT-link
+//! in the full-tree batch. Runs in interp + JIT; the residual check is tier-independent.
 
 // A flatten OUTPUT to validate: a `[flatten]` twin (`*_flat`) or a `[pixel_shader]` entry.
 def private is_flatten_output(func : FunctionPtr) : bool {
@@ -66,7 +70,7 @@ def private check_unit(t : T?; proj, path : string) : int {
 def test_flatten_fold(t : T?) {
     let root = get_das_root()
     t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
-        let n = check_unit(t, "", "{root}/tests/flatten/_fold_fixtures.das")
+        let n = check_unit(t, "", "{root}/tests/flatten/no_aot/_fold_fixtures.das")
         t |> success(n >= 3, "expected >=3 twins, checked {n}")
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {

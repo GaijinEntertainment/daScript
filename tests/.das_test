@@ -39,6 +39,17 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
+    // A meta-test that requires the compiler frontend at runtime (e.g. daslib/flatten ->
+    // macro_boost) can't AOT-link in the full-tree batch — exclude such folders under AOT.
+    if (folder_name == "no_aot") {
+        let args <- get_command_line_arguments()
+        for (arg in args) {
+            if (arg == "--use-aot") {
+                *result = false
+                return
+            }
+        }
+    }
     if (folder_name == "ast_match") {
         let args <- get_command_line_arguments()
         for (arg in args) {
