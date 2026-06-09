@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = true
+options _comment_hygiene = true
 
 module flatten_opt shared private
 
@@ -22,13 +23,8 @@ def private is_flat_temp(name : das_string) : bool {
 }
 
 // ===== Dead-store elimination =====
-//
-// The lowered body is straight-line (no branches), so liveness is a single
-// backward scan. We only ever touch flatten-introduced `__flat_*` locals — never
-// user locals or globals (a `g_out = ...` is observable output, never "dead").
-// A `__flat_*` store is removed when its target is not live afterward AND its RHS
-// is side-effect-free / non-faulting (no call, index, or division) — which is
-// exactly the live-mask kills (`__flat_live = false`, per-frame mask updates).
+// Straight-line body → liveness is one backward scan. Touches only `__flat_*` locals (never
+// user locals/globals); drops a store whose target is dead afterward and whose RHS is pure.
 
 class private FlatScan : AstVisitor {
     reads : table<uint64>
@@ -69,13 +65,8 @@ def private scan_flat(var e : ExpressionPtr; var reads : table<uint64>; var risk
 }
 
 // ===== Boolean const-fold of live masks =====
-//
-// When a function has no early returns, `__flat_live` is never reassigned, so it is
-// constant `true` — and so is every per-frame `__flat_live_N` derived from it. copy_prop
-// inlines such a single-def mask, then `fold_stmt` collapses the selects it exposes
-// (`true ? a : b → a`, `true && x → x`), unwinding the whole mask scaffolding into clean
-// dataflow. fold_const / const_bool / fold_stmt are copy_prop's folding helpers; they only
-// simplify literal const-bools, never user/global vars.
+// With no early return `__flat_live` stays constant `true`; copy_prop inlines the single-def
+// mask and fold_stmt collapses the selects it exposes (`true ? a:b → a`), unwinding the scaffold.
 
 def private const_bool(e : ExpressionPtr; var val : bool&) : bool {
     if (e == null) return false
@@ -183,15 +174,8 @@ def private fold_stmt(var s : ExpressionPtr; constmap : table<uint64; bool>) : E
 }
 
 // ===== Copy propagation of single-assignment flatten temps =====
-//
-// A `__flat_*` temp with exactly one definition (a decl-init, or a no-init decl
-// plus a single store) and whose source reads no later-reassigned variable is a
-// pure forward copy: inline its source at every use and drop the temp. This folds
-// the output scaffold away — `__flat_ret = c; return __flat_ret` → `return c`, and
-// `var __flat_arg = x` → `x` — so a branchless shader flattens byte-identical to
-// its source (the parity goal). Substitution is delegated to `apply_template`
-// (peel-aware, clones the source per hit). A risky source (call / index / divide)
-// is inlined only at a single use, never duplicated.
+// A single-def `__flat_*` temp whose source reads no later-reassigned var is a pure forward copy:
+// inline the source at every use, drop the temp (a risky call/index/divide source only at one use).
 
 class private FlatVarRef : AstVisitor {
     name  : string
@@ -255,10 +239,9 @@ def private scan_src(var e : ExpressionPtr; var reads : table<uint64>; var risky
     }
 }
 
-// Per-pass reference index: name-hash -> the statement indices that reference it
-// (deduped per statement) plus the total occurrence count. Built once per copy_prop
-// pass in a single walk, replacing the old per-candidate count_refs sweep that made
-// the pass O(n^3) on large bodies (one full-body walk per candidate per fold-restart).
+// Per-pass reference index: name-hash -> referencing statement indices (deduped) + total count.
+// Built once per copy_prop pass, replacing the old per-candidate count_refs sweep that was
+// O(n^3) on large bodies.
 class private FlatUsesBuilder : AstVisitor {
     nameUses : table<uint64; array<int>>
     nameCount : table<uint64; int>
@@ -283,10 +266,9 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
     while (changed) {
         changed = false
         let n = length(out)
-        // Precompute once per pass (not per candidate): every store target's indices,
-        // and a name -> (referencing statements, occurrence count) index. A source
-        // reading var V is only unsafe if V is reassigned BETWEEN this temp's def and a
-        // use — a reassignment fully before the def leaves the captured value intact.
+        // Precompute once per pass: each store target's indices + a name -> (ref statements, count)
+        // index. A source reading V is unsafe only if V is reassigned BETWEEN this temp's def and a
+        // use (a reassignment fully before the def leaves the captured value intact).
         var storeIdx : table<uint64; array<int>>
         for (j in range(n)) {
             if (out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar) {
@@ -309,10 +291,9 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             if (length(lc.variables) != 1 || !is_flat_temp(lc.variables[0].name)) continue
             let hk = hash(lc.variables[0].name)
             let nStores = key_exists(storeIdx, hk) ? length(storeIdx[hk]) : 0
-            // Single definition: decl-init + no stores, OR no-init decl + one store. Use the
-            // ORIGINAL source (no clone) — apply_template clones it per use, and the original
-            // lives in out[k]/out[si], reclaimed when we drop them. Cloning here would orphan a
-            // copy on every non-folding candidate (re-examined each while-restart → millions).
+            // Single definition: decl-init + no stores, OR no-init decl + one store. Use the ORIGINAL
+            // source (no clone) — apply_template clones per use; pre-cloning would orphan a copy on
+            // every non-folding candidate (re-examined each while-restart).
             var src : ExpressionPtr = null
             var si = -1
             if (lc.variables[0].init != null && nStores == 0) {
@@ -464,19 +445,8 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 }
 
 // ===== SSA-rename of reassigned user locals =====
-//
-// flatten's body is straight-line (if → ?:, loops unrolled, no user calls), so a
-// reassigned local has a single linear chain of definitions — no control-flow merges,
-// hence no phi nodes. Renaming each write to a fresh version (`acc = acc + 3` →
-// `var __ssa_acc_2 = __ssa_acc_1 + 3`) makes every local single-definition, which lets the
-// post-infer const-prop (fold_body) fold the chain through the existing single-def
-// path. We rename only user locals that are declared WITH an initializer (single-var)
-// and reassigned at least once — never `__flat_*` masks (folded by copy_prop),
-// globals (observable), or params (not declared here). A self-referential select
-// (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version. The `__ssa_`
-// prefix is compiler-reserved (a user can't declare `__`-names), so the versions never
-// collide with a user local — and it is disjoint from `__flat_`, so is_flat_temp still
-// classifies them as user locals (folded here, not by the mask/copy/dse passes).
+// Straight-line body → a reassigned local is a linear def-chain (no phi); renaming each write to a
+// fresh single-def `__ssa_` version lets post-infer const-prop fold the chain (declared-with-init only).
 
 def private rename_reads(var e : ExpressionPtr; current : table<string; string>) : ExpressionPtr {
     if (e == null) return null
@@ -554,29 +524,16 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // A fully-constant arithmetic ExprOp2 the typer left unfolded — it folds scalar const
-        // arithmetic during re-infer (`2+3→6`) but leaves vector const arithmetic
-        // (`float3(2)+float3(3)`), which survives here and is what reassoc's gathered const
-        // groups become. Fold to one literal via the evaluator (mirrors the visitExprCall arm).
-        // eval_to_const_supported is null-safe, so an un-inferred node (the group reassoc just
-        // built this pass) is skipped and folded on the next re-infer cycle.
+        // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
+        // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
+        // to one literal via the evaluator; an un-inferred node is skipped (folded next re-infer).
         if (is_all_const(that) && eval_to_const_supported(that._type)) {
             var folded = eval_to_const(that)
             if (folded |> is_expr_const()) { changed = true; return folded }
         }
-        // Algebraic identities over the scalar + vector (float/int/uint) family. Integer
-        // arms are exact (two's-complement, `e*-1==-e` even at INT_MIN); float arms fire
-        // under flatten's fast-math assumption (every consumer is a shader backend) — `x*1`/
-        // `x*-1` are exact for all floats, while `x*0`/`x+0`/`x-0` are lossy (NaN·0=NaN;
-        // +0.0 flips -0.0) but enabled by decision. `*1`/`*-1` RETURN the non-const operand
-        // and so gate on `same_base_type(that, returned)`: scalar*vector broadcast IS valid
-        // (`s:float * float3(1)` is `float3(s,s,s)`, NOT `s`), so dropping the const must not
-        // mistype to the scalar. `+`/`-` need NO such gate — vector±scalar does not compile,
-        // so a valid `+`/`-` always has same-type operands and the non-const operand already
-        // carries the result type; omitting the gate also lets a freshly-inlined (un-inferred,
-        // hence `_type == null`) `v + 0` fold without waiting on a re-infer. `*0` DROPS an
-        // operand (purity gate) and returns a zero of the RESULT type via zero_const_of — so
-        // `v * 0.0` / `v * float3(0)` fold to a width-matched vector zero with no mistype.
+        // Algebraic identities over the scalar + vector (float/int/uint) family, under fast-math.
+        // `*1`/`*-1` return the non-const operand and gate on `same_base_type` (scalar*vector
+        // broadcast must not mistype to scalar); `*0` returns a RESULT-typed zero via zero_const_of.
         if (that.op == "*") {
             if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
             if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
@@ -647,11 +604,9 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
-        // A fully-constant, side-effect-free call — a vector constructor (`float3(0)`
-        // stays `float3(0f,0f,0f)`, never a const) or a pure builtin over const args —
-        // folds to a single const literal. The typer folds scalar const ARITHMETIC
-        // during re-infer (`2*3 → 6`) but leaves const CONSTRUCTORS; this collapses
-        // them. Post-order, so const-folded args are visible here.
+        // A fully-constant, side-effect-free call (vector constructor or pure builtin over const
+        // args) folds to one literal. The typer folds const ARITHMETIC but leaves const
+        // CONSTRUCTORS; this collapses them. Post-order, so const-folded args are visible.
         if (is_all_const(that)) {
             var folded = eval_to_const(that)
             if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
@@ -663,11 +618,9 @@ class private FoldVisitor : AstVisitor {
     }
 }
 
-// A scalar zero/default literal: `default<T>` for every workhorse scalar is the
-// zero bit-pattern (int 0, float 0.0, bool false, …). A `var x = <this>` initializer
-// is therefore redundant with daslang's guaranteed zero-init of a bare `var x : T`,
-// so it can be dropped. Non-scalar inits (vector/struct ctors like `float3(0)`) are
-// NOT literals here and are left alone — conservative by design.
+// A scalar zero/default literal (int 0, float 0.0, bool false, …). A `var x = <this>` init is
+// redundant with daslang's zero-init of a bare `var x : T`, so it can be dropped. Non-scalar
+// inits (vector/struct ctors) are not literals here and left alone.
 def private is_zero_const(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e is ExprConstInt) return (e as ExprConstInt).value == 0
@@ -723,10 +676,9 @@ def private is_real_val(e : ExpressionPtr; want : double) : bool {
     return false
 }
 
-// An all-lanes-equal float vector const (ExprConstFloat2/3/4) equal to `want`. Extends the
-// scalar is_real_val so the float identities fire for vector-const operands too
-// (`v * float3(1)`, `v + float3(0)`, …). `want` is exact (0/1/-1) so the widening compare
-// is exact.
+// An all-lanes-equal float vector const (ExprConstFloat2/3/4) equal to `want`. Extends scalar
+// is_real_val so the float identities fire for vector-const operands (`v * float3(1)`); `want`
+// is exact (0/1/-1) so the widening compare is exact.
 def private is_real_vec_val(e : ExpressionPtr; want : double) : bool {
     if (e == null) return false
     if (e is ExprConstFloat2) { let v = (e as ExprConstFloat2).getValue; return double(v.x) == want && double(v.y) == want }
@@ -782,13 +734,9 @@ def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
     return false
 }
 
-// True if `e` is an op2 that FoldVisitor's identity arms would have rewritten away:
-// `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x` (scalar OR all-lanes-equal vector
-// const). MIRRORS the fold arms exactly: the `*1`/`*-1` arms carry a `same_base_type` gate
-// (scalar*vector broadcast is valid, so `s * float3(1)` is correctly NOT folded and must not
-// be flagged); `+`/`-` have no gate (vector±scalar does not compile, so they always fold).
-// `x*0` is excluded — it carries a purity gate, so a survivor is not a miss. The typer never
-// folds a runtime-operand identity, so a survivor here is a genuine const-fold miss.
+// True if `e` is an op2 FoldVisitor's identity arms would rewrite away (`x*1`/`x*-1`/`x+0`/`x-0`,
+// scalar or vector const). MIRRORS the fold arms exactly — `*1`/`*-1` carry the `same_base_type`
+// gate, `+`/`-` don't, `x*0` is excluded (purity-gated, so a survivor isn't a miss).
 def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
     if (e == null) return false
     if (e.op == "*") {
@@ -810,10 +758,9 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// A fresh zero literal of `t` (the RESULT type of an `X * 0`), over the numeric scalar +
-// vector family; null otherwise (→ the fold bails). Keying on the result type — not the
-// zero operand's type — is what lets a scalar-broadcast `v:float3 * 0.0` and a vector-const
-// `v * float3(0)` both fold to a width-matched `float3(0)` with no float3→float mistype.
+// A fresh zero literal of `t` (the RESULT type of `X * 0`), over the numeric scalar + vector
+// family; null otherwise. Keying on the result type (not the zero operand's) lets both
+// `v:float3 * 0.0` and `v * float3(0)` fold to a width-matched `float3(0)` with no mistype.
 def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
     let bt = t.baseType
@@ -839,11 +786,9 @@ def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     return null
 }
 
-// True if `e` is built only from const literals and pure ops/builtins over them — NO
-// variable/global reference and NO user call anywhere. eval_single_expression runs in a
-// bare context with no globals (a global read dereferences null) and no user functions
-// linked (a user call can't be evaluated), so the tree must bottom out in literals and
-// pure builtins. Conservative: an unknown node kind returns false.
+// True if `e` is built only from const literals and pure ops/builtins — no var/global read,
+// no user call. eval_single_expression runs in a bare context (no globals, no user functions),
+// so the tree must bottom out in literals and pure builtins. Unknown node → false.
 def public is_all_const(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e |> is_expr_const()) return true
@@ -880,12 +825,9 @@ def public eval_to_const_supported(t : TypeDeclPtr) : bool {
         bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4)
 }
 
-// True if every operator / call node in the subtree carries a settled type. eval_single_expression
-// builds sim-nodes assuming inference is complete — an un-inferred operator node has a null `.func`
-// and crashes the simulator. Const literals need no inference (exempt); a var would already have
-// failed is_all_const. Guards eval against a not-yet-re-inferred subtree — e.g. an is_all_const
-// tree whose inferred root has an operand the fold replaced this same pass with a fresh (un-typed)
-// const-arithmetic node.
+// True if every operator/call node in the subtree carries a settled type. eval_single_expression
+// assumes inference is complete (an un-inferred operator has null `.func` → crash), so this guards
+// eval against a not-yet-re-inferred subtree (a fold-built operand under an inferred all-const root).
 def private fully_inferred(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e is ExprOp1) {
@@ -943,14 +885,8 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
 }
 
 // ===== Generalized const-propagation of single-def user locals =====
-//
-// After SSA-rename every user local is single-definition, so a `var x = <const>` can
-// be substituted at all of x's uses and dropped. Because flatten linearized the body,
-// one forward pass folds a whole accumulator chain: each link's init is substituted
-// with the prior constants and evaluated exactly via the shared runtime evaluator
-// (types are present post-infer), so `var __ssa_acc_1=5; var __ssa_acc_2=__ssa_acc_1+3; …` collapses
-// to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are folded
-// by copy_prop (pre-infer); globals/fields are never substituted (only their read operands).
+// Post-SSA-rename every user local is single-def, so a `var x = <const>` substitutes at all uses and
+// drops. One forward pass folds a whole accumulator chain; masks are copy_prop's job, globals never.
 
 def private reads_any(var e : ExpressionPtr; names : table<string; ExpressionPtr>) : bool {
     for (nm in keys(names)) {
@@ -963,9 +899,7 @@ def private subst_consts(var e : ExpressionPtr; constmap : table<string; Express
     if (e == null) return null
     var tmpl : Template
     for (nm in keys(constmap)) {
-        // ?[] yields a const view (non-inserting; keys() locks the table) but the pointed-to
-        // node is genuinely mutable. apply_template clones it per use, so const-strip the raw
-        // pointer instead of pre-cloning (which would orphan a copy every substitution).
+        // ?[] yields a const view; const-strip the raw pointer (apply_template clones per use anyway).
         var ex = unsafe(reinterpret<Expression? -const>(constmap?[nm] ?? null))
         tmpl |> replaceVariable(nm, ex)
     }
@@ -987,29 +921,23 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
     var constmap : table<string; ExpressionPtr>
     var i = 0
     while (i < length(blk.list)) {
-        // Substitute already-known constants into this statement's reads (the next
-        // link's init, a final `g_out = acc`, a `return acc`, …).
+        // Substitute already-known constants into this statement's reads.
         if (!empty(constmap) && reads_any(blk.list[i], constmap)) {
             blk.list[i] = subst_consts(blk.list[i], constmap)
             changed = true
         }
-        // A single-def user local whose (now-substituted) init is literal-only folds to
-        // one constant and joins the map for the rest of the pass.
+        // A single-def user local with a now-literal init folds to a constant and joins the map.
         var s = blk.list[i]
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
                 var oldInit = lc.variables[0].init
                 if (oldInit |> is_expr_const()) {
-                    // Already a literal — e.g. a fold-produced `0f` whose `0*s` collapsed.
-                    // eval_to_const bails on its null _type, but it IS the constant; map it
-                    // directly so its uses inline (revealing identities like `v + 0`) and the
-                    // dead decl drops. Without this the local survives to the backend.
+                    // Already a literal (e.g. a fold-produced `0f`): map it directly so its uses inline.
                     constmap["{lc.variables[0].name}"] = oldInit
                     changed = true
                 } else {
-                    // A const expression (`2.0 * 3.0`): eval to its literal. eval_single_expression
-                    // only READS the tree (throwaway context), so fold the init in place.
+                    // A const expression (`2.0 * 3.0`): eval to its literal, folding the init in place.
                     var folded = eval_to_const(oldInit)
                     if (folded |> is_expr_const() && folded != oldInit) {
                         lc.variables[0].init = folded
@@ -1050,27 +978,17 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
 }
 
 // ===== Constant reassociation =====
-//
-// Gather scattered constants in associative/commutative `+`/`-` and `*` chains into one
-// adjacent group: `0.5 + a + b + 0.6` → `a + b + (0.5 + 0.6)`, `2.0 * a * 3.0` → `a * (2.0 * 3.0)`.
-// Reassoc only REORDERS (structural) — the FoldVisitor all-const arm + the typer's re-infer then
-// collapse the grouped const sub-expression to one literal. The typer folds only ADJACENT const
-// arithmetic and never reassociates (float rounding); flatten assumes fast-math, so it can.
-// Integer `+`/`*` are exact; integer `/` is non-associative (no `/` here — reciprocal grouping
-// is a follow-up). Const terms are side-effect-free (is_all_const), so gathering them to the tail
-// is unconditional; the var terms are additionally sorted into a canonical (describe) order so
-// commutative chains converge to one form for a later CSE — gated on every var term being
-// side-effect-free, so a side-effecting term's evaluation order is never observably reordered.
+// Gather scattered consts in `+`/`-`/`*` chains into one adjacent group (`0.5 + a + 0.6` → `a +
+// (0.5+0.6)`) for the all-const arm to fold; also sort var terms into a canonical order (for a later CSE).
 
 struct private ReTerm {
-    neg : bool          //!< additive term is subtracted (always false for the `*` monoid in v1)
+    neg : bool          // subtracted (additive chains); always false for the `*` monoid
     e : ExpressionPtr
 }
 
 // Flatten a maximal additive chain into signed terms (left-to-right = source order). Descends
-// `+`/`-` ExprOp2 and unary `-`; everything else (vars, calls, `*`/`/` sub-exprs, const literals)
-// is a leaf. No same-base-type gate: vector±scalar does not compile, so an additive chain is
-// always same-type.
+// `+`/`-` ExprOp2 and unary `-`; everything else is a leaf. No same-base-type gate (vector±scalar
+// does not compile, so an additive chain is always same-type).
 def private collect_add(var e : ExpressionPtr; neg : bool; var terms : array<ReTerm>) {
     if (e == null) return
     if (e is ExprOp2) {
@@ -1130,11 +1048,9 @@ def private already_grouped(that : ExprOp2?; addOp : string) : bool {
     return that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
 }
 
-// Build a left-leaning `<t0> op <t1> op …` tree from non-empty `terms`, REUSING the operand
-// nodes (each leaf appears once in the flattened term list, so it lands in exactly one slot of
-// the rebuilt tree; the old chain wrappers are dropped when the visitor replaces `that` with the
-// result — the same move-not-clone pattern FoldVisitor uses returning `that.left`). A negative
-// first term becomes a unary `-`; subsequent terms pick addOp/subOp by sign.
+// Build a left-leaning `<t0> op <t1> …` tree from non-empty `terms`, REUSING the operand nodes
+// (each leaf appears once, so it lands in one slot; the old chain wrappers drop when the visitor
+// replaces `that`). A negative first term becomes unary `-`; later terms pick addOp/subOp by sign.
 def private build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp : string) : ExpressionPtr {
     var acc = terms[0].neg ? negate(terms[0].e) : terms[0].e
     for (i in range(1, length(terms))) {
@@ -1154,14 +1070,9 @@ def private vars_sorted(vars : array<ReTerm>) : bool {
     return true
 }
 
-// Partition `terms` into var/const and rebuild as `<vars> addOp <consts>` (consts to the tail).
-// Two canonicalizations: gather ≥2 scattered consts into one group (folded by the all-const arm /
-// re-infer), and SORT the var terms into a structural (describe) order so commutative chains
-// converge to one form (`b + a` and `a + b` both → `a + b`) — which lets a later CSE pass match
-// them. Sorting reorders var terms relative to each other, so it is gated on every var term being
-// side-effect-free (shaders are pure, so this always holds there); const terms are pure, so the
-// gather is unconditional. Returns null when neither canonicalization applies, or the chain is
-// all-const (the all-const ExprOp2 arm folds that).
+// Partition `terms` into var/const and rebuild as `<vars> addOp <consts>`. Two canonicalizations:
+// gather ≥2 scattered consts into one group, and sort the var terms into a canonical order (for a
+// later CSE) — the sort gated on side-effect freedom. Null when neither applies / the chain is all-const.
 def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : string) : ExpressionPtr {
     var vars : array<ReTerm>
     var consts : array<ReTerm>
@@ -1226,10 +1137,9 @@ def private count_terms(e : ExpressionPtr; addOp : string; var nv : int&; var nc
     }
 }
 
-// True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered const terms, not already
-// grouped. The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's
-// exact gate through this, so it flags only genuine misses — never a chain reassoc legitimately
-// leaves alone (single const, already grouped, no var).
+// True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered consts, not already grouped.
+// The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's exact gate
+// through this, so it flags only genuine misses.
 def public has_scattered_consts(that : ExprOp2?) : bool {
     if (that == null) return false
     var nv = 0
@@ -1268,17 +1178,9 @@ class private ReassocVisitor : AstVisitor {
 }
 
 def public fold_body(var func : FunctionPtr) : bool {
-    //! Post-infer fold over a flattened body: const-propagate single-def user locals
-    //! (accumulator chains → a constant), reassociate scattered constants in `+`/`-`/`*`
-    //! chains into one adjacent group (folded by the all-const arm / re-infer), collapse
-    //! `const ? a : b` to the live arm, fold algebraic / boolean identities and const
-    //! constructors, drop the side-effect-free `lhs = lhs` self-assigns a folded false-select
-    //! leaves behind, and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
-    //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
-    //! A SINGLE pass — multi-step cascades that route through re-inference (a folded
-    //! `0*s → 0` makes a local const, which the next re-infer settles so it can be
-    //! const-propagated, revealing a fresh identity) are driven to a fixpoint by the
-    //! caller's re-infer loop (see [flatten]'s patch and the [pixel_shader] patch).
+    //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate
+    //! scattered consts, collapse `const ? a : b`, fold algebraic/boolean identities + const
+    //! constructors, drop pure self-assigns, strip zero inits. SINGLE pass (caller's re-infer loops it).
     if (!(func.body is ExprBlock)) return false
     var changed = const_prop_locals(func.body as ExprBlock)
     // Reassociate BEFORE the fold — gather scattered consts into one adjacent group so the
@@ -1320,14 +1222,9 @@ def public fold_body(var func : FunctionPtr) : bool {
         }
         si --
     }
-    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`,
-    // the bare decl already zero-inits). DEFERRED to a converged pass: a const-folded
-    // scalar local (`let k = 0f`) must keep its init until const_prop_locals propagates
-    // it into the local's uses (`v + k → v + 0 → v`); nulling it earlier strands the use
-    // as a non-foldable read of a now-uninitialized local. So strip only when const-prop
-    // + fold + self-assign-drop made no other change this pass — by then const-prop has
-    // run to completion. Sets changed=true, so the caller re-infers after the strip
-    // (the strip mutates decls; the next quiet pass then converges).
+    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`). DEFERRED
+    // to a converged pass: a const-folded local must keep its init until const_prop_locals
+    // propagates it into uses; nulling it earlier strands the use. Sets changed → caller re-infers.
     if (!changed) {
         si = length(blk.list) - 1
         while (si >= 0) {
