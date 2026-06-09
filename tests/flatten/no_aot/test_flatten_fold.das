@@ -1,0 +1,93 @@
+options gen2
+options indenting = 4
+
+require dastest/testing_boost public
+require daslib/flatten
+require daslib/ast
+require daslib/ast_boost
+require daslib/rtti
+require strings
+require daslib/fio
+
+//! Fold-completeness verification over the ACTUAL compiled output. It compiles REAL flatten
+//! units and asserts no const-foldable residual (`x*1`/`x+0`/`x*-1`, an all-const call, a
+//! const-condition `?:`, a const `!`) survives in the final post-flatten AST — using
+//! `flatten_fold_residuals` (daslib/flatten). Unlike the opt-in `[flatten(strict_fold=true)]`
+//! compile-time flag, this runs over compiled output, so it covers the `[pixel_shader]`
+//! backend path (the single-fold + re-infer loop the flag never reached — the center-tap
+//! `uv + float2(0,0)` bug). Two unit kinds:
+//!   • every example shader (project-resolved) — the `@pixel_shader` entry function;
+//!   • _fold_fixtures.das (this dir) — the `[flatten]` reveal-cascade corpus (`*_flat`).
+//!
+//! Lives in tests/flatten/no_aot/ (excluded from test_aot via tests/.das_test): it requires
+//! daslib/flatten at runtime, pulling macro_boost generic instantiations that don't AOT-link
+//! in the full-tree batch. Runs in interp + JIT; the residual check is tier-independent.
+
+// A flatten OUTPUT to validate: a `[flatten]` twin (`*_flat`) or a `[pixel_shader]` entry.
+def private is_flatten_output(func : FunctionPtr) : bool {
+    if (func.name |> ends_with("_flat")) {
+        return true
+    }
+    for (a in func.annotations) {
+        if (a.annotation.name == "pixel_shader") {
+            return true
+        }
+    }
+    return false
+}
+
+// Compile `path` (project-aware when `proj` is non-empty) and assert every flatten output's
+// body is residual-free. Returns the number of flatten outputs checked.
+def private check_unit(t : T?; proj, path : string) : int {
+    var checked = 0
+    var inscope access <- make_file_access(proj)
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.version_2_syntax = true
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; iss) {
+                if (!ok) {
+                    t |> failure("compile failed: {path}\n{iss}")
+                    return
+                }
+                program_for_each_module(program) $(mod) {
+                    for_each_function(mod, "") $(func) {
+                        if (func.body == null || func.flags.builtIn || !is_flatten_output(func)) {
+                            return
+                        }
+                        checked ++
+                        let r <- flatten_fold_residuals(func)
+                        t |> equal(length(r), 0, "{base_name(path)}::{func.name}: {r}")
+                    }
+                }
+            }
+        }
+    }
+    return checked
+}
+
+[test]
+def test_flatten_fold(t : T?) {
+    let root = get_das_root()
+    t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/no_aot/_fold_fixtures.das")
+        t |> success(n >= 3, "expected >=3 twins, checked {n}")
+    }
+    t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
+        let proj = "{root}/examples/flatten/flatten_shaders.das_project"
+        let base = "{root}/examples/flatten/shaders"
+        var total = 0
+        fio::dir(base) $(dirname) {
+            let sub = "{base}/{dirname}"
+            if (dirname |> starts_with(".") || !stat(sub).is_dir) {
+                return
+            }
+            fio::dir(sub) $(fn) {
+                if (fn |> ends_with(".shader")) {
+                    total += check_unit(t, proj, "{sub}/{fn}")
+                }
+            }
+        }
+        t |> success(total >= 60, "expected >=60 shaders, checked {total}")
+    }
+}

@@ -89,6 +89,12 @@ predicate. Per-iteration locals are renamed so the copies don't collide. Paralle
 multi-source loops (``for (a, b in xs, ys)``) unroll in lockstep — every source
 must have the same constant length — substituting each loop variable per copy.
 
+**Generated locals are reserved-namespaced.** Every flatten-introduced local takes a
+``__``-prefixed name — ``__flat_*`` for the lowering scaffold (live masks, value temps,
+unrolled-loop locals) and ``__ssa_*`` for the single-assignment versions of reassigned
+user locals. The language reserves the ``__`` prefix (a user cannot declare such a name),
+so the generated names never collide with anything in the source.
+
 **break / continue** lower to predication, not jumps:
 
 - ``break`` narrows a **loop-scoped mask** that is declared once and *persists
@@ -112,18 +118,20 @@ arm and drops the pure self-assigns a folded false-select leaves behind.
 **Constant folding.** Because the branchless target has no downstream optimizer,
 the twin is reduced as far as possible *before* the backend sees it. The
 post-inference fold applies algebraic identities — ``x*1``, ``x+0``, ``x-0`` and
-``x*-1`` over int / float / vectors (each keeps the non-constant operand, so the
-vector type survives), plus a **scalar-only** ``x*0`` (it returns the zero
-literal, so it is gated to a scalar result — a runtime ``vec*0`` is left intact
-and folds only when the vector operand is itself constant, via full-const eval),
-and the boolean ``true && x``, ``c ? true : false``, ``!const``. It also collapses
-constant vector constructors (``float3(1, 2, 3)``) and const-argument pure
-builtins (``float(7)``, ``min(2, 3)``) to literals, and constant-propagates
-single-definition locals — so a fully-constant accumulator loop reduces to its
-final constant. These are exactly the folds the general compiler leaves for the
-downstream tiers (it folds constant *arithmetic* but not constant *constructors*,
-and never a runtime-operand identity), done here under a shader's fast-math
-assumption (scalar ``x*0 → 0`` always fires).
+``x*-1`` — over the full **scalar + vector (float / int / uint)** family, with the
+constant operand either a scalar or an all-lanes-equal vector literal (``x * float3(1)``,
+``v + int3(0)``, ``uint3(0) - w``). Each returns the non-constant operand, gated on a
+matching result type so a scalar-broadcast ``s * float3(1)`` (which is ``float3(s,s,s)``,
+not ``s``) is left intact rather than collapsing to the scalar. ``x*0`` returns a zero of
+the **result type**, so both ``v * 0`` and ``v * float3(0)`` fold to a width-matched vector
+zero (``*-1`` is signed-only — an unsigned "-1" is not a negation factor). It also folds
+the boolean ``true && x``, ``c ? true : false``, ``!const``; collapses constant vector
+constructors (``float3(1, 2, 3)``, ``uint3(1, 2, 3)``) and const-argument pure builtins
+(``float(7)``, ``min(2, 3)``) to literals; and constant-propagates single-definition
+locals — so a fully-constant accumulator loop reduces to its final constant. These are
+exactly the folds the general compiler leaves for the downstream tiers (it folds constant
+*arithmetic* but not constant *constructors*, and never a runtime-operand identity), done
+here under a shader's fast-math assumption (``x*0 → 0`` always fires).
 
 The fold and the typer's const-fold are *mutually-enabling*, so the fold phase
 **iterates to a fixpoint**. Flattening folds the runtime-operand identities the
@@ -232,7 +240,21 @@ Public API
     *after* re-inference (the constant conditions must already be folded to
     ``ExprConstBool``). ``[flatten]`` runs it automatically; a backend calling
     ``flatten_function`` runs it after its own re-infer, before consuming the
-    twin.
+    twin. A single call is **one shallow pass — it is not self-converging**.
+    A multi-step *reveal* cascade (a folded ``0*s → 0`` makes a local constant
+    that the next re-infer settles for const-prop, exposing a fresh ``v + 0``
+    identity) only fully collapses if the backend **re-enters the fold across
+    re-inference until it reports no change** — exactly as ``[flatten]``'s own
+    patch does (and as the ``[pixel_shader]`` backend now does).
+
+``flatten_fold_residuals(var func) : array<string>``
+    Test-framework / fuzzer introspection: walks a compiled twin's final body
+    and returns a description for each const-foldable residual a complete fold
+    should have collapsed (the same set ``strict_fold`` rejects). Empty means
+    clean. Unlike the ``strict_fold`` *compile-time* flag it runs over the
+    *compiled* output, so it also covers backend paths (e.g.
+    ``[pixel_shader]``) the flag never reaches. ``tests/flatten/test_flatten_fold.das``
+    uses it to verify both the ``[flatten]`` corpus and every example shader.
 
 A backend's typical pipeline is therefore: ``flatten_function`` → re-infer →
 ``flatten_fold`` → re-infer → walk the now-branchless, call-free twin and emit

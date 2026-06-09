@@ -20,8 +20,10 @@ require daslib/flatten
 //!     select). Differential alone can't see a fold that failed to fire — an
 //!     un-optimized twin computes the same value; strict_fold is what proves the
 //!     collapse happened. (Node-count proof at the backend level lives in the
-//!     cap_fold_* shaders.) A non-folding shape (`vec*0`, runtime accumulator) carries
-//!     strict_fold too — its compiling proves strict does NOT false-positive on it.
+//!     cap_fold_* shaders.) A genuinely-non-folding shape (a param-seeded runtime
+//!     accumulator, or a scalar-broadcast `s * vec(1)` the same_base_type gate must NOT
+//!     collapse to scalar) carries strict_fold too — its compiling proves strict does NOT
+//!     false-positive on it.
 
 // ----- float algebraic identities (#1a) -----
 
@@ -66,10 +68,10 @@ def f_combo(x : float) : float {
     return (x * 1.0) + (x * 0.0) - 0.0
 }
 
-// Vector * scalar-0: the `*0` fold is gated to a scalar result, so this must NOT
-// fold to a scalar zero (that would mistype float3 -> float). It stays `x * 0.0`
-// and still computes float3(0,0,0); the test's value is that it COMPILES (the gate
-// held) and is value-correct.
+// Scalar const on a vector. `x:float3 * 1.0` folds to x (the non-const operand carries the
+// result type). `x:float3 * 0.0` folds to a width-matched float3(0): zero_const_of keys on
+// the RESULT type, so the scalar zero never mistypes float3 -> float. Both value-correct
+// (finite inputs). The dedicated *vector-const* arms (`x * float3(1)`, …) are f_vc* below.
 [flatten(strict_fold=true)]
 def f_vec1(x : float3) : float3 {
     return x * 1.0
@@ -127,10 +129,9 @@ def f_izerosub(x : int) : int {
     return 0 - x
 }
 
-// Integer vector * scalar-0: same gate as the float case (f_vec0) — the `*0` fold must
-// NOT replace the int3 expression with a scalar zero (that would mistype int3 -> int).
-// It stays `x * 0` and computes int3(0,0,0); compiling proves the scalar-result gate
-// holds for the integer arm too.
+// Scalar const on an int vector: `x:int3 * 1` folds to x; `x:int3 * 0` folds to int3(0)
+// (zero_const_of on the result type — exact for integers, no fast-math). The dedicated
+// *vector-const* arms (`x * int3(1)`, …) are f_ivc* below.
 [flatten(strict_fold=true)]
 def f_ivec1(x : int3) : int3 {
     return x * 1
@@ -164,6 +165,122 @@ def f_ctor_mixed : float3 {
 [flatten(strict_fold=true)]
 def f_ctor_mixed_rt(x : float3) : float3 {
     return x + float3(0.5)
+}
+
+// ----- vector-const operands: floatX / intX const operands fold like scalar consts -----
+//
+// Distinct from f_vec*/f_ivec* above (scalar const on a vector): here the CONST operand is
+// itself a vector literal. `v * vec(1)` -> v, `v * vec(-1)` -> -v, `v + vec(0)` -> v,
+// `vec(0) - v` -> -v, `v * vec(0)` -> vec(0). strict_fold proves the ungated arms fire (a
+// survivor is a hard error); the differential proves the value.
+
+[flatten(strict_fold=true)]
+def f_vcmul1(x : float3) : float3 {
+    return x * float3(1.0)
+}
+
+[flatten(strict_fold=true)]
+def f_vcmulneg1(x : float3) : float3 {
+    return x * float3(-1.0)
+}
+
+[flatten(strict_fold=true)]
+def f_vcadd0(x : float3) : float3 {
+    return x + float3(0.0)
+}
+
+[flatten(strict_fold=true)]
+def f_vcsub0(x : float3) : float3 {
+    return x - float3(0.0)
+}
+
+[flatten(strict_fold=true)]
+def f_vczerosub(x : float3) : float3 {
+    return float3(0.0) - x
+}
+
+[flatten(strict_fold=true)]
+def f_vcmul0(x : float3) : float3 {
+    return x * float3(0.0)
+}
+
+// int vector-const operands — exact (no fast-math); covers IGRID incl. edges for `*-1`.
+[flatten(strict_fold=true)]
+def f_ivcmul1(x : int3) : int3 {
+    return x * int3(1)
+}
+
+[flatten(strict_fold=true)]
+def f_ivcmulneg1(x : int3) : int3 {
+    return x * int3(-1)
+}
+
+[flatten(strict_fold=true)]
+def f_ivcadd0(x : int3) : int3 {
+    return x + int3(0)
+}
+
+[flatten(strict_fold=true)]
+def f_ivcsub0(x : int3) : int3 {
+    return x - int3(0)
+}
+
+[flatten(strict_fold=true)]
+def f_ivczerosub(x : int3) : int3 {
+    return int3(0) - x
+}
+
+[flatten(strict_fold=true)]
+def f_ivcmul0(x : int3) : int3 {
+    return x * int3(0)
+}
+
+// ----- uint: scalar identities (no *-1 — unsigned), vectors, and const constructors -----
+
+[flatten(strict_fold=true)]
+def f_umul1(x : uint) : uint {
+    return x * 1u
+}
+
+[flatten(strict_fold=true)]
+def f_uadd0(x : uint) : uint {
+    return x + 0u
+}
+
+[flatten(strict_fold=true)]
+def f_usub0(x : uint) : uint {
+    return x - 0u
+}
+
+[flatten(strict_fold=true)]
+def f_umul0(x : uint) : uint {
+    return x * 0u
+}
+
+[flatten(strict_fold=true)]
+def f_uvmul1(x : uint3) : uint3 {
+    return x * uint3(1u)
+}
+
+[flatten(strict_fold=true)]
+def f_uvadd0(x : uint3) : uint3 {
+    return x + uint3(0u)
+}
+
+[flatten(strict_fold=true)]
+def f_uvmul0(x : uint3) : uint3 {
+    return x * uint3(0u)
+}
+
+// uint const constructors fold to a literal (eval_to_const now covers uint scalar + vector).
+[flatten(strict_fold=true)]
+def f_uctor : uint3 {
+    return uint3(1u, 2u, 3u)
+}
+
+[flatten(strict_fold=true)]
+def f_uctor_splat : uint3 {
+    return uint3(5u)
 }
 
 // ----- boolean algebraic identities (&&, ||, !, bool-select) -----
@@ -319,6 +436,18 @@ def f_acc_early(g : bool) : int {
     return acc
 }
 
+// Guards the `__ssa_` rename-prefix choice: a user local literally named `flat_acc`
+// (reassigned -> SSA-renamed) must stay a USER local — folded by const_prop_locals — not be
+// mis-swept by the `__flat_*` mask/copy/dse passes. The chosen `__ssa_{orig}_{counter}`
+// scheme renames it to `__ssa_flat_acc_N` (disjoint from `__flat_`); a naive `__{orig}`
+// scheme would mint `__flat_acc_1` and is_flat_temp would misclassify it. Folds to 8.
+[flatten(strict_fold=true)]
+def f_acc_flatname : int {
+    var flat_acc = 5
+    flat_acc = flat_acc + 3
+    return flat_acc
+}
+
 // ----- const type-conversion folding -----
 //
 // A pure builtin (cast / vector ctor) with all-const args is a compile-time constant, so
@@ -394,12 +523,27 @@ def f_fix_inline(b : int) : int {
 var GRID : array<float>
 var BOOLS : array<bool>
 var IGRID : array<int>
+var UGRID : array<uint>
 
 [init]
 def fill_grid {
     GRID <- [-100.0, -3.5, -1.0, -0.0, 0.0, 1.0, 2.5, 7.0, 100.0]
     BOOLS <- [true, false]
     IGRID <- [-100, -7, -1, 0, 1, 3, 42, 1000]
+    UGRID <- [0u, 1u, 3u, 42u, 1000u, 4294967295u]
+}
+
+// Componentwise compares for the vector differential arms.
+def cmp3f(t : T?; a, b : float3) {
+    t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+}
+
+def cmp3i(t : T?; a, b : int3) {
+    t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
+}
+
+def cmp3u(t : T?; a, b : uint3) {
+    t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
 }
 
 [test]
@@ -468,7 +612,7 @@ def test_flatten_const(t : T?) {
             t |> equal(a.z, b.z)
         }
     }
-    t |> run("float3 * 0.0 stays vector (gate held, no scalar mistype)") @(t : T?) {
+    t |> run("float3 * 0.0 -> float3(0) (width-matched, no scalar mistype)") @(t : T?) {
         for (v in GRID) {
             let a = f_vec0(float3(v, v + 1.0, v - 1.0))
             let b = f_vec0_flat(float3(v, v + 1.0, v - 1.0))
@@ -486,7 +630,7 @@ def test_flatten_const(t : T?) {
             t |> equal(a.z, b.z)
         }
     }
-    t |> run("int3 * 0 stays vector (gate held, no scalar mistype)") @(t : T?) {
+    t |> run("int3 * 0 -> int3(0) (width-matched, no scalar mistype)") @(t : T?) {
         for (n in IGRID) {
             let a = f_ivec0(int3(n, n + 1, n - 1))
             let b = f_ivec0_flat(int3(n, n + 1, n - 1))
@@ -516,6 +660,56 @@ def test_flatten_const(t : T?) {
             let b = f_ctor_mixed_rt_flat(float3(v, v + 1.0, v - 1.0))
             t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
         }
+    }
+    t |> run("float3 vector-const operands (* / + / - vs float3 literals)") @(t : T?) {
+        for (v in GRID) {
+            let inp = float3(v, v + 1.0, v - 1.0)
+            cmp3f(t, f_vcmul1_flat(inp), f_vcmul1(inp))
+            cmp3f(t, f_vcmulneg1_flat(inp), f_vcmulneg1(inp))
+            cmp3f(t, f_vcadd0_flat(inp), f_vcadd0(inp))
+            cmp3f(t, f_vcsub0_flat(inp), f_vcsub0(inp))
+            cmp3f(t, f_vczerosub_flat(inp), f_vczerosub(inp))
+            cmp3f(t, f_vcmul0_flat(inp), f_vcmul0(inp))
+        }
+    }
+    t |> run("int3 vector-const operands (exact)") @(t : T?) {
+        for (n in IGRID) {
+            let inp = int3(n, n + 1, n - 1)
+            cmp3i(t, f_ivcmul1_flat(inp), f_ivcmul1(inp))
+            cmp3i(t, f_ivcmulneg1_flat(inp), f_ivcmulneg1(inp))
+            cmp3i(t, f_ivcadd0_flat(inp), f_ivcadd0(inp))
+            cmp3i(t, f_ivcsub0_flat(inp), f_ivcsub0(inp))
+            cmp3i(t, f_ivczerosub_flat(inp), f_ivczerosub(inp))
+            cmp3i(t, f_ivcmul0_flat(inp), f_ivcmul0(inp))
+        }
+    }
+    t |> run("uint scalar identities (*1, +0, -0, *0)") @(t : T?) {
+        for (u in UGRID) {
+            t |> equal(f_umul1_flat(u), f_umul1(u))
+            t |> equal(f_uadd0_flat(u), f_uadd0(u))
+            t |> equal(f_usub0_flat(u), f_usub0(u))
+            t |> equal(f_umul0_flat(u), f_umul0(u))
+            t |> equal(f_umul1_flat(u), u)
+            t |> equal(f_umul0_flat(u), 0u)
+        }
+    }
+    t |> run("uint3 vector-const operands (*1, +0, *0)") @(t : T?) {
+        for (u in UGRID) {
+            let inp = uint3(u, u + 1u, u + 2u)
+            cmp3u(t, f_uvmul1_flat(inp), f_uvmul1(inp))
+            cmp3u(t, f_uvadd0_flat(inp), f_uvadd0(inp))
+            cmp3u(t, f_uvmul0_flat(inp), f_uvmul0(inp))
+        }
+    }
+    t |> run("uint const constructors fold (eval_to_const)") @(t : T?) {
+        cmp3u(t, f_uctor_flat(), f_uctor())
+        cmp3u(t, f_uctor_splat_flat(), f_uctor_splat())
+        let c = f_uctor_flat()
+        t |> equal(c.x, 1u); t |> equal(c.y, 2u); t |> equal(c.z, 3u)
+    }
+    t |> run("__ssa_ rename keeps a flat_-named user local safe") @(t : T?) {
+        t |> equal(f_acc_flatname_flat(), f_acc_flatname())
+        t |> equal(f_acc_flatname_flat(), 8)
     }
     t |> run("true && x -> x ; x && true -> x") @(t : T?) {
         for (b in BOOLS) {

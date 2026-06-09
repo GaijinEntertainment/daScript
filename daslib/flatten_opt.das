@@ -495,12 +495,15 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 // flatten's body is straight-line (if → ?:, loops unrolled, no user calls), so a
 // reassigned local has a single linear chain of definitions — no control-flow merges,
 // hence no phi nodes. Renaming each write to a fresh version (`acc = acc + 3` →
-// `var acc__s2 = acc__s1 + 3`) makes every local single-definition, which lets the
+// `var __ssa_acc_2 = __ssa_acc_1 + 3`) makes every local single-definition, which lets the
 // post-infer const-prop (fold_body) fold the chain through the existing single-def
 // path. We rename only user locals that are declared WITH an initializer (single-var)
 // and reassigned at least once — never `__flat_*` masks (handled by const_prop_pass),
 // globals (observable), or params (not declared here). A self-referential select
-// (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version.
+// (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version. The `__ssa_`
+// prefix is compiler-reserved (a user can't declare `__`-names), so the versions never
+// collide with a user local — and it is disjoint from `__flat_`, so is_flat_temp still
+// classifies them as user locals (folded here, not by the mask/copy/dse passes).
 
 def private rename_reads(var e : ExpressionPtr; current : table<string; string>) : ExpressionPtr {
     if (e == null) return null
@@ -555,7 +558,7 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
             let orig = "{(s as ExprLet).variables[0].name}"
             let newInit = rename_reads((s as ExprLet).variables[0].init, current)
             counter ++
-            let vn = "{orig}__s{counter}"
+            let vn = "__ssa_{orig}_{counter}"
             out[i] = qmacro_expr(${ var $i(vn) = $e(newInit); })
             current[orig] = vn
         } elif (s is ExprCopy && (s as ExprCopy).left is ExprVar &&
@@ -563,7 +566,7 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
             let orig = "{((s as ExprCopy).left as ExprVar).name}"
             let newRhs = rename_reads((s as ExprCopy).right, current)
             counter ++
-            let vn = "{orig}__s{counter}"
+            let vn = "__ssa_{orig}_{counter}"
             out[i] = qmacro_expr(${ var $i(vn) = $e(newRhs); })
             current[orig] = vn
         } else {
@@ -578,37 +581,38 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // Algebraic identities. Integer arms are always exact (two's-complement,
-        // `e*-1==-e` even at INT_MIN). Float arms fire under flatten's fast-math
-        // assumption — every consumer is a shader backend: `x*1`/`x*-1` are exact for
-        // all floats (incl. NaN/inf/±0), while `x*0`/`x+0`/`x-0` are lossy (NaN/inf·0
-        // = NaN; +0.0 flips -0.0) but enabled by decision. Only `*0` DROPS an operand
-        // (side-effect gate) and RETURNS the scalar zero, so both the int and float arms
-        // gate it to a scalar result (`same_base_type`) — a vector `vec*0` would otherwise
-        // mistype to the scalar zero; full-const eval handles a constant vector operand.
+        // Algebraic identities over the scalar + vector (float/int/uint) family. Integer
+        // arms are exact (two's-complement, `e*-1==-e` even at INT_MIN); float arms fire
+        // under flatten's fast-math assumption (every consumer is a shader backend) — `x*1`/
+        // `x*-1` are exact for all floats, while `x*0`/`x+0`/`x-0` are lossy (NaN·0=NaN;
+        // +0.0 flips -0.0) but enabled by decision. `*1`/`*-1` RETURN the non-const operand
+        // and so gate on `same_base_type(that, returned)`: scalar*vector broadcast IS valid
+        // (`s:float * float3(1)` is `float3(s,s,s)`, NOT `s`), so dropping the const must not
+        // mistype to the scalar. `+`/`-` need NO such gate — vector±scalar does not compile,
+        // so a valid `+`/`-` always has same-type operands and the non-const operand already
+        // carries the result type; omitting the gate also lets a freshly-inlined (un-inferred,
+        // hence `_type == null`) `v + 0` fold without waiting on a re-infer. `*0` DROPS an
+        // operand (purity gate) and returns a zero of the RESULT type via zero_const_of — so
+        // `v * 0.0` / `v * float3(0)` fold to a width-matched vector zero with no mistype.
         if (that.op == "*") {
-            if (is_int_val(that.right, 0l) && !has_sideeffects(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
-            if (is_int_val(that.left, 0l) && !has_sideeffects(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
-            if (is_int_val(that.right, 1l)) { changed = true; return that.left }
-            if (is_int_val(that.left, 1l)) { changed = true; return that.right }
-            if (is_int_neg_one(that.right)) { changed = true; return negate(that.left) }
-            if (is_int_neg_one(that.left)) { changed = true; return negate(that.right) }
-            if (is_real_val(that.right, 1.0lf)) { changed = true; return that.left }
-            if (is_real_val(that.left, 1.0lf)) { changed = true; return that.right }
-            if (is_real_val(that.right, -1.0lf)) { changed = true; return negate(that.left) }
-            if (is_real_val(that.left, -1.0lf)) { changed = true; return negate(that.right) }
-            if (is_real_val(that.right, 0.0lf) && !has_sideeffects(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
-            if (is_real_val(that.left, 0.0lf) && !has_sideeffects(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
+            if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
+            if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
+            if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
+            if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
+            if (is_zero_const_op(that.right) && !has_sideeffects(that.left)) {
+                var z = zero_const_of(that._type, that.at)
+                if (z != null) { changed = true; return z }
+            }
+            if (is_zero_const_op(that.left) && !has_sideeffects(that.right)) {
+                var z = zero_const_of(that._type, that.at)
+                if (z != null) { changed = true; return z }
+            }
         } elif (that.op == "+") {
-            if (is_int_val(that.right, 0l)) { changed = true; return that.left }
-            if (is_int_val(that.left, 0l)) { changed = true; return that.right }
-            if (is_real_val(that.right, 0.0lf)) { changed = true; return that.left }
-            if (is_real_val(that.left, 0.0lf)) { changed = true; return that.right }
+            if (is_zero_const_op(that.right)) { changed = true; return that.left }
+            if (is_zero_const_op(that.left)) { changed = true; return that.right }
         } elif (that.op == "-") {
-            if (is_int_val(that.right, 0l)) { changed = true; return that.left }
-            if (is_int_val(that.left, 0l)) { changed = true; return negate(that.right) }
-            if (is_real_val(that.right, 0.0lf)) { changed = true; return that.left }
-            if (is_real_val(that.left, 0.0lf)) { changed = true; return negate(that.right) }
+            if (is_zero_const_op(that.right)) { changed = true; return that.left }
+            if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
         } elif (that.op == "&&") {
             // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
             // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
@@ -728,12 +732,63 @@ def private is_int_neg_one(e : ExpressionPtr) : bool {
 
 // A scalar float/double const equal to `want`. `want` is exact (0/1/-1) in both
 // float and double, so the widening compare is exact. Vector consts (ExprConstFloat3
-// …) are NOT scalars and return false — the float identities are scalar-operand only.
+// …) are NOT scalars and return false — is_real_vec_val (below) is the vector form.
 def private is_real_val(e : ExpressionPtr; want : double) : bool {
     if (e == null) return false
     if (e is ExprConstFloat) return double((e as ExprConstFloat).value) == want
     if (e is ExprConstDouble) return (e as ExprConstDouble).value == want
     return false
+}
+
+// An all-lanes-equal float vector const (ExprConstFloat2/3/4) equal to `want`. Extends the
+// scalar is_real_val so the float identities fire for vector-const operands too
+// (`v * float3(1)`, `v + float3(0)`, …). `want` is exact (0/1/-1) so the widening compare
+// is exact.
+def private is_real_vec_val(e : ExpressionPtr; want : double) : bool {
+    if (e == null) return false
+    if (e is ExprConstFloat2) { let v = (e as ExprConstFloat2).getValue; return double(v.x) == want && double(v.y) == want }
+    if (e is ExprConstFloat3) { let v = (e as ExprConstFloat3).getValue; return double(v.x) == want && double(v.y) == want && double(v.z) == want }
+    if (e is ExprConstFloat4) { let v = (e as ExprConstFloat4).getValue; return double(v.x) == want && double(v.y) == want && double(v.z) == want && double(v.w) == want }
+    return false
+}
+
+// An all-lanes-equal int OR uint vector const equal to `want` (want >= 0). Mirrors is_int_val
+// covering both signed and unsigned scalar consts — uint vectors fold for 0/1 but not -1.
+def private is_int_vec_val(e : ExpressionPtr; want : int64) : bool {
+    if (e == null) return false
+    if (e is ExprConstInt2) { let v = (e as ExprConstInt2).getValue; return int64(v.x) == want && int64(v.y) == want }
+    if (e is ExprConstInt3) { let v = (e as ExprConstInt3).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want }
+    if (e is ExprConstInt4) { let v = (e as ExprConstInt4).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want && int64(v.w) == want }
+    if (e is ExprConstUInt2) { let v = (e as ExprConstUInt2).getValue; return int64(v.x) == want && int64(v.y) == want }
+    if (e is ExprConstUInt3) { let v = (e as ExprConstUInt3).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want }
+    if (e is ExprConstUInt4) { let v = (e as ExprConstUInt4).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want && int64(v.w) == want }
+    return false
+}
+
+// An all-lanes -1 signed int vector const (ExprConstInt2/3/4 only). Mirrors is_int_neg_one —
+// an unsigned vector "-1" is a large positive, never a negation factor (the "uint ≈ int,
+// almost" boundary).
+def private is_int_vec_neg_one(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprConstInt2) { let v = (e as ExprConstInt2).getValue; return v.x == -1 && v.y == -1 }
+    if (e is ExprConstInt3) { let v = (e as ExprConstInt3).getValue; return v.x == -1 && v.y == -1 && v.z == -1 }
+    if (e is ExprConstInt4) { let v = (e as ExprConstInt4).getValue; return v.x == -1 && v.y == -1 && v.z == -1 && v.w == -1 }
+    return false
+}
+
+// Combined const-operand predicates for the algebraic identities: scalar OR all-lanes-equal
+// vector const. `*0`/`+0`/`-0` use is_zero_const_op, `*1` uses is_one_const_op, `*-1` uses
+// is_neg_one_const_op (signed/float only).
+def private is_zero_const_op(e : ExpressionPtr) : bool {
+    return is_int_val(e, 0l) || is_real_val(e, 0.0lf) || is_int_vec_val(e, 0l) || is_real_vec_val(e, 0.0lf)
+}
+
+def private is_one_const_op(e : ExpressionPtr) : bool {
+    return is_int_val(e, 1l) || is_real_val(e, 1.0lf) || is_int_vec_val(e, 1l) || is_real_vec_val(e, 1.0lf)
+}
+
+def private is_neg_one_const_op(e : ExpressionPtr) : bool {
+    return is_int_neg_one(e) || is_real_val(e, -1.0lf) || is_int_vec_neg_one(e) || is_real_vec_val(e, -1.0lf)
 }
 
 // A const bool equal to `want`. Backs the boolean algebraic identities
@@ -744,23 +799,21 @@ def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
     return false
 }
 
-// True if `e` is an op2 that FoldVisitor's UNCONDITIONAL algebraic identities would
-// have rewritten away: `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x`. These
-// fold for any operand type with no side-effect or vector gate (unlike `x*0`, which
-// is excluded here — it carries the scalar-result + purity gates), and the typer
-// never folds a runtime-operand identity. A survivor of these is a const-fold miss —
-// the high-teeth half of the strict_fold verification invariant.
+// True if `e` is an op2 that FoldVisitor's identity arms would have rewritten away:
+// `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x` (scalar OR all-lanes-equal vector
+// const). MIRRORS the fold arms exactly: the `*1`/`*-1` arms carry a `same_base_type` gate
+// (scalar*vector broadcast is valid, so `s * float3(1)` is correctly NOT folded and must not
+// be flagged); `+`/`-` have no gate (vector±scalar does not compile, so they always fold).
+// `x*0` is excluded — it carries a purity gate, so a survivor is not a miss. The typer never
+// folds a runtime-operand identity, so a survivor here is a genuine const-fold miss.
 def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
     if (e == null) return false
     if (e.op == "*") {
-        return (is_int_val(e.right, 1l) || is_int_val(e.left, 1l) ||
-            is_real_val(e.right, 1.0lf) || is_real_val(e.left, 1.0lf) ||
-            is_int_neg_one(e.right) || is_int_neg_one(e.left) ||
-            is_real_val(e.right, -1.0lf) || is_real_val(e.left, -1.0lf))
+        return (((is_one_const_op(e.right) || is_neg_one_const_op(e.right)) && same_base_type(e, e.left)) ||
+            ((is_one_const_op(e.left) || is_neg_one_const_op(e.left)) && same_base_type(e, e.right)))
     }
     if (e.op == "+" || e.op == "-") {
-        return (is_int_val(e.right, 0l) || is_int_val(e.left, 0l) ||
-            is_real_val(e.right, 0.0lf) || is_real_val(e.left, 0.0lf))
+        return (is_zero_const_op(e.right) || is_zero_const_op(e.left))
     }
     return false
 }
@@ -772,6 +825,35 @@ def private same_base_type(a, b : ExpressionPtr) : bool {
 
 def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
+}
+
+// A fresh zero literal of `t` (the RESULT type of an `X * 0`), over the numeric scalar +
+// vector family; null otherwise (→ the fold bails). Keying on the result type — not the
+// zero operand's type — is what lets a scalar-broadcast `v:float3 * 0.0` and a vector-const
+// `v * float3(0)` both fold to a width-matched `float3(0)` with no float3→float mistype.
+def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+    if (t == null) return null
+    let bt = t.baseType
+    if (bt == Type.tInt) return new ExprConstInt(at = at, value = 0)
+    if (bt == Type.tInt8) return new ExprConstInt8(at = at, value = int8(0))
+    if (bt == Type.tInt16) return new ExprConstInt16(at = at, value = int16(0))
+    if (bt == Type.tInt64) return new ExprConstInt64(at = at, value = 0l)
+    if (bt == Type.tUInt) return new ExprConstUInt(at = at, value = 0u)
+    if (bt == Type.tUInt8) return new ExprConstUInt8(at = at, value = uint8(0))
+    if (bt == Type.tUInt16) return new ExprConstUInt16(at = at, value = uint16(0))
+    if (bt == Type.tUInt64) return new ExprConstUInt64(at = at, value = 0ul)
+    if (bt == Type.tFloat) return new ExprConstFloat(at = at, value = 0.0f)
+    if (bt == Type.tDouble) return new ExprConstDouble(at = at, value = 0.0lf)
+    if (bt == Type.tFloat2) return new ExprConstFloat2(at = at, value = float2(0.0))
+    if (bt == Type.tFloat3) return new ExprConstFloat3(at = at, value = float3(0.0))
+    if (bt == Type.tFloat4) return new ExprConstFloat4(at = at, value = float4(0.0))
+    if (bt == Type.tInt2) return new ExprConstInt2(at = at, value = int2(0))
+    if (bt == Type.tInt3) return new ExprConstInt3(at = at, value = int3(0))
+    if (bt == Type.tInt4) return new ExprConstInt4(at = at, value = int4(0))
+    if (bt == Type.tUInt2) return new ExprConstUInt2(at = at, value = uint2(0u))
+    if (bt == Type.tUInt3) return new ExprConstUInt3(at = at, value = uint3(0u))
+    if (bt == Type.tUInt4) return new ExprConstUInt4(at = at, value = uint4(0u))
+    return null
 }
 
 // True if `e` is built only from const literals and pure ops/builtins over them — NO
@@ -805,13 +887,14 @@ def public is_all_const(e : ExpressionPtr) : bool {
 }
 
 // True if a constant of this type can be rebuilt as a literal by eval_to_const — the
-// float4-based evaluator covers the float/int scalar + vector family. Gates the cycle-1
+// float4-based evaluator covers the float/int/uint scalar + vector family. Gates the cycle-1
 // const-builtin allowance so only foldable-type calls bypass the whitelist.
 def public eval_to_const_supported(t : TypeDeclPtr) : bool {
     if (t == null) return false
     let bt = t.baseType
     return (bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4 ||
-        bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4)
+        bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4 ||
+        bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4)
 }
 
 // Evaluate a literal-only (is_all_const) inferred expression to one const literal of
@@ -835,6 +918,10 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
         if (bt == Type.tInt2) return new ExprConstInt2(at = e.at, value = int2(reinterpret<int>(val.x), reinterpret<int>(val.y)))
         if (bt == Type.tInt3) return new ExprConstInt3(at = e.at, value = int3(reinterpret<int>(val.x), reinterpret<int>(val.y), reinterpret<int>(val.z)))
         if (bt == Type.tInt4) return new ExprConstInt4(at = e.at, value = int4(reinterpret<int>(val.x), reinterpret<int>(val.y), reinterpret<int>(val.z), reinterpret<int>(val.w)))
+        if (bt == Type.tUInt) return new ExprConstUInt(at = e.at, value = reinterpret<uint>(val.x))
+        if (bt == Type.tUInt2) return new ExprConstUInt2(at = e.at, value = uint2(reinterpret<uint>(val.x), reinterpret<uint>(val.y)))
+        if (bt == Type.tUInt3) return new ExprConstUInt3(at = e.at, value = uint3(reinterpret<uint>(val.x), reinterpret<uint>(val.y), reinterpret<uint>(val.z)))
+        if (bt == Type.tUInt4) return new ExprConstUInt4(at = e.at, value = uint4(reinterpret<uint>(val.x), reinterpret<uint>(val.y), reinterpret<uint>(val.z), reinterpret<uint>(val.w)))
     }
     return e
 }
@@ -845,7 +932,7 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
 // be substituted at all of x's uses and dropped. Because flatten linearized the body,
 // one forward pass folds a whole accumulator chain: each link's init is substituted
 // with the prior constants and evaluated exactly via the shared runtime evaluator
-// (types are present post-infer), so `var acc__s1=5; var acc__s2=acc__s1+3; …` collapses
+// (types are present post-infer), so `var __ssa_acc_1=5; var __ssa_acc_2=__ssa_acc_1+3; …` collapses
 // to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are left
 // to const_prop_pass; globals/fields are never substituted (only their read operands).
 
@@ -896,14 +983,23 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
-                // eval_single_expression only READS the tree (throwaway context), so fold the
-                // init in place — no defensive clone.
                 var oldInit = lc.variables[0].init
-                var folded = eval_to_const(oldInit)
-                if (folded |> is_expr_const() && folded != oldInit) {
-                    lc.variables[0].init = folded
-                    constmap["{lc.variables[0].name}"] = folded
+                if (oldInit |> is_expr_const()) {
+                    // Already a literal — e.g. a fold-produced `0f` whose `0*s` collapsed.
+                    // eval_to_const bails on its null _type, but it IS the constant; map it
+                    // directly so its uses inline (revealing identities like `v + 0`) and the
+                    // dead decl drops. Without this the local survives to the backend.
+                    constmap["{lc.variables[0].name}"] = oldInit
                     changed = true
+                } else {
+                    // A const expression (`2.0 * 3.0`): eval to its literal. eval_single_expression
+                    // only READS the tree (throwaway context), so fold the init in place.
+                    var folded = eval_to_const(oldInit)
+                    if (folded |> is_expr_const() && folded != oldInit) {
+                        lc.variables[0].init = folded
+                        constmap["{lc.variables[0].name}"] = folded
+                        changed = true
+                    }
                 }
             }
         }
@@ -944,6 +1040,10 @@ def public fold_body(var func : FunctionPtr) : bool {
     //! side-effect-free `lhs = lhs` self-assigns a folded false-select leaves behind,
     //! and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
     //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
+    //! A SINGLE pass — multi-step cascades that route through re-inference (a folded
+    //! `0*s → 0` makes a local const, which the next re-infer settles so it can be
+    //! const-propagated, revealing a fresh identity) are driven to a fixpoint by the
+    //! caller's re-infer loop (see [flatten]'s patch and the [pixel_shader] patch).
     if (!(func.body is ExprBlock)) return false
     var changed = const_prop_locals(func.body as ExprBlock)
     var v = new FoldVisitor()
@@ -956,14 +1056,9 @@ def public fold_body(var func : FunctionPtr) : bool {
     unsafe {
         delete v
     }
-    // Two statement-level cleanups over the (post-fold) body. Erase in reverse so
-    // earlier indices stay valid as we remove:
-    //   1. Drop pure self-assigns (`acc = acc`) a collapsed false-select leaves behind.
-    //      has_sideeffects gates it — `g[k()] = g[k()]` keeps (the lvalue is not free).
-    //   2. Strip a redundant zero/default initializer: `var acc = 0` → `var acc : int`,
-    //      since the bare decl already zero-inits. This is always a local decl (you can't
-    //      `var` a global), so it never touches observable state. Post-infer the var's
-    //      type is settled, so dropping the init keeps the declared type intact.
+    // Cleanup 1 — drop pure self-assigns (`acc = acc`) a collapsed false-select leaves
+    // behind. has_sideeffects gates it (`g[k()] = g[k()]` keeps — the lvalue isn't free).
+    // Erase in reverse so earlier indices stay valid.
     var blk = func.body as ExprBlock
     var si = length(blk.list) - 1
     while (si >= 0) {
@@ -974,16 +1069,32 @@ def public fold_body(var func : FunctionPtr) : bool {
                 blk.list |> erase(si)
                 changed = true
             }
-        } elif (s is ExprLet) {
-            var lt = s as ExprLet
-            for (lv in lt.variables) {
-                if (is_zero_const(lv.init)) {
-                    lv.init = null
-                    changed = true
-                }
-            }
         }
         si --
+    }
+    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`,
+    // the bare decl already zero-inits). DEFERRED to a converged pass: a const-folded
+    // scalar local (`let k = 0f`) must keep its init until const_prop_locals propagates
+    // it into the local's uses (`v + k → v + 0 → v`); nulling it earlier strands the use
+    // as a non-foldable read of a now-uninitialized local. So strip only when const-prop
+    // + fold + self-assign-drop made no other change this pass — by then const-prop has
+    // run to completion. Sets changed=true, so the caller re-infers after the strip
+    // (the strip mutates decls; the next quiet pass then converges).
+    if (!changed) {
+        si = length(blk.list) - 1
+        while (si >= 0) {
+            var s = blk.list[si]
+            if (s is ExprLet) {
+                var lt = s as ExprLet
+                for (lv in lt.variables) {
+                    if (is_zero_const(lv.init)) {
+                        lv.init = null
+                        changed = true
+                    }
+                }
+            }
+            si --
+        }
     }
     return changed
 }
