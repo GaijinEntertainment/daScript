@@ -1243,3 +1243,391 @@ def public fold_body(var func : FunctionPtr) : bool {
     }
     return changed
 }
+
+// ===== Preshader extraction + CSE =====
+// Two pure-AST passes on the converged body: hoist maximal globals-only subtrees to top-of-body
+// `_preshader_N` lets, then CSE-dedup repeated subtrees. See flatten.rst / the plan for the why.
+
+def private psh_simple_name(fullname : string) : string {
+    let t1 = find(fullname, 96, 0)
+    if (t1 < 0) return fullname
+    let t2 = find(fullname, 96, t1 + 1)
+    let endp = t2 < 0 ? length(fullname) : t2
+    return slice(fullname, t1 + 1, endp)
+}
+
+def private psh_reserved(name : das_string) : bool {
+    return name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
+}
+
+// True if the subtree carries a graph node (operator or call) — i.e. hoisting it saves per-pixel
+// work. A bare var / const / member access alone is trivial (no node), so it is inlined as an alias
+// rather than hoisted.
+def private psh_has_compute(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprRef2Value) return psh_has_compute((e as ExprRef2Value).subexpr)
+    if (e is ExprOp1 || e is ExprOp2 || e is ExprOp3 || e is ExprCall) return true
+    if (e is ExprField) return psh_has_compute((e as ExprField).value)
+    if (e is ExprSwizzle) return psh_has_compute((e as ExprSwizzle).value)
+    return false
+}
+
+struct private PEX {
+    paramNames : table<string>
+    localColor : table<string; bool>    // local name -> uniform (preshader-eligible)?
+    top : array<ExpressionPtr>          // hoisted `_preshader_N` lets, in dependency order
+    dedup : table<string; string>       // describe(init) -> preshader name
+    rename : table<string; ExpressionPtr>   // old local name -> replacement (alias inline / preshader ref)
+    counter : int
+    changed : bool
+}
+
+// Uniform = depends only on globals + literals, no barrier (sampler/noise) call. Leaf rule: a param
+// read is varying; a local read inherits its colored value; anything else is a module global (uniform).
+def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e |> is_expr_const()) return true
+    if (e is ExprVar) {
+        let nm = "{(e as ExprVar).name}"
+        if (key_exists(pe.localColor, nm)) return pe.localColor?[nm] ?? false
+        return !key_exists(pe.paramNames, nm)   // a non-param, non-local read is a module global → uniform
+    }
+    if (e is ExprRef2Value) return pex_eligible(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprField) return pex_eligible(pe, barriers, (e as ExprField).value)
+    if (e is ExprSwizzle) return pex_eligible(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprOp1) return pex_eligible(pe, barriers, (e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return pex_eligible(pe, barriers, o.left) && pex_eligible(pe, barriers, o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return pex_eligible(pe, barriers, o.subexpr) && pex_eligible(pe, barriers, o.left) && pex_eligible(pe, barriers, o.right)
+    }
+    if (e is ExprCall) {
+        let c = e as ExprCall
+        // Surviving calls are all whitelisted pure GPU math; only the caller's barriers (sampler/noise) bar a preshader.
+        if (key_exists(barriers, psh_simple_name("{c.name}"))) return false
+        for (a in c.arguments) {
+            if (!pex_eligible(pe, barriers, a)) return false
+        }
+        return true
+    }
+    return false
+}
+
+// Hoist an eligible+nontrivial subtree into a `_preshader_N` let (deduped by describe), returning
+// the let name. The fresh let is un-inferred; the macro re-infers it after the pass.
+def private pex_hoist_name(var pe : PEX; var e : ExpressionPtr) : string {
+    let key = describe(e)
+    if (key_exists(pe.dedup, key)) return pe.dedup[key]
+    let nm = "_preshader_{pe.counter}"
+    pe.counter ++
+    pe.dedup[key] = nm
+    pe.localColor[nm] = true
+    pe.top |> push <| qmacro_expr(${ let $i(nm) = $e(e); })
+    return nm
+}
+
+// Top-down maximal-subtree extraction: the first eligible+nontrivial node going down is hoisted and
+// replaced with a ref; otherwise recurse children. Handles the bounded post-flatten node set.
+def private pex_extract(var pe : PEX; barriers : table<string>; var e : ExpressionPtr) : ExpressionPtr {
+    if (e == null) return null
+    if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) {
+        let nm = pex_hoist_name(pe, e)
+        pe.changed = true
+        return new ExprVar(at = e.at, name := nm)
+    }
+    if (e is ExprOp1) {
+        var o = e as ExprOp1
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprOp2) {
+        var o = e as ExprOp2
+        o.left = pex_extract(pe, barriers, o.left)
+        o.right = pex_extract(pe, barriers, o.right)
+    } elif (e is ExprOp3) {
+        var o = e as ExprOp3
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+        o.left = pex_extract(pe, barriers, o.left)
+        o.right = pex_extract(pe, barriers, o.right)
+    } elif (e is ExprCall) {
+        var c = e as ExprCall
+        for (i in range(length(c.arguments))) {
+            c.arguments[i] = pex_extract(pe, barriers, c.arguments[i])
+        }
+    } elif (e is ExprField) {
+        var o = e as ExprField
+        o.value = pex_extract(pe, barriers, o.value)
+    } elif (e is ExprSwizzle) {
+        var o = e as ExprSwizzle
+        o.value = pex_extract(pe, barriers, o.value)
+    } elif (e is ExprRef2Value) {
+        var o = e as ExprRef2Value
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                fld.value = pex_extract(pe, barriers, fld.value)
+            }
+        }
+    }
+    return e
+}
+
+def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>) : bool {
+    var pe : PEX
+    for (a in func.arguments) {
+        pe.paramNames |> insert("{a.name}")
+    }
+    var body : array<ExpressionPtr>
+    for (s0 in blk.list) {
+        var s = s0
+        if (!empty(pe.rename) && reads_any(s, pe.rename)) {
+            s = subst_consts(s, pe.rename)
+        }
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 && !psh_reserved((s as ExprLet).variables[0].name)) {
+            var lc = s as ExprLet
+            let vname = "{lc.variables[0].name}"
+            var init = lc.variables[0].init
+            if (init != null && pex_eligible(pe, barriers, init)) {
+                if (psh_has_compute(init)) {
+                    // Whole uniform let: hoist its init, rename refs to the preshader temp, drop the decl.
+                    let nm = pex_hoist_name(pe, init)
+                    pe.rename[vname] = new ExprVar(at = init.at, name := nm)
+                    pe.changed = true
+                } else {
+                    // Trivial uniform alias (a bare global / member read): inline it at every use.
+                    pe.rename[vname] = clone_expression(init)
+                    pe.changed = true
+                }
+                continue
+            }
+        }
+        // Varying / reserved / multi-var statement: extract buried uniform subtrees, then emit.
+        if (s is ExprLet) {
+            var lc = s as ExprLet
+            for (lv in lc.variables) {
+                if (lv.init != null) {
+                    lv.init = pex_extract(pe, barriers, lv.init)
+                }
+                pe.localColor["{lv.name}"] = false
+            }
+        } elif (s is ExprCopy) {
+            var cp = s as ExprCopy
+            cp.right = pex_extract(pe, barriers, cp.right)
+        } elif (s is ExprReturn) {
+            var rt = s as ExprReturn
+            rt.subexpr = pex_extract(pe, barriers, rt.subexpr)
+        }
+        body |> push(s)
+    }
+    if (pe.changed) {
+        // Replace the body in place: preshader group on top, then the (extracted) varying body.
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (t in pe.top) {
+            blk.list |> emplace(t)
+        }
+        for (b in body) {
+            blk.list |> emplace(b)
+        }
+    }
+    let result = pe.changed
+    delete pe.paramNames
+    delete pe.localColor
+    delete pe.dedup
+    unsafe {
+        delete pe.rename
+        delete pe.top
+        delete body
+    }
+    return result
+}
+
+// ===== CSE (local value numbering) =====
+// The body is one basic block, so LVN is complete. Value-number pure subtrees by `describe()`, dedup
+// any computed >=2x into one shared let before its first use; uniform dups route to the preshader.
+
+class private CseTally : AstVisitor {
+    counts : table<string; int>
+    sample : table<string; ExpressionPtr>
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        if (psh_has_compute(expr)) {
+            let k = "{describe(expr)}"
+            counts[k] = (counts?[k] ?? 0) + 1
+            if (!key_exists(sample, k)) {
+                sample[k] = clone_expression(expr)
+            }
+        }
+    }
+}
+
+// Replace every subtree whose describe matches `key` with a ref to `refName`. Top-down: a match is
+// replaced (no recursion into it); otherwise recurse children (the bounded post-flatten node set).
+def private cse_replace_expr(var e : ExpressionPtr; key, refName : string) : ExpressionPtr {
+    if (e == null) return null
+    if (psh_has_compute(e) && "{describe(e)}" == key) {
+        return new ExprVar(at = e.at, name := refName)
+    }
+    if (e is ExprOp1) {
+        var o = e as ExprOp1
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprOp2) {
+        var o = e as ExprOp2
+        o.left = cse_replace_expr(o.left, key, refName)
+        o.right = cse_replace_expr(o.right, key, refName)
+    } elif (e is ExprOp3) {
+        var o = e as ExprOp3
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+        o.left = cse_replace_expr(o.left, key, refName)
+        o.right = cse_replace_expr(o.right, key, refName)
+    } elif (e is ExprCall) {
+        var c = e as ExprCall
+        for (i in range(length(c.arguments))) {
+            c.arguments[i] = cse_replace_expr(c.arguments[i], key, refName)
+        }
+    } elif (e is ExprField) {
+        var o = e as ExprField
+        o.value = cse_replace_expr(o.value, key, refName)
+    } elif (e is ExprSwizzle) {
+        var o = e as ExprSwizzle
+        o.value = cse_replace_expr(o.value, key, refName)
+    } elif (e is ExprRef2Value) {
+        var o = e as ExprRef2Value
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                fld.value = cse_replace_expr(fld.value, key, refName)
+            }
+        }
+    }
+    return e
+}
+
+def private cse_replace_stmt(var s : ExpressionPtr; key, refName : string) {
+    if (s is ExprLet) {
+        var lc = s as ExprLet
+        for (lv in lc.variables) {
+            if (lv.init != null) {
+                lv.init = cse_replace_expr(lv.init, key, refName)
+            }
+        }
+    } elif (s is ExprCopy) {
+        var cp = s as ExprCopy
+        cp.right = cse_replace_expr(cp.right, key, refName)
+    } elif (s is ExprReturn) {
+        var rt = s as ExprReturn
+        rt.subexpr = cse_replace_expr(rt.subexpr, key, refName)
+    }
+}
+
+// Count leading contiguous `_preshader_*` lets — the preshader region. A CSE dup whose first use
+// falls inside it is uniform (Pass A already pulled every nontrivial uniform subtree out of the
+// body), so it routes to the preshader.
+def private preshader_prefix_len(blk : ExprBlock?) : int {
+    var k = 0
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 &&
+                (s as ExprLet).variables[0].name |> starts_with("_preshader_")) {
+            k ++
+        } else {
+            break
+        }
+    }
+    return k
+}
+
+def private cse_body(var blk : ExprBlock?) : bool {
+    var anyChange = false
+    var counter = 0
+    var guard = 0
+    while (guard < 4096) {
+        guard ++
+        // Tally every nontrivial subtree across the block, recording its first statement index.
+        var counts : table<string; int>
+        var sample : table<string; ExpressionPtr>
+        var firstStmt : table<string; int>
+        for (i in range(length(blk.list))) {
+            var ct = new CseTally()
+            make_visitor(*ct) $(a) {
+                visit(blk.list[i], a)
+            }
+            for (k in keys(ct.counts)) {
+                counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
+                if (!key_exists(firstStmt, k)) {
+                    firstStmt[k] = i
+                    sample[k] = ct.sample?[k] ?? null
+                }
+            }
+            unsafe {
+                delete ct
+            }
+        }
+        // Pick the largest subtree computed >=2x (largest → fewer rounds; nested dups surface next).
+        var bestKey = ""
+        var bestLen = 0
+        for (k in keys(counts)) {
+            if ((counts?[k] ?? 0) >= 2 && length(k) > bestLen) {
+                bestKey = k
+                bestLen = length(k)
+            }
+        }
+        if (bestKey == "") {
+            delete counts
+            delete firstStmt
+            unsafe {
+                delete sample
+            }
+            break
+        }
+        let fi = firstStmt?[bestKey] ?? 0
+        let uniform = fi < preshader_prefix_len(blk)
+        let nm = uniform ? "_preshader_cse_{counter}" : "_cse_{counter}"
+        counter ++
+        // `sample` holds a tally-time (pre-replace) clone; cse_replace mutates the tree, not it.
+        var src = sample?[bestKey] ?? null
+        for (s in blk.list) {
+            cse_replace_stmt(s, bestKey, nm)
+        }
+        var theLet = qmacro_expr(${ let $i(nm) = $e(src); })
+        var newlist : array<ExpressionPtr>
+        newlist |> reserve(length(blk.list) + 1)
+        for (i in range(length(blk.list))) {
+            if (i == fi) {
+                newlist |> push(theLet)
+            }
+            newlist |> push(blk.list[i])
+        }
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (m in newlist) {
+            blk.list |> emplace(m)
+        }
+        delete counts
+        delete firstStmt
+        unsafe {
+            delete sample
+            delete newlist
+        }
+        anyChange = true
+    }
+    return anyChange
+}
+
+def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>) : bool {
+    //! Post-fold optimize pass: hoist uniform (globals+literals) subtrees to top-of-body
+    //! `_preshader_N` lets, then CSE-dedup repeated subtrees. `barriers` = sampler/noise call names
+    //! that must stay per-pixel. Runs once after the fold fixpoint; caller re-infers after.
+    if (!(func.body is ExprBlock)) return false
+    var blk = func.body as ExprBlock
+    var changed = extract_preshader(func, blk, barriers)
+    if (cse_body(blk)) {
+        changed = true
+    }
+    return changed
+}

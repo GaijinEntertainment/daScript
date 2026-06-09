@@ -81,6 +81,12 @@ let HINT_WHITELIST : table<string> <- {
     "float2", "float3", "float4", "int2", "int3", "int4"
 }
 
+// Surviving intrinsics that can't run in the per-draw preshader (texture sample / procedural
+// noise). flatten_optimize keeps these per-pixel; everything else uniform is hoisted.
+let SHADER_BARRIERS : table<string> <- {
+    "tex2d", "noise"
+}
+
 let UV = "uv";
 let GTime = "gTime";
 let WorldPos = "worldPos";
@@ -1594,6 +1600,15 @@ class PixelShaderMacro : AstFunctionAnnotation {
             if (flatten_fold(func)) {
                 astChanged = true
                 return true
+            }
+            // Fold converged → hoist uniform subtrees to per-draw `_preshader_` lets + CSE-dedup,
+            // then re-infer once to type them. tex2d/noise stay per-pixel (can't sample in a preshader).
+            if (!shader_annotation_arg(func, "optimized")) {
+                set_shader_annotation_flag(func, "optimized")
+                if (flatten_optimize(func, SHADER_BARRIERS)) {
+                    astChanged = true
+                    return true
+                }
             }
             set_shader_annotation_flag(func, "folded")
             return true

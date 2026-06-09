@@ -32,7 +32,15 @@ require daslib/flatten_opt
 // PHASE_DONE so the entry never re-transforms.
 let private PHASE_LOWERED = 1
 let private PHASE_FOLDED = 2
+let private PHASE_OPTIMIZED = 3
 let private PHASE_DONE = 999
+
+// Calls that must stay per-pixel (can't run in the per-draw preshader). The [flatten] annotation
+// path is pure math (STD_WHITELIST), so these never appear here — listed for robustness; a backend
+// driving flatten_function directly passes its own sampler/intrinsic set to flatten_preshade_cse.
+let private FLATTEN_BARRIERS : table<string> <- {
+    "tex2d", "noise"
+}
 
 // Leaf builtins permitted to survive into flattened output: pure, branch-safe,
 // GPU-expressible. Everything else (print, allocation, I/O, ...) is rejected.
@@ -729,6 +737,14 @@ def public flatten_fold(var func : FunctionPtr) : bool {
     return fold_body(func)
 }
 
+[macro_function]
+def public flatten_optimize(var func : FunctionPtr; barriers : table<string>) : bool {
+    //! Post-fold optimize pass (delegates to `flatten_preshade_cse`): hoist uniform subtrees to
+    //! per-draw `_preshader_` lets + CSE-dedup. Run ONCE after the `flatten_fold` fixpoint converges;
+    //! `barriers` = the backend's sampler/intrinsic call names. Returns true if anything changed.
+    return flatten_preshade_cse(func, barriers)
+}
+
 // ===== Post-inference shape verification — twin must be branchless + call-free =====
 // A violation is a lowering bug (fail loudly). Runs cycle 2 (user-call detection needs the
 // resolved `call.func`); fold completeness is a separate, correctness-irrelevant concern.
@@ -848,7 +864,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             errors := "flatten: twin {twin_name(func)} was not declared"
             return false
         }
-        if (ph != PHASE_LOWERED && ph != PHASE_FOLDED) {
+        if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED) {
             // Cycle 1: lower the twin with the std whitelist, then re-infer so
             // call.func resolves. (Backends call flatten_function directly with
             // their own primitive set instead of going through this annotation.)
@@ -871,7 +887,14 @@ class FlattenAnnotation : AstFunctionAnnotation {
                 astChanged = true
                 return true
             }
-            // Nothing left to fold — fall through to the shape check this cycle.
+            // Fold fixpoint reached → run the optimize pass once on the canonical body: hoist uniform
+            // subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to
+            // type the new lets, then fall through to the shape check next cycle.
+            set_flatten_phase(func, PHASE_OPTIMIZED)
+            if (flatten_optimize(twin, FLATTEN_BARRIERS)) {
+                astChanged = true
+                return true
+            }
         }
         // Final cycle: verify the twin is branchless and call-free.
         let problem = verify_flat(twin)
