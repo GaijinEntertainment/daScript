@@ -8,31 +8,57 @@ require daslib/ast_boost
 require daslib/templates_boost
 require shader_graph_ir_builder
 require daslib/flatten
-require daslib/fio
 
-// ---------------------------------------------------------------------------
-// EdenSpark shader-DSL backend (flatten example harness copy).
-//
-// Adapted from the engine's shader_dsl_boost. Two changes for this harness:
-//   (1) the [shader(stage=,type=)] annotation calls daslib/flatten's
-//       `flatten_function` in patch() BEFORE validation, so a shader written
-//       with if/else, helper calls or fixed loops is lowered to branchless,
-//       call-free `?:`/straight-line form first. flatten does ALL the lowering
-//       (inlining + if-conversion + loop unroll); the old UnrollForVisitor is
-//       kept only for reference.
-//   (2) Phase B (capability tier) adds ExprOp3 -> Select so the backend can
-//       consume flatten's `?:` output. The branchless real shaders never emit
-//       `?:`, so the regression tier is unaffected.
-// ---------------------------------------------------------------------------
-
-def warning_at(message : string, at : LineInfo) {
-    print("shader_dsl_boost: warning at {at.describe()}: {message}\n")
+// describe_function prints monomorphized calls with their full mangling:
+//   __::shader_dsl_primitives`saturate`6743598172484463179(...)
+// For the AST dump we only want the bare name (`saturate`). A mangled symbol is
+// `__::<scope>` + '`' + <name> + '`' + <hash-digits>; rewrite each to <name>.
+// (96 == '`'.) Drives the human-readable AST recorded in the golden test.
+[macro_function]
+def clean_mangled_names(s : string) : string {
+    let bt = 96  // '`'
+    var res = ""
+    peek_data(s) $(data) {
+        let n = length(data)
+        res = build_string() $(sb) {
+            var i = 0
+            while (i < n) {
+                // A mangled symbol always starts with the "__::" introducer
+                // (95 95 58 58 == "__::").
+                let isIntro = i + 4 <= n && data[i] == uint8(95) && data[i + 1] == uint8(95) && data[i + 2] == uint8(58) && data[i + 3] == uint8(58)
+                if (isIntro) {
+                    // Scope runs up to the first backtick; the name is between the two
+                    // backticks; the hash digits follow the second backtick.
+                    var s1 = i + 4
+                    while (s1 < n && int(data[s1]) != bt) {
+                        s1++
+                    }
+                    var s2 = s1 + 1
+                    while (s2 < n && int(data[s2]) != bt) {
+                        s2++
+                    }
+                    if (s1 < n && s2 < n) {
+                        write(sb, slice(s, s1 + 1, s2))   // bare name only
+                        i = s2 + 1
+                        while (i < n && int(data[i]) >= 48 && int(data[i]) <= 57) {
+                            i++                            // skip the hash digits
+                        }
+                        continue
+                    }
+                }
+                write_char(sb, int(data[i]))
+                i++
+            }
+        }
+    }
+    return res
 }
 
 let DEBUG_AT = false
 let PRIMITIVES_MODULE_NAME = "shader_dsl_primitives"
 
 // Per-contract I/O struct names in PRIMITIVES_MODULE_NAME.
+// Add a row here when introducing a new contract.
 let CONTRACT_INPUT_STRUCTS : table<string; string> = {
     "pbr"   => "PbrInput",
     "unlit" => "UnlitInput"
@@ -62,6 +88,11 @@ let WorldNormal = "worldNormal";
 let ViewDir = "viewDir";
 let LocalPos = "localPos";
 let LocalNormal = "localNormal";
+let CameraPos   = "cameraPos"
+let CameraFwd   = "cameraFwd"
+let CameraRight = "cameraRight"
+let CameraUp    = "cameraUp";
+let ScreenPos = "screenPos";
 
 // ---- Outputs ---------------------------------------------------------------
 let OutAlbedo = "out_albedo";
@@ -91,6 +122,8 @@ let TextureVar = "textureVar";
 
 // ---- Ops -------------------------------------------------------------------
 let SampleTexture = "sampleTexture";
+let SampleSceneColor = "sampleSceneColor";
+let SampleSceneDepth = "sampleSceneDepth";
 let PerlinNoise2D = "perlinNoise2D";
 let PerlinNoise3D = "perlinNoise3D";
 
@@ -171,33 +204,36 @@ let CombineFloat3 = "combineFloat3";
 let CombineFloat4 = "combineFloat4";
 let CombineFloat4F2F2 = "combineFloat4F2F2";
 let CombineFloat4F3F1 = "combineFloat4F3F1";
+// Arbitrary multi-component swizzle: one node, mask packed in constValue[0].
 let SwizzleF2 = "swizzleF2";
 let SwizzleF3 = "swizzleF3";
 let SwizzleF4 = "swizzleF4";
 
 
 enum ShaderPinType {
-    Float
-    Float2
-    Float3
-    Float4
-    AnyFloat
-    Texture2D
-}
+  Float,     // scalar    — green icon
+  Float2,    // vec2      — blue icon    (e.g. UV coordinates)
+  Float3,    // vec3      — purple icon
+  Float4,    // vec4      — orange icon
+  AnyFloat,  // polymorphic — accepts any float type; resolved at compile time
+             // (width inferred from connected inputs, widest wins)
+  Texture2D, // texture handle — incompatible with float math ops
+};
 
 
 enum ShaderPropertyType {
-    Float
-    Float2
-    Float3
-    Float4
-    Color
-    Texture2D
-}
+  Float,     // single float
+  Float2,    // vec2
+  Float3,    // vec3
+  Float4,    // vec4
+  Color,     // float4 with color-picker UI
+  Texture2D, // texture asset reference
+};
 
 
 struct IRPin {
     id : int
+    // name : string
     _type : ShaderPinType
 }
 
@@ -216,26 +252,26 @@ struct ShaderGraphProperty {
 
 
 enum ShaderNodeKind {
-    Input
-    Output
-    Op
-    Const
-    Var
-}
+  Input,  // shader-level input  (UV, gTime)
+  Output, // shader-level output (alpha)
+  Op,     // pure math operation (perlinNoise2D, sum_f, …)
+  Const,  // editable float constant (1.0, …) — value lives inline in the node
+  Var,    // named material property reference — value lives in the properties list
+};
 
 
 struct IRLink {
-    fromPin : int
-    toPin : int
-}
+  fromPin : int; // id of the output (source) pin
+  toPin : int;   // id of the input  (destination) pin
+};
 
 
 struct IRNode {
     id : int = 0
     typeId : string
     kind : ShaderNodeKind
-    constValue : float4
-    propertyIndex : int
+    constValue : float4 // Const nodes only
+    propertyIndex : int // Var nodes only: index into ShaderGraphIR::properties
 
     inputs : array<IRPin?>
     outputs : array<IRPin?>
@@ -262,19 +298,24 @@ class ValidateShaderVisitor : AstVisitor {
 
     propsIdx : int = 0
 
-    @do_not_delete pins : table<IRPinId, IRPin?>
+    @do_not_delete pins : table<IRPinId, IRPin?> // pin to parent node id
     @do_not_delete nodeExitPins : table<Expression const?, IRPinId>
     @do_not_delete exprLinks : array<tuple<IRPinId, Expression const?>>
     @do_not_delete variableLinks : array<tuple<IRPinId, Variable const?>>
 
     @do_not_delete variables : table<Variable const?, Expression const?>
     @do_not_delete variablePins : table<Variable const?, IRPinId>
-    @do_not_delete aliasTargets : table<Variable const?, Variable const?>
+    @do_not_delete aliasTargets : table<Variable const?, Variable const?> // `let a = b` → a maps to b; b owns the actual node/pin
     @do_not_delete outPins : table<Variable const?, IRPinId>
+    // Mutable accumulators: `var acc = <const>` then `acc += x` / `acc = x`.
+    // The shader graph is pure dataflow, so an accumulator is just a value that
+    // is rebound by each assignment. accumCurPin tracks the output pin that
+    // currently represents the accumulator's value; reads resolve to it at the
+    // point of the read, assignments advance it to the right-hand side's pin.
     @do_not_delete accumVars : table<Variable const?, bool>
     @do_not_delete accumCurPin : table<Variable const?, IRPinId>
-    @do_not_delete inputFieldPins : table<string, IRPinId>
-    @do_not_delete makeStructStates : array<int>
+    @do_not_delete inputFieldPins : table<string, IRPinId> // field name → output pin of the input node (dedup)
+    @do_not_delete makeStructStates : array<int> // per ExprMakeStruct: 0=output(process), 1=suppress+error, 2=nested-in-suppression
 
     contract : string
 
@@ -291,21 +332,29 @@ class ValidateShaderVisitor : AstVisitor {
     }
 
     static unsupportedExpr = {
+        // ("ExprBlock" => "blocks are not supported in shader code"),
         ("ExprStringBuilder" => "string interpolation is not supported in shader code"),
         ("ExprNew" => "heap allocations are not supported in shader code"),
+        // ExprNamedCall
         ("ExprLooksLikeCall" => "function calls without function identifiers are not supported in shader code"),
+        // ExprCall
         ("ExprNullCoalescing" => "null coalescing operator (??) is not supported in shader code"),
         ("ExprAt" => "the at operator is not supported in shader code"),
         ("ExprSafeAt" => "safe at operator is not supported in shader code"),
         ("ExprIs" => "is operator is not supported in shader code"),
+        // ExprOp2
+        // ("ExprOp3" => "ternary operator (?:) and other 3-operand expressions are not supported in shader code"),
+        // ExprCopy
         ("ExprMove" => "move semantics are not supported in shader code"),
         ("ExprClone" => "clone operator is not supported in shader code"),
+        // ExprAssume
         ("ExprWith" => "the with operator is not supported in shader code"),
         ("ExprWhile" => "while loops are not supported in shader code"),
         ("ExprTryCatch" => "try-catch blocks are not supported in shader code"),
         ("ExprIfThenElse" => "if expressions are not supported in shader code"),
         ("ExprFor" => "for loops are not supported in shader code"),
         ("ExprMakeVariant" => "make variant expressions are not supported in shader code"),
+        // ExprMakeStruct — handled via preVisitExprMakeStruct (allowed for output contract structs)
         ("ExprMakeArray" => "make array expressions are not supported in shader code"),
         ("ExprMakeTuple" => "make tuple expressions are not supported in shader code"),
         ("ExprArrayComprehension" => "array comprehensions are not supported in shader code"),
@@ -313,9 +362,11 @@ class ValidateShaderVisitor : AstVisitor {
         ("ExprPtr2Ref" => "pointer to reference conversions are not supported in shader code"),
         ("ExprLabel" => "labels are not supported in shader code"),
         ("ExprGoto" => "goto statements are not supported in shader code"),
+        // ("ExprRef2Value" => "pointer to value conversions are not supported in shader code"),
         ("ExprRef2Ptr" => "reference to pointer conversions are not supported in shader code"),
         ("ExprAddr" => "function address retrieval is not supported in shader code"),
         ("ExprAssert" => "assert statements are not supported in shader code"),
+        // ExprStaticAssert
         ("ExprQuote" => "quote expressions are not supported in shader code"),
         ("ExprDebug" => "debug expressions are not supported in shader code"),
         ("ExprInvoke" => "function invocations are not supported in shader code"),
@@ -326,10 +377,16 @@ class ValidateShaderVisitor : AstVisitor {
         ("ExprAscend" => "ascend function is not supported in shader code"),
         ("ExprCast" => "cast function is not supported in shader code"),
         ("ExprDelete" => "delete function is not supported in shader code"),
+        // ExprVar
+        // ExprTag
+        // ExprField — handled via preVisitExprField (allowed on I/O contract struct arguments)
         ("ExprSafeField" => "safe field access is not supported in shader code"),
+        // ExprSwizzle
         ("ExprIsVariant" => "is variant function is not supported in shader code"),
         ("ExprAsVariant" => "as variant function is not supported in shader code"),
         ("ExprSafeAsVariant" => "safe as variant function is not supported in shader code"),
+        // ExprOp1
+        // ExprReturn — handled via preVisitExprReturn (allowed when returning an output contract struct)
         ("ExprYield" => "yield statements are not supported in shader code"),
         ("ExprBreak" => "break statements are not supported in shader code"),
         ("ExprContinue" => "continue statements are not supported in shader code"),
@@ -340,6 +397,7 @@ class ValidateShaderVisitor : AstVisitor {
         ("ExprConstBitfield" => "const bitfield expressions are not supported in shader code"),
         ("ExprConstInt8" => "int8 expressions are not supported in shader code"),
         ("ExprConstInt16" => "int16 expressions are not supported in shader code"),
+        // ExprConstInt — handled via preVisitExprConstInt (auto-promoted to float)
         ("ExprConstInt64" => "int64 expressions are not supported in shader code"),
         ("ExprConstInt2" => "int2 expressions are not supported in shader code"),
         ("ExprConstInt3" => "int3 expressions are not supported in shader code"),
@@ -355,16 +413,24 @@ class ValidateShaderVisitor : AstVisitor {
         ("ExprConstURange" => "urange expressions are not supported in shader code"),
         ("ExprConstRange64" => "range64 expressions are not supported in shader code"),
         ("ExprConstURange64" => "urange64 expressions are not supported in shader code"),
+        // ("ExprConstBool" => "bool expressions are not supported in shader code"),
+        // ExprConstFloat
+        // ExprConstFloat2
+        // ExprConstFloat3
+        // ExprConstFloat4
         ("ExprConstString" => "string expressions are not supported in shader code"),
         ("ExprConstDouble" => "double expressions are not supported in shader code"),
         ("ExprReader" => "reader expressions are not supported in shader code"),
         ("ExprUnsafe" => "unsafe expressions are not supported in shader code"),
-        ("ExprCallMacro" => "call macro expressions are not supported in shader code")
+        ("ExprCallMacro" => "call macro expressions are not supported in shader code"),
     }
 
     def add_in_link(from : ExpressionPtr&, to : IRPin?) {
         if (from is ExprVar) {
             let v : Variable const? = (from as ExprVar).variable
+            // An accumulator read resolves to whatever pin is current *now*, not
+            // to a single per-variable pin. Bind this read expression directly to
+            // the accumulator's current pin and route it as an expression link.
             if (accumVars.key_exists(v)) {
                 let readId : Expression const? = from
                 nodeExitPins[readId] = accumCurPin?[v] ?? -1
@@ -380,6 +446,7 @@ class ValidateShaderVisitor : AstVisitor {
 
     def register_node(x : ExpressionPtr&, var irNode : IRNode&) {
         let id : Expression const? = x
+        // print("deep: adding node for {x.describe()} with id {irNodeId}")
         verify(irNode.outputs.length() <= 1)
         if (irNode.outputs.length() == 1) {
             nodeExitPins[id] = irNode.outputs[0].id
@@ -408,7 +475,8 @@ class ValidateShaderVisitor : AstVisitor {
     }
 
     def add_pin(expr : ExpressionPtr) : IRPin? {
-        var pin = new IRPin(id = irPinId, _type = ShaderPinType.Float)
+        var pin = new IRPin(id = irPinId, _type = ShaderPinType.Float) // default type, may be overridden by hint annotation
+        // print("deep: adding pin {pin.id} for expr {expr.describe()} with type {describe(expr._type)}")
         pins[irPinId] = pin
         if (expr._type.baseType == Type.tFloat) {
             pin._type = ShaderPinType.Float
@@ -487,6 +555,8 @@ class ValidateShaderVisitor : AstVisitor {
         return false
     }
 
+    // Field access on I/O contract struct arguments: inp.uv, inp.worldPos, etc.
+    // Any other field access remains an error.
     def override preVisitExprField(expr : ExprField?) : void {
         if (!empty(ignoreNext)) {
             return
@@ -502,6 +572,7 @@ class ValidateShaderVisitor : AstVisitor {
         }
         let fieldName = "{expr.name}"
         let structType = (expr.value as ExprVar).variable._type.structType
+        // Read typeId from the @alias annotation on the struct field
         var typeId = ""
         for (field in structType.fields) {
             if (field.name == fieldName) {
@@ -519,18 +590,20 @@ class ValidateShaderVisitor : AstVisitor {
             ignoreNext.push(true)
             return
         }
+        // Reuse existing input node for this field if already created
         if (inputFieldPins.key_exists(fieldName)) {
             let id : Expression const? = expr
             nodeExitPins[id] = inputFieldPins[fieldName]
             ignoreNext.push(true)
             return
         }
+        // First access — create the input IR node; pin type inferred from expr._type
         var irNode = begin_op(expr, typeId, ShaderNodeKind.Input)
         var pin = add_pin(expr)
         irNode.outputs.push(pin)
         register_node(expr, irNode)
         inputFieldPins[fieldName] = pin.id
-        ignoreNext.push(true)
+        ignoreNext.push(true)  // suppress child ExprVar(inp) visit
     }
 
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
@@ -540,6 +613,8 @@ class ValidateShaderVisitor : AstVisitor {
         return <- expr
     }
 
+    // ExprReturn: only 'return OutputStruct(field = val, ...)' is valid;
+    // bare 'return PbrOutput()' and all others are silently suppressed.
     def override preVisitExprReturn(expr : ExprReturn?) : void {
         if (!empty(ignoreNext)) { return ; }
         let allowSubexpr = (expr.subexpr != null
@@ -558,12 +633,14 @@ class ValidateShaderVisitor : AstVisitor {
         return <- expr
     }
 
+    // ExprMakeStruct: only output contract structs are valid (e.g. PbrOutput(albedo=..., ...)).
     def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
         if (!empty(ignoreNext)) {
             makeStructStates.push(2)
             return
         }
         if (expr._type.baseType != Type.tStructure || !is_output_contract_struct(expr._type.structType)) {
+
             errors.push(("make struct expressions are not supported in shader code", unsafe(addr(expr.at))))
             makeStructStates.push(1)
             ignoreNext.push(true)
@@ -623,6 +700,8 @@ class ValidateShaderVisitor : AstVisitor {
             }
             ignoreNext.push(true)
         }
+
+        // print("deep: visiting expr {expr.__rtti} : {describe(expr)}")
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
@@ -638,6 +717,9 @@ class ValidateShaderVisitor : AstVisitor {
     def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         if (expr.left is ExprVar) {
             let v : Variable const? = (expr.left as ExprVar).variable
+            // Accumulator assignment (`acc = rhs`, or `acc += rhs` lowered to
+            // `acc = acc + rhs`): rebind the accumulator to the rhs's pin. The rhs
+            // subtree is already visited (post-order), so its exit pin exists.
             if (accumVars.key_exists(v)) {
                 let rhsId : Expression const? = expr.right
                 let pin = nodeExitPins?[rhsId] ?? -1
@@ -670,6 +752,7 @@ class ValidateShaderVisitor : AstVisitor {
         }
 
         for (v in expr.variables) {
+            // print("deep: let {v.name} = {describe(v.init)}")
             if (v.init == null) {
                 errors.push(("shader variables must be initialized with a constant expression", unsafe(addr(v.at))))
                 continue
@@ -680,6 +763,10 @@ class ValidateShaderVisitor : AstVisitor {
             if (!empty(v._type.dim)) {
                 errors.push(("shader code doesn't support vector literals; use float2/3/4 types instead", unsafe(addr(v.at))))
             }
+            // A mutable `var` is an accumulator: it may be reassigned later via
+            // `=` / `+=`. The init still emits a node normally; we just mark the
+            // variable so reads/assignments are routed through accumCurPin.
+            // (accumCurPin is bound to the init's pin in visitExprLet, post-init.)
             let isAccum = !v._type.isConst
             // Phase C: a bool (`var __flat_loop = true`) is a stored mask — flatten's
             // loop-scoped break / per-iteration continue mask. It is just a mutable
@@ -697,9 +784,14 @@ class ValidateShaderVisitor : AstVisitor {
                     }
                     continue
                 }
+                // `let a = b` is a pure alias: it emits no IR node of its own, so
+                // record the target variable and resolve through it at link time.
                 if (v.init is ExprVar) {
                     let aliasId : Variable const? = v
                     var target : Variable const? = (v.init as ExprVar).variable
+                    // Flatten the chain at insertion: `target` was declared earlier, so its
+                    // own alias (if any) already points at a root. One hop keeps every entry
+                    // pointing directly at a root, making link-time resolution O(1).
                     if (aliasTargets.key_exists(target)) {
                         target = aliasTargets[target]
                     }
@@ -711,6 +803,8 @@ class ValidateShaderVisitor : AstVisitor {
         }
     }
 
+    // Bind each accumulator to its init expression's output pin once the init
+    // subtree has been visited (the init node is registered during the walk).
     def override visitExprLet(var expr : ExprLet?) : ExpressionPtr {
         if (empty(ignoreNext)) {
             for (v in expr.variables) {
@@ -762,6 +856,9 @@ class ValidateShaderVisitor : AstVisitor {
                 return
             }
         }
+        // Scalar `float(x)` cast — identity in the float-only shader graph. Useful
+        // after loop unrolling, where an int loop index participates in float math
+        // (e.g. `float(x - 1) * s`). Int constants are already promoted to floats.
         if (expr._type.baseType == Type.tFloat && expr.arguments.length() == 1 && expr.func.name.string().find("float") >= 0
             && (expr.arguments[0]._type.baseType == Type.tFloat || expr.arguments[0]._type.baseType == Type.tInt)) {
             emit_noop(expr.arguments[0], expr)
@@ -793,6 +890,7 @@ class ValidateShaderVisitor : AstVisitor {
                 emit_noop(expr.arguments[0], expr)
                 return
             }
+            // float4(f, f, f, f)
             if (argc == 4 && expr.arguments[0]._type.baseType == Type.tFloat
                           && expr.arguments[1]._type.baseType == Type.tFloat
                           && expr.arguments[2]._type.baseType == Type.tFloat
@@ -803,6 +901,7 @@ class ValidateShaderVisitor : AstVisitor {
                 register_node(expr, irNode)
                 return
             }
+            // float4(f2, f2)
             if (argc == 2 && expr.arguments[0]._type.baseType == Type.tFloat2
                           && expr.arguments[1]._type.baseType == Type.tFloat2) {
                 var irNode = begin_op(expr, CombineFloat4F2F2, kind)
@@ -811,6 +910,7 @@ class ValidateShaderVisitor : AstVisitor {
                 register_node(expr, irNode)
                 return
             }
+            // float4(f3, f)
             if (argc == 2 && expr.arguments[0]._type.baseType == Type.tFloat3
                           && expr.arguments[1]._type.baseType == Type.tFloat) {
                 var irNode = begin_op(expr, CombineFloat4F3F1, kind)
@@ -824,6 +924,7 @@ class ValidateShaderVisitor : AstVisitor {
         }
 
         if (is_in_completion()) {
+            // vscode support
             let name = expr.name.string()
             if (name.starts_with("__::shader_dsl_primitives")) {
                 return
@@ -838,10 +939,12 @@ class ValidateShaderVisitor : AstVisitor {
         }
         let id : Variable const? = expr.variable
 
+        // Accumulator reads emit no node; add_in_link binds them to the current pin.
         if (accumVars.key_exists(id)) {
             return
         }
 
+        // input by default
         var kind = ShaderNodeKind.Input
         for (ann in expr.variable.annotation) {
             if (ann.name == "dir") {
@@ -859,10 +962,11 @@ class ValidateShaderVisitor : AstVisitor {
         for (ann in expr.variable.annotation) {
             if (ann.name == "alias") {
                 if (kind == ShaderNodeKind.Input) {
+                    // print("deep: adding input variable {expr.variable.name} flags {expr.varFlags}")
                     if (expr.varFlags.write) {
                         errors.push(("shader input variable {expr.variable.name} must be read-only", unsafe(addr(expr.at))))
                     }
-                } else {
+                } else/*elif (kind == ShaderNodeKind.Output)*/ {
                     if (!expr.varFlags.write) {
                         errors.push(("shader output variable {expr.variable.name} must be written to in the shader code and cannot be read", unsafe(addr(expr.at))))
                     }
@@ -883,17 +987,19 @@ class ValidateShaderVisitor : AstVisitor {
                     var pin = add_pin(expr)
                     irNode.outputs.push(pin)
                     variablePins[id] = pin.id
-                } else {
+                } else/*elif (kind == ShaderNodeKind.Output)*/ {
                     var pin = add_pin(expr)
                     irNode.inputs.push(pin)
                     outPins[id] = pin.id
                 }
                 register_node(expr, irNode)
+                // add_variable(expr.variable, typeId)
                 return
             }
         }
 
         if (expr.varFlags.argument) {
+            // I/O contract struct arguments (PbrInput etc.) are accessed via ExprField — silently ignore
             if (expr.variable._type.baseType == Type.tStructure) {
                 var st = expr.variable._type.structType
                 if (st != null && st._module != null && st._module.name == PRIMITIVES_MODULE_NAME && st.name != "Sampler2D") {
@@ -917,6 +1023,12 @@ class ValidateShaderVisitor : AstVisitor {
             if (!empty(arg._type.dim)) {
                 errors.push(("shader properties can't be vectors; use float2/3/4 types instead", unsafe(addr(arg.at))))
             }
+            // if (!arg._type.isConst) {
+            //     errors.push(("shader function arguments must be const", unsafe(addr(arg.at))))
+            // }
+            // if (!arg.flags.marked_used) {
+            //     macro_err(compiling_program(), arg.at, "shader function argument {arg.name} is not used in the shader code")
+            // }
             var prop : ShaderGraphProperty
             prop.name = arg.name.string()
             var valid = false
@@ -1053,6 +1165,12 @@ class ValidateShaderVisitor : AstVisitor {
             register_node(expr, irNode)
             return
         }
+
+        // Compound assignment to an accumulator: `acc += rhs` becomes a math node
+        // (acc_current OP rhs) whose output rebinds the accumulator. The new pin is
+        // set in visitExprOp2 (post-order), so reads of `acc` inside rhs still see
+        // the pre-statement value. The op2 itself yields no value (it is a
+        // statement), so it gets no exit pin.
         if (expr.op == "+=" || expr.op == "-=" || expr.op == "*=" || expr.op == "/=") {
             if (!(expr.left is ExprVar) || !accumVars.key_exists((expr.left as ExprVar).variable)) {
                 errors.push(("compound assignment '{expr.op}' is only supported on a mutable accumulator (`var acc = ...`)", unsafe(addr(expr.at))))
@@ -1060,8 +1178,9 @@ class ValidateShaderVisitor : AstVisitor {
             }
             let typeId = expr.op == "+=" ? Add : expr.op == "-=" ? Sub : expr.op == "*=" ? Mul : Div
             var irNode = begin_op(expr, typeId)
-            add_arg(irNode, expr.left)
+            add_arg(irNode, expr.left)   // reads the accumulator's current pin
             add_arg(irNode, expr.right)
+            // Output pin type follows the accumulator (the assigned-to variable).
             var outPin = new IRPin(id = irPinId, _type = pin_type_of(expr.left._type))
             pins[irPinId] = outPin
             irPinId++
@@ -1078,6 +1197,8 @@ class ValidateShaderVisitor : AstVisitor {
             && (expr.left is ExprVar)) {
             let v : Variable const? = (expr.left as ExprVar).variable
             if (accumVars.key_exists(v)) {
+                // The math node was registered against this op2 expr; rebind the
+                // accumulator to that node's output pin.
                 let opId : Expression const? = expr
                 let pin = nodeExitPins?[opId] ?? -1
                 if (pin != -1) {
@@ -1108,6 +1229,8 @@ class ValidateShaderVisitor : AstVisitor {
         return SplatW
     }
 
+    // Pack a mask string into the byte used by SG_OP_SWIZZLE:
+    //   bits[2i+1:2i] = source channel index for output component i  (0=x 1=y 2=z 3=w)
     def swizzle_pack_mask(mask : string) : int {
         var packed = 0
         for (i in range(length(mask))) {
@@ -1124,11 +1247,13 @@ class ValidateShaderVisitor : AstVisitor {
         }
         let mask = "{expr.mask}"
 
+        // noop passthrough for sequential masks
         if (mask == "xyzw" || mask == "xyz" || mask == "xy" || mask == "rgba" || mask == "rgb" || mask == "rg") {
             emit_noop(expr.value, expr)
             return
         }
 
+        // single component: .x .y .z .w .r .g .b .a
         if (length(mask) == 1) {
             var irNode = begin_op(expr, swizzle_component_typeId(mask))
             add_arg(irNode, expr.value)
@@ -1137,6 +1262,7 @@ class ValidateShaderVisitor : AstVisitor {
             return
         }
 
+        // .xyxy on float2: float4(p, p) — one CombineFloat4F2F2 node instead of 4 splats + combine
         if ((mask == "xyxy" || mask == "rgrg") && expr.value._type.baseType == Type.tFloat2) {
             var irNode = begin_op(expr, CombineFloat4F2F2)
             for (_ in range(2)) { add_arg(irNode, expr.value); }
@@ -1145,6 +1271,7 @@ class ValidateShaderVisitor : AstVisitor {
             return
         }
 
+        // arbitrary 2-4 component swizzle: emit a single swizzle node (more efficient than splat+combine)
         let maskLen = length(mask)
         if (maskLen == 2 || maskLen == 3 || maskLen == 4) {
             let typeId = maskLen == 2 ? SwizzleF2 : (maskLen == 3 ? SwizzleF3 : SwizzleF4)
@@ -1350,6 +1477,13 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
         if (!is_in_completion()) {
             sg_ir_reset()
             sg_ir_set_contract(shaderStage, shaderContract)
+            // Debug aid (opt-in via sg_ir_want_ast_dump, set only on the
+            // shader-debug disasm path): record the function body AST after all
+            // macro transforms (loop unrolling, accumulator rewrites). Skipped on
+            // normal asset builds so they never pay for the describe() build.
+            if (sg_ir_want_ast_dump()) {
+                sg_ir_set_ast_dump("def {func.describe_function_short()}\n{func.body.describe()}".clean_mangled_names().replace("shader_dsl_primitives::", ""))
+            }
             for (prop in astVisitor.props) {
                 sg_ir_add_property(prop.name, int(prop._type), prop.defaultValue, prop.defaultTexture.name)
             }
@@ -1380,15 +1514,16 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
 
 // ---- Shader annotation (flatten-integrated) --------------------------------
 //
-// [shader(stage="pixel", type="pbr")] is the surface the real EdenSpark shaders
+// [pixel_shader] is the surface the real EdenSpark shaders
 // use. patch() flattens the shader (inlining + if-conversion + loop unroll) via
 // daslib/flatten, then re-infers; finish() builds the shader graph from the now
 // branchless body. A "flattened" annotation arg guards against re-flattening on
 // the post-astChanged re-infer cycle.
 
+[macro_function]
 def private shader_annotation_arg(func : FunctionPtr; argName : string) : bool {
     for (ann in func.annotations) {
-        if (ann.annotation.name == "shader") {
+        if (ann.annotation.name == "pixel_shader") {
             for (a in ann.arguments) {
                 if ("{a.name}" == argName && a.basicType == Type.tBool) {
                     return a.bValue
@@ -1399,9 +1534,10 @@ def private shader_annotation_arg(func : FunctionPtr; argName : string) : bool {
     return false
 }
 
+[macro_function]
 def private set_shader_annotation_flag(var func : FunctionPtr; argName : string) {
     for (ann in func.annotations) {
-        if (ann.annotation.name != "shader") {
+        if (ann.annotation.name != "pixel_shader") {
             continue
         }
         var found = false
@@ -1418,6 +1554,7 @@ def private set_shader_annotation_flag(var func : FunctionPtr; argName : string)
     }
 }
 
+[macro_function]
 def private shader_stage_arg(args : AnnotationArgumentList) : string {
     let sv = find_arg(args, "stage")
     if (sv is tString) {
@@ -1426,8 +1563,8 @@ def private shader_stage_arg(args : AnnotationArgumentList) : string {
     return "pixel"
 }
 
-[function_macro(name="shader")]
-class ShaderMacro : AstFunctionAnnotation {
+[function_macro(name="pixel_shader")]
+class PixelShaderMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true
@@ -1465,14 +1602,34 @@ class ShaderMacro : AstFunctionAnnotation {
     }
     def override finish(var func : FunctionPtr; var group : ModuleGroup;
                         args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
-        // Optional: dump the flattened daslang source alongside the opcodes, so the
-        // branchless rewrite (inlined calls, if/else -> ?:, unrolled loops) is legible.
-        if (!is_in_completion() && !empty(get_env_variable("FLATTEN_DUMP_DAS"))) {
-            print(";; ---- flattened daslang ----\n{describe(func)}\n")
-        }
-        return shader_build_ir(func, group, errors, shader_stage_arg(args))
+        return shader_build_ir(func, group, errors, "pixel")
     }
 }
+
+
+// [function_macro(name="shader")]
+// class ShaderMacro : AstFunctionAnnotation {
+
+//     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+//         func.flags.exports = true
+//         return true
+//     }
+
+//     def override finish(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+//         var shaderStage = ""
+//         for (arg in args) {
+//             if (arg.name == "stage" && arg.basicType == Type.tString) {
+//                 shaderStage = string(arg.sValue)
+//                 break
+//             }
+//         }
+//         if (shaderStage == "") {
+//             errors := "[shader] requires stage= argument (e.g. stage=\"pixel\") or use [pixel_shader] for pixel shaders"
+//             return false
+//         }
+//         return shader_build_ir(func, group, errors, shaderStage)
+//     }
+// }
 
 
 [macro_function]
@@ -1494,6 +1651,7 @@ def extract_float(expr : Expression?&, var res : float&, var errors : string?) :
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_float(v.variable.init, res, errors)
         }
     }
@@ -1519,6 +1677,7 @@ def extract_float2(expr : Expression?&, var res : float2&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_float2(v.variable.init, res, errors)
         }
     }
@@ -1544,6 +1703,7 @@ def extract_float3(expr : Expression?&, var res : float3&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_float3(v.variable.init, res, errors)
         }
     }
@@ -1569,6 +1729,7 @@ def extract_float4(expr : Expression?&, var res : float4&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_float4(v.variable.init, res, errors)
         }
     }
@@ -1594,6 +1755,7 @@ def extract_string(expr : Expression?&, var res : string&, var errors : string?)
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_string(v.variable.init, res, errors)
         }
     }
@@ -1621,6 +1783,7 @@ def extract_sampler2d(expr : Expression?&, var res : string&, var errors : strin
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
+            // retrive constant values from global variables
             return extract_sampler2d(v.variable.init, res, errors)
         }
     }

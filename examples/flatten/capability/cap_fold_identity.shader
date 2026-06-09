@@ -11,7 +11,7 @@ var {
     gain = 1.0
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_fold_identity(inp : PbrInput) : PbrOutput {
     let base = tex2d(albedo_texture, inp.uv).xyz
     let k = gain * 1.0 + 0.0

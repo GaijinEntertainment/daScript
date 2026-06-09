@@ -13,6 +13,8 @@ module shader_graph_ir_builder shared public
 //! Everything prints at COMPILE time (the backend emits the graph from a macro
 //! `finish` hook), so compiling a shader against this module dumps its opcodes.
 
+require daslib/fio
+
 // ShaderNodeKind { Input, Output, Op, Const, Var }
 def private kind_name(k : int) : string {
     if (k == 0) { return "Input" }
@@ -74,4 +76,17 @@ def sg_ir_add_output_pin(id : int; ptype : int) {
 
 def sg_ir_add_link(fromPin : int; toPin : int) {
     print("link  pin {fromPin} -> pin {toPin}\n")
+}
+
+def sg_ir_want_ast_dump() : bool {
+    //! Opt-in flag for the post-flatten AST dump. The native engine sets this on
+    //! the shader-debug disasm path; the harness wires it to `run.sh --das`
+    //! (which exports FLATTEN_DUMP_DAS).
+    return has_env_variable("FLATTEN_DUMP_DAS")
+}
+
+def sg_ir_set_ast_dump(astText : string) {
+    //! Record the flattened daslang source the backend consumed (the branchless
+    //! `?:` rewrite daslib/flatten produced), printed above the opcode graph.
+    print(";; ---- flattened daslang ----\n{astText}\n")
 }

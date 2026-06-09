@@ -14,7 +14,7 @@ var {
     blurSize = 0.01
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_loop_break(inp : PbrInput) : PbrOutput {
     var acc = float3(0)
     for (i in range(4)) {

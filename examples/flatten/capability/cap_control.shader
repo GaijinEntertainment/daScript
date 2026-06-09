@@ -14,7 +14,7 @@ var {
     threshold = 0.5
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_control(inp : PbrInput) : PbrOutput {
     let nDotL = saturate(dot(normalize(inp.worldNormal), normalize(lightDir)))
     var lit = float3(0)

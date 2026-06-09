@@ -17,7 +17,7 @@ def shade(n : float3; l : float3) : float3 {
     return lerp(shadowColor, baseColor, nDotL)
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_helper(inp : PbrInput) : PbrOutput {
     let lit = shade(inp.worldNormal, lightDir)
     return PbrOutput(

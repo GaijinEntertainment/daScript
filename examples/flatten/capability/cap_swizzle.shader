@@ -17,7 +17,7 @@ def lighting(n : float3; l : float3) : float4 {
     return float4(baseColor * d, 1.0)
 }
 
-[shader(stage="pixel", type="pbr")]
+[pixel_shader]
 def cap_swizzle(inp : PbrInput) : PbrOutput {
     let rgb = lighting(inp.worldNormal, lightDir).xyz
     return PbrOutput(

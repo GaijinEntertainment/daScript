@@ -6,7 +6,7 @@
 // stand-in. Everything else (daslib/*) falls through to the dasroot.
 //
 //   bin/daslang -das_project examples/flatten/flatten_shaders.das_project \
-//               examples/flatten/shaders/user_shader/cel_shading.shader
+//               examples/flatten/shaders/user_shaders/cel_shading.shader
 
 options gen2
 require strings
