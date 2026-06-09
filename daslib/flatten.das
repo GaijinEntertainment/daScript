@@ -745,6 +745,12 @@ def public flatten_optimize(var func : FunctionPtr; barriers : table<string>) : 
     return flatten_preshade_cse(func, barriers)
 }
 
+def public flatten_opt_residuals(var func : FunctionPtr) : array<string> {
+    //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
+    //! has no un-extracted uniform subtree and no un-CSE'd repeat. Test-framework / fuzzer facing.
+    return <- opt_residuals(func, FLATTEN_BARRIERS)
+}
+
 // ===== Post-inference shape verification — twin must be branchless + call-free =====
 // A violation is a lowering bug (fail loudly). Runs cycle 2 (user-call detection needs the
 // resolved `call.func`); fold completeness is a separate, correctness-irrelevant concern.

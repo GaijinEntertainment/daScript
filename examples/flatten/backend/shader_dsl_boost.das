@@ -1597,13 +1597,14 @@ class PixelShaderMacro : AstFunctionAnnotation {
             // folding; mark "folded" (terminal) only once it reports no further change.
             // Mirrors daslib/flatten's own patch loop (daScript #3048) — without it, shaders
             // leave const-foldable residuals the branchless backend then has to emit.
-            if (flatten_fold(func)) {
-                astChanged = true
-                return true
-            }
-            // Fold converged → hoist uniform subtrees to per-draw `_preshader_` lets + CSE-dedup,
-            // then re-infer once to type them. tex2d/noise stay per-pixel (can't sample in a preshader).
+            // Fold fixpoint, THEN optimize once — both gated on !optimized so fold/reassoc never runs
+            // after optimize (else reassoc reorders a hoisted ref into a fresh un-extracted uniform
+            // subtree, e.g. `uv - _preshader` → `-_preshader + uv`). tex2d/noise stay per-pixel.
             if (!shader_annotation_arg(func, "optimized")) {
+                if (flatten_fold(func)) {
+                    astChanged = true
+                    return true
+                }
                 set_shader_annotation_flag(func, "optimized")
                 if (flatten_optimize(func, SHADER_BARRIERS)) {
                     astChanged = true

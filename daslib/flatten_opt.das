@@ -1451,13 +1451,14 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
 // any computed >=2x into one shared let before its first use; uniform dups route to the preshader.
 
 class private CseTally : AstVisitor {
+    collectSample : bool        // clone a representative node per key (cse_body only; the oracle just counts)
     counts : table<string; int>
     sample : table<string; ExpressionPtr>
     def override preVisitExpression(expr : ExpressionPtr) : void {
         if (psh_has_compute(expr)) {
             let k = "{describe(expr)}"
             counts[k] = (counts?[k] ?? 0) + 1
-            if (!key_exists(sample, k)) {
+            if (collectSample && !key_exists(sample, k)) {
                 sample[k] = clone_expression(expr)
             }
         }
@@ -1553,6 +1554,7 @@ def private cse_body(var blk : ExprBlock?) : bool {
         var firstStmt : table<string; int>
         for (i in range(length(blk.list))) {
             var ct = new CseTally()
+            ct.collectSample = true
             make_visitor(*ct) $(a) {
                 visit(blk.list[i], a)
             }
@@ -1617,6 +1619,109 @@ def private cse_body(var blk : ExprBlock?) : bool {
         anyChange = true
     }
     return anyChange
+}
+
+// ===== Completeness oracle (test-framework facing) =====
+// Mirrors flatten.das FoldResidualVisitor: flags a uniform subtree still inline in the varying body
+// or a pure subtree computed >=2x un-shared. Empty ⇒ complete; checked over the COMPILED twin.
+
+// True if the subtree hides a maximal eligible-nontrivial node (one preshader extraction missed).
+def private pex_residual_expr(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) return true
+    if (e is ExprOp1) return pex_residual_expr(pe, barriers, (e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (pex_residual_expr(pe, barriers, a)) return true
+        }
+        return false
+    }
+    if (e is ExprField) return pex_residual_expr(pe, barriers, (e as ExprField).value)
+    if (e is ExprSwizzle) return pex_residual_expr(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprRef2Value) return pex_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (pex_residual_expr(pe, barriers, fld.value)) return true
+            }
+        }
+    }
+    return false
+}
+
+def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : array<string> {
+    var res : array<string>
+    if (func == null || func.body == null || !(func.body is ExprBlock)) return <- res
+    var blk = func.body as ExprBlock
+    // Post-optimize coloring: a `_preshader_*` let is uniform, every other local is varying.
+    var pe : PEX
+    for (a in func.arguments) {
+        pe.paramNames |> insert("{a.name}")
+    }
+    for (s in blk.list) {
+        if (s is ExprLet) {
+            for (lv in (s as ExprLet).variables) {
+                pe.localColor["{lv.name}"] = lv.name |> starts_with("_preshader_")
+            }
+        }
+    }
+    // Preshader residual: a uniform subtree still inline in the varying region (index >= prefix).
+    let prefix = preshader_prefix_len(blk)
+    for (i in range(length(blk.list))) {
+        if (i < prefix) {
+            continue
+        }
+        let s = blk.list[i]
+        var hit = false
+        if (s is ExprLet) {
+            for (lv in (s as ExprLet).variables) {
+                if (lv.init != null && pex_residual_expr(pe, barriers, lv.init)) {
+                    hit = true
+                }
+            }
+        } elif (s is ExprCopy) {
+            hit = pex_residual_expr(pe, barriers, (s as ExprCopy).right)
+        } elif (s is ExprReturn) {
+            hit = pex_residual_expr(pe, barriers, (s as ExprReturn).subexpr)
+        }
+        if (hit) {
+            res |> push("an un-extracted uniform subtree (preshader miss)")
+            break
+        }
+    }
+    // CSE residual: any pure subtree still computed >=2x across the block.
+    var counts : table<string; int>
+    for (i in range(length(blk.list))) {
+        var ct = new CseTally()
+        make_visitor(*ct) $(a) {
+            visit(blk.list[i], a)
+        }
+        for (k in keys(ct.counts)) {
+            counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
+        }
+        unsafe {
+            delete ct
+        }
+    }
+    for (k in keys(counts)) {
+        if ((counts?[k] ?? 0) >= 2) {
+            res |> push("a repeated subtree '{k}' (>=2x) not CSE'd")
+            break
+        }
+    }
+    delete pe.paramNames
+    delete pe.localColor
+    delete counts
+    return <- res
 }
 
 def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>) : bool {
