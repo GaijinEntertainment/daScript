@@ -219,15 +219,6 @@ Public API
     The thin annotation. Generates ``<name>_flat`` with the standard whitelist.
     Use it when you just want a flattened twin to call.
 
-``[flatten(strict_fold = true)]``
-    Opt-in verification. The final shape check additionally rejects any
-    const-foldable residual the fold should have collapsed — an unconditional
-    algebraic identity, an all-const foldable call, a const-condition select, or
-    ``!const`` — turning a *missed* fold into a compile error. Default off (a
-    missed fold is suboptimal, not wrong); turn it on in tests to prove the
-    reduction actually happened, since a differential check alone cannot see a
-    fold that failed to fire.
-
 ``flatten_function(var func, whitelist : table<string>) : FlatCtx?``
     Flattens ``func``'s body in place using the caller-supplied primitive set.
     Backends call this directly with their own ``[hint]`` primitives, before
@@ -250,11 +241,15 @@ Public API
 ``flatten_fold_residuals(var func) : array<string>``
     Test-framework / fuzzer introspection: walks a compiled twin's final body
     and returns a description for each const-foldable residual a complete fold
-    should have collapsed (the same set ``strict_fold`` rejects). Empty means
-    clean. Unlike the ``strict_fold`` *compile-time* flag it runs over the
-    *compiled* output, so it also covers backend paths (e.g.
-    ``[pixel_shader]``) the flag never reaches. ``tests/flatten/test_flatten_fold.das``
-    uses it to verify both the ``[flatten]`` corpus and every example shader.
+    should have collapsed — an unconditional algebraic identity (``x*1``,
+    ``x+0``, …), an all-const foldable call, a const-condition select, or
+    ``!const``. Empty means clean. It runs over the *compiled* output (not at
+    transform time), so it covers backend paths such as ``[pixel_shader]`` and
+    is the fold-completeness oracle for both ``tests/flatten/test_flatten_fold.das``
+    (the ``[flatten]`` + const-identity corpus and every example shader) and the
+    ``flatten-fuzz`` ``--strict-fold`` mode. This is the *only* fold-completeness
+    check — there is no compile-time flag; a missed fold is suboptimal, not an
+    error, so it is validated by tests rather than gated in the macro.
 
 A backend's typical pipeline is therefore: ``flatten_function`` → re-infer →
 ``flatten_fold`` → re-infer → walk the now-branchless, call-free twin and emit

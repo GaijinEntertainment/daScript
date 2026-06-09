@@ -19,7 +19,6 @@ module flatten shared private
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/macro_boost
 require daslib/rtti
 require strings
 require daslib/flatten_opt
@@ -80,22 +79,6 @@ def private set_flatten_phase(var func : FunctionPtr; ph : int) {
         }
         if (!found) ann.arguments |> add_annotation_argument("phase", ph)
     }
-}
-
-def private get_flatten_strict(func : FunctionPtr) : bool {
-    //! Reads the opt-in `[flatten(strict_fold=true)]` argument. When set, the final
-    //! shape check additionally rejects any const-foldable residual the fold should
-    //! have collapsed: an unconditional algebraic identity (`x*1`, `x+0`, …), an
-    //! all-const foldable call, a const-condition `?:` select, or `!const` — the
-    //! compile-time half of the const-opt verification net. Default false: the
-    //! production path stays lenient (a missed fold is suboptimal, not an error).
-    for (ann in func.annotations) {
-        if (ann.annotation.name == "flatten") {
-            let sv = find_arg(ann.arguments, "strict_fold")
-            if (sv is tBool) return sv as tBool
-        }
-    }
-    return false
 }
 
 //! Default cap on the product of nested constant-loop iteration counts a twin may
@@ -853,14 +836,15 @@ def public flatten_fold(var func : FunctionPtr) : bool {
 // (all inlined). A violation is a lowering bug — fail loudly rather than hand a
 // branchful/callful twin to a backend that cannot represent it. Runs in cycle 2
 // (post-infer) because user-call detection needs the resolved `call.func`.
+//
+// Fold completeness (a missed const-fold) is NOT checked here — that is a
+// suboptimal-but-correct outcome, validated post-compile by the test framework
+// via `flatten_fold_residuals`, not gated at transform time.
 
 class private FlatVerify : AstVisitor {
-    strict      : bool   // opt-in: also reject const-foldable residuals
     sawBranch   : bool
     sawCall     : bool
     callName    : string
-    sawFoldable : bool
-    foldDesc    : string
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
         sawBranch = true
     }
@@ -868,40 +852,12 @@ class private FlatVerify : AstVisitor {
         if (expr.func != null && !expr.func.flags.builtIn && expr.func.body != null) {
             sawCall = true
             callName = "{expr.name}"
-        } elif (strict && is_all_const(expr) && eval_to_const_supported(expr._type)) {
-            // An all-const call of an eval-foldable type must have collapsed to a
-            // literal (eval_to_const). A survivor is a const-fold miss.
-            sawFoldable = true
-            foldDesc = "an unfolded all-const call '{expr.name}'"
-        }
-    }
-    def override preVisitExprOp3(expr : ExprOp3?) : void {
-        // A `?:` with a constant condition must have collapsed to its live arm.
-        if (strict && expr.subexpr is ExprConstBool) {
-            sawFoldable = true
-            foldDesc = "an unfolded const-condition select"
-        }
-    }
-    def override preVisitExprOp2(expr : ExprOp2?) : void {
-        // An unconditional algebraic identity (`x*1`, `x+0`, `x*-1`, …) must have
-        // collapsed — the typer never folds a runtime-operand identity, so this is the
-        // high-teeth half of the strict check.
-        if (strict && is_unfolded_identity_op2(expr)) {
-            sawFoldable = true
-            foldDesc = "an unfolded algebraic identity ('{expr.op}')"
-        }
-    }
-    def override preVisitExprOp1(expr : ExprOp1?) : void {
-        // `!true`/`!false` must have collapsed to a const bool.
-        if (strict && expr.op == "!" && expr.subexpr is ExprConstBool) {
-            sawFoldable = true
-            foldDesc = "an unfolded constant '!'"
         }
     }
 }
 
-def private verify_flat(var twin : FunctionPtr; strict : bool) : string {
-    var v = new FlatVerify(strict = strict)
+def private verify_flat(var twin : FunctionPtr) : string {
+    var v = new FlatVerify()
     make_visitor(*v) $(adapter) {
         visit(twin.body, adapter)
     }
@@ -910,8 +866,6 @@ def private verify_flat(var twin : FunctionPtr; strict : bool) : string {
         msg = "flatten: internal error — a branch (if/else) survived lowering in '{twin.name}'"
     } elif (v.sawCall) {
         msg = "flatten: internal error — user call '{v.callName}' survived lowering in '{twin.name}'"
-    } elif (v.sawFoldable) {
-        msg = "flatten: strict_fold — {v.foldDesc} survived the fold in '{twin.name}'"
     }
     unsafe {
         delete v
@@ -921,16 +875,15 @@ def private verify_flat(var twin : FunctionPtr; strict : bool) : string {
 
 // ===== Fold-completeness validation (test-framework facing) =====
 //
-// `flatten_fold_residuals` is the test-framework / fuzzer check for fold completeness:
-// it walks a COMPILED twin's final AST and collects every const-foldable residual a
-// complete fold should have collapsed — an unconditional algebraic identity
-// (`x*1`/`x+0`/`x-0`/`x*-1`, scalar or vector), an all-const call of an eval-foldable
-// type, a const-condition `?:`, a const `!`. Empty result = clean. Unlike the opt-in
-// `[flatten(strict_fold=true)]` compile-time check, it runs over the ACTUAL compiled
-// output, so it also covers the `[pixel_shader]` backend path that flag never reaches.
-// (Branch / user-call survivors are a DIFFERENT class — a lowering failure — and stay a
-// hard compile error in patch via verify_flat; they never reach a successfully compiled
-// unit.)
+// `flatten_fold_residuals` is the ONLY fold-completeness check — there is no compile-time
+// flag, because a missed fold is suboptimal, not wrong. It walks a COMPILED twin's final
+// AST and collects every const-foldable residual a complete fold should have collapsed —
+// an unconditional algebraic identity (`x*1`/`x+0`/`x-0`/`x*-1`, scalar or vector), an
+// all-const call of an eval-foldable type, a const-condition `?:`, a const `!`. Empty
+// result = clean. It runs over the ACTUAL compiled output (not at transform time), so it
+// covers the `[pixel_shader]` backend path uniformly with `[flatten]`. (Branch / user-call
+// survivors are a DIFFERENT class — a lowering failure — and stay a hard compile error in
+// patch via verify_flat; they never reach a successfully compiled unit.)
 
 class private FoldResidualVisitor : AstVisitor {
     found : array<string>
@@ -1040,9 +993,8 @@ class FlattenAnnotation : AstFunctionAnnotation {
             }
             // Nothing left to fold — fall through to the shape check this cycle.
         }
-        // Final cycle: verify the twin is branchless and call-free (and, under
-        // strict_fold, free of const-foldable residuals).
-        let problem = verify_flat(twin, get_flatten_strict(func))
+        // Final cycle: verify the twin is branchless and call-free.
+        let problem = verify_flat(twin)
         if (problem != "") {
             errors := problem
             return false
