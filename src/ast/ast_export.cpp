@@ -147,6 +147,9 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;    // we don't do a thing with templates
+        }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         // global variable declaration

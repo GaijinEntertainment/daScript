@@ -164,7 +164,7 @@ namespace das
         } else {
             for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
                 if ( dim[i]==TypeDecl::dimConst ) {
-                    if ( dimExpr[i] ) {
+                    if ( i<dimExpr.size() && dimExpr[i] ) {
                         dimExpr[i] = dimExpr[i]->visit(vis);
                     }
                 }

@@ -909,6 +909,16 @@ namespace das {
                           expr->at, CompilationError::invalid_clone_smart_pointer_type);
                     return Visitor::visit(expr);
                 }
+                if ( !cloneType->firstType->isHandle() ) {
+                    error("can only clone smart pointer to handled type", "", "",
+                          expr->at, CompilationError::invalid_clone_smart_pointer_type);
+                    return Visitor::visit(expr);
+                }
+                if ( !cloneType->firstType->annotation->isSmart() ) {
+                    error("pointer to " + cloneType->describe() + " can't be a smart pointer", "", "",
+                          expr->at, CompilationError::invalid_clone_smart_pointer_type);
+                    return Visitor::visit(expr);
+                }
                 auto fnClone = makeCloneSmartPtr(expr->at, cloneType, expr->right->type);
                 if (program->addFunction(fnClone)) {
                     reportAstChanged();

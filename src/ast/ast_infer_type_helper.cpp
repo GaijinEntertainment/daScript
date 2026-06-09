@@ -647,7 +647,7 @@ namespace das {
         if (type->baseType != Type::typeDecl && type->baseType != Type::typeMacro) {
             for (size_t i = 0, is = type->dim.size(); i != is; ++i) {
                 if (type->dim[i] == TypeDecl::dimConst) {
-                    if (type->dimExpr[i]) {
+                    if (i<type->dimExpr.size() && type->dimExpr[i]) {
                         if (auto constExpr = getConstExpr(type->dimExpr[i])) {
                             if (constExpr->type->isIndex()) {
                                 auto cI = static_cast<ExprConstInt*>(constExpr);

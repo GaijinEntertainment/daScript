@@ -2214,6 +2214,7 @@ namespace das {
         func->result = new TypeDecl(Type::tVoid);
         func->isClassMethod = true;
         func->classParent = baseClass;
+        func->isTemplate = baseClass->isTemplate;
         DAS_ASSERT(func->classParent);
         if ( baseClass->macroInterface ) func->macroFunction = true;
         auto block = new ExprBlock();
