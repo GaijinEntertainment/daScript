@@ -241,7 +241,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - Class methods: `def const`, `def abstract const`, `def static`; call syntax `obj.method()`, `obj->method()`, `obj |> method()`
 - **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
 - `#pragma optimize` in AOT-generated code must be wrapped in `#ifdef _MSC_VER` — Clang warns on unknown pragmas
-- **Macro-generated struct variables** need `default<$t(st)>` initialization (not `var x : $t(st)`) — avoids "uninitialized variable" errors for structs without field defaults
+- **Macro-generated `var x : $t(st)`** (no init) trips `error[31016]` "uninitialized variable is unsafe" for **any** struct result/local type — field defaults do **not** exempt it. Fixes: `= default<$t(st)>` when the type is default-constructible; but for handled/backend types `default<>` is `error[50503] unsupported variable type` — then set `td.flags.safeWhenUninitialized = true` on the (cloned) decl type when the uninitialized read is intentional and discarded (canonical: the `[flatten]` return accumulator in `daslib/flatten.das`)
 - `print` is for user-facing scripts only. In `tests/`, `daslib/`, `utils/`: use `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` — same stdout, but level-tagged and filterable. Canonical example: `utils/detect-dupe/main.das`
 
 ### Code style — prefer idiomatic forms

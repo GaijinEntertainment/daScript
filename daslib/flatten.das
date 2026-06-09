@@ -780,6 +780,14 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>; m
         if (ctx.hasRet) {
             var rt = clone_type(func.result)
             rt.flags.constant = false
+            // The return accumulator is read self-referentially by every `__flat_ret = pred
+            // ? v : __flat_ret` write (lower_stmt), so its first read is the bare decl. That
+            // read is always a discarded placeholder — overwritten by the taken return, or
+            // kept only on the not-taken path — so the uninitialized read is safe by design.
+            // const_prop_pass collapses it away when the live mask folds (single return), but
+            // a live early-return leaves the self-ref intact, and `var x : Struct` is otherwise
+            // rejected (error[31016]) for any struct return type.
+            rt.flags.safeWhenUninitialized = true
             out |> push <| qmacro_expr(${ var $i(ctx.retName) : $t(rt); })
         }
         lower_list(ctx, bodyBlk, null, out)
@@ -789,6 +797,7 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>; m
         if (ctx.ok) {
             dse_pass(out)          // drop dead mask-kills (`__flat_live = false`) first…
             const_prop_pass(out)   // …so an unreassigned `__flat_live` reads as const true → collapse
+
             copy_prop_pass(out)    // inline single-def temps (`__flat_ret = c; return __flat_ret` → `return c`)
             dse_pass(out)          // remove anything left dead (collapsed mask decls, folded temps)
             ssa_rename_pass(out)   // single-def-ify reassigned user locals → fold_body const-props the chain

@@ -103,6 +103,30 @@ def inline_twice(x : int) : int {
     return withlocal(x) + withlocal(x + 1)
 }
 
+// A STRUCT return type with an early return: the predicated `__flat_ret = pred ? v :
+// __flat_ret` write reads the bare accumulator decl, which a live early return leaves
+// intact (const_prop_pass can only collapse it for a single unconditional return). For a
+// struct (unsafe-when-uninitialized) result that read was previously rejected
+// (error[31016]); the lowering now marks the accumulator safe-when-uninitialized because
+// the placeholder read is always discarded.
+struct Pt {
+    a : float3 = float3(0)
+    b : float = 1.0
+}
+
+[flatten]
+def struct_uncond(x : float) : Pt {
+    return Pt(a = float3(x))
+}
+
+[flatten]
+def struct_guard(x : float; c : bool) : Pt {
+    if (c) {
+        return Pt(a = float3(x))
+    }
+    return Pt(b = x)
+}
+
 // ----- differential driver -----
 
 var GRID : array<int>
@@ -152,6 +176,21 @@ def test_flatten_equivalence(t : T?) {
     t |> run("helper-with-local inlined at two direct call sites") @(t : T?) {
         for (v in GRID) {
             t |> equal(inline_twice_flat(v), inline_twice(v))
+        }
+    }
+    t |> run("struct return type, unconditional + early return (was error[31016])") @(t : T?) {
+        for (v in GRID) {
+            let fv = float(v)
+            let u = struct_uncond_flat(fv)
+            let eu = struct_uncond(fv)
+            t |> equal(u.a.x, eu.a.x)
+            t |> equal(u.b, eu.b)
+            for (c in fixed_array(false, true)) {
+                let g = struct_guard_flat(fv, c)
+                let eg = struct_guard(fv, c)
+                t |> equal(g.a.x, eg.a.x)
+                t |> equal(g.b, eg.b)
+            }
         }
     }
 }
