@@ -40,6 +40,11 @@ var public {
 
 var private seen_function_labels : table<string; uint>
 
+// symbol names whose value/field tables are wrapped in `.. container:: nosearch`
+// (the search crawler drops them; the symbol + its description stay indexed).
+// populated per-module by `documents()` from its `nosearch` argument.
+var private nosearch_symbols : table<string>
+
 
 
 def PANIC(message : string) {
@@ -658,6 +663,26 @@ def make_table(title : string; tab : array<array<string>>) {
     }
 }
 
+def private is_nosearch(name : string) : bool {
+    return key_exists(nosearch_symbols, name)
+}
+
+def private indent_block(text : string) : string {
+    return build_string() $(writer) {
+        let lines <- split(text, "\n")
+        for (line, i in lines, count()) {
+            if (i > 0) { write(writer, "\n") }
+            if (!empty(line)) { write(writer, "   {line}") }
+        }
+    }
+}
+
+// emits the symbol's value/field table, optionally wrapped so the search crawler skips it.
+def private table_block(header : string; tab : array<array<string>>; nosearch : bool) : string {
+    let t = make_table(header, tab)
+    return t if (!nosearch)
+    return ".. container:: nosearch\n\n{indent_block(t)}"
+}
 
 
 def make_table_(tab : array<array<string>>; withHeader : bool = false) {
@@ -812,11 +837,11 @@ def document_function_topic(doc_file : file; resType : TypeDecl?&; topic, conten
     }
 }
 
-def document_topic(header : string; doc_file : file; topic, content : string implicit; var tab : array<array<string>>) {
+def document_topic(header : string; doc_file : file; topic, content : string implicit; var tab : array<array<string>>; nosearch : bool = false) {
     document_topic(doc_file, topic, content) $(txt; handmade) {
         if (add_stub_header && txt |> starts_with(STUB)) {
             if (length(tab) > 1) {
-                fwrite(doc_file, make_table(header, tab))
+                fwrite(doc_file, table_block(header, tab, nosearch))
             }
             return txt
         }
@@ -846,7 +871,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
                 }
 
                 if (length(tab) > 1) {
-                    fwrite(doc_file, make_table(header, tab))
+                    fwrite(doc_file, table_block(header, tab, nosearch))
                 }
 
                 hasDoc = true
@@ -869,7 +894,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
             tab[0] |> push("description")
 
             if (length(tab) > 1) {
-                fwrite(doc_file, make_table(header, tab))
+                fwrite(doc_file, table_block(header, tab, nosearch))
             }
             hasDoc = true
         }
@@ -877,7 +902,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
         return "" if (hasDoc)
 
         if (length(tab) > 1) {
-            fwrite(doc_file, make_table(header, tab))
+            fwrite(doc_file, table_block(header, tab, nosearch))
         }
         return txt
     }
@@ -942,7 +967,7 @@ def document_bitfield(mod : Module?; doc_file : file; name : string; value : Typ
         }
     }
 
-    document_topic("Fields", doc_file, topic("typedef", mod, name), describe(value), tab)
+    document_topic("Fields", doc_file, topic("typedef", mod, name), describe(value), tab, is_nosearch(name))
 }
 
 def document_variant(mod : Module?; doc_file : file; name : string; value : TypeDeclPtr) {
@@ -952,7 +977,7 @@ def document_variant(mod : Module?; doc_file : file; name : string; value : Type
         var line <- [string(an), describe_type(at)]
         emplace(tab, line)
     }
-    document_topic("Variants", doc_file, topic("typedef", mod, name), describe(value), tab)
+    document_topic("Variants", doc_file, topic("typedef", mod, name), describe(value), tab, is_nosearch(name))
 }
 
 def document_typedef(doc_file : file; mod : Module?; name : string implicit; value) {
@@ -1061,7 +1086,7 @@ def public document_enumeration(doc_file : file; mod : Module?; value) {
         push(line, short_enum_value(describe(en.value)))
         emplace(tab, line)
     }
-    document_topic("Values", doc_file, topic("enumeration", mod, string(value.name)), "enum {value.name}", tab)
+    document_topic("Values", doc_file, topic("enumeration", mod, string(value.name)), "enum {value.name}", tab, is_nosearch(string(value.name)))
 }
 
 
@@ -1306,7 +1331,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
                 }
             }
 
-            document_topic("Fields", doc_file, topic("class", mod, string(value.name)), "class {value.name}", fields)
+            document_topic("Fields", doc_file, topic("class", mod, string(value.name)), "class {value.name}", fields, is_nosearch(string(value.name)))
 
             for (fld in value.fields) {
                 if (is_class_method(value, fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)) {
@@ -1424,7 +1449,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
     }
     // fwrite(doc_file,"{value.name} fields are\n\n")
     // fwrite(doc_file,make_table(tab))
-    document_topic("Fields", doc_file, topic("structure", mod, string(value.name)), "struct {value.name}", tab)
+    document_topic("Fields", doc_file, topic("structure", mod, string(value.name)), "struct {value.name}", tab, is_nosearch(string(value.name)))
 
     for (fld in value.fields) {
         if (is_class_method(value, fld) && !fld.flags.generated && !fld.flags.privateField && !fld.flags.parentType && fld.flags.implemented) {
@@ -1535,7 +1560,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
         emplace(tab, line)
     }
 
-    document_topic("Fields", doc_file, topic("structure_annotation", mod, string(value.name)), "Annotation {value.name}", tab)
+    document_topic("Fields", doc_file, topic("structure_annotation", mod, string(value.name)), "Annotation {value.name}", tab, is_nosearch(string(value.name)))
 }
 
 def document_structure_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
@@ -2118,6 +2143,12 @@ def public document(name : string; var mod : Module?; fname : string; var groups
     documents(name, mods, fname, groups, hook)
 }
 
+def public document(name : string; var mod : Module?; fname : string; var groups : array<DocGroup>; var hook : DocsHook; nosearch : array<string>) {
+    //! Same as `document`, with a per-module `nosearch` symbol-name list (see `documents`).
+    let mods : array<Module?> = [mod]
+    documents(name, mods, fname, groups, hook, nosearch)
+}
+
 struct public DocsHook {
     //! Callback hooks for customizing RST documentation output.
     annotationFilter : lambda<(ann : rtti::Annotation const) : bool>
@@ -2127,7 +2158,18 @@ struct public DocsHook {
 
 def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook = DocsHook()) {
     //! Generates complete RST documentation for a set of modules into the specified file.
+    let none : array<string>
+    documents(name, mods, fname, groups, hook, none)
+}
+
+def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook; nosearch : array<string>) {
+    //! Same as `documents`, plus `nosearch`: symbol names whose value/field tables are
+    //! excluded from the search index (the symbol and its description stay indexed).
     clear(seen_function_labels)
+    clear(nosearch_symbols)
+    for (n in nosearch) {
+        nosearch_symbols |> insert(n)
+    }
     static_if (log_documentation) {
         print("Documenting {name} into {fname}\n")
     }
