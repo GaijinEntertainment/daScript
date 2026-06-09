@@ -852,6 +852,15 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 }
 <eof_done><<EOF>>       { YYCOLUMN(yyextra->das_yycolumn = 0,"EOF"); return 0; }
+    /* '@@' (function pointer / local function) and '@name' (field annotation) are
+       distinct tokens from the lambda '@' ( @(x){...} / @{...} ): this lets a struct
+       member's arrow body end in a piped lambda without colliding with the next
+       member's '@'-annotation. A bare '@' falls through to the catch-all below.
+       '@capture' is the one lambda form where '@' is followed by an identifier
+       (the capture-clause keyword), so it must stay a lambda '@', not AT_FIELD. */
+<normal>"@@"                                return DOUBLE_AT;
+<normal>"@"/"capture"[^a-zA-Z0-9_]          return *yytext;
+<normal>"@"/[a-zA-Z_]                       return AT_FIELD;
 <normal>.                                   return *yytext;
 
 %%

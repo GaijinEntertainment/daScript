@@ -2109,6 +2109,10 @@
         "required": true,
         "types": [
           {
+            "type": "_expression",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           }
@@ -3618,6 +3622,10 @@
         "multiple": false,
         "required": false,
         "types": [
+          {
+            "type": "_expression",
+            "named": true
+          },
           {
             "type": "block",
             "named": true

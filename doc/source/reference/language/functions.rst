@@ -94,6 +94,16 @@ Move-return uses ``=> <-``:
 This mirrors the lambda inline-arrow form (see :ref:`tutorial 14 <tutorial_lambdas>`)
 and desugars to ``{ return expr }``.
 
+Struct and class methods use the same arrow form:
+
+.. code-block:: das
+
+    class Widget {
+        w, h : int
+        def area() : int => w * h
+        def scaled(k : int) : int => area() * k
+    }
+
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Publicity
