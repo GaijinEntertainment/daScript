@@ -272,7 +272,13 @@ module.exports = grammar({
       field('name', $.function_name),
       optional($.function_argument_list),
       optional($.function_return_type),
+      $._function_body,
+    ),
+
+    // single-expression arrow body ( => expr / => <- expr ) or a brace block
+    _function_body: $ => choice(
       field('body', $.block),
+      seq('=>', optional('<-'), field('body', $._expression)),
     ),
 
     function_name: $ => choice(
@@ -391,7 +397,7 @@ module.exports = grammar({
       optional($.function_return_type),
       optional(choice(
         ';',
-        field('body', $.block),
+        $._function_body,
       )),
     ),
 

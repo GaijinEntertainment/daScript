@@ -309,6 +309,8 @@
 %token  ROTLEQU             "<<<="
 %token  ROTREQU             ">>>="
 %token  MAPTO               "=>"
+%token  DOUBLE_AT           "@@"
+%token  AT_FIELD            "@field"
 %token  COLCOL              "::"
 %token  ANDAND              "&&"
 %token  OROR                "||"
@@ -556,7 +558,7 @@
 %left       POST_INC POST_DEC RARROW DEREF
 %left       '.'
 %nonassoc  '[' ']' '(' ')' QDOT QBRA
-%nonassoc   '$' '@'
+%nonassoc   '$' '@' DOUBLE_AT
 %nonassoc   COLCOL
 
 %right STRING_CHARACTER STRING_CHARACTER_ESC
@@ -1125,7 +1127,7 @@ annotation_argument_name
 annotation_argument
     :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
-    |   annotation_argument_name[name] '=' '@' '@' NAME[value]      { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
+    |   annotation_argument_name[name] '=' DOUBLE_AT NAME[value]      { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
@@ -1146,10 +1148,10 @@ annotation_argument_list
     ;
 
 metadata_argument_list
-    :   '@' annotation_argument[arg] optional_emit_semis {
+    :   AT_FIELD annotation_argument[arg] optional_emit_semis {
         $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
     }
-    |   metadata_argument_list[argL] '@' annotation_argument[arg] optional_emit_semis {
+    |   metadata_argument_list[argL] AT_FIELD annotation_argument[arg] optional_emit_semis {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
     ;
@@ -1894,7 +1896,7 @@ block_or_simple_block
 block_or_lambda
     :   '$'     { $$ = 0;   /* block */  }
     |   '@'     { $$ = 1;   /* lambda */ }
-    |   '@' '@' { $$ = 2;   /* local function */ }
+    |   DOUBLE_AT { $$ = 2;   /* local function */ }
     ;
 
 capture_entry
@@ -2020,15 +2022,15 @@ func_addr_name
     ;
 
 func_addr_expr
-    :   '@' '@' func_addr_name[faddr]     {
+    :   DOUBLE_AT func_addr_name[faddr]     {
         $$ = $faddr;
     }
-    |   '@' '@' '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[blockType] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
+    |   DOUBLE_AT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[blockType] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
         auto expr = (ExprAddr *) ($faddr->rtti_isAddr() ? $faddr : (((ExprTag *) $faddr)->value));
         expr->funcType = $blockType;
         $$ = $faddr;
     }
-    |   '@' '@' '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
+    |   DOUBLE_AT '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
         auto expr = (ExprAddr *) ($faddr->rtti_isAddr() ? $faddr : (((ExprTag *) $faddr)->value));
         expr->funcType = new TypeDecl(Type::tFunction);
         expr->funcType->firstType = $result;
@@ -2364,7 +2366,7 @@ expr_mtag_no_bracket
         auto cfield = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   '@' '@'[loc] MTAG_C[cname] '(' expr[subexpr] ')' {
+    |   DOUBLE_AT[loc] MTAG_C[cname] '(' expr[subexpr] ')' {
         auto ccall = new ExprAddr(tokAt(scanner,@loc),"``MACRO``TAG``ADDR``");
         $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
     }
@@ -2456,7 +2458,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@cnst);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
                 }
-            } function_declaration_header[func] optional_emit_semis expression_block[block] {
+            } function_declaration_header[func] optional_emit_semis block_or_simple_block[block] {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@block);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);

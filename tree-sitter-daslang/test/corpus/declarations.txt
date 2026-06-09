@@ -111,6 +111,48 @@ def add(a : int, b : int) : int {
           (identifier))))))
 
 ================================================================================
+Function with single-expression arrow body
+================================================================================
+
+def succ(x : int) => x + 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (basic_type)))
+    body: (binary_expression
+      (identifier)
+      (integer_literal))))
+
+================================================================================
+Method with single-expression arrow body
+================================================================================
+
+class C {
+  def area() : int => 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (structure_declaration
+    name: (identifier)
+    (structure_member
+      (structure_method
+        name: (function_name
+          (identifier))
+        (function_argument_list)
+        (function_return_type
+          type: (basic_type))
+        body: (integer_literal)))))
+
+================================================================================
 Struct declaration
 ================================================================================
 
