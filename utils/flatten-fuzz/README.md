@@ -29,7 +29,7 @@ daslang utils/flatten-fuzz/main.das -- [flags]
 | `-n, --inputs N` | random inputs per unit (default 40) |
 | `-d, --depth N` | max nesting / expression depth (default 3) |
 | `-b, --batches N` | run seeds `seed .. seed+N-1` (default 1) |
-| `-f, --strict-fold` | enable the `strict_fold` structural oracle + const-density bias |
+| `-f, --strict-fold` | enable the post-compile fold-residual oracle (`flatten_fold_residuals`) + const-density bias |
 | `-k, --keep` | keep the generated temp source (don't delete) |
 | `-L, --log-infer` | emit `options log_infer_passes` in generated source (dump the compiler's per-infer-pass AST) |
 | `-B, --bool` | pure-bool domain: bool params/locals/return, **exhaustive** 2³ truth-table oracle (ignores `-n`/`--inputs`) |
@@ -40,19 +40,25 @@ the per-pass AST dump exposes infer non-convergence / oscillation on
 flatten-generated code. The in-process compiler routes that log into the
 compile-result string (not stdout), so the tool surfaces it explicitly.
 
-Exit code is non-zero if any batch fails. On a mismatch or compile failure the
-offending unit is bisected out and dumped as a standalone reproducer
-(`flatten_fuzz_fail_seed<S>_unit<N>.das`).
+Exit code is non-zero if any batch **fails** (a value mismatch or a compile
+failure); the offending unit is bisected out and dumped as a standalone
+reproducer (`flatten_fuzz_fail_seed<S>_unit<N>.das`). Fold residuals are
+**warnings**, not failures (see below), and dump as `flatten_fuzz_residual_*`.
 
 ## Two oracles
 
 - **Value-differential** (default) — `f(x) == f_flat(x)`. Catches semantic
   divergence in the mask machinery (early-return / break / continue / nested
-  loops / inlining).
-- **Structural** (`--strict-fold`) — compiles the twins with
-  `[flatten(strict_fold=true)]` and biases the grammar toward constants, so a
-  *missed* constant fold becomes a compile error. This is the "did the fold
-  fire" half that value equivalence can't see.
+  loops / inlining). This is the **only hard gate**.
+- **Structural** (`--strict-fold`) — biases the grammar toward constants, then
+  walks each compiled twin with `flatten_fold_residuals` and reports any
+  const-foldable survivor. Because the units are plain `[flatten]` — whose fold
+  fixpoint already converged — a residual in the *final* compiled twin
+  necessarily materialized **after** the macro settled: the compiler's own later
+  const-prop proved an operand constant (e.g. `x*k` with `k` proven `1` → `x*1`),
+  exposing an identity flatten can no longer reach. So these are **non-fatal
+  warnings** — missed-fold *opportunities* (grist for moving more const-fold into
+  flatten), not flatten correctness bugs. A per-run summary tallies them.
 
 ## Domains
 

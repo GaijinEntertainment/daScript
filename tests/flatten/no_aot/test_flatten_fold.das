@@ -12,12 +12,15 @@ require daslib/fio
 //! Fold-completeness verification over the ACTUAL compiled output. It compiles REAL flatten
 //! units and asserts no const-foldable residual (`x*1`/`x+0`/`x*-1`, an all-const call, a
 //! const-condition `?:`, a const `!`) survives in the final post-flatten AST — using
-//! `flatten_fold_residuals` (daslib/flatten). Unlike the opt-in `[flatten(strict_fold=true)]`
-//! compile-time flag, this runs over compiled output, so it covers the `[pixel_shader]`
-//! backend path (the single-fold + re-infer loop the flag never reached — the center-tap
-//! `uv + float2(0,0)` bug). Two unit kinds:
+//! `flatten_fold_residuals` (daslib/flatten) — the only fold-completeness check (there is no
+//! compile-time flag). Running over compiled output, it covers the `[pixel_shader]` backend
+//! path uniformly with `[flatten]` (the single-fold + re-infer loop that left the center-tap
+//! `uv + float2(0,0)` residual). Three unit kinds:
 //!   • every example shader (project-resolved) — the `@pixel_shader` entry function;
-//!   • _fold_fixtures.das (this dir) — the `[flatten]` reveal-cascade corpus (`*_flat`).
+//!   • _fold_fixtures.das (this dir) — the `[flatten]` reveal-cascade corpus (`*_flat`);
+//!   • test_flatten_const.das — the const-identity corpus. This is the structural FIRED
+//!     half of that file's verification; the file itself carries only differential VALUE
+//!     checks (a missed fold computes the same value, so it needs this residual proof).
 //!
 //! Lives in tests/flatten/no_aot/ (excluded from test_aot via tests/.das_test): it requires
 //! daslib/flatten at runtime, pulling macro_boost generic instantiations that don't AOT-link
@@ -72,6 +75,10 @@ def test_flatten_fold(t : T?) {
     t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/no_aot/_fold_fixtures.das")
         t |> success(n >= 3, "expected >=3 twins, checked {n}")
+    }
+    t |> run("const-identity corpus folds clean (test_flatten_const.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_const.das")
+        t |> success(n >= 70, "expected >=70 twins, checked {n}")
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
         let proj = "{root}/examples/flatten/flatten_shaders.das_project"

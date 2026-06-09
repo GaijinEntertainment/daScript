@@ -17,6 +17,9 @@ require daslib/fio
 require daslib/debugger
 require daslib/random
 require daslib/clargs
+require daslib/ast
+require daslib/flatten
+require strings
 require math
 
 // ===== generator config + state =====
@@ -25,7 +28,7 @@ struct GenCfg {
     maxDepth : int      // expression / nesting depth budget
     maxStmts : int      // max statements per block
     literalPct : int    // leaf literal probability (vs in-scope var)
-    constBias : int     // 0..100 — bias toward const subtrees (strict_fold mode)
+    constBias : int     // 0..100 — bias toward const subtrees (--strict-fold mode)
     boolDomain : bool   // pure-bool grammar + exhaustive truth-table oracle (vs integer)
 }
 
@@ -400,11 +403,14 @@ def gen_function_body(var g : Gen&) : string {
 
 // One self-contained unit: helpers + [flatten] fn (leaves the pristine original
 // AND emits the _flat twin) + an [export,pinvoke] driver calling both.
-def gen_unit(var g : Gen&; idx : int; strict : bool) : string {
+def gen_unit(var g : Gen&; idx : int) : string {
     g.unitIdx = idx
     resize(g.helperDefs, 0)
     let body = gen_function_body(g)
-    let ann = strict ? "[flatten(strict_fold=true)]" : "[flatten]"
+    // Fold completeness (strict mode) is verified post-compile by walking the twin with
+    // `flatten_fold_residuals` (see run_batch) — not by a compile-time annotation flag. The
+    // const-density bias that makes residuals likely is driven by cfg.constBias, set in main.
+    let ann = "[flatten]"
     let ty = g.cfg.boolDomain ? "bool" : "int"
     // The driver always takes/returns int so the harness (int3 inputs, int out-params, exact
     // int compare) stays domain-agnostic; a bool candidate marshals 0/1 at the boundary.
@@ -429,6 +435,10 @@ def gen_unit(var g : Gen&; idx : int; strict : bool) : string {
 // which dumps the compiler's per-infer-pass AST — to catch daslang infer bugs
 // (non-convergence / oscillation), not just flatten lowering bugs.
 var g_log_infer = false
+
+// Tally of post-flatten fold residuals seen across all batches in --strict-fold mode.
+// Non-fatal (see run_batch) — reported as a summary line at the end.
+var g_residual_warnings = 0
 
 // Per-process unique suffix for temp files (set once in main) so concurrent
 // flatten-fuzz runs never clobber each other's generated source / read a stale one.
@@ -505,10 +515,10 @@ def try_compile(src : string; var issues : string&) : bool {
     return compiled
 }
 
-def dump_reproducer(unitSrc : string; seedArg, idx : int) {
-    let fn = "flatten_fuzz_fail_seed{seedArg}_unit{idx}.das"
+def dump_reproducer(unitSrc : string; seedArg, idx : int; kind : string) {
+    let fn = "flatten_fuzz_{kind}_seed{seedArg}_unit{idx}.das"
     if (write_source(fn, build_file([unitSrc]))) {
-        to_log(LOG_ERROR, "  dumped reproducer: {fn}\n")
+        to_log(LOG_INFO, "  dumped {kind}: {fn}\n")
     }
 }
 
@@ -520,7 +530,7 @@ def bisect_compile(units : array<string>; seedArg : int) {
         if (!try_compile(build_file([units[idx]]), issues)) {
             found = true
             to_log(LOG_ERROR, "COMPILE-FAIL unit {idx} (seed {seedArg}):\n{issues}\n")
-            dump_reproducer(units[idx], seedArg, idx)
+            dump_reproducer(units[idx], seedArg, idx, "fail")
         }
     }
     if (!found) {
@@ -528,8 +538,23 @@ def bisect_compile(units : array<string>; seedArg : int) {
     }
 }
 
-// Returns (#value mismatches, compiled?).
-def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; keep : bool) : tuple<int; bool> {
+// Map a flatten twin name (`cand_N_flat`) back to its unit index, or -1 if it isn't one.
+def twin_unit_index(name : string) : int {
+    if (!(name |> starts_with("cand_")) || !(name |> ends_with("_flat"))) {
+        return -1
+    }
+    return to_int(slice(name, length("cand_"), length(name) - length("_flat")))
+}
+
+// Returns (#value mismatches, compiled?). In strict mode, after the differential, every
+// twin's final body is walked with `flatten_fold_residuals`. A survivor is reported as a
+// WARNING (tallied in g_residual_warnings), not a failure: because the fuzzer emits plain
+// `[flatten]`, whose fold fixpoint already converged, any residual in the FINAL compiled
+// twin materialized AFTER the macro settled — the compiler's own later const-prop proved an
+// operand constant (e.g. `x*k` with `k` proven 1 -> `x*1`), exposing an identity flatten can
+// no longer reach. So it's a missed-fold *opportunity* surfaced for the const-fold-in-flatten
+// work, not a flatten correctness bug (the differential still proves the value is right).
+def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; strict, keep : bool) : tuple<int; bool> {
     let nUnits = length(units)
     let src = build_file(units)
     let tmp = tmp_path("gen")
@@ -554,6 +579,24 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; keep :
                     return
                 }
                 compiled = true
+                if (strict) {
+                    program_for_each_module(program) $(mod) {
+                        for_each_function(mod, "") $(func) {
+                            if (func.body == null || func.flags.builtIn || !(func.name |> ends_with("_flat"))) {
+                                return
+                            }
+                            let res <- flatten_fold_residuals(func)
+                            if (!empty(res)) {
+                                g_residual_warnings ++
+                                to_log(LOG_WARNING, "RESIDUAL (post-flatten, non-fatal) {func.name}: {res}\n")
+                                let idx = twin_unit_index("{func.name}")
+                                if (idx >= 0 && idx < nUnits) {
+                                    dump_reproducer(units[idx], seedArg, idx, "residual")
+                                }
+                            }
+                        }
+                    }
+                }
                 simulate(program) $(sok; var ctx; serrors) {
                     if (!sok) {
                         to_log(LOG_ERROR, "simulate failed:\n{serrors}\n")
@@ -569,7 +612,7 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; keep :
                             if (r_orig != r_flat) {
                                 mismatches++
                                 to_log(LOG_ERROR, "MISMATCH unit {idx} a={inp.x} b={inp.y} c={inp.z}: orig={r_orig} flat={r_flat}\n")
-                                dump_reproducer(units[idx], seedArg, idx)
+                                dump_reproducer(units[idx], seedArg, idx, "fail")
                                 break
                             }
                         }
@@ -586,19 +629,19 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; keep :
     return mismatches => compiled
 }
 
-// One batch at a given seed: generate units, compile, run the differential.
-// Returns true on a clean batch. A compile failure triggers bisect+dump (in
-// strict_fold mode that includes missed-fold structural findings).
+// One batch at a given seed: generate units, compile, run the differential (plus, in
+// strict mode, the post-compile fold-residual walk). Returns true on a clean batch. A
+// compile failure triggers bisect+dump.
 def fuzz_one(seedArg, nUnits, nInputs : int; cfg : GenCfg; strict, keep : bool) : bool {
     var g = Gen(seed = random_seed(seedArg), cfg = cfg)
-    let units <- [for (i in range(nUnits)); gen_unit(g, i, strict)]
+    let units <- [for (i in range(nUnits)); gen_unit(g, i)]
     var inputs : array<int3>
     if (cfg.boolDomain) {
         inputs <- enum_bool_inputs()
     } else {
         inputs <- gen_inputs(g, nInputs)
     }
-    let r = run_batch(units, inputs, seedArg, keep)
+    let r = run_batch(units, inputs, seedArg, strict, keep)
     if (!r._1) {
         to_log(LOG_ERROR, "seed {seedArg}: batch compile failed — isolating\n")
         bisect_compile(units, seedArg)
@@ -635,7 +678,7 @@ struct Config {
     batches : int
 
     @clarg_short = "f"
-    @clarg_doc = "strict_fold structural oracle + const-density bias"
+    @clarg_doc = "post-compile fold-residual oracle (flatten_fold_residuals) + const-density bias"
     strict_fold : bool
 
     @clarg_short = "k"
@@ -687,6 +730,9 @@ def main : int {
         if (!fuzz_one(baseSeed + b, nUnits, nInputs, cfg, strict, cfg_args.keep)) {
             failed++
         }
+    }
+    if (g_residual_warnings > 0) {
+        to_log(LOG_WARNING, "flatten-fuzz: {g_residual_warnings} post-flatten fold residual(s) — non-fatal (see 'residual' dumps)\n")
     }
     if (failed == 0) {
         to_log(LOG_INFO, "flatten-fuzz: ALL {batches} batch(es) PASS\n")

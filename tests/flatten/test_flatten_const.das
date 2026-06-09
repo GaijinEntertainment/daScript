@@ -14,56 +14,57 @@ require daslib/flatten
 //!     the bitwise `-0.0`/NaN/inf differences either don't arise here or compare
 //!     `==`-equal), so plain `equal` suffices — `equal_approx` is reserved for the
 //!     reassociation arc, where rounding genuinely differs.
-//!   • FIRED (Layer 2): every function opts into `[flatten(strict_fold=true)]`, so the
-//!     post-fold shape check REJECTS any const-foldable residual the fold should have
-//!     removed (an unfolded algebraic identity, all-const call, or const-condition
-//!     select). Differential alone can't see a fold that failed to fire — an
-//!     un-optimized twin computes the same value; strict_fold is what proves the
-//!     collapse happened. (Node-count proof at the backend level lives in the
-//!     cap_fold_* shaders.) A genuinely-non-folding shape (a param-seeded runtime
-//!     accumulator, or a scalar-broadcast `s * vec(1)` the same_base_type gate must NOT
-//!     collapse to scalar) carries strict_fold too — its compiling proves strict does NOT
-//!     false-positive on it.
+//!   • FIRED (Layer 2): differential alone can't see a fold that failed to fire — an
+//!     un-optimized twin computes the same value, so VALUE checks must be paired with a
+//!     structural proof that the collapse happened. That proof lives in
+//!     `tests/flatten/no_aot/test_flatten_fold.das`, which compiles THIS file as a unit
+//!     and asserts `flatten_fold_residuals` is empty on every `*_flat` twin (rejecting any
+//!     unfolded algebraic identity, all-const call, or const-condition select left behind).
+//!     (Node-count proof at the backend level lives in the cap_fold_* shaders.) The
+//!     genuinely-non-folding shapes here — a param-seeded runtime accumulator, or a
+//!     scalar-broadcast `s * vec(1)` the same_base_type gate must NOT collapse to scalar —
+//!     are part of that same corpus: their empty residual set proves the check does NOT
+//!     false-positive on a shape that legitimately does not fold.
 
 // ----- float algebraic identities (#1a) -----
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_mul1(x : float) : float {
     return x * 1.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_mul1l(x : float) : float {
     return 1.0 * x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_mulneg1(x : float) : float {
     return x * -1.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_mul0(x : float) : float {
     return x * 0.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_add0(x : float) : float {
     return x + 0.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_sub0(x : float) : float {
     return x - 0.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_zerosub(x : float) : float {
     return 0.0 - x
 }
 
 // Chained identities collapse bottom-up: (x*1) + (x*0) - 0 -> x + 0 - 0 -> x.
-[flatten(strict_fold=true)]
+[flatten]
 def f_combo(x : float) : float {
     return (x * 1.0) + (x * 0.0) - 0.0
 }
@@ -72,59 +73,59 @@ def f_combo(x : float) : float {
 // result type). `x:float3 * 0.0` folds to a width-matched float3(0): zero_const_of keys on
 // the RESULT type, so the scalar zero never mistypes float3 -> float. Both value-correct
 // (finite inputs). The dedicated *vector-const* arms (`x * float3(1)`, …) are f_vc* below.
-[flatten(strict_fold=true)]
+[flatten]
 def f_vec1(x : float3) : float3 {
     return x * 1.0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vec0(x : float3) : float3 {
     return x * 0.0
 }
 
 // ----- integer algebraic identities (two's-complement exact, incl. x*-1 at edges) -----
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_imul1(x : int) : int {
     return x * 1
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_imul1l(x : int) : int {
     return 1 * x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_imulneg1(x : int) : int {
     return x * -1
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_imulneg1l(x : int) : int {
     return -1 * x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_imul0(x : int) : int {
     return x * 0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_iadd0(x : int) : int {
     return x + 0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_iadd0l(x : int) : int {
     return 0 + x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_isub0(x : int) : int {
     return x - 0
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_izerosub(x : int) : int {
     return 0 - x
 }
@@ -132,12 +133,12 @@ def f_izerosub(x : int) : int {
 // Scalar const on an int vector: `x:int3 * 1` folds to x; `x:int3 * 0` folds to int3(0)
 // (zero_const_of on the result type — exact for integers, no fast-math). The dedicated
 // *vector-const* arms (`x * int3(1)`, …) are f_ivc* below.
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivec1(x : int3) : int3 {
     return x * 1
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivec0(x : int3) : int3 {
     return x * 0
 }
@@ -145,24 +146,24 @@ def f_ivec0(x : int3) : int3 {
 // ----- const-constructor folding (#1c): vector ctors over const args fold to a
 // single const literal (the typer leaves them; flatten collapses them) -----
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ctor_zero : float3 {
     return float3(0.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ctor_arith : float3 {
     return float3(2.0 * 3.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ctor_mixed : float3 {
     return float3(1.0, 2.0, 3.0)
 }
 
 // A const ctor buried under arithmetic with a runtime operand: the ctor folds, the
 // surrounding add stays.
-[flatten(strict_fold=true)]
+[flatten]
 def f_ctor_mixed_rt(x : float3) : float3 {
     return x + float3(0.5)
 }
@@ -171,114 +172,114 @@ def f_ctor_mixed_rt(x : float3) : float3 {
 //
 // Distinct from f_vec*/f_ivec* above (scalar const on a vector): here the CONST operand is
 // itself a vector literal. `v * vec(1)` -> v, `v * vec(-1)` -> -v, `v + vec(0)` -> v,
-// `vec(0) - v` -> -v, `v * vec(0)` -> vec(0). strict_fold proves the ungated arms fire (a
-// survivor is a hard error); the differential proves the value.
+// `vec(0) - v` -> -v, `v * vec(0)` -> vec(0). The residual walk (test_flatten_fold.das)
+// proves the ungated arms fire (a survivor is flagged); the differential proves the value.
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vcmul1(x : float3) : float3 {
     return x * float3(1.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vcmulneg1(x : float3) : float3 {
     return x * float3(-1.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vcadd0(x : float3) : float3 {
     return x + float3(0.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vcsub0(x : float3) : float3 {
     return x - float3(0.0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vczerosub(x : float3) : float3 {
     return float3(0.0) - x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_vcmul0(x : float3) : float3 {
     return x * float3(0.0)
 }
 
 // int vector-const operands — exact (no fast-math); covers IGRID incl. edges for `*-1`.
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivcmul1(x : int3) : int3 {
     return x * int3(1)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivcmulneg1(x : int3) : int3 {
     return x * int3(-1)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivcadd0(x : int3) : int3 {
     return x + int3(0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivcsub0(x : int3) : int3 {
     return x - int3(0)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivczerosub(x : int3) : int3 {
     return int3(0) - x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_ivcmul0(x : int3) : int3 {
     return x * int3(0)
 }
 
 // ----- uint: scalar identities (no *-1 — unsigned), vectors, and const constructors -----
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_umul1(x : uint) : uint {
     return x * 1u
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_uadd0(x : uint) : uint {
     return x + 0u
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_usub0(x : uint) : uint {
     return x - 0u
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_umul0(x : uint) : uint {
     return x * 0u
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_uvmul1(x : uint3) : uint3 {
     return x * uint3(1u)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_uvadd0(x : uint3) : uint3 {
     return x + uint3(0u)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_uvmul0(x : uint3) : uint3 {
     return x * uint3(0u)
 }
 
 // uint const constructors fold to a literal (eval_to_const now covers uint scalar + vector).
-[flatten(strict_fold=true)]
+[flatten]
 def f_uctor : uint3 {
     return uint3(1u, 2u, 3u)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_uctor_splat : uint3 {
     return uint3(5u)
 }
@@ -291,62 +292,62 @@ def f_uctor_splat : uint3 {
 // so that pass bails and the post-infer FoldVisitor is the sole folder — exercising the
 // new arms directly. Differential proves the fold is value-preserving either way.
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_and_tl(x : bool) : bool {
     return true && x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_and_tr(x : bool) : bool {
     return x && true
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_and_fl(x : bool) : bool {
     return false && x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_and_fr(x : bool) : bool {
     return x && false
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_or_fl(x : bool) : bool {
     return false || x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_or_fr(x : bool) : bool {
     return x || false
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_or_tl(x : bool) : bool {
     return true || x
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_or_tr(x : bool) : bool {
     return x || true
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_not_t : bool {
     return !true
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_not_f : bool {
     return !false
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_sel_tf(c : bool) : bool {
     return c ? true : false
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_sel_ft(c : bool) : bool {
     return c ? false : true
 }
@@ -354,7 +355,7 @@ def f_sel_ft(c : bool) : bool {
 // Early-return variants: the early return reassigns the live mask, so the mask-collapse
 // pass bails (empty const map) and the post-infer FoldVisitor folds the boolean. Scalar
 // return type auto-zero-inits, so no struct-init issue.
-[flatten(strict_fold=true)]
+[flatten]
 def f_and_early(x : bool; g : bool) : bool {
     if (g) {
         return true && x
@@ -362,7 +363,7 @@ def f_and_early(x : bool; g : bool) : bool {
     return x || true
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_sel_early(c : bool; g : bool) : bool {
     if (g) {
         return c ? true : false
@@ -379,7 +380,7 @@ def f_sel_early(c : bool; g : bool) : bool {
 // proves it actually fires (0 add nodes reach the backend).
 
 // Pure const accumulator chain -> a constant.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_const : int {
     var acc = 5
     acc = acc + 3
@@ -388,7 +389,7 @@ def f_acc_const : int {
 }
 
 // Const loop accumulator (unrolled then folded): 0+0+1+2+3 = 6.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_loop : int {
     var acc = 0
     for (i in range(4)) {
@@ -398,7 +399,7 @@ def f_acc_loop : int {
 }
 
 // Const prefix folds, runtime tail stays: 30 + x.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_mixed(x : int) : int {
     var acc = 1
     acc = acc + 2
@@ -407,7 +408,7 @@ def f_acc_mixed(x : int) : int {
 }
 
 // Accumulator seeded from a parameter must NOT fold: (x + 5) * 2.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_runtime(x : int) : int {
     var acc = x
     acc = acc + 5
@@ -416,7 +417,7 @@ def f_acc_runtime(x : int) : int {
 }
 
 // Float const loop accumulator: 0.25 * 4 = 1.0.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_float : float {
     var acc = 0.0
     for (_i in range(4)) {
@@ -426,7 +427,7 @@ def f_acc_float : float {
 }
 
 // Const accumulator across an early return: g ? 10 : 15.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_early(g : bool) : int {
     var acc = 10
     if (g) {
@@ -441,7 +442,7 @@ def f_acc_early(g : bool) : int {
 // mis-swept by the `__flat_*` mask/copy/dse passes. The chosen `__ssa_{orig}_{counter}`
 // scheme renames it to `__ssa_flat_acc_N` (disjoint from `__flat_`); a naive `__{orig}`
 // scheme would mint `__flat_acc_1` and is_flat_temp would misclassify it. Folds to 8.
-[flatten(strict_fold=true)]
+[flatten]
 def f_acc_flatname : int {
     var flat_acc = 5
     flat_acc = flat_acc + 3
@@ -455,28 +456,28 @@ def f_acc_flatname : int {
 // `int`, `float2`) are rejected as non-GPU-expressible and the functions would NOT
 // COMPILE. So compiling at all proves the gate relaxed; the differential proves the value.
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_cast_float : float {
     return float(7)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_cast_int : int {
     return int(3.9)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_cast_expr : float {
     return float(3) * 2.0 + float(1)
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_cast_vec : float2 {
     return float2(float(1), float(2))
 }
 
 // The motivating case: a const cast inside a loop accumulator (was whitelist-rejected).
-[flatten(strict_fold=true)]
+[flatten]
 def f_cast_accum : float {
     var acc = 0.0
     for (i in range(4)) {
@@ -492,16 +493,16 @@ def f_cast_accum : float {
 // the typer leaves (a const-propagated local `p`, a runtime-operand identity `0*b`);
 // the re-infer THEN const-folds the freshly-constant `p >> (p & 31)` / `24 >> (24 & 31)`
 // to `0` (a shift/mask the FoldVisitor does not touch), which exposes a NEW `x - 0`
-// identity that only a SECOND fold pass can collapse. Under strict_fold the surviving
-// `x - 0` is a hard compile error, so these COMPILING proves the fixpoint loop holds;
-// both reduce to `b + 7`.
+// identity that only a SECOND fold pass can collapse. The residual walk (test_flatten_fold.das)
+// flags a surviving `x - 0`, so a clean run proves the fixpoint loop holds; both reduce to
+// `b + 7`.
 
 // const-prop reveals the constant: `p → 24`, then the typer folds `24 >> (24 & 31) → 0`.
 // `var` (not `let`) is load-bearing: an immutable `let p` is const-propagated early, so
 // the typer folds the shift before fold_body runs and a single pass suffices. `var`
 // defeats that early propagation, forcing the cascade into the post-fold re-infer — the
 // path the fixpoint loop exists to handle.
-[flatten(strict_fold=true)]
+[flatten]
 def f_fix_local(b : int) : int {
     var p = 24   // nolint:LINT003 -- var defeats early const-prop; see note above
     return (b + 7) - (p >> (p & 31))
@@ -513,7 +514,7 @@ def fix_callee(p0, q : int) : int {
     return q - (p0 >> (p0 & 31))
 }
 
-[flatten(strict_fold=true)]
+[flatten]
 def f_fix_inline(b : int) : int {
     return fix_callee((0 * b) + 24, b + 7)
 }
