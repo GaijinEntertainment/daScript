@@ -105,7 +105,7 @@ def inline_twice(x : int) : int {
 
 // A STRUCT return type with an early return: the predicated `__flat_ret = pred ? v :
 // __flat_ret` write reads the bare accumulator decl, which a live early return leaves
-// intact (const_prop_pass can only collapse it for a single unconditional return). For a
+// intact (the mask-fold can only collapse it for a single unconditional return). For a
 // struct (unsafe-when-uninitialized) result that read was previously rejected
 // (error[31016]); the lowering now marks the accumulator safe-when-uninitialized because
 // the placeholder read is always discarded.
