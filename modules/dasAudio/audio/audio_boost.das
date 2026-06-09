@@ -602,6 +602,57 @@ class AudioSourceDecoder : AudioSource {
 }
 
 
+class AudioSourceDecoderLoop : AudioSourceDecoder {
+    def override get_samples(nframes : int) : array<float> {
+        var samples : array<float>
+        samples |> resize(nframes * channels)
+        var framesRemaining = nframes
+
+        var tries = 1000
+        while (framesRemaining > 0 && tries > 0) {
+            let framesRead = int(ma_decoder_read_pcm_frames(
+                decoder,
+                unsafe(addr(samples[(nframes - framesRemaining) * channels])),
+                uint64(framesRemaining)))
+            if (framesRead < framesRemaining) {
+                ma_decoder_seek_to_pcm_frame(decoder, 0ul)
+            }
+            framesRemaining -= framesRead
+            tries --
+        }
+
+        return <- samples
+    }
+    def override set_position(pos : uint64) : uint64 {
+        let res = ma_decoder_seek_to_pcm_frame(decoder, pos)
+        if (res == ma_result.MA_SUCCESS) {
+            return pos
+        }
+        // seek failed, try to wrap into the valid range, slow code, but works
+        let nframes = ma_decoder_get_length_in_pcm_frames(decoder)
+        if (nframes > 0ul) {
+            let newPos = pos % nframes
+            let newRes = ma_decoder_seek_to_pcm_frame(decoder, newPos)
+            if (newRes == ma_result.MA_SUCCESS) {
+                return newPos
+            }
+        }
+        // no luck, return current position
+        var cursor : uint64
+        ma_decoder_get_cursor_in_pcm_frames(decoder, unsafe(addr(cursor)))
+        return cursor
+    }
+    def finalize {
+        if (isReady) {
+            ma_decoder_uninit(decoder)
+        }
+        unsafe {
+            delete decoder
+        }
+    }
+}
+
+
 def remove_channel(srci : int) {
     g_channels[srci]->report_eos()
     let sid = g_channels[srci].sid
@@ -717,6 +768,7 @@ struct AudioCommandAddDecoder {
     decoder : uint64      //! opaque ma_decoder? (archive-safe)
     rate : int
     channels : int
+    loop : bool
 }
 
 struct AudioCommandAddDecoder3D : AudioCommandAddDecoder {
@@ -854,12 +906,22 @@ def command_processor {
             g_command_stream |> release
         } elif (cmd is add_decoder) {
             assume dcmd = cmd as add_decoder
-            var decoder  = new AudioSourceDecoder()
+            var decoder : AudioSourceDecoder?
+            if (dcmd.loop) {
+                decoder = new AudioSourceDecoderLoop()
+            } else {
+                decoder = new AudioSourceDecoder()
+            }
             decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder), dcmd.rate, dcmd.channels)
             add_channel(dcmd.sid) <| new AudioChannel(decoder)
         } elif (cmd is add_decoder_3d) {
             assume dcmd = cmd as add_decoder_3d
-            var decoder  = new AudioSourceDecoder()
+            var decoder : AudioSourceDecoder?
+            if (dcmd.loop) {
+                decoder = new AudioSourceDecoderLoop()
+            } else {
+                decoder = new AudioSourceDecoder()
+            }
             decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder), dcmd.rate, dcmd.channels)
             add_channel_3d(dcmd.sid, dcmd.position, dcmd.attenuation) <| new AudioChannel(decoder)
         } elif (cmd is add_pcm_stream) {
@@ -1223,6 +1285,7 @@ def public audio_system_create : AudioSystemChannels {
     return (command = s, next_sid = g_sound_sid)
 }
 
+[unused_argument(next_sid)]
 def public audio_system_finalize(var s : Stream?&; var next_sid : Atomic64?) {
     //! Low-level: shuts down the audio system.
     s |> push_archive(AudioCommand(shutdown = true))
@@ -1312,24 +1375,24 @@ def push_cmd(var cmd : AudioCommand) {
     }
 }
 
-def public play_sound_from_file(filename : string; rate, channels : int; sid : SID = INVALID_SID) {
+def public play_sound_from_file(filename : string; rate, channels : int; sid : SID = INVALID_SID; loop : bool = false) {
     //! plays sound from file. If sid is INVALID_SID, a new SID is generated.
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if (decoder == null) return INVALID_SID
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
-    push_cmd(AudioCommand(add_decoder = AudioCommandAddDecoder(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels)))
+    push_cmd(AudioCommand(add_decoder = AudioCommandAddDecoder(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels, loop = loop)))
     return useSid
 }
 
-def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation; rate, channels : int; sid : SID = INVALID_SID) {
+def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation; rate, channels : int; sid : SID = INVALID_SID; loop : bool = false) {
     //! plays 3D sound from file. If sid is INVALID_SID, a new SID is generated.
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if (decoder == null) return INVALID_SID
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_decoder_3d =
-        AudioCommandAddDecoder3D(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels, position = position, attenuation = attenuation)))
+        AudioCommandAddDecoder3D(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels, position = position, attenuation = attenuation, loop = loop)))
     return useSid
 }
 
