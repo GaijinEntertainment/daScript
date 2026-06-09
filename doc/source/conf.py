@@ -157,7 +157,21 @@ html_static_path = ['_static']
 
 # Custom CSS — Forge token overlay on top of sphinx_rtd_theme.
 # See doc/source/_static/custom.css for the retoken rules.
-html_css_files = ['custom.css', 'custom-patch.css']
+# DocSearch: base CSS from CDN + the Forge theme overlay (docsearch.css).
+html_css_files = [
+    'custom.css', 'custom-patch.css',
+    'https://cdn.jsdelivr.net/npm/@docsearch/css@3',
+    'docsearch.css',
+]
+
+# DocSearch: UMD bundle from CDN (defines global `docsearch`) + the init
+# that wires it to the #docsearch container in _templates/layout.html.
+# Sphinx appends html_js_files in order and emits <script defer> for them,
+# so the bundle is loaded before the init.
+html_js_files = [
+    'https://cdn.jsdelivr.net/npm/@docsearch/js@3',
+    'docsearch.js',
+]
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

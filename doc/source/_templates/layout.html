@@ -27,6 +27,11 @@
     {%- endif %}
   {%- endif %}
 
+  {# DocSearch (Algolia) — sits alongside the native RTD search box below.
+     CSS/JS wired via conf.py html_css_files / html_js_files; _static/docsearch.js
+     targets this container. #}
+  <div id="docsearch"></div>
+
   {%- include "searchbox.html" %}
 
 {%- endblock %}

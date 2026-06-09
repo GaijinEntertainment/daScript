@@ -1,0 +1,83 @@
+/* Algolia DocSearch — Forge theme overlay for daslang.io.
+ *
+ * Maps the @docsearch/css@3 custom properties onto the Forge dark tokens
+ * (defined in files/forge.css for the site, and doc/source/_static/custom.css
+ * for the Sphinx docs — both expose the same --bg/--fg/--amber/--rule names).
+ * Literal-hex fallbacks keep this working even where the tokens are absent.
+ *
+ * NOTE: a byte-identical copy lives at doc/source/_static/docsearch.css for the
+ * Sphinx docs (separate static tree). Keep the two in sync. */
+
+:root {
+    --docsearch-primary-color:              var(--amber, #e8a13a);
+    --docsearch-text-color:                 var(--fg, #e8e2d2);
+    --docsearch-muted-color:                var(--fg-dim, #9b9281);
+    --docsearch-spacing:                    12px;
+
+    /* Backdrop + modal */
+    --docsearch-container-background:       rgba(13, 12, 10, 0.78);
+    --docsearch-modal-background:           var(--bg-2, #15130f);
+    --docsearch-modal-shadow:               0 0 0 1px var(--rule, #2a2620),
+                                            0 14px 44px rgba(0, 0, 0, 0.6);
+
+    /* Search box inside the modal */
+    --docsearch-searchbox-background:       var(--bg-3, #1c1a14);
+    --docsearch-searchbox-focus-background: var(--bg-3, #1c1a14);
+    --docsearch-searchbox-shadow:           inset 0 0 0 1px var(--amber, #e8a13a);
+
+    /* Result hits */
+    --docsearch-hit-color:                  var(--fg, #e8e2d2);
+    --docsearch-hit-background:             var(--bg-3, #1c1a14);
+    --docsearch-hit-active-color:           var(--bg, #0d0c0a);
+    --docsearch-hit-shadow:                 none;
+
+    /* Footer + keyboard hint keys */
+    --docsearch-footer-background:          var(--bg-2, #15130f);
+    --docsearch-footer-shadow:              0 -1px 0 0 var(--rule, #2a2620);
+    --docsearch-key-gradient:               linear-gradient(-225deg, #2a2620, #1c1a14);
+    --docsearch-key-shadow:                 none;
+    --docsearch-logo-color:                 var(--fg-dim, #9b9281);
+}
+
+/* ───── Trigger button inside the Forge nav (site + blog) ───── */
+.forge-nav #docsearch { display: flex; align-items: center; }
+.forge-nav .DocSearch-Button {
+    margin: 0;
+    height: 32px;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--rule, #2a2620);
+    border-radius: 4px;
+    background: transparent;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 12.5px;
+    color: var(--fg-dim, #9b9281);
+}
+.forge-nav .DocSearch-Button:hover {
+    box-shadow: none;
+    border-color: var(--amber-dim, #a87420);
+    background: var(--bg-3, #1c1a14);
+}
+.forge-nav .DocSearch-Button:active,
+.forge-nav .DocSearch-Button:focus { box-shadow: none; outline: none; }
+.forge-nav .DocSearch-Button .DocSearch-Search-Icon {
+    width: 15px; height: 15px;
+    color: var(--fg-dim, #9b9281);
+}
+.forge-nav .DocSearch-Button-Placeholder { padding: 0 8px; font-size: 12.5px; }
+.forge-nav .DocSearch-Button-Keys { min-width: auto; }
+.forge-nav .DocSearch-Button-Key {
+    background: var(--bg-3, #1c1a14);
+    box-shadow: none;
+    border: 1px solid var(--rule, #2a2620);
+    color: var(--fg-faint, #5b5547);
+    padding: 0;
+}
+
+/* ───── Trigger button inside the RTD docs sidebar (Sphinx) ───── */
+.wy-side-nav-search #docsearch { margin: 0 0 8px; }
+.wy-side-nav-search .DocSearch-Button {
+    width: 100%;
+    margin: 0;
+    border-radius: 4px;
+    background: var(--bg-3, #1c1a14);
+}
