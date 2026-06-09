@@ -13,6 +13,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="files/forge.css" />
+
+    <!-- Algolia DocSearch -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3" />
+    <link rel="stylesheet" href="files/docsearch.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@docsearch/js@3" defer></script>
+    <script src="files/docsearch.js" defer></script>
 </head>
 <body>
 <div class="forge-page">
@@ -37,6 +43,7 @@
                 </div>
             </div>
             <div class="forge-nav__right">
+                <div id="docsearch"></div>
                 <button class="forge-nav__burger" type="button" aria-label="menu"
                     onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
                 <span class="forge-nav__version">v0.6.3</span>
