@@ -73,6 +73,7 @@ namespace das {
             :  AstExprCallFuncAnnotation<ExprNew> ("ExprNew", ml) {
             addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
             addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
+            addField<DAS_BIND_MANAGED_FIELD(allocate_on_stack)>("allocate_on_stack");
         }
     };
 

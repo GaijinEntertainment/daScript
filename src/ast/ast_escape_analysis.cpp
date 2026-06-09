@@ -214,10 +214,58 @@ namespace das {
     };
 
     // ===== Pass 2: scope-free optimization (consumes Variable::does_not_escape) =====
+    // upper bound on a pointee we are willing to move onto the (fixed-size) stack frame; anything
+    // larger stays on the heap (and is still freed at scope exit) so a big struct can't blow the stack
+    static constexpr uint32_t MAX_STACK_ALLOC_SIZE = 256;
+
+    // set the stack-allocation flag on the fresh-alloc init expression; returns true if it changed it.
+    // only the shapes the codegen tiers can stack-allocate: a plain `new T()` (no initializer call,
+    // no dim) over a plain struct, and `new T(f=v)` which lowers to an ascend over a make-struct.
+    // capped by size. classes / constructors / handles are excluded: their construction has semantics
+    // (ctor invocation, rtti) that the plain in-frame build does not reproduce (breaks under JIT).
+    static bool setAllocateOnStack ( Expression * init ) {
+        if ( init && init->rtti_isNewExpr() ) {
+            auto en = (ExprNew *) init;
+            auto st = en->typeexpr ? en->typeexpr->structType : nullptr;
+            bool persistent = st && st->persistent;
+            bool isClass = st && st->isClass;
+            // use the non-asserting 64-bit size: a malformed/oversized type (e.g. in invalid_types.das)
+            // yields a huge value that simply fails the cap, instead of tripping the size<=0x7fffffff assert
+            bool fits = en->typeexpr && en->typeexpr->getBaseSizeOf64() <= uint64_t(MAX_STACK_ALLOC_SIZE);
+            if ( !en->initializer && en->typeexpr && en->typeexpr->dim.empty() && !persistent && !isClass && fits && !en->allocate_on_stack ) {
+                en->allocate_on_stack = true; return true;
+            }
+        } else if ( init && init->rtti_isAscend() ) {
+            auto ea = (ExprAscend *) init;
+            bool plainStruct = false;
+            if ( ea->subexpr && ea->subexpr->rtti_isMakeStruct() ) {
+                auto mks = (ExprMakeStruct *) ea->subexpr;
+                auto st = mks->makeType ? mks->makeType->structType : nullptr;
+                // note: isNewClass means "make-struct produced by a `new`" (set for plain structs too),
+                // NOT "is a class" - the class signal is the constructor / forceClass / structType->isClass
+                plainStruct = !mks->constructor && !mks->isNewHandle
+                    && !mks->forceClass && !( st && st->isClass );
+            }
+            bool persistent = ea->subexpr && ea->subexpr->type && ea->subexpr->type->structType
+                && ea->subexpr->type->structType->persistent;
+            bool fits = ea->subexpr && ea->subexpr->type && ea->subexpr->type->getSizeOf64() <= uint64_t(MAX_STACK_ALLOC_SIZE);
+            if ( plainStruct && !persistent && fits && !ea->allocate_on_stack ) {
+                ea->allocate_on_stack = true; return true;
+            }
+        }
+        return false;
+    }
+
+    static bool initIsAllocatedOnStack ( Expression * init ) {
+        if ( init && init->rtti_isNewExpr() ) return ((ExprNew *)init)->allocate_on_stack;
+        if ( init && init->rtti_isAscend() ) return ((ExprAscend *)init)->allocate_on_stack;
+        return false;
+    }
+
     class ScopeFreeVisitor : public Visitor {
     public:
         bool anyWork = false;
-        ScopeFreeVisitor ( TextWriter * logs_ ) : logs(logs_) {}
+        ScopeFreeVisitor ( TextWriter * logs_, bool forceStack_ ) : logs(logs_), forceStack(forceStack_) {}
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;
@@ -246,11 +294,25 @@ namespace das {
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->does_not_escape && !blocks.empty() ) {
-                pending.push_back({var, blocks.back()});
+                // put the pointee in the stack frame instead of the heap; idempotent so the
+                // notInferred re-infer loop terminates once the flag is already set
+                if ( forceStack && setAllocateOnStack(var->init) ) {
+                    anyWork = true;
+                    func->notInferred();
+                }
+                // emit the scope-free only when it frees something real: a heap shell (not stack-
+                // allocated) or owned heap members (arrays/tables) inside the pointee. a stack-
+                // allocated POD frees nothing, so skip it - else every scope pays an interop call.
+                bool stacked = forceStack && initIsAllocatedOnStack(var->init);
+                bool ownsHeap = !( var->type->firstType && var->type->firstType->isNoHeapType() );
+                if ( !stacked || ownsHeap ) {
+                    pending.push_back({var, blocks.back()});
+                }
             }
             return Visitor::visitLet(expr,var,last);
         }
         void emitScopeFree ( ExprBlock * block, Variable * var ) {
+            if ( var->type->firstType->getSizeOf64() > 0x7fffffffull ) return;  // skip pointees over the 2^31 (32-bit) size limit - oversized/invalid types that error out anyway
             anyWork = true;
             func->notInferred();
             // GC-style raw free (no finalizer), matching what the heap GC would do for this garbage.
@@ -268,12 +330,14 @@ namespace das {
         }
         Function * func = nullptr;
         TextWriter * logs = nullptr;
+        bool forceStack = false;
         vector<ExprBlock *> blocks;
         vector<pair<Variable *, ExprBlock *>> pending;
     };
 
     bool Program::escapeAnalysis(TextWriter & logs) {
-        if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) ) return false;
+        auto forceStack = options.getBoolOption("force_allocate_on_stack", policies.force_allocate_on_stack);
+        if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) && !forceStack ) return false;
         auto logEscape = options.getBoolOption("log_escape_analysis", policies.log_escape_analysis);
         EscapeAnalysisVisitor ev(logEscape ? &logs : nullptr);
         visit(ev);
@@ -281,9 +345,10 @@ namespace das {
     }
 
     bool Program::scopeFreeOptimization(TextWriter & logs) {
-        if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) ) return false;
+        auto forceStack = options.getBoolOption("force_allocate_on_stack", policies.force_allocate_on_stack);
+        if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) && !forceStack ) return false;
         auto logEscape = options.getBoolOption("log_escape_analysis", policies.log_escape_analysis);
-        ScopeFreeVisitor ev(logEscape ? &logs : nullptr);
+        ScopeFreeVisitor ev(logEscape ? &logs : nullptr, forceStack);
         visit(ev);
         return ev.anyWork;
     }

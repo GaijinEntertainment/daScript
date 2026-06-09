@@ -1267,6 +1267,7 @@ namespace das
             struct {
                 bool    useStackRef : 1;
                 bool    needTypeInfo : 1;
+                bool    allocate_on_stack : 1;  // escape analysis: build in the stack frame, no heap copy
             };
             uint32_t    ascendFlags = 0;
         };
@@ -1303,6 +1304,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         TypeDeclPtr     typeexpr = nullptr;
         bool            initializer = false;
+        bool            allocate_on_stack = false;  // escape analysis: pointee lives in the stack frame, not the heap
     };
 
     struct DAS_API ExprCall : ExprCallFunc {

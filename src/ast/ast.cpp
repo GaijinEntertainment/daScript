@@ -1709,6 +1709,7 @@ namespace das {
         ExprLooksLikeCall::clone(cexpr);
         cexpr->typeexpr = new TypeDecl(*typeexpr);
         cexpr->initializer = initializer;
+        cexpr->allocate_on_stack = allocate_on_stack;
         return cexpr;
     }
 

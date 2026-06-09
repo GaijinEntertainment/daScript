@@ -13,3 +13,4 @@ Pointer to the constructor function being called, if resolved
 Stack top at the point of call, if temporary variable allocation is needed
 Type expression for the type being constructed
 Whether there is an initializer for the new expression, or it's just default construction
+Escape analysis: allocate the pointee on the stack frame instead of the heap (set when the local provably does not escape)

@@ -1231,8 +1231,14 @@ class public LlvmJitVisitor : AstVisitor {
             persistent = expr.typeexpr.structType.flags.persistent
         }
         let bytes = expr.typeexpr.baseSizeOf
-        new_ptr = build_alloc(bytes, persistent)
-        check_ptr_zero(new_ptr, expr.at, "new returned null")
+        if (expr.allocate_on_stack) {
+            at_function_entry() {
+                new_ptr = LLVMBuildAlloca(g_builder, type_to_llvm_type(expr.typeexpr), "new_stack")
+            }
+        } else {
+            new_ptr = build_alloc(bytes, persistent)
+            check_ptr_zero(new_ptr, expr.at, "new returned null")
+        }
         if (expr.initializer) {
             call2cmres[get_expr_ptr(expr)] = new_ptr
             make_call(expr, false)
@@ -5101,13 +5107,19 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var mks_ptr : LLVMOpaqueValue?
         var needMemset = true
+        let onStack = expr.ascendFlags.allocate_on_stack && !needTypeInfo
         if (expr.subexpr._type.isHandle) {
             mks_ptr = alloc_handle_type(expr.subexpr._type, uid.get_ascend_new(expr))
             needMemset = false
+            check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
+        } elif (onStack) {
+            at_function_entry() {
+                mks_ptr = LLVMBuildAlloca(g_builder, type_to_llvm_type(expr.subexpr._type), "ascend_stack")
+            }
         } else {
             mks_ptr = build_alloc(bytes, false)
+            check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
         }
-        check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
         var memset_bytes = bytes
         if (needTypeInfo) {
             var tinfo = make_type_info_structure(*jit_context, expr.subexpr._type)

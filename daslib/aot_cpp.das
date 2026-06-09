@@ -2,7 +2,6 @@ options gen2
 
 module aot_cpp private
 
-require daslib/fio
 require strings
 
 require daslib/match
@@ -444,6 +443,20 @@ def public describeCppType(typeDecl : TypeDeclPtr;
                            cfg : DescribeConfig) {
     //! Returns the C++ type string for a daslang TypeDecl using the given configuration.
     return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
+}
+
+// escape analysis: a `new`/ascend whose pointee lives in the stack frame gets a block-scope
+// storage declared up front; this names it uniquely per allocation site
+def stackNewName(expr : ExpressionPtr) : string {
+    return "_stack_new_{expr.at.line:d}_{expr.at.column:d}";
+}
+
+// the pointee (C++) type for a stack-allocated `new` (ExprNew) or ascend (ExprAscend)
+def stackNewPointeeType(expr : ExpressionPtr; cross_platform : bool) : string {
+    if (expr is ExprNew) {
+        return describeCppType((expr as ExprNew).typeexpr, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+    }
+    return describeCppType((expr as ExprAscend).subexpr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
 }
 
 def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
@@ -1079,6 +1092,20 @@ class public BlockVariableCollector : AstVisitor {
     def override preVisitExprMakeVariant(var expr : ExprMakeVariant?) {
         handleExpr(expr)
     }
+// new -> stack frame
+    def override preVisitExprNew(var expr : ExprNew?) {
+        if (expr.allocate_on_stack) {
+            let blk = getCurrentBlock();
+            stackNew[blk] |> push(expr);
+        }
+    }
+// ascend -> stack frame
+    def override preVisitExprAscend(var expr : ExprAscend?) {
+        if (expr.ascendFlags.allocate_on_stack && !expr.ascendFlags.needTypeInfo) {
+            let blk = getCurrentBlock();
+            stackNew[blk] |> push(expr);
+        }
+    }
 // call with CMRES
     def override preVisitExprCall(var expr : ExprCall?) {
         let need_insert = !expr.doesNotNeedSp && expr.stackTop != 0u;
@@ -1102,6 +1129,7 @@ class public BlockVariableCollector : AstVisitor {
     @do_not_delete stack :      array<ExprBlock?>
     @do_not_delete variables :  table<ExprBlock?, array<Variable?>>
     @do_not_delete localTemps : table<ExprBlock?, array<Expression?>>
+    @do_not_delete stackNew :   table<ExprBlock?, array<Expression?>>
 
     rename : table<Variable?, string>
     moved : table<Variable?>
@@ -1478,6 +1506,15 @@ class public CppAot : AstVisitor {
                 describeVarLocalCppType(ss, tmp._type, cross_platform);
                 let tempName = makeLocalTempName(tmp);
                 write(*ss, " {tempName}; {tempName};\n");
+            }
+        }
+        // pre-declare stack-frame storage for non-escaping `new` / ascend. The per-evaluation
+        // (re)initialization happens at the use site - plain `new` memsets each time (matching the
+        // interpreter), ascend overwrites the whole value via das_ascend_stack
+        collector.stackNew.get(blk) $(news) {
+            for (nw in news) {
+                let nm = stackNewName(nw);
+                write(*ss, "{tabs()}{stackNewPointeeType(nw, cross_platform)} {nm}; {nm};\n");
             }
         }
     }
@@ -2821,6 +2858,14 @@ class public CppAot : AstVisitor {
     }
 // ascend
     def override preVisitExprAscend(expr : ExprAscend?) {
+        if (expr.ascendFlags.allocate_on_stack && !expr.ascendFlags.needTypeInfo
+                && expr._type.firstType.baseType != Type.tHandle) {
+            // build the value, then copy it into the pre-declared stack-frame storage
+            let type_str = describeCppType(expr._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+            let subexpr_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+            write(*ss, "das_ascend_stack<{type_str},{subexpr_str}>::make({stackNewName(expr)},");
+            return
+        }
         let info : TypeInfo?  = (expr.ascendFlags.needTypeInfo
                                 ? helper.helper |> make_type_info(null, expr.subexpr._type)
                                 : null);
@@ -2844,6 +2889,13 @@ class public CppAot : AstVisitor {
     }
 // new
     def override preVisitExprNew(enew : ExprNew?) {
+        if (enew.allocate_on_stack) {
+            // pointee lives in the pre-declared stack-frame storage; zero it per evaluation
+            // (matching the interpreter's SimNode_NewStack) and take its address
+            let nm = stackNewName(enew);
+            write(*ss, "(memset((void*)&{nm},0,sizeof({nm})), &{nm}");
+            return
+        }
         if (!enew._type.dim |> empty()) {
             if (enew._type.firstType.isHandle) {
                 let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
