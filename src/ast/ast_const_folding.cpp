@@ -93,6 +93,9 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;    // we don't do a thing with templates
+        }
         // virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         // virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         // virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
@@ -509,6 +512,9 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate && funcIsDirty(fun);    // we don't do a thing with templates
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;    // we don't do a thing with templates
+        }
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
@@ -760,7 +766,7 @@ namespace das {
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             auto what = expr->arguments[0];
-            if ( what->type->baseType==Type::tFunction && what->rtti_isAddr() ) {
+            if ( what->type && what->type->baseType==Type::tFunction && what->rtti_isAddr() ) {
                 auto pAddr = static_cast<ExprAddr*>(what);
                 auto funcC = pAddr->func;
                 auto pCall = new ExprCall(expr->at, funcC->name);

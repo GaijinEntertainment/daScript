@@ -28,16 +28,19 @@ namespace das
     }
 
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody) {
-        DAS_ASSERTF(*g_throwBuf==nullptr, "das_trycatch without g_throwBuf");
+        // re-entrant: save/restore the outer frame so das_trycatch can nest (e.g. a fmt
+        // error raised while already formatting another value) — #2570. prevBuf is set
+        // before setjmp and never touched after, so it survives the longjmp.
+        jmp_buf * prevBuf = *g_throwBuf;
         jmp_buf ev;
         *g_throwBuf = &ev;
         if ( !setjmp(ev) ) {
             tryBody();
+            *g_throwBuf = prevBuf;
         } else {
-            *g_throwBuf = nullptr;
+            *g_throwBuf = prevBuf;
             catchBody(g_throwMsg->c_str());
         }
-        *g_throwBuf = nullptr;
     }
     #else
 
