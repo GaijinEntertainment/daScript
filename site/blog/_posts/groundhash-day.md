@@ -30,4 +30,5 @@ Once dust settles, everything is way faster (2-4 times on JIT) and uses less mem
 And now for something completely different.
 - Boris, I did not understand shit. Are You writing for us or for yourself?
 - Yes.
+
 But. If u scroll down, there is a comment section. Its about as useful as blinkers on the BMW. In the unlikely event of something being there I answer, in detail. There is also https://t.me/daScript and somehow I got way more mileage out of that one. Both are there for u. So as blog. Definitely. Maybe.
