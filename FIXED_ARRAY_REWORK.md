@@ -171,10 +171,38 @@ The indivisible piece, sub-staged for review:
   silently produces dimSize=0 TypeInfo). ManagedVector's scratch dim node
   (ast_handle.h walk) flips with it. Builtin mangled names unchanged (unaliased FA
   chains byte-identical); semantic hashes shift — moot while dark.
-- **1d** Infer: inferAlias (WRAP, don't concatenate — alias label preserved),
-  inferGenericType / updateAliasMap / applyAutoContracts (dim arms deleted; FA rides the
-  firstType recursion), ExprAt/ExprSafeAt result typing, for-loop sources, make-array /
-  initializers, inferTypeExpr (dimConst resolution per node), variable checks.
+- **1d** Infer (sub-plan settled): inferAlias/inferPartialAliases gain the tFixedArray
+  recursion arm (WRAP, never concatenate); SETTLED: on alias resolution the typedef name
+  is kept as display label ONLY when the resolved type is an FA chain (M4 design; non-FA
+  aliases keep today's clear — zero display churn elsewhere). inferGenericType gains the
+  FA arm (fixedDim match, dimAuto wildcard, firstType recursion; plain auto(TT) binds the
+  whole chain via the existing clone path). updateAliasMap needs NO edit — auto(TT)[]
+  rides the firstType recursion; the dim.clear() root-cause line is a dead no-op.
+  applyAutoContracts gains the FA recursion arm; the removeDim peel moves to
+  pointer-returning callers (can't reseat through const TypeDeclPtr& in-place).
+  moreSpecialized ranks FA above plain auto. dimConst resolution per FA node
+  (inferTypeExpr walks the chain, evals fixedDimExpr); verifyType walks the chain.
+  ExprAt/ExprSafeAt/for-loop peel = the existing tArray pattern (clone element, ref=true,
+  constant|=head). ExprNew rebuilds the chain around the pointer node. typeinfo is_dim/
+  dim read isFixedArray/head fixedDim; baseType-gated dim.size()==0 checks need no edit.
+  Make-literal result typing wraps via makeFixedArrayTypeDecl (~8 sites + generate).
+  SEQUENCING (settled): 1d+1e land as a two-commit train pushed together — 1d compiles
+  FA but can't run it (simulate still reads dim vectors); boot gate applies at the
+  train's tip: tests-cpp full green (the int[5] known-red flips), daslang boots, dastest
+  runs -> per-test inventory becomes the 1f burndown.
+  IMPLEMENTED. Equivalence rule that drove the edit set: dim-GATED classifiers
+  (isStructure/isVariant/isString/isPointer/isVoid/isWorkhorseType/isClass-via-isStructure)
+  return false on the FA wrapper exactly as they did on a dim'd node — call sites need NO
+  edit; raw `baseType==`/`structType`/`annotation` reads DID see through a dim'd node, so
+  those need the two-line element walk (make-struct/-variant/-array visitors, escape
+  analysis ascend branch, needAvoidNullPtr allowDim). Known intentional divergence:
+  `[[EnumT[2]]]` (isEnumT ignored dim, master collapsed to a single const — FA keeps the
+  array). Two latent master bugs fixed by the natural wrap: gen2 fixed_array of an
+  already-dim'd element appended the result dim INNER-first (same family as the 1c
+  typeFactory order fix), and makeStructWhereBlock double-appended dim when makeType
+  carried an explicit one. ExprNew dead dim-copy remnants removed.
+  Gates: build green; tests-cpp 55/56 — the one red (int[5]) now passes COMPILE and
+  throws in simulate, i.e. the failure crossed the 1d/1e boundary on schedule.
 - **1e** Simulate lowering: ExprAt/iterator SimNode emission computed from nested type
   (same SimNodes), the fakeVariable flatten hack (ast_simulate.cpp ~:949), ExprNew dims.
   Note: gen2 `new Foo[3]` parses as `(new Foo)[3]` (pointer index), NOT new-dim — the

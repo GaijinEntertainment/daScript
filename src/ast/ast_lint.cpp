@@ -347,10 +347,14 @@ namespace das {
         if ( !type ) {
             return false;
         }
-        if ( !allowDim && type->dim.size() ) {
-            return false;
+        auto t = type;
+        if ( t->baseType==Type::tFixedArray ) {
+            if ( !allowDim ) {
+                return false;
+            }
+            while ( t->baseType==Type::tFixedArray && t->firstType ) t = t->firstType;
         }
-        if ( auto * ann = (TypeAnnotation *) type->isPointerToAnnotation() ) {
+        if ( auto * ann = (TypeAnnotation *) t->isPointerToAnnotation() ) {
             if ( ann->avoidNullPtr() ) {
                 return true;
             }

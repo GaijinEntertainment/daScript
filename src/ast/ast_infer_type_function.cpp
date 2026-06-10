@@ -1130,11 +1130,11 @@ namespace das {
         // 3. one with dim is more specialized, than one without
         //      if both have dim, one with actual value is more specialized, than the other one
         {
-            int d1 = t1->dim.size() ? t1->dim[0] : 0;
-            int d2 = t2->dim.size() ? t2->dim[0] : 0;
+            int d1 = t1->baseType==Type::tFixedArray ? t1->fixedDim : 0;
+            int d2 = t2->baseType==Type::tFixedArray ? t2->fixedDim : 0;
             if (d1 != d2) {
                 if (d1 && d2) {
-                    return d1 == -1 ? -1 : 1;
+                    return d1 == TypeDecl::dimAuto ? -1 : 1;
                 } else {
                     return d1 ? 1 : -1;
                 }
@@ -1195,7 +1195,7 @@ namespace das {
         //    DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
 
         // if its an array or a pointer, we compare specialization of subtype
-        if (t1->baseType == Type::tPointer || t1->baseType == Type::tArray || t1->baseType == Type::tIterator) {
+        if (t1->baseType == Type::tPointer || t1->baseType == Type::tArray || t1->baseType == Type::tIterator || t1->baseType == Type::tFixedArray) {
             return moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
             // if its a table, we compare both subtypes
         } else if (t1->baseType == Type::tTable) {

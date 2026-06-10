@@ -2294,10 +2294,12 @@ namespace das {
         block->isClosure = true;
         block->returnType = new TypeDecl(Type::tVoid);
         // only one argument, and its 'self'
-        auto argT = new TypeDecl(*(mks->makeType));
+        auto mkBaseT = mks->makeType;
+        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
+        TypeDeclPtr argT = new TypeDecl(*mkBaseT);
         argT->constant = false;
         if ( mks->structs.size() > 1 ) {
-            argT->dim.push_back(int32_t(mks->structs.size()));
+            argT = makeFixedArrayTypeDecl(int32_t(mks->structs.size()), argT);
         }
         auto argV = new Variable();
         argV->name = "__self__" + to_string(mks->at.line) + "_" + to_string(mks->at.column);

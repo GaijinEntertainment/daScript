@@ -244,6 +244,10 @@ namespace das
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
+        } else if ( autoT->baseType==Type::tFixedArray ) {
+            if ( TT->firstType && autoT->firstType ) {
+                applyAutoContracts(TT->firstType, autoT->firstType);
+            }
         } else if ( autoT->baseType==Type::tIterator ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
@@ -402,6 +406,13 @@ namespace das
                 }
             }
         }
+        // auto[] has to match a fixed array of the same outer size (dimAuto = wildcard)
+        if ( autoT->baseType==Type::tFixedArray ) {
+            if ( initT->baseType!=Type::tFixedArray || !initT->firstType )
+                return nullptr;
+            if ( autoT->fixedDim!=TypeDecl::dimAuto && autoT->fixedDim!=initT->fixedDim )
+                return nullptr;
+        }
         // non-implicit temp can't be inferred from non-temp, and non-temp from temp
         if ( autoT->baseType!=autoinfer && !autoT->implicit && !initT->implicit ) {
             if ( autoT->temporary != initT->temporary )
@@ -447,6 +458,10 @@ namespace das
         TT->explicitRef |= autoT->explicitRef;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
+            if ( !TT->firstType ) return nullptr;
+        } else if ( autoT->baseType==Type::tFixedArray ) {
+            // fixed array peels one level; elements are bare per the canonical form
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tIterator ) {

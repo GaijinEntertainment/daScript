@@ -232,7 +232,7 @@ namespace das {
             // use the non-asserting 64-bit size: a malformed/oversized type (e.g. in invalid_types.das)
             // yields a huge value that simply fails the cap, instead of tripping the size<=0x7fffffff assert
             bool fits = en->typeexpr && en->typeexpr->getBaseSizeOf64() <= uint64_t(MAX_STACK_ALLOC_SIZE);
-            if ( !en->initializer && en->typeexpr && en->typeexpr->dim.empty() && !persistent && !isClass && fits && !en->allocate_on_stack ) {
+            if ( !en->initializer && en->typeexpr && en->typeexpr->baseType!=Type::tFixedArray && !persistent && !isClass && fits && !en->allocate_on_stack ) {
                 en->allocate_on_stack = true; return true;
             }
         } else if ( init && init->rtti_isAscend() ) {
@@ -240,14 +240,17 @@ namespace das {
             bool plainStruct = false;
             if ( ea->subexpr && ea->subexpr->rtti_isMakeStruct() ) {
                 auto mks = (ExprMakeStruct *) ea->subexpr;
-                auto st = mks->makeType ? mks->makeType->structType : nullptr;
+                auto mkT = mks->makeType;
+                while ( mkT && mkT->baseType==Type::tFixedArray && mkT->firstType ) mkT = mkT->firstType;
+                auto st = mkT ? mkT->structType : nullptr;
                 // note: isNewClass means "make-struct produced by a `new`" (set for plain structs too),
                 // NOT "is a class" - the class signal is the constructor / forceClass / structType->isClass
                 plainStruct = !mks->constructor && !mks->isNewHandle
                     && !mks->forceClass && !( st && st->isClass );
             }
-            bool persistent = ea->subexpr && ea->subexpr->type && ea->subexpr->type->structType
-                && ea->subexpr->type->structType->persistent;
+            auto subT = ea->subexpr ? ea->subexpr->type : nullptr;
+            while ( subT && subT->baseType==Type::tFixedArray && subT->firstType ) subT = subT->firstType;
+            bool persistent = subT && subT->structType && subT->structType->persistent;
             bool fits = ea->subexpr && ea->subexpr->type && ea->subexpr->type->getSizeOf64() <= uint64_t(MAX_STACK_ALLOC_SIZE);
             if ( plainStruct && !persistent && fits && !ea->allocate_on_stack ) {
                 ea->allocate_on_stack = true; return true;
