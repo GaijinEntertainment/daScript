@@ -300,6 +300,14 @@ namespace das {
         return nullptr;
     }
 
+    Structure * findChainFinalizerAncestor ( Structure * cls ) {
+        if ( !cls || !cls->isClass || !cls->parent ) return nullptr;
+        for ( auto * anc = cls->parent; anc; anc = anc->parent ) {
+            if ( anc->hasUserFinalizer() ) return anc;
+        }
+        return nullptr;
+    }
+
     // return [[t()]] -- or, for a class derived from a parent with a user ctor,
     // emit the let-self / call Parent`Parent(self) / return self chain body.
     FunctionPtr makeConstructor ( Structure * str, bool isPrivate ) {
@@ -529,11 +537,19 @@ namespace das {
         if ( ls->macroInterface ) pFunc->macroFunction = true;
         auto fb = new ExprBlock();
         fb->at = ls->at;
+        // For a class whose ancestry has a user finalizer, chain to the immediate
+        // parent: this finalizer owns only its own slice of the fields (everything
+        // past the parent prefix), then `delete cast<Parent>(__this)` runs the
+        // parent's finalize — the user one, or a generated chain finalizer that
+        // recurses the same way. Derived slice first, parent second (dtor order).
+        Structure * chainParent = ( ls->isClass && findChainFinalizerAncestor(ls) ) ? ls->parent : nullptr;
+        size_t firstOwnField = chainParent ? chainParent->fields.size() : 0;
         // now finalize
         bool needUnsafe = false;
         for ( int stage=0; stage!=2; ++stage ) {
             // stage 0 is iterators, stage 1 is everything else
-            for ( const auto & fl : ls->fields ) {
+            for ( size_t fi=firstOwnField, fis=ls->fields.size(); fi!=fis; ++fi ) {
+                const auto & fl = ls->fields[fi];
                 if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
                     if ( !fl.doNotDelete && !fl.capturedRef ) {
                         if ( stage==0 && !fl.type->isIterator() ) continue;
@@ -552,6 +568,13 @@ namespace das {
                     }
                 }
             }
+        }
+        if ( chainParent ) {
+            auto chthis = new ExprVar(ls->at, "__this");
+            auto chcast = new ExprCast(ls->at, chthis, new TypeDecl(chainParent));
+            auto chdel = new ExprDelete(ls->at, chcast);
+            chdel->alwaysSafe = true;
+            fb->list.push_back(chdel);
         }
         auto mz = new ExprMemZero(ls->at, "memzero");
         auto lvar = new ExprVar(ls->at, "__this");

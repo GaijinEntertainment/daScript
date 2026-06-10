@@ -133,6 +133,32 @@ namespace das {
     // Closures (ExprMakeBlock) are NOT descended into — a super() inside a defer/lambda
     // is asynchronous and isn't the chain call we're enforcing.
     static const int kSuperUnbounded = INT_MAX;
+    // Matcher for the chain call the CFG count is looking for.
+    // Ctor mode (mangled non-empty): super(...) post-infer is a direct call to
+    // Parent`Parent, possibly _::-qualified.
+    // Finalizer mode (finalizeParent set): `delete super.self` post-infer is
+    // `_::finalize(cast<Parent>(self))` — match the resolved finalize call whose
+    // single argument casts `self` to the immediate parent. A hand-written
+    // `delete cast<Parent>(self)` lowers to the identical AST and counts the same;
+    // a cast to a deeper ancestor does NOT count (it would skip the parent's field
+    // slice now that generated finalizers chain level by level).
+    struct SuperChainMatch {
+        string      mangled;
+        Structure * finalizeParent = nullptr;
+        bool operator() ( ExprCall * call ) const {
+            if ( !mangled.empty() ) {
+                return call->name == mangled || call->name == ("_::" + mangled);
+            }
+            if ( !call->func || call->func->name != "finalize" ) return false;
+            if ( call->arguments.size() != 1 ) return false;
+            auto arg = call->arguments[0];
+            if ( !arg || !arg->rtti_isCast() ) return false;
+            auto cast = static_cast<ExprCast*>(arg);
+            if ( !cast->castType || cast->castType->structType != finalizeParent ) return false;
+            auto sub = cast->subexpr;
+            return sub && sub->rtti_isVar() && static_cast<ExprVar*>(sub)->name == "self";
+        }
+    };
     struct SuperCount {
         bool    fallsThrough;
         int     fallLo, fallHi;
@@ -159,48 +185,48 @@ namespace das {
     // via break/continue/goto (those terminate dead() and erase prefix super counts on
     // the way out, so e.g. `if(x){ super(); break }` would otherwise look super-free).
     // Closures are still skipped (super inside defer/lambda isn't the chain call).
-    bool subtreeHasSuperCall ( const ExpressionPtr & expr, const string & parentMangled ) {
+    bool subtreeHasSuperCall ( const ExpressionPtr & expr, const SuperChainMatch & chainCall ) {
         if ( !expr ) return false;
         if ( expr->rtti_isCall() ) {
             auto call = static_cast<ExprCall*>(expr);
-            if ( call->name == parentMangled || call->name == ("_::" + parentMangled) ) return true;
+            if ( chainCall(call) ) return true;
             if ( call->func && call->func->module && call->func->module->name == "$"
                 && call->func->name == "builtin_try_recover"
                 && call->arguments.size() >= 2
                 && call->arguments[0]->rtti_isMakeBlock() ) {
                 auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
-                return subtreeHasSuperCall(mb->block, parentMangled);
+                return subtreeHasSuperCall(mb->block, chainCall);
             }
             return false;
         }
         if ( expr->rtti_isBlock() ) {
             for ( auto & be : static_cast<ExprBlock*>(expr)->list ) {
-                if ( subtreeHasSuperCall(be, parentMangled) ) return true;
+                if ( subtreeHasSuperCall(be, chainCall) ) return true;
             }
             return false;
         }
         if ( expr->rtti_isIfThenElse() ) {
             auto ite = static_cast<ExprIfThenElse*>(expr);
-            return subtreeHasSuperCall(ite->if_true, parentMangled)
-                || subtreeHasSuperCall(ite->if_false, parentMangled);
+            return subtreeHasSuperCall(ite->if_true, chainCall)
+                || subtreeHasSuperCall(ite->if_false, chainCall);
         }
-        if ( expr->rtti_isWith() )   return subtreeHasSuperCall(static_cast<ExprWith*>(expr)->body, parentMangled);
-        if ( expr->rtti_isUnsafe() ) return subtreeHasSuperCall(static_cast<ExprUnsafe*>(expr)->body, parentMangled);
-        if ( expr->rtti_isWhile() )  return subtreeHasSuperCall(static_cast<ExprWhile*>(expr)->body, parentMangled);
-        if ( expr->rtti_isFor() )    return subtreeHasSuperCall(static_cast<ExprFor*>(expr)->body, parentMangled);
+        if ( expr->rtti_isWith() )   return subtreeHasSuperCall(static_cast<ExprWith*>(expr)->body, chainCall);
+        if ( expr->rtti_isUnsafe() ) return subtreeHasSuperCall(static_cast<ExprUnsafe*>(expr)->body, chainCall);
+        if ( expr->rtti_isWhile() )  return subtreeHasSuperCall(static_cast<ExprWhile*>(expr)->body, chainCall);
+        if ( expr->rtti_isFor() )    return subtreeHasSuperCall(static_cast<ExprFor*>(expr)->body, chainCall);
         if ( expr->__rtti && strcmp(expr->__rtti, "ExprTryCatch") == 0 ) {
             // Mirror countSuperCalls: only the try block contributes to chain semantics.
             // The recover block's super (if any) is irrelevant to the chain check.
             auto tc = static_cast<ExprTryCatch*>(expr);
-            return subtreeHasSuperCall(tc->try_block, parentMangled);
+            return subtreeHasSuperCall(tc->try_block, chainCall);
         }
         return false;
     }
-    SuperCount countSuperCalls ( const ExpressionPtr & expr, const string & parentMangled ) {
+    SuperCount countSuperCalls ( const ExpressionPtr & expr, const SuperChainMatch & chainCall ) {
         if ( !expr ) return SuperCount::onlyFall(0, 0);
         if ( expr->rtti_isCall() ) {
             auto call = static_cast<ExprCall*>(expr);
-            if ( call->name == parentMangled || call->name == ("_::" + parentMangled) ) {
+            if ( chainCall(call) ) {
                 return SuperCount::onlyFall(1, 1);
             }
             // JIT-mode rewrite of try/recover: ast_infer_type_op.cpp:1015 emits
@@ -214,7 +240,7 @@ namespace das {
                 && call->arguments.size() >= 2
                 && call->arguments[0]->rtti_isMakeBlock() ) {
                 auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
-                return countSuperCalls(mb->block, parentMangled);
+                return countSuperCalls(mb->block, chainCall);
             }
             return SuperCount::onlyFall(0, 0);
         }
@@ -235,7 +261,7 @@ namespace das {
             out.hasExits = false;
             bool fallenThrough = true;
             for ( auto & be : blk->list ) {
-                auto sub = countSuperCalls(be, parentMangled);
+                auto sub = countSuperCalls(be, chainCall);
                 if ( sub.hasExits ) {
                     mergeExit(out, safeAdd(prefix_lo, sub.exitLo), safeAdd(prefix_hi, sub.exitHi));
                 }
@@ -253,9 +279,9 @@ namespace das {
         }
         if ( expr->rtti_isIfThenElse() ) {
             auto ite = static_cast<ExprIfThenElse*>(expr);
-            auto t = countSuperCalls(ite->if_true, parentMangled);
+            auto t = countSuperCalls(ite->if_true, chainCall);
             // Treat absent else as an empty fall-through branch with 0 super calls.
-            SuperCount e = ite->if_false ? countSuperCalls(ite->if_false, parentMangled)
+            SuperCount e = ite->if_false ? countSuperCalls(ite->if_false, chainCall)
                                          : SuperCount::onlyFall(0, 0);
             SuperCount out = SuperCount::dead();
             if ( t.hasExits ) mergeExit(out, t.exitLo, t.exitHi);
@@ -273,23 +299,23 @@ namespace das {
         }
         if ( expr->rtti_isWith() ) {
             auto wth = static_cast<ExprWith*>(expr);
-            return countSuperCalls(wth->body, parentMangled);
+            return countSuperCalls(wth->body, chainCall);
         }
         if ( expr->rtti_isUnsafe() ) {
             auto us = static_cast<ExprUnsafe*>(expr);
-            return countSuperCalls(us->body, parentMangled);
+            return countSuperCalls(us->body, chainCall);
         }
         if ( expr->rtti_isWhile() || expr->rtti_isFor() ) {
             ExpressionPtr body = expr->rtti_isWhile()
                 ? static_cast<ExprWhile*>(expr)->body
                 : static_cast<ExprFor*>(expr)->body;
-            auto inner = countSuperCalls(body, parentMangled);
+            auto inner = countSuperCalls(body, chainCall);
             // Conservatively: loop iterates 0..N times. If body contains ANY super anywhere
             // (including paths that terminate via break/continue, which countSuperCalls
             // collapses to dead()), the loop's fall-through count is unbounded. Inner exits
             // (return) still propagate as function-level exit paths.
             SuperCount out = SuperCount::onlyFall(0, 0);
-            if ( subtreeHasSuperCall(body, parentMangled) ) {
+            if ( subtreeHasSuperCall(body, chainCall) ) {
                 out.fallLo = 0; out.fallHi = kSuperUnbounded;
             }
             if ( inner.hasExits ) mergeExit(out, inner.exitLo, inner.exitHi);
@@ -301,7 +327,7 @@ namespace das {
         // it. ExprTryCatch has no rtti_is* — dispatch via __rtti.
         if ( expr->__rtti && strcmp(expr->__rtti, "ExprTryCatch") == 0 ) {
             auto tc = static_cast<ExprTryCatch*>(expr);
-            return countSuperCalls(tc->try_block, parentMangled);
+            return countSuperCalls(tc->try_block, chainCall);
         }
         return SuperCount::onlyFall(0, 0);
     }
@@ -1044,8 +1070,9 @@ namespace das {
                 && fn->name == fn->classParent->name + "`" + fn->classParent->name ) {
                 Structure * chainAncestor = findChainCtorAncestor(fn->classParent);
                 if ( chainAncestor ) {
-                    string chainMangled = chainAncestor->name + "`" + chainAncestor->name;
-                    auto count = reduceSuperCount(countSuperCalls(fn->body, chainMangled));
+                    SuperChainMatch match;
+                    match.mangled = chainAncestor->name + "`" + chainAncestor->name;
+                    auto count = reduceSuperCount(countSuperCalls(fn->body, match));
                     if ( count.lo == 0 ) {
                         program->error("class constructor " + fn->name + " does not call super(...) on every control-flow path",
                             "", "call super(...) (or super." + chainAncestor->name + "(...)) exactly once per path",
@@ -1055,6 +1082,27 @@ namespace das {
                             "", "super(...) must be called exactly once per control-flow path",
                             fn->at, CompilationError::missing_function_body);
                     }
+                }
+            }
+            // Derived class finalizer: when ANY ancestor has a user-defined finalizer,
+            // every CFG path must `delete super.self` exactly once — same chain
+            // invariant as ctors. An empty intermediate parent is fine: the chain
+            // call resolves to its generated finalizer, which chains up in turn.
+            if ( fn->isClassMethod && fn->classParent && fn->classParent->parent
+                && !fn->generated
+                && fn->name == "finalize"
+                && findChainFinalizerAncestor(fn->classParent) ) {
+                SuperChainMatch match;
+                match.finalizeParent = fn->classParent->parent;
+                auto count = reduceSuperCount(countSuperCalls(fn->body, match));
+                if ( count.lo == 0 ) {
+                    program->error("class finalizer of " + fn->classParent->name + " does not call delete super.self on every control-flow path",
+                        "", "delete super.self exactly once per path",
+                        fn->at, CompilationError::missing_function_body);
+                } else if ( count.hi != count.lo || count.hi > 1 ) {
+                    program->error("class finalizer of " + fn->classParent->name + " calls delete super.self more than once on some path",
+                        "", "delete super.self must be called exactly once per control-flow path",
+                        fn->at, CompilationError::missing_function_body);
                 }
             }
             func = nullptr;

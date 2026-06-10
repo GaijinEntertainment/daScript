@@ -240,9 +240,12 @@ the closest ancestor struct whose ``finalize`` lookup resolves to a user-defined
 Because struct ``finalize`` resolution honors inheritance substitution (a derived struct
 can be passed where its base is expected), ``T`` is typically the immediate parent — even
 when only a more distant ancestor defines ``operator delete``. See :ref:`Classes <classes>`
-for the full description of the ``super`` sugar; the behavior is the same except that
-classes lack this substitution and instead skip past empty intermediate classes that
-don't define their own ``operator delete``.
+for the full description of the ``super`` sugar. Classes go further: they chain through
+the immediate parent level by level, finalize each level's own field slice, inherit
+finalizers automatically when a derived class declares none, and lint-enforce the
+``delete super.self`` call in user-defined derived finalizers. None of that applies to
+structs — a struct finalizer that omits ``delete super.self`` silently skips its
+ancestors' finalizers.
 
 .. _structs_alignment:
 

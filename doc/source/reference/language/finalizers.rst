@@ -62,6 +62,11 @@ Finalizers obey the following rules:
 
 If a custom ``finalize`` is available, it is called instead of default one.
 
+For derived classes, finalizers chain through the inheritance hierarchy — each level
+finalizes its own fields and runs the parent's finalizer via ``delete super.self``
+(written explicitly in user finalizers, generated automatically otherwise). See
+:ref:`Classes <classes>`.
+
 Pointer finalizers expand to calling ``finalize`` on the dereferenced pointer,
 and then calling the native memory finalizer on the result:
 
