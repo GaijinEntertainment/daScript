@@ -35,7 +35,7 @@ module style_lint shared private
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for modules X re-exports (transitive-only) — require those directly and drop X (skipped when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 
 require daslib/ast_boost
 require daslib/is_local
@@ -82,6 +82,9 @@ class StyleLintVisitor : AstVisitor {
     analyze_requires : bool = false
     @do_not_delete this_module : Module?
     used_modules : table<string>
+    // Calls inside UNINSTANCED generic bodies stay unresolved at lint time (func==null)
+    // and leave no used_modules trace; their names gate STYLE030 instead.
+    unresolved_call_names : table<string>
 
     def StyleLintVisitor() {
         pass
@@ -254,6 +257,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
         st029_record_func(expr.func)
+        st029_record_unresolved_call(expr)
         st029_record_module_getter(expr)
         check_block_pipe(expr.at, expr.arguments)
         check_style019_clamp(expr)
@@ -1496,6 +1500,43 @@ class StyleLintVisitor : AstVisitor {
         else st029_record_mod(fun._module)
     }
 
+    def st029_record_unresolved_call(expr : ExprCall?) : void {
+        // Calls inside generic bodies that never instantiate stay unresolved
+        // (func==null); keep their unqualified names so STYLE030 can match them
+        // against a required module's exports instead of flagging it unused.
+        if (expr.func != null || !st029_expr_in_scope()) return
+        var nm = "{expr.name}"
+        let sep = nm |> rfind("::")   // strip any module qualification, e.g. `_::foo`
+        if (sep >= 0) {
+            nm = nm |> slice(sep + 2)
+        }
+        if (!empty(nm) && !key_exists(unresolved_call_names, nm)) {
+            unresolved_call_names |> insert(nm)
+        }
+    }
+
+    def st030_exports_unresolved_name(mod : Module?) : bool {
+        // True when `mod` exports a function or generic whose name matches an
+        // unresolved generic-body call — the require is (potentially) load-bearing
+        // for instantiations the lint pass never sees.
+        if (empty(unresolved_call_names)) return false
+        var found = false
+        for_each_function(mod, "") $(fn) {
+            if (found) return
+            if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        if (found) return true
+        for_each_generic(mod, "") $(fn) {
+            if (found) return
+            if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        return found
+    }
+
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
         // Type references — st029_record_mod self-gates on expr_in_scope (global
         // scope or this module's code; never a foreign function body).
@@ -1622,7 +1663,8 @@ class StyleLintVisitor : AstVisitor {
             if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
                 || key_exists(used_modules, mname)
                 || st029_module_provides_macro(mod)
-                || st029_module_has_init(mod)) return
+                || st029_module_has_init(mod)
+                || st030_exports_unresolved_name(mod)) return
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
             var via : array<string>

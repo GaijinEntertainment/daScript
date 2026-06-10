@@ -87,14 +87,14 @@ class GlslShader : AstFunctionAnnotation {
                 return false
             }
         }
-        self->generate_bind_uniform_dummy(func)
+        generate_bind_uniform_dummy(func)
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for_each_function(compiling_module(), bind_uniform_function_name(func)) $(bfun) {
             if (bfun.flags.exports) {
                 bfun.flags.exports = false
-                self->generate_bind_uniform(func, bfun)
+                generate_bind_uniform(func, bfun)
                 astChanged = true
             }
         }
@@ -169,9 +169,9 @@ class GlslShader : AstFunctionAnnotation {
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null) {
             if (glob.name == argName) {
-                let caps = self->buildCaps()
+                let caps = buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
-                let shader_text = "{gres.inout_stub}{self->get_glsl_prefix()}{gres.body}"
+                let shader_text = "{gres.inout_stub}{get_glsl_prefix()}{gres.body}"
                 glob.init = new ExprConstString(at = func.at,
                     value := shader_text,
                     _type = new TypeDecl(at = func.at, baseType = Type.tString)
@@ -356,7 +356,7 @@ class GlslExport : AstVisitor {
             } elif (glsl_types |> key_exists(t.baseType)) {
                 tw |> write(glsl_types?[t.baseType] ?? "error")
             } else {
-                self->error("unsupported type {t.baseType}", t.at)
+                error("unsupported type {t.baseType}", t.at)
                 tw |> write("error")
             }
             if (write_dim) {
@@ -368,7 +368,7 @@ class GlslExport : AstVisitor {
         return st
     }
     def describe_glsl_type(t : TypeDeclPtr) {
-        return self->describe_glsl_type_ex(t, true)
+        return describe_glsl_type_ex(t, true)
     }
     def glsl_function_name(fun : FunctionPtr) {
         var funname = build_string() $(var tw) {
@@ -398,8 +398,8 @@ class GlslExport : AstVisitor {
     }
     def describe_glsl_function(fun : FunctionPtr) {
         let st = build_string() $(var tw) {
-            tw |> write <| self->describe_glsl_type(fun.result)
-            let funname = self->glsl_function_name(fun)
+            tw |> write <| describe_glsl_type(fun.result)
+            let funname = glsl_function_name(fun)
             tw |> write(" {funname} ( ")
             for (arg, i in fun.arguments, count()) {
                 if (i != 0) {
@@ -408,7 +408,7 @@ class GlslExport : AstVisitor {
                 if (arg._type.isRef && !arg._type.flags.constant) {
                     tw |> write("inout ")
                 }
-                tw |> write <| self->describe_glsl_type(arg._type)
+                tw |> write <| describe_glsl_type(arg._type)
                 tw |> write(" {arg.name}")
             }
             tw |> write(" )")
@@ -417,13 +417,13 @@ class GlslExport : AstVisitor {
     }
     def produce_zero(t : TypeDeclPtr) {
         if (!empty(t.dim)) {
-            *writer |> write("{self->describe_glsl_type(t)}(")
+            *writer |> write("{describe_glsl_type(t)}(")
             var ct <- clone_type(t.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
             for (d in range(t.dim[0])) {
                 if (d != 0) {
                     *writer |> write(",")
                 }
-                self->produce_zero(ct)
+                produce_zero(ct)
             }
             ct := null
             *writer |> write(")")
@@ -437,7 +437,7 @@ class GlslExport : AstVisitor {
                 if (i != 0) {
                     *writer |> write(",")
                 }
-                self->produce_zero(fld._type)
+                produce_zero(fld._type)
             }
             *writer |> write(")")
         } elif (t.baseType == Type.tHandle) {
@@ -454,7 +454,7 @@ class GlslExport : AstVisitor {
                     *writer |> write("mat4(vec4(0),vec4(0),vec4(0),vec4(0))")
                 }
             } else {
-                self->error("unsupported zero for handled type {describe(t)}", t.at)
+                error("unsupported zero for handled type {describe(t)}", t.at)
             }
         } elif (t.baseType == Type.tInt) {
             *writer |> write("0")
@@ -485,7 +485,7 @@ class GlslExport : AstVisitor {
         } elif (t.baseType == Type.tEnumeration) {
             *writer |> write("0")
         } else {
-            self->error("unsupported zero for type {describe(t)}", t.at)
+            error("unsupported zero for type {describe(t)}", t.at)
         }
     }
 // any subexpression to string in current context
@@ -517,18 +517,18 @@ class GlslExport : AstVisitor {
         var any = false
         for_each_function(mod, "") $(fun) {
             if (depFun |> key_exists(intptr(fun))) {
-                if (!self->isMainFunction(fun)) {
+                if (!isMainFunction(fun)) {
                     if (fun._module.name != "glsl_common") {
-                        let ss = self->describe_glsl_function(fun)
+                        let ss = describe_glsl_function(fun)
                         *writer |> write("{ss};")
-                        self->newLine(1)
+                        newLine(1)
                         any = true
                     }
                 }
             }
         }
         if (any) {
-            self->newLine(1)
+            newLine(1)
         }
     }
     def override preVisitProgram(prog : ProgramPtr) : void {
@@ -695,22 +695,22 @@ class GlslExport : AstVisitor {
     }
     def override preVisitStructure(str : StructurePtr) {
         if (str.flags.isClass) {
-            self->error("classes are not supported", str.at)
+            error("classes are not supported", str.at)
         }
-        self->line(str.at)
+        line(str.at)
         *writer |> write("struct {str.name}")
-        self->newLine(1)
+        newLine(1)
         *writer |> write("\{")
-        self->newLine(1)
+        newLine(1)
     }
     def override preVisitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) {
-        self->line(decl.at)
+        line(decl.at)
         *writer |> write("\t")
         //if decl.annotation |> length != 0
         //    *writer |> write("[{describe(decl.annotation)}] ")
-        *writer |> write("{self->describe_glsl_type_ex(decl._type,false)} {decl.name}")
+        *writer |> write("{describe_glsl_type_ex(decl._type,false)} {decl.name}")
         if (decl.init != null) {
-            self->error("structure initialization is not supported", decl.init.at)
+            error("structure initialization is not supported", decl.init.at)
         }
     }
     def override visitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) {
@@ -718,11 +718,11 @@ class GlslExport : AstVisitor {
             *writer |> write("[{d}]")
         }
         *writer |> write(";")
-        self->newLine(1)
+        newLine(1)
     }
     def override visitStructure(str : StructurePtr) : StructurePtr {
         *writer |> write("};")
-        self->newLine(2)
+        newLine(2)
         if (caps.output_structure_initializers) {
             *writer |> write("{str.name} {str.name}_STRUCTURE_INITIALIZER ( ")
             var first = true
@@ -732,7 +732,7 @@ class GlslExport : AstVisitor {
                 } else {
                     *writer |> write(", ")
                 }
-                *writer |> write(self->describe_glsl_type(fl._type))
+                *writer |> write(describe_glsl_type(fl._type))
                 *writer |> write(" _{fl.name}")
             }
             *writer |> write(" )\n")
@@ -754,10 +754,10 @@ class GlslExport : AstVisitor {
     def override preVisitFunction(fun : FunctionPtr) {
         if (caps.restrict_array_as_result) {
             if (!empty(fun.result.dim)) {
-                self->error("returning arrays is prohibited in this shader model", fun.at)
+                error("returning arrays is prohibited in this shader model", fun.at)
             }
         }
-        let isMain = self->isMainFunction(fun)
+        let isMain = isMainFunction(fun)
         if (isMain && shaderType == ShaderType.compute) {
             if (caps.output_hlsl_style_compute_layout) {
                 if (compute_local_size.z != 0) {
@@ -769,9 +769,9 @@ class GlslExport : AstVisitor {
                 }
             }
         }
-        self->line(fun.at)
-        *writer |> write("{self->describe_glsl_type(fun.result)} ")
-        let fnName = isMain ? "main" : self->glsl_function_name(fun)
+        line(fun.at)
+        *writer |> write("{describe_glsl_type(fun.result)} ")
+        let fnName = isMain ? "main" : glsl_function_name(fun)
         *writer |> write("{fnName}(")
     }
     def override preVisitFunctionBody(fun : FunctionPtr; expr : ExpressionPtr) {
@@ -784,17 +784,17 @@ class GlslExport : AstVisitor {
                 }
             }
         }
-        self->newLine(1)
+        newLine(1)
     }
     def override visitFunction(fun : FunctionPtr) : FunctionPtr {
-        self->newLine(1)
+        newLine(1)
         return fun
     }
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; last : bool) {
         if (arg._type.isRef && !arg._type.flags.constant) {
             *writer |> write("inout ")
         }
-        *writer |> write("{self->describe_glsl_type(arg._type)} {arg.name} ")
+        *writer |> write("{describe_glsl_type(arg._type)} {arg.name} ")
     }
     def override visitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; last : bool) {
         if (!last) {
@@ -808,37 +808,37 @@ class GlslExport : AstVisitor {
 // block
     def override preVisitExprBlock(blk : ExprBlock?) {
         if (blk.blockFlags.isClosure) {
-            self->error("closure is not supported", blk.at)
+            error("closure is not supported", blk.at)
         }
         *writer |> write("{repeat("\t",tab)}\{")
-        self->newLine(1)
+        newLine(1)
         tab ++
     }
     def override visitExprBlock(blk : ExprBlock?) : ExpressionPtr {
         tab --
         *writer |> write("{repeat("\t",tab)}\}")
-        self->newLine(1)
+        newLine(1)
         return blk
     }
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) {
-        self->line(expr.at)
+        line(expr.at)
         *writer |> write("{repeat("\t",tab)}")
     }
     def override visitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) {
         *writer |> write(";")
-        self->newLine(1)
+        newLine(1)
         return expr
     }
     def override visitExprBlockFinal(blk : ExprBlock?) {
-        self->error("finally is not supported", blk.at)
+        error("finally is not supported", blk.at)
     }
 // let
     def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) {
         if (arg._type.flags.ref) {
-            self->error("local references are not supported by GLSL", arg.at)
+            error("local references are not supported by GLSL", arg.at)
         }
-        self->line(arg.at)
-        *writer |> write("{self->describe_glsl_type_ex(arg._type,false)} {arg.name}")
+        line(arg.at)
+        *writer |> write("{describe_glsl_type_ex(arg._type,false)} {arg.name}")
         for (d in arg._type.dim) {
             *writer |> write("[{d}]")
         }
@@ -855,7 +855,7 @@ class GlslExport : AstVisitor {
             }
             if (needZero) {
                 *writer |> write(" = ")
-                self->produce_zero(arg._type)
+                produce_zero(arg._type)
             }
         }
         if (!lastArg) {
@@ -882,7 +882,7 @@ class GlslExport : AstVisitor {
             if ("{typ.structType.name}" |> find("sampler") != -1
                 || "{typ.structType.name}" |> find("image") != -1) return
         }
-        self->error("unsupported uniform type {describe(typ)}", typ.at)
+        error("unsupported uniform type {describe(typ)}", typ.at)
     }
     def getSamplerType(typ : TypeDeclPtr) : string {
         if (typ.baseType == Type.tStructure) {
@@ -898,7 +898,7 @@ class GlslExport : AstVisitor {
     }
     def outputSamplerMacro(arg : VariablePtr) : bool {
         if (!caps.output_unfirom_macro_declarations) return false
-        let st = self->getSamplerType(arg._type)
+        let st = getSamplerType(arg._type)
         if (st == "") return false
         let stage = arg.annotation |> find_arg("stage") ?as tInt ?? 0
         let sfunc = to_upper(st)
@@ -908,7 +908,7 @@ class GlslExport : AstVisitor {
     }
     def outputImageMacro(arg : VariablePtr) : bool {
         if (!caps.output_unfirom_macro_declarations) return false
-        let st = self->getImageType(arg._type)
+        let st = getImageType(arg._type)
         if (st == "") return false
         let format =  arg.annotation |> find_arg("format") ?as tString ?? "rgba8"
         let binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
@@ -924,13 +924,13 @@ class GlslExport : AstVisitor {
         return true
     }
     def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
-        self->line(arg.at)
+        line(arg.at)
         if (caps.restrict_array_as_result) {
             if (!empty(arg._type.dim)) {
                 let need_init = arg.annotation |> find_arg("need_init") ?as tBool ?? true
                 let group_shared = arg.annotation |> find_arg("groupshared") ?as tBool ?? false
                 if (need_init && !group_shared) {
-                    self->error("returning arrays is prohibited in this shader model", arg.at)
+                    error("returning arrays is prohibited in this shader model", arg.at)
                 }
             }
         }
@@ -944,11 +944,11 @@ class GlslExport : AstVisitor {
         if (arg.annotation |> find_arg("ssbo") is tBool) {
             let binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
             *writer |> write("layout(std430, binding={binding}) buffer {arg.name}_ssbo")
-            self->newLine(1)
+            newLine(1)
             *writer |> write("\{")
-            self->newLine(1)
-            *writer |> write("    {self->describe_glsl_type(arg._type)} {arg.name};")
-            self->newLine(1)
+            newLine(1)
+            *writer |> write("    {describe_glsl_type(arg._type)} {arg.name};")
+            newLine(1)
             *writer |> write("\}")
         } else {
             var needInit = arg.annotation |> find_arg("need_init") ?as tBool ?? true
@@ -957,8 +957,8 @@ class GlslExport : AstVisitor {
             }
             if (shaderType == ShaderType.vertex) {
                 if (arg.annotation |> find_arg("uniform") is tBool) {
-                    self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg)) return
+                    checkUniformType(arg._type)
+                    if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 let argLoc = arg.annotation |> find_arg("location")
@@ -973,8 +973,8 @@ class GlslExport : AstVisitor {
                 }
             } elif (shaderType == ShaderType.fragment) {
                 if (arg.annotation |> find_arg("uniform") is tBool) {
-                    self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg)) return
+                    checkUniformType(arg._type)
+                    if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 if (arg.annotation |> find_arg("in") is tBool) {
@@ -995,8 +995,8 @@ class GlslExport : AstVisitor {
                     }
                 }
                 if (arg.annotation |> find_arg("uniform") is tBool) {
-                    self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg) || self->outputImageMacro(arg)) return
+                    checkUniformType(arg._type)
+                    if (outputSamplerMacro(arg) || outputImageMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 if (arg.annotation |> find_arg("in") is tBool) {
@@ -1032,13 +1032,13 @@ class GlslExport : AstVisitor {
                     }
                 }
             }
-            *writer |> write("{self->describe_glsl_type_ex(arg._type,false)} {arg.name}")
+            *writer |> write("{describe_glsl_type_ex(arg._type,false)} {arg.name}")
             for (d in arg._type.dim) {
                 *writer |> write("[{d}]")
             }
             if (arg.init == null && needInit) {
                 *writer |> write(" = ")
-                self->produce_zero(arg._type)
+                produce_zero(arg._type)
             }
         }
     }
@@ -1048,7 +1048,7 @@ class GlslExport : AstVisitor {
             *writer |> write(": register({reg as tString})")
         }
         *writer |> write(";")
-        self->newLine(2)
+        newLine(2)
         var is_inout = false
         if (caps.output_inout_stub) {
             is_inout = true
@@ -1064,7 +1064,7 @@ class GlslExport : AstVisitor {
                     if (!glsl_restricted_vertex_attribute_names |> key_exists("{arg.name}")) {
                         var names <- [for (n in keys(glsl_restricted_vertex_attribute_names)); n]
                         let allowed_names = join(names, ",")
-                        self->error("invalid vertex attribute name {arg.name}, supported names are {allowed_names}", arg.at)
+                        error("invalid vertex attribute name {arg.name}, supported names are {allowed_names}", arg.at)
                         delete names
                     }
                 }
@@ -1096,10 +1096,10 @@ class GlslExport : AstVisitor {
                     }
                 }
                 if (suffix == "") {
-                    self->error("missing semantics for {arg.name}", arg.at)
+                    error("missing semantics for {arg.name}", arg.at)
                 }
             }
-            inout_decl += "{self->describe_glsl_type(arg._type)} {arg.name}{suffix};\n"
+            inout_decl += "{describe_glsl_type(arg._type)} {arg.name}{suffix};\n"
         }
         return arg
     }
@@ -1110,22 +1110,22 @@ class GlslExport : AstVisitor {
     }
 // string builder
     def override preVisitExprStringBuilder(expr : ExprStringBuilder?) {
-        self->error("string builder is not supported", expr.at)
+        error("string builder is not supported", expr.at)
     }
 // new
     def override preVisitExprNew(expr : ExprNew?) {
-        self->error("new is not supported", expr.at)
+        error("new is not supported", expr.at)
     }
 // named call
     def override preVisitExprNamedCall(expr : ExprNamedCall?) {
-        self->error("named call is not supported", expr.at)
+        error("named call is not supported", expr.at)
     }
 // looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
     def isInvokeMethod(expr : ExprLooksLikeCall?) {
         return (expr ?as ExprInvoke)?.isInvokeMethod ?? false
     }
     def override preVisitExprLooksLikeCall(expr : ExprLooksLikeCall?) {
-        if (self->isInvokeMethod(expr)) {
+        if (isInvokeMethod(expr)) {
             pass
         } else {
             *writer |> write("{expr.name}(")
@@ -1136,13 +1136,13 @@ class GlslExport : AstVisitor {
         return expr
     }
     def override preVisitExprLooksLikeCallArgument(expr : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
-        let isInvoke = self->isInvokeMethod(expr)
+        let isInvoke = isInvokeMethod(expr)
         if (isInvoke && arg == expr.arguments[1]) {
             *writer |> write("/*")
         }
     }
     def override visitExprLooksLikeCallArgument(expr : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
-        let isInvoke = self->isInvokeMethod(expr)
+        let isInvoke = isInvokeMethod(expr)
         if (isInvoke && arg == expr.arguments[0]) {
             *writer |> write("(")
         } elif (isInvoke && arg == expr.arguments[1]) {
@@ -1156,7 +1156,7 @@ class GlslExport : AstVisitor {
     def override preVisitExprCall(expr : ExprCall?) {
         var fnName : string
         unsafe {
-            fnName = self->glsl_function_name(reinterpret<FunctionPtr> expr.func)
+            fnName = glsl_function_name(reinterpret<FunctionPtr> expr.func)
         }
         if (caps.output_compatibility_constructors) {
             glsl_compatibility_constructors |> get(fnName) $(newName) {
@@ -1180,7 +1180,7 @@ class GlslExport : AstVisitor {
     }
 // null coaelescing
     def override preVisitExprNullCoalescing(expr : ExprNullCoalescing?) : void {
-        self->error("null coaelescing is not supported", expr.at)
+        error("null coaelescing is not supported", expr.at)
     }
 // at
     def override visitExprAt(expr : ExprAt?) : ExpressionPtr {
@@ -1192,11 +1192,11 @@ class GlslExport : AstVisitor {
     }
 // safe at
     def override preVisitExprSafeAt(expr : ExprSafeAt?) : void {
-        self->error("safe index is not supported", expr.at)
+        error("safe index is not supported", expr.at)
     }
 // is
     def override preVisitExprIsType(expr : ExprIs?; typeDecl : TypeDeclPtr) : void {
-        self->error("is type is not supported", expr.at)
+        error("is type is not supported", expr.at)
     }
 // op2
     def getReplaceOp2(expr : ExprOp2?) : tuple<fun : string; replOp : bool> {
@@ -1212,7 +1212,7 @@ class GlslExport : AstVisitor {
         return (fun = "", replOp = false)
     }
     def override preVisitExprOp2(expr : ExprOp2?) {
-        let repl = self->getReplaceOp2(expr)
+        let repl = getReplaceOp2(expr)
         *writer |> write("{repl.fun}(")
     }
     def override visitExprOp2(expr : ExprOp2?) : ExpressionPtr {
@@ -1220,7 +1220,7 @@ class GlslExport : AstVisitor {
         return expr
     }
     def override preVisitExprOp2Right(expr : ExprOp2?; right : ExpressionPtr) {
-        let repl = self->getReplaceOp2(expr)
+        let repl = getReplaceOp2(expr)
         if (repl.replOp) {
             *writer |> write(", ")
         } else {
@@ -1247,15 +1247,15 @@ class GlslExport : AstVisitor {
     }
 // move
     def override preVisitExprMoveRight(expr : ExprMove?; right : ExpressionPtr) {
-        self->error("move is not supported", expr.at)
+        error("move is not supported", expr.at)
     }
 // clone
     def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) {
-        self->error("clone is not supported", expr.at)
+        error("clone is not supported", expr.at)
     }
 // with
     def override preVisitExprWith(expr : ExprWith?) {
-        self->error("with is not supported", expr.at)
+        error("with is not supported", expr.at)
     }
 // while
     def override preVisitExprWhile(expr : ExprWhile?) {
@@ -1263,11 +1263,11 @@ class GlslExport : AstVisitor {
     }
     def override preVisitExprWhileBody(expr : ExprWhile?; right : ExpressionPtr) {
         *writer |> write(") ")
-        self->newLine(1)
+        newLine(1)
     }
 // try-catch
     def override preVisitExprTryCatch(expr : ExprTryCatch?) {
-        self->error("try-recover is not supported", expr.at)
+        error("try-recover is not supported", expr.at)
     }
 // if-then-else
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) {
@@ -1275,7 +1275,7 @@ class GlslExport : AstVisitor {
     }
     def override preVisitExprIfThenElseIfBlock(expr : ExprIfThenElse?; ifBlock : ExpressionPtr) {
         *writer |> write(")")
-        self->newLine(1)
+        newLine(1)
     }
     def override preVisitExprIfThenElseElseBlock(expr : ExprIfThenElse?; elseBlock : ExpressionPtr) {
         *writer |> write("{repeat("\t",tab)}")
@@ -1283,7 +1283,7 @@ class GlslExport : AstVisitor {
             *writer |> write("else ")
         } else {
             *writer |> write("else")
-            self->newLine(1)
+            newLine(1)
         }
     }
 // for
@@ -1296,75 +1296,75 @@ class GlslExport : AstVisitor {
     }
     def override preVisitExprFor(expr : ExprFor?) {
         for (source in expr.sources) {
-            if (!self->isRangeFor(source) && !self->isDimFor(source)) {
-                self->error("only range for or dim for are supported for now {describe(source._type)}", source.at)
+            if (!isRangeFor(source) && !isDimFor(source)) {
+                error("only range for or dim for are supported for now {describe(source._type)}", source.at)
                 return
             }
         }
         *writer |> write("\{")
     }
     def override preVisitExprForSource(expr : ExprFor?; source : ExpressionPtr; last : bool) : void {
-        self->newLine(1)
+        newLine(1)
         let index = get_for_source_index(expr, source)
-        if (self->isDimFor(source)) {
+        if (isDimFor(source)) {
             *writer |> write("{repeat("\t",tab)}int {expr.iteratorVariables[index].name} = 0; //")
-        } elif (self->isRangeFor(source)) {
-            let svtype = "{self->describe_glsl_type(source._type)}"
+        } elif (isRangeFor(source)) {
+            let svtype = "{describe_glsl_type(source._type)}"
             *writer |> write("{repeat("\t",tab)}{svtype} _for_range_v{expr.iteratorVariables[index].name} = ")
         }
     }
     def override visitExprForSource(expr : ExprFor?; source : ExpressionPtr; last : bool) : ExpressionPtr {
         let index = get_for_source_index(expr, source)
-        if (self->isDimFor(source)) {
+        if (isDimFor(source)) {
             pass
-        } elif (self->isRangeFor(source)) {
+        } elif (isRangeFor(source)) {
             *writer |> write(";")
-            self->newLine(1)
+            newLine(1)
             let sname = "{expr.iteratorVariables[index].name}"
-            let stype = "{self->describe_glsl_type(expr.iteratorVariables[index]._type)}"
+            let stype = "{describe_glsl_type(expr.iteratorVariables[index]._type)}"
             *writer |> write("{repeat("\t",tab)}{stype} {sname} = _for_range_v{sname}.x;")
         }
         return source
     }
     def override preVisitExprForBody(expr : ExprFor?) {
-        self->newLine(1)
+        newLine(1)
         *writer |> write("{repeat("\t",tab)}while ( ")
         for (source, svar, iter in expr.sources, expr.iteratorVariables, expr.iterators) {
             if (iter != expr.iterators[0]) {
                 *writer |> write(" && ")
             }
-            if (self->isDimFor(source)) {
+            if (isDimFor(source)) {
                 let sdim = source._type.dim[length(source._type.dim) - 1]
                 *writer |> write("{svar.name}!={sdim}")
-                let newsrc = "{self->describe_subexpression(source)}[{svar.name}]"
+                let newsrc = "{describe_subexpression(source)}[{svar.name}]"
                 renames |> push((name = "{iter}", repl = newsrc))
-            } elif (self->isRangeFor(source)) {
+            } elif (isRangeFor(source)) {
                 *writer |> write("{svar.name}!=_for_range_v{svar.name}.y")
             }
         }
         *writer |> write(" )")
-        self->newLine(1)
+        newLine(1)
         *writer |> write("{repeat("\t",tab)}\{")
-        self->newLine(1)
+        newLine(1)
         *writer |> write("{repeat("\t",tab-1)}")
     }
     def override visitExprFor(expr : ExprFor?) : ExpressionPtr {
         for (svar, source in expr.iteratorVariables, expr.sources) {
             *writer |> write("{repeat("\t",tab)}")
-            if (self->isDimFor(source)) {
+            if (isDimFor(source)) {
                 renames |> pop()
                 *writer |> write("{svar.name}++;")
-            } elif (self->isRangeFor(source)) {
+            } elif (isRangeFor(source)) {
                 *writer |> write("{svar.name}++;")
             }
-            self->newLine(1)
+            newLine(1)
         }
         *writer |> write("{repeat("\t",tab)}\}\}")
         return expr
     }
 // make variant
     def override preVisitExprMakeVariant(expr : ExprMakeVariant?) {
-        self->error("variant is not supported", expr.at)
+        error("variant is not supported", expr.at)
     }
 // make structure
     def outputMakeStruct(expr : ExprMakeStruct?; index : int) {
@@ -1373,7 +1373,7 @@ class GlslExport : AstVisitor {
             for (sf, i in expr._type.structType.fields, count()) {
                 if (sf.name == st.name) {
                     if (prev > i) {
-                        self->error("out of order initialization is not supported by GLSL yet", st.at)
+                        error("out of order initialization is not supported by GLSL yet", st.at)
                     }
                     if (!st.value.flags.noSideEffects) {
                         prev = i
@@ -1393,13 +1393,13 @@ class GlslExport : AstVisitor {
                 }
             }
             if (!has) {
-                self->produce_zero(sf._type)
+                produce_zero(sf._type)
             }
         }
     }
     def override preVisitExprMakeStruct(expr : ExprMakeStruct?) {
         if (expr._block != null) {
-            self->error("structure initialization with the block is not supported", expr.at)
+            error("structure initialization with the block is not supported", expr.at)
         }
         *writer |> write("{expr.makeType.structType.name}")
         if (caps.output_structure_initializers) {
@@ -1416,11 +1416,11 @@ class GlslExport : AstVisitor {
                     *writer |> write(",")
                 }
                 *writer |> write("{expr.makeType.structType.name}(")
-                self->outputMakeStruct(expr, n)
+                outputMakeStruct(expr, n)
                 *writer |> write(")")
             }
         } else {
-            self->outputMakeStruct(expr, 0)
+            outputMakeStruct(expr, 0)
         }
         *writer |> write(")")
     }
@@ -1429,7 +1429,7 @@ class GlslExport : AstVisitor {
     }
 // make array
     def override preVisitExprMakeArray(expr : ExprMakeArray?) {
-        let atype = self->describe_glsl_type(expr._type)
+        let atype = describe_glsl_type(expr._type)
         *writer |> write("({atype}(")
     }
     def override visitExprMakeArray(expr : ExprMakeArray?) : ExpressionPtr {
@@ -1450,31 +1450,31 @@ class GlslExport : AstVisitor {
 // make tuple
     def override preVisitExprMakeTuple(expr : ExprMakeTuple?) {
         // TODO: support nameless structure
-        self->error("tuple is not supported YET", expr.at)
+        error("tuple is not supported YET", expr.at)
     }
 // array comprehension
     def override preVisitExprArrayComprehension(expr : ExprArrayComprehension?) {
-        self->error("array comprehension is not supported", expr.at)
+        error("array comprehension is not supported", expr.at)
     }
 // type info
     def override preVisitExprTypeInfo(expr : ExprTypeInfo?) {
-        self->error("typeinfo is not supported", expr.at)
+        error("typeinfo is not supported", expr.at)
     }
 // ptr to ref
     def override preVisitExprPtr2Ref(expr : ExprPtr2Ref?) {
-        self->error("deref is not supported", expr.at)
+        error("deref is not supported", expr.at)
     }
 // label
     def override preVisitExprLabel(expr : ExprLabel?) {
-        self->error("label is not supported", expr.at)
+        error("label is not supported", expr.at)
     }
 // goto
     def override preVisitExprGoto(expr : ExprGoto?) {
-        self->error("goto is not supported", expr.at)
+        error("goto is not supported", expr.at)
     }
 // ref 2 ptr
     def override preVisitExprRef2Ptr(expr : ExprRef2Ptr?) {
-        self->error("addr is not supported", expr.at)
+        error("addr is not supported", expr.at)
     }
 // ref to value
     def override preVisitExprRef2Value(expr : ExprRef2Value?) {
@@ -1486,55 +1486,55 @@ class GlslExport : AstVisitor {
     }
 // @@
     def override preVisitExprAddr(expr : ExprAddr?) {
-        self->error("function addr is not supported", expr.at)
+        error("function addr is not supported", expr.at)
     }
 // assert / verify
     def override preVisitExprAssert(expr : ExprAssert?) : void {
-        self->error("assert is not supported", expr.at)
+        error("assert is not supported", expr.at)
     }
 // static_assert
     def override preVisitExprStaticAssert(expr : ExprStaticAssert?) : void {
-        self->error("static_assert is not supported", expr.at)
+        error("static_assert is not supported", expr.at)
     }
 // quote
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        self->error("quote is not supported", expr.at)
+        error("quote is not supported", expr.at)
     }
 // debug
     def override preVisitExprDebug(expr : ExprDebug?) : void {
-        self->error("debug is not supported", expr.at)
+        error("debug is not supported", expr.at)
     }
 // invoke
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
-        self->error("invoke is not supported", expr.at)
+        error("invoke is not supported", expr.at)
     }
 // erase
     def override preVisitExprErase(expr : ExprErase?) : void {
-        self->error("erase is not supported", expr.at)
+        error("erase is not supported", expr.at)
     }
 // set insert
     def override preVisitExprSetInsert(expr : ExprSetInsert?) : void {
-        self->error("insert is not supported", expr.at)
+        error("insert is not supported", expr.at)
     }
 // find
     def override preVisitExprFind(expr : ExprFind?) : void {
-        self->error("find is not supported", expr.at)
+        error("find is not supported", expr.at)
     }
 // key exists
     def override preVisitExprKeyExists(expr : ExprKeyExists?) : void {
-        self->error("keyexists is not supported", expr.at)
+        error("keyexists is not supported", expr.at)
     }
 // ascend
     def override preVisitExprAscend(expr : ExprAscend?) {
-        self->error("new is not supported", expr.at)
+        error("new is not supported", expr.at)
     }
 // cast
     def override preVisitExprCast(expr : ExprCast?) {
-        self->error("cast is not supported", expr.at)
+        error("cast is not supported", expr.at)
     }
 // delete
     def override preVisitExprDelete(expr : ExprDelete?) {
-        self->error("delete is not supported", expr.at)
+        error("delete is not supported", expr.at)
     }
 // var
     def override preVisitExprVar(expr : ExprVar?) {
@@ -1556,7 +1556,7 @@ class GlslExport : AstVisitor {
     }
 // safe field
     def override preVisitExprSafeField(expr : ExprSafeField?) : void {
-        self->error("'?.' is not supported", expr.at)
+        error("'?.' is not supported", expr.at)
     }
 // swizzle
     def override visitExprSwizzle(expr : ExprSwizzle?) : ExpressionPtr {
@@ -1570,15 +1570,15 @@ class GlslExport : AstVisitor {
     }
 // is variant
     def override preVisitExprIsVariant(expr : ExprIsVariant?) : void {
-        self->error("'is' is not supported", expr.at)
+        error("'is' is not supported", expr.at)
     }
 // as variant
     def override preVisitExprAsVariant(expr : ExprAsVariant?) : void {
-        self->error("'as' is not supported", expr.at)
+        error("'as' is not supported", expr.at)
     }
 // safe as variant
     def override preVisitExprSafeAsVariant(expr : ExprSafeAsVariant?) : void {
-        self->error("'?as' is not supported", expr.at)
+        error("'?as' is not supported", expr.at)
     }
 // op1
     def override preVisitExprOp1(expr : ExprOp1?) : void {
@@ -1602,7 +1602,7 @@ class GlslExport : AstVisitor {
     }
 // yield
     def override preVisitExprYield(expr : ExprYield?) : void {
-        self->error("yield is not supported", expr.at)
+        error("yield is not supported", expr.at)
     }
 // break
     def override preVisitExprBreak(expr : ExprBreak?) : void {
@@ -1614,19 +1614,19 @@ class GlslExport : AstVisitor {
     }
 // make block
     def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
-        self->error("'make block' is not supported", expr.at)
+        error("'make block' is not supported", expr.at)
     }
 // make generator
     def override preVisitExprMakeGenerator(expr : ExprMakeGenerator?) : void {
-        self->error("'make generator' is not supported", expr.at)
+        error("'make generator' is not supported", expr.at)
     }
 // memzero
     def override preVisitExprMemZero(expr : ExprMemZero?) : void {
-        self->error("memzero is not supported", expr.at)
+        error("memzero is not supported", expr.at)
     }
 // const ptr
     def override preVisitExprConstPtr(expr : ExprConstPtr?) : void {
-        self->error("pointer is not supported", expr.at)
+        error("pointer is not supported", expr.at)
     }
 // const enumeraiton
     def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
@@ -1785,7 +1785,7 @@ class GlslExport : AstVisitor {
     }
 // string
     def override preVisitExprConstString(expr : ExprConstString?) : void {
-        self->error("string constant is not supported", expr.at)
+        error("string constant is not supported", expr.at)
     }
 // const double
     def override preVisitExprConstDouble(expr : ExprConstDouble?) : void {
@@ -1793,19 +1793,19 @@ class GlslExport : AstVisitor {
     }
 // fake context
     def override preVisitExprFakeContext(expr : ExprFakeContext?) : void {
-        self->error("__context__ is not supported", expr.at)
+        error("__context__ is not supported", expr.at)
     }
 // fake line info
     def override preVisitExprFakeLineInfo(expr : ExprFakeLineInfo?) : void {
-        self->error("__lineinfo__ is not supported", expr.at)
+        error("__lineinfo__ is not supported", expr.at)
     }
 // reader
     def override preVisitExprReader(expr : ExprReader?) : void {
-        self->error("call macro is not supported", expr.at)
+        error("call macro is not supported", expr.at)
     }
 // call macro
     def override preVisitExprCallMacro(expr : ExprCallMacro?) : void {
-        self->error("call macro is not supported", expr.at)
+        error("call macro is not supported", expr.at)
     }
 }
 
