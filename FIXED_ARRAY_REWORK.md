@@ -241,6 +241,57 @@ The indivisible piece, sub-staged for review:
   `.dimExpr` compat properties with the flattened-array view (payload side landed at 1b-i).
 Inference semantics flip in this stage; fallout fixes in tests/daslib land here.
 Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (riding compat).
+  **1f IMPLEMENTED.** The 11-file burndown collapsed into four classes:
+  (1) GENERIC ALIAS DIM SEMANTICS (PUGIXML/json/decs) — settled via AskUserQuestion:
+  MASTER-COMPAT PEEL. Master's rule (empirically pinned with the saved 1b-i exe): a
+  generic alias use-site's own dims REPLACE the bound type's dims — bare `TT` bound from
+  `int[3]` is the ELEMENT `int`, `TT[4]` is `int[4]`, and the strip applies even through
+  `array<auto(TT)>`; module typedefs append naturally (`foo[2]` where `foo=int[3]` is
+  `int[2][3]`) in both worlds. Implementation: `peelFixedArrayAliasBinding` at the alias
+  leaf in inferAlias + inferPartialAliases (head qualifiers transfer to the element on
+  peel; arm 2 keeps the binding's alias label — clearing breaks typemacro aliases), plus
+  the FA-recursion arm now HOISTS the resolved element's ref/const/temporary to the chain
+  head (canonical form; without it `TT[4]` kept const on the element and var-decl
+  const-stripping missed it). daslib's `TT[typeinfo dim(x)]` reconstruct pattern works
+  unmodified. Probe matrix lives in D:/Work/fa_scratch/alias_dim_probe*.das.
+  (2) DASLIB `.dim` READERS (match tests, stbimage→is_local, aot_cpp): the das `.dim`
+  binding is now a READ-ONLY compat property (`TypeDecl::dimCompat`) returning the
+  flattened outermost-first sizes of the FA chain, recomputed on read into a per-node
+  transient member (`dimCompatCache` — NOT the legacy `dim` field: warming that would
+  nondeterministically revive dead C++ dim-vector loops on FA nodes). 59 daslib read
+  sites ride it unmodified. das-side WRITERS break at compile by design and were ported
+  now (the forced exceptions to "daslib unmodified"): match.das pop→`clone_type(what
+  .firstType)`, tests/typemacro fixture + tutorials/macros twin →`make_fixed_array_type`,
+  dasGlsl produce_zero, dasLLVM llvm_jit×3 dim-clear→element-walk (+ the `new Handle[N]`
+  tHandle gate now walks the chain; LLVM_JIT_CODEGEN_VERSION bumped 0x22→0x23).
+  (3) aot_cpp had FOUR FA gaps (all red on the 1d+1e train's AOT lane too):
+  describeCppTypeEx PANICKED on FA nodes (`das_to_cppString` "Missed type tFixedArray")
+  and emission SWALLOWS macro panics — struct fields/local decls silently vanish from
+  generated C++; dim'd make-VARIANT field emission dropped its `das_get_variant_field::
+  set` wrapper (find_argument_index on the chain head); dim'd make-STRUCT tHandle gate +
+  get_tuple/variant_field helpers same class; dim'd ExprNew emitted the POINTER type
+  where das_new_dim<> wants the POINTEE (TDim<T**> mismatch) and its isHandle/smartPtr
+  reads missed (das_new_dim_handle silently mis-branched to das_new_dim). Fix: dims emit
+  from the head's `.dim` view, all structural dispatch walks to the chain element via a
+  new `fa_element` clone-walk helper (clone-walks so the result is non-const whatever
+  flavor the caller holds — bare field-walks inherit const and break downstream calls).
+  TDim<TDim<float,3>,2> nesting verified; full test_aot regen+compile+run green.
+  BUILD GOTCHA: genaot custom-commands and the consuming compile are separate vcxprojs —
+  when emitter output CHANGES, one `--target test_aot` pass can compile stale outputs;
+  run the build twice (second pass converges). Plus MSBuild skipped relinking
+  test_aot.exe after a deleted-output (stale .tlog) — delete build/test_aot.dir/Release/
+  test_aot.tlog to force.
+  (4) invalid_types ERROR CODES: verifyType's FA too-big check now multiplies element
+  COUNTS across the chain (master parity: 32767² passes infer; lint reports byte-size
+  with site-specific exceeds_* codes). Plus decs.das get_ro declared its dim'd return as
+  `TT[typeinfo sizeof(value)]` (bytes!) — worked on master only because an unresolvable
+  dim-expr in a generic result type was silently discarded in favor of the body-inferred
+  type; fixed to `typeinfo dim(value)`.
+  KNOWN GAP (deliberate): `-[]` (removeDim) on FA-typed generic params still erases the
+  legacy vector only — zero in-tree users; revisit at Stage 4/5.
+  Gates: probes match master 100%, all 11 files green, tests-cpp 56/56, tests/fixed_array
+  86/86, full-tree dastest 10784/10784 interpreted + 10123/10123 under test_aot -use-aot,
+  zero GC leaks both modes, lint 0 errors on every changed file.
 
 ### Stage 2 — AOT emitter
 `daslib/aot_cpp.das` ports to the structural API; nested `TDim` emission becomes natural

@@ -56,7 +56,7 @@ class PaddedTypeMacro : AstTypeMacro {
                 // Fallback: pure auto-infer.
                 auto_type = new TypeDecl(baseType = Type.autoinfer)
             }
-            auto_type.dim |> push(count)
+            auto_type = make_fixed_array_type(count, auto_type)
             return <- auto_type
         }
 
@@ -64,7 +64,7 @@ class PaddedTypeMacro : AstTypeMacro {
         // The type argument is fully inferred.  Clone it and add the
         // dimension to produce the final array type (e.g. float[4]).
         var final_type = clone_type(td.dimExpr[1]._type)
-        final_type.dim |> push(count)
+        final_type = make_fixed_array_type(count, final_type)
         return <- final_type
     }
 }

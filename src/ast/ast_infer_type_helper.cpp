@@ -157,10 +157,16 @@ namespace das {
                 error("array dimension can't be 0 or less: '" + describeType(decl) + "'", "", "",
                       decl->at, CompilationError::invalid_array_dimension);
             } else {
-                bool failed = false;
-                if (decl->getSizeOf64(failed) > 0x7fffffff && !failed) {
-                    error("array is too big: '" + describeType(decl) + "'", "", "",
-                          decl->at, CompilationError::exceeds_array);
+                // master parity: the infer-time limit is the flattened ELEMENT COUNT, not bytes;
+                // byte-size limits are enforced later by lint with site-specific errors
+                uint64_t count = 1;
+                for (auto t = decl; t->baseType == Type::tFixedArray && t->firstType; t = t->firstType) {
+                    if (t->fixedDim > 0) count *= uint64_t(t->fixedDim);
+                    if (count > 0x7fffffff) {
+                        error("array is too big: '" + describeType(decl) + "'", "", "",
+                              decl->at, CompilationError::exceeds_array);
+                        break;
+                    }
                 }
             }
             if (auto elemType = decl->firstType) {
@@ -375,6 +381,23 @@ namespace das {
         return false;
     }
 
+    // master semantics: a generic alias use-site's own dims REPLACE the bound type's dims
+    // (bare use strips them) - resolve the binding to the bound chain's ELEMENT, carrying the
+    // head's qualifiers; use-site FA wraps then re-dim it naturally
+    static TypeDecl * peelFixedArrayAliasBinding ( TypeDecl * aT ) {
+        auto elemT = aT;
+        while ( elemT->baseType==Type::tFixedArray && elemT->firstType ) {
+            elemT = elemT->firstType;
+        }
+        auto resT = new TypeDecl(*elemT);
+        if ( elemT != aT ) {
+            resT->ref = resT->ref || aT->ref;
+            resT->constant = resT->constant || aT->constant;
+            resT->temporary = resT->temporary || aT->temporary;
+        }
+        return resT;
+    }
+
     TypeDeclPtr InferTypes::inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr, AliasMap *aliases, OptionsMap *options, bool autoToAlias) const {
         autoToAlias |= decl->autoToAlias;
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
@@ -403,18 +426,14 @@ namespace das {
                 }
             }
             if (aT) {
-                auto resT = new TypeDecl(*aT);
+                auto resT = peelFixedArrayAliasBinding(aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
                 resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
-                if (resT->baseType == Type::tFixedArray) {
-                    resT->alias = decl->alias;   // typedef name survives as a display label on the chain head (M4 design)
-                } else {
-                    resT->alias.clear();
-                }
+                resT->alias.clear();
                 return resT;
             } else {
                 return nullptr;
@@ -440,8 +459,18 @@ namespace das {
                     return nullptr;
             }
             if (decl->baseType == Type::tFixedArray) {
+                if (resT->firstType) {
+                    // canonical form: qualifiers live on the chain head only - hoist whatever
+                    // the resolved element brought in (e.g. the constness of an alias binding)
+                    resT->ref = resT->ref || resT->firstType->ref;
+                    resT->constant = resT->constant || resT->firstType->constant;
+                    resT->temporary = resT->temporary || resT->firstType->temporary;
+                    resT->firstType->ref = false;
+                    resT->firstType->constant = false;
+                    resT->firstType->temporary = false;
+                }
                 // the chain head carries the hoisted qualifiers+contracts the dim'd alias leaf used to;
-                // apply and clear them here the way the alias-leaf case does
+                // apply and clear them here the way the dim'd alias leaf case does
                 resT->ref = resT->ref && !decl->removeRef;
                 resT->constant = resT->constant && !decl->removeConstant;
                 resT->temporary = resT->temporary && !decl->removeTemporary;
@@ -529,7 +558,7 @@ namespace das {
                 aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
             }
             if (aT) {
-                auto resT = new TypeDecl(*aT);
+                auto resT = peelFixedArrayAliasBinding(aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
@@ -538,7 +567,7 @@ namespace das {
                 resT->explicitConst = (resT->explicitConst || decl->explicitConst);
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
-                // resT->alias.clear(); // this may speed things up, but it breaks typemacro-based aliases
+                resT->alias = aT->alias; // keep the binding's label (a peel drops the chain head that carried it); clearing breaks typemacro-based aliases
                 return resT;
             } else {
                 return decl;

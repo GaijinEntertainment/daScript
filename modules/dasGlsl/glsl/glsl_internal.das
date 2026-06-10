@@ -418,9 +418,8 @@ class GlslExport : AstVisitor {
     def produce_zero(t : TypeDeclPtr) {
         if (!empty(t.dim)) {
             *writer |> write("{self->describe_glsl_type(t)}(")
-            var ct <- clone_type(t)
-            ct.dim |> pop()
-            for (d in range(t.dim[length(t.dim) - 1])) {
+            var ct <- clone_type(t.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
+            for (d in range(t.dim[0])) {
                 if (d != 0) {
                     *writer |> write(",")
                 }

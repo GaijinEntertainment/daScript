@@ -699,7 +699,6 @@ def private walk_and_convert_dim(data : uint8 const?; info : TypeDeclPtr; at : L
     while (einfo.baseType == Type.tFixedArray && einfo.firstType != null) {
         einfo = clone_type(einfo.firstType)
     }
-    clear(einfo.dim)    // legacy dim-vector view; nothing produces it post-rework
     var mkArr = new ExprMakeArray(at = at, makeType = clone_type(info))
     for (x in range(total)) {
         unsafe {

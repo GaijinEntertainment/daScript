@@ -35,7 +35,12 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(secondType)>("secondType");
             addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");
             addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
-            addField<DAS_BIND_MANAGED_FIELD(dim)>("dim");
+            // compat view (FIXED_ARRAY_REWORK.md, 1f): flattened (outermost-first) sizes of
+            // the tFixedArray chain under the legacy .dim name; READ-ONLY - das writers use
+            // ast_boost`make_fixed_array_type
+            addProperty<
+                const vector<int32_t> & (TypeDecl::*)() const, &TypeDecl::dimCompat
+            >("dim","dimCompat");
             addField<DAS_BIND_MANAGED_FIELD(fixedDim)>("fixedDim");
             addField<DAS_BIND_MANAGED_FIELD(fixedDimExpr)>("fixedDimExpr");
             // compat view (FIXED_ARRAY_REWORK.md, 1b): the typeMacro/typeDecl/tag payload

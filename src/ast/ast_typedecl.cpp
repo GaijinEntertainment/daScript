@@ -1097,6 +1097,19 @@ namespace das
         aliasCacheHasAlias = hasAny;
         return hasAny;
     }
+    const vector<int32_t> & TypeDecl::dimCompat() const {
+        if ( baseType==Type::tFixedArray ) {
+            vector<int32_t> flat;
+            for ( auto t = this; t->baseType==Type::tFixedArray && t->firstType; t = t->firstType ) {
+                flat.push_back(t->fixedDim);
+            }
+            // refill only when stale, so a nested read of the same node can't invalidate
+            // an iterator held over a previous read
+            if ( dimCompatCache != flat ) dimCompatCache = das::move(flat);
+            return dimCompatCache;
+        }
+        return dim;
+    }
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
         if (!aliasCacheValid) computeAliasCache();
         if (!aliasCacheHasAlias) return nullptr;        // proven no aliases anywhere

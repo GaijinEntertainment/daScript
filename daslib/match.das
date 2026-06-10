@@ -262,8 +262,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
                 return false
             }
         }
-        recT = clone_type(what)
-        recT.dim |> pop()
+        recT = clone_type(what.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
         if (!wths.makeType.isAuto && !is_same_type(recT, wths.makeType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
             to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wthsLength}] ... ]] array", wths.at)
             return false

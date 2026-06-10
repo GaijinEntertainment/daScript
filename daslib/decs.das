@@ -792,7 +792,7 @@ def public get(arch : Archetype; name : string; value : auto(TT)) {
 }
 
 [expect_dim(value), unsafe_outside_of_for]
-def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<TT[typeinfo sizeof(value)] -const -& -#> const {
+def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<TT[typeinfo dim(value)] -const -& -#> const {
     //! Returns const temporary array of component given specific name and type of component for array components.
     unsafe {
         return <- get(arch, name, value)

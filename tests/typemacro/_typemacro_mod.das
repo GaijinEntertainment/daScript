@@ -6,9 +6,9 @@
 //   dimExpr[2] — ExprConstInt (size)
 //   dimExpr[3] — ExprConstBool (wrap into an array or not)
 //   dimExpr[4] — ExprConstString (mode tag, "arr" expected when wrapping)
-// NOTE: this module reads .dimExpr and writes .dim directly — it is itself a
-// consumer the rework migrates (kept on the old API until the compat property
-// lands in Stage 1, ported to typeMacroExpr in Stage 5).
+// NOTE: this module reads .dimExpr through the compat property (ported to
+// typeMacroExpr in Stage 5); array results are built with make_fixed_array_type
+// since Stage 1f (the .dim compat view is read-only).
 options gen2
 options no_aot
 
@@ -52,13 +52,13 @@ class TmMakeTypeMacro : AstTypeMacro {
                 auto_type = new TypeDecl(baseType = Type.autoinfer)
             }
             if (wrap) {
-                auto_type.dim |> push(count)
+                auto_type = make_fixed_array_type(count, auto_type)
             }
             return <- auto_type
         }
         var final_type = clone_type(td.dimExpr[1]._type)
         if (wrap) {
-            final_type.dim |> push(count)
+            final_type = make_fixed_array_type(count, final_type)
         }
         return <- final_type
     }

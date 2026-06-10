@@ -1121,7 +1121,9 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
     var res : LLVMOpaqueType?
     if (!empty(t.dim)) {
         var ndt = clone_type(t)
-        ndt.dim |> clear()
+        while (ndt.baseType == Type.tFixedArray && ndt.firstType != null) {   // element of the chain (the .dim compat view is read-only)
+            ndt = clone_type(ndt.firstType)
+        }
         res = type_to_llvm_type(ndt)
         let ndim = length(t.dim)
         for (i in range(ndim)) {
@@ -1212,7 +1214,9 @@ def public dim_element_type_to_llvm_type(typ : TypeDeclPtr) {
         return type_to_llvm_type(typ)
     } else {
         var ndt = clone_type(typ)
-        ndt.dim |> clear()
+        while (ndt.baseType == Type.tFixedArray && ndt.firstType != null) {   // scalar element of the chain (the .dim compat view is read-only)
+            ndt = clone_type(ndt.firstType)
+        }
         return type_to_llvm_type(ndt)
     }
 }

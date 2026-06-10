@@ -276,6 +276,12 @@ namespace das {
         __forceinline const vector<ExpressionPtr> & dimExprCompat() const {
             return typeMacroExpr.empty() ? dimExpr : typeMacroExpr;
         }
+        // das-binding compat view for `.dim` — the flattened (outermost-first) sizes of the
+        // tFixedArray chain, recomputed on every read into per-node transient storage.
+        // Read-only by design: das writers use ast_boost`make_fixed_array_type. Dies with
+        // dim/dimExpr at the end of Stage 1.
+        const vector<int32_t> & dimCompat() const;
+        mutable vector<int32_t> dimCompatCache; // dimCompat scratch — transient, never serialized
         union {
             struct {
                 bool    ref : 1 ;

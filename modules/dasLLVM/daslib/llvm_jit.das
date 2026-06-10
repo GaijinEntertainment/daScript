@@ -1299,9 +1299,11 @@ class public LlvmJitVisitor : AstVisitor {
                     var elem_type = dim_element_type_to_llvm_type(expr._type)
                     var elem = LLVMBuildGEP2(g_builder, elem_type, arr, index, "")
                     var new_ptr : LLVMOpaqueValue?;
-                    if (expr.typeexpr.baseType == Type.tHandle) {
-                        var elemT = clone_type(expr.typeexpr)
-                        elemT.dim |> clear() // hack to get correct ptr to ctor
+                    var elemT = clone_type(expr.typeexpr)   // element of the fixed-array chain - the ctor lives on it
+                    while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
+                        elemT = clone_type(elemT.firstType)
+                    }
+                    if (elemT.baseType == Type.tHandle) {
                         new_ptr = alloc_handle_type(elemT, uid.get_new(expr.typeexpr))
                         check_ptr_zero(new_ptr, expr.at, "new returned null")
                         new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(elemT), 0u), "")
@@ -2593,13 +2595,8 @@ class public LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } elif (!empty(subExprT.dim)) {
-            var etype = clone_type(subExprT)
-            assume vec = etype.dim
-            let maxIndex = vec[0]
-            for (i in range(1, length(vec))) {
-                vec[i - 1] = vec[i]
-            }
-            vec |> resize(vec |> length - 1)
+            let maxIndex = subExprT.dim[0]
+            var etype = clone_type(subExprT.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
             check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if (expr.atFlags.r2v) {
@@ -2666,13 +2663,9 @@ class public LlvmJitVisitor : AstVisitor {
         assume subExprT = expr.subexpr._type
         var res : LLVMOpaqueValue?;
         if (!empty(subExprT.dim) || (subExprT.isPointer && !empty(subExprT.firstType.dim))) {
-            var etype = subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
-            assume vec = etype.dim
-            let maxIndex = vec[0]
-            for (i in range(1, length(vec))) {
-                vec[i - 1] = vec[i]
-            }
-            vec |> resize(vec |> length - 1)
+            // element of the fixed-array chain, behind one pointer level when present
+            let maxIndex = subExprT.isPointer ? subExprT.firstType.dim[0] : subExprT.dim[0]
+            var etype = subExprT.isPointer ? clone_type(subExprT.firstType.firstType) : clone_type(subExprT.firstType)
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             var if_not_null = empty(subExprT.dim) ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             res = build_select(if_not_null, resType) {
@@ -3701,8 +3694,7 @@ class public LlvmJitVisitor : AstVisitor {
                 range2[ssrc] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
             } elif (!empty(ssrc._type.dim)) {// []->first()
-                var etype = clone_type(ssrc._type)
-                etype.dim |> erase(0)
+                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
                 var element_type = type_to_llvm_type(svar._type)
                 var sdim = getE(ssrc)
                 var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, types.ConstI32(0ul), "dim_0")
@@ -3826,8 +3818,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
             } elif (!empty(ssrc._type.dim)) {// []->next()
-                var etype = clone_type(ssrc._type)
-                etype.dim |> erase(0)
+                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
                 var svar_i = build_array_index(svar_v, types.ConstI32(1ul), etype, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
