@@ -1339,6 +1339,16 @@ def private psh_reserved(name : das_string) : bool {
     return name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
 }
 
+// Parse `name` as `prefix` + decimal digits, -1 when it isn't. The round-trip check rejects
+// foreign suffixes — `_preshader_cse_3` against prefix `_preshader_` belongs to the cse counter.
+def private name_counter_suffix(name : das_string; prefix : string) : int {
+    if (!(name |> starts_with(prefix))) return -1
+    let s = slice("{name}", length(prefix))
+    if (empty(s)) return -1
+    let v = to_int(s)
+    return "{v}" == s ? v : -1
+}
+
 // True if the subtree carries a graph node (operator or call) — i.e. hoisting it saves per-pixel
 // work. A bare var / const / member access alone is trivial (no node), so it is inlined as an alias
 // rather than hoisted.
@@ -1508,6 +1518,11 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
                 pe.dedup["{describe(lv.init)}"] = "{lv.name}"
             }
             pe.localColor["{lv.name}"] = true
+            // existing names own their suffixes — a fresh caller's counter must not re-mint them
+            let cnum = name_counter_suffix(lv.name, "_preshader_")
+            if (cnum >= pe.counter) {
+                pe.counter = cnum + 1
+            }
             oldPrefix ++
         } else {
             break
@@ -1820,6 +1835,18 @@ def private preshader_prefix_len(blk : ExprBlock?) : int {
 def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {
     var anyChange = false
     var guard = 0
+    // existing share names own their suffixes — never re-mint them (shares splice mid-body, so scan all)
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            var cnum = name_counter_suffix((s as ExprLet).variables[0].name, "_preshader_cse_")
+            if (cnum < 0) {
+                cnum = name_counter_suffix((s as ExprLet).variables[0].name, "_cse_")
+            }
+            if (cnum >= counter) {
+                counter = cnum + 1
+            }
+        }
+    }
     // Reassigned vars are stable across rounds (cse only ever adds `let`s), so collect once.
     var mutableVars <- collect_mutable(blk)
     while (guard < 4096) {
