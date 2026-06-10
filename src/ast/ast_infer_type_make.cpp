@@ -534,10 +534,11 @@ namespace das {
                       expr->at, CompilationError::invalid_structure_type);
             }
         }
-        if (expr->makeType->baseType==Type::tFixedArray && expr->makeType->firstType->baseType==Type::tFixedArray) {
+        // zero provided elements (default<T[N]>, [[T[N]]]) means "zero/default-init the whole array" - any depth
+        if (expr->makeType->baseType==Type::tFixedArray && expr->makeType->firstType->baseType==Type::tFixedArray && expr->structs.size()) {
             error("[[" + describeType(expr->makeType) + "]] struct can only initialize single dimension arrays", "", "",
                   expr->at, CompilationError::invalid_structure_array);
-        } else if (expr->makeType->baseType==Type::tFixedArray && expr->makeType->fixedDim != int32_t(expr->structs.size())) {
+        } else if (expr->makeType->baseType==Type::tFixedArray && expr->structs.size() && expr->makeType->fixedDim != int32_t(expr->structs.size())) {
             error("[[" + describeType(expr->makeType) + "]] struct dimension mismatch, provided " +
                       to_string(expr->structs.size()) + " elements, expecting " + to_string(expr->makeType->fixedDim),
                   "", "",

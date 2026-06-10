@@ -35,7 +35,7 @@ module style_lint shared private
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for modules X re-exports (transitive-only) — require those directly and drop X (skipped when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 
 require daslib/ast_boost
 require daslib/is_local
@@ -1516,10 +1516,16 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st030_exports_unresolved_name(mod : Module?) : bool {
-        // True when `mod` exports a function or generic whose name matches an
-        // unresolved generic-body call — the require is (potentially) load-bearing
-        // for instantiations the lint pass never sees.
+        // True when `mod` — or a module it publicly re-exports (e.g. daslib/rtti
+        // re-exporting the builtin rtti module) — exports a function or generic whose
+        // name matches an unresolved generic-body call; the require is (potentially)
+        // load-bearing for instantiations the lint pass never sees.
         if (empty(unresolved_call_names)) return false
+        var seen : table<string>
+        return st030_exports_unresolved_rec(mod, seen)
+    }
+
+    def st030_exports_unresolved_rec(mod : Module?; var seen : table<string>) : bool {
         var found = false
         for_each_function(mod, "") $(fn) {
             if (found) return
@@ -1531,6 +1537,16 @@ class StyleLintVisitor : AstVisitor {
         for_each_generic(mod, "") $(fn) {
             if (found) return
             if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        if (found) return true
+        module_for_each_dependency(mod) $(dep, is_pub) {
+            if (found || !is_pub || dep == null) return
+            let dn = "{dep.name}"
+            return if (dn == "" || dn == "$" || dn == "builtin" || key_exists(seen, dn))
+            seen |> insert(dn)
+            if (st030_exports_unresolved_rec(dep, seen)) {
                 found = true
             }
         }

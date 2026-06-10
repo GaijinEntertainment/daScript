@@ -868,7 +868,9 @@ namespace das
         bool emptyEmbeddedTuple = ( mkBaseT->baseType==Type::tTuple && total==0);
         bool partialyInitStruct = !mks->doesNotNeedInit && !mks->initAllFields;
         if ( (emptyEmbeddedTuple || partialyInitStruct) && stride ) {
-            int bytes = das::max(total,1) * stride;
+            // zero provided elements means zero-init the WHOLE declared shape (default<T[N]>) -
+            // stride is one outer element, which under-counts fixed-array makeTypes
+            int bytes = total ? total * stride : int(mks->makeType->getSizeOf());
             SimNode * init0;
             if ( mks->useCMRES ) {
                 if ( bytes==0 ) {

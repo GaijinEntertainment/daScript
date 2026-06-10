@@ -305,6 +305,39 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
   full-tree dastest 10784/10784 interpreted + 10123/10123 under test_aot -use-aot,
   zero GC leaks both modes, lint 0 errors on every changed file.
 
+- **1g — container-FA `[]` overload deletion (Stage 4's builtin.das half, pulled forward
+  per Boris's review note on the 1d–1f train: "bunch of other ones, same 'identical'
+  flavor"). IMPLEMENTED.** Deleted the 22 dedicated `[]` overloads in builtin.das where
+  the FA lives in a CONTAINER's element/value slot — natural binding makes the base
+  generics cover them with byte-identical bodies: array<T[N]> push x2 / emplace /
+  push_clone x2; table<K;V[N]> get x4 / get_value / insert x2 / insert_clone x2 /
+  emplace / values x2 / get_key / clone x2; one-arg clone x2. Resolution check: PRE-
+  deletion the dedicated forms still out-specialized the naturally-matching base (no
+  ambiguity); post-deletion the base takes over. KEPT (C-array-as-subject, the `[]` IS
+  the API): each / finalize_dim / clone_dim / sort / stable_sort / find_index(_if) /
+  subarray / to_array(_move) / to_table(_move) / strings_boost join / decs get_ro /
+  llvm_boost array_data_ptr. archive.das: the 6 stacked [][]..[] serialize overloads
+  collapsed to ONE natural recursion (auto(TT)[] peels a level per call); bulk-memcpy
+  gate = `is_raw && (is_workhorse || is_dim)` — exact wire-format parity incl. master's
+  quirk (1-D raw STRUCT arrays go element-wise, 2-D+ memcpy), and >6-D now works.
+  CAPABILITY GAINS: push_clone of clone-only rows (array<int>[2]) — the dedicated form
+  gated can_copy and concept_assert'd; its const-src sibling's body was un-instantiable
+  rot (pushed scalar elements into FA slots); at-index push of FA rows; size mismatch
+  is now a no-match type error instead of concept_assert.
+  `default<T[N]>` FIXED (was broken on master too, just unreachable — TT never bound
+  to FA): ExprMakeStruct with 0 provided elements on an FA makeType now means zero-init
+  the whole declared shape, any depth. Two sites: infer dimension check tolerates 0
+  (ast_infer_type_make.cpp ~:537), simulate zero-fill uses getSizeOf() when total==0
+  (ast_simulate.cpp simulateExprMakeStruct — stride is ONE OUTER ELEMENT and
+  under-zeroed). AOT side already correct (das_zero on the whole TDim).
+  Target spec ENABLED: `_target_inference.das` → `test_target_inference.das` (expect
+  line dropped; picked up by the AOT glob automatically). Settled decoration: plain
+  `auto(TT)` ← int[4] binds `int const[4]` (param constness rides TT); `auto(TT)[]` ←
+  float[4][4] binds `float[4]` UNQUALIFIED — the `[]` consumed the chain head where
+  qualifiers live. Asymmetric but harmless (generics strip with -const anyway).
+  get_key subtest is in (Stage 4 gate satisfied); note get_key is ADDRESS-based — the
+  value must reference the table slot (values() iteration), not a local copy.
+
 ### Stage 2 — AOT emitter
 `daslib/aot_cpp.das` ports to the structural API; nested `TDim` emission becomes natural
 recursion; AOT version bump. Also fixes issue #3077 (iterate/pass/copy of a NATIVE C-array
@@ -318,15 +351,13 @@ nesting; TypeInfo globals unchanged — flattened); bump `LLVM_JIT_CODEGEN_VERSI
 Exit: JIT tests green.
 
 ### Stage 4 — daslib payoff
-Delete the `[]` workaround families in builtin.das (table get x4 / get_value / insert x2 /
-insert_clone x2 / emplace / values x2 / get_key; array push/emplace/push_clone siblings);
-verify base generics cover them. Generalize `each`/`sort`/`find_index`/`subarray`/`clone`/
-`finalize_dim`. Un-reject fixed arrays in apply.das / contracts.das where they now just work.
-The broken-on-master get_key(table<K;V[N]>) overload is NOT fixed in place (it gets deleted
-here) — the get_key target subtest in tests/fixed_array stays disabled until THIS stage and
-its enablement is part of this stage's exit gate.
-Exit: new multi-dim/typedef'd-array tests pass through the generic stdlib (incl. get_key on
-FA values); LOC visibly negative.
+~~Delete the `[]` workaround families in builtin.das~~ + ~~get_key subtest enablement~~ —
+DONE EARLY in 1g (see above), archive.das collapse included. Remaining here: generalize
+`each`/`sort`/`find_index`/`subarray`/`finalize_dim` (multi-dim/typedef'd sources through
+one overload where natural nesting allows). Un-reject fixed arrays in apply.das /
+contracts.das where they now just work.
+Exit: new multi-dim/typedef'd-array tests pass through the generic stdlib; LOC visibly
+negative.
 
 ### Stage 5 — Macro/tooling ports
 ast_match.das (structural FA matching), match.das, typemacro_boost (field rename), lints
