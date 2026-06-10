@@ -113,7 +113,9 @@ jobs:
           EXTRA=""
           if [ -f clang-cl.exe ]; then EXTRA="clang-cl.exe"; fi
           tar czf ${{ matrix.name }}_llvm.tar.gz LLVM.dll $EXTRA
-          sha256sum ${{ matrix.name }}_llvm.tar.gz | tee ${{ matrix.name }}_llvm.tar.gz.sha256
+          # macOS has shasum, not sha256sum
+          if command -v sha256sum >/dev/null; then SHA=sha256sum; else SHA="shasum -a 256"; fi
+          $SHA ${{ matrix.name }}_llvm.tar.gz | tee ${{ matrix.name }}_llvm.tar.gz.sha256
 
       - uses: actions/upload-artifact@v4
         with:
