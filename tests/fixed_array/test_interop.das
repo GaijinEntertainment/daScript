@@ -2,6 +2,8 @@
 // Pins C++ interop: a handled type's native C-array field (TestObjectFoo.fooArray,
 // bound via typeFactory<TT[dim]> with isNativeDim) must keep reading/writing and
 // keep its type identity through the representation flip.
+// AOT-EXCLUDED (tests/aot/CMakeLists.txt): iterate/pass/copy of a native dim field
+// emits non-compiling C++ on master — issue #3077. Interpreted-only until fixed.
 options gen2
 require UnitTest
 require dastest/testing_boost public

@@ -423,6 +423,9 @@ FILE(GLOB AOT_TABLE_PACKED_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPEND
 FILE(GLOB AOT_FIXED_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fixed_array/*.das")
 # Exclude failed_* expect-fixtures and _-prefixed target-spec files (enabled at Stage 1)
 list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "failed_|/_")
+# test_interop: AOT emitter produces non-compiling C++ for iterate/pass/copy of a native
+# C-array field (issue #3077) — interpreted-only until fixed; re-include to verify the fix
+list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "test_interop")
 
 # AOT for typemacro test files
 FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/typemacro/*.das")

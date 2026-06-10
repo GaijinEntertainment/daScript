@@ -133,7 +133,10 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
 
 ### Stage 2 — AOT emitter
 `daslib/aot_cpp.das` ports to the structural API; nested `TDim` emission becomes natural
-recursion; AOT version bump. Exit: tests/aot + AOT CI green.
+recursion; AOT version bump. Also fixes issue #3077 (iterate/pass/copy of a NATIVE C-array
+field emits non-compiling C++ — found by Stage 0, test_interop.das AOT-excluded since) if
+not fixed earlier; re-include test_interop in the AOT glob to verify.
+Exit: tests/aot + AOT CI green, test_interop back in the AOT set.
 
 ### Stage 3 — JIT
 `modules/dasLLVM/daslib/llvm_jit.das` port (element type, bounds checks, loop ranges from

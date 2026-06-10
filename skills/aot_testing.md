@@ -368,6 +368,6 @@ SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
 
 **Step 5** — Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list.
 
-**Why this matters**: CI builds `test_aot` on Linux/macOS and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. The `test_aot` target is only built on non-Windows platforms (`NOT WIN32` guard in root CMakeLists.txt), so this failure won't be caught locally on Windows.
+**Why this matters**: CI builds `test_aot` on Linux/macOS/Windows-64 and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. `test_aot` builds and runs fine on Windows (only 32-bit Windows is excluded — `NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)` gate in root CMakeLists.txt); it requires tests and AOT examples enabled in the CMake configure.
 
 Also ensure that wrapper functions in builtin `.das` files (like `src/builtin/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.

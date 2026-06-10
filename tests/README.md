@@ -386,7 +386,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_containers.das | `array<int[4]>` push/push_clone/emplace, `table<K;int[4]>` insert/get/get_value/values/insert_clone (get_key excluded — broken on master, see target spec) | |
 | test_generics_current.das | Must-survive inference — 1D FA prefers `auto[]` overload, dynamic containers bind whole to `auto(TT)`, unsized `int[]` params, `==const` | |
 | test_typeinfo.das | typeinfo surface — `dim`, non-alias typename strings, can_copy/is_pod, sizeof≡dim×elem | |
-| test_interop.das | C++ native-dim field (TestObjectFoo.fooArray) — read/write, typename, iteration, unsized param, copy-out | |
+| test_interop.das | C++ native-dim field (TestObjectFoo.fooArray) — read/write, typename, iteration, unsized param, copy-out. AOT-excluded: emitter bug #3077 | |
 | failed_zero_dim.das | dimension 0 rejected | **expect** 30109 |
 | failed_nonconst_dim.das | runtime dim value rejected | **expect** 30109, 30838 |
 | failed_void_array.das | array of void rejected | **expect** 30108 |
