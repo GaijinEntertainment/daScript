@@ -419,6 +419,16 @@ list(FILTER AOT_RTTI_FILES EXCLUDE REGEX "/_")
 # AOT for packed small-table test files
 FILE(GLOB AOT_TABLE_PACKED_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/table_packed/*.das")
 
+# AOT for fixed_array test files (tFixedArray rework characterization, FIXED_ARRAY_REWORK.md)
+FILE(GLOB AOT_FIXED_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fixed_array/*.das")
+# Exclude failed_* expect-fixtures and _-prefixed target-spec files (enabled at Stage 1)
+list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "failed_|/_")
+
+# AOT for typemacro test files
+FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/typemacro/*.das")
+# Exclude the _-prefixed macro module (compile-time only, options no_aot)
+list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "/_")
+
 # AOT for language test files
 FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -726,6 +736,14 @@ add_custom_target(test_aot_loops)
 SET(LOOPS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LOOPS_FILES}" LOOPS_AOT_GENERATED_SRC test_aot_loops daslang)
 
+add_custom_target(test_aot_fixed_array)
+SET(FIXED_ARRAY_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_FIXED_ARRAY_FILES}" FIXED_ARRAY_AOT_GENERATED_SRC test_aot_fixed_array daslang)
+
+add_custom_target(test_aot_typemacro)
+SET(TYPEMACRO_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_TYPEMACRO_FILES}" TYPEMACRO_AOT_GENERATED_SRC test_aot_typemacro daslang)
+
 add_custom_target(test_aot_language)
 SET(LANGUAGE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LANGUAGE_TEST_FILES}" LANGUAGE_AOT_GENERATED_SRC test_aot_language daslang)
@@ -769,6 +787,8 @@ SOURCE_GROUP_FILES("aot generated" BITFIELDS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" BOOL_ARRAY_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" CLASS_BOOST_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DATA_WALKER_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" FIXED_ARRAY_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" TYPEMACRO_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AGENT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASPEG_AOT_GENERATED_SRC)
@@ -889,6 +909,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
     ${JIT_AOT_GENERATED_SRC}
     ${LOOPS_AOT_GENERATED_SRC}
+    ${FIXED_ARRAY_AOT_GENERATED_SRC}
+    ${TYPEMACRO_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
     ${DASLIB_MODULES_AOT_GENERATED_SRC}
@@ -934,6 +956,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_lpipe
     test_aot_jit
     test_aot_loops
+    test_aot_fixed_array test_aot_typemacro
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
     test_aot_daslib

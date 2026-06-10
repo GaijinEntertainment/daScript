@@ -373,6 +373,29 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | glob_test.das | Pathname glob — `match_glob` (literal, `*`, `**`, `?`, `[a-z]`, `[!abc]`, edge cases), `glob`, `glob_filtered` walk, `is_glob_pattern` | |
 | popen_argv.das | `popen_argv` — basic invocation, non-zero exit on unknown flag, exit code capture | |
 
+## fixed_array/
+
+> Stage 0 characterization suite for the tFixedArray rework (`FIXED_ARRAY_REWORK.md`). Pins current fixed-array behavior that must survive the representation flip; `_target_*.das` files are the (skipped) acceptance spec for the new inference semantics, enabled at Stage 1.
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_layout.das | Memory layout — sizeof/alignof, element stride via addresses, 2D contiguity, FA field offsets in structs/tuples/variants, packed float3 stride | |
+| test_semantics.das | Value semantics — whole-array assign/init-copy/`:=`/`clone()`, 2D assign, zero-init, `fixed_array()` literal types, FA returns, struct-field deep copy, non-copyable elements + `finalize_dim` | |
+| test_indexing.das | Indexing — read/write at every depth, index expressions, partial 2D index yields row copy, const globals, struct fields, `subarray` + range-index sugar | |
+| test_iteration.das | Iteration — for-loops 1D/2D, mutation through loop ref, FA of structs, `each()`, parallel iteration with range/array | |
+| test_containers.das | `array<int[4]>` push/push_clone/emplace, `table<K;int[4]>` insert/get/get_value/values/insert_clone (get_key excluded — broken on master, see target spec) | |
+| test_generics_current.das | Must-survive inference — 1D FA prefers `auto[]` overload, dynamic containers bind whole to `auto(TT)`, unsized `int[]` params, `==const` | |
+| test_typeinfo.das | typeinfo surface — `dim`, non-alias typename strings, can_copy/is_pod, sizeof≡dim×elem | |
+| test_interop.das | C++ native-dim field (TestObjectFoo.fooArray) — read/write, typename, iteration, unsized param, copy-out | |
+| failed_zero_dim.das | dimension 0 rejected | **expect** 30109 |
+| failed_nonconst_dim.das | runtime dim value rejected | **expect** 30109, 30838 |
+| failed_void_array.das | array of void rejected | **expect** 30108 |
+| failed_typedecl_dim.das | `typedecl(...)[N]` rejected as array base | **expect** 30112 |
+| failed_new_fixed_array.das | `new` of FA type rejected | **expect** 30214 |
+| failed_copy_noncopyable.das | `=` on FA of array<int> rejected | **expect** 30950 |
+| _target_inference.das | *(skipped)* Stage 1 acceptance spec — `auto(TT)` binds whole FA, `auto(TT)[]` peels one level, get_key fix | |
+| _target_alias.das | *(skipped)* Stage 1 acceptance spec — typedef name survives declaration/indexing/generic binding | |
+
 ## functional/
 
 | File | Description | Expects errors |
@@ -917,6 +940,15 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 |---|---|---|
 | test_bitfields.das | bitfield_trait — each_bit_name iteration | |
 | test_traits.das | type_traits — fields_count for struct/derived struct | |
+
+## typemacro/
+
+> Direct coverage of the raw `AstTypeMacro` payload surface (Stage 0 of `FIXED_ARRAY_REWORK.md` — the dimExpr payload migrates to a dedicated field at Stage 1b). Deep indirect coverage lives in option/hash_map/delegate suites via typemacro_boost.
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_basic.das | All four grammar forms (`name(args)`, `$name(args)`, `name<types>(args)`, `$name<types>(args)`), const int/bool/string argument extraction, `typedecl(expr)` | |
+| _typemacro_mod.das | *(helper)* `tm_make` raw AstTypeMacro — resolves `tm_make(type<T>, N, wrap, tag)` to `T[N]` or `T` | |
 
 ## unsafe/
 

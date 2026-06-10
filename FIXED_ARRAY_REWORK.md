@@ -79,6 +79,10 @@ structural nodes with `firstType` recursion. Fixed arrays are the only container
   port to the structural API (`baseType==tFixedArray`, `.fixedDim`, `.fixedDimExpr`,
   `.firstType`, `.typeMacroExpr`). Compat properties are DELETED after the sweep
   (optionally keep a `dims(td)` helper in ast_boost for code that wants the flattened list).
+  The compat `.dimExpr` property must be **baseType-aware** — on typeMacro/typeDecl/tag
+  nodes it returns `typeMacroExpr` (so typemacro_boost works unmodified until its Stage-5
+  rename); on tFixedArray nodes it returns the size-expr view. "Whatever dimExpr used to
+  hold for this baseType."
 - Parser keeps the existing `MyMacro(...)[N]` / `typedecl(...)[N]` errors (behavior-
   preserving); lifting them becomes representable and is a separate later decision.
 
@@ -87,12 +91,21 @@ structural nodes with `firstType` recursion. Fixed arrays are the only container
 Each stage: plan discussion -> implementation -> commit review. CI + /test green at every gate.
 
 ### Stage 0 — Characterization & target tests
-Pin current must-not-change behavior as a dastest suite run against master semantics:
-layout (sizeof/alignof/stride/field offsets incl. C++ handled types, tuples, variants with
-FA fields), copy/clone/init semantics, indexing + bounds, iteration, `table<K;V[]>` /
-`array<T[]>` operations, serialization round-trip, AOT, `typeinfo dim` traits, current
-overload preference (`auto` vs `auto[]` with FA arg). Plus the TARGET-behavior tests
-(initially disabled) encoding the new inference semantics and M4 preservation.
+Pin current must-not-change behavior as a dastest suite (`tests/fixed_array/`) run against
+master semantics: layout (sizeof/alignof/stride/field offsets incl. C++ handled types,
+tuples, variants with FA fields), copy/clone/init semantics, indexing + bounds, iteration,
+`table<K;V[]>` / `array<T[]>` operations, serialization round-trip, AOT, `typeinfo dim`
+traits, current overload preference (`auto` vs `auto[]` with FA arg). Plus the
+TARGET-behavior tests (initially disabled via leading-`_` filenames) encoding the new
+inference semantics and M4 preservation.
+Also `tests/typemacro/test_basic.das` — direct coverage of the typeMacro payload surface
+that Stage 1b migrates (all four grammar forms; `typemacro_argument` const-extraction for
+int/bool/string; `typeMacroName`; `typedecl(expr)`). Deep indirect coverage already exists
+via tests/option + tests/hash_map + tests/delegate (Option/Result/hash tables are
+typemacro_boost-based), but the raw grammar forms and const-arg extraction had none.
+Known-broken-on-master, expected fixed by this rework (target spec, NOT characterization):
+`get_key(table<K;V[]>, v)` fails to resolve its own `valT const[-2]` contortion
+(builtin.das:1407).
 Exit: suite green on the branch point; target tests reviewed as the spec.
 
 ### Stage 1 — Core representation flip
