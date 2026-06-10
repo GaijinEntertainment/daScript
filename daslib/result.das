@@ -46,7 +46,7 @@ struct template Result {
 //! mutable source, use ``move_ok`` instead.
 [template(etype)]
 def ok(v : auto(TT); etype : auto(EE)) {
-    typedef RT = $Result < TT - const; EE - const >
+    typedef RT = $Result<TT -const; EE -const>
     var r = default<RT>
     r._is_ok = true
     static_if (typeinfo can_copy(r._value)) {
@@ -74,7 +74,7 @@ def move_ok(var v : auto(TT); etype : auto(EE)) {
 //! mutable source, use ``move_err`` instead.
 [template(ttype)]
 def err(e : auto(EE); ttype : auto(TT)) {
-    typedef RT = $Result < TT - const; EE - const >
+    typedef RT = $Result<TT -const; EE -const>
     var r = default<RT>
     r._is_ok = false
     static_if (typeinfo can_copy(r._error)) {
@@ -95,17 +95,17 @@ def move_err(var e : auto(EE); ttype : auto(TT)) {
 }
 
 //! ``true`` iff the result is a successful ``ok``.
-def is_ok(r : $Result < auto(TT); auto(EE) >) : bool {
+def is_ok(r : $Result<auto(TT); auto(EE)>) : bool {
     return r._is_ok
 }
 
 //! ``true`` iff the result is a failed ``err``.
-def is_err(r : $Result < auto(TT); auto(EE) >) : bool {
+def is_err(r : $Result<auto(TT); auto(EE)>) : bool {
     return !r._is_ok
 }
 
 //! Apply ``f`` to the ok payload. ``err`` stays ``err`` (same ``E``).
-def map(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : auto(UU)>) {
+def map(r : $Result<auto(TT); auto(EE)>; f : block<(v : TT) : auto(UU)>) {
     var out = default<$Result<UU -const; EE -const> >
     if (r._is_ok) {
         out._is_ok = true
@@ -125,7 +125,7 @@ def map(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : auto(UU)>) {
 }
 
 //! Apply ``f`` to the err payload. ``ok`` stays ``ok`` (same ``T``).
-def map_err(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : auto(FF)>) {
+def map_err(r : $Result<auto(TT); auto(EE)>; f : block<(e : EE) : auto(FF)>) {
     var out = default<$Result<TT -const; FF -const> >
     if (r._is_ok) {
         out._is_ok = true
@@ -145,7 +145,7 @@ def map_err(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : auto(FF)>) 
 }
 
 //! Monadic bind on the ok side — ``f`` returns the next ``Result``.
-def and_then(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : $Result<auto(UU); EE> >) {
+def and_then(r : $Result<auto(TT); auto(EE)>; f : block<(v : TT) : $Result<auto(UU); EE> >) {
     if (r._is_ok) return <- invoke(f, r._value)
     var out = default<$Result<UU -const; EE -const> >
     static_if (typeinfo can_copy(out._error)) {
@@ -157,7 +157,7 @@ def and_then(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : $Result<au
 }
 
 //! Monadic bind on the err side — ``f`` can recover or re-map the error.
-def or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : $Result<TT; auto(FF)> >) {
+def or_else(r : $Result<auto(TT); auto(EE)>; f : block<(e : EE) : $Result<TT; auto(FF)> >) {
     if (!r._is_ok) return <- invoke(f, r._error)
     var out = default<$Result<TT -const; FF -const> >
     out._is_ok = true
@@ -170,7 +170,7 @@ def or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : $Result<TT;
 }
 
 //! Extract the ok payload or panic when ``err``.
-def unwrap(r : $Result < auto(TT); auto(EE) >) : TT {
+def unwrap(r : $Result<auto(TT); auto(EE)>) : TT {
     if (!r._is_ok) {
         panic("unwrap called on err")
     }
@@ -186,7 +186,7 @@ def unwrap(r : $Result < auto(TT); auto(EE) >) : TT {
 //! this instead of ``unwrap`` when ``T`` is non-copyable and you no longer need
 //! ``r`` — it avoids the deep clone that ``unwrap`` would otherwise perform.
 //! Panics when ``err``.
-def move_unwrap(var r : $Result < auto(TT); auto(EE) >) : TT {
+def move_unwrap(var r : $Result<auto(TT); auto(EE)>) : TT {
     if (!r._is_ok) {
         panic("move_unwrap called on err")
     }
@@ -195,7 +195,7 @@ def move_unwrap(var r : $Result < auto(TT); auto(EE) >) : TT {
 }
 
 //! Extract the ok payload or return ``d`` when ``err``.
-def unwrap_or(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
+def unwrap_or(r : $Result<auto(TT); auto(EE)>; d : TT) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : d
     } else {
@@ -204,7 +204,7 @@ def unwrap_or(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
 }
 
 //! Extract the ok payload or compute a fallback from the error via ``f``.
-def unwrap_or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : TT>) : TT {
+def unwrap_or_else(r : $Result<auto(TT); auto(EE)>; f : block<(e : EE) : TT>) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : invoke(f, r._error)
     } else {
@@ -213,7 +213,7 @@ def unwrap_or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : TT>)
 }
 
 //! Extract the ok payload or return ``default<T>`` when ``err``.
-def unwrap_or_default(r : $Result < auto(TT); auto(EE) >) : TT {
+def unwrap_or_default(r : $Result<auto(TT); auto(EE)>) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : default<TT>
     } else {
@@ -222,7 +222,7 @@ def unwrap_or_default(r : $Result < auto(TT); auto(EE) >) : TT {
 }
 
 //! Extract the err payload or panic when ``ok``.
-def unwrap_err(r : $Result < auto(TT); auto(EE) >) : EE {
+def unwrap_err(r : $Result<auto(TT); auto(EE)>) : EE {
     if (r._is_ok) {
         panic("unwrap_err called on ok")
     }
@@ -236,7 +236,7 @@ def unwrap_err(r : $Result < auto(TT); auto(EE) >) : EE {
 //! Destructively extract the err payload, leaving ``r`` in the ok state with
 //! the ok side defaulted. Mirrors ``move_err`` on the construction side.
 //! Panics when ``ok``.
-def move_unwrap_err(var r : $Result < auto(TT); auto(EE) >) : EE {
+def move_unwrap_err(var r : $Result<auto(TT); auto(EE)>) : EE {
     if (r._is_ok) {
         panic("move_unwrap_err called on ok")
     }
@@ -246,7 +246,7 @@ def move_unwrap_err(var r : $Result < auto(TT); auto(EE) >) : EE {
 
 //! Extract the ok payload or panic with ``msg`` when ``err``. ``expect_value``
 //! rather than ``expect`` because ``expect`` is a reserved keyword.
-def expect_value(r : $Result < auto(TT); auto(EE) >; msg : string) : TT {
+def expect_value(r : $Result<auto(TT); auto(EE)>; msg : string) : TT {
     if (!r._is_ok) {
         panic(msg)
     }
@@ -258,7 +258,7 @@ def expect_value(r : $Result < auto(TT); auto(EE) >; msg : string) : TT {
 }
 
 //! Extract the err payload or panic with ``msg`` when ``ok``.
-def expect_err(r : $Result < auto(TT); auto(EE) >; msg : string) : EE {
+def expect_err(r : $Result<auto(TT); auto(EE)>; msg : string) : EE {
     if (r._is_ok) {
         panic(msg)
     }
@@ -270,21 +270,21 @@ def expect_err(r : $Result < auto(TT); auto(EE) >; msg : string) : EE {
 }
 
 //! Invoke ``f`` with the ok payload when ``ok``; no-op when ``err``.
-def if_ok(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : void>) : void {
+def if_ok(r : $Result<auto(TT); auto(EE)>; f : block<(v : TT) : void>) : void {
     if (r._is_ok) {
         invoke(f, r._value)
     }
 }
 
 //! Invoke ``f`` with the err payload when ``err``; no-op when ``ok``.
-def if_err(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : void>) : void {
+def if_err(r : $Result<auto(TT); auto(EE)>; f : block<(e : EE) : void>) : void {
     if (!r._is_ok) {
         invoke(f, r._error)
     }
 }
 
 //! Drop the err side; ``ok`` becomes ``some``, ``err`` becomes ``none``.
-def to_option(r : $Result < auto(TT); auto(EE) >) {
+def to_option(r : $Result<auto(TT); auto(EE)>) {
     var o = default<$Option<TT -const> >
     if (r._is_ok) {
         o._has_value = true
@@ -298,7 +298,7 @@ def to_option(r : $Result < auto(TT); auto(EE) >) {
 }
 
 //! Drop the ok side; ``err`` becomes ``some``, ``ok`` becomes ``none``.
-def err_to_option(r : $Result < auto(TT); auto(EE) >) {
+def err_to_option(r : $Result<auto(TT); auto(EE)>) {
     var o = default<$Option<EE -const> >
     if (!r._is_ok) {
         o._has_value = true
@@ -312,7 +312,7 @@ def err_to_option(r : $Result < auto(TT); auto(EE) >) {
 }
 
 //! Unwrap or default. Mirrors ``T? ?? default`` for value types.
-def operator ??(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
+def operator ??(r : $Result<auto(TT); auto(EE)>; d : TT) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : d
     } else {
@@ -321,24 +321,24 @@ def operator ??(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
 }
 
 //! Structural equality: same tag, and the active payload compares equal.
-def operator ==(a, b : $Result < auto(TT); auto(EE) > implicit) : bool {
+def operator ==(a, b : $Result<auto(TT); auto(EE)> implicit) : bool {
     if (a._is_ok != b._is_ok) return false
     return a._is_ok ? a._value == b._value : a._error == b._error
 }
 
 //! Equality against ok payload: ``ok(v) == v``, ``err(...) != v``.
-def operator ==(r : $Result < auto(TT); auto(EE) >; v : TT) : bool {
+def operator ==(r : $Result<auto(TT); auto(EE)>; v : TT) : bool {
     return r._is_ok && r._value == v
 }
 
-def operator ==(v : auto(TT); r : $Result < TT; auto(EE) >) : bool {
+def operator ==(v : auto(TT); r : $Result<TT; auto(EE)>) : bool {
     return r._is_ok && r._value == v
 }
 
-def operator !=(r : $Result < auto(TT); auto(EE) >; v : TT) : bool {
+def operator !=(r : $Result<auto(TT); auto(EE)>; v : TT) : bool {
     return !(r == v)
 }
 
-def operator !=(v : auto(TT); r : $Result < TT; auto(EE) >) : bool {
+def operator !=(v : auto(TT); r : $Result<TT; auto(EE)>) : bool {
     return !(r == v)
 }
