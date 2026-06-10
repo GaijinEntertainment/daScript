@@ -36,6 +36,11 @@ def z_int(n : int) : int2 {
 }
 
 [flatten]
+def z_uint(n : uint) : uint2 {
+    return uint2(n * 7u, 5u) * uint2(0u, 3u)
+}
+
+[flatten]
 def sp_mul(v : float3; s : float) : float3 {
     return v * float3(s)
 }
@@ -139,6 +144,15 @@ def test_flatten_ctor(t : T?) {
         for (n in IGRID) {
             let r = z_int_flat(n)
             let o = z_int(n)
+            t |> equal(r.x, o.x)
+            t |> equal(r.y, o.y)
+        }
+    }
+    t |> run("uint zero-lane kill (exact, ungated)") @(t : T?) {
+        for (n in IGRID) {
+            let u = uint(n)
+            let r = z_uint_flat(u)
+            let o = z_uint(u)
             t |> equal(r.x, o.x)
             t |> equal(r.y, o.y)
         }

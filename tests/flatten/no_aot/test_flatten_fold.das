@@ -127,7 +127,13 @@ def test_flatten_fold(t : T?) {
     }
     t |> run("ctor lane algebra corpus rewrites clean (test_flatten_ctor.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_ctor.das")
-        t |> success(n >= 14, "expected >=14 twins, checked {n}")
+        t |> success(n >= 15, "expected >=15 twins, checked {n}")
+        // structural half for the uint kill — the oracle shares const_vec_zero_mask with the
+        // transform, so only the surviving shape proves the uint branches exist
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_ctor.das")
+        let zu = bodies?["z_uint_flat"] ?? ""
+        t |> success(zu |> find(" * ") < 0, "uint zero-lane kill must fold the whole product: {zu}")
+        delete bodies
     }
     t |> run("no-fast-math corpus: option-aware oracle clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_nofastmath.das")

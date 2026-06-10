@@ -950,6 +950,15 @@ def private const_vec_zero_mask(e : ExpressionPtr) : int {
     } elif (e is ExprConstInt4) {
         let v = (e as ExprConstInt4).value
         if (v.x == 0) { m |= 1; }; if (v.y == 0) { m |= 2; }; if (v.z == 0) { m |= 4; }; if (v.w == 0) { m |= 8; }
+    } elif (e is ExprConstUInt2) {
+        let v = (e as ExprConstUInt2).value
+        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }
+    } elif (e is ExprConstUInt3) {
+        let v = (e as ExprConstUInt3).value
+        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }; if (v.z == 0u) { m |= 4; }
+    } elif (e is ExprConstUInt4) {
+        let v = (e as ExprConstUInt4).value
+        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }; if (v.z == 0u) { m |= 4; }; if (v.w == 0u) { m |= 8; }
     }
     return m
 }
