@@ -1601,12 +1601,12 @@ class PixelShaderMacro : AstFunctionAnnotation {
             // after optimize (else reassoc reorders a hoisted ref into a fresh un-extracted uniform
             // subtree, e.g. `uv - _preshader` → `-_preshader + uv`). tex2d/noise stay per-pixel.
             if (!shader_annotation_arg(func, "optimized")) {
-                if (flatten_fold(func)) {
+                if (flatten_fold(func, flatten_no_fast_math())) {
                     astChanged = true
                     return true
                 }
                 set_shader_annotation_flag(func, "optimized")
-                if (flatten_optimize(func, SHADER_BARRIERS)) {
+                if (flatten_optimize(func, SHADER_BARRIERS, flatten_no_fast_math())) {
                     astChanged = true
                     return true
                 }
@@ -1615,7 +1615,7 @@ class PixelShaderMacro : AstFunctionAnnotation {
             // back into `lerp` (one [hint] node each), re-inferring to resolve the new calls.
             // Mirrors daslib/flatten's PHASE_FUSED loop (converges — each round drops a `+`/`-`).
             if (!shader_annotation_arg(func, "fused")) {
-                if (flatten_fuse(func)) {
+                if (flatten_fuse(func, flatten_no_fast_math())) {
                     astChanged = true
                     return true
                 }

@@ -53,15 +53,18 @@ def private check_unit(t : T?; proj, path : string) : int {
                     t |> failure("compile failed: {path}\n{iss}")
                     return
                 }
+                // honor the unit's own `options _flatten_no_fast_math` — gated rewrites are
+                // skipped there by design, and the oracle must mirror that (no false flags)
+                let noFastMath = program._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false
                 program_for_each_module(program) $(mod) {
                     for_each_function(mod, "") $(func) {
                         if (func.body == null || func.flags.builtIn || !is_flatten_output(func)) {
                             return
                         }
                         checked ++
-                        let r <- flatten_fold_residuals(func)
+                        let r <- flatten_fold_residuals(func, noFastMath)
                         t |> equal(length(r), 0, "{base_name(path)}::{func.name}: {r}")
-                        let optr <- flatten_opt_residuals(func)
+                        let optr <- flatten_opt_residuals(func, noFastMath)
                         t |> equal(length(optr), 0, "{base_name(path)}::{func.name} (opt): {optr}")
                     }
                 }
@@ -69,6 +72,34 @@ def private check_unit(t : T?; proj, path : string) : int {
         }
     }
     return checked
+}
+
+// Compile `path` and return describe() of each `*_flat` twin body, keyed by twin name — the
+// structural skip-proof half of the `_flatten_no_fast_math` tests (a skipped fold computes the
+// same VALUE, so only the surviving shape proves the gate fired).
+def private twin_bodies(t : T?; path : string) : table<string; string> {
+    var bodies : table<string; string>
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.version_2_syntax = true
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; iss) {
+                if (!ok) {
+                    t |> failure("compile failed: {path}\n{iss}")
+                    return
+                }
+                program_for_each_module(program) $(mod) {
+                    for_each_function(mod, "") $(func) {
+                        if (func.body != null && !func.flags.builtIn && func.name |> ends_with("_flat")) {
+                            bodies["{func.name}"] = "{describe(func.body)}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return <- bodies
 }
 
 [test]
@@ -89,6 +120,52 @@ def test_flatten_fold(t : T?) {
     t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")
         t |> success(n >= 20, "expected >=20 twins, checked {n}")
+    }
+    t |> run("rcp corpus rewrites clean (test_flatten_rcp.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_rcp.das")
+        t |> success(n >= 8, "expected >=8 twins, checked {n}")
+    }
+    t |> run("ctor lane algebra corpus rewrites clean (test_flatten_ctor.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_ctor.das")
+        t |> success(n >= 15, "expected >=15 twins, checked {n}")
+        // structural half for the uint kill — the oracle shares const_vec_zero_mask with the
+        // transform, so only the surviving shape proves the uint branches exist
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_ctor.das")
+        let zu = bodies?["z_uint_flat"] ?? ""
+        t |> success(zu |> find(" * ") < 0, "uint zero-lane kill must fold the whole product: {zu}")
+        delete bodies
+    }
+    t |> run("no-fast-math corpus: option-aware oracle clean") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_nofastmath.das")
+        t |> success(n >= 13, "expected >=13 twins, checked {n}")
+    }
+    t |> run("no-fast-math corpus: gated shapes survive (skip-proof)") @(t : T?) {
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_nofastmath.das")
+        let mul0 = bodies?["nf_mul0_flat"] ?? ""
+        t |> success(mul0 |> find("* 0f") >= 0, "x*0 must survive: {mul0}")
+        let vmul0 = bodies?["nf_vmul0_flat"] ?? ""
+        t |> success(vmul0 |> find("float3(0") >= 0, "v*vec0 must survive: {vmul0}")
+        let subself = bodies?["nf_subself_flat"] ?? ""
+        t |> success(subself |> find(" - ") >= 0, "x-x must survive: {subself}")
+        let reas = bodies?["nf_reassoc_flat"] ?? ""
+        t |> success(reas |> find("0.75") < 0 && reas |> find("0.25") >= 0, "float consts must stay scattered: {reas}")
+        let lrp = bodies?["nf_lerp0_flat"] ?? ""
+        t |> success(lrp |> find("lerp") >= 0, "lerp(a,b,0) must round-trip back to lerp: {lrp}")
+        let imul0 = bodies?["nf_imul0_flat"] ?? ""
+        t |> success(imul0 |> find("* 0") < 0, "int n*0 must STILL fold: {imul0}")
+        let ire = bodies?["nf_ireassoc_flat"] ?? ""
+        t |> success(ire |> find("2 +") < 0, "int consts must gather+fold: {ire}")
+        let pre = bodies?["nf_preshader_flat"] ?? ""
+        t |> success(pre |> find("_preshader_0") >= 0, "preshader extraction must still run: {pre}")
+        let dv = bodies?["nf_div_flat"] ?? ""
+        t |> success(dv |> find("/ 3f") >= 0, "x / C must survive: {dv}")
+        let udv = bodies?["nf_unidiv_flat"] ?? ""
+        t |> success(udv |> find("/ G_NF") >= 0, "x / uniform must survive (no rcp): {udv}")
+        let zk = bodies?["nf_zkill_flat"] ?? ""
+        t |> success(zk |> find("sin") >= 0, "the zero-lane kill must be skipped (sin survives): {zk}")
+        let mj = bodies?["nf_mj_flat"] ?? ""
+        t |> success(mj |> find("* 12f") >= 0, "majority compensation must be skipped: {mj}")
+        delete bodies
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
         let proj = "{root}/examples/flatten/flatten_shaders.das_project"
