@@ -55,16 +55,16 @@ def private check_unit(t : T?; proj, path : string) : int {
                 }
                 // honor the unit's own `options _flatten_no_fast_math` — gated rewrites are
                 // skipped there by design, and the oracle must mirror that (no false flags)
-                let fastMath = !(program._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false)
+                let noFastMath = program._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false
                 program_for_each_module(program) $(mod) {
                     for_each_function(mod, "") $(func) {
                         if (func.body == null || func.flags.builtIn || !is_flatten_output(func)) {
                             return
                         }
                         checked ++
-                        let r <- flatten_fold_residuals(func, fastMath)
+                        let r <- flatten_fold_residuals(func, noFastMath)
                         t |> equal(length(r), 0, "{base_name(path)}::{func.name}: {r}")
-                        let optr <- flatten_opt_residuals(func)
+                        let optr <- flatten_opt_residuals(func, noFastMath)
                         t |> equal(length(optr), 0, "{base_name(path)}::{func.name} (opt): {optr}")
                     }
                 }
@@ -121,9 +121,13 @@ def test_flatten_fold(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")
         t |> success(n >= 20, "expected >=20 twins, checked {n}")
     }
+    t |> run("rcp corpus rewrites clean (test_flatten_rcp.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_rcp.das")
+        t |> success(n >= 8, "expected >=8 twins, checked {n}")
+    }
     t |> run("no-fast-math corpus: option-aware oracle clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_nofastmath.das")
-        t |> success(n >= 9, "expected >=9 twins, checked {n}")
+        t |> success(n >= 11, "expected >=11 twins, checked {n}")
     }
     t |> run("no-fast-math corpus: gated shapes survive (skip-proof)") @(t : T?) {
         var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_nofastmath.das")
@@ -143,6 +147,10 @@ def test_flatten_fold(t : T?) {
         t |> success(ire |> find("2 +") < 0, "int consts must gather+fold: {ire}")
         let pre = bodies?["nf_preshader_flat"] ?? ""
         t |> success(pre |> find("_preshader_0") >= 0, "preshader extraction must still run: {pre}")
+        let dv = bodies?["nf_div_flat"] ?? ""
+        t |> success(dv |> find("/ 3f") >= 0, "x / C must survive: {dv}")
+        let udv = bodies?["nf_unidiv_flat"] ?? ""
+        t |> success(udv |> find("/ G_NF") >= 0, "x / uniform must survive (no rcp): {udv}")
         delete bodies
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {

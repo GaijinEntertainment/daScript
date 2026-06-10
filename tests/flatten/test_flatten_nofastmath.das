@@ -47,6 +47,16 @@ def nf_lerp0(a, b : float) : float {
     return lerp(a, b, 0.0)
 }
 
+[flatten]
+def nf_div(x : float) : float {
+    return x / 3.0
+}
+
+[flatten]
+def nf_unidiv(x : float) : float {
+    return x / G_NF
+}
+
 // ----- exact rewrites: still fire under the option -----
 
 [flatten]
@@ -110,6 +120,16 @@ def test_flatten_nofastmath(t : T?) {
     t |> run("lerp const-selector skipped — bit-exact") @(t : T?) {
         for (a in GRID) {
             t |> equal(nf_lerp0_flat(a, 7.5), nf_lerp0(a, 7.5))
+        }
+    }
+    t |> run("x / C NOT rewritten to *(1/C) — bit-exact") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(nf_div_flat(v), nf_div(v))
+        }
+    }
+    t |> run("x / uniform NOT rcp'd — bit-exact") @(t : T?) {
+        for (v in GRID) {
+            t |> equal(nf_unidiv_flat(v), nf_unidiv(v))
         }
     }
     t |> run("int n * 0 still folds (exact)") @(t : T?) {

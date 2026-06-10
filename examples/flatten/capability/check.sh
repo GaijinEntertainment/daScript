@@ -65,6 +65,10 @@
 #  16. cap_mad.shader (mul-adds + a hand-written lerp shape) -> fused. The finishing pass packs
 #      `a*b + c` into mad nodes (incl. the scalar-broadcast form) and `(b-a)*t + a` into a lerp
 #      node, so the graph carries 2 mad + 1 lerp instead of mul/add/sub chains.
+#
+#  17. cap_rcp.shader (two per-pixel '/ exposure') -> ONE shared per-draw reciprocal
+#      (`_preshader_N = 1f / exposure`) and two muls; the per-pixel graph carries no division
+#      by the uniform. Asserted on the --das dump (fast-math; the reciprocal rounds).
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -318,6 +322,21 @@ if [[ "$errs" -eq 0 && "$mads" -eq 2 && "$lerps" -eq 1 ]]; then
     echo "   ok — compiles ($nodes nodes), 2 mad + 1 lerp (mul-adds fused)"
 else
     echo "   FAIL — errors=$errs mads=$mads lerps=$lerps (expected 2 and 1)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "17. cap_rcp.shader (per-pixel '/ uniform' -> one shared per-draw reciprocal)"
+out="$(FLATTEN_DUMP_DAS=1 compile "$here/cap_rcp.shader")"
+rcps="$(echo "$out" | grep -c 'let _preshader_.*1f / exposure')"
+divs="$(echo "$out" | grep -v 'let _preshader_' | grep -c '/ exposure')"
+errs="$(echo "$out" | grep -ci error)"
+# both `c / exposure` and `(c.x+c.y) / exposure` ride the same `_preshader_N = 1f / exposure`;
+# the per-pixel body must carry only muls by it.
+if [[ "$errs" -eq 0 && "$rcps" -eq 1 && "$divs" -eq 0 ]]; then
+    echo "   ok — one shared reciprocal preshader let; no per-pixel division by the uniform"
+else
+    echo "   FAIL — errors=$errs rcp_lets=$rcps residual_divs=$divs (expected 1 and 0)"
     echo "$out" | grep -i error | head
     fail=1
 fi

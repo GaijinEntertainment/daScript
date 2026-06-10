@@ -734,27 +734,27 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>; m
 // ===== Post-infer select folding =====
 
 [macro_function]
-def public flatten_fast_math : bool {
-    //! True unless the COMPILING module sets `options _flatten_no_fast_math = true` — the user
+def public flatten_no_fast_math : bool {
+    //! True when the COMPILING module sets `options _flatten_no_fast_math = true` — the user
     //! opt-out of flatten's value-changing rewrites; bit-exact passes ignore it. COMPILE-TIME ONLY
     //! (panics outside a compile): patch code reads it once, runtime tools pass their flag explicitly.
-    return !(compiling_program()._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false)
+    return compiling_program()._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false
 }
 
 [macro_function]
-def public flatten_fold(var func : FunctionPtr; fast_math : bool = true) : bool {
+def public flatten_fold(var func : FunctionPtr; no_fast_math : bool = false) : bool {
     //! Post-infer fold pass (delegates to `fold_body`): collapse `const ? a : b`, fold identities,
     //! drop pure self-assigns. Run AFTER re-inference; returns true if anything changed. Compile-time
-    //! callers pass `flatten_fast_math()` to honor `options _flatten_no_fast_math`.
-    return fold_body(func, fast_math)
+    //! callers pass `flatten_no_fast_math()` to honor the module option; the default is fast-math ON.
+    return fold_body(func, no_fast_math)
 }
 
 [macro_function]
-def public flatten_optimize(var func : FunctionPtr; barriers : table<string>) : bool {
+def public flatten_optimize(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : bool {
     //! Post-fold optimize pass (delegates to `flatten_preshade_cse`): hoist uniform subtrees to
-    //! per-draw `_preshader_` lets + CSE-dedup. Run ONCE after the `flatten_fold` fixpoint converges;
-    //! `barriers` = the backend's sampler/intrinsic call names. Returns true if anything changed.
-    return flatten_preshade_cse(func, barriers)
+    //! per-draw `_preshader_` lets + CSE-dedup + rcp-rewrite divisions by a uniform (fast-math).
+    //! Run after the `flatten_fold` fixpoint; `barriers` = the backend's sampler/intrinsic names.
+    return flatten_preshade_cse(func, barriers, no_fast_math)
 }
 
 [macro_function]
@@ -765,10 +765,10 @@ def public flatten_fuse(var func : FunctionPtr) : bool {
     return fuse_body(func)
 }
 
-def public flatten_opt_residuals(var func : FunctionPtr) : array<string> {
+def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
     //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
-    //! has no un-extracted uniform subtree and no un-CSE'd repeat. Test-framework / fuzzer facing.
-    return <- opt_residuals(func, FLATTEN_BARRIERS)
+    //! has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division.
+    return <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math)
 }
 
 // ===== Post-inference shape verification — twin must be branchless + call-free =====
@@ -813,7 +813,7 @@ def private verify_flat(var twin : FunctionPtr) : string {
 
 class private FoldResidualVisitor : AstVisitor {
     found : array<string>
-    fastMath : bool = true
+    noFastMath : bool
     def override preVisitExprCall(expr : ExprCall?) : void {
         if (expr.func != null && expr.func.flags.builtIn && is_all_const(expr) && eval_to_const_supported(expr._type)) {
             found |> push("an unfolded all-const call '{expr.name}'")
@@ -829,8 +829,10 @@ class private FoldResidualVisitor : AstVisitor {
             found |> push("an unfolded algebraic identity ('{expr.op}')")
         } elif (is_all_const(expr) && eval_to_const_supported(expr._type)) {
             found |> push("an unfolded all-const arithmetic ('{expr.op}')")
-        } elif (has_scattered_consts(expr, fastMath)) {
+        } elif (has_scattered_consts(expr, noFastMath)) {
             found |> push("a scattered const chain ('{expr.op}') reassoc should gather")
+        } elif (!noFastMath && is_unrcp_const_div(expr)) {
+            found |> push("an un-rewritten const division ('x / C' should be 'x * (1/C)')")
         }
     }
     def override preVisitExprOp1(expr : ExprOp1?) : void {
@@ -840,16 +842,16 @@ class private FoldResidualVisitor : AstVisitor {
     }
 }
 
-def public flatten_fold_residuals(var func : FunctionPtr; fast_math : bool = true) : array<string> {
+def public flatten_fold_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
     //! Collect the const-foldable residuals left in `func`'s (post-flatten) body — empty means the
     //! fold is complete; reuses the exact predicates the macro's own fold uses (test/fuzzer facing).
-    //! Pass `fast_math = false` for a unit compiled under `options _flatten_no_fast_math`.
+    //! Pass `no_fast_math = true` for a unit compiled under `options _flatten_no_fast_math`.
     var res : array<string>
     if (func == null || func.body == null) {
         return <- res
     }
     var v = new FoldResidualVisitor()
-    v.fastMath = fast_math
+    v.noFastMath = no_fast_math
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
@@ -909,7 +911,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // Cycle 2+: fold the inferred twin (const selects, algebraic identities, pure self-
             // assigns), re-infer if anything changed. Iterate to a fixpoint — fold and the typer's
             // re-infer const-fold are mutually-enabling, so one pass isn't enough.
-            let folded = flatten_fold(twin, flatten_fast_math())
+            let folded = flatten_fold(twin, flatten_no_fast_math())
             set_flatten_phase(func, PHASE_FOLDED)
             if (folded) {
                 astChanged = true
@@ -919,7 +921,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to
             // type the new lets, then fuse next cycle.
             set_flatten_phase(func, PHASE_OPTIMIZED)
-            if (flatten_optimize(twin, FLATTEN_BARRIERS)) {
+            if (flatten_optimize(twin, FLATTEN_BARRIERS, flatten_no_fast_math())) {
                 astChanged = true
                 return true
             }

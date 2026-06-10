@@ -524,7 +524,7 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 
 class private FoldVisitor : AstVisitor {
     changed : bool
-    fastMath : bool = true
+    noFastMath : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
         // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
@@ -542,11 +542,11 @@ class private FoldVisitor : AstVisitor {
             if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
             if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
             // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
-            if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (fastMath || !is_float_valued(that))) {
+            if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (!noFastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
             }
-            if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (fastMath || !is_float_valued(that))) {
+            if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (!noFastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
             }
@@ -559,9 +559,19 @@ class private FoldVisitor : AstVisitor {
             // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
             // fast-math charter). Identical describe ⇒ identical purity, so one check.
             if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
-                    (fastMath || !is_float_valued(that))) {
+                    (!noFastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
+            }
+        } elif (that.op == "/") {
+            // `x / C → x * (1/C)` — a mul instead of a div; the reciprocal rounds (fast-math).
+            // Float-family only (int division has no reciprocal); zero lanes keep the div.
+            if (!noFastMath && is_float_valued(that)) {
+                var rec = recip_const(that.right)
+                if (rec != null) {
+                    changed = true
+                    return new ExprOp2(at = that.at, op := "*", left = that.left, right = rec)
+                }
             }
         } elif (that.op == "&&") {
             // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
@@ -638,7 +648,7 @@ class private FoldVisitor : AstVisitor {
                 var tArg = that.arguments[2]
                 // const-selector short-circuits — no expand/refuse round trip. They DROP an
                 // argument (`(b-a)*0` would still propagate b's inf/NaN) → fast-math only.
-                if (fastMath) {
+                if (!noFastMath) {
                     if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
                     if (is_one_const_op(tArg) && !has_sideeffects(aArg)) { changed = true; return bArg }
                     if (describe(aArg) == describe(bArg) && !has_sideeffects(bArg) && !has_sideeffects(tArg)) {
@@ -1233,8 +1243,8 @@ def private count_terms(e : ExpressionPtr; addOp : string; var nv : int&; var nc
 // True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered consts, not already grouped.
 // The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's exact gate
 // through this — incl. `fast_math` (float chains stay scattered under `_flatten_no_fast_math`).
-def public has_scattered_consts(that : ExprOp2?; fast_math : bool = true) : bool {
-    if (that == null || (!fast_math && is_float_valued(that))) return false
+def public has_scattered_consts(that : ExprOp2?; no_fast_math : bool = false) : bool {
+    if (that == null || (no_fast_math && is_float_valued(that))) return false
     var nv = 0
     var nc = 0
     if (that.op == "+" || that.op == "-") {
@@ -1251,11 +1261,11 @@ def public has_scattered_consts(that : ExprOp2?; fast_math : bool = true) : bool
 
 class private ReassocVisitor : AstVisitor {
     changed : bool
-    fastMath : bool = true
+    noFastMath : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         // Both the const-gather and the canonical re-sort rebuild the chain — a float
         // sum/product picks up a different association order, so floats are fast-math only.
-        if (!fastMath && is_float_valued(that)) {
+        if (noFastMath && is_float_valued(that)) {
             return that
         }
         var res : ExpressionPtr = null
@@ -1276,18 +1286,18 @@ class private ReassocVisitor : AstVisitor {
     }
 }
 
-def public fold_body(var func : FunctionPtr; fast_math : bool = true) : bool {
+def public fold_body(var func : FunctionPtr; no_fast_math : bool = false) : bool {
     //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate
     //! scattered consts, collapse `const ? a : b`, fold identities/const ctors, drop pure self-assigns.
-    //! SINGLE pass (caller re-infers and loops); `fast_math = false` skips the value-changing arms.
+    //! SINGLE pass (caller re-infers and loops); `no_fast_math = true` skips the value-changing arms.
     if (!(func.body is ExprBlock)) return false
-    let fm = fast_math
+    let nfm = no_fast_math
     var changed = const_prop_locals(func.body as ExprBlock)
     // Reassociate BEFORE the fold — gather scattered consts into one adjacent group so the
     // FoldVisitor all-const arm (and the typer's re-infer) can collapse them. After const-prop,
     // which is what scatters consts (a substituted single-def local lands mid-chain).
     var rv = new ReassocVisitor()
-    rv.fastMath = fm
+    rv.noFastMath = nfm
     make_visitor(*rv) $(adapter) {
         visit(func.body, adapter)
     }
@@ -1298,7 +1308,7 @@ def public fold_body(var func : FunctionPtr; fast_math : bool = true) : bool {
         delete rv
     }
     var v = new FoldVisitor()
-    v.fastMath = fm
+    v.noFastMath = nfm
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
@@ -1399,6 +1409,16 @@ struct private PEX {
     rename : table<string; ExpressionPtr>   // old local name -> replacement (alias inline / preshader ref)
     counter : int
     changed : bool
+    noFastMath : bool                       // zero-init false = fast-math ON (the default)
+}
+
+// `x / U` rcp-candidate: a varying division by a preshader-eligible scalar-float NON-const
+// divisor — shared verbatim by the extraction rewrite and the opt residual oracle. A wholly-
+// uniform division hoists intact (maximal arm); a const divisor belongs to the fold arm.
+def private is_rcp_candidate(pe : PEX; barriers : table<string>; o : ExprOp2?) : bool {
+    return (o.op == "/" && expr_bt(o.right) == Type.tFloat && is_float_valued(o) &&
+        !(o.right |> is_expr_const()) && !pex_eligible(pe, barriers, o) &&
+        pex_eligible(pe, barriers, o.right))
 }
 
 // Uniform = depends only on globals + literals, no barrier (sampler/noise) call. Leaf rule: a param
@@ -1475,6 +1495,16 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
         o.subexpr = pex_extract(pe, barriers, o.subexpr)
     } elif (e is ExprOp2) {
         var o = e as ExprOp2
+        // `x / U` → `x * (1f/U)` — reciprocal hoisted per-draw, dedup'd by describe (fast-math)
+        if (!pe.noFastMath && is_rcp_candidate(pe, barriers, o)) {
+            var one = new ExprConstFloat(at = o.at, value = 1.0)
+            var recip = new ExprOp2(at = o.at, op := "/", left = one, right = o.right)
+            let nm = pex_hoist_name(pe, recip)
+            pe.changed = true
+            return new ExprOp2(at = o.at, op := "*",
+                left = pex_extract(pe, barriers, o.left),
+                right = new ExprVar(at = o.at, name := nm))
+        }
         o.left = pex_extract(pe, barriers, o.left)
         o.right = pex_extract(pe, barriers, o.right)
     } elif (e is ExprOp3) {
@@ -1524,9 +1554,8 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
 
 // `counter` is owned by the caller's optimize loop — extraction re-runs per round, and a fresh
 // per-call numbering would collide a later round's `_preshader_0` with the surviving first one.
-def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&) : bool {
-    var pe : PEX
-    pe.counter = counter
+def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&; no_fast_math : bool) : bool {
+    var pe = PEX(counter = counter, noFastMath = no_fast_math)
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")
     }
@@ -2046,7 +2075,53 @@ def private pex_residual_expr(pe : PEX; barriers : table<string>; e : Expression
     return false
 }
 
-def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : array<string> {
+// Oracle mirror of the extraction rcp rewrite — any descendant division `is_rcp_candidate`
+// would have become `* _preshader(1/U)`. Same closed node set as pex_residual_expr.
+def private rcp_residual_expr(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprOp1) return rcp_residual_expr(pe, barriers, (e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        if (is_rcp_candidate(pe, barriers, o)) return true
+        return rcp_residual_expr(pe, barriers, o.left) || rcp_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return rcp_residual_expr(pe, barriers, o.subexpr) || rcp_residual_expr(pe, barriers, o.left) || rcp_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (rcp_residual_expr(pe, barriers, a)) return true
+        }
+        return false
+    }
+    if (e is ExprField) return rcp_residual_expr(pe, barriers, (e as ExprField).value)
+    if (e is ExprSwizzle) return rcp_residual_expr(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprRef2Value) return rcp_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprCast) return rcp_residual_expr(pe, barriers, (e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return rcp_residual_expr(pe, barriers, (e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return rcp_residual_expr(pe, barriers, o.subexpr) || rcp_residual_expr(pe, barriers, o.index)
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (rcp_residual_expr(pe, barriers, v)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (rcp_residual_expr(pe, barriers, fld.value)) return true
+            }
+        }
+    }
+    return false
+}
+
+def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : array<string> {
     var res : array<string>
     if (func == null || func.body == null || !(func.body is ExprBlock)) return <- res
     var blk = func.body as ExprBlock
@@ -2085,6 +2160,31 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
         if (hit) {
             res |> push("an un-extracted uniform subtree (preshader miss)")
             break
+        }
+    }
+    // rcp residual: a varying division by a preshader-eligible scalar still inline (fast-math only).
+    if (!no_fast_math) {
+        for (i in range(length(blk.list))) {
+            if (i < prefix) {
+                continue
+            }
+            let s = blk.list[i]
+            var hit = false
+            if (s is ExprLet) {
+                for (lv in (s as ExprLet).variables) {
+                    if (lv.init != null && rcp_residual_expr(pe, barriers, lv.init)) {
+                        hit = true
+                    }
+                }
+            } elif (s is ExprCopy) {
+                hit = rcp_residual_expr(pe, barriers, (s as ExprCopy).right)
+            } elif (s is ExprReturn) {
+                hit = rcp_residual_expr(pe, barriers, (s as ExprReturn).subexpr)
+            }
+            if (hit) {
+                res |> push("an un-rewritten division by a uniform ('x / U' should be 'x * _preshader(1/U)')")
+                break
+            }
         }
     }
     // CSE residual: any pure subtree (no mutable read) still computed >=2x — tallying the same
@@ -2150,7 +2250,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
     return <- res
 }
 
-def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>) : bool {
+def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : bool {
     //! Post-fold optimize pass: hoist uniform (globals+literals) subtrees to top-of-body
     //! `_preshader_N` lets, CSE-dedup repeats, collapse pure aliases — a joint fixpoint.
     //! `barriers` = sampler/noise names that stay per-pixel. Post-fold, once; caller re-infers.
@@ -2166,7 +2266,7 @@ def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>
     while (guard < 16) {
         guard ++
         var round = false
-        if (extract_preshader(func, blk, barriers, preCounter)) {
+        if (extract_preshader(func, blk, barriers, preCounter, no_fast_math)) {
             round = true
         }
         if (cse_body(blk, cseCounter)) {
@@ -2189,6 +2289,44 @@ def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>
 // ===== mad/lerp re-fusion (PHASE_FUSED finishing pass) =====
 // The fold DISASSEMBLES lerp/mad into raw arithmetic (identities fold, reassoc/CSE see through);
 // this re-packs survivors: `a*b ± c` → mad, then `mad(b - a, t, a)` → lerp — one node each.
+
+// A reciprocal copy of a scalar/vector float const literal (`C` → `1/C`); null for any other
+// node or when any lane is zero (no inf literals). Backs the `x / C → x * (1/C)` fold arm.
+def private recip_const(e : ExpressionPtr) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprConstFloat) {
+        let v = (e as ExprConstFloat).value
+        if (v == 0.0) return null
+        return new ExprConstFloat(at = e.at, value = 1.0 / v)
+    }
+    if (e is ExprConstDouble) {
+        let v = (e as ExprConstDouble).value
+        if (v == 0.0lf) return null
+        return new ExprConstDouble(at = e.at, value = 1.0lf / v)
+    }
+    if (e is ExprConstFloat2) {
+        let v = (e as ExprConstFloat2).value
+        if (v.x == 0.0 || v.y == 0.0) return null
+        return new ExprConstFloat2(at = e.at, value = float2(1.0 / v.x, 1.0 / v.y))
+    }
+    if (e is ExprConstFloat3) {
+        let v = (e as ExprConstFloat3).value
+        if (v.x == 0.0 || v.y == 0.0 || v.z == 0.0) return null
+        return new ExprConstFloat3(at = e.at, value = float3(1.0 / v.x, 1.0 / v.y, 1.0 / v.z))
+    }
+    if (e is ExprConstFloat4) {
+        let v = (e as ExprConstFloat4).value
+        if (v.x == 0.0 || v.y == 0.0 || v.z == 0.0 || v.w == 0.0) return null
+        return new ExprConstFloat4(at = e.at, value = float4(1.0 / v.x, 1.0 / v.y, 1.0 / v.z, 1.0 / v.w))
+    }
+    return null
+}
+
+// Oracle mirror for the `x / C → x * (1/C)` fold arm: true when the (fast-math) rewrite would fire.
+def public is_unrcp_const_div(e : ExprOp2?) : bool {
+    if (e == null || e.op != "/" || !is_float_valued(e)) return false
+    return recip_const(e.right) != null
+}
 
 // A negated copy of a scalar/vector float/int const literal; null for any other node
 // (uint excluded — modular negation is value-correct but backend-hostile).
