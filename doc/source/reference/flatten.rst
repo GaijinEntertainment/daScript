@@ -136,7 +136,9 @@ reassociates, for float rounding) into one adjacent group the all-const fold the
 The same pass sorts the chain's *variable* terms into a canonical (structural) order, so
 commutative chains converge to one form (``b + a`` and ``a + b`` both become ``a + b``) —
 gated on every term being side-effect-free, and intended to feed a later common-subexpression
-pass. Integer ``+``/``*`` reassociate exactly; integer ``/`` is non-associative and excluded.
+pass. Positive terms sort before subtracted ones, so the rebuilt chain spells ``b - a``
+(one sub node) rather than ``-a + b`` (a negate plus an add — whose uniform ``-a`` the
+preshader pass would hoist into a pass-through ``_preshader_ = -_preshader_`` alias). Integer ``+``/``*`` reassociate exactly; integer ``/`` is non-associative and excluded.
 These are exactly the folds the general compiler leaves for the downstream tiers (it folds
 constant *arithmetic* but not constant *constructors*, and never a runtime-operand identity
 or reassociation), done here under a shader's fast-math assumption (``x*0 → 0`` always fires).
@@ -196,7 +198,9 @@ converges, a finishing **fuse** pass (``PHASE_FUSED``) re-packs what survived:
 become one ``mad(a, b, c)`` node — including the vector·scalar broadcast form —
 and a mad still carrying the lerp shape, ``mad(b - a, t, a)``, becomes one
 ``lerp(a, b, t)`` node. Hand-written ``(b - a)*t + a`` arithmetic that never
-spelled ``lerp`` canonicalises into the lerp node the same way. Type gates keep
+spelled ``lerp`` canonicalises into the lerp node the same way. A leftover
+``(-a) + b`` (the ``0 - x`` / ``*-1`` folds produce bare negates) re-packs into
+``b - a``. Type gates keep
 the rewrites inside the das ``math`` overload set (float / int / uint, scalar +
 vector; lerp with scalar ``t``), and fusion only runs when a 3-argument
 ``mad`` / ``lerp`` is visible from the twin's module (``math`` or a backend DSL).

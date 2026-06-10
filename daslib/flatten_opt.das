@@ -1133,11 +1133,13 @@ def private build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp :
     return acc
 }
 
-// True if the var terms are already in canonical (describe-ascending) order. Lets the sort fire
-// only when needed, so a canonicalized chain is a no-op (idempotent → the macro fixpoint ends).
+// True if the var terms are already canonical: positives first (so build_chain emits `b - a`,
+// never `-a + b` = neg + add, whose uniform `-a` would hoist into a `_preshader_ = -_preshader_`
+// alias), describe-ascending per sign group. Mirrors the regroup sort exactly (idempotence).
 def private vars_sorted(vars : array<ReTerm>) : bool {
     for (i in range(1, length(vars))) {
-        if (describe(vars[i].e) < describe(vars[i - 1].e)) {
+        if ((vars[i - 1].neg && !vars[i].neg) ||
+            (vars[i - 1].neg == vars[i].neg && describe(vars[i].e) < describe(vars[i - 1].e))) {
             return false
         }
     }
@@ -1174,6 +1176,9 @@ def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : s
     }
     if (pure) {
         sort(vars) $(a, b : ReTerm) : bool {
+            if (a.neg != b.neg) {
+                return !a.neg
+            }
             return describe(a.e) < describe(b.e)
         }
     }
@@ -2081,6 +2086,9 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
         if (fr.foundLerp) {
             res |> push("an un-refused lerp shape (mad(b-a,t,a))")
         }
+        if (fr.foundNegAdd) {
+            res |> push("an un-packed neg-add ('-a + b' should be 'b - a')")
+        }
         unsafe {
             delete fr
         }
@@ -2232,8 +2240,26 @@ def private match_mad(var that : ExprOp2?; var ma, mb, mc : ExpressionPtr&) : bo
     return true
 }
 
+// `(-a) + b` / `b + (-a)` → `b - a`: one sub node instead of neg + add. Reassoc no longer emits
+// the form (positives-first canonical order), so this catches the other producers — the `0 - x`
+// and `*-1` fold arms. Shared by fuser AND residual.
+def private match_neg_add(var that : ExprOp2?; var pos, neg : ExpressionPtr&) : bool {
+    if (that == null || that.op != "+" || !is_mad_elem(expr_bt(that))) return false
+    if (that.left is ExprOp1 && (that.left as ExprOp1).op == "-") {
+        pos = that.right
+        neg = (that.left as ExprOp1).subexpr
+        return true
+    }
+    if (that.right is ExprOp1 && (that.right as ExprOp1).op == "-") {
+        pos = that.left
+        neg = (that.right as ExprOp1).subexpr
+        return true
+    }
+    return false
+}
+
 // `mad(b - a, t, a)` → `lerp(a, b, t)`: the re-packed expansion shape, `a` matched by
-// describe-equality. Reassoc canonicalizes `b - a` into `-a + b`, so both forms must match.
+// describe-equality. The neg-add form is matched too (defense — reassoc no longer emits it).
 // Deliberately misses a CSE-shared `b - a` (behind a `_cse_` var — keeping the share IS the win).
 def private match_lerp(var cll : ExprCall?; var la, lb, lt : ExpressionPtr&) : bool {
     if (cll == null || length(cll.arguments) != 3 ||
@@ -2275,6 +2301,12 @@ class private MadFuseVisitor : AstVisitor {
             emplace(cll.arguments, mc)
             return cll
         }
+        var pos : ExpressionPtr
+        var neg : ExpressionPtr
+        if (match_neg_add(that, pos, neg)) {
+            changed = true
+            return new ExprOp2(at = that.at, op := "-", left = pos, right = neg)
+        }
         return that
     }
 }
@@ -2303,12 +2335,18 @@ class private FuseResidualVisitor : AstVisitor {
     checkLerp : bool
     foundMad : bool
     foundLerp : bool
+    foundNegAdd : bool
     def override preVisitExprOp2(var expr : ExprOp2?) : void {
         var ma : ExpressionPtr
         var mb : ExpressionPtr
         var mc : ExpressionPtr
         if (match_mad(expr, ma, mb, mc)) {
             foundMad = true
+        }
+        var pos : ExpressionPtr
+        var neg : ExpressionPtr
+        if (match_neg_add(expr, pos, neg)) {
+            foundNegAdd = true
         }
     }
     def override preVisitExprCall(var expr : ExprCall?) : void {
