@@ -97,11 +97,23 @@ def c_loop_uni(x : int) : int {
     return acc
 }
 
+var PAL : array<float>
+
+// ----- CSE under a wrapper node: the repeated index `(a*3+b)&3` sits under two ExprAt nodes.
+// flatten preserves ExprAt/ExprCast/ExprMakeTuple/ExprPtr2Ref (see lift_expr), and the opt-pass
+// recursions must descend through them — else the dup is tallied (universal visitor) but never
+// replaced (manual dispatch), leaving a CSE residual and spinning the round loop. -----
+[flatten]
+def c_at(a : int; b : int) : float {
+    return PAL[(a * 3 + b) & 3] + PAL[(a * 3 + b) & 3]
+}
+
 var GRID : array<float>
 
 [init]
 def fill_grid {
     GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
+    PAL <- [1.0, 2.0, 3.0, 4.0]
 }
 
 def cmp3f(t : T?; a, b : float3) {
@@ -154,6 +166,12 @@ def test_flatten_opt(t : T?) {
         for (v in GRID) {
             let n = int(v)
             t |> equal(c_loop_uni_flat(n), c_loop_uni(n))
+        }
+    }
+    t |> run("CSE: repeated index under ExprAt is deduped") @(t : T?) {
+        for (v in GRID) {
+            let n = int(v)
+            t |> equal(c_at_flat(n, n + 1), c_at(n, n + 1))
         }
     }
 }

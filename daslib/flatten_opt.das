@@ -1269,6 +1269,12 @@ def private psh_has_compute(e : ExpressionPtr) : bool {
     if (e is ExprOp1 || e is ExprOp2 || e is ExprOp3 || e is ExprCall) return true
     if (e is ExprField) return psh_has_compute((e as ExprField).value)
     if (e is ExprSwizzle) return psh_has_compute((e as ExprSwizzle).value)
+    if (e is ExprCast) return psh_has_compute((e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return psh_has_compute((e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return psh_has_compute(o.subexpr) || psh_has_compute(o.index)
+    }
     return false
 }
 
@@ -1297,6 +1303,18 @@ def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) 
     if (e is ExprRef2Value) return pex_eligible(pe, barriers, (e as ExprRef2Value).subexpr)
     if (e is ExprField) return pex_eligible(pe, barriers, (e as ExprField).value)
     if (e is ExprSwizzle) return pex_eligible(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprCast) return pex_eligible(pe, barriers, (e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return pex_eligible(pe, barriers, (e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return pex_eligible(pe, barriers, o.subexpr) && pex_eligible(pe, barriers, o.index)
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (!pex_eligible(pe, barriers, v)) return false
+        }
+        return true
+    }
     if (e is ExprOp1) return pex_eligible(pe, barriers, (e as ExprOp1).subexpr)
     if (e is ExprOp2) {
         let o = e as ExprOp2
@@ -1366,6 +1384,21 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
     } elif (e is ExprRef2Value) {
         var o = e as ExprRef2Value
         o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprCast) {
+        var o = e as ExprCast
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprPtr2Ref) {
+        var o = e as ExprPtr2Ref
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprAt) {
+        var o = e as ExprAt
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+        o.index = pex_extract(pe, barriers, o.index)
+    } elif (e is ExprMakeTuple) {
+        var o = e as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = pex_extract(pe, barriers, o.values[vi])
+        }
     } elif (e is ExprMakeStruct) {
         var ms = e as ExprMakeStruct
         for (si in range(length(ms.structs))) {
@@ -1481,13 +1514,52 @@ def private collect_mutable(blk : ExprBlock?) : table<string> {
     return <- r
 }
 
+// One structural walk (O(size)) over the closed post-flatten node set, replacing the old
+// O(#mutableVars * size) per-name count_refs loop. An unknown node kind is conservatively treated
+// as reading a mutable (never CSE through it) — correctness over completeness for this safety gate.
 def private reads_mutable(e : ExpressionPtr; mutableVars : table<string>) : bool {
-    if (empty(mutableVars)) return false
-    var ec = unsafe(reinterpret<Expression? -const>(e))
-    for (nm in keys(mutableVars)) {
-        if (count_refs(ec, nm) > 0) return true
+    if (e == null || empty(mutableVars) || e |> is_expr_const()) return false
+    if (e is ExprVar) return key_exists(mutableVars, "{(e as ExprVar).name}")
+    if (e is ExprRef2Value) return reads_mutable((e as ExprRef2Value).subexpr, mutableVars)
+    if (e is ExprField) return reads_mutable((e as ExprField).value, mutableVars)
+    if (e is ExprSwizzle) return reads_mutable((e as ExprSwizzle).value, mutableVars)
+    if (e is ExprCast) return reads_mutable((e as ExprCast).subexpr, mutableVars)
+    if (e is ExprPtr2Ref) return reads_mutable((e as ExprPtr2Ref).subexpr, mutableVars)
+    if (e is ExprOp1) return reads_mutable((e as ExprOp1).subexpr, mutableVars)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
     }
-    return false
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
+    }
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.index, mutableVars)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (reads_mutable(a, mutableVars)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (reads_mutable(v, mutableVars)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (reads_mutable(fld.value, mutableVars)) return true
+            }
+        }
+        return false
+    }
+    return true
 }
 
 class private CseTally : AstVisitor {
@@ -1539,6 +1611,21 @@ def private cse_replace_expr(var e : ExpressionPtr; key, refName : string) : Exp
     } elif (e is ExprRef2Value) {
         var o = e as ExprRef2Value
         o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprCast) {
+        var o = e as ExprCast
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprPtr2Ref) {
+        var o = e as ExprPtr2Ref
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprAt) {
+        var o = e as ExprAt
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+        o.index = cse_replace_expr(o.index, key, refName)
+    } elif (e is ExprMakeTuple) {
+        var o = e as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = cse_replace_expr(o.values[vi], key, refName)
+        }
     } elif (e is ExprMakeStruct) {
         var ms = e as ExprMakeStruct
         for (si in range(length(ms.structs))) {
@@ -1740,6 +1827,18 @@ def private pex_residual_expr(pe : PEX; barriers : table<string>; e : Expression
     if (e is ExprField) return pex_residual_expr(pe, barriers, (e as ExprField).value)
     if (e is ExprSwizzle) return pex_residual_expr(pe, barriers, (e as ExprSwizzle).value)
     if (e is ExprRef2Value) return pex_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprCast) return pex_residual_expr(pe, barriers, (e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return pex_residual_expr(pe, barriers, (e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.index)
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (pex_residual_expr(pe, barriers, v)) return true
+        }
+        return false
+    }
     if (e is ExprMakeStruct) {
         var ms = e as ExprMakeStruct
         for (si in range(length(ms.structs))) {
