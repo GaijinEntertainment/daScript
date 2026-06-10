@@ -168,7 +168,7 @@ common-subexpression elimination (``flatten_optimize``):
   ``a + b`` and ``b + a``; a uniform repeat routes to the preshader
   (``_preshader_cse_``), a varying one stays in the body (``_cse_``).
 * **Alias elimination** then collapses every pure ``let X = <bare var V>`` copy (with
-  ``V`` not reassigned) into direct references to ``V`` and drops the ``let``. CSE can
+  neither ``X`` nor ``V`` reassigned) into direct references to ``V`` and drops the ``let``. CSE can
   leave such copies (a later round rewrites an earlier ``_cse_`` let's whole RHS down to
   a bare var) and the unroll / fold can leave them (``let p_0 = ro``); both are
   pass-through graph nodes for nothing. CSE and alias elimination iterate to a fixpoint,
@@ -176,7 +176,8 @@ common-subexpression elimination (``flatten_optimize``):
 
 Both passes are **value-exact** — they only hoist and share existing subtrees, never
 regroup or round — and both exclude any subtree that reads a **reassigned** variable
-(a live/loop mask or a written global), whose value is not stable across the body.
+(a live/loop mask, a written global, or the base of an indexed store — ``G[i] = v``
+makes every ``G[...]`` read unstable), whose value is not stable across the body.
 
 Supported subset
 ================

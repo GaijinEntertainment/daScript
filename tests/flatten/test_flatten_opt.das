@@ -108,6 +108,18 @@ def c_at(a : int; b : int) : float {
     return PAL[(a * 3 + b) & 3] + PAL[(a * 3 + b) & 3]
 }
 
+var G_BUF : int[8]
+
+// ----- indexed STORE marks the base var mutable: G_BUF[...] reads must NOT be CSE-shared across
+// the stores (a hoisted pre-store read returns the stale value). The ExprAt lvalue hides the base
+// from a naive `ExprCopy.left is ExprVar` check. -----
+[flatten]
+def c_store(a : int; b : int) : int {
+    G_BUF[(a * 3 + b) & 7] = a * 2
+    G_BUF[(a * 3 + b) & 7] ++
+    return G_BUF[(a * 3 + b) & 7]
+}
+
 var GRID : array<float>
 
 [init]
@@ -172,6 +184,21 @@ def test_flatten_opt(t : T?) {
         for (v in GRID) {
             let n = int(v)
             t |> equal(c_at_flat(n, n + 1), c_at(n, n + 1))
+        }
+    }
+    t |> run("CSE: indexed-store base is mutable (no read shared across stores)") @(t : T?) {
+        for (v in GRID) {
+            let n = int(v)
+            // Reset the buffer before EACH twin: a stale shared read would otherwise pick up the
+            // previous twin's result and mask the bug.
+            for (i in range(8)) {
+                G_BUF[i] = 0
+            }
+            let want = c_store(n, n + 1)
+            for (i in range(8)) {
+                G_BUF[i] = 0
+            }
+            t |> equal(c_store_flat(n, n + 1), want)
         }
     }
 }

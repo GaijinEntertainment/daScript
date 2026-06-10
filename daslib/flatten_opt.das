@@ -1487,14 +1487,27 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
 // The body is one basic block, so LVN is complete. Value-number pure subtrees by `describe()`, dedup
 // any computed >=2x into one shared let before its first use; uniform dups route to the preshader.
 
+// The base ExprVar of a store target, digging through index/field/swizzle/deref wrappers —
+// `G[i] = v` makes G's reads value-unstable exactly like `G = v` does.
+def private store_base(e : Expression const?) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprAt) return store_base((e as ExprAt).subexpr)
+    if (e is ExprField) return store_base((e as ExprField).value)
+    if (e is ExprSwizzle) return store_base((e as ExprSwizzle).value)
+    if (e is ExprPtr2Ref) return store_base((e as ExprPtr2Ref).subexpr)
+    if (e is ExprRef2Value) return store_base((e as ExprRef2Value).subexpr)
+    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+}
+
 // Names reassigned somewhere in the block (live/loop masks `__flat_*`, any reassigned user `var`).
 // A subtree reading one of these is NOT value-stable — CSE must not share it (its value differs
 // per occurrence), so it is excluded from value numbering. Single-def `__ssa_*` / `let` are safe.
 class private MutCollect : AstVisitor {
     names : table<string>
     def override preVisitExprCopy(expr : ExprCopy?) : void {
-        if (expr.left is ExprVar) {
-            names |> insert("{(expr.left as ExprVar).name}")
+        let base = store_base(expr.left)
+        if (base != null) {
+            names |> insert("{(base as ExprVar).name}")
         }
     }
 }
@@ -1568,6 +1581,12 @@ class private CseTally : AstVisitor {
     sample : table<string; ExpressionPtr>
     mutableVars : table<string>
     def override preVisitExpression(expr : ExpressionPtr) : void {
+        // ExprRef2Value is describe-transparent: tallying wrapper AND wrappee double-counts every
+        // ref-rooted dup (an array/field read), so its count never drops below 2 after sharing and
+        // the round loop spins. Tally the wrappee only.
+        if (expr is ExprRef2Value) {
+            return
+        }
         if (psh_has_compute(expr) && !reads_mutable(expr, mutableVars)) {
             let k = "{describe(expr)}"
             counts[k] = (counts?[k] ?? 0) + 1
@@ -1654,6 +1673,26 @@ def private cse_replace_stmt(var s : ExpressionPtr; key, refName : string) {
     }
 }
 
+// Tally EXACTLY the regions cse_replace_stmt rewrites (let inits, copy RHS, return expr) — NOT the
+// whole statement. A dup counted in an unrewritable position (a store's lvalue) can never drop
+// below 2, so the round loop would re-pick the same key and spin to the guard.
+def private cse_tally_stmt(s : ExpressionPtr; a) {
+    if (s is ExprLet) {
+        for (lv in (s as ExprLet).variables) {
+            if (lv.init != null) {
+                visit(lv.init, a)
+            }
+        }
+    } elif (s is ExprCopy) {
+        visit((s as ExprCopy).right, a)
+    } elif (s is ExprReturn) {
+        let rt = s as ExprReturn
+        if (rt.subexpr != null) {
+            visit(rt.subexpr, a)
+        }
+    }
+}
+
 // Count leading contiguous `_preshader_*` lets — the preshader region. A CSE dup whose first use
 // falls inside it is uniform (Pass A already pulled every nontrivial uniform subtree out of the
 // body), so it routes to the preshader.
@@ -1670,9 +1709,10 @@ def private preshader_prefix_len(blk : ExprBlock?) : int {
     return k
 }
 
-def private cse_body(var blk : ExprBlock?) : bool {
+// `counter` is owned by the caller's cse/alias loop — fresh per-call numbering would collide a
+// second call's `_cse_0` with a surviving first-call `_cse_0` (error[30704] shadowing).
+def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {
     var anyChange = false
-    var counter = 0
     var guard = 0
     // Reassigned vars are stable across rounds (cse only ever adds `let`s), so collect once.
     var mutableVars <- collect_mutable(blk)
@@ -1687,7 +1727,7 @@ def private cse_body(var blk : ExprBlock?) : bool {
             ct.collectSample = true
             ct.mutableVars := mutableVars
             make_visitor(*ct) $(a) {
-                visit(blk.list[i], a)
+                cse_tally_stmt(blk.list[i], a)
             }
             for (k in keys(ct.counts)) {
                 counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
@@ -1891,13 +1931,14 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
             break
         }
     }
-    // CSE residual: any pure subtree (no mutable read) still computed >=2x across the block.
+    // CSE residual: any pure subtree (no mutable read) still computed >=2x — tallying the same
+    // rewritable regions cse_body does, so an unrewritable lvalue dup is not a false positive.
     var counts : table<string; int>
     for (i in range(length(blk.list))) {
         var ct = new CseTally()
         ct.mutableVars := pe.mutableVars
         make_visitor(*ct) $(a) {
-            visit(blk.list[i], a)
+            cse_tally_stmt(blk.list[i], a)
         }
         for (k in keys(ct.counts)) {
             counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
@@ -1939,13 +1980,27 @@ def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>
     if (!(func.body is ExprBlock)) return false
     var blk = func.body as ExprBlock
     var changed = extract_preshader(func, blk, barriers)
-    if (cse_body(blk)) {
+    // cse and alias enable each other (a collapsed alias canonicalises names, exposing fresh dups),
+    // so iterate the pair to a fixpoint. Converges in a couple of iterations now that the tally is
+    // occurrence-exact; an exhausted guard means an oscillation regression — warn, never hang.
+    var guard = 0
+    var cseCounter = 0
+    while (guard < 16) {
+        guard ++
+        var round = false
+        if (cse_body(blk, cseCounter)) {
+            round = true
+        }
+        if (eliminate_aliases(blk)) {
+            round = true
+        }
+        if (!round) {
+            break
+        }
         changed = true
     }
-    // Collapse every pure copy-let — CSE's `_cse_a = _cse_b` leftovers AND the unroll/fold's
-    // `p_0 = ro`. `eliminate_aliases` is general, so one post-CSE sweep clears them all.
-    if (eliminate_aliases(blk)) {
-        changed = true
+    if (guard >= 16) {
+        to_log(LOG_WARNING, "flatten: cse/alias loop guard exhausted in {func.name} (oscillation?)\n")
     }
     return changed
 }
