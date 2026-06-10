@@ -122,20 +122,6 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     font-size: 12.5px;
 }
 .forge-nav__version { color: var(--fg-faint); }
-.forge-nav__github {
-    color: var(--fg);
-    padding: 6px 12px;
-    border: 1px solid var(--rule);
-    border-radius: 4px;
-}
-.forge-nav__install {
-    color: var(--bg);
-    background: var(--amber);
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-weight: 600;
-}
-.forge-nav__install:hover { color: var(--bg); background: #f4b04a; }
 
 /* "N NEW" blog chip injected by files/blog-counter.js */
 .forge-nav__links a.forge-blog-link {
