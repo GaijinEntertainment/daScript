@@ -14,8 +14,10 @@ module flatten_opt shared private
 
 require daslib/ast
 require daslib/ast_boost
+require daslib/ast_match
 require daslib/templates_boost
 require daslib/macro_boost
+require daslib/match
 require daslib/rtti
 require strings
 
@@ -536,93 +538,100 @@ class private FoldVisitor : AstVisitor {
         // Algebraic identities over the scalar + vector (float/int/uint) family, under fast-math.
         // `*1`/`*-1` return the non-const operand and gate on `same_base_type` (scalar*vector
         // broadcast must not mistype to scalar); `*0` returns a RESULT-typed zero via zero_const_of.
-        if (that.op == "*") {
-            if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
-            if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
-            if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
-            if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
-            // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
-            if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (!noFastMath || !is_float_valued(that))) {
-                var z = zero_const_of(that._type, that.at)
-                if (z != null) { changed = true; return z }
-            }
-            if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (!noFastMath || !is_float_valued(that))) {
-                var z = zero_const_of(that._type, that.at)
-                if (z != null) { changed = true; return z }
-            }
-            // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a
-            // full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing
-            // the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
-            if (!noFastMath || !is_float_valued(that)) {
-                if (ctor_lane_kill(that.left, that.right) || ctor_lane_kill(that.right, that.left)) {
+        match (that.op) {
+            if ("*") {
+                if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
+                if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
+                if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
+                if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
+                // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
+                if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (!noFastMath || !is_float_valued(that))) {
+                    var z = zero_const_of(that._type, that.at)
+                    if (z != null) { changed = true; return z }
+                }
+                if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (!noFastMath || !is_float_valued(that))) {
+                    var z = zero_const_of(that._type, that.at)
+                    if (z != null) { changed = true; return z }
+                }
+                // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a
+                // full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing
+                // the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
+                if (!noFastMath || !is_float_valued(that)) {
+                    if (ctor_lane_kill(that.left, that.right) || ctor_lane_kill(that.right, that.left)) {
+                        changed = true
+                        return that
+                    }
+                }
+                // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the
+                // splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
+                var spm = splat_scalar_arg(that.right)
+                if (spm != null && is_float_vec(expr_bt(that.left))) {
                     changed = true
+                    that.right = spm
+                    return that
+                }
+                spm = splat_scalar_arg(that.left)
+                if (spm != null && is_float_vec(expr_bt(that.right))) {
+                    changed = true
+                    that.left = spm
                     return that
                 }
             }
-            // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the
-            // splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
-            var spm = splat_scalar_arg(that.right)
-            if (spm != null && is_float_vec(expr_bt(that.left))) {
-                changed = true
-                that.right = spm
-                return that
+            if ("+") {
+                if (is_zero_const_op(that.right)) { changed = true; return that.left }
+                if (is_zero_const_op(that.left)) { changed = true; return that.right }
             }
-            spm = splat_scalar_arg(that.left)
-            if (spm != null && is_float_vec(expr_bt(that.right))) {
-                changed = true
-                that.left = spm
-                return that
-            }
-        } elif (that.op == "+") {
-            if (is_zero_const_op(that.right)) { changed = true; return that.left }
-            if (is_zero_const_op(that.left)) { changed = true; return that.right }
-        } elif (that.op == "-") {
-            if (is_zero_const_op(that.right)) { changed = true; return that.left }
-            if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
-            // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
-            // fast-math charter). Identical describe ⇒ identical purity, so one check.
-            if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
-                    (!noFastMath || !is_float_valued(that))) {
-                var z = zero_const_of(that._type, that.at)
-                if (z != null) { changed = true; return z }
-            }
-        } elif (that.op == "/") {
-            // `x / C → x * (1/C)` — a mul instead of a div; the reciprocal rounds (fast-math).
-            // Float-family only (int division has no reciprocal); zero lanes keep the div.
-            if (!noFastMath && is_float_valued(that)) {
-                var rec = recip_const(that.right)
-                if (rec != null) {
-                    changed = true
-                    return new ExprOp2(at = that.at, op := "*", left = that.left, right = rec)
+            if ("-") {
+                if (is_zero_const_op(that.right)) { changed = true; return that.left }
+                if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
+                // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
+                // fast-math charter). Identical describe ⇒ identical purity, so one check.
+                if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
+                        (!noFastMath || !is_float_valued(that))) {
+                    var z = zero_const_of(that._type, that.at)
+                    if (z != null) { changed = true; return z }
                 }
             }
-            // splat collapse for division: `v / floatN(s) → v / s`, `floatN(s) / v → s / v` —
-            // both vec÷scalar forms are native das. Bit-exact, never gated.
-            var spd = splat_scalar_arg(that.right)
-            if (spd != null && is_float_vec(expr_bt(that.left))) {
-                changed = true
-                that.right = spd
-                return that
+            if ("/") {
+                // `x / C → x * (1/C)` — a mul instead of a div; the reciprocal rounds (fast-math).
+                // Float-family only (int division has no reciprocal); zero lanes keep the div.
+                if (!noFastMath && is_float_valued(that)) {
+                    var rec = recip_const(that.right)
+                    if (rec != null) {
+                        changed = true
+                        return new ExprOp2(at = that.at, op := "*", left = that.left, right = rec)
+                    }
+                }
+                // splat collapse for division: `v / floatN(s) → v / s`, `floatN(s) / v → s / v` —
+                // both vec÷scalar forms are native das. Bit-exact, never gated.
+                var spd = splat_scalar_arg(that.right)
+                if (spd != null && is_float_vec(expr_bt(that.left))) {
+                    changed = true
+                    that.right = spd
+                    return that
+                }
+                spd = splat_scalar_arg(that.left)
+                if (spd != null && is_float_vec(expr_bt(that.right))) {
+                    changed = true
+                    that.left = spd
+                    return that
+                }
             }
-            spd = splat_scalar_arg(that.left)
-            if (spd != null && is_float_vec(expr_bt(that.right))) {
-                changed = true
-                that.left = spd
-                return that
+            if ("&&") {
+                // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
+                // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
+                if (is_bool_val(that.left, true)) { changed = true; return that.right }
+                if (is_bool_val(that.right, true)) { changed = true; return that.left }
+                if (is_bool_val(that.left, false)) { changed = true; return that.left }
+                if (is_bool_val(that.right, false) && !has_sideeffects(that.left)) { changed = true; return that.right }
             }
-        } elif (that.op == "&&") {
-            // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
-            // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
-            if (is_bool_val(that.left, true)) { changed = true; return that.right }
-            if (is_bool_val(that.right, true)) { changed = true; return that.left }
-            if (is_bool_val(that.left, false)) { changed = true; return that.left }
-            if (is_bool_val(that.right, false) && !has_sideeffects(that.left)) { changed = true; return that.right }
-        } elif (that.op == "||") {
-            // Mirror of `&&`: `true || x` never evaluates x; `x || true` does.
-            if (is_bool_val(that.left, false)) { changed = true; return that.right }
-            if (is_bool_val(that.right, false)) { changed = true; return that.left }
-            if (is_bool_val(that.left, true)) { changed = true; return that.left }
-            if (is_bool_val(that.right, true) && !has_sideeffects(that.left)) { changed = true; return that.right }
+            if ("||") {
+                // Mirror of `&&`: `true || x` never evaluates x; `x || true` does.
+                if (is_bool_val(that.left, false)) { changed = true; return that.right }
+                if (is_bool_val(that.right, false)) { changed = true; return that.left }
+                if (is_bool_val(that.left, true)) { changed = true; return that.left }
+                if (is_bool_val(that.right, true) && !has_sideeffects(that.left)) { changed = true; return that.right }
+            }
         }
         return that
     }
@@ -683,7 +692,7 @@ class private FoldVisitor : AstVisitor {
                 var aArg = that.arguments[0]
                 var bArg = that.arguments[1]
                 var tArg = that.arguments[2]
-                // const-selector short-circuits — no expand/refuse round trip. They DROP an
+                // const-selector short-circuits — no expand/re-fuse round trip. They DROP an
                 // argument (`(b-a)*0` would still propagate b's inf/NaN) → fast-math only.
                 if (!noFastMath) {
                     if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
@@ -853,26 +862,27 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
 // Keying on the result type lets both `v * 0.0` and `v * float3(0)` fold width-matched.
 def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
-    let bt = t.baseType
-    if (bt == Type.tInt) return new ExprConstInt(at = at, value = 0)
-    if (bt == Type.tInt8) return new ExprConstInt8(at = at, value = int8(0))
-    if (bt == Type.tInt16) return new ExprConstInt16(at = at, value = int16(0))
-    if (bt == Type.tInt64) return new ExprConstInt64(at = at, value = 0l)
-    if (bt == Type.tUInt) return new ExprConstUInt(at = at, value = 0u)
-    if (bt == Type.tUInt8) return new ExprConstUInt8(at = at, value = uint8(0))
-    if (bt == Type.tUInt16) return new ExprConstUInt16(at = at, value = uint16(0))
-    if (bt == Type.tUInt64) return new ExprConstUInt64(at = at, value = 0ul)
-    if (bt == Type.tFloat) return new ExprConstFloat(at = at, value = 0.0f)
-    if (bt == Type.tDouble) return new ExprConstDouble(at = at, value = 0.0lf)
-    if (bt == Type.tFloat2) return new ExprConstFloat2(at = at, value = float2(0.0))
-    if (bt == Type.tFloat3) return new ExprConstFloat3(at = at, value = float3(0.0))
-    if (bt == Type.tFloat4) return new ExprConstFloat4(at = at, value = float4(0.0))
-    if (bt == Type.tInt2) return new ExprConstInt2(at = at, value = int2(0))
-    if (bt == Type.tInt3) return new ExprConstInt3(at = at, value = int3(0))
-    if (bt == Type.tInt4) return new ExprConstInt4(at = at, value = int4(0))
-    if (bt == Type.tUInt2) return new ExprConstUInt2(at = at, value = uint2(0u))
-    if (bt == Type.tUInt3) return new ExprConstUInt3(at = at, value = uint3(0u))
-    if (bt == Type.tUInt4) return new ExprConstUInt4(at = at, value = uint4(0u))
+    match (t.baseType) {
+        if (Type.tInt) { return new ExprConstInt(at = at, value = 0) }
+        if (Type.tInt8) { return new ExprConstInt8(at = at, value = int8(0)) }
+        if (Type.tInt16) { return new ExprConstInt16(at = at, value = int16(0)) }
+        if (Type.tInt64) { return new ExprConstInt64(at = at, value = 0l) }
+        if (Type.tUInt) { return new ExprConstUInt(at = at, value = 0u) }
+        if (Type.tUInt8) { return new ExprConstUInt8(at = at, value = uint8(0)) }
+        if (Type.tUInt16) { return new ExprConstUInt16(at = at, value = uint16(0)) }
+        if (Type.tUInt64) { return new ExprConstUInt64(at = at, value = 0ul) }
+        if (Type.tFloat) { return new ExprConstFloat(at = at, value = 0.0f) }
+        if (Type.tDouble) { return new ExprConstDouble(at = at, value = 0.0lf) }
+        if (Type.tFloat2) { return new ExprConstFloat2(at = at, value = float2(0.0)) }
+        if (Type.tFloat3) { return new ExprConstFloat3(at = at, value = float3(0.0)) }
+        if (Type.tFloat4) { return new ExprConstFloat4(at = at, value = float4(0.0)) }
+        if (Type.tInt2) { return new ExprConstInt2(at = at, value = int2(0)) }
+        if (Type.tInt3) { return new ExprConstInt3(at = at, value = int3(0)) }
+        if (Type.tInt4) { return new ExprConstInt4(at = at, value = int4(0)) }
+        if (Type.tUInt2) { return new ExprConstUInt2(at = at, value = uint2(0u)) }
+        if (Type.tUInt3) { return new ExprConstUInt3(at = at, value = uint3(0u)) }
+        if (Type.tUInt4) { return new ExprConstUInt4(at = at, value = uint4(0u)) }
+    }
     return null
 }
 
@@ -2530,24 +2540,20 @@ def private fuse_callable(mod : Module?; fname : string) : bool {
 // residual; no purity gate — flat-body calls are pure by contract (and has_sideeffects is timing-dependent).
 def private match_mad(var that : ExprOp2?; var ma, mb, mc : ExpressionPtr&) : bool {
     if (that == null) return false
-    var mul : ExprOp2?
-    var other : ExpressionPtr
+    var fa, fb, other : ExpressionPtr
     var negOther = false        // `m - C`  → c = -C
     var negFactor = false       // `C - m`  → negate a const factor of m
-    if (that.op == "+" || that.op == "-") {
-        if (that.left is ExprOp2 && (that.left as ExprOp2).op == "*") {
-            mul = that.left as ExprOp2
-            other = that.right
-            negOther = that.op == "-"
-        } elif (that.right is ExprOp2 && (that.right as ExprOp2).op == "*") {
-            mul = that.right as ExprOp2
-            other = that.left
-            negFactor = that.op == "-"
-        }
+    if (qmatch(that, $e(fa) * $e(fb) + $e(other)).matched) {
+        pass
+    } elif (qmatch(that, $e(other) + $e(fa) * $e(fb)).matched) {
+        pass
+    } elif (qmatch(that, $e(fa) * $e(fb) - $e(other)).matched) {
+        negOther = true
+    } elif (qmatch(that, $e(other) - $e(fa) * $e(fb)).matched) {
+        negFactor = true
+    } else {
+        return false
     }
-    if (mul == null) return false
-    var fa = mul.left
-    var fb = mul.right
     // types captured BEFORE negation — a fresh negated literal is untyped until re-infer
     var bta = expr_bt(fa)
     var btb = expr_bt(fb)
@@ -2586,46 +2592,25 @@ def private match_mad(var that : ExprOp2?; var ma, mb, mc : ExpressionPtr&) : bo
 // the form (positives-first canonical order), so this catches the other producers — the `0 - x`
 // and `*-1` fold arms. Shared by fuser AND residual.
 def private match_neg_add(var that : ExprOp2?; var pos, neg : ExpressionPtr&) : bool {
-    if (that == null || that.op != "+" || !is_mad_elem(expr_bt(that))) return false
-    if (that.left is ExprOp1 && (that.left as ExprOp1).op == "-") {
-        pos = that.right
-        neg = (that.left as ExprOp1).subexpr
-        return true
-    }
-    if (that.right is ExprOp1 && (that.right as ExprOp1).op == "-") {
-        pos = that.left
-        neg = (that.right as ExprOp1).subexpr
-        return true
-    }
-    return false
+    if (that == null || !is_mad_elem(expr_bt(that))) return false
+    return (qmatch(that, -$e(neg) + $e(pos)).matched ||    // nolint:STYLE016 (qmatch macro expansion)
+        qmatch(that, $e(pos) + -$e(neg)).matched)           // nolint:STYLE016 (qmatch macro expansion)
 }
 
 // `mad(b - a, t, a)` → `lerp(a, b, t)`: the re-packed expansion shape, `a` matched by
 // describe-equality. The neg-add form is matched too (defense — reassoc no longer emits it).
 // Deliberately misses a CSE-shared `b - a` (behind a `_cse_` var — keeping the share IS the win).
 def private match_lerp(var cll : ExprCall?; var la, lb, lt : ExpressionPtr&) : bool {
-    if (cll == null || length(cll.arguments) != 3 ||
-        psh_simple_name("{cll.name}") != "mad" || !(cll.arguments[0] is ExprOp2)) return false
-    var diff = cll.arguments[0] as ExprOp2
-    var db : ExpressionPtr      // b — the minuend
-    var da : ExpressionPtr      // a — the subtrahend
-    if (diff.op == "-") {
-        db = diff.left
-        da = diff.right
-    } elif (diff.op == "+") {
-        if (diff.left is ExprOp1 && (diff.left as ExprOp1).op == "-") {
-            da = (diff.left as ExprOp1).subexpr
-            db = diff.right
-        } elif (diff.right is ExprOp1 && (diff.right as ExprOp1).op == "-") {
-            da = (diff.right as ExprOp1).subexpr
-            db = diff.left
-        }
-    }
-    if (da == null || describe(da) != describe(cll.arguments[2]) ||
-        !lerp_shape(expr_bt(da), expr_bt(db), expr_bt(cll.arguments[1]))) return false
-    la = cll.arguments[2]
+    if (cll == null) return false
+    var da, db, aa, tt : ExpressionPtr
+    if (!qmatch(cll, mad($e(db) - $e(da), $e(tt), $e(aa))).matched &&     // nolint:STYLE016 (qmatch macro expansion)
+        !qmatch(cll, mad(-$e(da) + $e(db), $e(tt), $e(aa))).matched &&    // nolint:STYLE016 (qmatch macro expansion)
+        !qmatch(cll, mad($e(db) + -$e(da), $e(tt), $e(aa))).matched) return false  // nolint:STYLE016 (qmatch macro expansion)
+    if (describe(da) != describe(aa) ||
+        !lerp_shape(expr_bt(da), expr_bt(db), expr_bt(tt))) return false
+    la = aa
     lb = db
-    lt = cll.arguments[1]
+    lt = tt
     return true
 }
 
@@ -2657,18 +2642,18 @@ def private component_read_of(var e : ExpressionPtr; var baseKey : string&; var 
     if (e is ExprRef2Value) return component_read_of((e as ExprRef2Value).subexpr, baseKey, base, comp)
     var v : ExpressionPtr
     var nm = ""
-    if (e is ExprSwizzle) {
-        var sw = e as ExprSwizzle
-        nm = "{sw.mask}"
-        v = sw.value
-    } elif (e is ExprField) {
-        var fl = e as ExprField
-        nm = "{fl.name}"
-        v = fl.value
-    } else {
-        return false
+    match (e) {
+        if (ExprSwizzle(mask = $v(swMask), value = $v(swValue))) {
+            nm = "{swMask}"
+            v = swValue
+        }
+        if (ExprField(name = $v(flName), value = $v(flValue))) {
+            nm = "{flName}"
+            v = flValue
+        }
     }
-    if ((nm != "x" && nm != "y" && nm != "z" && nm != "w") ||
+    if (v == null ||
+        (nm != "x" && nm != "y" && nm != "z" && nm != "w") ||
         !is_float_vec(expr_bt(v)) || expr_bt(e) != Type.tFloat) return false
     base = v
     baseKey = describe(v)
