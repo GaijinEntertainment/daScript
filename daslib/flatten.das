@@ -734,11 +734,19 @@ def public flatten_function(var func : FunctionPtr; whitelist : table<string>; m
 // ===== Post-infer select folding =====
 
 [macro_function]
-def public flatten_fold(var func : FunctionPtr) : bool {
-    //! Post-infer fold pass (delegates to `fold_body`): collapse `const ? a : b`, drop pure
-    //! `lhs = lhs` self-assigns, strip redundant zero inits. Run AFTER re-inference (conditions
-    //! must be `ExprConstBool`). Returns true if anything changed — re-infer then for clean codegen.
-    return fold_body(func)
+def public flatten_fast_math : bool {
+    //! True unless the COMPILING module sets `options _flatten_no_fast_math = true` — the user
+    //! opt-out of flatten's value-changing rewrites; bit-exact passes ignore it. COMPILE-TIME ONLY
+    //! (panics outside a compile): patch code reads it once, runtime tools pass their flag explicitly.
+    return !(compiling_program()._options |> find_arg("_flatten_no_fast_math") ?as tBool ?? false)
+}
+
+[macro_function]
+def public flatten_fold(var func : FunctionPtr; fast_math : bool = true) : bool {
+    //! Post-infer fold pass (delegates to `fold_body`): collapse `const ? a : b`, fold identities,
+    //! drop pure self-assigns. Run AFTER re-inference; returns true if anything changed. Compile-time
+    //! callers pass `flatten_fast_math()` to honor `options _flatten_no_fast_math`.
+    return fold_body(func, fast_math)
 }
 
 [macro_function]
@@ -805,6 +813,7 @@ def private verify_flat(var twin : FunctionPtr) : string {
 
 class private FoldResidualVisitor : AstVisitor {
     found : array<string>
+    fastMath : bool = true
     def override preVisitExprCall(expr : ExprCall?) : void {
         if (expr.func != null && expr.func.flags.builtIn && is_all_const(expr) && eval_to_const_supported(expr._type)) {
             found |> push("an unfolded all-const call '{expr.name}'")
@@ -820,7 +829,7 @@ class private FoldResidualVisitor : AstVisitor {
             found |> push("an unfolded algebraic identity ('{expr.op}')")
         } elif (is_all_const(expr) && eval_to_const_supported(expr._type)) {
             found |> push("an unfolded all-const arithmetic ('{expr.op}')")
-        } elif (has_scattered_consts(expr)) {
+        } elif (has_scattered_consts(expr, fastMath)) {
             found |> push("a scattered const chain ('{expr.op}') reassoc should gather")
         }
     }
@@ -831,15 +840,16 @@ class private FoldResidualVisitor : AstVisitor {
     }
 }
 
-def public flatten_fold_residuals(var func : FunctionPtr) : array<string> {
-    //! Collect the const-foldable residuals left in `func`'s (post-flatten) body — empty
-    //! means the fold is complete. For test-framework / fuzzer verification of a compiled
-    //! flattened twin; reuses the same predicates the macro's own fold uses.
+def public flatten_fold_residuals(var func : FunctionPtr; fast_math : bool = true) : array<string> {
+    //! Collect the const-foldable residuals left in `func`'s (post-flatten) body — empty means the
+    //! fold is complete; reuses the exact predicates the macro's own fold uses (test/fuzzer facing).
+    //! Pass `fast_math = false` for a unit compiled under `options _flatten_no_fast_math`.
     var res : array<string>
     if (func == null || func.body == null) {
         return <- res
     }
     var v = new FoldResidualVisitor()
+    v.fastMath = fast_math
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
@@ -899,7 +909,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // Cycle 2+: fold the inferred twin (const selects, algebraic identities, pure self-
             // assigns), re-infer if anything changed. Iterate to a fixpoint — fold and the typer's
             // re-infer const-fold are mutually-enabling, so one pass isn't enough.
-            let folded = flatten_fold(twin)
+            let folded = flatten_fold(twin, flatten_fast_math())
             set_flatten_phase(func, PHASE_FOLDED)
             if (folded) {
                 astChanged = true

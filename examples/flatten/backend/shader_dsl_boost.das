@@ -1601,7 +1601,7 @@ class PixelShaderMacro : AstFunctionAnnotation {
             // after optimize (else reassoc reorders a hoisted ref into a fresh un-extracted uniform
             // subtree, e.g. `uv - _preshader` → `-_preshader + uv`). tex2d/noise stay per-pixel.
             if (!shader_annotation_arg(func, "optimized")) {
-                if (flatten_fold(func)) {
+                if (flatten_fold(func, flatten_fast_math())) {
                     astChanged = true
                     return true
                 }

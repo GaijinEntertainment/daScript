@@ -524,6 +524,7 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 
 class private FoldVisitor : AstVisitor {
     changed : bool
+    fastMath : bool = true
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
         // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
@@ -540,11 +541,12 @@ class private FoldVisitor : AstVisitor {
             if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
             if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
             if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
-            if (is_zero_const_op(that.right) && !has_sideeffects(that.left)) {
+            // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
+            if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (fastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
             }
-            if (is_zero_const_op(that.left) && !has_sideeffects(that.right)) {
+            if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (fastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
             }
@@ -556,7 +558,8 @@ class private FoldVisitor : AstVisitor {
             if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
             // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
             // fast-math charter). Identical describe ⇒ identical purity, so one check.
-            if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left)) {
+            if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
+                    (fastMath || !is_float_valued(that))) {
                 var z = zero_const_of(that._type, that.at)
                 if (z != null) { changed = true; return z }
             }
@@ -633,12 +636,15 @@ class private FoldVisitor : AstVisitor {
                 var aArg = that.arguments[0]
                 var bArg = that.arguments[1]
                 var tArg = that.arguments[2]
-                // const-selector short-circuits — exact, and no expand/refuse round trip
-                if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
-                if (is_one_const_op(tArg) && !has_sideeffects(aArg)) { changed = true; return bArg }
-                if (describe(aArg) == describe(bArg) && !has_sideeffects(bArg) && !has_sideeffects(tArg)) {
-                    changed = true
-                    return aArg
+                // const-selector short-circuits — no expand/refuse round trip. They DROP an
+                // argument (`(b-a)*0` would still propagate b's inf/NaN) → fast-math only.
+                if (fastMath) {
+                    if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
+                    if (is_one_const_op(tArg) && !has_sideeffects(aArg)) { changed = true; return bArg }
+                    if (describe(aArg) == describe(bArg) && !has_sideeffects(bArg) && !has_sideeffects(tArg)) {
+                        changed = true
+                        return aArg
+                    }
                 }
                 changed = true
                 var sub = new ExprOp2(at = that.at, op := "-", left = bArg, right = clone_expression(aArg))
@@ -838,6 +844,14 @@ def private vec_elem_bt(bt : Type) : Type {
 def private is_float_family(bt : Type) : bool {
     return bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
 }
+
+// Float-valued (float/double scalar or float vector) — the fast-math gates key on this:
+// integer/bool identities are exact, floating-point ones change inf/NaN/rounding behavior.
+def private is_float_valued(e : ExpressionPtr) : bool {
+    let bt = expr_bt(e)
+    return is_float_family(bt) || bt == Type.tDouble
+}
+
 
 // The (T,T,T) element family das `mad` covers: float/int/uint scalar+vector, double scalar.
 def private is_mad_elem(bt : Type) : bool {
@@ -1218,9 +1232,9 @@ def private count_terms(e : ExpressionPtr; addOp : string; var nv : int&; var nc
 
 // True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered consts, not already grouped.
 // The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's exact gate
-// through this, so it flags only genuine misses.
-def public has_scattered_consts(that : ExprOp2?) : bool {
-    if (that == null) return false
+// through this — incl. `fast_math` (float chains stay scattered under `_flatten_no_fast_math`).
+def public has_scattered_consts(that : ExprOp2?; fast_math : bool = true) : bool {
+    if (that == null || (!fast_math && is_float_valued(that))) return false
     var nv = 0
     var nc = 0
     if (that.op == "+" || that.op == "-") {
@@ -1237,7 +1251,13 @@ def public has_scattered_consts(that : ExprOp2?) : bool {
 
 class private ReassocVisitor : AstVisitor {
     changed : bool
+    fastMath : bool = true
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        // Both the const-gather and the canonical re-sort rebuild the chain — a float
+        // sum/product picks up a different association order, so floats are fast-math only.
+        if (!fastMath && is_float_valued(that)) {
+            return that
+        }
         var res : ExpressionPtr = null
         if (that.op == "*") {
             var terms : array<ReTerm>
@@ -1256,16 +1276,18 @@ class private ReassocVisitor : AstVisitor {
     }
 }
 
-def public fold_body(var func : FunctionPtr) : bool {
+def public fold_body(var func : FunctionPtr; fast_math : bool = true) : bool {
     //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate
-    //! scattered consts, collapse `const ? a : b`, fold algebraic/boolean identities + const
-    //! constructors, drop pure self-assigns, strip zero inits. SINGLE pass (caller's re-infer loops it).
+    //! scattered consts, collapse `const ? a : b`, fold identities/const ctors, drop pure self-assigns.
+    //! SINGLE pass (caller re-infers and loops); `fast_math = false` skips the value-changing arms.
     if (!(func.body is ExprBlock)) return false
+    let fm = fast_math
     var changed = const_prop_locals(func.body as ExprBlock)
     // Reassociate BEFORE the fold — gather scattered consts into one adjacent group so the
     // FoldVisitor all-const arm (and the typer's re-infer) can collapse them. After const-prop,
     // which is what scatters consts (a substituted single-def local lands mid-chain).
     var rv = new ReassocVisitor()
+    rv.fastMath = fm
     make_visitor(*rv) $(adapter) {
         visit(func.body, adapter)
     }
@@ -1276,6 +1298,7 @@ def public fold_body(var func : FunctionPtr) : bool {
         delete rv
     }
     var v = new FoldVisitor()
+    v.fastMath = fm
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }
