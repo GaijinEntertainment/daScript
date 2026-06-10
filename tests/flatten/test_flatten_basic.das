@@ -127,6 +127,30 @@ def struct_guard(x : float; c : bool) : Pt {
     return Pt(b = x)
 }
 
+// ----- partially-assigned bare decls: each branch writes a DIFFERENT var; the other keeps its
+// implicit zero (the lowering materializes the zero-init the predicated select's false path reads) -----
+
+[flatten]
+def partial_vec(x : float) : float3 {
+    var a : float3
+    var b : float3
+    if (x > 0.5) {
+        a = float3(1.0, 0.0, 0.0)
+    } else {
+        b = float3(0.0, 1.0, 0.0)
+    }
+    return a + b
+}
+
+[flatten]
+def partial_scalar(x : float) : float {
+    var s : float
+    if (x > 0.5) {
+        s = x * 2.0
+    }
+    return s + 1.0
+}
+
 // ----- differential driver -----
 
 var GRID : array<int>
@@ -176,6 +200,17 @@ def test_flatten_equivalence(t : T?) {
     t |> run("helper-with-local inlined at two direct call sites") @(t : T?) {
         for (v in GRID) {
             t |> equal(inline_twice_flat(v), inline_twice(v))
+        }
+    }
+    t |> run("partially-assigned bare decls (each branch writes a different var)") @(t : T?) {
+        for (v in GRID) {
+            let fv = float(v) * 0.1
+            let pv = partial_vec_flat(fv)
+            let ev = partial_vec(fv)
+            t |> equal(pv.x, ev.x)
+            t |> equal(pv.y, ev.y)
+            t |> equal(pv.z, ev.z)
+            t |> equal(partial_scalar_flat(fv), partial_scalar(fv))
         }
     }
     t |> run("struct return type, unconditional + early return (was error[31016])") @(t : T?) {

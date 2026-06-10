@@ -7,7 +7,8 @@ module flatten_opt shared private
 
 //! Internal optimization passes for daslib/flatten: constant folding, constant
 //! propagation, copy propagation, and dead-store elimination over a flattened
-//! twin's straight-line body, plus the post-infer select-fold (`fold_body`).
+//! twin's straight-line body, plus the post-infer select-fold (`fold_body`),
+//! the preshader/CSE optimize pass and the mad/lerp re-fusion finishing pass.
 //! Not a public API — `require`d by daslib/flatten; the lowering machinery stays
 //! in flatten.das.
 
@@ -553,6 +554,12 @@ class private FoldVisitor : AstVisitor {
         } elif (that.op == "-") {
             if (is_zero_const_op(that.right)) { changed = true; return that.left }
             if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
+            // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
+            // fast-math charter). Identical describe ⇒ identical purity, so one check.
+            if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left)) {
+                var z = zero_const_of(that._type, that.at)
+                if (z != null) { changed = true; return z }
+            }
         } elif (that.op == "&&") {
             // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
             // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
@@ -612,6 +619,36 @@ class private FoldVisitor : AstVisitor {
             if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
                 changed = true
                 return folded
+            }
+        }
+        // DISASSEMBLE lerp/mad into raw arithmetic so the identity/const folds, reassoc and CSE
+        // see through them; the PHASE_FUSED finishing pass re-packs survivors. Type-gated to the
+        // das math overload set — a loose DSL-stub instantiation must not expand into ill-typed ops.
+        if (that.func != null && length(that.arguments) == 3) {
+            let fname = psh_simple_name("{that.func.name}")
+            let ta = expr_bt(that.arguments[0])
+            let tb = expr_bt(that.arguments[1])
+            let tc = expr_bt(that.arguments[2])
+            if (fname == "lerp" && lerp_shape(ta, tb, tc)) {
+                var aArg = that.arguments[0]
+                var bArg = that.arguments[1]
+                var tArg = that.arguments[2]
+                // const-selector short-circuits — exact, and no expand/refuse round trip
+                if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
+                if (is_one_const_op(tArg) && !has_sideeffects(aArg)) { changed = true; return bArg }
+                if (describe(aArg) == describe(bArg) && !has_sideeffects(bArg) && !has_sideeffects(tArg)) {
+                    changed = true
+                    return aArg
+                }
+                changed = true
+                var sub = new ExprOp2(at = that.at, op := "-", left = bArg, right = clone_expression(aArg))
+                var mul = new ExprOp2(at = that.at, op := "*", left = sub, right = tArg)
+                return new ExprOp2(at = that.at, op := "+", left = mul, right = aArg)
+            }
+            if (fname == "mad" && mad_shape(ta, tb, tc)) {
+                changed = true
+                var mul = new ExprOp2(at = that.at, op := "*", left = that.arguments[0], right = that.arguments[1])
+                return new ExprOp2(at = that.at, op := "+", left = mul, right = that.arguments[2])
             }
         }
         return that
@@ -758,10 +795,10 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// A fresh zero literal of `t` (the RESULT type of `X * 0`), over the numeric scalar + vector
-// family; null otherwise. Keying on the result type (not the zero operand's) lets both
-// `v:float3 * 0.0` and `v * float3(0)` fold to a width-matched `float3(0)` with no mistype.
-def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+// A fresh zero literal of `t` (the RESULT type of `X * 0`; also the lowering's materialized
+// implicit zero-init on bare decls), over the numeric scalar + vector family; null otherwise.
+// Keying on the result type lets both `v * 0.0` and `v * float3(0)` fold width-matched.
+def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
     let bt = t.baseType
     if (bt == Type.tInt) return new ExprConstInt(at = at, value = 0)
@@ -784,6 +821,43 @@ def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (bt == Type.tUInt3) return new ExprConstUInt3(at = at, value = uint3(0u))
     if (bt == Type.tUInt4) return new ExprConstUInt4(at = at, value = uint4(0u))
     return null
+}
+
+def private expr_bt(e : ExpressionPtr) : Type {
+    return (e == null || e._type == null) ? Type.none : e._type.baseType
+}
+
+// Scalar element of a vector baseType (tFloat3 → tFloat); Type.none for non-vectors.
+def private vec_elem_bt(bt : Type) : Type {
+    if (bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) return Type.tFloat
+    if (bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4) return Type.tInt
+    if (bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4) return Type.tUInt
+    return Type.none
+}
+
+def private is_float_family(bt : Type) : bool {
+    return bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
+}
+
+// The (T,T,T) element family das `mad` covers: float/int/uint scalar+vector, double scalar.
+def private is_mad_elem(bt : Type) : bool {
+    return (is_float_family(bt) || bt == Type.tDouble ||
+        bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4 ||
+        bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4)
+}
+
+// `mad(a, b, c)` overload shapes (das math): (T,T,T) over the numeric family, or the
+// vec-scalar-vec broadcast form (MadS). The single gate for expand, fuse AND residual.
+def private mad_shape(ta, tb, tc : Type) : bool {
+    if (ta == tb && tb == tc) return is_mad_elem(ta)
+    return ta == tc && tb != Type.none && vec_elem_bt(ta) == tb
+}
+
+// `lerp(a, b, t)` shapes safe to expand AND re-fuse: float family with scalar `t` only — the
+// one shape every provider has (das math AND the scalar-`t` backend DSL stubs). A vector-`t`
+// re-fusion of raw `(b-a)*tv + a` arithmetic would emit a call a DSL-only module can't resolve.
+def private lerp_shape(ta, tb, tt : Type) : bool {
+    return ta == tb && is_float_family(ta) && tt == Type.tFloat
 }
 
 // True if `e` is built only from const literals and pure ops/builtins — no var/global read,
@@ -1059,11 +1133,13 @@ def private build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp :
     return acc
 }
 
-// True if the var terms are already in canonical (describe-ascending) order. Lets the sort fire
-// only when needed, so a canonicalized chain is a no-op (idempotent → the macro fixpoint ends).
+// True if the var terms are already canonical: positives first (so build_chain emits `b - a`,
+// never `-a + b` = neg + add, whose uniform `-a` would hoist into a `_preshader_ = -_preshader_`
+// alias), describe-ascending per sign group. Mirrors the regroup sort exactly (idempotence).
 def private vars_sorted(vars : array<ReTerm>) : bool {
     for (i in range(1, length(vars))) {
-        if (describe(vars[i].e) < describe(vars[i - 1].e)) {
+        if ((vars[i - 1].neg && !vars[i].neg) ||
+            (vars[i - 1].neg == vars[i].neg && describe(vars[i].e) < describe(vars[i - 1].e))) {
             return false
         }
     }
@@ -1100,6 +1176,9 @@ def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : s
     }
     if (pure) {
         sort(vars) $(a, b : ReTerm) : bool {
+            if (a.neg != b.neg) {
+                return !a.neg
+            }
             return describe(a.e) < describe(b.e)
         }
     }
@@ -1260,6 +1339,16 @@ def private psh_reserved(name : das_string) : bool {
     return name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
 }
 
+// Parse `name` as `prefix` + decimal digits, -1 when it isn't. The round-trip check rejects
+// foreign suffixes — `_preshader_cse_3` against prefix `_preshader_` belongs to the cse counter.
+def private name_counter_suffix(name : das_string; prefix : string) : int {
+    if (!(name |> starts_with(prefix))) return -1
+    let s = slice("{name}", length(prefix))
+    if (empty(s)) return -1
+    let v = to_int(s)
+    return "{v}" == s ? v : -1
+}
+
 // True if the subtree carries a graph node (operator or call) — i.e. hoisting it saves per-pixel
 // work. A bare var / const / member access alone is trivial (no node), so it is inlined as an alias
 // rather than hoisted.
@@ -1410,17 +1499,45 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
     return e
 }
 
-def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>) : bool {
+// `counter` is owned by the caller's optimize loop — extraction re-runs per round, and a fresh
+// per-call numbering would collide a later round's `_preshader_0` with the surviving first one.
+def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&) : bool {
     var pe : PEX
+    pe.counter = counter
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")
     }
     pe.mutableVars <- collect_mutable(blk)
+    // re-entry seeding: prefix lets pre-fill dedup + colour (a re-hoist of one's own init would self-collapse)
+    var oldPrefix = 0
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 &&
+                (s as ExprLet).variables[0].name |> starts_with("_preshader_")) {
+            let lv = (s as ExprLet).variables[0]
+            if (lv.init != null) {
+                pe.dedup["{describe(lv.init)}"] = "{lv.name}"
+            }
+            pe.localColor["{lv.name}"] = true
+            // existing names own their suffixes — a fresh caller's counter must not re-mint them
+            let cnum = name_counter_suffix(lv.name, "_preshader_")
+            if (cnum >= pe.counter) {
+                pe.counter = cnum + 1
+            }
+            oldPrefix ++
+        } else {
+            break
+        }
+    }
     var body : array<ExpressionPtr>
     for (s0 in blk.list) {
         var s = s0
         if (!empty(pe.rename) && reads_any(s, pe.rename)) {
             s = subst_consts(s, pe.rename)
+        }
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 &&
+                (s as ExprLet).variables[0].name |> starts_with("_preshader_")) {
+            body |> push(s)
+            continue
         }
         if (s is ExprLet && length((s as ExprLet).variables) == 1 && !psh_reserved((s as ExprLet).variables[0].name)) {
             var lc = s as ExprLet
@@ -1459,18 +1576,22 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
         body |> push(s)
     }
     if (pe.changed) {
-        // Replace the body in place: preshader group on top, then the (extracted) varying body.
+        // old prefix first, then fresh hoists (they may reference earlier `_preshader_` names), then the body
         while (!empty(blk.list)) {
             blk.list |> erase(length(blk.list) - 1)
+        }
+        for (i in range(oldPrefix)) {
+            blk.list |> emplace(body[i])
         }
         for (t in pe.top) {
             blk.list |> emplace(t)
         }
-        for (b in body) {
-            blk.list |> emplace(b)
+        for (i in range(oldPrefix, length(body))) {
+            blk.list |> emplace(body[i])
         }
     }
     let result = pe.changed
+    counter = pe.counter
     delete pe.paramNames
     delete pe.localColor
     delete pe.mutableVars
@@ -1714,6 +1835,18 @@ def private preshader_prefix_len(blk : ExprBlock?) : int {
 def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {
     var anyChange = false
     var guard = 0
+    // existing share names own their suffixes — never re-mint them (shares splice mid-body, so scan all)
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            var cnum = name_counter_suffix((s as ExprLet).variables[0].name, "_preshader_cse_")
+            if (cnum < 0) {
+                cnum = name_counter_suffix((s as ExprLet).variables[0].name, "_cse_")
+            }
+            if (cnum >= counter) {
+                counter = cnum + 1
+            }
+        }
+    }
     // Reassigned vars are stable across rounds (cse only ever adds `let`s), so collect once.
     var mutableVars <- collect_mutable(blk)
     while (guard < 4096) {
@@ -1966,6 +2099,27 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
             }
         }
     }
+    // Fusion residual: a fusable mul-add (`a*b ± c`) PHASE_FUSED should have re-packed into
+    // `mad`, or a mad still carrying the lerp shape — gated on the same module visibility.
+    if (fuse_callable(func._module, "mad")) {
+        var fr = new FuseResidualVisitor()
+        fr.checkLerp = fuse_callable(func._module, "lerp")
+        make_visitor(*fr) $(a) {
+            visit(func.body, a)
+        }
+        if (fr.foundMad) {
+            res |> push("an un-fused mul-add ('a*b ± c' should be mad)")
+        }
+        if (fr.foundLerp) {
+            res |> push("an un-refused lerp shape (mad(b-a,t,a))")
+        }
+        if (fr.foundNegAdd) {
+            res |> push("an un-packed neg-add ('-a + b' should be 'b - a')")
+        }
+        unsafe {
+            delete fr
+        }
+    }
     delete pe.paramNames
     delete pe.localColor
     delete pe.mutableVars
@@ -1975,19 +2129,23 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : arr
 
 def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>) : bool {
     //! Post-fold optimize pass: hoist uniform (globals+literals) subtrees to top-of-body
-    //! `_preshader_N` lets, then CSE-dedup repeated subtrees. `barriers` = sampler/noise call names
-    //! that must stay per-pixel. Runs once after the fold fixpoint; caller re-infers after.
+    //! `_preshader_N` lets, CSE-dedup repeats, collapse pure aliases — a joint fixpoint.
+    //! `barriers` = sampler/noise names that stay per-pixel. Post-fold, once; caller re-infers.
     if (!(func.body is ExprBlock)) return false
     var blk = func.body as ExprBlock
-    var changed = extract_preshader(func, blk, barriers)
-    // cse and alias enable each other (a collapsed alias canonicalises names, exposing fresh dups),
-    // so iterate the pair to a fixpoint. Converges in a couple of iterations now that the tally is
-    // occurrence-exact; an exhausted guard means an oscillation regression — warn, never hang.
+    // The passes enable each other — an alias subst / CSE share can re-expose uniform compute in
+    // the varying region (`!_preshader_0`) that only re-extraction hoists, so iterate the triple
+    // to a fixpoint. An exhausted guard means an oscillation regression — warn, never hang.
+    var changed = false
     var guard = 0
     var cseCounter = 0
+    var preCounter = 0
     while (guard < 16) {
         guard ++
         var round = false
+        if (extract_preshader(func, blk, barriers, preCounter)) {
+            round = true
+        }
         if (cse_body(blk, cseCounter)) {
             round = true
         }
@@ -2001,6 +2159,264 @@ def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>
     }
     if (guard >= 16) {
         to_log(LOG_WARNING, "flatten: cse/alias loop guard exhausted in {func.name} (oscillation?)\n")
+    }
+    return changed
+}
+
+// ===== mad/lerp re-fusion (PHASE_FUSED finishing pass) =====
+// The fold DISASSEMBLES lerp/mad into raw arithmetic (identities fold, reassoc/CSE see through);
+// this re-packs survivors: `a*b ± c` → mad, then `mad(b - a, t, a)` → lerp — one node each.
+
+// A negated copy of a scalar/vector float/int const literal; null for any other node
+// (uint excluded — modular negation is value-correct but backend-hostile).
+def private negate_const(e : ExpressionPtr) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprConstFloat) return new ExprConstFloat(at = e.at, value = -(e as ExprConstFloat).value)
+    if (e is ExprConstDouble) return new ExprConstDouble(at = e.at, value = -(e as ExprConstDouble).value)
+    if (e is ExprConstInt) return new ExprConstInt(at = e.at, value = -(e as ExprConstInt).value)
+    if (e is ExprConstFloat2) return new ExprConstFloat2(at = e.at, value = -(e as ExprConstFloat2).value)
+    if (e is ExprConstFloat3) return new ExprConstFloat3(at = e.at, value = -(e as ExprConstFloat3).value)
+    if (e is ExprConstFloat4) return new ExprConstFloat4(at = e.at, value = -(e as ExprConstFloat4).value)
+    if (e is ExprConstInt2) return new ExprConstInt2(at = e.at, value = -(e as ExprConstInt2).value)
+    if (e is ExprConstInt3) return new ExprConstInt3(at = e.at, value = -(e as ExprConstInt3).value)
+    if (e is ExprConstInt4) return new ExprConstInt4(at = e.at, value = -(e as ExprConstInt4).value)
+    return null
+}
+
+def private has_3arg_named(mod : Module?; fname : string) : bool {
+    var found = false
+    for_each_function(mod, fname) $(fn) {
+        if (length(fn.arguments) == 3) {
+            found = true
+        }
+    }
+    for_each_generic(mod, fname) $(fn) {
+        if (length(fn.arguments) == 3) {
+            found = true
+        }
+    }
+    return found
+}
+
+def private fuse_callable(mod : Module?; fname : string) : bool {
+    if (mod == null) return false
+    if (has_3arg_named(mod, fname)) return true
+    var found = false
+    module_for_each_dependency(mod) $(dep, _isPub) {
+        if (!found && has_3arg_named(dep, fname)) {
+            found = true
+        }
+    }
+    return found
+}
+
+// Match `m ± c` / `c ± m` (m = a*b; `-` needs a const-negatable side) against the das mad shapes;
+// out-params carry (a, b, c) with the vec-scalar swap + negation applied. The ONE gate for fuser AND
+// residual; no purity gate — flat-body calls are pure by contract (and has_sideeffects is timing-dependent).
+def private match_mad(var that : ExprOp2?; var ma, mb, mc : ExpressionPtr&) : bool {
+    if (that == null) return false
+    var mul : ExprOp2?
+    var other : ExpressionPtr
+    var negOther = false        // `m - C`  → c = -C
+    var negFactor = false       // `C - m`  → negate a const factor of m
+    if (that.op == "+" || that.op == "-") {
+        if (that.left is ExprOp2 && (that.left as ExprOp2).op == "*") {
+            mul = that.left as ExprOp2
+            other = that.right
+            negOther = that.op == "-"
+        } elif (that.right is ExprOp2 && (that.right as ExprOp2).op == "*") {
+            mul = that.right as ExprOp2
+            other = that.left
+            negFactor = that.op == "-"
+        }
+    }
+    if (mul == null) return false
+    var fa = mul.left
+    var fb = mul.right
+    // types captured BEFORE negation — a fresh negated literal is untyped until re-infer
+    var bta = expr_bt(fa)
+    var btb = expr_bt(fb)
+    let btc = expr_bt(other)
+    if (negFactor) {
+        var nf = negate_const(fa)
+        if (nf != null) {
+            fa = nf
+        } else {
+            nf = negate_const(fb)
+            if (nf == null) return false
+            fb = nf
+        }
+    }
+    if (negOther) {
+        other = negate_const(other)
+        if (other == null) return false
+    }
+    // a scalar-left mul swaps to the MadS (vec, scalar, vec) form
+    if (vec_elem_bt(btb) != Type.none && bta == vec_elem_bt(btb)) {
+        var tmp = fa
+        fa = fb
+        fb = tmp
+        let tmpbt = bta
+        bta = btb
+        btb = tmpbt
+    }
+    if (!mad_shape(bta, btb, btc)) return false
+    ma = fa
+    mb = fb
+    mc = other
+    return true
+}
+
+// `(-a) + b` / `b + (-a)` → `b - a`: one sub node instead of neg + add. Reassoc no longer emits
+// the form (positives-first canonical order), so this catches the other producers — the `0 - x`
+// and `*-1` fold arms. Shared by fuser AND residual.
+def private match_neg_add(var that : ExprOp2?; var pos, neg : ExpressionPtr&) : bool {
+    if (that == null || that.op != "+" || !is_mad_elem(expr_bt(that))) return false
+    if (that.left is ExprOp1 && (that.left as ExprOp1).op == "-") {
+        pos = that.right
+        neg = (that.left as ExprOp1).subexpr
+        return true
+    }
+    if (that.right is ExprOp1 && (that.right as ExprOp1).op == "-") {
+        pos = that.left
+        neg = (that.right as ExprOp1).subexpr
+        return true
+    }
+    return false
+}
+
+// `mad(b - a, t, a)` → `lerp(a, b, t)`: the re-packed expansion shape, `a` matched by
+// describe-equality. The neg-add form is matched too (defense — reassoc no longer emits it).
+// Deliberately misses a CSE-shared `b - a` (behind a `_cse_` var — keeping the share IS the win).
+def private match_lerp(var cll : ExprCall?; var la, lb, lt : ExpressionPtr&) : bool {
+    if (cll == null || length(cll.arguments) != 3 ||
+        psh_simple_name("{cll.name}") != "mad" || !(cll.arguments[0] is ExprOp2)) return false
+    var diff = cll.arguments[0] as ExprOp2
+    var db : ExpressionPtr      // b — the minuend
+    var da : ExpressionPtr      // a — the subtrahend
+    if (diff.op == "-") {
+        db = diff.left
+        da = diff.right
+    } elif (diff.op == "+") {
+        if (diff.left is ExprOp1 && (diff.left as ExprOp1).op == "-") {
+            da = (diff.left as ExprOp1).subexpr
+            db = diff.right
+        } elif (diff.right is ExprOp1 && (diff.right as ExprOp1).op == "-") {
+            da = (diff.right as ExprOp1).subexpr
+            db = diff.left
+        }
+    }
+    if (da == null || describe(da) != describe(cll.arguments[2]) ||
+        !lerp_shape(expr_bt(da), expr_bt(db), expr_bt(cll.arguments[1]))) return false
+    la = cll.arguments[2]
+    lb = db
+    lt = cll.arguments[1]
+    return true
+}
+
+class private MadFuseVisitor : AstVisitor {
+    changed : bool
+    def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        var ma : ExpressionPtr
+        var mb : ExpressionPtr
+        var mc : ExpressionPtr
+        if (match_mad(that, ma, mb, mc)) {
+            changed = true
+            var cll = new ExprCall(at = that.at, name := "mad")
+            emplace(cll.arguments, ma)
+            emplace(cll.arguments, mb)
+            emplace(cll.arguments, mc)
+            return cll
+        }
+        var pos : ExpressionPtr
+        var neg : ExpressionPtr
+        if (match_neg_add(that, pos, neg)) {
+            changed = true
+            return new ExprOp2(at = that.at, op := "-", left = pos, right = neg)
+        }
+        return that
+    }
+}
+
+class private LerpFuseVisitor : AstVisitor {
+    changed : bool
+    def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
+        var la : ExpressionPtr
+        var lb : ExpressionPtr
+        var lt : ExpressionPtr
+        if (match_lerp(that, la, lb, lt)) {
+            changed = true
+            var cll = new ExprCall(at = that.at, name := "lerp")
+            emplace(cll.arguments, la)
+            emplace(cll.arguments, lb)
+            emplace(cll.arguments, lt)
+            return cll
+        }
+        return that
+    }
+}
+
+// Fusion residuals — mirrors the fuser's matchers EXACTLY (same gates, same shapes), so a
+// survivor means the PHASE_FUSED pass missed, never that the gate was narrower here.
+class private FuseResidualVisitor : AstVisitor {
+    checkLerp : bool
+    foundMad : bool
+    foundLerp : bool
+    foundNegAdd : bool
+    def override preVisitExprOp2(var expr : ExprOp2?) : void {
+        var ma : ExpressionPtr
+        var mb : ExpressionPtr
+        var mc : ExpressionPtr
+        if (match_mad(expr, ma, mb, mc)) {
+            foundMad = true
+        }
+        var pos : ExpressionPtr
+        var neg : ExpressionPtr
+        if (match_neg_add(expr, pos, neg)) {
+            foundNegAdd = true
+        }
+    }
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        if (checkLerp) {
+            var la : ExpressionPtr
+            var lb : ExpressionPtr
+            var lt : ExpressionPtr
+            if (match_lerp(expr, la, lb, lt)) {
+                foundLerp = true
+            }
+        }
+    }
+}
+
+def public fuse_body(var func : FunctionPtr) : bool {
+    //! PHASE_FUSED finishing pass: re-pack `a*b ± c` into `mad(a,b,c)` and the expanded lerp
+    //! shape `mad(b - a, t, a)` back into `lerp(a, b, t)` over the optimized, re-inferred body
+    //! (the type gates need settled types). Caller re-infers after to type the new calls.
+    if (!(func.body is ExprBlock) || !fuse_callable(func._module, "mad")) return false
+    var changed = false
+    var v = new MadFuseVisitor()
+    make_visitor(*v) $(adapter) {
+        visit(func.body, adapter)
+    }
+    if (v.changed) {
+        changed = true
+    }
+    unsafe {
+        delete v
+    }
+    // lerp re-fusion is a separate walk over the fresh mads — a visitor never descends into
+    // the node it just returned, so the mad → lerp chain can't happen in one pass.
+    if (fuse_callable(func._module, "lerp")) {
+        var lv = new LerpFuseVisitor()
+        make_visitor(*lv) $(adapter) {
+            visit(func.body, adapter)
+        }
+        if (lv.changed) {
+            changed = true
+        }
+        unsafe {
+            delete lv
+        }
     }
     return changed
 }

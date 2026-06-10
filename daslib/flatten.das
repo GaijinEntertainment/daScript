@@ -33,6 +33,7 @@ require daslib/flatten_opt
 let private PHASE_LOWERED = 1
 let private PHASE_FOLDED = 2
 let private PHASE_OPTIMIZED = 3
+let private PHASE_FUSED = 4
 let private PHASE_DONE = 999
 
 // Calls that must stay per-pixel (can't run in the per-draw preshader). The [flatten] annotation
@@ -445,6 +446,9 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         for (v in lc.variables) {
             if (v.init != null) {
                 v.init = lower_value(ctx, v.init, structPred, out)
+            } else {
+                // materialize the implicit zero-init — the predicated store's false path READS it
+                v.init = zero_const_of(v._type, v.at)
             }
         }
         out |> push <| letClone
@@ -745,6 +749,14 @@ def public flatten_optimize(var func : FunctionPtr; barriers : table<string>) : 
     return flatten_preshade_cse(func, barriers)
 }
 
+[macro_function]
+def public flatten_fuse(var func : FunctionPtr) : bool {
+    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): re-pack `a*b ± c` into `mad(a,b,c)`
+    //! and the expanded lerp shape back into `lerp(a,b,t)`. Call on the optimized, re-inferred body and
+    //! repeat across re-inference until it returns false (the type gates need each round's settled types).
+    return fuse_body(func)
+}
+
 def public flatten_opt_residuals(var func : FunctionPtr) : array<string> {
     //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
     //! has no un-extracted uniform subtree and no un-CSE'd repeat. Test-framework / fuzzer facing.
@@ -870,7 +882,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             errors := "flatten: twin {twin_name(func)} was not declared"
             return false
         }
-        if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED) {
+        if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED && ph != PHASE_FUSED) {
             // Cycle 1: lower the twin with the std whitelist, then re-infer so
             // call.func resolves. (Backends call flatten_function directly with
             // their own primitive set instead of going through this annotation.)
@@ -895,9 +907,19 @@ class FlattenAnnotation : AstFunctionAnnotation {
             }
             // Fold fixpoint reached → run the optimize pass once on the canonical body: hoist uniform
             // subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to
-            // type the new lets, then fall through to the shape check next cycle.
+            // type the new lets, then fuse next cycle.
             set_flatten_phase(func, PHASE_OPTIMIZED)
             if (flatten_optimize(twin, FLATTEN_BARRIERS)) {
+                astChanged = true
+                return true
+            }
+        }
+        if (get_flatten_phase(func) == PHASE_OPTIMIZED || get_flatten_phase(func) == PHASE_FUSED) {
+            // Optimize converged → re-pack `a*b ± c` into `mad` and the lerp shape back into
+            // `lerp`, re-inferring to resolve the new calls; iterates (each round strictly
+            // drops a `+`/`-`, so it converges), a clean round falls through to the shape check.
+            set_flatten_phase(func, PHASE_FUSED)
+            if (flatten_fuse(twin)) {
                 astChanged = true
                 return true
             }

@@ -136,7 +136,9 @@ reassociates, for float rounding) into one adjacent group the all-const fold the
 The same pass sorts the chain's *variable* terms into a canonical (structural) order, so
 commutative chains converge to one form (``b + a`` and ``a + b`` both become ``a + b``) —
 gated on every term being side-effect-free, and intended to feed a later common-subexpression
-pass. Integer ``+``/``*`` reassociate exactly; integer ``/`` is non-associative and excluded.
+pass. Positive terms sort before subtracted ones, so the rebuilt chain spells ``b - a``
+(one sub node) rather than ``-a + b`` (a negate plus an add — whose uniform ``-a`` the
+preshader pass would hoist into a pass-through ``_preshader_ = -_preshader_`` alias). Integer ``+``/``*`` reassociate exactly; integer ``/`` is non-associative and excluded.
 These are exactly the folds the general compiler leaves for the downstream tiers (it folds
 constant *arithmetic* but not constant *constructors*, and never a runtime-operand identity
 or reassociation), done here under a shader's fast-math assumption (``x*0 → 0`` always fires).
@@ -171,13 +173,39 @@ common-subexpression elimination (``flatten_optimize``):
   neither ``X`` nor ``V`` reassigned) into direct references to ``V`` and drops the ``let``. CSE can
   leave such copies (a later round rewrites an earlier ``_cse_`` let's whole RHS down to
   a bare var) and the unroll / fold can leave them (``let p_0 = ro``); both are
-  pass-through graph nodes for nothing. CSE and alias elimination iterate to a fixpoint,
-  since an eliminated alias can canonicalise a variable and expose a fresh dup.
+  pass-through graph nodes for nothing. All three passes iterate to a **joint
+  fixpoint**: an eliminated alias can expose a fresh dup, and a CSE share or alias
+  substitution can re-expose *uniform* compute in the varying region (``!_preshader_0``,
+  a ``_cse_`` let whose operands converge to all-preshader references) that only
+  re-extraction hoists to the per-draw group.
 
 Both passes are **value-exact** — they only hoist and share existing subtrees, never
 regroup or round — and both exclude any subtree that reads a **reassigned** variable
 (a live/loop mask, a written global, or the base of an indexed store — ``G[i] = v``
 makes every ``G[...]`` read unstable), whose value is not stable across the body.
+
+**mad / lerp: disassemble early, re-fuse late.** ``lerp`` and ``mad`` are pure
+arithmetic wearing a call: the fold phase **expands** them in place —
+``mad(a, b, c) → a*b + c``, ``lerp(a, b, t) → (b - a)*t + a`` — so every
+downstream pass sees through them: the existing identity arms collapse the
+constant selectors (``lerp(a, b, 0) → a``, ``lerp(a, b, 1) → b``,
+``lerp(a, a, t) → a``, ``mad(a, 1, c) → a + c``, ``lerp(1.0, d, 1.0) → d``)
+with **no per-builtin identity table**, reassociation canonicalises the exposed
+operands, CSE shares a repeated ``b - a`` across lerps, and preshader extraction
+hoists a uniform ``b - a`` even when ``t`` is varying. Once the optimize pass
+converges, a finishing **fuse** pass (``PHASE_FUSED``) re-packs what survived:
+``a*b + c`` / ``c + a*b`` (and the const-negatable ``a*b - C`` / ``C - a*b``)
+become one ``mad(a, b, c)`` node — including the vector·scalar broadcast form —
+and a mad still carrying the lerp shape, ``mad(b - a, t, a)``, becomes one
+``lerp(a, b, t)`` node. Hand-written ``(b - a)*t + a`` arithmetic that never
+spelled ``lerp`` canonicalises into the lerp node the same way. A leftover
+``(-a) + b`` (the ``0 - x`` / ``*-1`` folds produce bare negates) re-packs into
+``b - a``. Type gates keep
+the rewrites inside the das ``math`` overload set (float / int / uint, scalar +
+vector; lerp with scalar ``t``), and fusion only runs when a 3-argument
+``mad`` / ``lerp`` is visible from the twin's module (``math`` or a backend DSL).
+Fusion is the one pass that is **not value-exact on floats**: a fused ``mad``
+single-rounds where ``a*b + c`` rounds twice (integer fusion is exact).
 
 Supported subset
 ================
@@ -206,6 +234,8 @@ Supported subset
      - flattened in place / unwrapped to its body
    * - copyable value assignment
      - selects support scalars, vectors (``float4`` …), structs and tuples
+   * - bare local decl (``var a : float3``), partially assigned under a branch
+     - the implicit zero-init is materialized, so the predicated select's false path reads a real node
    * - ``void`` functions
      - predicated writes to output globals (the writes-to-globals shader model)
 
@@ -299,19 +329,29 @@ Public API
     (``{ "tex2d", "noise" }``) — those stay per-pixel. ``[flatten]`` runs it
     automatically; the ``[pixel_shader]`` backend runs it after its fold fixpoint.
 
+``flatten_fuse(var func) : bool``
+    The finishing fuse pass: re-pack ``a*b ± c`` into ``mad(a, b, c)`` and the
+    expanded lerp shape ``mad(b - a, t, a)`` back into ``lerp(a, b, t)``. Run it
+    after ``flatten_optimize``'s re-infer (the type gates need settled types) and
+    **iterate across re-inference while it reports change**, exactly like the
+    fold — each round strictly drops a ``+``/``-`` node, so it converges.
+    ``[flatten]`` runs it automatically; the ``[pixel_shader]`` backend mirrors it.
+
 ``flatten_opt_residuals(var func) : array<string>``
     The optimize-completeness oracle (sibling of ``flatten_fold_residuals``):
     walks a compiled twin and returns a description for each missed optimization —
     a maximal uniform subtree still inline in the varying body, a pure subtree
-    computed twice or more left un-shared, or a pure-alias ``let`` copy left
-    uncollapsed. Empty means complete. Drives the same
+    computed twice or more left un-shared, a pure-alias ``let`` copy left
+    uncollapsed, a fusable mul-add left un-packed, or a mad still carrying the
+    lerp shape. Empty means complete. Drives the same
     ``tests/flatten/test_flatten_fold.das`` corpus and the ``flatten-fuzz``
     strict mode.
 
 A backend's typical pipeline is therefore: ``flatten_function`` → re-infer →
 ``flatten_fold`` (to a fixpoint) → re-infer → ``flatten_optimize`` → re-infer →
-walk the now-branchless, call-free twin and emit its dataflow graph (mapping
-``?:`` to a *select* node and the bool masks to a 0/1 selector).
+``flatten_fuse`` (to a fixpoint) → walk the now-branchless, call-free twin and
+emit its dataflow graph (mapping ``?:`` to a *select* node and the bool masks
+to a 0/1 selector).
 
 .. seealso::
 

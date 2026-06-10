@@ -1611,6 +1611,16 @@ class PixelShaderMacro : AstFunctionAnnotation {
                     return true
                 }
             }
+            // Optimize converged → re-pack `a*b ± c` into `mad` and the expanded lerp shape
+            // back into `lerp` (one [hint] node each), re-inferring to resolve the new calls.
+            // Mirrors daslib/flatten's PHASE_FUSED loop (converges — each round drops a `+`/`-`).
+            if (!shader_annotation_arg(func, "fused")) {
+                if (flatten_fuse(func)) {
+                    astChanged = true
+                    return true
+                }
+                set_shader_annotation_flag(func, "fused")
+            }
             set_shader_annotation_flag(func, "folded")
             return true
         }

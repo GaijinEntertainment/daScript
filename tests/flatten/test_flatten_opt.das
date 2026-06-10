@@ -8,11 +8,13 @@ require math
 
 //! Differential net for the flatten OPTIMIZE arc (preshader extraction + CSE).
 //! Both passes are VALUE-EXACT — they only hoist and dedup pure subtrees, never
-//! regroup or round — so every twin compares with exact `equal` (unlike the
-//! reassoc arc, which reserves `equal_approx`). The FIRED proof (a `_preshader_`
-//! let on top, a shared `_cse_` let) lives in `no_aot/test_flatten_fold.das`
-//! (empty `flatten_opt_residuals`) and the cap_preshader / cap_cse node-count
-//! shaders; here we only assert the optimization preserved the result.
+//! regroup or round — so twins compare with exact `equal` (unlike the reassoc
+//! arc). ONE carve-out: PHASE_FUSED re-packs a vector mul-add into `mad`, which
+//! runs hardware-fused (FMA, single rounding), so a vector twin where that fires
+//! (p_vec) compares approx. The FIRED proof (a `_preshader_` let on top, a shared
+//! `_cse_` let) lives in `no_aot/test_flatten_fold.das` (empty
+//! `flatten_opt_residuals`) and the cap_preshader / cap_cse node-count shaders;
+//! here we only assert the optimization preserved the result.
 
 // Module globals are UNIFORM (preshader-eligible); function params are VARYING.
 var G_GAIN = 2.5
@@ -132,6 +134,15 @@ def cmp3f(t : T?; a, b : float3) {
     t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
 }
 
+def fapprox(t : T?; a, b : float) {
+    let m = max(max(abs(a), abs(b)), 1.0)
+    t |> success(abs(a - b) <= 1.0e-4 * m, "fused-mad approx mismatch: {a} vs {b}")
+}
+
+def cmp3f_approx(t : T?; a, b : float3) {
+    fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
+}
+
 [test]
 def test_flatten_opt(t : T?) {
     t |> run("preshader: whole-uniform let -> _preshader_") @(t : T?) {
@@ -149,9 +160,9 @@ def test_flatten_opt(t : T?) {
             t |> equal(p_chain_flat(v), p_chain(v))
         }
     }
-    t |> run("preshader: vector-typed uniform") @(t : T?) {
+    t |> run("preshader: vector-typed uniform (approx — fused mad in the preshader)") @(t : T?) {
         for (v in GRID) {
-            cmp3f(t, p_vec_flat(float3(v, -v, v * 2.0)), p_vec(float3(v, -v, v * 2.0)))
+            cmp3f_approx(t, p_vec_flat(float3(v, -v, v * 2.0)), p_vec(float3(v, -v, v * 2.0)))
         }
     }
     t |> run("CSE: varying dup -> _cse_") @(t : T?) {

@@ -40,11 +40,12 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         }
     }
     // A meta-test that requires the compiler frontend at runtime (e.g. daslib/flatten ->
-    // macro_boost) can't AOT-link in the full-tree batch — exclude such folders under AOT.
+    // macro_boost) can't AOT-link in the full-tree batch, and one that runs qmacro at runtime
+    // (flatten_optimize re-entry) carries quote nodes LLVM JIT can't codegen — interp only.
     if (folder_name == "no_aot") {
         let args <- get_command_line_arguments()
         for (arg in args) {
-            if (arg == "--use-aot") {
+            if (arg == "--use-aot" || arg == "-jit") {
                 *result = false
                 return
             }

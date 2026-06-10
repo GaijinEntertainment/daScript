@@ -116,6 +116,13 @@ def gen_expr(var g : Gen&; scope : array<Var>; depth : int) : string {
         let op = rnd(g, 2) == 0 ? "-" : "~"
         let e = gen_expr(g, scope, depth - 1)
         return "({op} {e})"   // space: avoid `--`/`-~` token glue on negative literals
+    } elif (k < 90) {
+        // exercises the lerp/mad disassemble -> re-fuse arc (int mad is exact, so the
+        // differential oracle rides free; strict mode checks the fusion residual arms)
+        let a = gen_expr(g, scope, depth - 1)
+        let b = gen_expr(g, scope, depth - 1)
+        let c = gen_expr(g, scope, depth - 1)
+        return "mad({a}, {b}, {c})"
     }
     return gen_leaf(g, scope)
 }
@@ -472,7 +479,8 @@ def build_file(units : array<string>) : string {
         if (g_log_infer) {
             write(w, "options log_infer_passes = true\n")
         }
-        write(w, "require daslib/flatten\n\n")
+        write(w, "require daslib/flatten\n")
+        write(w, "require math\n\n")
         if (g_use_globals) {
             write(w, G_DEFS)
         }
