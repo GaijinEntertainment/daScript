@@ -527,6 +527,7 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     noFastMath : bool
+    expandLerp : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
         // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
@@ -680,9 +681,9 @@ class private FoldVisitor : AstVisitor {
                 return folded
             }
         }
-        // DISASSEMBLE lerp/mad into raw arithmetic so the identity/const folds, reassoc and CSE
-        // see through them; the PHASE_FUSED finishing pass re-packs survivors. Type-gated to the
-        // das math overload set — a loose DSL-stub instantiation must not expand into ill-typed ops.
+        // DISASSEMBLE mad (and, under `expandLerp`, lerp) into raw arithmetic so the folds,
+        // reassoc and CSE see through them; PHASE_FUSED re-packs survivors. Type-gated to the
+        // das math overload set — a loose DSL-stub instantiation must not expand ill-typed.
         if (that.func != null && length(that.arguments) == 3) {
             let fname = psh_simple_name("{that.func.name}")
             let ta = expr_bt(that.arguments[0])
@@ -702,6 +703,7 @@ class private FoldVisitor : AstVisitor {
                         return aArg
                     }
                 }
+                if (!expandLerp) return that
                 changed = true
                 var sub = new ExprOp2(at = that.at, op := "-", left = bArg, right = clone_expression(aArg))
                 var mul = new ExprOp2(at = that.at, op := "*", left = sub, right = tArg)
@@ -1448,10 +1450,10 @@ class private ReassocVisitor : AstVisitor {
     }
 }
 
-def public fold_body(var func : FunctionPtr; no_fast_math : bool = false) : bool {
-    //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate
-    //! scattered consts, collapse `const ? a : b`, fold identities/const ctors, drop pure self-assigns.
-    //! SINGLE pass (caller re-infers and loops); `no_fast_math = true` skips the value-changing arms.
+def public fold_body(var func : FunctionPtr; no_fast_math : bool = false; expand_lerp : bool = false) : bool {
+    //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate scattered
+    //! consts, collapse `const ? a : b`, fold identities/const ctors, drop pure self-assigns. SINGLE pass
+    //! (caller loops); `no_fast_math` skips value-changing arms, `expand_lerp` disassembles `lerp` calls.
     if (!(func.body is ExprBlock)) return false
     let nfm = no_fast_math
     var changed = const_prop_locals(func.body as ExprBlock)
@@ -1469,8 +1471,7 @@ def public fold_body(var func : FunctionPtr; no_fast_math : bool = false) : bool
     unsafe {
         delete rv
     }
-    var v = new FoldVisitor()
-    v.noFastMath = nfm
+    var v = new FoldVisitor(noFastMath = nfm, expandLerp = expand_lerp)
     make_visitor(*v) $(adapter) {
         visit(func.body, adapter)
     }

@@ -186,28 +186,52 @@ passes exclude any subtree that reads a **reassigned** variable
 (a live/loop mask, a written global, or the base of an indexed store — ``G[i] = v``
 makes every ``G[...]`` read unstable), whose value is not stable across the body.
 
-**mad / lerp: disassemble early, re-fuse late.** ``lerp`` and ``mad`` are pure
-arithmetic wearing a call: the fold phase **expands** them in place —
-``mad(a, b, c) → a*b + c``, ``lerp(a, b, t) → (b - a)*t + a`` — so every
-downstream pass sees through them: the existing identity arms collapse the
-constant selectors (``lerp(a, b, 0) → a``, ``lerp(a, b, 1) → b``,
-``lerp(a, a, t) → a``, ``mad(a, 1, c) → a + c``, ``lerp(1.0, d, 1.0) → d``)
-with **no per-builtin identity table**, reassociation canonicalises the exposed
-operands, CSE shares a repeated ``b - a`` across lerps, and preshader extraction
-hoists a uniform ``b - a`` even when ``t`` is varying. Once the optimize pass
-converges, a finishing **fuse** pass (``PHASE_FUSED``) re-packs what survived:
-``a*b + c`` / ``c + a*b`` (and the const-negatable ``a*b - C`` / ``C - a*b``)
-become one ``mad(a, b, c)`` node — including the vector·scalar broadcast form —
-and a mad still carrying the lerp shape, ``mad(b - a, t, a)``, becomes one
-``lerp(a, b, t)`` node. Hand-written ``(b - a)*t + a`` arithmetic that never
-spelled ``lerp`` canonicalises into the lerp node the same way. A leftover
+**mad: disassemble early, re-fuse late. lerp: keep whole.** ``mad`` is pure
+arithmetic wearing a call: the fold phase **expands** it in place —
+``mad(a, b, c) → a*b + c`` — so every downstream pass sees through it (the
+identity arms collapse ``mad(a, 1, c) → a + c`` with **no per-builtin identity
+table**, reassociation canonicalises the exposed operands, CSE and preshader
+extraction work on the pieces). Once the optimize pass converges, a finishing
+**fuse** pass (``PHASE_FUSED``) re-packs what survived: ``a*b + c`` /
+``c + a*b`` (and the const-negatable ``a*b - C`` / ``C - a*b``) become one
+``mad(a, b, c)`` node — including the vector·scalar broadcast form. A leftover
 ``(-a) + b`` (the ``0 - x`` / ``*-1`` folds produce bare negates) re-packs into
-``b - a``. Type gates keep
-the rewrites inside the das ``math`` overload set (float / int / uint, scalar +
-vector; lerp with scalar ``t``), and fusion only runs when a 3-argument
-``mad`` / ``lerp`` is visible from the twin's module (``math`` or a backend DSL).
-Fusion is value-exact at the das level (das ``mad`` computes ``a*b + c``); the
-*backend* may contract it to a single-rounding FMA — that is its call.
+``b - a``.
+
+``lerp`` is **not** expanded by default. A shader-graph backend computes
+``(b - a)*t + a`` in one native lerp instruction with constant operands free,
+so disassembly can at best break even (a full re-fuse) and loses 1–2
+instructions whenever reassociation or mad fusion merges a lerp piece with a
+*neighbor* term into a shape re-fusion cannot recover — the smooth-min idiom
+``lerp(d, ds, h) + k*h*(h - 1.0)`` loses its lerp six times over in the
+raymarch example shader. The
+constant-selector identities fire directly on the call instead
+(``lerp(a, b, 0) → a``, ``lerp(a, b, 1) → b``, ``lerp(a, a, t) → a``; fast-math
+gated — they drop an argument), the surviving call is one pure node for CSE,
+and a fully-uniform lerp hoists whole into the preshader. The fuse pass still
+canonicalises hand-written ``(b - a)*t + a`` arithmetic (via the
+``mad(b - a, t, a)`` shape) *into* one ``lerp(a, b, t)`` node, so organic
+lerp-shaped math reaches the backend as the native instruction too.
+
+A backend **without** a native lerp opts back into the disassembly with an
+integration setting in the modules that carry its shaders:
+
+.. code-block:: das
+
+    options _flatten_expand_lerp = true
+
+(or by passing ``expand_lerp = true`` when driving ``flatten_fold`` directly).
+Under the option ``lerp(a, b, t) → (b - a)*t + a`` exactly as mad: the folds
+see through it, CSE shares a repeated ``b - a`` across lerps, preshader
+extraction hoists a uniform ``b - a`` even when ``t`` is varying, and the fuse
+pass re-packs an unfolded survivor back into the single ``lerp`` node.
+
+Type gates keep the rewrites inside the das ``math`` overload set (float / int /
+uint, scalar + vector; lerp with scalar ``t``), and fusion only runs when a
+3-argument ``mad`` / ``lerp`` is visible from the twin's module (``math`` or a
+backend DSL). Fusion is value-exact at the das level (das ``mad`` computes
+``a*b + c``); the *backend* may contract it to a single-rounding FMA — that is
+its call.
 
 **Division becomes a reciprocal multiply.** A divide is the most expensive
 arithmetic node a shader carries, and most divisors never change per pixel. The
@@ -268,9 +292,10 @@ with a user option:
 The option is module-local (it applies to the shaders/twins *written in* that
 module) and turns off exactly the value-changing set; everything bit-exact —
 flattening, predication, unrolling, preshader extraction, CSE, alias
-elimination, the mad/lerp expand/re-fuse round trip, splat collapse, lane
-re-vectorization, shared-factor extraction, and every *integer* fold — stays
-on. Under the option a twin computes bit-identical results to its original.
+elimination, the mad expand/re-fuse round trip (and the lerp one, when
+``_flatten_expand_lerp`` enables it), splat collapse, lane re-vectorization,
+shared-factor extraction, and every *integer* fold — stays on. Under the
+option a twin computes bit-identical results to its original.
 The residual oracles take the same flag, so a unit compiled under the option
 validates clean without flagging the deliberately-skipped rewrites.
 
@@ -366,7 +391,13 @@ Public API
     threads the bool into the passes below); a runtime tool driving the passes
     directly passes its own flag instead.
 
-``flatten_fold(var func, no_fast_math = false) : bool``
+``flatten_expand_lerp : bool``
+    True when the *compiling* module sets ``options _flatten_expand_lerp = true`` —
+    the opt-in lerp disassembly for backends *without* a native lerp instruction
+    (see the mad/lerp section above). Same compile-time-only contract as
+    ``flatten_no_fast_math``.
+
+``flatten_fold(var func, no_fast_math = false, expand_lerp = false) : bool``
     The post-inference fold pass: collapse ``const ? a : b`` selects, drop the
     pure ``lhs = lhs`` self-assigns, strip redundant zero initializers. Run it
     *after* re-inference (the constant conditions must already be folded to

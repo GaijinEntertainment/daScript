@@ -120,6 +120,29 @@ def test_flatten_fold(t : T?) {
     t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")
         t |> success(n >= 20, "expected >=20 twins, checked {n}")
+        // default mode: a plain lerp survives as the call (no expansion), and organic
+        // (b-a)*t + a arithmetic still canonicalizes INTO the lerp node via the fuser
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_mad.das")
+        let lr = bodies?["l_round_flat"] ?? ""
+        t |> success(lr |> find("lerp") >= 0, "plain lerp must survive whole by default: {lr}")
+        let lm = bodies?["l_manual_flat"] ?? ""
+        t |> success(lm |> find("lerp") >= 0, "organic (b-a)*t+a must still re-fuse to lerp: {lm}")
+        delete bodies
+    }
+    t |> run("expand-lerp corpus folds clean (test_flatten_lerp_expand.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_lerp_expand.das")
+        t |> success(n >= 6, "expected >=6 twins, checked {n}")
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_lerp_expand.das")
+        // the expand -> re-fuse round trip must come back (the symmetric-oracle guard:
+        // fuser and residual oracle share match_lerp, so only a POSITIVE assert catches
+        // a matcher break blinding both)
+        let rt = bodies?["le_round_flat"] ?? ""
+        t |> success(rt |> find("lerp") >= 0, "lerp must round-trip under _flatten_expand_lerp: {rt}")
+        // uniform bounds preshade ONLY when expansion exposes G_B - G_A — the FIRED proof
+        // (kept whole, the bounds ride as plain operands and nothing extracts)
+        let pre = bodies?["le_preshader_flat"] ?? ""
+        t |> success(pre |> find("_preshader_") >= 0, "expanded uniform bounds must preshade: {pre}")
+        delete bodies
     }
     t |> run("rcp corpus rewrites clean (test_flatten_rcp.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_rcp.das")
@@ -150,7 +173,7 @@ def test_flatten_fold(t : T?) {
         let reas = bodies?["nf_reassoc_flat"] ?? ""
         t |> success(reas |> find("0.75") < 0 && reas |> find("0.25") >= 0, "float consts must stay scattered: {reas}")
         let lrp = bodies?["nf_lerp0_flat"] ?? ""
-        t |> success(lrp |> find("lerp") >= 0, "lerp(a,b,0) must round-trip back to lerp: {lrp}")
+        t |> success(lrp |> find("lerp") >= 0, "lerp(a,b,0) must survive as lerp (selector is fast-math gated): {lrp}")
         let imul0 = bodies?["nf_imul0_flat"] ?? ""
         t |> success(imul0 |> find("* 0") < 0, "int n*0 must STILL fold: {imul0}")
         let ire = bodies?["nf_ireassoc_flat"] ?? ""
