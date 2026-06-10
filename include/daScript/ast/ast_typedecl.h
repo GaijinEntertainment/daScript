@@ -75,6 +75,7 @@ namespace das {
         __forceinline bool isSimpleType () const;
         __forceinline bool isSimpleType ( Type typ ) const;
         __forceinline bool isArray() const;
+        __forceinline bool isFixedArray() const;
         __forceinline bool isGoodIteratorType() const;
         __forceinline bool isGoodArrayType() const;
         __forceinline bool isGoodTableType() const;
@@ -258,6 +259,14 @@ namespace das {
         vector<string>          argNames;
         vector<int32_t>         dim;
         vector<ExpressionPtr>   dimExpr;
+        // tFixedArray rework (FIXED_ARRAY_REWORK.md), Stage 1a. fixedDim/fixedDimExpr are
+        // meaningful only on baseType==tFixedArray nodes (one size per node, element in
+        // firstType, dimAuto/dimConst sentinels apply). typeMacroExpr takes over dimExpr's
+        // typeMacro/typeDecl/tag payload duty in Stage 1b. dim/dimExpr above are deleted
+        // at the end of Stage 1.
+        int32_t                 fixedDim = 0;
+        ExpressionPtr           fixedDimExpr = nullptr;
+        vector<ExpressionPtr>   typeMacroExpr;
         union {
             struct {
                 bool    ref : 1 ;
@@ -796,7 +805,11 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isArray() const {
-        return (bool) dim.size();
+        return dim.size()!=0 || baseType==Type::tFixedArray;
+    }
+
+    __forceinline bool TypeDecl::isFixedArray() const {
+        return baseType==Type::tFixedArray;
     }
 
     __forceinline bool TypeDecl::isRef() const {

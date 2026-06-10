@@ -54,9 +54,11 @@ structural nodes with `firstType` recursion. Fixed arrays are the only container
     No typemacro argument-model redesign in this train.
   - Net ~−12B per node; every predicate drops the `dim.size()` branch.
 - `isNativeDim` moves onto the FA node; `typeFactory<TT[dim]>` wraps instead of pushes.
-- **Qualifier discipline**: `constant`/`ref`/`temporary` on the OUTER node describe the
-  whole object — same rule as `tArray`. Peeling a level (`a[i]`, iteration, `auto(TT)[]`)
-  = `firstType` plus the same constness propagation tArray element access uses.
+- **Qualifier discipline (canonical form, settled at 1a)**: `constant`/`ref`/`temporary`
+  live ONLY on the outermost FA node; inner chain nodes are bare — same rule as `tArray`
+  elements. Peeling a level (`a[i]`, iteration, `auto(TT)[]`) = `firstType` plus the same
+  constness propagation tArray element access uses. One type, one shape; Stage 1d enforces
+  at construction sites, a debug assert in `isSameType` catches violations.
 - `-[]` (`removeDim`) = unwrap one FA level; kept parsing, mostly obsolete.
 - **New inference semantics (no compat shim)**:
   - `auto(TT)` <- `int[4]`        => `TT = int[4]` (whole array, consistent with `array<int>`)
@@ -69,9 +71,14 @@ structural nodes with `firstType` recursion. Fixed arrays are the only container
   and the flattened form IS the layout. Single AST->runtime conversion point
   (`ast_debug_info_helper.cpp`) walks the nested chain and emits `dim[]={3,4,4}` exactly as
   today. GC walker, data walker, debug print, JIT TypeInfo globals, `daslib/rtti` untouched.
-- **Mangled-name TEXT unchanged** (`[3][4][4]f` is already a nested prefix encoding):
-  emitted from nesting, parsed into nesting. AOT symbol names don't churn. Semantic-hash,
-  AST-serializer, and `LLVM_JIT_CODEGEN_VERSION` bumps happen once.
+- **Mangled name: natural recursion (settled at 1a)**. Each FA node emits its own
+  qualifiers + `[d]` + alias slot, recursing into `firstType`; parse rebuilds the exact
+  structure including alias placement (clean round-trip). Unaliased chains — the
+  overwhelming majority, including every C++ binding — stay byte-identical to master
+  (`[3][4][4]f`). Mid-chain aliases shift the `Y<>` slot to the level it labels
+  (`[3][4]Y<M4>[4]f` vs master's flattened `[3][4][4]Y<M4>f`); the already-planned
+  one-time semantic-hash / AST-serializer / `LLVM_JIT_CODEGEN_VERSION` bumps cover that
+  churn. Text is self-consistent within a build and stable going forward.
 - **Same SimNodes emitted** — interpreter/runtime untouched; stride/count computed from the
   nested type instead of the dim vector.
 - **das macro API**: during migration, read-only computed `.dim`/`.dimExpr` compat
@@ -110,11 +117,17 @@ Exit: suite green on the branch point; target tests reviewed as the spec.
 
 ### Stage 1 — Core representation flip
 The indivisible piece, sub-staged for review:
-- **1a** TypeDecl fields + `Type::tFixedArray` + predicates + clone/visit/gc/sanitize +
-  describe + mangled name (emit + parse) + `isSameType` + semantic/lookup hash +
-  getSizeOf/stride/align family.
+- **1a** (settled: ADDITIVE, byte-neutral, full CI green standalone) — `Type::tFixedArray`
+  appended + new TypeDecl fields (`fixedDim`/`fixedDimExpr`/`typeMacroExpr`, dormant) +
+  predicates + clone/visit/gc + describe + mangled name EMIT + `isSameType` +
+  semantic/lookup hash + getSizeOf/stride/align family. Everything gated on
+  `baseType==tFixedArray`; nothing produces FA nodes yet; `dim`/`dimExpr` stay live until
+  end of Stage 1. Dead arms proven by a hand-built-nodes tests-cpp doctest suite asserting
+  FA-vs-old-node equivalence (text, sizes, identity, clone, gc, hashes). Mangled-name
+  PARSE flip deferred to 1b — `[N]` text is identical in both worlds, so the parser must
+  build whichever representation the program uses, and that flips with the world.
 - **1b** Parsers (ds2 + ds1 + parser_impl): build nested FA chains; typeMacro/typeDecl/tag
-  move to `typeMacroExpr`; keep existing grammar errors.
+  move to `typeMacroExpr`; mangled-name parse builds FA; keep existing grammar errors.
 - **1c** typeFactory / interop (`TT[dim]`, `TDim<>`, `isNativeDim`, makeArgumentType,
   ast_handle).
 - **1d** Infer: inferAlias (WRAP, don't concatenate — alias label preserved),

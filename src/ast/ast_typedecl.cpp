@@ -121,6 +121,9 @@ namespace das
                 return true;
             }
         }
+        if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimConst ) {
+            return true;
+        }
         if ( baseType==Type::tStructure ) {
             if (structType) {
                 if (dep.find(structType) != dep.end()) return false;
@@ -144,6 +147,9 @@ namespace das
                 return true;
             }
         }
+        if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimConst ) {
+            return true;
+        }
         if ( firstType && firstType->isExprType() ) return true;
         if ( secondType && secondType->isExprType() ) return true;
         for ( auto & arg : argTypes ) {
@@ -160,6 +166,15 @@ namespace das
                 if ( dimExpr[i] ) {
                     dimExpr[i] = dimExpr[i]->visit(vis);
                 }
+            }
+            for ( size_t i=0, is=typeMacroExpr.size(); i!=is; ++i ) {
+                if ( typeMacroExpr[i] ) {
+                    typeMacroExpr[i] = typeMacroExpr[i]->visit(vis);
+                }
+            }
+        } else if ( baseType==Type::tFixedArray ) {
+            if ( fixedDim==TypeDecl::dimConst && fixedDimExpr ) {
+                fixedDimExpr = fixedDimExpr->visit(vis);
             }
         } else {
             for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
@@ -501,6 +516,9 @@ namespace das
         for ( auto d : dim ) {
             hash = hashmix(hash, d);
         }
+        if ( baseType==Type::tFixedArray ) {
+            hash = hashmix(hash, fixedDim);
+        }
         if ( structType ) {
             hash = hashmix(hash, intptr_t(structType));
         } else if ( enumType ) {
@@ -570,6 +588,19 @@ namespace das
                 wr << *(de);
             }
         }
+        if ( baseType==Type::tFixedArray ) {
+            hb.update(fixedDim);
+            hb.update(fixedDimExpr != nullptr);
+            if ( fixedDimExpr ) {
+                wr << *fixedDimExpr;
+            }
+        }
+        for ( auto & de : typeMacroExpr ) {
+            hb.update(de != nullptr);
+            if ( de ) {
+                wr << *(de);
+            }
+        }
         hb.update(flagsWithoutAliasCache(this));
         hb.updateString(wr.str());
         return hb.getHash();
@@ -619,6 +650,19 @@ namespace das
             hb.update(d);
         }
         for ( auto & de : dimExpr ) {
+            hb.update(de != nullptr);
+            if ( de ) {
+                wr << *(de);
+            }
+        }
+        if ( baseType==Type::tFixedArray ) {
+            hb.update(fixedDim);
+            hb.update(fixedDimExpr != nullptr);
+            if ( fixedDimExpr ) {
+                wr << *fixedDimExpr;
+            }
+        }
+        for ( auto & de : typeMacroExpr ) {
             hb.update(de != nullptr);
             if ( de ) {
                 wr << *(de);
@@ -689,6 +733,18 @@ namespace das
                 }
             }
             stream << ")";
+        } else if ( baseType==Type::tFixedArray ) {
+            // element-first flattened text ("float[3][4][4]"), byte-matching the old
+            // dim-vector output; the chain's dims print in the suffix section below
+            const TypeDecl * elem = this;
+            while ( elem->baseType==Type::tFixedArray && elem->firstType ) {
+                elem = elem->firstType;
+            }
+            if ( elem->baseType==Type::tFixedArray ) {
+                stream << "fixed array";   // malformed chain (no element)
+            } else {
+                stream << elem->describe(extra, contracts, dmodule, aliasDefs);
+            }
         } else if ( baseType==Type::tHandle ) {
             if ( annotation ) {
                 if (dmodule == DescribeModule::yes && annotation->module && !annotation->module->name.empty()) {
@@ -839,6 +895,15 @@ namespace das
                 stream << "[" << d << "]";
             }
         }
+        if ( baseType==Type::tFixedArray ) {
+            for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
+                if ( t->fixedDim==TypeDecl::dimAuto ) {
+                    stream << "[]";
+                } else {
+                    stream << "[" << t->fixedDim << "]";
+                }
+            }
+        }
         if ( ref ) {
             stream << "&";
         }
@@ -899,6 +964,18 @@ namespace das
                 dimExpr.push_back(nullptr);
             }
         }
+        fixedDim = decl.fixedDim;
+        if ( decl.fixedDimExpr ) {
+            fixedDimExpr = decl.fixedDimExpr->clone();
+        }
+        typeMacroExpr.reserve(decl.typeMacroExpr.size());
+        for ( auto & de : decl.typeMacroExpr ) {
+            if ( de ) {
+                typeMacroExpr.push_back(de->clone());
+            } else {
+                typeMacroExpr.push_back(nullptr);
+            }
+        }
         flags = decl.flags;
         aliasCacheValid = false;            // not cloned — recompute lazily
         aliasCacheHasAlias = false;
@@ -943,6 +1020,16 @@ namespace das
                 dest->dimExpr[i] = nullptr;
             }
         }
+        dest->fixedDim = src->fixedDim;
+        dest->fixedDimExpr = src->fixedDimExpr ? src->fixedDimExpr->clone() : nullptr;
+        dest->typeMacroExpr.resize(src->typeMacroExpr.size());
+        for ( size_t i=0; i!=src->typeMacroExpr.size(); ++i ) {
+            if ( src->typeMacroExpr[i] ) {
+                dest->typeMacroExpr[i] = src->typeMacroExpr[i]->clone();
+            } else {
+                dest->typeMacroExpr[i] = nullptr;
+            }
+        }
         dest->flags = src->flags;
         dest->aliasCacheValid = false;      // not cloned — recompute lazily
         dest->aliasCacheHasAlias = false;
@@ -968,6 +1055,8 @@ namespace das
         if ( secondType ) secondType->gc_collect(target, from);
         for ( auto t : argTypes ) if ( t ) t->gc_collect(target, from);
         for ( auto & de : dimExpr ) if ( de ) de->gc_collect(target, from);
+        if ( fixedDimExpr ) fixedDimExpr->gc_collect(target, from);
+        for ( auto & de : typeMacroExpr ) if ( de ) de->gc_collect(target, from);
         // this??
         if ( structType ) structType->gc_collect(target, from);
         if ( enumType ) enumType->gc_collect(target, from);
@@ -1022,18 +1111,26 @@ namespace das
     }
 
     bool TypeDecl::canDelete() const {
-        if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tFixedArray ) {
+            // fixed-array dims are transparent to classification, same as the old dim vector
+            return firstType ? firstType->canDelete() : false;
+        } else if ( baseType==Type::tHandle ) {
             return annotation->canDelete();
         } else if ( baseType==Type::tPointer ) {
-            if ( !firstType ) {
+            // peel fixed-array levels — delete of `new Foo[4]` classifies by the element
+            auto pointee = firstType;
+            while ( pointee && pointee->baseType==Type::tFixedArray ) {
+                pointee = pointee->firstType;
+            }
+            if ( !pointee ) {
                 return false;
-            } else if (firstType->baseType==Type::tHandle ) {
-                return firstType->annotation->canDeletePtr();
-            } else if ( firstType->baseType==Type::tStructure ) {
+            } else if (pointee->baseType==Type::tHandle ) {
+                return pointee->annotation->canDeletePtr();
+            } else if ( pointee->baseType==Type::tStructure ) {
                 return true;
-            } else if ( firstType->baseType==Type::tTuple ) {
+            } else if ( pointee->baseType==Type::tTuple ) {
                 return true;
-            } else if ( firstType->baseType==Type::tVariant ) {
+            } else if ( pointee->baseType==Type::tVariant ) {
                 return true;
             } else {
                 return false;
@@ -1056,7 +1153,9 @@ namespace das
     }
 
     bool TypeDecl::canDeletePtr() const {
-        if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tFixedArray ) {
+            return firstType ? firstType->canDeletePtr() : false;
+        } else if ( baseType==Type::tHandle ) {
             return annotation->canDeletePtr();
         } else if ( baseType==Type::tStructure ) {
             return true;
@@ -1068,7 +1167,9 @@ namespace das
     }
 
     bool TypeDecl::canNew() const {
-        if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tFixedArray ) {
+            return firstType ? firstType->canNew() : false;
+        } else if ( baseType==Type::tHandle ) {
             return annotation->canNew();
         } else if ( baseType==Type::tStructure ) {
             return true;
@@ -1080,7 +1181,9 @@ namespace das
     }
 
     bool TypeDecl::needDelete() const {
-        if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tFixedArray ) {
+            return firstType ? firstType->needDelete() : false;
+        } else if ( baseType==Type::tHandle ) {
             return annotation->needDelete();
         } else if ( baseType==Type::tPointer ) {
             return canDelete();
@@ -1123,7 +1226,9 @@ namespace das
     }
 
     bool TypeDecl::canMove() const {
-        if (baseType == Type::tHandle) {
+        if (baseType == Type::tFixedArray) {
+            return firstType ? firstType->canMove() : true;
+        } else if (baseType == Type::tHandle) {
             return annotation->canMove();
         } else if (baseType == Type::tBlock) {
             return false;
@@ -1140,7 +1245,9 @@ namespace das
     }
 
     bool TypeDecl::canCloneFromConst() const {
-        if (baseType == Type::tHandle) {
+        if (baseType == Type::tFixedArray) {
+            return firstType ? firstType->canCloneFromConst() : true;
+        } else if (baseType == Type::tHandle) {
             return annotation->canClone();
         } else if (baseType == Type::tStructure && structType) {
             return !structType->circular ? structType->canCloneFromConst() : false;
@@ -1167,7 +1274,9 @@ namespace das
     }
 
     bool TypeDecl::canClone() const {
-        if (baseType == Type::tHandle) {
+        if (baseType == Type::tFixedArray) {
+            return firstType ? firstType->canClone() : true;
+        } else if (baseType == Type::tHandle) {
             return annotation->canClone();
         } else if (baseType == Type::tStructure && structType) {
             return !structType->circular ? structType->canClone() : false;
@@ -1190,7 +1299,9 @@ namespace das
     }
 
     bool TypeDecl::canCopy(bool tempMatters) const {
-        if ( baseType == Type::tHandle ) {
+        if ( baseType == Type::tFixedArray ) {
+            return firstType ? firstType->canCopy(tempMatters) : true;
+        } else if ( baseType == Type::tHandle ) {
             return annotation->canCopy();
         } else if (baseType == Type::tArray || baseType == Type::tTable || baseType == Type::tBlock || baseType == Type::tIterator) {
             return false;
@@ -1213,6 +1324,8 @@ namespace das
     }
 
         bool TypeDecl::isNoHeapType() const {
+            if ( baseType==Type::tFixedArray )
+                return firstType ? firstType->isNoHeapType() : true;
             if ( baseType==Type::tArray || baseType==Type::tTable
                     || baseType==Type::tBlock || baseType==Type::tLambda )
                 return false;
@@ -1232,6 +1345,8 @@ namespace das
         }
 
     bool TypeDecl::isPod() const {
+        if ( baseType==Type::tFixedArray )
+            return firstType ? firstType->isPod() : true;
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString
                 || baseType==Type::tBlock || baseType==Type::tLambda )
             return false;
@@ -1252,6 +1367,8 @@ namespace das
     }
 
     bool TypeDecl::isRawPod() const {
+        if ( baseType==Type::tFixedArray )
+            return firstType ? firstType->isRawPod() : true;
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString
             || baseType==Type::tBlock || baseType==Type::tLambda || baseType==Type::tFunction )
             return false;
@@ -1296,7 +1413,7 @@ namespace das
                 }
             }
             return false;
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && firstType->hasStringData(dep) ) return true;
             if ( secondType && secondType->hasStringData(dep) ) return true;
         } else if ( baseType==Type::tPointer) {
@@ -1313,6 +1430,9 @@ namespace das
 
     bool TypeDecl::unsafeInit( das_set<Structure*> & dep ) const {
         if ( safeWhenUninitialized ) return false;
+        if ( baseType==Type::tFixedArray ) {
+            return firstType ? firstType->unsafeInit(dep) : false;
+        }
         if ( baseType==Type::tHandle ) {
             return  annotation->hasNonTrivialCtor();
         } if ( baseType==Type::tStructure ) {
@@ -1353,7 +1473,7 @@ namespace das
                 }
             }
             return false;
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && firstType->needInScope(dep) ) return true;
             if ( secondType && secondType->needInScope(dep) ) return true;
         } else if ( baseType==Type::tPointer) {
@@ -1385,7 +1505,7 @@ namespace das
             return true;
         } else if ( baseType==Type::tBlock ) {
             return false;
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && !firstType->canBePlacedInContainer(dep) ) return false;
             if ( secondType && !secondType->canBePlacedInContainer(dep) ) return false;
         }
@@ -1398,7 +1518,11 @@ namespace das
     }
 
     bool TypeDecl::hasNonTrivialCtor(das_set<Structure *> & dep) const {
-        if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tFixedArray ) {
+            // unlike tArray (excluded below — an empty array<T> stays uninitialized), a
+            // fixed array's elements are live at init, so the element's ctor-ness counts
+            return firstType ? firstType->hasNonTrivialCtor(dep) : false;
+        } else if ( baseType==Type::tHandle ) {
             return annotation->hasNonTrivialCtor();
         } else if ( baseType==Type::tStructure ) {
             if (structType) {
@@ -1442,7 +1566,7 @@ namespace das
                     return true;
                 }
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && firstType->hasNonTrivialDtor(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialDtor(dep) ) return true;
         }
@@ -1469,7 +1593,7 @@ namespace das
                     return true;
                 }
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && firstType->hasNonTrivialCopy(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialCopy(dep) ) return true;
         }
@@ -1494,7 +1618,7 @@ namespace das
                     return true;
                 }
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && firstType->hasClasses(dep) ) return true;
             if ( secondType && secondType->hasClasses(dep) ) return true;
         }
@@ -1526,6 +1650,10 @@ namespace das
             gcf |= gcFlag_heap;
             if ( firstType ) gcf |= firstType->gcFlags(dep,depA);
             if ( secondType ) gcf |= secondType->gcFlags(dep,depA);
+        } else if ( baseType==Type::tFixedArray ) {
+            // inline storage — element flags only, no gcFlag_heap (matches the old
+            // dim-vector behavior where dims never added heap-ness)
+            if ( firstType ) gcf |= firstType->gcFlags(dep,depA);
         } else if ( baseType==Type::tHandle ) {
             if (depA.find(annotation) != depA.end()) return 0;
             depA.insert(annotation);
@@ -1575,7 +1703,7 @@ namespace das
             return false;
         } else if ( baseType==Type::tTable ) {
             if ( secondType && !secondType->isSafeToDelete(dep) ) return false;
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             if ( firstType && !firstType->isSafeToDelete(dep) ) return false;
         }
         return true;
@@ -1607,7 +1735,7 @@ namespace das
             return true;
         } else if ( baseType==Type::tBlock ) {
             return false;
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tFixedArray ) {
             if ( firstType && !firstType->isLocal(dep) ) return false;
             if ( secondType && !secondType->isLocal(dep) ) return false;
         }
@@ -1639,6 +1767,7 @@ namespace das
             ||  annotation!=decl.annotation || flags!=decl.flags || alias!=decl.alias ) {
                 return false;
             }
+        if ( fixedDim != decl.fixedDim ) return false;
         if ( dim.size() != decl.dim.size() ) return false;
         for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
             if ( dim[i] != decl.dim[i] ) {
@@ -1782,6 +1911,18 @@ namespace das
             }
             break;
         case Type::tArray:
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                    TemporaryMatters::yes,AllowSubstitute::no,false) ) {
+                return false;
+            }
+            break;
+        case Type::tFixedArray:
+            // canonical form: ref/const/temporary live on the outermost FA node only
+            DAS_ASSERT(!firstType || (!firstType->ref && !firstType->constant && !firstType->temporary));
+            DAS_ASSERT(!decl.firstType || (!decl.firstType->ref && !decl.firstType->constant && !decl.firstType->temporary));
+            if ( fixedDim != decl.fixedDim ) {
+                return false;
+            }
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,false) ) {
                 return false;
@@ -2187,6 +2328,11 @@ namespace das
         } else if ( baseType==Type::tArray ) {
             if ( firstType )
                 return firstType->isAliasOrExpr();
+        } else if ( baseType==Type::tFixedArray ) {
+            if ( fixedDim==TypeDecl::dimConst )
+                return true;
+            if ( firstType )
+                return firstType->isAliasOrExpr();
         } else if ( baseType==Type::tTable ) {
             bool any = false;
             if ( firstType )
@@ -2213,6 +2359,11 @@ namespace das
                 return false;
             }
         }
+        for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
+            if ( t->fixedDim==TypeDecl::dimAuto || t->fixedDim==TypeDecl::dimConst ) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -2233,6 +2384,11 @@ namespace das
         case Type::tPointer:
         case Type::tIterator:
         case Type::tArray:
+            return firstType ? firstType->isAuto() : false;
+        case Type::tFixedArray:
+            if ( fixedDim==TypeDecl::dimAuto ) {
+                return true;
+            }
             return firstType ? firstType->isAuto() : false;
         case Type::tTable:
             if ( firstType && firstType->isAuto() ) {
@@ -2281,6 +2437,11 @@ namespace das
         } else if ( baseType==Type::tArray ) {
             if ( firstType )
                 return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tFixedArray ) {
+            if ( fixedDim==TypeDecl::dimAuto )
+                return true;
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
         } else if ( baseType==Type::tTable ) {
             bool any = false;
             if ( firstType )
@@ -2321,6 +2482,11 @@ namespace das
         case Type::tPointer:
         case Type::tIterator:
         case Type::tArray:
+            return firstType ? firstType->isAutoOrAlias() : false;
+        case Type::tFixedArray:
+            if ( fixedDim==TypeDecl::dimAuto ) {
+                return true;
+            }
             return firstType ? firstType->isAutoOrAlias() : false;
         case Type::tTable:
             if ( firstType && firstType->isAutoOrAlias() ) {
@@ -2552,7 +2718,7 @@ namespace das
     }
 
     bool TypeDecl::isVecPolicyType() const {
-        if ( dim.size() )
+        if ( dim.size() || baseType==Type::tFixedArray )
             return false;
         if ( baseType==Type::tString ) {
             return false;
@@ -2586,7 +2752,7 @@ namespace das
         return baseType==Type::tTuple || baseType==Type::tVariant ||
                 baseType==Type::tStructure || baseType==Type::tArray ||
                 baseType==Type::tTable || baseType==Type::tBlock ||
-                baseType==Type::tIterator;
+                baseType==Type::tIterator || baseType==Type::tFixedArray;
     }
 
     bool TypeDecl::isTemp( bool topLevel, bool refMatters ) const {
@@ -2609,7 +2775,7 @@ namespace das
             }
         } else if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             return firstType ? firstType->isTemp(false, true, dep) : false;
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             return firstType ? firstType->isTemp(false, true, dep) : false;
         } else if ( baseType==Type::tTable ) {
             if ( firstType && firstType->isTemp(false, true, dep) ) {
@@ -2639,6 +2805,9 @@ namespace das
             if (di == TypeDecl::dimAuto) {
                 return false;
             }
+        }
+        if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimAuto ) {
+            return false;
         }
         if ( baseType==Type::tStructure ) {
             if ( structType ) {
@@ -2701,7 +2870,7 @@ namespace das
             } else {
                 return true;
             }
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             return firstType ? firstType->isShareable(dep) : true;
         } else if ( baseType==Type::tTable ) {
             if ( firstType && !firstType->isShareable(dep) ) {
@@ -3062,6 +3231,10 @@ namespace das
     }
 
     uint64_t TypeDecl::getBaseSizeOf64() const {
+        if ( baseType==Type::tFixedArray ) {
+            // size of the chain-end element, dims excluded — the dim-vector meaning
+            return firstType ? firstType->getBaseSizeOf64() : 0;
+        }
         if ( baseType==Type::tHandle ) {
             return annotation->getSizeOf();
         } else if ( baseType==Type::tStructure ) {
@@ -3078,6 +3251,13 @@ namespace das
     }
 
     uint64_t TypeDecl::getBaseSizeOf64(bool & failed) const {
+        if ( baseType==Type::tFixedArray ) {
+            if ( !firstType ) {
+                failed = true;
+                return 0;
+            }
+            return firstType->getBaseSizeOf64(failed);
+        }
         if ( baseType==Type::tHandle ) {
             return annotation->getSizeOf();
         } else if ( baseType==Type::tStructure ) {
@@ -3098,6 +3278,9 @@ namespace das
     }
 
     int TypeDecl::getAlignOf() const {
+        if ( baseType==Type::tFixedArray ) {
+            return firstType ? firstType->getAlignOf() : 1;
+        }
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
         } else if ( baseType==Type::tStructure ) {
@@ -3114,6 +3297,13 @@ namespace das
     }
 
     int TypeDecl::getAlignOfFailed(bool &failed) const {
+        if ( baseType==Type::tFixedArray ) {
+            if ( !firstType ) {
+                failed = true;
+                return 1;
+            }
+            return firstType->getAlignOfFailed(failed);
+        }
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
         } else if ( baseType==Type::tStructure ) {
@@ -3144,6 +3334,9 @@ namespace das
         for ( auto i : dim ) {
             size *= i;
         }
+        for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
+            size *= uint64_t(t->fixedDim);
+        }
         return size;
     }
 
@@ -3164,6 +3357,12 @@ namespace das
                 return 0;
             }
         }
+        for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
+            if ( t->fixedDim==TypeDecl::dimAuto || t->fixedDim==TypeDecl::dimConst ) {
+                failed = true;
+                return 0;
+            }
+        }
         return getBaseSizeOf64(failed) * getCountOf64();
     }
 
@@ -3174,6 +3373,10 @@ namespace das
     }
 
     uint64_t TypeDecl::getStride64() const {
+        if ( baseType==Type::tFixedArray ) {
+            // size of one outer-level element, same meaning the dim-vector form had
+            return firstType ? firstType->getSizeOf64() : 0;
+        }
         uint64_t size = 1;
         if ( dim.size() > 1 ) {
             for ( size_t i=1, is=dim.size(); i!=is; ++i ) {
@@ -3223,6 +3426,9 @@ namespace das
             for ( auto & arg : type->argTypes ) {
                 if ( isCircularType(arg, all) ) return true;
             }
+        } else if ( type->baseType==Type::tFixedArray ) {
+            // inline storage — no heap indirection to break the cycle, must descend
+            if ( type->firstType && isCircularType(type->firstType, all) ) return true;
         }
         all.pop_back();
         return false;
@@ -3254,6 +3460,24 @@ namespace das
         if ( explicitRef )  ss << "R";
         if ( isExplicit )   ss << "X";
         if ( aotAlias )     ss << "F";
+        if ( baseType==Type::tFixedArray ) {
+            // natural recursion: this node's [d] + alias, then the element directly (no 1<>
+            // wrapper) — unaliased chains stay byte-identical to the old dim-vector text
+            ss << "[" << fixedDim << "]";
+            if ( fullName ) {
+                if ( removeDim )        ss << "-[]";
+                if ( removeConstant )   ss << "-C";
+                if ( removeRef )        ss << "-&";
+                if ( removeTemporary )  ss << "-#";
+            }
+            if ( !alias.empty() ) {
+                ss << "Y<" << alias << ">";
+            }
+            if ( firstType ) {
+                firstType->getMangledName(ss, fullName);
+            }
+            return;
+        }
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "[" << d << "]";
@@ -3411,7 +3635,9 @@ namespace das
     void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
         append(aliases, (TypeDecl *) this, viaPointer);
         if ( temporary ) return;    // temporary types never alias
-        if ( baseType==Type::tArray ) {
+        if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
+            // for tFixedArray this is slightly more conservative than the old dim-vector
+            // form (the recursion also appends the bare element); conservative == safe
             if ( firstType  ) {
                 firstType->collectAliasing(aliases, dep, viaPointer);
             }
@@ -3440,7 +3666,13 @@ namespace das
 
     void TypeDecl::collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
         if ( constant ) return;
-        if ( baseType==Type::tArray ) {
+        if ( baseType==Type::tFixedArray ) {
+            // dispatch as the element would — dims were transparent qualifiers before the
+            // rework, so no element append here (parity with the dim-vector behavior)
+            if ( firstType && !firstType->constant ) {
+                firstType->collectContainerAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tArray ) {
             if ( firstType && !firstType->constant ) {
                 append(aliases, firstType, viaPointer);
                 firstType->collectContainerAliasing(aliases, dep, viaPointer);
@@ -3548,6 +3780,7 @@ namespace das
         {   Type::tLambda,      "tLambda"},
         {   Type::tTuple,       "tTuple"},
         {   Type::tVariant,     "tVariant"},
+        {   Type::tFixedArray,  "tFixedArray"},
         {   Type::tHandle,      "tHandle"}
     };
 
@@ -3729,6 +3962,14 @@ namespace das
                 stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr) << ">";
             } else {
                 stream << "Array";
+            }
+        } else if ( baseType==Type::tFixedArray ) {
+            // natural recursion reproduces the old TDim<TDim<elem,4>,3> nesting exactly
+            if ( type->firstType ) {
+                stream << "TDim<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr)
+                    << "," << type->fixedDim << ">";
+            } else {
+                stream << "TDim";
             }
         } else if ( baseType==Type::tTable ) {
             if ( type->firstType && type->secondType ) {
