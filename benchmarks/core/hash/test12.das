@@ -16,9 +16,9 @@ require _common
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 
-typedef CuckooHashMap_test = $TCuckooHashTable < int; int >
-typedef FlatHashMap_test = $TFlatHashTable < int; int >
-typedef PathalogicalFlatHashMap_test = $TFlatHashTable < int; int > (@@pathalogical)
+typedef CuckooHashMap_test = $TCuckooHashTable<int; int>
+typedef FlatHashMap_test = $TFlatHashTable<int; int>
+typedef PathalogicalFlatHashMap_test = $TFlatHashTable<int; int>(@@pathalogical)
 
 let PATHO_TOTAL = 100000
 let PATHO_SEQUENTIAL = 8192

@@ -25,7 +25,7 @@ def test_grammar_forms(t : T?) {
         t |> equal(typeinfo typename(_a), "float[4]")
     }
     t |> run("$name<types>(args) form") @(t : T?) {
-        var _a : $tm_make < float > (4, true, "arr")
+        var _a : $tm_make<float>(4, true, "arr")
         t |> equal(typeinfo typename(_a), "float[4]")
     }
 }

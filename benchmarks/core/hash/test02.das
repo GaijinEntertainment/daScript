@@ -11,11 +11,11 @@ require dastest/testing_boost
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 
-typedef CuckooHashMap_test = $TCuckooHashTable < int; int >
-typedef CuckooHashMap_test_inline = $TCuckooHashTable < int; int > (@@hash0, @@hash_inline)
-typedef FlatHashMap_test = $TFlatHashTable < int; int >
-typedef FlatHashMap_test_inline = $TFlatHashTable < int; int > (@@hash_inline)
-typedef FlatHashMap_test0 = $TFlatHashTable < int; int > (@@hash0)
+typedef CuckooHashMap_test = $TCuckooHashTable<int; int>
+typedef CuckooHashMap_test_inline = $TCuckooHashTable<int; int>(@@hash0, @@hash_inline)
+typedef FlatHashMap_test = $TFlatHashTable<int; int>
+typedef FlatHashMap_test_inline = $TFlatHashTable<int; int>(@@hash_inline)
+typedef FlatHashMap_test0 = $TFlatHashTable<int; int>(@@hash0)
 
 [sideeffects]
 def read_map(b : B?; hmap : auto(HashMapType)) {

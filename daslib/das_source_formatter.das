@@ -477,6 +477,10 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
             pos++;
         }
     } else {
+        // '$' prefix of the $name(args) / $name<types>(args) type-macro form
+        if (ctx |> eq(pos, "$") && pos + 1 < length(ctx.tokens) && ctx.tokens[pos + 1].tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
+            pos++
+        }
         // 'ident :: ident ...'
         while (pos < length(ctx.tokens)) {
             if (ctx |> new_line_before(pos)) break;
