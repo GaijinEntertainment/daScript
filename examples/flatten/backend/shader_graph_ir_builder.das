@@ -14,6 +14,7 @@ module shader_graph_ir_builder shared public
 //! `finish` hook), so compiling a shader against this module dumps its opcodes.
 
 require daslib/fio
+require strings
 
 // ShaderNodeKind { Input, Output, Op, Const, Var }
 def private kind_name(k : int) : string {
@@ -40,21 +41,45 @@ def private type_name(t : int) : string {
 // flattened daslang stands alone — the node/pin/link plumbing is noise when you
 // just want to read flatten's output. The default `run.sh <shader>` view (and the
 // regression / capability checks that parse `node ` lines) is unaffected.
+//
+// SGIR mode (FLATTEN_DUMP_SGIR) wins over both: it serializes the graph in the
+// machine line format a native `sg_compile` driver can parse — same fields as
+// the engine IR-builder calls, one line per call, full float precision.
+
+def sg_ir_want_sgir_dump() : bool {
+    return has_env_variable("FLATTEN_DUMP_SGIR")
+}
+
+def private f4_fields(v : float4) : string {
+    return build_string() $(var writer) {
+        writer |> fmt(":.9g", v.x) |> write(" ") |> fmt(":.9g", v.y) |> write(" ")
+        writer |> fmt(":.9g", v.z) |> write(" ") |> fmt(":.9g", v.w)
+    }
+}
 
 def sg_ir_reset() {
     //! Begin a fresh shader graph.
-    return if (sg_ir_want_ast_dump())
+    return if (sg_ir_want_sgir_dump() || sg_ir_want_ast_dump())
     print(";; ---- begin shader graph ----\n")
 }
 
 def sg_ir_set_contract(stage : string; contract : string) {
     //! Record the shader stage + I/O contract.
+    if (sg_ir_want_sgir_dump()) {
+        print("contract {stage} {contract}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     print(";; contract: stage={stage} type={contract}\n")
 }
 
 def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaultTexture : string) {
     //! A material property (from a `var { ... }` block / shader argument).
+    if (sg_ir_want_sgir_dump()) {
+        let tex = empty(defaultTexture) ? "-" : defaultTexture
+        print("property {name} {ptype} {f4_fields(defaultValue)} {tex}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     if (empty(defaultTexture)) {
         print(";; property {name} : {type_name(ptype)} = {defaultValue}\n")
@@ -65,6 +90,10 @@ def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaul
 
 def sg_ir_begin_node(id : int; typeId : string; kind : int; constValue : float4; propertyIndex : int) {
     //! Open a graph node. Its pins follow via sg_ir_add_*_pin.
+    if (sg_ir_want_sgir_dump()) {
+        print("node {id} {typeId} {kind} {f4_fields(constValue)} {propertyIndex}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     var extra = ""
     if (kind == 3) {   // Const
@@ -76,16 +105,28 @@ def sg_ir_begin_node(id : int; typeId : string; kind : int; constValue : float4;
 }
 
 def sg_ir_add_input_pin(id : int; ptype : int) {
+    if (sg_ir_want_sgir_dump()) {
+        print("in {id} {ptype}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     print("    in   pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_output_pin(id : int; ptype : int) {
+    if (sg_ir_want_sgir_dump()) {
+        print("out {id} {ptype}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     print("    out  pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_link(fromPin : int; toPin : int) {
+    if (sg_ir_want_sgir_dump()) {
+        print("link {fromPin} {toPin}\n")
+        return
+    }
     return if (sg_ir_want_ast_dump())
     print("link  pin {fromPin} -> pin {toPin}\n")
 }
