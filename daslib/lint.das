@@ -59,7 +59,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
     //!   - LINT010: dead store — local variable written but value never read
     //!   - LINT011: int literal promoted to float/double with precision loss
-    //!   - LINT012: unused function argument (class-method args skipped — signature is dictated by the base)
+    //!   - LINT012: unused function argument (class-method and [extern] args skipped — signature is dictated externally)
     //!   - LINT013: unused block argument
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
@@ -254,9 +254,13 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
-        // class-method signatures are dictated by the base class / interface, so an
-        // unused param there is structural, not a mistake — skip to avoid override noise
+        // class-method signatures are dictated by the base class / interface, and
+        // [extern] stubs by the bound C function — unused params there are
+        // structural, not a mistake
         if (fun.flags.isClassMethod) return
+        for (ann in fun.annotations) {
+            if (ann.annotation.name == "extern") return
+        }
         validate_argument(arg, "LINT012", "function argument")
     }
 

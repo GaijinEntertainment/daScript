@@ -10,7 +10,9 @@ directly from daScript.
 During the CMake configuration process, the build system will:
 - First attempt to locate a system-installed `LLVM 22`
 - If not found, automatically download prebuilt LLVM packages from:
-https://github.com/aleksisch/llvm-shared-builds/releases/tag/v22.1.5
+https://github.com/GaijinEntertainment/daScript/releases/tag/llvm-v22.1.5
+(curated z3-free builds produced by the `llvm-release` workflow,
+`.github/workflows/llvm_release.yml`)
 - Place the library into `das_root/lib/LLVM.dll`.
 
 Note that the filename is fixed and cannot be changed, regardless of your platform.
