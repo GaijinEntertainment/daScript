@@ -152,7 +152,7 @@ def ceil(x : float3) : float3 {}
 [stub, hint(ceil)]
 def ceil(x : float4) : float4 {}
 
-// mad: a * b + c
+// mad: a * b + c (b may be a scalar broadcast)
 [stub, hint(mad)]
 def mad(a : float | int, b : float | int, c : float | int) : float {}
 [stub, hint(mad)]
@@ -161,6 +161,12 @@ def mad(a : float2, b : float2, c : float2) : float2 {}
 def mad(a : float3, b : float3, c : float3) : float3 {}
 [stub, hint(mad)]
 def mad(a : float4, b : float4, c : float4) : float4 {}
+[stub, hint(mad)]
+def mad(a : float2, b : float, c : float2) : float2 {}
+[stub, hint(mad)]
+def mad(a : float3, b : float, c : float3) : float3 {}
+[stub, hint(mad)]
+def mad(a : float4, b : float, c : float4) : float4 {}
 
 // lerp: a, b are AnyFloat; t is a float scalar
 [stub, hint(lerp)]

@@ -61,6 +61,10 @@
 #
 #  15. cap_cse.shader (repeated `dot(c, LUMA)`) -> one shared node. Neither the compiler nor the
 #      backend CSEs; flatten value-numbers the body and shares the repeat, so 1 dot node (not 2).
+#
+#  16. cap_mad.shader (mul-adds + a hand-written lerp shape) -> fused. The finishing pass packs
+#      `a*b + c` into mad nodes (incl. the scalar-broadcast form) and `(b-a)*t + a` into a lerp
+#      node, so the graph carries 2 mad + 1 lerp instead of mul/add/sub chains.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -298,6 +302,22 @@ if [[ "$errs" -eq 0 && "$dots" -eq 1 ]]; then
     echo "   ok — compiles ($nodes nodes), 1 dot node (the repeat was CSE'd)"
 else
     echo "   FAIL — errors=$errs dots=$dots (expected 1)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "16. cap_mad.shader (mul-adds + lerp shape -> 2 mad + 1 lerp nodes)"
+out="$(compile "$here/cap_mad.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+mads="$(echo "$out" | grep '^node ' | grep -cw 'mad')"
+lerps="$(echo "$out" | grep '^node ' | grep -cw 'lerp')"
+errs="$(echo "$out" | grep -ci error)"
+# `lum*0.5 + 0.5` and `c*remap + bias` each pack into one mad; `(white - c)*remap + c` re-fuses
+# into one lerp. An un-fused body would carry the raw mul/add/sub nodes instead.
+if [[ "$errs" -eq 0 && "$mads" -eq 2 && "$lerps" -eq 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), 2 mad + 1 lerp (mul-adds fused)"
+else
+    echo "   FAIL — errors=$errs mads=$mads lerps=$lerps (expected 2 and 1)"
     echo "$out" | grep -i error | head
     fail=1
 fi

@@ -86,6 +86,10 @@ def test_flatten_fold(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_opt.das")
         t |> success(n >= 7, "expected >=7 twins, checked {n}")
     }
+    t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")
+        t |> success(n >= 20, "expected >=20 twins, checked {n}")
+    }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
         let proj = "{root}/examples/flatten/flatten_shaders.das_project"
         let base = "{root}/examples/flatten/shaders"
