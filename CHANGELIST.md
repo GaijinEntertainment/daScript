@@ -1,8 +1,6 @@
 # daslang Changelog
 
-## 0.6.3 (June 2026) — PRELIMINARY
-
-> Preliminary changelog covering everything merged since 0.6.2 (#2618 – #3072). Subject to edit before release.
+## 0.6.3 (June 2026)
 
 ### New Features
 
