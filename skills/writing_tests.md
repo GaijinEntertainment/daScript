@@ -2,6 +2,19 @@
 
 Tests use the `dastest` framework. Test files live in `tests/` with per-module subfolders.
 
+## AOT registration (REQUIRED for new test directories)
+
+CI's `test_aot` binary runs EVERY test under `tests/` with AOT enabled (`fail_on_no_aot`).
+Creating a new test directory ⇒ register it in `tests/aot/CMakeLists.txt` (5-step pattern in
+`skills/aot_testing.md` § "Registering a New Test Directory"), or CI fails with
+`error[50101]: AOT link failed`.
+
+If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put
+`options no_aot` IN THE FILE **and** exclude it from the directory's AOT glob, with a
+comment + issue link on both. Glob exclusion alone is NOT enough — test_aot still *runs*
+the file and trips 50101 on its missing stubs; `options no_aot` is what makes the runtime
+skip AOT linking for it.
+
 ## Test file structure
 
 ```das

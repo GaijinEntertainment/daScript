@@ -81,7 +81,13 @@ The `-use-aot` flag enables AOT for sub-compiled test files even when the host b
 
 This applies to ALL test directories (e.g., `tests/fio/`, `tests/fs/`, `tests/json/`), not just `tests/aot/`. See the "Registering a New Test Directory" section below.
 
-**Do NOT use `options no_aot`** to suppress AOT link failures — register the tests properly in CMake instead.
+**Do NOT use `options no_aot`** to mask a missing CMake registration — register the tests properly instead.
+
+**Exception — a file that genuinely can't AOT** (codegen/emitter bug, interpreted-only by design): use BOTH markers together, each with a comment + issue link:
+1. `options no_aot` in the file — makes test_aot's `fail_on_no_aot` skip AOT linking for it at runtime;
+2. exclude it from the directory's AOT glob in `tests/aot/CMakeLists.txt` — skips generating stubs that wouldn't compile.
+
+**Trap:** glob exclusion ALONE is not enough. `test_aot` runs every file under `tests/` regardless of what was stub-generated, so an excluded-but-not-`no_aot` file fails at runtime with `error[50101]` on all its functions (precedent: `tests/fixed_array/test_interop.das`, issue #3077).
 
 ## Adding a New AOT Test in `tests/aot/`
 
@@ -368,6 +374,6 @@ SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
 
 **Step 5** — Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list.
 
-**Why this matters**: CI builds `test_aot` on Linux/macOS and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. The `test_aot` target is only built on non-Windows platforms (`NOT WIN32` guard in root CMakeLists.txt), so this failure won't be caught locally on Windows.
+**Why this matters**: CI builds `test_aot` on Linux/macOS/Windows-64 and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. `test_aot` builds and runs fine on Windows (only 32-bit Windows is excluded — `NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)` gate in root CMakeLists.txt); it requires tests and AOT examples enabled in the CMake configure.
 
 Also ensure that wrapper functions in builtin `.das` files (like `src/builtin/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.
