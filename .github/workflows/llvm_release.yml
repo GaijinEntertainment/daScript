@@ -1,0 +1,147 @@
+name: llvm-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      llvm_version:
+        description: "LLVM version (e.g. 22.1.5)"
+        required: true
+        default: "22.1.5"
+
+env:
+  # daslang needs the C-API only; llvm_targets.das initializes exactly these targets
+  LLVM_COMMON_FLAGS: >-
+    -DCMAKE_BUILD_TYPE=Release
+    -DLLVM_ENABLE_ASSERTIONS=OFF
+    -DLLVM_ENABLE_Z3_SOLVER=OFF
+    -DLLVM_TARGETS_TO_BUILD=X86;AArch64;WebAssembly
+    -DLLVM_ENABLE_ZLIB=OFF
+    -DLLVM_ENABLE_ZSTD=OFF
+    -DLLVM_ENABLE_LIBXML2=OFF
+    -DLLVM_ENABLE_CURL=OFF
+    -DLLVM_ENABLE_LIBEDIT=OFF
+    -DLLVM_ENABLE_HTTPLIB=OFF
+    -DLLVM_ENABLE_FFI=OFF
+    -DLLVM_ENABLE_LIBPFM=OFF
+    -DLLVM_ENABLE_BINDINGS=OFF
+    -DLLVM_ENABLE_BACKTRACES=OFF
+    -DLLVM_ENABLE_CRASH_OVERRIDES=OFF
+    -DLLVM_ENABLE_UNWIND_TABLES=OFF
+    -DLLVM_INCLUDE_TESTS=OFF
+    -DLLVM_INCLUDE_EXAMPLES=OFF
+    -DLLVM_INCLUDE_BENCHMARKS=OFF
+    -DLLVM_INCLUDE_DOCS=OFF
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux_64
+            os: ubuntu-22.04
+          - name: linux_arm64
+            os: ubuntu-22.04-arm
+          - name: mac_arm64
+            os: macos-14
+          - name: win64
+            os: windows-2022
+    steps:
+      # git clone, not the source tarball: tar on Windows fails to extract
+      # symlinks under clang/test and llvm/utils/mlgo-utils; git stores them
+      # as plain files when core.symlinks=false
+      - name: fetch llvm sources
+        shell: bash
+        run: git clone --depth 1 --branch llvmorg-${{ inputs.llvm_version }} https://github.com/llvm/llvm-project.git llvm-project
+
+      - name: build LLVM (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ninja-build lld
+          cmake -S llvm-project/llvm -B build -G Ninja \
+            $LLVM_COMMON_FLAGS \
+            -DLLVM_USE_LINKER=lld \
+            -DLLVM_BUILD_LLVM_DYLIB=ON
+          ninja -C build LLVM
+          SO=$(ls build/lib/libLLVM.so.* | head -n1)
+          cp "$SO" LLVM.dll
+          strip --strip-unneeded LLVM.dll
+
+      - name: build LLVM (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          set -euxo pipefail
+          brew install ninja
+          cmake -S llvm-project/llvm -B build -G Ninja \
+            $LLVM_COMMON_FLAGS \
+            -DLLVM_BUILD_LLVM_DYLIB=ON
+          ninja -C build LLVM
+          cp build/lib/libLLVM.dylib LLVM.dll
+          strip -x LLVM.dll
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: startsWith(matrix.os, 'windows')
+
+      - name: build LLVM (Windows)
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          set -euxo pipefail
+          choco install -y ninja
+          cmake -S llvm-project/llvm -B build -G Ninja \
+            $LLVM_COMMON_FLAGS \
+            -DLLVM_BUILD_LLVM_C_DYLIB=ON \
+            -DLLVM_ENABLE_PROJECTS=clang
+          ninja -C build LLVM-C clang
+          cp build/bin/LLVM-C.dll LLVM.dll
+          # clang-cl.exe is a driver alias of clang.exe (dispatch on argv[0])
+          if [ -f build/bin/clang-cl.exe ]; then
+            cp build/bin/clang-cl.exe .
+          else
+            cp build/bin/clang.exe clang-cl.exe
+          fi
+
+      - name: package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          EXTRA=""
+          if [ -f clang-cl.exe ]; then EXTRA="clang-cl.exe"; fi
+          tar czf ${{ matrix.name }}_llvm.tar.gz LLVM.dll $EXTRA
+          sha256sum ${{ matrix.name }}_llvm.tar.gz | tee ${{ matrix.name }}_llvm.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}_llvm
+          path: |
+            ${{ matrix.name }}_llvm.tar.gz
+            ${{ matrix.name }}_llvm.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: collect sha256
+        run: |
+          set -euxo pipefail
+          cd artifacts
+          ls -la
+          cat *.sha256 > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: llvm-v${{ inputs.llvm_version }}
+          name: LLVM ${{ inputs.llvm_version }} prebuilt
+          body_path: artifacts/SHA256SUMS
+          files: artifacts/*_llvm.tar.gz
+          draft: true
