@@ -210,7 +210,7 @@ namespace das
             }
         } else if ( TT->baseType==Type::tIterator ) {
             applyRefToRef(TT->firstType);
-        } else if ( TT->baseType==Type::tArray ) {
+        } else if ( TT->baseType==Type::tArray || TT->baseType==Type::tFixedArray ) {
             applyRefToRef(TT->firstType);
         } else if ( TT->baseType==Type::tTable ) {
             applyRefToRef(TT->firstType);
@@ -2226,7 +2226,7 @@ namespace das
         } else  if ( baseType==Type::tIterator ) {
             if ( firstType )
                 firstType->collectAliasList(aliases);
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             if ( firstType )
                 firstType->collectAliasList(aliases);
         } else if ( baseType==Type::tTable ) {
@@ -2253,7 +2253,7 @@ namespace das
         } else  if ( baseType==Type::tIterator ) {
             if ( firstType )
                 return firstType->isAotAlias();
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             if ( firstType )
                 return firstType->isAotAlias();
         } else if ( baseType==Type::tTable ) {
@@ -2297,7 +2297,7 @@ namespace das
         } else  if ( baseType==Type::tIterator ) {
             if ( firstType )
                 return firstType->isAliasOrA2A(a2a);
-        } else if ( baseType==Type::tArray ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tFixedArray ) {
             if ( firstType )
                 return firstType->isAliasOrA2A(a2a);
         } else if ( baseType==Type::tTable ) {

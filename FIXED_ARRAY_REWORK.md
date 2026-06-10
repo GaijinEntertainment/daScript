@@ -208,6 +208,34 @@ The indivisible piece, sub-staged for review:
   Note: gen2 `new Foo[3]` parses as `(new Foo)[3]` (pointer index), NOT new-dim — the
   ExprNew-with-dim / das_new_dim path is reachable via other routes (gen1 et al.);
   map its actual reachability during this sub-stage before porting it.
+  IMPLEMENTED. ast_simulate.cpp: make-variant/make-struct lowering element walks
+  (findArgumentIndex/getVariantFieldOffset/structType/annotation through the wrapper;
+  getStride needs NO walk — FA head getStride == old dim'd getStride), fakeVariable
+  wrap, ExprAscend/ExprNew dispatch walks + pointee-size via pointer-node walk,
+  sv_trySimulate_At/ExprSafeAt ranges from fixedDim, for-loop fixedSize + iterator arm.
+  ExprDelete needs NO edit (infer routes FA delete to finalize_dim; the total==1 assert
+  proves dim'd never reached it). Boot-gate fallout fixed en route, beyond ast_simulate:
+  (1) expect_dim contract + sort transformCall in src/builtin (dim reads);
+  (2) isAliasOrA2A/applyRefToRef/collectAliasList/isAotAlias were MISSING their FA arms
+  (1a gap — isAlias() false on FA-of-alias made ExprCast never resolve `TT -const[N]`);
+  (3) inferAlias FA arm now applies+clears the head's hoisted remove* contracts (the
+  dim'd alias leaf used to do this; without it `TT -const[N]` kept the contract flag and
+  isSameType failed);
+  (4) AST-GC HAZARD (new failure class for the whole rework): a fresh node held only in
+  a C++ local across inferFunctionCall gets collected (proven via cdb: ptrType freed,
+  baadf00d). Discipline: derive scratch pointers from rooted slots AFTER such calls,
+  never capture across them. Second instance: gc_local frees ONLY the head — TypeDecl's
+  copy ctor deep-clones children, so guarded deep clones leak their subtree (makeTypeInfo
+  FA-flatten arm now uses a SHALLOW borrow scratch; ManagedVector scratch got an element
+  guard, at master parity);
+  (5) updateAliasMap "dead no-op" claim was WRONG for bare `auto(TT)` matched against an
+  FA-typed pass — actually surfaced via daslib: ast_boost walk_and_convert_array/table
+  still BUILT dim-vector types via the das-side `.dim` push — they now wrap via the new
+  public ast_boost helper `make_fixed_array_type` (canonical hoist); walk_and_convert
+  dispatches on tFixedArray; fixedDim/fixedDimExpr exposed on the das TypeDecl (pulled
+  forward from 1f by necessity — dastest→clargs→`$v` hits this path at boot).
+  Gates: tests-cpp 56/56 (int[5] flipped), daslang boots, tests/fixed_array 86/86,
+  zero GC leaks; full-tree dastest inventory = the 1f burndown list.
 - **1f** debug-info helper flatten; AST serializer FA fields (payload side + version bump
   landed at 1b-i); module_builtin_ast bindings: expose new fields + extend the `.dim`/
   `.dimExpr` compat properties with the flattened-array view (payload side landed at 1b-i).

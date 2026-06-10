@@ -3092,9 +3092,7 @@ namespace das {
         // pointer-to-element ('array of pointers', as the old flat dim copy did)
         TypeDecl * baseT = expr->typeexpr;
         while (baseT->baseType == Type::tFixedArray && baseT->firstType) baseT = baseT->firstType;
-        TypeDeclPtr ptrType = nullptr;
         auto wrapNewDimChain = [&](TypeDeclPtr pt) -> TypeDeclPtr {
-            ptrType = pt;
             if (expr->typeexpr->baseType != Type::tFixedArray) return pt;
             auto chain = new TypeDecl(*expr->typeexpr);     // deep clone of the chain
             auto inner = chain;
@@ -3164,6 +3162,10 @@ namespace das {
                     expr->name = saveName;
             }
             swap(resultType, expr->type);
+            // pointer node re-derived from the rooted expr->type AFTER inferFunctionCall -
+            // a raw local held across it can be collected by the AST gc (proven on `new Class()`)
+            TypeDecl * ptrType = expr->type;
+            while (ptrType->baseType == Type::tFixedArray && ptrType->firstType) ptrType = ptrType->firstType;
             if (expr->func) {
                 if (!ptrType->firstType->isSameType(*resultType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes)) {
                     error("initializer returns '" + describeType(resultType) + "' vs '" + describeType(ptrType->firstType) + "'", "", "",

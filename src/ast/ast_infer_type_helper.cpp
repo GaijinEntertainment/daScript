@@ -439,6 +439,16 @@ namespace das {
                 if (!resT->firstType)
                     return nullptr;
             }
+            if (decl->baseType == Type::tFixedArray) {
+                // the chain head carries the hoisted qualifiers+contracts the dim'd alias leaf used to;
+                // apply and clear them here the way the alias-leaf case does
+                resT->ref = resT->ref && !decl->removeRef;
+                resT->constant = resT->constant && !decl->removeConstant;
+                resT->temporary = resT->temporary && !decl->removeTemporary;
+                resT->removeRef = false;
+                resT->removeConstant = false;
+                resT->removeTemporary = false;
+            }
         } else if (decl->baseType == Type::tTable) {
             if (decl->firstType) {
                 resT->firstType = inferAlias(decl->firstType, fptr, aliases, options, autoToAlias);

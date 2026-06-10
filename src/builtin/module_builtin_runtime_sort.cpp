@@ -490,15 +490,16 @@ namespace das
                 }
             }
             const auto & arg = call->arguments[0];
-            if ( arg->type->dim.size() ) {
-                auto arrType = new TypeDecl(*arg->type);
-                arrType->dim.clear();
+            if ( arg->type->baseType==Type::tFixedArray ) {
+                auto faT = arg->type;   // innermost fixed-array node (matches old dim.back() semantics)
+                while ( faT->firstType && faT->firstType->baseType==Type::tFixedArray ) faT = faT->firstType;
+                auto arrType = new TypeDecl(*faT->firstType);
                 auto newCall = static_cast<ExprCall*>(call->clone());
                 auto stride = arrType->getSizeOf();
                 auto strideArg = new ExprConstInt(call->at, stride);
                 strideArg->generated = true;
                 newCall->arguments.insert(newCall->arguments.begin()+1,strideArg);
-                auto length = arg->type->dim.back();
+                auto length = faT->fixedDim;
                 auto lengthArg = new ExprConstInt(call->at, length);
                 lengthArg->generated = true;
                 newCall->arguments.insert(newCall->arguments.begin()+2,lengthArg);

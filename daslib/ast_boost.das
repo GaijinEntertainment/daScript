@@ -660,6 +660,21 @@ def operator as StructureAnnotation(foo : Annotation?) {
     return unsafe(reinterpret<StructureAnnotation?>(foo));
 }
 
+def make_fixed_array_type(total : int; var element : TypeDecl?) : TypeDecl? {
+    //! Wraps `element` into a fixed-array type node of size `total` (canonical form:
+    //! ref/const/temporary qualifiers live on the chain head, never on the element).
+    var fa = new TypeDecl(at = element.at, baseType = Type.tFixedArray)
+    fa.fixedDim = total
+    fa.flags.ref = element.flags.ref
+    element.flags.ref = false
+    fa.flags.constant = element.flags.constant
+    element.flags.constant = false
+    fa.flags.temporary = element.flags.temporary
+    element.flags.temporary = false
+    fa.firstType = element
+    return fa
+}
+
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
     let total = any_array_size(data)
     if (total != 0) {
@@ -668,7 +683,7 @@ def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at :
         any_array_foreach(data, stride) $(value) {
             emplace_new(mkArr.values) <| walk_and_convert(value, info.firstType, at)
         }
-        push(mkArr.makeType.dim, total)
+        mkArr.makeType = make_fixed_array_type(total, mkArr.makeType)
         var mkToArrayMove = new ExprCall(at = at, name := "to_array_move")
         emplace(mkToArrayMove.arguments, mkArr)
         return mkToArrayMove
@@ -681,7 +696,10 @@ def private walk_and_convert_dim(data : uint8 const?; info : TypeDeclPtr; at : L
     let stride = info.baseSizeOf
     let total = info.countOf
     var einfo = clone_type(info)
-    clear(einfo.dim)
+    while (einfo.baseType == Type.tFixedArray && einfo.firstType != null) {
+        einfo = clone_type(einfo.firstType)
+    }
+    clear(einfo.dim)    // legacy dim-vector view; nothing produces it post-rework
     var mkArr = new ExprMakeArray(at = at, makeType = clone_type(info))
     for (x in range(total)) {
         unsafe {
@@ -766,7 +784,7 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
             emplace(mkTup.values, value)
             emplace(mkArr.values, mkTup)
         }
-        push(mkArr.makeType.dim, total)
+        mkArr.makeType = make_fixed_array_type(total, mkArr.makeType)
         var mkToTableMove = new ExprCall(at = at, name := "to_table_move")
         emplace(mkToTableMove.arguments, mkArr)
         return mkToTableMove
@@ -845,7 +863,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
 def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
     //! Recursively converts raw data to an AST expression based on type information.
     // print("0x{intptr(data)} {describe(info)}\n")
-    if (!empty(info.dim)) {
+    if (info.baseType == Type.tFixedArray || !empty(info.dim)) {
         return walk_and_convert_dim(data, info, at)
     } elif (info.baseType == Type.tArray) {
         return walk_and_convert_array(data, info, at)

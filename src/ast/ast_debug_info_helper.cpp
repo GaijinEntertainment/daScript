@@ -210,7 +210,7 @@ namespace das {
     TypeInfo * DebugInfoHelper::makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type ) {
         if ( type->baseType==Type::tFixedArray ) {
             // runtime TypeInfo stays flattened forever (FIXED_ARRAY_REWORK.md): collect the
-            // chain dims onto a scratch element clone; canonical head qualifiers ride along.
+            // chain dims onto a scratch element view; canonical head qualifiers ride along.
             // The mangled-name cache key is unaffected — chain and flattened text are identical.
             const TypeDecl * t = type;
             vector<int32_t> dims;
@@ -219,7 +219,21 @@ namespace das {
                 DAS_ASSERTF(t->firstType, "tFixedArray chain without an element");
                 t = t->firstType;
             }
-            gc_local<TypeDecl> flat(new TypeDecl(*t));
+            // SHALLOW scratch borrowing the element's children: the TypeDecl copy ctor
+            // deep-clones sub-nodes and gc_local frees only the head, so a full clone
+            // here leaks the subtree on the thread root (one per FA-typed debug info)
+            gc_local<TypeDecl> flat(new TypeDecl(t->baseType));
+            flat->structType = t->structType;
+            flat->enumType = t->enumType;
+            flat->annotation = t->annotation;
+            flat->firstType = t->firstType;
+            flat->secondType = t->secondType;
+            flat->argTypes = t->argTypes;
+            flat->argNames = t->argNames;
+            flat->alias = t->alias;
+            flat->module = t->module;
+            flat->at = t->at;
+            flat->flags = t->flags;
             flat->dim.insert(flat->dim.begin(), dims.begin(), dims.end());
             flat->ref = type->ref;
             flat->constant = type->constant;

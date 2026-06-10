@@ -407,7 +407,7 @@ namespace das
             for ( size_t ai=0; ai!=maxIndex; ++ ai) {
                 if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
                     const auto & argT = types[ai];
-                    if ( argT->dim.size() == 0 ) {
+                    if ( argT->baseType != Type::tFixedArray ) {
                         err = "argument " + fn->arguments[ai]->name + " is expected to be a dim []";
                         return false;
                     }
