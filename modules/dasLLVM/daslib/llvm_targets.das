@@ -7,7 +7,7 @@ require llvm/bindings/llvm_func
 // is manually call requested functions.
 //
 // The set below mirrors the universal_targets list in bind_llvm.das (X86,
-// AArch64, ARM) — the only targets whose per-target Initialize<X>* symbols
+// AArch64) — the only targets whose per-target Initialize<X>* symbols
 // are guaranteed to be exported by every prebuilt LLVM.dll we ship across
 // linux x86_64 / linux arm64 / mac arm64 / windows x86_64. Adding more
 // targets here will break loading the bindings on platforms whose curated
@@ -16,22 +16,18 @@ require llvm/bindings/llvm_func
 
 def LLVMInitializeAllTargetInfos() {
     LLVMInitializeAArch64TargetInfo()
-    LLVMInitializeARMTargetInfo()
     LLVMInitializeX86TargetInfo()
 }
 def LLVMInitializeAllTargets() {
     LLVMInitializeAArch64Target()
-    LLVMInitializeARMTarget()
     LLVMInitializeX86Target()
 }
 def LLVMInitializeAllTargetMCs() {
     LLVMInitializeAArch64TargetMC()
-    LLVMInitializeARMTargetMC()
     LLVMInitializeX86TargetMC()
 }
 def LLVMInitializeAllAsmPrinters() {
     LLVMInitializeAArch64AsmPrinter()
-    LLVMInitializeARMAsmPrinter()
     LLVMInitializeX86AsmPrinter()
 }
 
