@@ -446,6 +446,9 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         for (v in lc.variables) {
             if (v.init != null) {
                 v.init = lower_value(ctx, v.init, structPred, out)
+            } else {
+                // materialize the implicit zero-init — the predicated store's false path READS it
+                v.init = zero_const_of(v._type, v.at)
             }
         }
         out |> push <| letClone

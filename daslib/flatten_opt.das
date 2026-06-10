@@ -795,10 +795,10 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// A fresh zero literal of `t` (the RESULT type of `X * 0`), over the numeric scalar + vector
-// family; null otherwise. Keying on the result type (not the zero operand's) lets both
-// `v:float3 * 0.0` and `v * float3(0)` fold to a width-matched `float3(0)` with no mistype.
-def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+// A fresh zero literal of `t` (the RESULT type of `X * 0`; also the lowering's materialized
+// implicit zero-init on bare decls), over the numeric scalar + vector family; null otherwise.
+// Keying on the result type lets both `v * 0.0` and `v * float3(0)` fold width-matched.
+def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
     let bt = t.baseType
     if (bt == Type.tInt) return new ExprConstInt(at = at, value = 0)

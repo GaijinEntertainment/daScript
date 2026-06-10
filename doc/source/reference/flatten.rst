@@ -234,6 +234,8 @@ Supported subset
      - flattened in place / unwrapped to its body
    * - copyable value assignment
      - selects support scalars, vectors (``float4`` …), structs and tuples
+   * - bare local decl (``var a : float3``), partially assigned under a branch
+     - the implicit zero-init is materialized, so the predicated select's false path reads a real node
    * - ``void`` functions
      - predicated writes to output globals (the writes-to-globals shader model)
 
