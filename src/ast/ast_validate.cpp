@@ -98,6 +98,10 @@ namespace das {
             for ( auto de : td->dimExpr ) {
                 trackExpression(de);
             }
+            for ( auto de : td->typeMacroExpr ) {
+                trackExpression(de);
+            }
+            trackExpression(td->fixedDimExpr);
             currentField = savedField;
         }
         void trackExpression ( Expression * expr ) {
@@ -161,6 +165,15 @@ namespace das {
                         trackExpression(td->dimExpr[i]);
                     }
                 }
+                // tag payload sits in typeMacroExpr of an autoinfer node — never visited by
+                // the standard visitor (it only walks typeMacroExpr on typeDecl/typeMacro)
+                for ( auto de : td->typeMacroExpr ) {
+                    trackExpression(de);
+                }
+            }
+            // resolved tFixedArray keeps fixedDimExpr on gc_root but the visitor skips it
+            if ( td->baseType == Type::tFixedArray && td->fixedDim != TypeDecl::dimConst ) {
+                trackExpression(td->fixedDimExpr);
             }
         }
     // Expression — standard visitor path

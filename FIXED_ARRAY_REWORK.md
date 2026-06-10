@@ -126,8 +126,27 @@ The indivisible piece, sub-staged for review:
   FA-vs-old-node equivalence (text, sizes, identity, clone, gc, hashes). Mangled-name
   PARSE flip deferred to 1b — `[N]` text is identical in both worlds, so the parser must
   build whichever representation the program uses, and that flips with the world.
-- **1b** Parsers (ds2 + ds1 + parser_impl): build nested FA chains; typeMacro/typeDecl/tag
-  move to `typeMacroExpr`; mangled-name parse builds FA; keep existing grammar errors.
+- **1b** (settled: TWO commits) Parsers (ds2 + ds1 + parser_impl) + the payload move.
+  - **1b-i — payload move, CI-green standalone.** typeMacro/typeDecl/tag payload moves
+    `dimExpr` -> `typeMacroExpr` atomically: parser writes, all C++ reads (typeMacroName,
+    describe, mangled emit, moreSpecialized, inferPartialAliases, inferTypeExpr, validator),
+    PLUS two pieces pulled forward from 1f because atomicity forces them: the das-side
+    `.dimExpr` binding becomes a read-only compat property ("whatever dimExpr used to hold
+    for this node": non-empty `typeMacroExpr` wins, covers the tag payload on autoinfer
+    nodes), and the AST serializer carries `typeMacroExpr` (+version bump). typemacro_boost /
+    clargs / ast_match / templates_boost keep working unmodified. Mangled text byte-identical.
+  - **1b-ii — FA parser flip, breaks the FA world.** `appendDimExpr` becomes an FA-chain
+    builder + `attachDimChain` (attach element bare at chain end; hoist the qualifier flags
+    the old world fused onto the dim-carrying node — const/ref/temporary, their remove*,
+    implicit/explicitConst/explicitRef/isExplicit/autoToAlias — to the chain head; `alias`
+    NEVER hoists: at parse it is the unresolved name on the element). dim_list/splice arms
+    in both grammars, gen1's push-at-end `[]` arm and `{{ }}` synthesized `auto[]`, mangled
+    PARSE `case '['` builds FA — with the rule that a `Y<name>` immediately following `[d]`
+    labels THAT FA node (known cosmetic asymmetry: `[3]Y<I>i` re-parses with the label on
+    the FA node even if it was on the element; structural identity unaffected). Grammar
+    errors kept verbatim. Gate: tests-cpp parse-shape + mangled round-trip suites green;
+    dastest framework still runs (concrete FA in daslib is only decs/faker/profiler/regex)
+    and its FA-failure inventory becomes the 1c/1d/1e burndown list.
 - **1c** typeFactory / interop (`TT[dim]`, `TDim<>`, `isNativeDim`, makeArgumentType,
   ast_handle).
 - **1d** Infer: inferAlias (WRAP, don't concatenate — alias label preserved),
@@ -139,8 +158,9 @@ The indivisible piece, sub-staged for review:
   Note: gen2 `new Foo[3]` parses as `(new Foo)[3]` (pointer index), NOT new-dim — the
   ExprNew-with-dim / das_new_dim path is reachable via other routes (gen1 et al.);
   map its actual reachability during this sub-stage before porting it.
-- **1f** debug-info helper flatten; AST serializer (+version bump); module_builtin_ast
-  bindings: expose new fields + computed read-only `.dim`/`.dimExpr` compat.
+- **1f** debug-info helper flatten; AST serializer FA fields (payload side + version bump
+  landed at 1b-i); module_builtin_ast bindings: expose new fields + extend the `.dim`/
+  `.dimExpr` compat properties with the flattened-array view (payload side landed at 1b-i).
 Inference semantics flip in this stage; fallout fixes in tests/daslib land here.
 Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (riding compat).
 

@@ -267,6 +267,15 @@ namespace das {
         int32_t                 fixedDim = 0;
         ExpressionPtr           fixedDimExpr = nullptr;
         vector<ExpressionPtr>   typeMacroExpr;
+        // das-binding compat view for `.dimExpr` — "whatever dimExpr used to hold for this
+        // node" (the typeMacro/typeDecl/tag payload lives in typeMacroExpr since Stage 1b).
+        // Dies with dim/dimExpr at the end of Stage 1, replaced by the flattened-array view.
+        __forceinline vector<ExpressionPtr> & dimExprCompat() {
+            return typeMacroExpr.empty() ? dimExpr : typeMacroExpr;
+        }
+        __forceinline const vector<ExpressionPtr> & dimExprCompat() const {
+            return typeMacroExpr.empty() ? dimExpr : typeMacroExpr;
+        }
         union {
             struct {
                 bool    ref : 1 ;

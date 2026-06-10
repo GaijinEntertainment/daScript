@@ -3079,7 +3079,7 @@ auto_type_declaration
         $$->isTag = true;
         $$->firstType = new TypeDecl(Type::autoinfer);
         $$->firstType->at = tokAt(scanner, @subexpr);
-        $$->firstType->dimExpr.push_back($subexpr);
+        $$->firstType->typeMacroExpr.push_back($subexpr);
     }
     ;
 
@@ -3221,20 +3221,20 @@ type_declaration_no_options
     |   DAS_TYPEDECL[td] '(' expr[subexpr] ')' {
         $$ = new TypeDecl(Type::typeDecl);
         $$->at = tokRangeAt(scanner,@td,@subexpr);
-        $$->dimExpr.push_back($subexpr);
+        $$->typeMacroExpr.push_back($subexpr);
     }
     |   '$' name_in_namespace[name] optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
-        $$->dimExpr = sequenceToList($arguments);
-        $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
+        $$->typeMacroExpr = sequenceToList($arguments);
+        $$->typeMacroExpr.insert($$->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
     |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
-        $$->dimExpr = typesAndSequenceToList($declL,$arguments);
-        $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
+        $$->typeMacroExpr = typesAndSequenceToList($declL,$arguments);
+        $$->typeMacroExpr.insert($$->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {

@@ -453,7 +453,7 @@ namespace das {
     TypeDeclPtr InferTypes::inferPartialAliases(const TypeDeclPtr &decl, const TypeDeclPtr &passType, const FunctionPtr &fptr, AliasMap *aliases) const {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
             auto resT = new TypeDecl(*decl);
-            for (auto &de : resT->dimExpr) {
+            for (auto &de : resT->typeMacroExpr) {
                 if (de && de->rtti_isTypeDecl()) {
                     auto td = static_cast<ExprTypeDecl*>(de);
                     // since we don't have passType in typeexpr(3), we pass what we have
@@ -674,12 +674,12 @@ namespace das {
                 }
             }
         } else if (type->baseType == Type::typeDecl) {
-            if (type->dimExpr.size() != 1) {
+            if (type->typeMacroExpr.size() != 1) {
                 error("typeDecl must have exactly one dimension", "", "",
                       type->at, CompilationError::invalid_type_dimension);
-            } else if (type->dimExpr[0]->type) {
-                if (!type->dimExpr[0]->type->isAutoOrAlias()) {
-                    auto resType = new TypeDecl(*type->dimExpr[0]->type);
+            } else if (type->typeMacroExpr[0]->type) {
+                if (!type->typeMacroExpr[0]->type->isAutoOrAlias()) {
+                    auto resType = new TypeDecl(*type->typeMacroExpr[0]->type);
                     resType->ref = false;
                     TypeDecl::applyAutoContracts(resType, type);
                     type = resType;

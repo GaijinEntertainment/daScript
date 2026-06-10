@@ -1135,8 +1135,13 @@ namespace das {
         switch ( baseType ) {
             case Type::typeMacro:
             case Type::typeDecl:
-                ser << alias << dimExpr;
+                ser << alias;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
+                                argTypes.empty(), argNames.empty());
+                break;
+            case Type::tFixedArray:
+                ser << alias << firstType << fixedDim << fixedDimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
             case Type::alias:
@@ -1246,6 +1251,10 @@ namespace das {
                 SERIALIZER_VERIFYF(false,  "not expected to be here");
                 break;
         }
+
+        // unconditional: typeMacro/typeDecl payload, and the tag payload riding on an
+        // autoinfer firstType (FIXED_ARRAY_REWORK.md, 1b)
+        ser << typeMacroExpr;
 
         ser << flags << at << module;
     }
@@ -2698,7 +2707,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 89;
+        static constexpr uint32_t currentVersion = 90;   // 90: typeMacroExpr/fixedDim/fixedDimExpr (FIXED_ARRAY_REWORK.md, 1b)
         return currentVersion;
     }
 

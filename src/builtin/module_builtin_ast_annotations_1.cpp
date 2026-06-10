@@ -36,7 +36,12 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");
             addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
             addField<DAS_BIND_MANAGED_FIELD(dim)>("dim");
-            addField<DAS_BIND_MANAGED_FIELD(dimExpr)>("dimExpr");
+            // compat view (FIXED_ARRAY_REWORK.md, 1b): the typeMacro/typeDecl/tag payload
+            // moved to typeMacroExpr; daslib keeps reading it under the .dimExpr name
+            addPropertyExtConst<
+                vector<ExpressionPtr> & (TypeDecl::*)(), &TypeDecl::dimExprCompat,
+                const vector<ExpressionPtr> & (TypeDecl::*)() const, &TypeDecl::dimExprCompat
+            >("dimExpr","dimExprCompat");
             addFieldEx ( "flags", "flags", offsetof(TypeDecl, flags), makeTypeDeclFlags() );
             addField<DAS_BIND_MANAGED_FIELD(alias)>("alias");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");

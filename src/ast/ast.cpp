@@ -1401,9 +1401,9 @@ namespace das {
     }
 
     string TypeDecl::typeMacroName() const {
-        if ( dimExpr.size()<1 ) return "";
-        if ( dimExpr[0]->rtti_isStringConstant() ) {
-            return ((ExprConstString *)dimExpr[0])->text;
+        if ( typeMacroExpr.size()<1 ) return "";
+        if ( typeMacroExpr[0]->rtti_isStringConstant() ) {
+            return ((ExprConstString *)typeMacroExpr[0])->text;
         } else {
             return "";
         }

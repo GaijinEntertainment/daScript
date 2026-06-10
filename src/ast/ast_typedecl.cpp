@@ -694,8 +694,8 @@ namespace das
             if ( isTag ) {
                 if ( firstType) {
                     stream << "$$(";
-                    if ( firstType->dimExpr.size()==1 ) {
-                        stream << *(firstType->dimExpr[0]);
+                    if ( firstType->typeMacroExpr.size()==1 ) {
+                        stream << *(firstType->typeMacroExpr[0]);
                     }
                     stream << ")";
                 } else {
@@ -717,17 +717,17 @@ namespace das
                 }
             }
         } else if ( baseType==Type::typeDecl ) {
-            if ( dimExpr.size()==1 ) {
-                stream << "typedecl(" << (*dimExpr[0]) << ")";
+            if ( typeMacroExpr.size()==1 ) {
+                stream << "typedecl(" << (*typeMacroExpr[0]) << ")";
             } else {
                 stream << "typedecl(/*invalid expression*/)";
             }
         } else if ( baseType==Type::typeMacro ) {
             stream << "$" << typeMacroName() << "(";
-            for ( size_t i=1; i!=dimExpr.size(); ++i ) {
+            for ( size_t i=1; i!=typeMacroExpr.size(); ++i ) {
                 if ( i!=1 ) stream << ",";
-                if ( dimExpr[i] ) {
-                    stream << *(dimExpr[i]);
+                if ( typeMacroExpr[i] ) {
+                    stream << *(typeMacroExpr[i]);
                 } else {
                     stream << "/*invalid expression*/";
                 }
@@ -3551,9 +3551,9 @@ namespace das
             }
         } else if ( baseType==Type::typeMacro ) {
             TextWriter tw;
-            for ( size_t i=1; i<dimExpr.size(); ++i ) {
+            for ( size_t i=1; i<typeMacroExpr.size(); ++i ) {
                 if ( i!=1 ) tw << ",";
-                tw << *dimExpr[i];
+                tw << *typeMacroExpr[i];
             }
             ss << "^<" << typeMacroName() << ";" << hash64z(tw.str().c_str()) << ">";
         } else {

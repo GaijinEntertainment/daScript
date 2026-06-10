@@ -1152,8 +1152,8 @@ namespace das {
         // 5. if both are typemacros, we need to pick the more specialized one
         if (t1->baseType == Type::typeMacro && t2->baseType == Type::typeMacro) {
             // the one with more arguments wins
-            size_t d1 = t1->dimExpr.size();
-            size_t d2 = t2->dimExpr.size();
+            size_t d1 = t1->typeMacroExpr.size();
+            size_t d2 = t2->typeMacroExpr.size();
             if (d1 != d2) {
                 return d1 < d2 ? -1 : 1;
             }
@@ -1162,11 +1162,11 @@ namespace das {
             bool more = false;
             for (size_t d = 0; d != d1; ++d) {
                 TypeDeclPtr t1Arg = nullptr, t2Arg = nullptr;
-                if (t1->dimExpr[d]->rtti_isTypeDecl()) {
-                    t1Arg = static_cast<ExprTypeDecl*>(t1->dimExpr[d])->typeexpr;
+                if (t1->typeMacroExpr[d]->rtti_isTypeDecl()) {
+                    t1Arg = static_cast<ExprTypeDecl*>(t1->typeMacroExpr[d])->typeexpr;
                 }
-                if (t2->dimExpr[d]->rtti_isTypeDecl()) {
-                    t2Arg = static_cast<ExprTypeDecl*>(t2->dimExpr[d])->typeexpr;
+                if (t2->typeMacroExpr[d]->rtti_isTypeDecl()) {
+                    t2Arg = static_cast<ExprTypeDecl*>(t2->typeMacroExpr[d])->typeexpr;
                 }
                 if (t1Arg && t2Arg) {
                     // only if both are types, we can compare
