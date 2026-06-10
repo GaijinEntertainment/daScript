@@ -16,7 +16,8 @@ require math
 //! must still run; the int twins prove the integer folds (exact) still fire. The
 //! structural FIRED/SKIPPED half lives in tests/flatten/no_aot/test_flatten_fold.das,
 //! which compiles this file as a unit and asserts the gated shapes SURVIVE in the
-//! twins while the option-aware oracle (`flatten_fold_residuals(func, false)`) stays clean.
+//! twins while the option-aware oracle (`flatten_fold_residuals` called with the unit's
+//! detected `_flatten_no_fast_math` flag) stays clean.
 
 var G_NF = 2.5
 
