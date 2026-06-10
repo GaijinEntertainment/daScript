@@ -77,6 +77,10 @@ def test_peel_one_level(t : T?) {
     }
 }
 
+// NOTE: unlike the rest of this file (enabled at Stage 1), this subtest is gated on
+// STAGE 4 — the broken builtin.das:1407 overload is deleted (not fixed) there, and only
+// then does the base get_key generic cover FA values. If Stage 1 enablement trips on it,
+// split it out and keep it disabled until Stage 4.
 [test]
 def test_get_key_fixed(t : T?) {
     t |> run("get_key on table<K;V[N]> resolves") @(t : T?) {

@@ -123,6 +123,9 @@ The indivisible piece, sub-staged for review:
   initializers, inferTypeExpr (dimConst resolution per node), variable checks.
 - **1e** Simulate lowering: ExprAt/iterator SimNode emission computed from nested type
   (same SimNodes), the fakeVariable flatten hack (ast_simulate.cpp ~:949), ExprNew dims.
+  Note: gen2 `new Foo[3]` parses as `(new Foo)[3]` (pointer index), NOT new-dim — the
+  ExprNew-with-dim / das_new_dim path is reachable via other routes (gen1 et al.);
+  map its actual reachability during this sub-stage before porting it.
 - **1f** debug-info helper flatten; AST serializer (+version bump); module_builtin_ast
   bindings: expose new fields + computed read-only `.dim`/`.dimExpr` compat.
 Inference semantics flip in this stage; fallout fixes in tests/daslib land here.
@@ -142,7 +145,11 @@ Delete the `[]` workaround families in builtin.das (table get x4 / get_value / i
 insert_clone x2 / emplace / values x2 / get_key; array push/emplace/push_clone siblings);
 verify base generics cover them. Generalize `each`/`sort`/`find_index`/`subarray`/`clone`/
 `finalize_dim`. Un-reject fixed arrays in apply.das / contracts.das where they now just work.
-Exit: new multi-dim/typedef'd-array tests pass through the generic stdlib; LOC visibly negative.
+The broken-on-master get_key(table<K;V[N]>) overload is NOT fixed in place (it gets deleted
+here) — the get_key target subtest in tests/fixed_array stays disabled until THIS stage and
+its enablement is part of this stage's exit gate.
+Exit: new multi-dim/typedef'd-array tests pass through the generic stdlib (incl. get_key on
+FA values); LOC visibly negative.
 
 ### Stage 5 — Macro/tooling ports
 ast_match.das (structural FA matching), match.das, typemacro_boost (field rename), lints

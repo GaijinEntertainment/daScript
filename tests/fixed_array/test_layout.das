@@ -42,7 +42,9 @@ def test_sizes(t : T?) {
         t |> equal(typeinfo sizeof(_c), 96)
     }
     t |> run("vector elements use packed stride") @(t : T?) {
-        // float3 inside a fixed array packs to 12 bytes, NOT the standalone 16-byte vec4f
+        // float3 inside a fixed array packs to 12 bytes, NOT the standalone 16-byte
+        // vec4f — by design, memory matters; loads go through v_ldu when unaligned
+        // vector loads are explicitly enabled (asan off)
         var _v3 : float3[4]
         var _v2 : float2[3]
         var _v4 : float4[2]
