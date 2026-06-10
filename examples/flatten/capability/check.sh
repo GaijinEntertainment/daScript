@@ -69,6 +69,10 @@
 #  17. cap_rcp.shader (two per-pixel '/ exposure') -> ONE shared per-draw reciprocal
 #      (`_preshader_N = 1f / exposure`) and two muls; the per-pixel graph carries no division
 #      by the uniform. Asserted on the --das dump (fast-math; the reciprocal rounds).
+#
+#  18. cap_ctor.shader (ctor lane algebra) -> the zero-lane product collapses to an embedded
+#      constant (its sin lane dies) and the per-component adds re-vectorize into one vector
+#      add feeding one sin: exactly 1 sin + 1 add node in the whole graph.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -337,6 +341,21 @@ if [[ "$errs" -eq 0 && "$rcps" -eq 1 && "$divs" -eq 0 ]]; then
     echo "   ok — one shared reciprocal preshader let; no per-pixel division by the uniform"
 else
     echo "   FAIL — errors=$errs rcp_lets=$rcps residual_divs=$divs (expected 1 and 0)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "18. cap_ctor.shader (zero-lane kill collapses; per-component adds re-vectorize)"
+out="$(compile "$here/cap_ctor.shader")"
+sins="$(echo "$out" | grep '^node ' | grep -cw 'sin')"
+adds="$(echo "$out" | grep '^node ' | grep -cw 'add')"
+errs="$(echo "$out" | grep -ci error)"
+# the zk product folds to a constant (its sin lane is killed by the zero const lane), and
+# `float3(c.x+0.1, c.y+0.2, c.z+0.3)` re-packs as `c + float3(...)` — one add, one sin.
+if [[ "$errs" -eq 0 && "$sins" -eq 1 && "$adds" -eq 1 ]]; then
+    echo "   ok — 1 sin + 1 add (zero-lane product folded; adds re-vectorized)"
+else
+    echo "   FAIL — errors=$errs sins=$sins adds=$adds (expected 1 and 1)"
     echo "$out" | grep -i error | head
     fail=1
 fi

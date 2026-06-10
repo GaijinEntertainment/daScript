@@ -1615,7 +1615,7 @@ class PixelShaderMacro : AstFunctionAnnotation {
             // back into `lerp` (one [hint] node each), re-inferring to resolve the new calls.
             // Mirrors daslib/flatten's PHASE_FUSED loop (converges — each round drops a `+`/`-`).
             if (!shader_annotation_arg(func, "fused")) {
-                if (flatten_fuse(func)) {
+                if (flatten_fuse(func, flatten_no_fast_math())) {
                     astChanged = true
                     return true
                 }

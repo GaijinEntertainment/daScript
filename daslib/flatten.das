@@ -758,17 +758,22 @@ def public flatten_optimize(var func : FunctionPtr; barriers : table<string>; no
 }
 
 [macro_function]
-def public flatten_fuse(var func : FunctionPtr) : bool {
-    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): re-pack `a*b ± c` into `mad(a,b,c)`
-    //! and the expanded lerp shape back into `lerp(a,b,t)`. Call on the optimized, re-inferred body and
-    //! repeat across re-inference until it returns false (the type gates need each round's settled types).
-    return fuse_body(func)
+def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false) : bool {
+    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): re-pack ctor lane patterns, `a*b ± c`
+    //! into `mad(a,b,c)`, and the expanded lerp shape back into `lerp(a,b,t)`. Call on the optimized,
+    //! re-inferred body and repeat across re-inference until it returns false.
+    return fuse_body(func, no_fast_math)
 }
 
 def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
     //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
-    //! has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division.
-    return <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math)
+    //! has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division,
+    //! no un-packed ctor lane pattern.
+    var res : array<string>
+    ast_gc_guard() {
+        res <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math)
+    }
+    return <- res
 }
 
 // ===== Post-inference shape verification — twin must be branchless + call-free =====
@@ -824,7 +829,7 @@ class private FoldResidualVisitor : AstVisitor {
             found |> push("an unfolded const-condition select")
         }
     }
-    def override preVisitExprOp2(expr : ExprOp2?) : void {
+    def override preVisitExprOp2(var expr : ExprOp2?) : void {
         if (is_unfolded_identity_op2(expr)) {
             found |> push("an unfolded algebraic identity ('{expr.op}')")
         } elif (is_all_const(expr) && eval_to_const_supported(expr._type)) {
@@ -833,6 +838,10 @@ class private FoldResidualVisitor : AstVisitor {
             found |> push("a scattered const chain ('{expr.op}') reassoc should gather")
         } elif (!noFastMath && is_unrcp_const_div(expr)) {
             found |> push("an un-rewritten const division ('x / C' should be 'x * (1/C)')")
+        } elif (is_uncollapsed_splat_op2(expr)) {
+            found |> push("an uncollapsed splat operand ('v {expr.op} floatN(s)' should use the scalar)")
+        } elif (is_unkilled_ctor_zero_lane(expr, noFastMath)) {
+            found |> push("an un-killed ctor lane under a zero const lane")
         }
     }
     def override preVisitExprOp1(expr : ExprOp1?) : void {
@@ -850,14 +859,18 @@ def public flatten_fold_residuals(var func : FunctionPtr; no_fast_math : bool = 
     if (func == null || func.body == null) {
         return <- res
     }
-    var v = new FoldResidualVisitor()
-    v.noFastMath = no_fast_math
-    make_visitor(*v) $(adapter) {
-        visit(func.body, adapter)
-    }
-    res <- v.found
-    unsafe {
-        delete v
+    // the probe matchers (recip_const, ctor_fuse_rewrite) clone AST nodes; at runtime (tests,
+    // fuzzer) those land on the thread root — guard the walk so they are swept, not leaked
+    ast_gc_guard() {
+        var v = new FoldResidualVisitor()
+        v.noFastMath = no_fast_math
+        make_visitor(*v) $(adapter) {
+            visit(func.body, adapter)
+        }
+        res <- v.found
+        unsafe {
+            delete v
+        }
     }
     return <- res
 }
@@ -931,7 +944,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // `lerp`, re-inferring to resolve the new calls; iterates (each round strictly
             // drops a `+`/`-`, so it converges), a clean round falls through to the shape check.
             set_flatten_phase(func, PHASE_FUSED)
-            if (flatten_fuse(twin)) {
+            if (flatten_fuse(twin, flatten_no_fast_math())) {
                 astChanged = true
                 return true
             }

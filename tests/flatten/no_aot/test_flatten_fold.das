@@ -125,9 +125,13 @@ def test_flatten_fold(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_rcp.das")
         t |> success(n >= 8, "expected >=8 twins, checked {n}")
     }
+    t |> run("ctor lane algebra corpus rewrites clean (test_flatten_ctor.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_ctor.das")
+        t |> success(n >= 14, "expected >=14 twins, checked {n}")
+    }
     t |> run("no-fast-math corpus: option-aware oracle clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_nofastmath.das")
-        t |> success(n >= 11, "expected >=11 twins, checked {n}")
+        t |> success(n >= 13, "expected >=13 twins, checked {n}")
     }
     t |> run("no-fast-math corpus: gated shapes survive (skip-proof)") @(t : T?) {
         var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_nofastmath.das")
@@ -151,6 +155,10 @@ def test_flatten_fold(t : T?) {
         t |> success(dv |> find("/ 3f") >= 0, "x / C must survive: {dv}")
         let udv = bodies?["nf_unidiv_flat"] ?? ""
         t |> success(udv |> find("/ G_NF") >= 0, "x / uniform must survive (no rcp): {udv}")
+        let zk = bodies?["nf_zkill_flat"] ?? ""
+        t |> success(zk |> find("sin") >= 0, "the zero-lane kill must be skipped (sin survives): {zk}")
+        let mj = bodies?["nf_mj_flat"] ?? ""
+        t |> success(mj |> find("* 12f") >= 0, "majority compensation must be skipped: {mj}")
         delete bodies
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {

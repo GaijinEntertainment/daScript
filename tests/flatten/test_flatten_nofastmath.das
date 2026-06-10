@@ -57,6 +57,16 @@ def nf_unidiv(x : float) : float {
     return x / G_NF
 }
 
+[flatten]
+def nf_zkill(x : float) : float2 {
+    return float2(sin(x) * 12.0, 13.0) * float2(0.0, 123.0)
+}
+
+[flatten]
+def nf_mj(x, y, z : float) : float3 {
+    return float3(x * 13.0, y * 13.0, z * 12.0)
+}
+
 // ----- exact rewrites: still fire under the option -----
 
 [flatten]
@@ -130,6 +140,23 @@ def test_flatten_nofastmath(t : T?) {
     t |> run("x / uniform NOT rcp'd — bit-exact") @(t : T?) {
         for (v in GRID) {
             t |> equal(nf_unidiv_flat(v), nf_unidiv(v))
+        }
+    }
+    t |> run("float zero-lane kill skipped — bit-exact") @(t : T?) {
+        for (v in GRID) {
+            let r = nf_zkill_flat(v)
+            let o = nf_zkill(v)
+            t |> equal(r.x, o.x)
+            t |> equal(r.y, o.y)
+        }
+    }
+    t |> run("majority-factor compensation skipped — bit-exact") @(t : T?) {
+        for (v in GRID) {
+            let r = nf_mj_flat(v, -v, 1.0)
+            let o = nf_mj(v, -v, 1.0)
+            t |> equal(r.x, o.x)
+            t |> equal(r.y, o.y)
+            t |> equal(r.z, o.z)
         }
     }
     t |> run("int n * 0 still folds (exact)") @(t : T?) {
