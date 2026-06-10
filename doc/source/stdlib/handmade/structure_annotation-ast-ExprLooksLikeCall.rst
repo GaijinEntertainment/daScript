@@ -8,4 +8,5 @@ Expression print flags
 Name of the call
 List of arguments passed to the call
 Whether any arguments failed to infer their types
+Whether the last argument was attached via trailing pipe
 Location of the expression in source code

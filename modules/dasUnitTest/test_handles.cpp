@@ -186,6 +186,10 @@ void test_das_string(const Block & block, Context * context, LineInfoArg * at) {
     if (str2 != "test_das_string") context->throw_error_at(at, "test string clone mismatch");
 }
 
+void testPipedDefaults(int32_t a, float b, const TBlock<void, int32_t, float> & blk, Context * context, LineInfoArg * at) {
+    das_invoke<void>::invoke(context, at, blk, a, b);
+}
+
 vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
     TypeInfo * typeInfo = call->types[0];
     if ( typeInfo->dim || typeInfo->type!=Type::tStructure ) {
@@ -591,6 +595,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "get_screen_dimensions");
     addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string",
         SideEffects::modifyExternal, "test_das_string");
+    addExtern<DAS_BIND_FUN(testPipedDefaults)>(*this, lib, "testPipedDefaults",
+        SideEffects::invoke, "testPipedDefaults")
+            ->args({"a","b","blk","context","at"})
+            ->arg_init(1, new ExprConstFloat(3.125f));
     addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo",
         SideEffects::modifyArgument, "testFoo");
     addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd",

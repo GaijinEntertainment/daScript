@@ -348,6 +348,243 @@ namespace das {
         }
         return true;
     }
+    bool InferTypes::isFunctionCompatiblePipedAt(Function *pFn, const vector<TypeDeclPtr> &types, int blockParam, bool inferAuto) const {
+        int p = int(types.size()) - 1;
+        DAS_ASSERT(p >= 0 && blockParam > p && blockParam < int(pFn->arguments.size()));
+        // specialized annotations gate matching on positionally-aligned types - bail conservatively
+        for (const auto &ann : pFn->annotations) {
+            auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
+            if (fnAnn->isSpecialized()) {
+                return false;
+            }
+        }
+        // every parameter we shift across, and every parameter past the landing slot, must have a default
+        for (int ai = p; ai != blockParam; ++ai) {
+            if (!pFn->arguments[ai]->init) {
+                return false;
+            }
+        }
+        for (int ai = blockParam + 1, ais = int(pFn->arguments.size()); ai != ais; ++ai) {
+            if (!pFn->arguments[ai]->init) {
+                return false;
+            }
+        }
+        // types[0..p-1] match positionally, types[p] (the piped argument) matches params[blockParam]
+        auto paramAt = [&](int ti) -> int { return ti < p ? ti : blockParam; };
+        if (inferAuto) {
+            AliasMap aliases;
+            program->updateAliasMapCallback = [&](const TypeDeclPtr &argType, const TypeDeclPtr &passType) {
+                OptionsMap options;
+                TypeDecl::updateAliasMap(argType, passType, aliases, options);
+            };
+            for (;;) {
+                bool anyFailed = false;
+                auto totalAliases = aliases.size();
+                for (int ai = 0, ais = int(types.size()); ai != ais; ++ai) {
+                    auto argType = pFn->arguments[paramAt(ai)]->type;
+                    auto passType = types[ai];
+                    if (argType->isAlias()) {
+                        argType = inferPartialAliases(argType, passType, pFn, &aliases);
+                    }
+                    OptionsMap options;
+                    if (!isMatchingArgument(pFn, argType, passType, inferAuto, true, &aliases, &options)) {
+                        anyFailed = true;
+                        continue;
+                    }
+                    TypeDecl::updateAliasMap(argType, passType, aliases, options);
+                }
+                if (!anyFailed) {
+                    break;
+                }
+                if (totalAliases == aliases.size()) {
+                    program->updateAliasMapCallback = nullptr;
+                    return false;
+                }
+            }
+            program->updateAliasMapCallback = nullptr;
+        } else {
+            for (int ai = 0, ais = int(types.size()); ai != ais; ++ai) {
+                if (!isMatchingArgument(pFn, pFn->arguments[paramAt(ai)]->type, types[ai], inferAuto, true)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    bool InferTypes::findPipedLanding(Function *pFn, const vector<TypeDeclPtr> &types, bool inferAuto, int &blockParam, int &padCount) const {
+        int p = int(types.size()) - 1;
+        if (p < 0 || int(pFn->arguments.size()) <= p + 1) {
+            return false; // need at least one parameter past the piped position
+        }
+        // smallest landing slot wins; blockParam==p is the positional shape which already failed normal matching
+        for (int k = p + 1, ks = int(pFn->arguments.size()); k != ks; ++k) {
+            if (!pFn->arguments[k - 1]->init) {
+                return false; // can't shift across a parameter without a default
+            }
+            if (isFunctionCompatiblePipedAt(pFn, types, k, inferAuto)) {
+                int pads = 0;
+                for (int ai = p; ai != k; ++ai) {
+                    auto bt = pFn->arguments[ai]->type->baseType;
+                    if (bt != Type::fakeContext && bt != Type::fakeLineInfo) {
+                        ++pads; // fake args are invisible at the call site - they don't count as padding
+                    }
+                }
+                blockParam = k;
+                padCount = pads;
+                return true;
+            }
+        }
+        return false;
+    }
+    void InferTypes::findMatchingPipedFunctionsAndGenerics(MatchingFunctions &resultFunctions, MatchingFunctions &resultGenerics, const string &name, const vector<TypeDeclPtr> &types, bool visCheck, das_hash_map<Function *, pair<int, int>> &landing) const {
+        string moduleName, funcName;
+        splitTypeName(name, moduleName, funcName);
+        auto inWhichModule = getSearchModule(moduleName);
+        auto hFuncName = hash64z(funcName.c_str());
+        // note: pFn->lookup cache is keyed by positional compatibility - piped matching bypasses it
+        program->library.foreach ([&](Module *mod) -> bool {
+                { // functions
+                    auto itFnList = mod->functionsByName.find(hFuncName);
+                    if ( itFnList ) {
+                        const bool modVis = visCheck ? isVisibleFunc(inWhichModule, mod) : true;
+                        const bool modVisFromThis = thisModule->isVisibleDirectly(mod);
+                        auto & goodFunctions = itFnList->second;
+                        for ( auto & pFn : goodFunctions ) {
+                            if ( pFn->jitOnly && !jitEnabled() ) continue;
+                            if ( pFn->isTemplate ) continue;
+                            const bool funcVis = !visCheck ? true
+                                              : !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
+                                if ( !pFn->fromGeneric || modVisFromThis ) {
+                                    if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                                        int blockParam = -1, padCount = 0;
+                                        if ( findPipedLanding(pFn, types, false, blockParam, padCount) ) {
+                                            resultFunctions.push_back(pFn);
+                                            landing[pFn] = make_pair(blockParam, padCount);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                { // generics
+                    auto itFnList = mod->genericsByName.find(hFuncName);
+                    if ( itFnList ) {
+                        const bool modVis = visCheck ? isVisibleFunc(inWhichModule, mod) : true;
+                        auto & goodFunctions = itFnList->second;
+                        for ( auto & pFn : goodFunctions ) {
+                            if ( pFn->isTemplate ) continue;
+                            const bool funcVis = !visCheck ? true
+                                              : !pFn->fromGeneric ? modVis
+                                              : isVisibleFunc(inWhichModule, pFn->getOrigin()->module);
+                            if ( funcVis ) {
+                                if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                                    int blockParam = -1, padCount = 0;
+                                    if ( findPipedLanding(pFn, types, true, blockParam, padCount) ) {
+                                        resultGenerics.push_back(pFn);
+                                        landing[pFn] = make_pair(blockParam, padCount);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return true; }, moduleName);
+    }
+    bool InferTypes::tryPipedCallPadding(ExprLooksLikeCall *expr, vector<TypeDeclPtr> &types, MatchingFunctions &functions, MatchingFunctions &generics, bool visCheck) {
+        das_hash_map<Function *, pair<int, int>> landing;
+        MatchingFunctions pipedFns, pipedGens;
+        findMatchingPipedFunctionsAndGenerics(pipedFns, pipedGens, expr->name, types, visCheck, landing);
+        if (pipedFns.empty() && pipedGens.empty()) {
+            return false;
+        }
+        // least padding wins; functions win over generics at equal padding
+        auto minPad = [&](const MatchingFunctions &fns) -> int {
+            int best = -1;
+            for (auto fn : fns) {
+                auto pad = landing[fn].second;
+                if (best < 0 || pad < best) best = pad;
+            }
+            return best;
+        };
+        int bestFn = minPad(pipedFns);
+        int bestGen = minPad(pipedGens);
+        bool useGenerics = bestFn < 0 || (bestGen >= 0 && bestGen < bestFn);
+        auto & pool = useGenerics ? pipedGens : pipedFns;
+        int best = useGenerics ? bestGen : bestFn;
+        MatchingFunctions winners;
+        for (auto fn : pool) {
+            if (landing[fn].second == best) {
+                winners.push_back(fn);
+            }
+        }
+        if (winners.size() > 1) {
+            // aligned substitute distance over the slots the user actually filled (cf. computeSubstituteDistance)
+            int p = int(types.size()) - 1;
+            vector<pair<int, Function *>> fnm;
+            for (auto fn : winners) {
+                int dist = 0;
+                for (int ai = 0, ais = int(types.size()); ai != ais; ++ai) {
+                    const auto &funType = fn->arguments[ai < p ? ai : landing[fn].first]->type;
+                    if (!types[ai]->isSameType(*funType, RefMatters::no, ConstMatters::no,
+                                               TemporaryMatters::no, AllowSubstitute::no)) {
+                        dist += 100;
+                    }
+                    if (funType->constant != types[ai]->constant) {
+                        dist += 1;
+                    }
+                }
+                fnm.push_back(make_pair(dist, fn));
+            }
+            stable_sort(fnm.begin(), fnm.end(), [](const pair<int, Function *> &a, const pair<int, Function *> &b) { return a.first < b.first; });
+            if (fnm[0].first != fnm[1].first) {
+                winners.resize(1);
+                winners[0] = fnm[0].second;
+            }
+        }
+        if (winners.size() != 1) {
+            // ambiguous; expose non-generic candidates so the regular excess report lists them.
+            // ambiguous generics stay hidden - the generic machinery downstream assumes positional alignment
+            if (!useGenerics) {
+                functions = winners;
+            }
+            return false;
+        }
+        auto winner = winners.front();
+        int p = int(types.size()) - 1;
+        int k = landing[winner].first;
+        // resolve all padded defaults first - bail without mutating the call if one is not ready yet
+        vector<ExpressionPtr> padded;
+        for (int ai = p; ai != k; ++ai) {
+            auto newArg = winner->arguments[ai]->init->clone();
+            if (!newArg->type) {
+                // recursive resolve - same as the append-default path below
+                inInfer.push_back(winner);
+                newArg = newArg->visit(*this);
+                inInfer.pop_back();
+            }
+            if (!newArg->type) {
+                if (func) func->notInferred();
+                return false;
+            }
+            if (newArg->type->baseType == Type::fakeLineInfo) {
+                newArg->at = expr->at;
+            }
+            padded.push_back(newArg);
+        }
+        for (int ai = k - 1; ai >= p; --ai) {
+            expr->arguments.insert(expr->arguments.begin() + p, padded[ai - p]);
+            types.insert(types.begin() + p, padded[ai - p]->type);
+        }
+        if (useGenerics) {
+            generics.push_back(winner);
+        } else {
+            functions.push_back(winner);
+        }
+        return true;
+    }
     Function *InferTypes::findMethodFunction(Structure *st, const string &name) const {
         if (name.find("::") != string::npos) {
             return nullptr;
@@ -1174,6 +1411,11 @@ namespace das {
                 if (func) func->notInferred();
                 return nullptr;
             }
+            // note: no isMakeBlock recheck here - the parser sets the flag for any piped $ / @ / @@ literal,
+            // and @ / @@ are already lowered past ExprMakeBlock by the time the call infers
+            if (functions.empty() && generics.empty() && expr->pipedCallArgument && !expr->arguments.empty()) {
+                tryPipedCallPadding(expr, types, functions, generics, visCheck);
+            }
         } else {
             functions.push_back(lookupFunction);
         }
@@ -1475,21 +1717,27 @@ namespace das {
                                   "", "", expr->at, CompilationError::invalid_function_argument_count);
                         }
                     } else {
+                        const char * missingMsg = expr->pipedCallArgument
+                            ? "no matching functions or generics (the last argument is a piped block; no overload accepts it even after padding defaults): "
+                            : "no matching functions or generics: ";
                         if (cerr == InferCallError::operatorOp2) {
                             if (!reportOp2Errors(expr)) {
-                                reportMissing(expr, types, "no matching functions or generics: ", true);
+                                reportMissing(expr, types, missingMsg, true);
                             }
                         } else if (cerr != InferCallError::tryOperator) {
-                            reportMissing(expr, types, "no matching functions or generics: ", true);
+                            reportMissing(expr, types, missingMsg, true);
                         }
                     }
                 } else {
+                    const char * missingMsg = expr->pipedCallArgument
+                        ? "no matching functions or generics (the last argument is a piped block; no overload accepts it even after padding defaults): "
+                        : "no matching functions or generics: ";
                     if (cerr == InferCallError::operatorOp2) {
                         if (!reportOp2Errors(expr)) {
-                            reportMissing(expr, types, "no matching functions or generics: ", true);
+                            reportMissing(expr, types, missingMsg, true);
                         }
                     } else if (cerr != InferCallError::tryOperator) {
-                        reportMissing(expr, types, "no matching functions or generics: ", true);
+                        reportMissing(expr, types, missingMsg, true);
                     }
                 }
             }

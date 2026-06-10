@@ -1472,6 +1472,7 @@ namespace das {
         serializeBase(expr);
         ser << expr->name                   << expr->arguments;
         ser << expr->argumentsFailedToInfer << expr->aliasSubstitution << expr->atEnclosure;
+        ser << expr->pipedCallArgument;
     }
 
     void SerializeVisitor::serializeCallFunc ( ExprCallFunc * expr ) {
@@ -2697,7 +2698,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 88;
+        static constexpr uint32_t currentVersion = 89;
         return currentVersion;
     }
 

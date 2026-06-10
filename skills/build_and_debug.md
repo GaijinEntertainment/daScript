@@ -7,9 +7,9 @@ The repo builds on **Windows, Linux, macOS, iOS, Android, and WASM** (CI runs th
 ## Build & run
 
 - **Build system:** CMake. On Windows the default generator is MSVC (Visual Studio 2022); on Linux/macOS use Ninja or Make; on Android/iOS/WASM see the platform docs.
-- **Generate** (Windows convenience):
-  - `generate_msvc_2022.bat` → creates `build/DAS.sln`
-  - On Linux/macOS: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` (or omit `-G Ninja` to use the system default)
+- **Generate**:
+  - Windows: `cmake -B build` (default generator is MSVC; creates `build/DAS.sln`)
+  - Linux/macOS: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` (or omit `-G Ninja` to use the system default)
 - **Build:** `cmake --build build --config Release -j 64 -- /nodeReuse:false` (the `/nodeReuse:false` is MSBuild-only; drop it on Ninja/Make)
 - **Compiler binary:**
   - Windows MSVC (multi-config): `bin/Release/daslang.exe`
