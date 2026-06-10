@@ -38,7 +38,12 @@ new Crawler({
     // content is what ballooned a 58KB-of-text page into a 349KB record).
     {
       indexName: "daslang.io crawler",
-      pathsToMatch: ["https://daslang.io/doc/**"],
+      // ast.html is handled by its own signatures-only action below (it has 546
+      // symbols — too many to index with content under the 750-records cap).
+      pathsToMatch: [
+        "https://daslang.io/doc/**",
+        "!https://daslang.io/doc/stdlib/generated/ast.html",
+      ],
       recordExtractor: ({ helpers, $ }) => {
         // Drop blocks das2rst marked `.. container:: nosearch` (e.g. rtti's
         // 580-value CompilationError enum, which alone blew the per-record size
@@ -55,14 +60,57 @@ new Crawler({
             lvl2: ".rst-content h2",
             lvl3: ".rst-content h3",
             // [id] = canonical signatures only; overloads carry no id, so they
-            // don't each spawn a level record (this is what kept ast/builtin
-            // from blowing the 750-records-per-page cap).
+            // don't each spawn a level record (this kept builtin under the
+            // 750-records-per-page cap; ast has too many symbols even so — see
+            // its dedicated signatures-only action below).
             lvl4: ".rst-content dt.sig[id]",
             lvl5: ".rst-content h4",
             lvl6: ".rst-content h5",
             // exclude the nav toctree: index pages embed the sidebar tree as
             // li.toctree-l1..l4 INSIDE .rst-content, which would otherwise be
             // counted as content and balloon the record count.
+            content:
+              ".rst-content p, .rst-content li:not(.toctree-l1):not(.toctree-l2):not(.toctree-l3):not(.toctree-l4)",
+          },
+          indexHeadings: true,
+          aggregateContent: true,
+          recordVersion: "v3",
+        });
+      },
+    },
+    // Action 1b — ast.html ONLY. The AST module exposes 546 public symbols;
+    // even canonical-only (dt.sig[id]) that's 612 level records, and each
+    // symbol's description paragraph adds a content record → 1153 > 750, which
+    // fails the WHOLE page (0 records indexed). Index it signatures-only: keep
+    // the dt.sig[id] hierarchy levels (search by symbol name still works) and
+    // physically REMOVE the content nodes so the per-symbol descriptions don't
+    // each spawn a record → 612. (A non-matching content selector does NOT work:
+    // docsearch falls back to its default content selectors when the given one
+    // matches nothing, re-indexing everything. Strip the DOM instead.) Action 1
+    // excludes ast.html so it isn't ALSO processed there. If ast ever crosses 750
+    // on signatures alone, split the page into per-group sub-pages.
+    {
+      indexName: "daslang.io crawler",
+      pathsToMatch: ["https://daslang.io/doc/stdlib/generated/ast.html"],
+      recordExtractor: ({ helpers, $ }) => {
+        $(".nosearch").remove();
+        // signatures-only: drop exactly what the content selector below matches.
+        $(".rst-content p").remove();
+        $(
+          ".rst-content li:not(.toctree-l1):not(.toctree-l2):not(.toctree-l3):not(.toctree-l4)"
+        ).remove();
+        return helpers.docsearch({
+          recordProps: {
+            lvl0: {
+              selectors: ".wy-breadcrumbs li.active",
+              defaultValue: "Documentation",
+            },
+            lvl1: ".rst-content h1",
+            lvl2: ".rst-content h2",
+            lvl3: ".rst-content h3",
+            lvl4: ".rst-content dt.sig[id]",
+            lvl5: ".rst-content h4",
+            lvl6: ".rst-content h5",
             content:
               ".rst-content p, .rst-content li:not(.toctree-l1):not(.toctree-l2):not(.toctree-l3):not(.toctree-l4)",
           },
