@@ -17,7 +17,7 @@ let private per_target_init_suffixes <- array<string>(
 // prebuilt LLVM.dll (linux x86_64, linux arm64, mac arm64, windows x86_64).
 // Anything else is filtered out at regen time to keep the binding loadable.
 let private universal_targets <- array<string>(
-    "X86", "AArch64", "ARM", "WebAssembly"
+    "X86", "AArch64", "WebAssembly"
 )
 
 def private skip_per_target_initializer(function_name : string) : bool {
@@ -153,13 +153,11 @@ class LlvmGenDinamic : DasGenBind {
         if (function_name == "LLVMInitializeCore" || // Defined twice in LLVM C API
             function_name |> starts_with("LLVMInitializeAll") || // It's static macro function, implemented on das manually
             function_name |> starts_with("LLVMInitializeNative") || // It's static macro function, implemented on das manually
-            // Per-target LLVMInitialize<X><Suffix> bindings — only X86 / AArch64 / ARM
-            // are universally exported by prebuilt LLVM.dll across all the platforms
-            // we ship (linux x86_64 / linux arm64 / macOS arm64 / windows x86_64).
-            // The Windows build of LLVM.dll omits {SystemZ,M68k,VE,Xtensa,XCore,Sparc}
-            // (Disassembler+AsmPrinter) and macOS builds vary similarly. daslib JIT
-            // only needs the host target, so skipping every per-target initializer
-            // outside the X86/AArch64/ARM set keeps the binding loadable everywhere.
+            // Per-target LLVMInitialize<X><Suffix> bindings — only X86 / AArch64 /
+            // WebAssembly are exported by the curated LLVM.dll we ship across all
+            // platforms (linux x86_64 / linux arm64 / macOS arm64 / windows x86_64).
+            // daslib JIT only needs the host target, so skipping every per-target
+            // initializer outside that set keeps the binding loadable everywhere.
             skip_per_target_initializer(function_name)
             ) return true
         let funf = clang_getCursorLocationFileName(c)
