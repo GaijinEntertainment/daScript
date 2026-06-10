@@ -257,6 +257,30 @@ def or_match_v(B : Bar) {
 }
 
 [sideeffects]
+def or_match_prior_capture(ab : AB) {
+    match (ab) {
+        if (AB(a = $v(a), b = 1 || 2)) {
+            return a
+        }
+        if (_) {
+            return -1
+        }
+    }
+}
+
+[sideeffects]
+def or_capture_both_branches(ab : AB) {
+    match (ab) {
+        if (AB(a = $v(a), b = ($v(b) && (b > 5)) || ($v(b) && (b < 5)))) {
+            return a * 100 + b
+        }
+        if (_) {
+            return -1
+        }
+    }
+}
+
+[sideeffects]
 def struct_ptr_match(f : Foo?) {
     match (f) {
         if (null) {
@@ -547,6 +571,13 @@ def test_all_match(t : T?) {
         t |> equal(1., or_match_v(Bar(a = 1, b = 1.)))
         t |> equal(1., or_match_v(Bar(a = 2, b = 1.)))
         t |> equal(0., or_match_v(Bar(a = 3, b = 1.)))
+    }
+    t |> run("or match keeps captures made before it") @@(t : T?) {
+        t |> equal(7, or_match_prior_capture(AB(a = 7, b = 2)))
+        t |> equal(-1, or_match_prior_capture(AB(a = 7, b = 3)))
+        t |> equal(304, or_capture_both_branches(AB(a = 3, b = 4)))
+        t |> equal(309, or_capture_both_branches(AB(a = 3, b = 9)))
+        t |> equal(-1, or_capture_both_branches(AB(a = 3, b = 5)))
     }
     t |> run("struct ptr match") @@(t : T?) {
         t |> equal(-1, struct_ptr_match(null))

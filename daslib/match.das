@@ -443,6 +443,7 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
         return false
     }
     var toR : MatchTo
+    toR.declarations := to.declarations
     if (!match_any(what, wth.right, access, toR)) {
         to.errors |> push_from(toR.errors)
         to.failed ||= toR.failed
@@ -462,8 +463,10 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
             return false
         }
     }
-    unsafe {
-        to.declarations <- toL.declarations // because its a superset
+    // merge the branch's new captures (toL post-erase holds only those) — the old wholesale
+    // move dropped captures made earlier in the same pattern
+    for (k, v in keys(toL.declarations), values(toL.declarations)) {
+        to.declarations[k] = v
     }
     var lcond = join_conditions(toL.conditions, wth.left.at)
     var rcond = join_conditions(toR.conditions, wth.right.at)
