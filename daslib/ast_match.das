@@ -552,6 +552,14 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
     if (field_name == "func" || field_name == "atEnclosure" || field_name == "stackTop"
         || field_name == "doesNotNeedSp" || field_name == "cmresAlias"
         || field_name == "argumentsFailedToInfer") return true
+    // ExprOp* (and the ExprOp2-derived assignments) inherit ExprCallFunc's call
+    // machinery; their identity is `op` + children. The parser mirrors `op` into
+    // `name`, but macro-SYNTHESIZED nodes (`new ExprOp2(op := "-")`) leave `name`
+    // empty, so comparing it fails every qmatch against macro-built source.
+    if (rtti_name == "ExprOp1" || rtti_name == "ExprOp2" || rtti_name == "ExprOp3"
+            || rtti_name == "ExprCopy" || rtti_name == "ExprMove" || rtti_name == "ExprClone") {
+        if (field_name == "name" || field_name == "arguments") return true
+    }
     // ExprReturn
     return field_name == "returnInBlock"
 }
