@@ -244,7 +244,7 @@ def aotSuffixNameEx(funcName : string; suffix : string) {
                     if ('.') { t_ch = "Dot"; }
                     if ('`') { t_ch = "Tick"; }
                     if (',') { t_ch = "Comma"; }
-                    if (_) {   // nolint:STYLE010 — match macro expands wildcard to `if (true)`
+                    if (_) {
                         let repr = build_string() $(ss) {
                             ss |> write_char(hex_char(ch >> 4))
                             ss |> write_char(hex_char(ch));
@@ -1912,7 +1912,7 @@ class public CppAot : AstVisitor {
                     if ("&") { op = "&&"; }
                     if ("|") { op = "||"; }
                     if ("^" || "^^") { op = "!="; }
-                    if (_) { op = that_op; }  // nolint:STYLE010 — match macro expands wildcard to `if (true)`
+                    if (_) { op = that_op; }
                 }
                 write(*ss, " {op} ");
             } else {
@@ -2687,7 +2687,7 @@ class public CppAot : AstVisitor {
                 if (1) { write(*ss, "y"); }
                 if (2) { write(*ss, "z"); }
                 if (3) { write(*ss, "w"); }
-                if (_) { write(*ss, "?"); }  // nolint:STYLE010 — match macro expands wildcard to `if (true)`
+                if (_) { write(*ss, "?"); }
             }
         }
         write(*ss, "*/");

@@ -366,6 +366,11 @@ so patterns like ``generic_add(a, b)`` match transparently.
 
 ``$c(name)`` on a generic call also returns the original (unmangled) name.
 
+A parsed or resolved call may also carry a module-qualified name (``math::sin``). An
+unqualified pattern name matches its last ``::`` segment — ``sin($e(x))`` matches
+``math::sin(1.0)``. The match is segment-aligned (``sin`` does not match ``foosin``),
+and a qualified pattern name still requires an exact match.
+
 -----------
 Result type
 -----------

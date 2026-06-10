@@ -60,6 +60,13 @@ enum MatchType {
 }
 
 [macro_function]
+def is_string_like(typ : TypeDeclPtr) : bool {
+    if (typ == null) return false
+    if (typ.baseType == Type.tString) return true
+    return typ.baseType == Type.tHandle && typ.annotation != null && typ.annotation.name == "das_string"
+}
+
+[macro_function]
 def get_match_type(typ : TypeDeclPtr) {
     if (!typ.isStructure || typ.structType == null) return MatchType.none
     for (ann in typ.structType.annotations) {
@@ -107,7 +114,13 @@ def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; a
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
     // if its a pointer to ast::Expression or such, we need to 'as' cast first
     if (wths.makeType.isHandle && isExpression(wths.makeType)
-            && what.isPointer && what.firstType != null && isExpression(what.firstType)) return match_as_is(what, wths, wths.makeType,  wths.makeType.annotation.name, access, to)
+            && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
+        // `is` on a null AST pointer panics — guard like the pointer-to-structure path below
+        var cond_nz = qmacro($e(access) != null)
+        cond_nz |> force_at(wths.at)
+        to.conditions |> emplace(cond_nz)
+        return match_as_is(what, wths, wths.makeType, wths.makeType.annotation.name, access, to)
+    }
     // if its pointer to structure, automatically dereference it
     if (what.baseType == Type.tPointer && what.firstType != null && (what.firstType.isStructure || what.firstType.isHandle)) {
         var cond_nz = qmacro($e(access) != null)
@@ -423,9 +436,19 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var t
 def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) {
     var toL : MatchTo
     toL.declarations := to.declarations
-    if (!match_any(what, wth.left, access, toL)) return false
+    if (!match_any(what, wth.left, access, toL)) {
+        // propagate the branch's diagnostics — a silent false here surfaces as "unspecified match error"
+        to.errors |> push_from(toL.errors)
+        to.failed ||= toL.failed
+        return false
+    }
     var toR : MatchTo
-    if (!match_any(what, wth.right, access, toR)) return false
+    toR.declarations := to.declarations
+    if (!match_any(what, wth.right, access, toR)) {
+        to.errors |> push_from(toR.errors)
+        to.failed ||= toR.failed
+        return false
+    }
     for (k in keys(to.declarations)) {
         toL.declarations |> erase(k)
         toR.declarations |> erase(k)
@@ -440,8 +463,10 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
             return false
         }
     }
-    unsafe {
-        to.declarations <- toL.declarations // because its a superset
+    // merge the branch's new captures (toL post-erase holds only those) — the old wholesale
+    // move dropped captures made earlier in the same pattern
+    for (k, v in keys(toL.declarations), values(toL.declarations)) {
+        to.declarations[k] = v
     }
     var lcond = join_conditions(toL.conditions, wth.left.at)
     var rcond = join_conditions(toR.conditions, wth.right.at)
@@ -552,6 +577,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
         if (wth.__rtti == "ExprConstPtr" && what.isPointer) {
             pass
+        } elif (is_string_like(what) && is_string_like(wth._type)) {
+            pass    // das_string == string is a language-level compare
         } elif (!is_same_type(what, wth._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
             to.errors |> match_error("condition type mismatch {describe(what)} vs {describe(wth._type)}", wth.at)
             return false
@@ -562,7 +589,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         cond |> force_at(wth.at)
         to.conditions |> emplace(cond)
         return true
-    } elif (wth._type != null && is_same_type(what, wth._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
+    } elif (wth._type != null && (is_same_type(what, wth._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no) ||
+            (is_string_like(what) && is_string_like(wth._type)))) {
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         var ee = unsafe(reinterpret<Expression?> copy_to_local(wth))
         var cond = qmacro($e(access) == $e(ee))
@@ -640,7 +668,7 @@ class MatchMacro : AstCallMacro {
             }
         }
         var access = clone_expression(what)
-        var iff : ExprIfThenElse?
+        var iff : Expression?
         var iffb : array<ExprIfThenElse?>
         let eli = length(eblk.list)
         var any_errors = false
@@ -651,7 +679,6 @@ class MatchMacro : AstCallMacro {
                 var to : MatchTo
                 if (match_any(what._type, eto.cond, access, to)) {
                     log_m("match_any ok\n\n")
-                    var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))
                     var nblk = new ExprBlock(at = eto.at)
                     for (l in (eto.if_true as ExprBlock).list) {
                         nblk.list |> emplace_new <| clone_expression(l)
@@ -665,12 +692,19 @@ class MatchMacro : AstCallMacro {
                         }
                         rules |> replaceVarTag("_") <| clone_expression(access)
                     }
-                    new_iff.if_true = nblk
-                    if (multi_match) {
-                        iffb |> emplace(new_iff)
+                    if (!multi_match && iff == null && empty(to.conditions)) {
+                        // unconditional tail arm (`_` wildcard): splice the body directly — an
+                        // `if (true)` tail defeats all-paths-return analysis and trips STYLE010
+                        iff = nblk
                     } else {
-                        new_iff.if_false = iff
-                        iff = new_iff
+                        var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))
+                        new_iff.if_true = nblk
+                        if (multi_match) {
+                            iffb |> emplace(new_iff)
+                        } else {
+                            new_iff.if_false = iff
+                            iff = new_iff
+                        }
                     }
                 } elif (report_match_errors || to.failed) {
                     log_m("match_any failed\n\n")
@@ -680,7 +714,7 @@ class MatchMacro : AstCallMacro {
                             macro_error(prog, *e.at, e.msg)
                         }
                     } else {
-                        macro_error(prog, eto.at, "unspecified match error")
+                        macro_error(prog, eto.at, "pattern `{describe(eto.cond)}` does not match `{describe(what._type)}`")
                     }
                     break
                 }

@@ -392,6 +392,37 @@ Usage is identical to regular struct matching:
         }
     }
 
+Matching AST Nodes
+------------------
+
+``match`` decomposes compiler AST nodes (``ExpressionPtr``, ``TypeDeclPtr``, and other
+handled-type pointers) directly: the pattern names the node type, fields compare or
+capture, and nested node patterns recurse:
+
+.. code-block:: das
+
+    def classify ( e : ExpressionPtr ) {
+        match ( e ) {
+            if ( ExprOp2(op="+", left=ExprOp2(op="*", left=$v(a), right=$v(b)), right=$v(c)) ) {
+                return "mad shape"
+            }
+            if ( ExprOp2(op="+" || "-") ) {
+                return "additive"
+            }
+            if ( ExprSwizzle(mask="xy", value=$v(v)) ) {
+                return "xy swizzle"
+            }
+            if ( _ ) {
+                return "other"
+            }
+        }
+    }
+
+A null pointer fails node patterns cleanly, so no explicit ``if ( null )`` arm is
+required (one may still be used to handle null specifically). ``das_string`` fields
+(operator names, identifiers, swizzle masks) compare directly against string literals.
+Node-type checks are exact — ``ExprField`` does not match ``ExprSafeField``.
+
 Static Matching
 ---------------
 

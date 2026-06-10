@@ -302,13 +302,15 @@ def qm_extract_stmts(var blk_expr : Expression?; from_pos : int; to_pos : int; v
 }
 
 def qm_call_name_matches(call : ExprCall?; expected_name : string) : bool {
-    //! Check if a call's name matches, accounting for generic instantiation.
-    //! When a generic function is instantiated, the call name is mangled
-    //! (e.g. ``generic_add`123456``). This checks the mangled name first,
-    //! then falls back to the ``fromGeneric`` original name.
-    if (call.name == expected_name) return true
-    if (call.func != null && call.func.fromGeneric != null) return call.func.fromGeneric.name == expected_name
-    return false
+    //! Check if a call's name matches, accounting for generic instantiation
+    //! and module qualification. When a generic function is instantiated, the
+    //! call name is mangled (e.g. ``generic_add`123456``) — the ``fromGeneric``
+    //! original name is checked as a fallback. A resolved call may also carry a
+    //! module-qualified name (``math::mad``); an unqualified pattern name
+    //! matches its last ``::`` segment.
+    return (call.name == expected_name ||
+        (call.func != null && call.func.fromGeneric != null && call.func.fromGeneric.name == expected_name) ||
+        (find(expected_name, "::") < 0 && "{call.name}" |> ends_with("::{expected_name}")))
 }
 
 def qm_extract_call_name(var expr : Expression?) : string {
