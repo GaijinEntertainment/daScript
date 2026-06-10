@@ -642,14 +642,6 @@ class AudioSourceDecoderLoop : AudioSourceDecoder {
         ma_decoder_get_cursor_in_pcm_frames(decoder, unsafe(addr(cursor)))
         return cursor
     }
-    def finalize {
-        if (isReady) {
-            ma_decoder_uninit(decoder)
-        }
-        unsafe {
-            delete decoder
-        }
-    }
 }
 
 

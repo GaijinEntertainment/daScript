@@ -290,6 +290,7 @@ namespace das
         bool hasAnyInitializers() const;
         bool hasUserConstructor() const;
         bool hasUserDefaultConstructor() const;
+        bool hasUserFinalizer() const;
         void serialize( AstSerializer & ser );
         void gc_collect ( gc_root * target, gc_root * from );
         uint64_t getOwnSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;

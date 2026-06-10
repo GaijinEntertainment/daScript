@@ -342,6 +342,26 @@ namespace das {
         return false;
     }
 
+    // True if this class has a non-generated finalizer method. Class finalizers keep
+    // the plain name "finalize" (parser: ast_structVarDef), so the registry lookup is
+    // by that name with the classParent identity check filtering out other classes'
+    // finalizers and free-function struct finalizers.
+    bool Structure::hasUserFinalizer() const {
+        if ( !module ) return false;
+        uint64_t hName = hash64z("finalize");
+        if ( auto kv = module->functionsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == this ) return true;
+            }
+        }
+        if ( auto kv = module->genericsByName.find(hName) ) {
+            for ( auto * fn : kv->second ) {
+                if ( !fn->generated && fn->classParent == this ) return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::canCopy(bool tempMatters) const {
         if ( circularGuard ) return true;
         circularGuard = true;

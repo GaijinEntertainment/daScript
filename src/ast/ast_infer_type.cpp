@@ -2724,11 +2724,31 @@ namespace das {
                               "", "", expr->at, CompilationError::lookup_super_class);
                         return Visitor::visit(expr);
                     }
-                    // Walk up the inheritance chain to the nearest ancestor with a user-defined
-                    // finalizer (mirrors the super() / super.method() walk-ups). For structs, finalize
-                    // substitution via base type matches at the immediate parent even when only an
-                    // ancestor defines `def operator delete`. For classes there's no such substitution,
-                    // so we must skip empty intermediates and cast to the actual finalizer's class.
+                    // Classes chain through the IMMEDIATE parent: `delete cast<Parent>(self)`
+                    // resolves to the parent's user finalizer, or to a generated chain finalizer
+                    // (generateStructureFinalizer) that cleans the parent's own field slice and
+                    // recurses up — so every level's slice is finalized exactly once. We still
+                    // require SOME ancestor user finalizer; otherwise the chain is dead weight.
+                    if (selfStruct->isClass) {
+                        if (!findChainFinalizerAncestor(selfStruct)) {
+                            error("delete super.self in " + func->name + ": no ancestor of " + selfStruct->name + " defines a finalizer",
+                                  "", "", expr->at, CompilationError::lookup_super_finalizer);
+                            return Visitor::visit(expr);
+                        }
+                        reportAstChanged();
+                        auto selfVar = new ExprVar(expr->at, "self");
+                        auto castT = new TypeDecl(baseStruct);
+                        auto castExpr = new ExprCast(expr->at, selfVar, castT);
+                        auto newDel = new ExprDelete(expr->at, castExpr);
+                        newDel->alwaysSafe = true;
+                        newDel->native = expr->native;
+                        if (expr->sizeexpr)
+                            newDel->sizeexpr = expr->sizeexpr->clone();
+                        return newDel;
+                    }
+                    // Structs: walk up to the nearest ancestor with a user-defined finalizer.
+                    // Struct finalize substitution via base type matches at the immediate parent
+                    // even when only an ancestor defines `def operator delete`.
                     while (baseStruct) {
                         auto baseType = new TypeDecl(Type::tStructure);
                         baseType->structType = baseStruct;

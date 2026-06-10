@@ -91,6 +91,12 @@ namespace das {
     // user ctor.
     DAS_API Structure * findChainCtorAncestor ( Structure * cls );
 
+    // Finalizer twin of findChainCtorAncestor: closest ancestor with a user-defined
+    // finalizer ("finalize" class method, not generated). Used by the generated
+    // structure finalizer (chain to the parent's finalize) and by the lint
+    // (derived user finalizer must `delete super.self` when this returns non-null).
+    DAS_API Structure * findChainFinalizerAncestor ( Structure * cls );
+
     /*
      def clone(var a:STRUCT_NAME; b:STRUCT_NAME)
         a.f1 := b.f1

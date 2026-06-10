@@ -197,31 +197,49 @@ user-defined ctors on every control-flow path, so the user-ctor path always runs
 parent's invariants. ``new Class()`` (no args) on such a class continues to call the
 field-init synth — it does not run the user ctor.
 
-Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
-parent's finalizer on the current object:
+Finalizers chain through the inheritance hierarchy under the same rules as
+constructors. Inside a derived class's finalizer (``operator delete``),
+``delete super.self`` runs the parent's finalizer on the current object:
 
 .. code-block:: das
 
     class Derived : Base {
         def operator delete {
-            delete super.self       // calls Base's finalizer on self
-            // additional cleanup
+            // derived cleanup first — dtor order, base state still visible
+            delete super.self       // then Base's finalizer on self
         }
     }
 
-The compiler rewrites ``delete super.self`` into ``delete cast<T>(self)``, where ``T``
-is the closest ancestor whose ``finalize`` lookup resolves to a user-defined finalizer.
-For class hierarchies that means walking past intermediate classes that do not define
-their own ``def operator delete``. For struct hierarchies, ``finalize`` resolution honors
-inheritance substitution (a derived struct can be passed where its base is expected), so
-``T`` may be the immediate parent even when only an ancestor defines ``operator delete``.
-``delete super.self`` is only valid inside an ``operator delete`` (or equivalently
-``def finalize``) of a class that has a base with a finalizer; other uses are rejected
-at compile time. The same form also works for struct finalizers declared as free
-functions — see :ref:`Structs <structs>`.
+For classes, the compiler rewrites ``delete super.self`` into ``delete cast<T>(self)``
+where ``T`` is the *immediate* parent. If the parent has no finalizer of its own, the
+compiler generates one that finalizes the parent's own fields and chains up in turn —
+so every level of the hierarchy finalizes its own slice of the object exactly once.
+A user-defined finalizer takes over that slice responsibility for its class: it must
+clean up its class's own fields itself (the generated per-field cleanup is replaced,
+exactly as for non-derived classes).
 
-Base-class finalization is explicit, not automatic: a derived finalizer that omits
-``delete super.self`` will not run any ancestor finalizer.
+When an ancestor has a user-defined finalizer, a derived class finalizer must call
+``delete super.self`` exactly once on every control-flow path. The lint mirrors the
+``super(...)`` constructor rules:
+
+* zero ``delete super.self`` calls on any reachable path → error;
+* two or more calls on any path → error;
+* a call inside a loop body → error (call count is not bounded to one);
+* a hand-written ``delete cast<Ancestor> self`` that skips the immediate parent does
+  NOT count — it would bypass the parent's field-slice cleanup.
+
+A derived class with *no* finalizer of its own inherits finalization automatically:
+its generated finalizer cleans the derived slice and chains to the parent, so deleting
+a ``Derived`` always runs the ancestor's finalizer — no boilerplate forwarding needed.
+
+``delete super.self`` is only valid inside an ``operator delete`` (or equivalently
+``def finalize``) of a class that has a base with a finalizer somewhere in its
+ancestry; other uses are rejected at compile time. The same form also works for struct
+finalizers declared as free functions — see :ref:`Structs <structs>`. For struct
+hierarchies, ``finalize`` resolution honors inheritance substitution (a derived struct
+can be passed where its base is expected), so ``delete super.self`` resolves to the
+closest ancestor with a user-defined finalizer; structs do not chain field slices the
+way classes do.
 
 Alternatively, the parent's method can be called directly using the backtick syntax:
 
