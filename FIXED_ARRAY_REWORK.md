@@ -158,8 +158,19 @@ The indivisible piece, sub-staged for review:
     grammar fact recorded by the suite: `int[3][]` is a syntax error on master too
     (dim_list shift preference), so the push-at-end arm only composes via `int[]`/
     `int[][]`/`int[][3]`.
-- **1c** typeFactory / interop (`TT[dim]`, `TDim<>`, `isNativeDim`, makeArgumentType,
-  ast_handle).
+- **1c** typeFactory / interop (settled at landing). `typeFactory<TDim<TT,size>>` and
+  `typeFactory<TT[dim]>` wrap FA via the shared `makeFixedArrayTypeDecl` header helper
+  (hoists the canonical ref/const/temporary trio off the element); `isNativeDim` moves
+  onto the FA node (only consumer is aot_cpp.das reading the indexed type's head).
+  `makeArgumentType` needs no edit — composes via the FA-aware isRefType. SETTLED: the
+  natural recursion fixes the latent multi-dim order bug (old: C `int[3][4]` -> dim
+  [4,3] = das int[4][3], wrong row stride; believed unexercised in-tree) — fix taken,
+  pinned by tests. PULLED FORWARD from 1f by necessity: the `makeTypeInfo` FA-flatten
+  arm (typeFactory feeds handled-struct FIELD types and builtin signatures whose
+  runtime TypeInfo must keep the exact flattened shape — without it a C-array field
+  silently produces dimSize=0 TypeInfo). ManagedVector's scratch dim node
+  (ast_handle.h walk) flips with it. Builtin mangled names unchanged (unaliased FA
+  chains byte-identical); semantic hashes shift — moot while dark.
 - **1d** Infer: inferAlias (WRAP, don't concatenate — alias label preserved),
   inferGenericType / updateAliasMap / applyAutoContracts (dim arms deleted; FA rides the
   firstType recursion), ExprAt/ExprSafeAt result typing, for-loop sources, make-array /

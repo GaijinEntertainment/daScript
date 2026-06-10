@@ -208,6 +208,25 @@ namespace das {
     }
 
     TypeInfo * DebugInfoHelper::makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type ) {
+        if ( type->baseType==Type::tFixedArray ) {
+            // runtime TypeInfo stays flattened forever (FIXED_ARRAY_REWORK.md): collect the
+            // chain dims onto a scratch element clone; canonical head qualifiers ride along.
+            // The mangled-name cache key is unaffected — chain and flattened text are identical.
+            const TypeDecl * t = type;
+            vector<int32_t> dims;
+            while ( t->baseType==Type::tFixedArray ) {
+                dims.push_back(t->fixedDim);
+                DAS_ASSERTF(t->firstType, "tFixedArray chain without an element");
+                t = t->firstType;
+            }
+            gc_local<TypeDecl> flat(new TypeDecl(*t));
+            flat->dim.insert(flat->dim.begin(), dims.begin(), dims.end());
+            flat->ref = type->ref;
+            flat->constant = type->constant;
+            flat->temporary = type->temporary;
+            flat->implicit = type->implicit;
+            return makeTypeInfo(info, flat);
+        }
         if ( info==nullptr ) {
             string mangledName = type->getMangledName();
             auto it = tmn2t.find(mangledName);

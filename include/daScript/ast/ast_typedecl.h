@@ -636,12 +636,22 @@ namespace das {
     template <typename TT, int size>
     struct TDim;
 
+    // FIXED_ARRAY_REWORK.md, 1c: wrap an element type in a tFixedArray node, hoisting the
+    // canonical qualifiers — ref/const/temporary live on the outermost FA node only
+    inline TypeDeclPtr makeFixedArrayTypeDecl ( int32_t size, TypeDeclPtr element ) {
+        auto fa = new TypeDecl(Type::tFixedArray);
+        fa->fixedDim = size;
+        fa->firstType = element;
+        fa->ref = element->ref;             element->ref = false;
+        fa->constant = element->constant;   element->constant = false;
+        fa->temporary = element->temporary; element->temporary = false;
+        return fa;
+    }
+
     template <typename TT, int size>
     struct typeFactory<TDim<TT,size>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT>::make(lib);
-            t->dim.push_back(size);
-            return t;
+            return makeFixedArrayTypeDecl(size, typeFactory<TT>::make(lib));
         }
     };
 
@@ -674,8 +684,9 @@ namespace das {
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT>::make(lib);
-            t->dim.push_back(dim);
+            // natural recursion maps C int[3][4] to FA(3, FA(4, int)) — outermost first
+            // (the old dim-vector push produced the inner-first order, a latent bug)
+            auto t = makeFixedArrayTypeDecl(dim, typeFactory<TT>::make(lib));
             t->ref = false;
             t->isNativeDim = true;
             return t;
