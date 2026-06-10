@@ -1,4 +1,4 @@
-﻿// Stage 0 coverage for the tFixedArray rework (FIXED_ARRAY_REWORK.md).
+// Stage 0 coverage for the tFixedArray rework (FIXED_ARRAY_REWORK.md).
 // Raw AstTypeMacro exercising the typeMacro argument payload that Stage 1b moves
 // from TypeDecl.dimExpr to the dedicated typeMacroExpr field:
 //   dimExpr[0] — ExprConstString with the macro name
