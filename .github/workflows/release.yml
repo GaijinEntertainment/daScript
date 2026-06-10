@@ -49,7 +49,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin15, darwin26, windows]
+        # darwin15 (macOS Intel x86_64) was dropped after 0.6.2: the LLVM 22
+        # bump has no Intel-mac prebuilt at aleksisch/llvm-shared-builds (the
+        # LLVM 16 era did), and build.yml stopped gating on Intel for the same
+        # reason. 0.6.2 is the last release with a darwin15-x86_64 bundle.
+        target: [linux, linux_arm, darwin26, windows]
         architecture: [32, 64, arm64]
         cmake_preset: [ Release ]
 
@@ -73,22 +77,11 @@ jobs:
             architecture_string: arm64
             archive_ext: tar.gz
 
-          - target: darwin15
-            release_target: darwin15
-            release_arch: x86_64
-            runner: macos-15-large # Intel x86_64
-            architecture_string: x86_64
-            archive_ext: tar.gz
-
           - target: windows
             runner: windows-latest-fat
             archive_ext: zip
 
           - target: windows
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: darwin15
             build_system: cmake
             cmake_generator: Ninja
 
@@ -111,12 +104,6 @@ jobs:
             architecture_string: x64
 
         exclude:
-          - target: darwin15
-            architecture: 32
-
-          - target: darwin15
-            architecture: arm64
-
           - target: darwin26
             architecture: 32
 
@@ -203,16 +190,15 @@ jobs:
                 libxinerama-dev \
                 libxi-dev
               ;;
-            darwin15arm64|darwin26arm64)
-              brew install bison openssl
+            darwin26arm64)
+              # z3 is a runtime dependency of the prebuilt LLVM.dll on macOS
+              # arm64: its install_name hardcodes
+              # /opt/homebrew/opt/z3/lib/libz3.4.15.dylib, so dlopen("LLVM.dll")
+              # fails unless homebrew z3 is present (build.yml installs it for
+              # the same reason).
+              brew install bison openssl z3
               echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
               export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
-              export CPPFLAGS="-I$(brew --prefix openssl)/include"
-              ;;
-            darwin1564|darwin2664)
-              arch -x86_64 brew install bison openssl
-              echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
-              export LDFLAGS="-L/opt/homebrew/opt/bison/lib -L$(brew --prefix openssl)/lib"
               export CPPFLAGS="-I$(brew --prefix openssl)/include"
               ;;
           esac

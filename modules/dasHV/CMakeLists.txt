@@ -174,12 +174,16 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	SETUP_HV(libDasModuleHV)
 	SETUP_HV(dasModuleHV)
 
-	IF(WIN32 AND NOT MSVC)
-		# mingw: land libssl-*.dll + libcrypto-*.dll NEXT TO daslang.exe so
-		# dasModuleHV.shared_module can resolve its openssl deps at dlopen
-		# time. MSVC has its own openssl build path (no-shared above), so it
-		# doesn't need this. Without these copies, build-time AOT codegen
-		# fails silently because register_dynamic_module's default overload
+	IF(WIN32)
+		# Shared-OpenSSL builds (mingw sysroot, MSVC+vcpkg): land libssl-*.dll +
+		# libcrypto-*.dll NEXT TO daslang.exe so dasModuleHV.shared_module can
+		# resolve its openssl deps at dlopen time, and INSTALL them next to the
+		# .shared_module so release bundles work too (sysos.cpp loads modules
+		# with LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR — deps colocated under
+		# modules/dasHV/ resolve). The MSVC openssl-from-source path builds
+		# no-shared, so both globs stay empty there and this is a no-op.
+		# Without these copies, dlopen fails silently because
+		# register_dynamic_module's default overload
 		# (register_dynamic_module_silent) suppresses the LoadLibrary error
 		# and `require dashv` then surfaces as 20605 missing-prerequisite.
 		# Glob picks up the version suffix (libssl-3-x64.dll today, future
@@ -187,6 +191,12 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		FILE(GLOB _DAS_HV_OPENSSL_DLLS
 			"${OPENSSL_ROOT_DIR}/bin/libssl-*.dll"
 			"${OPENSSL_ROOT_DIR}/bin/libcrypto-*.dll")
+		IF(NOT _DAS_HV_OPENSSL_DLLS AND OPENSSL_INCLUDE_DIR)
+			# vcpkg layout: <triplet-root>/include + <triplet-root>/bin DLLs.
+			FILE(GLOB _DAS_HV_OPENSSL_DLLS
+				"${OPENSSL_INCLUDE_DIR}/../bin/libssl-*.dll"
+				"${OPENSSL_INCLUDE_DIR}/../bin/libcrypto-*.dll")
+		ENDIF()
 		IF(_DAS_HV_OPENSSL_DLLS)
 			# Mirror dasGlfw's multi-config / single-config split — Ninja
 			# (mingw default) is single-config; left in for symmetry with
@@ -201,7 +211,10 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 					${_DAS_HV_OPENSSL_DLLS}
 					"${_DAS_HV_COPY_DIR}/"
 			)
-		ELSE()
+			install(FILES ${_DAS_HV_OPENSSL_DLLS}
+				DESTINATION ${DAS_INSTALL_MODULESDIR}/dasHV
+			)
+		ELSEIF(NOT MSVC)
 			MESSAGE(WARNING "dasHV mingw: no libssl/libcrypto DLLs found under ${OPENSSL_ROOT_DIR}/bin — dasModuleHV.shared_module may fail to load at runtime")
 		ENDIF()
 	ENDIF()
