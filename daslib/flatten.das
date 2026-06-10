@@ -752,8 +752,8 @@ def public flatten_optimize(var func : FunctionPtr; barriers : table<string>) : 
 [macro_function]
 def public flatten_fuse(var func : FunctionPtr) : bool {
     //! PHASE_FUSED finishing pass (delegates to `fuse_body`): re-pack `a*b ± c` into `mad(a,b,c)`
-    //! and the expanded lerp shape back into `lerp(a,b,t)`. Run ONCE on the optimized, re-inferred
-    //! body (the type gates need settled types). Returns true if anything changed.
+    //! and the expanded lerp shape back into `lerp(a,b,t)`. Call on the optimized, re-inferred body and
+    //! repeat across re-inference until it returns false (the type gates need each round's settled types).
     return fuse_body(func)
 }
 
