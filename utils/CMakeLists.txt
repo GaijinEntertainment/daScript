@@ -47,9 +47,12 @@ file(GLOB DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/daslib/*.das)
 file(GLOB_RECURSE DASLLVM_DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/*.das)
 
 # daslang -exe appends `.exe` to the output path.
-# On multi-config generators (MSVC), place next to daslang in bin/<Config>/.
-# On single-config generators (Make/Ninja), place in bin/.
-if(MSVC)
+# On multi-config generators (Visual Studio), place next to daslang in
+# bin/<Config>/. On single-config generators (Make/Ninja), place in bin/.
+# Key on the GENERATOR, not the compiler: MSVC+Ninja (release CI) is
+# single-config and its exes land in plain bin/.
+get_property(_DAS_UTILS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(_DAS_UTILS_MULTI_CONFIG)
     set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin/${CMAKE_CFG_INTDIR})
 else()
     set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin)
@@ -138,7 +141,9 @@ ADD_CUSTOM_TARGET(run_utils_tests
 # Install utility executables (OPTIONAL — only present when -exe targets are built).
 # UTIL_BIN_DIR uses CMAKE_CFG_INTDIR which doesn't resolve at install time on
 # multi-config generators. Use install(CODE) with CMAKE_INSTALL_CONFIG_NAME.
-if(MSVC)
+# Same generator-keyed split as UTIL_BIN_DIR above — under MSVC+Ninja the exes
+# are in plain bin/, and bin/${CMAKE_INSTALL_CONFIG_NAME} would miss them all.
+if(_DAS_UTILS_MULTI_CONFIG)
     set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin/\${CMAKE_INSTALL_CONFIG_NAME}")
 else()
     set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin")
