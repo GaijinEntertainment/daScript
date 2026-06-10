@@ -218,13 +218,13 @@ literal is minted), and the optimize pass rewrites a *varying* division by a
 ``let _preshader_N = 1f / U`` hoisted per draw — deduplicated by structural key,
 so N divisions by the same uniform share ONE reciprocal (raymarch's six
 smooth-min ``/ smoothK`` divides become six muls against one per-draw rcp, and
-the muls then mad-fuse). Both rewrites round (≈1 ulp) and are **fast-math gated**.
+the muls then mad-fuse). Both rewrites round (~1 ulp) and are **fast-math gated**.
 
 **Ctor lane algebra.** Per-lane scalar arithmetic wrapped in a vector
 constructor is the manual-vectorization tax shaders pay everywhere; flatten
 re-packs it from both ends:
 
-* **Zero-lane kill** (fold): ``floatN(e₀, e₁, …) * constVec`` with a zero const
+* **Zero-lane kill** (fold): ``floatN(e0, e1, …) * constVec`` with a zero const
   lane zeroes the matching ctor lanes *in place* — no distribution — so the
   dead lane's compute (a ``sin``, a texture-free chain) is eliminated by DSE,
   and a fully-const product collapses to an embedded constant:
@@ -258,7 +258,7 @@ value-changing rewrite — the float ``x*0 → 0`` / ``x - x → 0`` folds (inf/
 propagation), float reassociation (association order), the ``lerp``
 const-selector short-circuits (they drop an argument), division→reciprocal,
 the float zero-lane kill, and majority-factor compensation — assumes finite
-inputs and tolerates ≈1-ulp drift. A module that cannot accept that opts out
+inputs and tolerates ~1-ulp drift. A module that cannot accept that opts out
 with a user option:
 
 .. code-block:: das
