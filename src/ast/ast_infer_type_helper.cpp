@@ -381,23 +381,6 @@ namespace das {
         return false;
     }
 
-    // master semantics: a generic alias use-site's own dims REPLACE the bound type's dims
-    // (bare use strips them) - resolve the binding to the bound chain's ELEMENT, carrying the
-    // head's qualifiers; use-site FA wraps then re-dim it naturally
-    static TypeDecl * peelFixedArrayAliasBinding ( TypeDecl * aT ) {
-        auto elemT = aT;
-        while ( elemT->baseType==Type::tFixedArray && elemT->firstType ) {
-            elemT = elemT->firstType;
-        }
-        auto resT = new TypeDecl(*elemT);
-        if ( elemT != aT ) {
-            resT->ref = resT->ref || aT->ref;
-            resT->constant = resT->constant || aT->constant;
-            resT->temporary = resT->temporary || aT->temporary;
-        }
-        return resT;
-    }
-
     TypeDeclPtr InferTypes::inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr, AliasMap *aliases, OptionsMap *options, bool autoToAlias) const {
         autoToAlias |= decl->autoToAlias;
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
@@ -426,7 +409,10 @@ namespace das {
                 }
             }
             if (aT) {
-                auto resT = peelFixedArrayAliasBinding(aT);
+                // a generic alias binds the WHOLE matched type - int[4] passed to auto(TT)
+                // makes TT = int[4]; use-site FA wraps then nest naturally (TT[2] = int[2][4]).
+                // (The flattened world stripped the bound dims here; that wart is gone.)
+                auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
@@ -558,7 +544,7 @@ namespace das {
                 aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
             }
             if (aT) {
-                auto resT = peelFixedArrayAliasBinding(aT);
+                auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
@@ -567,7 +553,7 @@ namespace das {
                 resT->explicitConst = (resT->explicitConst || decl->explicitConst);
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
-                resT->alias = aT->alias; // keep the binding's label (a peel drops the chain head that carried it); clearing breaks typemacro-based aliases
+                // resT->alias.clear(); // this may speed things up, but it breaks typemacro-based aliases
                 return resT;
             } else {
                 return decl;

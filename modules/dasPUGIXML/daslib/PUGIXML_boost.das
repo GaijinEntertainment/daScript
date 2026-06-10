@@ -765,7 +765,7 @@ def from_XML(node : xml_node; anything : auto(TT)) {
     //! Struct fields become child elements; arrays become sequences of
     //! child elements. Missing elements yield default values.
     static_if (typeinfo is_dim(anything)) {
-        var ret : TT[typeinfo dim(anything)]
+        var ret : TT -const -&   // TT IS the matched fixed-array type
         var ch = node.first_child
         for (i in 0..typeinfo dim(anything)) {
             if (ch.ok) {

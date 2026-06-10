@@ -242,18 +242,29 @@ The indivisible piece, sub-staged for review:
 Inference semantics flip in this stage; fallout fixes in tests/daslib land here.
 Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (riding compat).
   **1f IMPLEMENTED.** The 11-file burndown collapsed into four classes:
-  (1) GENERIC ALIAS DIM SEMANTICS (PUGIXML/json/decs) — settled via AskUserQuestion:
-  MASTER-COMPAT PEEL. Master's rule (empirically pinned with the saved 1b-i exe): a
-  generic alias use-site's own dims REPLACE the bound type's dims — bare `TT` bound from
-  `int[3]` is the ELEMENT `int`, `TT[4]` is `int[4]`, and the strip applies even through
-  `array<auto(TT)>`; module typedefs append naturally (`foo[2]` where `foo=int[3]` is
-  `int[2][3]`) in both worlds. Implementation: `peelFixedArrayAliasBinding` at the alias
-  leaf in inferAlias + inferPartialAliases (head qualifiers transfer to the element on
-  peel; arm 2 keeps the binding's alias label — clearing breaks typemacro aliases), plus
-  the FA-recursion arm now HOISTS the resolved element's ref/const/temporary to the chain
-  head (canonical form; without it `TT[4]` kept const on the element and var-decl
-  const-stripping missed it). daslib's `TT[typeinfo dim(x)]` reconstruct pattern works
-  unmodified. Probe matrix lives in D:/Work/fa_scratch/alias_dim_probe*.das.
+  (1) GENERIC ALIAS DIM SEMANTICS (PUGIXML/json/decs) — settled BY BORIS, REVISED once:
+  **NATURAL semantics. A generic alias binds the WHOLE matched type**: `auto(TT)` ←
+  `int[4]` makes `TT = int[4]`; `TT[2]` = `int[2][4]` (array of 2 TT, natural nesting);
+  `array<auto(TT)>` ← `array<int[3]>` makes `TT = int[3]` (inexpressible on master);
+  `def two(a : auto(TT); b : TT)` accepts `(int[3], int[3])`. Module typedefs append as
+  always. THE OLD (master/flattened-world) RULE IS DELIBERATELY DEAD: master stripped
+  the bound dims at every use-site (bare `TT` ← `int[3]` was the ELEMENT `int`; `TT[4]`
+  REPLACED to `int[4]`; strip applied even through `array<auto(TT)>`) — an artifact of
+  one node carrying both element and dims; Boris: wrong, makes generics clumsy and
+  unsupportable. (A master-compat peel was implemented first and reverted same-day —
+  the probe matrix in D:/Work/fa_scratch/alias_dim_probe*.das documents both worlds.)
+  IMPORTANT INVARIANT that keeps most of daslib working unchanged: `auto(TT)[]` (the
+  explicit `[]` suffix) still binds TT to the ELEMENT — the `[]` eats one dim level in
+  matching. So builtin.das clone/to_array/table-`[]` families and decs get_ro's
+  `TT[typeinfo dim(value)]` reconstruct stay correct. Ported to the new binding: the
+  bare-`auto(TT)` dim arms — json_boost from_JV (`var ret : TT -const -&`), PUGIXML
+  from_XML (same), decs decs_array/get/get_default_ro/get_component/ComponentMap-get/
+  make_callbacks/make_component (every `static_if is_dim` arm collapsed into its else
+  arm — visibly simpler, the point of the flip). The FA-recursion arm in inferAlias
+  HOISTS the resolved element's ref/const/temporary to the chain head (canonical form).
+  EXTERNAL BREAKAGE accepted: code using the `TT[typeinfo dim(x)]` reconstruct on bare
+  `auto(TT)` params breaks loudly at compile; bodies using bare `TT` as the element type
+  change meaning silently — test suites are the net.
   (2) DASLIB `.dim` READERS (match tests, stbimage→is_local, aot_cpp): the das `.dim`
   binding is now a READ-ONLY compat property (`TypeDecl::dimCompat`) returning the
   flattened outermost-first sizes of the FA chain, recomputed on read into a per-node
@@ -289,8 +300,9 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
   type; fixed to `typeinfo dim(value)`.
   KNOWN GAP (deliberate): `-[]` (removeDim) on FA-typed generic params still erases the
   legacy vector only — zero in-tree users; revisit at Stage 4/5.
-  Gates: probes match master 100%, all 11 files green, tests-cpp 56/56, tests/fixed_array
-  86/86, full-tree dastest 10784/10784 interpreted + 10123/10123 under test_aot -use-aot,
+  Gates (re-run after the natural-semantics flip): probe matrix = natural binding
+  everywhere, all 11 burndown files green, tests-cpp 56/56, tests/fixed_array 86/86,
+  full-tree dastest 10784/10784 interpreted + 10123/10123 under test_aot -use-aot,
   zero GC leaks both modes, lint 0 errors on every changed file.
 
 ### Stage 2 — AOT emitter
