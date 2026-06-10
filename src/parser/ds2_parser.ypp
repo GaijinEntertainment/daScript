@@ -3263,20 +3263,16 @@ table_type_pair
 
 dim_list
     :  '[' expr[dimExpr] ']' {
-        $$ = new TypeDecl(Type::autoinfer);
-        appendDimExpr($$, $dimExpr);
+        $$ = appendDimExpr(nullptr, $dimExpr, tokAt(scanner,@dimExpr));
     }
     |   '[' ']' {
-        $$ = new TypeDecl(Type::autoinfer);
-        appendDimExpr($$, nullptr);
+        $$ = appendDimExpr(nullptr, nullptr, tokAt(scanner,@1));
     }
     |  dim_list[list] '[' expr[dimExpr] ']' {
-        $$ = $list;
-        appendDimExpr($$, $dimExpr);
+        $$ = appendDimExpr($list, $dimExpr, tokAt(scanner,@dimExpr));
     }
     |  dim_list[list] '[' ']' {
-        $$ = $list;
-        appendDimExpr($$, nullptr);
+        $$ = appendDimExpr($list, nullptr, tokAt(scanner,@2));
     }
     ;
 
@@ -3292,11 +3288,7 @@ type_declaration_no_options
             das2_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_array_type);
         }
-        $typeDecl->dim.insert($typeDecl->dim.begin(), $dimlist->dim.begin(), $dimlist->dim.end());
-        $typeDecl->dimExpr.insert($typeDecl->dimExpr.begin(), $dimlist->dimExpr.begin(), $dimlist->dimExpr.end());
-        $typeDecl->removeDim = false;
-        $$ = $typeDecl;
-        $dimlist->dimExpr.clear();
+        $$ = attachDimChain($dimlist, $typeDecl);
     }
     ;
 

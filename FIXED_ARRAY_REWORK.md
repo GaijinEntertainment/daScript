@@ -144,9 +144,20 @@ The indivisible piece, sub-staged for review:
     PARSE `case '['` builds FA — with the rule that a `Y<name>` immediately following `[d]`
     labels THAT FA node (known cosmetic asymmetry: `[3]Y<I>i` re-parses with the label on
     the FA node even if it was on the element; structural identity unaffected). Grammar
-    errors kept verbatim. Gate: tests-cpp parse-shape + mangled round-trip suites green;
-    dastest framework still runs (concrete FA in daslib is only decs/faker/profiler/regex)
-    and its FA-failure inventory becomes the 1c/1d/1e burndown list.
+    errors kept verbatim. Gate (settled at landing: commit-as-is, world fully dark):
+    tests-cpp parse-shape + mangled round-trip suites green. The original "dastest still
+    runs -> per-test inventory" gate proved unmeetable: daslib generic SIGNATURES with
+    `[]` (builtin.das bulk push/to_array_move family) are parser-produced FA now, while
+    make-array literal ARG types still come from infer (dim-vector until 1d) — FA-vs-dim-
+    vector is structurally unequal by design, every `.das_module` initialize meets it at
+    `to_array_move`, so daslang.exe cannot boot the in-repo project until 1d. Class-level
+    burndown instead: (1) FA generic signatures vs infer-made dim-vector args — module
+    load/startup, 1d (make-array flip + FA rides firstType recursion; half deleted at
+    Stage 4); (2) concrete FA declarations through infer (`let x : int[5]`) — 1d;
+    (3) typeFactory/interop C-array types — 1c; (4) FA simulate lowering — 1e. gen1
+    grammar fact recorded by the suite: `int[3][]` is a syntax error on master too
+    (dim_list shift preference), so the push-at-end arm only composes via `int[]`/
+    `int[][]`/`int[][3]`.
 - **1c** typeFactory / interop (`TT[dim]`, `TDim<>`, `isNativeDim`, makeArgumentType,
   ast_handle).
 - **1d** Infer: inferAlias (WRAP, don't concatenate — alias label preserved),

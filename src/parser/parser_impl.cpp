@@ -28,6 +28,72 @@ namespace das {
         }
     }
 
+    static TypeDecl * makeFixedArrayNode ( Expression * dimExpr, const LineInfo & at ) {
+        auto fa = new TypeDecl(Type::tFixedArray);
+        fa->at = at;
+        if ( dimExpr ) {
+            fa->fixedDim = TypeDecl::dimConst;
+            if ( dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
+                auto cI = (ExprConst *) dimExpr;
+                auto bt = cI->baseType;
+                if ( bt==Type::tInt || bt==Type::tUInt ) {
+                    fa->fixedDim = cast<int32_t>::to(cI->value);
+                }
+            }
+            fa->fixedDimExpr = dimExpr;
+        } else {
+            fa->fixedDim = TypeDecl::dimAuto;
+        }
+        return fa;
+    }
+
+    TypeDecl * appendDimExpr ( TypeDecl * chain, Expression * dimExpr, const LineInfo & at ) {
+        auto fa = makeFixedArrayNode(dimExpr, at);
+        if ( !chain ) return fa;
+        auto inner = chain;                                     // chain under construction - innermost firstType is null
+        while ( inner->firstType ) inner = inner->firstType;
+        inner->firstType = fa;
+        return chain;
+    }
+
+    TypeDecl * attachDimChain ( TypeDecl * chain, TypeDecl * element ) {
+        auto inner = chain;
+        while ( inner->firstType ) inner = inner->firstType;
+        inner->firstType = element;
+        // the old world fused these qualifiers onto the single dim-carrying node; canonical
+        // form keeps them on the outermost FA node only. `alias` stays on the element - at
+        // parse time it is the unresolved type name, not a label on the array
+        chain->ref |= element->ref;                     element->ref = false;
+        chain->removeRef |= element->removeRef;         element->removeRef = false;
+        chain->constant |= element->constant;           element->constant = false;
+        chain->removeConstant |= element->removeConstant; element->removeConstant = false;
+        chain->temporary |= element->temporary;         element->temporary = false;
+        chain->removeTemporary |= element->removeTemporary; element->removeTemporary = false;
+        chain->implicit |= element->implicit;           element->implicit = false;
+        chain->explicitConst |= element->explicitConst; element->explicitConst = false;
+        chain->explicitRef |= element->explicitRef;     element->explicitRef = false;
+        chain->isExplicit |= element->isExplicit;       element->isExplicit = false;
+        chain->autoToAlias |= element->autoToAlias;     element->autoToAlias = false;
+        element->removeDim = false;                     // old splice cleared it outright
+        return chain;
+    }
+
+    TypeDecl * appendAutoDim ( TypeDecl * typeDecl, const LineInfo & at ) {
+        auto fa = makeFixedArrayNode(nullptr, at);
+        if ( typeDecl->baseType==Type::tFixedArray ) {
+            // gen1 `foo[3][]` pushed the auto dim at the END - innermost position
+            auto inner = typeDecl;
+            while ( inner->firstType && inner->firstType->baseType==Type::tFixedArray ) inner = inner->firstType;
+            fa->firstType = inner->firstType;
+            inner->firstType = fa;
+            typeDecl->removeDim = false;
+            return typeDecl;
+        }
+        return attachDimChain(fa, typeDecl);
+    }
+
+    // THE THIRD PARSER (FIXED_ARRAY_REWORK.md): utils/dasFormatter still builds the old
+    // dim/dimExpr world; this overload dies with those fields at the end of Stage 1
     void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr ) {
         if ( dimExpr ) {
             int32_t dI = TypeDecl::dimConst;

@@ -4126,8 +4126,23 @@ namespace das
                 ch ++;
                 int di = atoi(numT.c_str());
                 if ( neg ) di = -di;
-                auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->dim.insert(pt->dim.begin(), di);
+                auto pt = new TypeDecl(Type::tFixedArray);
+                pt->fixedDim = di;
+                // fullName remove-suffixes emitted right after this node's [d] land back on it
+                for ( ;; ) {
+                    if ( ch[0]=='-' && ch[1]=='[' && ch[2]==']' )   { ch += 3; pt->removeDim = true; }
+                    else if ( ch[0]=='-' && ch[1]=='C' )            { ch += 2; pt->removeConstant = true; }
+                    else if ( ch[0]=='-' && ch[1]=='&' )            { ch += 2; pt->removeRef = true; }
+                    else if ( ch[0]=='-' && ch[1]=='#' )            { ch += 2; pt->removeTemporary = true; }
+                    else break;
+                }
+                // Y<name> immediately following [d] labels THIS node - the standalone case 'Y'
+                // would label one level too deep ([4]Y<M4>[4]f labels the two-dim node)
+                if ( *ch=='Y' ) {
+                    ch ++;
+                    pt->alias = parseAnyNameInBrackets(ch,false);
+                }
+                pt->firstType = parseTypeFromMangledName(ch,library,thisModule);
                 return pt;
             }
             case '1': {
