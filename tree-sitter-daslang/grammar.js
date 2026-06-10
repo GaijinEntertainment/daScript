@@ -176,6 +176,7 @@ module.exports = grammar({
 
     require_module_name: $ => seq(
       optional('%'),
+      repeat(seq(choice('..', '.'), '/')),
       $.identifier,
       repeat(seq(choice('.', '/'), $.identifier)),
     ),

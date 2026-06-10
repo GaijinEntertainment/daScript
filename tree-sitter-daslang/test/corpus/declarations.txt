@@ -399,3 +399,26 @@ require ?pugixml pugixml/linq_fold_xml public
     module: (require_module_name
       (identifier)
       (identifier))))
+
+================================================================================
+Require with relative path prefixes
+================================================================================
+
+require ./sibling
+require ../parent_mod
+require ../../foo/bar.das
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    module: (require_module_name
+      (identifier)))
+  (require_declaration
+    module: (require_module_name
+      (identifier)))
+  (require_declaration
+    module: (require_module_name
+      (identifier)
+      (identifier)
+      (identifier))))
