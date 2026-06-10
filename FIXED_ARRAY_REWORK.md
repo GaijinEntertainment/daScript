@@ -189,8 +189,8 @@ FA values); LOC visibly negative.
 
 ### Stage 5 — Macro/tooling ports
 ast_match.das (structural FA matching), match.das, typemacro_boost (field rename), lints
-(perf_lint/style_lint), is_local, templates_boost, decs_boost, clargs, rst.das; decision on
-utils/dasFormatter's vendored parser (port vs freeze); MCP describe_type sanity.
+(perf_lint/style_lint), is_local, templates_boost, decs_boost, clargs, rst.das; MCP
+describe_type sanity.
 Exit: no in-tree consumers of the compat properties left.
 
 ### Stage 6 — Externals + compat removal
@@ -202,6 +202,14 @@ Exit: grep-clean everywhere.
 RST (type system, generic programming), CHANGELOG, version bump; final full-matrix CI +
 AOT + JIT verification; merge to master. Optional separate decision: lift the
 `MyMacro(...)[N]` parser restriction.
+
+THE THIRD PARSER (settled: very last item, after everything else is done): fix
+`utils/dasFormatter/ds_parser.ypp` — the gen1->gen2 conversion util vendors its own copy
+of the gen1 grammar, writing the real `TypeDecl::dim`/`dimExpr` through the same 10
+site-shapes as the in-tree gen1 parser. Caveat: deleting dim/dimExpr at the end of
+Stage 1 breaks its COMPILE, so the field-deletion commit carries the minimal mechanical
+flip (same edit as the in-tree gen1 parser got in 1b — by then the helpers exist);
+the full port/verification of the converter is what lands here at the end.
 
 ## Standing risk ledger (checked at every stage gate)
 
