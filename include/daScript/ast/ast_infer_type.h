@@ -175,6 +175,16 @@ namespace das {
 
         bool isFunctionCompatible(Function *pFn, const vector<TypeDeclPtr> &nonNamedTypes, const vector<MakeFieldDeclPtr> &arguments, bool inferAuto, bool inferBlock) const;
 
+        // piped-call padding: a trailing-piped argument may shift onto a later block-like parameter,
+        // padding the gap with that overload's defaults
+        bool isFunctionCompatiblePipedAt(Function *pFn, const vector<TypeDeclPtr> &types, int blockParam, bool inferAuto) const;
+
+        bool findPipedLanding(Function *pFn, const vector<TypeDeclPtr> &types, bool inferAuto, int &blockParam, int &padCount) const;
+
+        void findMatchingPipedFunctionsAndGenerics(MatchingFunctions &resultFunctions, MatchingFunctions &resultGenerics, const string &name, const vector<TypeDeclPtr> &types, bool visCheck, das_hash_map<Function *, pair<int, int>> &landing) const;
+
+        bool tryPipedCallPadding(ExprLooksLikeCall *expr, vector<TypeDeclPtr> &types, MatchingFunctions &functions, MatchingFunctions &generics, bool visCheck);
+
         string reportAliasError(const TypeDeclPtr &type) const;
 
         string describeMismatchingArgument(const string &argName, const TypeDeclPtr &passType, const TypeDeclPtr &argType, int argIndex) const;

@@ -8,5 +8,6 @@ Expression print flags
 Name of the asserted expression
 Arguments of the assert expression
 Whether the arguments failed to infer types
+Whether the last argument was attached via trailing pipe
 Location of the enclosure where the assert is used
 Whether the assert is a verify expression (verify expressions have to have sideeffects, assert expressions cant)

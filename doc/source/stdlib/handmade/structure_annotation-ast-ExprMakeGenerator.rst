@@ -8,6 +8,7 @@ Expression print flags
 Name of the AOT functor (if applicable)
 Arguments passed to the generator
 Whether arguments failed to infer
+Whether the last argument was attached via trailing pipe
 Location of the enclosure
 Iterator type, i.e. type of values produced by the generated iterator
 List of captured variables

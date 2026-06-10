@@ -1186,17 +1186,23 @@ namespace das {
         return argL;
     }
 
-    Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
+    Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt, bool markPiped ) {
         Expression * pipeCall = fncall->tail();
         if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(arg);
+            if ( markPiped && arg->rtti_isMakeBlock() ) {
+                pCall->pipedCallArgument = true;
+            }
             return fncall;
         } else if ( pipeCall->rtti_isVar() ) {
             // a += b <| c
             auto pVar = (ExprVar *) pipeCall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             pCall->arguments.push_back(arg);
+            if ( markPiped && arg->rtti_isMakeBlock() ) {
+                pCall->pipedCallArgument = true;
+            }
             if ( !fncall->swap_tail(pVar,pCall) ) {
                 // gc_node — don't delete Expression
                 return pCall;

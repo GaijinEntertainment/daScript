@@ -388,6 +388,7 @@ namespace das
         string                  name;
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;
+        bool                    pipedCallArgument = false;      // last argument was attached via trailing pipe
         TypeDeclPtr             aliasSubstitution = nullptr;  // only used during infer
         LineInfo                atEnclosure;
     };

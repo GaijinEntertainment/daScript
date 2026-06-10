@@ -8,4 +8,5 @@ Expression print flags
 Name of the query expression
 Arguments of the query expression
 Whether the arguments failed to infer types
+Whether the last argument was attached via trailing pipe
 Location of the enclosure where the query is used

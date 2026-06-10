@@ -97,6 +97,13 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | test_assumed_pipe.das | Assumed pipe — block invocation via `<\|` with `assume` aliases | |
+| test_piped_default_padding.das | Piped-call default padding — defaults filled in front of a trailing-piped block, overload ranking, class methods, C++ externs with fakeContext/fakeLineInfo | |
+| failed_piped_no_default.das | Piped block can't shift across a parameter without a default | **expect** `30341` |
+| failed_piped_block_mismatch.das | Piped block signature mismatch after padding | **expect** `30341` |
+| failed_piped_no_block_param.das | No block-like parameter for the piped block to land on | **expect** `30341` |
+| failed_piped_ambiguous.das | Two overloads with equal padding — ambiguous piped call | **expect** `30341` |
+| failed_piped_named_call.das | Named-argument call + piped block is a parse error | **expect** `30347` |
+| failed_piped_field.das | Field access + piped block is a parse error | **expect** `30347` |
 | test_bare_block.das | Bare lexical blocks — scoping, nesting, finally, control flow, name reuse | |
 | test_nested_data.das | Table `{}` literals as sub-data — structs, arrays, functions, tuples, variants, comprehensions, move semantics | |
 | _test_table_compat.das | Basic table literal compatibility tests | |

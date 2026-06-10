@@ -8,6 +8,7 @@ Expression print flags
 Name of the operator (unused)
 Arguments of the operator (unused)
 Whether arguments failed to infer
+Whether the last argument was attached via trailing pipe
 Location of the expression in source code
 Function associated with the expression
 Stack top position if temporary variable allocation is needed

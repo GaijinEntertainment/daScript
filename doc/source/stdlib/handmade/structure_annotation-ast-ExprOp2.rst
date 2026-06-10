@@ -8,6 +8,7 @@ Expression print flags
 Name of the call (unused)
 Arguments (unused)
 If arguments failed to infer their types
+Whether the last argument was attached via trailing pipe
 Location of the expression in source code
 Function being called, if resolved
 Stack top at the point of call, if temporary variable allocation is needed

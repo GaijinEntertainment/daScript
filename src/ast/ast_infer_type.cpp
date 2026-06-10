@@ -1643,6 +1643,7 @@ namespace das {
                             auto newCall = new ExprCall(expr->at, callName);
                             newCall->atEnclosure = expr->atEnclosure;
                             newCall->alwaysSafe = expr->alwaysSafe;
+                            newCall->pipedCallArgument = expr->pipedCallArgument;
                             if (value->rtti_isR2V()) {
                                 value = static_cast<ExprRef2Value*>(value)->subexpr;
                             }
@@ -1683,6 +1684,7 @@ namespace das {
                             }
                         }
                         if (auto mcall = makeCallMacro(expr->at, methodName)) {
+                            mcall->pipedCallArgument = expr->pipedCallArgument;
                             mcall->arguments.push_back(value);
                             for (size_t i = 2; i != expr->arguments.size(); ++i) {
                                 mcall->arguments.push_back(expr->arguments[i]);
@@ -1732,6 +1734,27 @@ namespace das {
                                                 } else {
                                                     int fnArgSize = int(fnAddr->func->arguments.size());
                                                     int fromFnArgSize = int(expr->arguments.size() - 1);
+                                                    // piped block lands on the first MATCHING block-like parameter; defaults in between are padded
+                                                    if (expr->pipedCallArgument && fromFnArgSize >= 1 && fromFnArgSize <= fnArgSize
+                                                            && expr->arguments.back()->type) {
+                                                        int pParam = fromFnArgSize - 1;
+                                                        int kParam = -1;
+                                                        for (int ai = pParam; ai < fnArgSize; ++ai) {
+                                                            if (isMatchingArgument(fnAddr->func, fnAddr->func->arguments[ai]->type, expr->arguments.back()->type, false, true)) {
+                                                                kParam = ai;
+                                                                break;
+                                                            }
+                                                            if (!fnAddr->func->arguments[ai]->init) break;
+                                                        }
+                                                        if (kParam > pParam) {
+                                                            for (int ai = kParam - 1; ai >= pParam; --ai) {
+                                                                expr->arguments.insert(expr->arguments.begin() + fromFnArgSize,
+                                                                    fnAddr->func->arguments[ai]->init->clone());
+                                                            }
+                                                            reportAstChanged();
+                                                            return Visitor::visit(expr);
+                                                        }
+                                                    }
                                                     bool allHaveInit = true;
                                                     for (int ai = fromFnArgSize; ai < fnArgSize; ++ai) {
                                                         if (!fnAddr->func->arguments[ai]->init) {

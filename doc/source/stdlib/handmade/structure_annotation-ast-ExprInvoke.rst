@@ -8,6 +8,7 @@ Expression print flags
 Name of the invoke expression
 Arguments of the invoke expression
 Whether the arguments failed to infer types
+Whether the last argument was attached via trailing pipe
 Location of the enclosure where the invoke is used
 Stack top for invoke, if applicable
 Does not need stack pointer

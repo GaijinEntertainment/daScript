@@ -1534,29 +1534,50 @@ expression_block
 expr_call_pipe_no_bracket
     : expr_call[call] expr_full_block_assumed_piped[block] {
         if ( $call->rtti_isCallLikeExpr() ) {
-            ((ExprLooksLikeCall *)$call)->arguments.push_back($block);
+            auto pCall = (ExprLooksLikeCall *) $call;
+            pCall->arguments.push_back($block);
+            pCall->pipedCallArgument = true;
+            $$ = $call;
+        } else if ( $call->rtti_isNamedCall() ) {
+            das2_yyerror(scanner,"piped block can't be combined with named arguments",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
         } else {
+            das2_yyerror(scanner,"piped block requires a function call",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
-            // gc_node — don't delete Expression
         }
     }
     | expr_method_call_no_bracket[call] expr_full_block_assumed_piped[block] {
         if ( $call->rtti_isCallLikeExpr() ) {
-            ((ExprLooksLikeCall *)$call)->arguments.push_back($block);
+            auto pCall = (ExprLooksLikeCall *) $call;
+            pCall->arguments.push_back($block);
+            pCall->pipedCallArgument = true;
+            $$ = $call;
+        } else if ( $call->rtti_isNamedCall() ) {
+            das2_yyerror(scanner,"piped block can't be combined with named arguments",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
         } else {
+            das2_yyerror(scanner,"piped block requires a function call",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
-            // gc_node — don't delete Expression
         }
     }
     | expr_field_no_bracket[call] expr_full_block_assumed_piped[block] {
         if ( $call->rtti_isCallLikeExpr() ) {
-            ((ExprLooksLikeCall *)$call)->arguments.push_back($block);
+            auto pCall = (ExprLooksLikeCall *) $call;
+            pCall->arguments.push_back($block);
+            pCall->pipedCallArgument = true;
+            $$ = $call;
+        } else if ( $call->rtti_isNamedCall() ) {
+            das2_yyerror(scanner,"piped block can't be combined with named arguments",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
         } else {
+            das2_yyerror(scanner,"piped block requires a function call",tokAt(scanner,@block),
+                CompilationError::cant_pipe);
             $$ = $call;
-            // gc_node — don't delete Expression
         }
     }
     ;
@@ -2275,7 +2296,7 @@ expr_no_bracket
     |   expr_method_call_no_bracket[subexpr]      { $$ = $subexpr; }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_full_block[subexpr]                { $$ = $subexpr; }
-    |   expr_no_bracket[fncall] LPIPE[loc] expr_no_bracket[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
+    |   expr_no_bracket[fncall] LPIPE[loc] expr_no_bracket[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc),true); }
     |   expr_no_bracket[arg] RPIPE[loc] expr_no_bracket[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
 
     |   expr_no_bracket[arg] RPIPE[loc] basic_type_declaration[type] {

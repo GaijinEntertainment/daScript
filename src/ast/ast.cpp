@@ -2663,6 +2663,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->atEnclosure = atEnclosure;
         cexpr->name = name;
+        cexpr->pipedCallArgument = pipedCallArgument;
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
