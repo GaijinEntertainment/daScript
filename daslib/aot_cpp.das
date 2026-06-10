@@ -149,7 +149,7 @@ def das_to_cppCTypeString(t : Type) {
 
 
 def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
-    if (!empty(typeDecl.dim)) return false;
+    if (typeDecl.baseType == Type.tFixedArray) return false;
     if (typeDecl.isVectorType) return true;
     match (typeDecl.baseType) {
         if (Type.tBool || Type.tInt8 || Type.tUInt8 || Type.tInt16 || Type.tUInt16 ||
@@ -303,19 +303,13 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             cfg.skip_const = true;
         }
     }
-    // dims live on the tFixedArray chain head (the .dim compat view flattens them);
-    // element kind, sub-types and annotations dispatch on the chain ELEMENT
-    var elemDecl = typeDecl
-    while (elemDecl.baseType == Type.tFixedArray && elemDecl.firstType != null) {
-        elemDecl = elemDecl.firstType
-    }
-    let baseType = elemDecl.baseType;
+    let baseType = typeDecl.baseType;
 
     return build_string() $(writer) {
-        for (_ in range(length(typeDecl.dim))) {
-            write(writer, "TDim<");
-        }
-        if (useAlias == CpptUseAlias.yes && typeDecl.flags.aotAlias && !typeDecl.alias.empty()) {
+        if (baseType == Type.tFixedArray && typeDecl.firstType != null) {
+            // natural recursion; inner chain nodes are canonically bare (qualifiers live on the head)
+            write(writer, "TDim<{describeCppTypeEx(typeDecl.firstType,DescribeConfig(cross_platform=cfg.cross_platform),useAlias)},{typeDecl.fixedDim}>")
+        } elif (useAlias == CpptUseAlias.yes && typeDecl.flags.aotAlias && !typeDecl.alias.empty()) {
             write(writer, "{typeDecl.alias}");
         } elif (baseType == Type.alias) {
             write(writer, "DAS_COMMENT(alias)");
@@ -326,104 +320,104 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             }
             write(writer, "DAS_COMMENT(auto{alias})")
         } elif (baseType == Type.tHandle) {
-            let handle_name = string(elemDecl.annotation.cppName.empty() ? elemDecl.annotation.name : elemDecl.annotation.cppName)
+            let handle_name = string(typeDecl.annotation.cppName.empty() ? typeDecl.annotation.name : typeDecl.annotation.cppName)
             write(writer, "{handle_name}")
         } elif (baseType == Type.tArray) {
-            if (elemDecl.firstType != null) {
-                let cpp_typeDecl = describeCppTypeEx(elemDecl.firstType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
+            if (typeDecl.firstType != null) {
+                let cpp_typeDecl = describeCppTypeEx(typeDecl.firstType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 write(writer, "TArray<{cpp_typeDecl}>")
             } else {
                 write(writer, "Array")
             }
         } elif (baseType == Type.tTable) {
-            if (elemDecl.firstType != null && elemDecl.secondType != null) {
-                let first_type = describeCppTypeEx(elemDecl.firstType, DescribeConfig(skip_const = true, cross_platform = cfg.cross_platform), useAlias);
-                let second_type = describeCppTypeEx(elemDecl.secondType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
+            if (typeDecl.firstType != null && typeDecl.secondType != null) {
+                let first_type = describeCppTypeEx(typeDecl.firstType, DescribeConfig(skip_const = true, cross_platform = cfg.cross_platform), useAlias);
+                let second_type = describeCppTypeEx(typeDecl.secondType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 write(writer, "TTable<{first_type},{second_type}>");
             } else {
                 write(writer, "Table");
             }
         } elif (baseType == Type.tTuple) {
-            let types = (each(elemDecl.argTypes)
+            let types = (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
                 .to_array()
                 ._fold()) |> join(",")
             if (cfg.cross_platform) {
                 write(writer, "AutoTuple<{types}>")
             } else {
-                write(writer, "TTuple<{elemDecl.tupleSize},{types}>")
+                write(writer, "TTuple<{typeDecl.tupleSize},{types}>")
             }
         } elif (baseType == Type.tVariant) {
-            let types = (each(elemDecl.argTypes)
+            let types = (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
                 .to_array()
                 ._fold()) |> join(",")
             if (cfg.cross_platform) {
                 write(writer, "AutoVariant<{types}>");
             } else {
-                write(writer, "TVariant<{elemDecl.variantSize},{elemDecl.variantAlign},{types}>")
+                write(writer, "TVariant<{typeDecl.variantSize},{typeDecl.variantAlign},{types}>")
             }
         } elif (baseType == Type.tStructure) {
-            if (elemDecl.structType != null) {
+            if (typeDecl.structType != null) {
                 // Elaborated-type-specifier (`struct X`) keeps GCC's -Wchanges-meaning
                 // happy when a field name shadows the struct name in the same scope —
                 // e.g. `struct User { TTuple<...,struct Profile> Profile; }`. Valid in
                 // every C++ context where a bare struct name is, including template args
                 // and qualified names.
-                if (elemDecl.structType._module.name.empty()) {
-                    write(writer, "struct {aotStructName(elemDecl.structType)}")
+                if (typeDecl.structType._module.name.empty()) {
+                    write(writer, "struct {aotStructName(typeDecl.structType)}")
                 } else {
-                    write(writer, "struct {aotModuleName(elemDecl.structType._module)}::{aotStructName(elemDecl.structType)}")
+                    write(writer, "struct {aotModuleName(typeDecl.structType._module)}::{aotStructName(typeDecl.structType)}")
                 }
             } else {
                 write(writer, "DAS_COMMENT(unspecified structure) ");
             }
         } elif (baseType == Type.tPointer) {
-            if (!elemDecl.flags.smartPtr) {
-                if (elemDecl.firstType != null) {
-                    write(writer, "{describeCppTypeEx(elemDecl.firstType,DescribeConfig(redundant_const=false,cross_platform=cfg.cross_platform),useAlias)} *");
+            if (!typeDecl.flags.smartPtr) {
+                if (typeDecl.firstType != null) {
+                    write(writer, "{describeCppTypeEx(typeDecl.firstType,DescribeConfig(redundant_const=false,cross_platform=cfg.cross_platform),useAlias)} *");
                 } else {
                     write(writer, "void *");
                 }
             } else {
-                let ptr_name = elemDecl.flags.smartPtrNative && cfg.use_smart_ptr ? "smart_ptr" : "smart_ptr_raw"
+                let ptr_name = typeDecl.flags.smartPtrNative && cfg.use_smart_ptr ? "smart_ptr" : "smart_ptr_raw"
                 var type_decl_name = "void"
-                if (elemDecl.firstType != null) {
-                    type_decl_name = describeCppTypeEx(elemDecl.firstType, DescribeConfig(redundant_const = false, cross_platform = cfg.cross_platform), useAlias);
+                if (typeDecl.firstType != null) {
+                    type_decl_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = false, cross_platform = cfg.cross_platform), useAlias);
                 }
                 write(writer, "{ptr_name}<{type_decl_name}>");
             }
-        } elif (elemDecl.isEnumT) {
-            if (elemDecl.enumType != null) {
-                if (elemDecl.enumType.external) {
-                    write(writer, "DAS_COMMENT(bound_enum) {elemDecl.enumType.cppName}");
-                } elif (elemDecl.enumType._module.name.empty()) {
-                    write(writer, "DAS_COMMENT(enum) {aotEnumName(elemDecl.enumType)}");
+        } elif (typeDecl.isEnumT) {
+            if (typeDecl.enumType != null) {
+                if (typeDecl.enumType.external) {
+                    write(writer, "DAS_COMMENT(bound_enum) {typeDecl.enumType.cppName}");
+                } elif (typeDecl.enumType._module.name.empty()) {
+                    write(writer, "DAS_COMMENT(enum) {aotEnumName(typeDecl.enumType)}");
                 } else {
-                    write(writer, "DAS_COMMENT(enum) {aotModuleName(elemDecl.enumType._module)}::{aotEnumName(elemDecl.enumType)}")
+                    write(writer, "DAS_COMMENT(enum) {aotModuleName(typeDecl.enumType._module)}::{aotEnumName(typeDecl.enumType)}")
                 }
             } else {
                 write(writer, "DAS_COMMENT(unspecified enumeration)")
             }
         } elif (baseType == Type.tIterator) {
-            if (elemDecl.firstType != null) {
+            if (typeDecl.firstType != null) {
                 let new_cfg = DescribeConfig(substitute_ref = cfg.substitute_ref,
                                          skip_ref = cfg.skip_ref,
                                          skip_const = cfg.skip_const,
                                          redundant_const = true,
                                          cross_platform = cfg.cross_platform)
-                write(writer, "Sequence DAS_COMMENT(({describeCppTypeEx(elemDecl.firstType,new_cfg,useAlias)}))")
+                write(writer, "Sequence DAS_COMMENT(({describeCppTypeEx(typeDecl.firstType,new_cfg,useAlias)}))")
             } else {
                 write(writer, "Sequence")
             }
         } elif (baseType == Type.tBlock || baseType == Type.tFunction || baseType == Type.tLambda) {
             let maybe_const = !typeDecl.flags.constant && baseType == Type.tBlock ? "const " : ""
             var type_name = "void"
-            if (elemDecl.firstType != null) {
-                type_name = describeCppTypeEx(elemDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
+            if (typeDecl.firstType != null) {
+                type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
             }
-            let extra_comma = !empty(elemDecl.argTypes) ? "," : "";
-            let arg_types = (each(elemDecl.argTypes)
+            let extra_comma = !empty(typeDecl.argTypes) ? "," : "";
+            let arg_types = (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias))
                 .to_array()
                 ._fold()) |> join(",")
@@ -431,13 +425,6 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        // dim is stored outer-first; C++ TDim<TDim<base,inner>,outer> emits dims
-        // inner-first, so walk dim in reverse.
-        let dim_count = length(typeDecl.dim)
-        for (i in 0..dim_count) {
-            write(writer, ",{typeDecl.dim[dim_count - 1 - i]}>")
-        }
-
         if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
@@ -968,8 +955,8 @@ class public AotDebugInfoHelper {
 };
 
 def public isLocalVec(vtype : TypeDeclPtr) {
-    //! Returns true if the type is a non-reference vector type without dimensions.
-    return empty(vtype.dim) && vtype.isVectorType && !vtype.flags.ref;
+    //! Returns true if the type is a non-reference vector type.
+    return vtype.isVectorType && !vtype.flags.ref;
 }
 
 def public describeLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; cross_platform : bool; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes; skipConst : CpptSkipConst = CpptSkipConst.no) {
@@ -2232,6 +2219,10 @@ class public CppAot : AstVisitor {
                     write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                 }
             }
+            if (field._type.flags.isNativeDim) {
+                // native C-array member: pun to the TDim view so iterate/pass/copy/safe-at consumers compile (issue #3077)
+                write(*ss, "das_reinterpret<{describeCppType(field._type, DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
+            }
             aot_previsit_get_field(field_type.annotation, ss, string(field.name));
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
@@ -2242,6 +2233,9 @@ class public CppAot : AstVisitor {
                     } else {
                         write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                     }
+                }
+                if (field._type.flags.isNativeDim) {
+                    write(*ss, "das_reinterpret<{describeCppType(field._type, DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
                 }
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
@@ -2264,12 +2258,18 @@ class public CppAot : AstVisitor {
             if (field._type.isString) {
                 write(*ss, "))");
             }
+            if (field._type.flags.isNativeDim) {
+                write(*ss, ")");
+            }
         } elif (field.value._type.baseType == Type.tPointer) {
             if (field.value._type.firstType.isHandle) {
                 aot_type_ann_get_field_ptr(field.value._type.firstType.annotation, ss, string(field.name));
                 write(*ss, " /*{field.name}*/");
                 if (field._type.isString) {
                     write(*ss, "))")
+                }
+                if (field._type.flags.isNativeDim) {
+                    write(*ss, ")");
                 }
             } elif (field.value._type.firstType.isTuple) {
                 write(*ss, ")");
@@ -2291,13 +2291,13 @@ class public CppAot : AstVisitor {
         if (expr._type.flags.aotAlias) {
             write(*ss, "das_alias<{expr._type.alias}>::from(");
         }
-        if (!(!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
+        if (!(expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
             let type_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "das_index<{type_str}>::at(");
         }
     }
     def override preVisitExprAtIndex(var expr : ExprAt?; index : ExpressionPtr) {
-        if (!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
+        if (expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
             if (expr.subexpr._type.flags.isNativeDim) {
                 write(*ss, "[");
             } else {
@@ -2323,7 +2323,7 @@ class public CppAot : AstVisitor {
     def override preVisitExprSafeAt(expr : ExprSafeAt?) {
         let isPtr : bool = expr.subexpr._type.isPointer;
         assume seT = isPtr ? expr.subexpr._type.firstType : expr.subexpr._type;
-        if ((!seT.dim |> empty() || seT.isGoodArrayType || seT.isGoodTableType)) {
+        if ((seT.baseType == Type.tFixedArray || seT.isGoodArrayType || seT.isGoodTableType)) {
             let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
             write(*ss, "{type_str}::safe_index(");
         } elif (isPtr && !seT.isVectorType) {
@@ -2915,11 +2915,11 @@ class public CppAot : AstVisitor {
             write(*ss, "(memset((void*)&{nm},0,sizeof({nm})), &{nm}");
             return
         }
-        if (!enew._type.dim |> empty()) {
+        if (enew._type.baseType == Type.tFixedArray) {
             let ptrType = fa_element(enew._type)   // the fixed-array chain wraps the pointer node; pointee is its firstType
             if (ptrType.firstType.isHandle) {
                 let type_str = describeCppType(ptrType.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
-                write(*ss, "das_new_dim_handle<{type_str},{enew._type.dim[0]},{ptrType.flags.smartPtr}");
+                write(*ss, "das_new_dim_handle<{type_str},{enew._type.fixedDim},{ptrType.flags.smartPtr}");
                 if (enew.initializer) {
                     panic("internal error. initializer for enew is not supported");
                 } else {
@@ -2927,7 +2927,7 @@ class public CppAot : AstVisitor {
                 }
             } else {
                 let type_str = describeCppType(ptrType.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
-                write(*ss, "das_new_dim<{type_str},{enew._type.dim[0]}");
+                write(*ss, "das_new_dim<{type_str},{enew._type.fixedDim}");
                 if (enew.initializer) {
                     write(*ss, ">::make_and_init(__context__,[&]() \{ return ");
                     CallFunc_preVisit(enew);

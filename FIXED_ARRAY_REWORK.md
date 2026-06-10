@@ -344,6 +344,28 @@ recursion; AOT version bump. Also fixes issue #3077 (iterate/pass/copy of a NATI
 field emits non-compiling C++ — found by Stage 0, test_interop.das AOT-excluded since) if
 not fixed earlier; re-include test_interop in the AOT glob to verify.
 Exit: tests/aot + AOT CI green, test_interop back in the AOT set.
+**IMPLEMENTED (pending review).** describeCppTypeEx: flatten-prefix loop + elemDecl
+walk + reversed-size closers replaced by one `tFixedArray` recursion arm
+(`TDim<{recurse(firstType)},{fixedDim}>`); qualifiers stay on the head (canonical form),
+unsized params emit `TDim<T,-1>` via the same `dimAuto` sentinel the compat view returned.
+Mechanical compat-read swaps: isConstRedundantForCpp / ExprAt / ExprSafeAt / ExprNew gates
+-> `baseType==tFixedArray`; `dim[0]` -> `fixedDim`; isLocalVec's dim conjunct dropped
+(isVectorType is false on FA wrappers per the 1d classifier rule). Runtime-TypeInfo
+writeDim untouched (flattened forever). ISSUE #3077 fixed emitter-side (option B): native
+C-array member access (`flags.isNativeDim`) puns to its TDim view via the existing
+`das_reinterpret<TDim<...>>::pass()` rail at the PRODUCER (both isHandle arms of
+ExprField) — one edit point fixes every consumer: iterate (das_iterator ctor), pass
+(das_arg), copy (das_copy decay static_assert), plus a 4th context the issue missed:
+safe-at (`safe_index` wants `TDim*`, got `int(*)[3]`); aot.h untouched, direct indexing
+keeps compiling through `TDim::operator[]` (unchecked, behavior preserved). test_interop:
+`options no_aot` + AOT-glob exclusion dropped, safe-at + copy-into-native subtests added.
+"AOT version bump" resolved as NOTHING TO BUMP: no AOT version constant exists in-tree;
+stale-external invalidation rides the semantic hashes Stage 1 already shifted; in-tree
+regenerates (genaot depends on daslib/*.das). Gates: 801-file generated-C++ corpus diff
+vs pre-port snapshot = ZERO content changes (28 files differ reorder-only — known
+hash-iteration emission nondeterminism; sorted-content identical), two-pass test_aot
+build green, AOT run 10134/10134 with test_interop in the set, interpreted 10795/10795,
+fixed_array 97/97, zero GC leaks both modes, format+lint clean.
 
 ### Stage 3 — JIT
 `modules/dasLLVM/daslib/llvm_jit.das` port (element type, bounds checks, loop ranges from
