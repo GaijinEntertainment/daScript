@@ -146,4 +146,4 @@ jobs:
           name: LLVM ${{ inputs.llvm_version }} prebuilt
           body_path: artifacts/SHA256SUMS
           files: artifacts/*_llvm.tar.gz
-          draft: true
+          prerelease: true
