@@ -5,10 +5,13 @@ require dastest/testing_boost public
 require daslib/flatten
 require math
 
-//! Differential net for the mad/lerp DISASSEMBLE → re-fuse arc. The fold expands `lerp`/`mad`
-//! calls into raw arithmetic (const selectors then collapse through the existing identity arms,
-//! and reassoc/CSE see through the operators); the PHASE_FUSED finishing pass re-packs surviving
-//! `a*b ± c` into `mad(a,b,c)` and the lerp shape `mad(b-a, t, a)` back into `lerp(a,b,t)`.
+//! Differential net for the mad disassemble → re-fuse arc and the DEFAULT lerp handling. The
+//! fold expands `mad` calls into raw arithmetic (reassoc/CSE see through the operators); the
+//! PHASE_FUSED finishing pass re-packs surviving `a*b ± c` into `mad(a,b,c)` and the lerp shape
+//! `mad(b-a, t, a)` back into `lerp(a,b,t)`. `lerp` calls are KEPT WHOLE by default (a native-lerp
+//! backend computes `(b-a)*t+a` in one instruction); the const-selector identities (`t=0`/`t=1`/
+//! `a==b`) fire directly on the call. The opt-in expansion path (`options _flatten_expand_lerp`)
+//! has its own corpus in test_flatten_lerp_expand.das.
 //! Exactness per twin: int twins and same-builtin-both-sides round trips compare exact; ANY
 //! float twin comparing raw interp ops against a `mad`/`lerp` builtin compares approx — the
 //! vector builtins are hardware-fused (NEON FMLA / x86 FMADD), and even the scalar C++ impls
@@ -99,13 +102,13 @@ def l_same(a : float; t : float) : float {
     return lerp(a, a, t)
 }
 
-// ----- lerp where expansion exposes a full fold: lerp(1, d, 1) -> d -----
+// ----- lerp with a const selector hitting the t=1 arm directly on the call -----
 [flatten]
 def l_const1(d : float) : float {
     return lerp(1.0, d, 1.0)
 }
 
-// ----- lerp round trip: expand -> nothing folds -> refuse to the same call -----
+// ----- plain lerp: survives as the same call (no expansion by default) -----
 [flatten]
 def l_round(a : float; b : float; t : float) : float {
     return lerp(a, b, t)
@@ -127,7 +130,7 @@ def l_vec_manual(a : float3; b : float3; t : float) : float3 {
     return (b - a) * t + a
 }
 
-// ----- uniform lerp bounds: the preshader split beats the lerp node (mad(_preshader_, x, G_A)) -----
+// ----- uniform lerp bounds: the call survives whole, bounds ride as const operands -----
 [flatten]
 def p_lerp(x : float) : float {
     return lerp(G_A, G_B, x)

@@ -742,11 +742,19 @@ def public flatten_no_fast_math : bool {
 }
 
 [macro_function]
-def public flatten_fold(var func : FunctionPtr; no_fast_math : bool = false) : bool {
+def public flatten_expand_lerp : bool {
+    //! True when the COMPILING module sets `options _flatten_expand_lerp = true` — opt-in lerp
+    //! disassembly for backends WITHOUT a native lerp instruction (a native-lerp ISA only loses
+    //! nodes to it). COMPILE-TIME ONLY: patch code reads it once, runtime tools pass their flag.
+    return compiling_program()._options |> find_arg("_flatten_expand_lerp") ?as tBool ?? false
+}
+
+[macro_function]
+def public flatten_fold(var func : FunctionPtr; no_fast_math : bool = false; expand_lerp : bool = false) : bool {
     //! Post-infer fold pass (delegates to `fold_body`): collapse `const ? a : b`, fold identities,
     //! drop pure self-assigns. Run AFTER re-inference; returns true if anything changed. Compile-time
-    //! callers pass `flatten_no_fast_math()` to honor the module option; the default is fast-math ON.
-    return fold_body(func, no_fast_math)
+    //! callers pass `flatten_no_fast_math()` / `flatten_expand_lerp()` to honor the module options.
+    return fold_body(func, no_fast_math, expand_lerp)
 }
 
 [macro_function]
@@ -924,7 +932,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // Cycle 2+: fold the inferred twin (const selects, algebraic identities, pure self-
             // assigns), re-infer if anything changed. Iterate to a fixpoint — fold and the typer's
             // re-infer const-fold are mutually-enabling, so one pass isn't enough.
-            let folded = flatten_fold(twin, flatten_no_fast_math())
+            let folded = flatten_fold(twin, flatten_no_fast_math(), flatten_expand_lerp())
             set_flatten_phase(func, PHASE_FOLDED)
             if (folded) {
                 astChanged = true

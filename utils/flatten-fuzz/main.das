@@ -117,7 +117,7 @@ def gen_expr(var g : Gen&; scope : array<Var>; depth : int) : string {
         let e = gen_expr(g, scope, depth - 1)
         return "({op} {e})"   // space: avoid `--`/`-~` token glue on negative literals
     } elif (k < 90) {
-        // exercises the lerp/mad disassemble -> re-fuse arc (int mad is exact, so the
+        // exercises the mad disassemble -> re-fuse arc (int mad is exact, so the
         // differential oracle rides free; strict mode checks the fusion residual arms)
         let a = gen_expr(g, scope, depth - 1)
         let b = gen_expr(g, scope, depth - 1)
