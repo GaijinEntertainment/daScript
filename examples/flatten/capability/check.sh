@@ -53,6 +53,14 @@
 #  13. cap_fold_reassoc.shader (scattered const chain `0.3 + gain + 0.4`) -> `gain + 0.7`.
 #      The typer can't fold non-adjacent consts and never reassociates; flatten does (fast-math),
 #      gathering them so exactly 1 add survives (not the 2 the source spells), + 1 base*k mul.
+#
+#  14. cap_preshader.shader (uniform `factor` = props-only) -> hoisted to a per-draw `_preshader_`
+#      let. Uniform work the general compiler runs per-pixel; flatten routes it to the preshader so
+#      the per-pixel graph is only `base * factor`. Asserted on the --das dump (per-draw routing is
+#      not a node-count change).
+#
+#  15. cap_cse.shader (repeated `dot(c, LUMA)`) -> one shared node. Neither the compiler nor the
+#      backend CSEs; flatten value-numbers the body and shares the repeat, so 1 dot node (not 2).
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -258,6 +266,38 @@ if [[ "$errs" -eq 0 && "$adds" -eq 1 && "$muls" -eq 1 ]]; then
     echo "   ok — compiles ($nodes nodes), 1 add (gain+0.7, consts gathered), 1 mul (base*k)"
 else
     echo "   FAIL — errors=$errs adds=$adds muls=$muls (expected 1 add, 1 mul)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "14. cap_preshader.shader (uniform factor -> hoisted to a per-draw _preshader_ let)"
+# `factor` reads only props (brightness/tint) + literals, so it is uniform: identical every pixel.
+# flatten hoists the whole subtree to a `_preshader_` let the backend routes to the per-draw
+# preshader, leaving only `base * factor` per-pixel. Asserted on the --das dump (preshader routing
+# is per-draw vs per-pixel, not a node-count change).
+out="$(FLATTEN_DUMP_DAS=1 compile "$here/cap_preshader.shader")"
+pre="$(echo "$out" | grep -c 'let _preshader_')"
+errs="$(echo "$out" | grep -ci error)"
+if [[ "$errs" -eq 0 && "$pre" -ge 1 ]]; then
+    echo "   ok — $pre _preshader_ let(s) hoisted; per-pixel body is only base * factor"
+else
+    echo "   FAIL — errors=$errs preshader_lets=$pre (expected >=1)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
+echo "15. cap_cse.shader (repeated dot(c,LUMA) -> one shared node)"
+out="$(compile "$here/cap_cse.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+dots="$(echo "$out" | grep -c 'dot')"
+errs="$(echo "$out" | grep -ci error)"
+# `dot(c, LUMA)` is spelled twice; neither the compiler nor the backend CSEs, so without flatten
+# this is 2 dot nodes. flatten value-numbers the body and shares the repeat into one `_cse_` let,
+# so exactly ONE dot node reaches the backend.
+if [[ "$errs" -eq 0 && "$dots" -eq 1 ]]; then
+    echo "   ok — compiles ($nodes nodes), 1 dot node (the repeat was CSE'd)"
+else
+    echo "   FAIL — errors=$errs dots=$dots (expected 1)"
     echo "$out" | grep -i error | head
     fail=1
 fi

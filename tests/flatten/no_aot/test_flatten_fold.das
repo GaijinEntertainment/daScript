@@ -61,6 +61,8 @@ def private check_unit(t : T?; proj, path : string) : int {
                         checked ++
                         let r <- flatten_fold_residuals(func)
                         t |> equal(length(r), 0, "{base_name(path)}::{func.name}: {r}")
+                        let optr <- flatten_opt_residuals(func)
+                        t |> equal(length(optr), 0, "{base_name(path)}::{func.name} (opt): {optr}")
                     }
                 }
             }
@@ -79,6 +81,10 @@ def test_flatten_fold(t : T?) {
     t |> run("const-identity corpus folds clean (test_flatten_const.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_const.das")
         t |> success(n >= 70, "expected >=70 twins, checked {n}")
+    }
+    t |> run("optimize corpus folds clean (test_flatten_opt.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_opt.das")
+        t |> success(n >= 7, "expected >=7 twins, checked {n}")
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
         let proj = "{root}/examples/flatten/flatten_shaders.das_project"

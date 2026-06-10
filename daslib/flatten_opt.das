@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = true
+options _comment_hygiene = true
 
 module flatten_opt shared private
 
@@ -22,13 +23,8 @@ def private is_flat_temp(name : das_string) : bool {
 }
 
 // ===== Dead-store elimination =====
-//
-// The lowered body is straight-line (no branches), so liveness is a single
-// backward scan. We only ever touch flatten-introduced `__flat_*` locals — never
-// user locals or globals (a `g_out = ...` is observable output, never "dead").
-// A `__flat_*` store is removed when its target is not live afterward AND its RHS
-// is side-effect-free / non-faulting (no call, index, or division) — which is
-// exactly the live-mask kills (`__flat_live = false`, per-frame mask updates).
+// Straight-line body → liveness is one backward scan. Touches only `__flat_*` locals (never
+// user locals/globals); drops a store whose target is dead afterward and whose RHS is pure.
 
 class private FlatScan : AstVisitor {
     reads : table<uint64>
@@ -69,13 +65,8 @@ def private scan_flat(var e : ExpressionPtr; var reads : table<uint64>; var risk
 }
 
 // ===== Boolean const-fold of live masks =====
-//
-// When a function has no early returns, `__flat_live` is never reassigned, so it is
-// constant `true` — and so is every per-frame `__flat_live_N` derived from it. copy_prop
-// inlines such a single-def mask, then `fold_stmt` collapses the selects it exposes
-// (`true ? a : b → a`, `true && x → x`), unwinding the whole mask scaffolding into clean
-// dataflow. fold_const / const_bool / fold_stmt are copy_prop's folding helpers; they only
-// simplify literal const-bools, never user/global vars.
+// With no early return `__flat_live` stays constant `true`; copy_prop inlines the single-def
+// mask and fold_stmt collapses the selects it exposes (`true ? a:b → a`), unwinding the scaffold.
 
 def private const_bool(e : ExpressionPtr; var val : bool&) : bool {
     if (e == null) return false
@@ -183,15 +174,8 @@ def private fold_stmt(var s : ExpressionPtr; constmap : table<uint64; bool>) : E
 }
 
 // ===== Copy propagation of single-assignment flatten temps =====
-//
-// A `__flat_*` temp with exactly one definition (a decl-init, or a no-init decl
-// plus a single store) and whose source reads no later-reassigned variable is a
-// pure forward copy: inline its source at every use and drop the temp. This folds
-// the output scaffold away — `__flat_ret = c; return __flat_ret` → `return c`, and
-// `var __flat_arg = x` → `x` — so a branchless shader flattens byte-identical to
-// its source (the parity goal). Substitution is delegated to `apply_template`
-// (peel-aware, clones the source per hit). A risky source (call / index / divide)
-// is inlined only at a single use, never duplicated.
+// A single-def `__flat_*` temp whose source reads no later-reassigned var is a pure forward copy:
+// inline the source at every use, drop the temp (a risky call/index/divide source only at one use).
 
 class private FlatVarRef : AstVisitor {
     name  : string
@@ -255,10 +239,9 @@ def private scan_src(var e : ExpressionPtr; var reads : table<uint64>; var risky
     }
 }
 
-// Per-pass reference index: name-hash -> the statement indices that reference it
-// (deduped per statement) plus the total occurrence count. Built once per copy_prop
-// pass in a single walk, replacing the old per-candidate count_refs sweep that made
-// the pass O(n^3) on large bodies (one full-body walk per candidate per fold-restart).
+// Per-pass reference index: name-hash -> referencing statement indices (deduped) + total count.
+// Built once per copy_prop pass, replacing the old per-candidate count_refs sweep that was
+// O(n^3) on large bodies.
 class private FlatUsesBuilder : AstVisitor {
     nameUses : table<uint64; array<int>>
     nameCount : table<uint64; int>
@@ -283,10 +266,9 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
     while (changed) {
         changed = false
         let n = length(out)
-        // Precompute once per pass (not per candidate): every store target's indices,
-        // and a name -> (referencing statements, occurrence count) index. A source
-        // reading var V is only unsafe if V is reassigned BETWEEN this temp's def and a
-        // use — a reassignment fully before the def leaves the captured value intact.
+        // Precompute once per pass: each store target's indices + a name -> (ref statements, count)
+        // index. A source reading V is unsafe only if V is reassigned BETWEEN this temp's def and a
+        // use (a reassignment fully before the def leaves the captured value intact).
         var storeIdx : table<uint64; array<int>>
         for (j in range(n)) {
             if (out[j] is ExprCopy && (out[j] as ExprCopy).left is ExprVar) {
@@ -309,10 +291,9 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
             if (length(lc.variables) != 1 || !is_flat_temp(lc.variables[0].name)) continue
             let hk = hash(lc.variables[0].name)
             let nStores = key_exists(storeIdx, hk) ? length(storeIdx[hk]) : 0
-            // Single definition: decl-init + no stores, OR no-init decl + one store. Use the
-            // ORIGINAL source (no clone) — apply_template clones it per use, and the original
-            // lives in out[k]/out[si], reclaimed when we drop them. Cloning here would orphan a
-            // copy on every non-folding candidate (re-examined each while-restart → millions).
+            // Single definition: decl-init + no stores, OR no-init decl + one store. Use the ORIGINAL
+            // source (no clone) — apply_template clones per use; pre-cloning would orphan a copy on
+            // every non-folding candidate (re-examined each while-restart).
             var src : ExpressionPtr = null
             var si = -1
             if (lc.variables[0].init != null && nStores == 0) {
@@ -464,19 +445,8 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 }
 
 // ===== SSA-rename of reassigned user locals =====
-//
-// flatten's body is straight-line (if → ?:, loops unrolled, no user calls), so a
-// reassigned local has a single linear chain of definitions — no control-flow merges,
-// hence no phi nodes. Renaming each write to a fresh version (`acc = acc + 3` →
-// `var __ssa_acc_2 = __ssa_acc_1 + 3`) makes every local single-definition, which lets the
-// post-infer const-prop (fold_body) fold the chain through the existing single-def
-// path. We rename only user locals that are declared WITH an initializer (single-var)
-// and reassigned at least once — never `__flat_*` masks (folded by copy_prop),
-// globals (observable), or params (not declared here). A self-referential select
-// (`acc = c ? e : acc`) resolves correctly: its read picks the PRIOR version. The `__ssa_`
-// prefix is compiler-reserved (a user can't declare `__`-names), so the versions never
-// collide with a user local — and it is disjoint from `__flat_`, so is_flat_temp still
-// classifies them as user locals (folded here, not by the mask/copy/dse passes).
+// Straight-line body → a reassigned local is a linear def-chain (no phi); renaming each write to a
+// fresh single-def `__ssa_` version lets post-infer const-prop fold the chain (declared-with-init only).
 
 def private rename_reads(var e : ExpressionPtr; current : table<string; string>) : ExpressionPtr {
     if (e == null) return null
@@ -554,29 +524,16 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
 class private FoldVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // A fully-constant arithmetic ExprOp2 the typer left unfolded — it folds scalar const
-        // arithmetic during re-infer (`2+3→6`) but leaves vector const arithmetic
-        // (`float3(2)+float3(3)`), which survives here and is what reassoc's gathered const
-        // groups become. Fold to one literal via the evaluator (mirrors the visitExprCall arm).
-        // eval_to_const_supported is null-safe, so an un-inferred node (the group reassoc just
-        // built this pass) is skipped and folded on the next re-infer cycle.
+        // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
+        // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
+        // to one literal via the evaluator; an un-inferred node is skipped (folded next re-infer).
         if (is_all_const(that) && eval_to_const_supported(that._type)) {
             var folded = eval_to_const(that)
             if (folded |> is_expr_const()) { changed = true; return folded }
         }
-        // Algebraic identities over the scalar + vector (float/int/uint) family. Integer
-        // arms are exact (two's-complement, `e*-1==-e` even at INT_MIN); float arms fire
-        // under flatten's fast-math assumption (every consumer is a shader backend) — `x*1`/
-        // `x*-1` are exact for all floats, while `x*0`/`x+0`/`x-0` are lossy (NaN·0=NaN;
-        // +0.0 flips -0.0) but enabled by decision. `*1`/`*-1` RETURN the non-const operand
-        // and so gate on `same_base_type(that, returned)`: scalar*vector broadcast IS valid
-        // (`s:float * float3(1)` is `float3(s,s,s)`, NOT `s`), so dropping the const must not
-        // mistype to the scalar. `+`/`-` need NO such gate — vector±scalar does not compile,
-        // so a valid `+`/`-` always has same-type operands and the non-const operand already
-        // carries the result type; omitting the gate also lets a freshly-inlined (un-inferred,
-        // hence `_type == null`) `v + 0` fold without waiting on a re-infer. `*0` DROPS an
-        // operand (purity gate) and returns a zero of the RESULT type via zero_const_of — so
-        // `v * 0.0` / `v * float3(0)` fold to a width-matched vector zero with no mistype.
+        // Algebraic identities over the scalar + vector (float/int/uint) family, under fast-math.
+        // `*1`/`*-1` return the non-const operand and gate on `same_base_type` (scalar*vector
+        // broadcast must not mistype to scalar); `*0` returns a RESULT-typed zero via zero_const_of.
         if (that.op == "*") {
             if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
             if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
@@ -647,11 +604,9 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
-        // A fully-constant, side-effect-free call — a vector constructor (`float3(0)`
-        // stays `float3(0f,0f,0f)`, never a const) or a pure builtin over const args —
-        // folds to a single const literal. The typer folds scalar const ARITHMETIC
-        // during re-infer (`2*3 → 6`) but leaves const CONSTRUCTORS; this collapses
-        // them. Post-order, so const-folded args are visible here.
+        // A fully-constant, side-effect-free call (vector constructor or pure builtin over const
+        // args) folds to one literal. The typer folds const ARITHMETIC but leaves const
+        // CONSTRUCTORS; this collapses them. Post-order, so const-folded args are visible.
         if (is_all_const(that)) {
             var folded = eval_to_const(that)
             if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
@@ -663,11 +618,9 @@ class private FoldVisitor : AstVisitor {
     }
 }
 
-// A scalar zero/default literal: `default<T>` for every workhorse scalar is the
-// zero bit-pattern (int 0, float 0.0, bool false, …). A `var x = <this>` initializer
-// is therefore redundant with daslang's guaranteed zero-init of a bare `var x : T`,
-// so it can be dropped. Non-scalar inits (vector/struct ctors like `float3(0)`) are
-// NOT literals here and are left alone — conservative by design.
+// A scalar zero/default literal (int 0, float 0.0, bool false, …). A `var x = <this>` init is
+// redundant with daslang's zero-init of a bare `var x : T`, so it can be dropped. Non-scalar
+// inits (vector/struct ctors) are not literals here and left alone.
 def private is_zero_const(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e is ExprConstInt) return (e as ExprConstInt).value == 0
@@ -723,10 +676,9 @@ def private is_real_val(e : ExpressionPtr; want : double) : bool {
     return false
 }
 
-// An all-lanes-equal float vector const (ExprConstFloat2/3/4) equal to `want`. Extends the
-// scalar is_real_val so the float identities fire for vector-const operands too
-// (`v * float3(1)`, `v + float3(0)`, …). `want` is exact (0/1/-1) so the widening compare
-// is exact.
+// An all-lanes-equal float vector const (ExprConstFloat2/3/4) equal to `want`. Extends scalar
+// is_real_val so the float identities fire for vector-const operands (`v * float3(1)`); `want`
+// is exact (0/1/-1) so the widening compare is exact.
 def private is_real_vec_val(e : ExpressionPtr; want : double) : bool {
     if (e == null) return false
     if (e is ExprConstFloat2) { let v = (e as ExprConstFloat2).getValue; return double(v.x) == want && double(v.y) == want }
@@ -782,13 +734,9 @@ def private is_bool_val(e : ExpressionPtr; want : bool) : bool {
     return false
 }
 
-// True if `e` is an op2 that FoldVisitor's identity arms would have rewritten away:
-// `x*1`/`1*x`/`x*-1`/`-1*x`, `x+0`/`0+x`, `x-0`/`0-x` (scalar OR all-lanes-equal vector
-// const). MIRRORS the fold arms exactly: the `*1`/`*-1` arms carry a `same_base_type` gate
-// (scalar*vector broadcast is valid, so `s * float3(1)` is correctly NOT folded and must not
-// be flagged); `+`/`-` have no gate (vector±scalar does not compile, so they always fold).
-// `x*0` is excluded — it carries a purity gate, so a survivor is not a miss. The typer never
-// folds a runtime-operand identity, so a survivor here is a genuine const-fold miss.
+// True if `e` is an op2 FoldVisitor's identity arms would rewrite away (`x*1`/`x*-1`/`x+0`/`x-0`,
+// scalar or vector const). MIRRORS the fold arms exactly — `*1`/`*-1` carry the `same_base_type`
+// gate, `+`/`-` don't, `x*0` is excluded (purity-gated, so a survivor isn't a miss).
 def public is_unfolded_identity_op2(e : ExprOp2?) : bool {
     if (e == null) return false
     if (e.op == "*") {
@@ -810,10 +758,9 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// A fresh zero literal of `t` (the RESULT type of an `X * 0`), over the numeric scalar +
-// vector family; null otherwise (→ the fold bails). Keying on the result type — not the
-// zero operand's type — is what lets a scalar-broadcast `v:float3 * 0.0` and a vector-const
-// `v * float3(0)` both fold to a width-matched `float3(0)` with no float3→float mistype.
+// A fresh zero literal of `t` (the RESULT type of `X * 0`), over the numeric scalar + vector
+// family; null otherwise. Keying on the result type (not the zero operand's) lets both
+// `v:float3 * 0.0` and `v * float3(0)` fold to a width-matched `float3(0)` with no mistype.
 def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
     let bt = t.baseType
@@ -839,11 +786,9 @@ def private zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     return null
 }
 
-// True if `e` is built only from const literals and pure ops/builtins over them — NO
-// variable/global reference and NO user call anywhere. eval_single_expression runs in a
-// bare context with no globals (a global read dereferences null) and no user functions
-// linked (a user call can't be evaluated), so the tree must bottom out in literals and
-// pure builtins. Conservative: an unknown node kind returns false.
+// True if `e` is built only from const literals and pure ops/builtins — no var/global read,
+// no user call. eval_single_expression runs in a bare context (no globals, no user functions),
+// so the tree must bottom out in literals and pure builtins. Unknown node → false.
 def public is_all_const(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e |> is_expr_const()) return true
@@ -880,12 +825,9 @@ def public eval_to_const_supported(t : TypeDeclPtr) : bool {
         bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4)
 }
 
-// True if every operator / call node in the subtree carries a settled type. eval_single_expression
-// builds sim-nodes assuming inference is complete — an un-inferred operator node has a null `.func`
-// and crashes the simulator. Const literals need no inference (exempt); a var would already have
-// failed is_all_const. Guards eval against a not-yet-re-inferred subtree — e.g. an is_all_const
-// tree whose inferred root has an operand the fold replaced this same pass with a fresh (un-typed)
-// const-arithmetic node.
+// True if every operator/call node in the subtree carries a settled type. eval_single_expression
+// assumes inference is complete (an un-inferred operator has null `.func` → crash), so this guards
+// eval against a not-yet-re-inferred subtree (a fold-built operand under an inferred all-const root).
 def private fully_inferred(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e is ExprOp1) {
@@ -943,14 +885,8 @@ def private eval_to_const(var e : ExpressionPtr) : ExpressionPtr {
 }
 
 // ===== Generalized const-propagation of single-def user locals =====
-//
-// After SSA-rename every user local is single-definition, so a `var x = <const>` can
-// be substituted at all of x's uses and dropped. Because flatten linearized the body,
-// one forward pass folds a whole accumulator chain: each link's init is substituted
-// with the prior constants and evaluated exactly via the shared runtime evaluator
-// (types are present post-infer), so `var __ssa_acc_1=5; var __ssa_acc_2=__ssa_acc_1+3; …` collapses
-// to a single constant in place — no re-infer leg per link. Masks (`__flat_*`) are folded
-// by copy_prop (pre-infer); globals/fields are never substituted (only their read operands).
+// Post-SSA-rename every user local is single-def, so a `var x = <const>` substitutes at all uses and
+// drops. One forward pass folds a whole accumulator chain; masks are copy_prop's job, globals never.
 
 def private reads_any(var e : ExpressionPtr; names : table<string; ExpressionPtr>) : bool {
     for (nm in keys(names)) {
@@ -963,9 +899,7 @@ def private subst_consts(var e : ExpressionPtr; constmap : table<string; Express
     if (e == null) return null
     var tmpl : Template
     for (nm in keys(constmap)) {
-        // ?[] yields a const view (non-inserting; keys() locks the table) but the pointed-to
-        // node is genuinely mutable. apply_template clones it per use, so const-strip the raw
-        // pointer instead of pre-cloning (which would orphan a copy every substitution).
+        // ?[] yields a const view; const-strip the raw pointer (apply_template clones per use anyway).
         var ex = unsafe(reinterpret<Expression? -const>(constmap?[nm] ?? null))
         tmpl |> replaceVariable(nm, ex)
     }
@@ -987,29 +921,23 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
     var constmap : table<string; ExpressionPtr>
     var i = 0
     while (i < length(blk.list)) {
-        // Substitute already-known constants into this statement's reads (the next
-        // link's init, a final `g_out = acc`, a `return acc`, …).
+        // Substitute already-known constants into this statement's reads.
         if (!empty(constmap) && reads_any(blk.list[i], constmap)) {
             blk.list[i] = subst_consts(blk.list[i], constmap)
             changed = true
         }
-        // A single-def user local whose (now-substituted) init is literal-only folds to
-        // one constant and joins the map for the rest of the pass.
+        // A single-def user local with a now-literal init folds to a constant and joins the map.
         var s = blk.list[i]
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             var lc = s as ExprLet
             if (!is_flat_temp(lc.variables[0].name) && lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
                 var oldInit = lc.variables[0].init
                 if (oldInit |> is_expr_const()) {
-                    // Already a literal — e.g. a fold-produced `0f` whose `0*s` collapsed.
-                    // eval_to_const bails on its null _type, but it IS the constant; map it
-                    // directly so its uses inline (revealing identities like `v + 0`) and the
-                    // dead decl drops. Without this the local survives to the backend.
+                    // Already a literal (e.g. a fold-produced `0f`): map it directly so its uses inline.
                     constmap["{lc.variables[0].name}"] = oldInit
                     changed = true
                 } else {
-                    // A const expression (`2.0 * 3.0`): eval to its literal. eval_single_expression
-                    // only READS the tree (throwaway context), so fold the init in place.
+                    // A const expression (`2.0 * 3.0`): eval to its literal, folding the init in place.
                     var folded = eval_to_const(oldInit)
                     if (folded |> is_expr_const() && folded != oldInit) {
                         lc.variables[0].init = folded
@@ -1050,27 +978,17 @@ def private const_prop_locals(var blk : ExprBlock?) : bool {
 }
 
 // ===== Constant reassociation =====
-//
-// Gather scattered constants in associative/commutative `+`/`-` and `*` chains into one
-// adjacent group: `0.5 + a + b + 0.6` → `a + b + (0.5 + 0.6)`, `2.0 * a * 3.0` → `a * (2.0 * 3.0)`.
-// Reassoc only REORDERS (structural) — the FoldVisitor all-const arm + the typer's re-infer then
-// collapse the grouped const sub-expression to one literal. The typer folds only ADJACENT const
-// arithmetic and never reassociates (float rounding); flatten assumes fast-math, so it can.
-// Integer `+`/`*` are exact; integer `/` is non-associative (no `/` here — reciprocal grouping
-// is a follow-up). Const terms are side-effect-free (is_all_const), so gathering them to the tail
-// is unconditional; the var terms are additionally sorted into a canonical (describe) order so
-// commutative chains converge to one form for a later CSE — gated on every var term being
-// side-effect-free, so a side-effecting term's evaluation order is never observably reordered.
+// Gather scattered consts in `+`/`-`/`*` chains into one adjacent group (`0.5 + a + 0.6` → `a +
+// (0.5+0.6)`) for the all-const arm to fold; also sort var terms into a canonical order (for a later CSE).
 
 struct private ReTerm {
-    neg : bool          //!< additive term is subtracted (always false for the `*` monoid in v1)
+    neg : bool          // subtracted (additive chains); always false for the `*` monoid
     e : ExpressionPtr
 }
 
 // Flatten a maximal additive chain into signed terms (left-to-right = source order). Descends
-// `+`/`-` ExprOp2 and unary `-`; everything else (vars, calls, `*`/`/` sub-exprs, const literals)
-// is a leaf. No same-base-type gate: vector±scalar does not compile, so an additive chain is
-// always same-type.
+// `+`/`-` ExprOp2 and unary `-`; everything else is a leaf. No same-base-type gate (vector±scalar
+// does not compile, so an additive chain is always same-type).
 def private collect_add(var e : ExpressionPtr; neg : bool; var terms : array<ReTerm>) {
     if (e == null) return
     if (e is ExprOp2) {
@@ -1130,11 +1048,9 @@ def private already_grouped(that : ExprOp2?; addOp : string) : bool {
     return that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
 }
 
-// Build a left-leaning `<t0> op <t1> op …` tree from non-empty `terms`, REUSING the operand
-// nodes (each leaf appears once in the flattened term list, so it lands in exactly one slot of
-// the rebuilt tree; the old chain wrappers are dropped when the visitor replaces `that` with the
-// result — the same move-not-clone pattern FoldVisitor uses returning `that.left`). A negative
-// first term becomes a unary `-`; subsequent terms pick addOp/subOp by sign.
+// Build a left-leaning `<t0> op <t1> …` tree from non-empty `terms`, REUSING the operand nodes
+// (each leaf appears once, so it lands in one slot; the old chain wrappers drop when the visitor
+// replaces `that`). A negative first term becomes unary `-`; later terms pick addOp/subOp by sign.
 def private build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp : string) : ExpressionPtr {
     var acc = terms[0].neg ? negate(terms[0].e) : terms[0].e
     for (i in range(1, length(terms))) {
@@ -1154,14 +1070,9 @@ def private vars_sorted(vars : array<ReTerm>) : bool {
     return true
 }
 
-// Partition `terms` into var/const and rebuild as `<vars> addOp <consts>` (consts to the tail).
-// Two canonicalizations: gather ≥2 scattered consts into one group (folded by the all-const arm /
-// re-infer), and SORT the var terms into a structural (describe) order so commutative chains
-// converge to one form (`b + a` and `a + b` both → `a + b`) — which lets a later CSE pass match
-// them. Sorting reorders var terms relative to each other, so it is gated on every var term being
-// side-effect-free (shaders are pure, so this always holds there); const terms are pure, so the
-// gather is unconditional. Returns null when neither canonicalization applies, or the chain is
-// all-const (the all-const ExprOp2 arm folds that).
+// Partition `terms` into var/const and rebuild as `<vars> addOp <consts>`. Two canonicalizations:
+// gather ≥2 scattered consts into one group, and sort the var terms into a canonical order (for a
+// later CSE) — the sort gated on side-effect freedom. Null when neither applies / the chain is all-const.
 def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : string) : ExpressionPtr {
     var vars : array<ReTerm>
     var consts : array<ReTerm>
@@ -1226,10 +1137,9 @@ def private count_terms(e : ExpressionPtr; addOp : string; var nv : int&; var nc
     }
 }
 
-// True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered const terms, not already
-// grouped. The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's
-// exact gate through this, so it flags only genuine misses — never a chain reassoc legitimately
-// leaves alone (single const, already grouped, no var).
+// True if reassoc WOULD gather this chain: ≥1 var term, ≥2 scattered consts, not already grouped.
+// The fold-completeness oracle (flatten.das FoldResidualVisitor) mirrors the transform's exact gate
+// through this, so it flags only genuine misses.
 def public has_scattered_consts(that : ExprOp2?) : bool {
     if (that == null) return false
     var nv = 0
@@ -1268,17 +1178,9 @@ class private ReassocVisitor : AstVisitor {
 }
 
 def public fold_body(var func : FunctionPtr) : bool {
-    //! Post-infer fold over a flattened body: const-propagate single-def user locals
-    //! (accumulator chains → a constant), reassociate scattered constants in `+`/`-`/`*`
-    //! chains into one adjacent group (folded by the all-const arm / re-infer), collapse
-    //! `const ? a : b` to the live arm, fold algebraic / boolean identities and const
-    //! constructors, drop the side-effect-free `lhs = lhs` self-assigns a folded false-select
-    //! leaves behind, and strip redundant zero/default inits (`var acc = 0` → `var acc : int`). Call
-    //! AFTER re-inference (conditions must be `ExprConstBool`, types must be settled).
-    //! A SINGLE pass — multi-step cascades that route through re-inference (a folded
-    //! `0*s → 0` makes a local const, which the next re-infer settles so it can be
-    //! const-propagated, revealing a fresh identity) are driven to a fixpoint by the
-    //! caller's re-infer loop (see [flatten]'s patch and the [pixel_shader] patch).
+    //! Post-infer fold over a flattened body: const-propagate single-def locals, reassociate
+    //! scattered consts, collapse `const ? a : b`, fold algebraic/boolean identities + const
+    //! constructors, drop pure self-assigns, strip zero inits. SINGLE pass (caller's re-infer loops it).
     if (!(func.body is ExprBlock)) return false
     var changed = const_prop_locals(func.body as ExprBlock)
     // Reassociate BEFORE the fold — gather scattered consts into one adjacent group so the
@@ -1320,14 +1222,9 @@ def public fold_body(var func : FunctionPtr) : bool {
         }
         si --
     }
-    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`,
-    // the bare decl already zero-inits). DEFERRED to a converged pass: a const-folded
-    // scalar local (`let k = 0f`) must keep its init until const_prop_locals propagates
-    // it into the local's uses (`v + k → v + 0 → v`); nulling it earlier strands the use
-    // as a non-foldable read of a now-uninitialized local. So strip only when const-prop
-    // + fold + self-assign-drop made no other change this pass — by then const-prop has
-    // run to completion. Sets changed=true, so the caller re-infers after the strip
-    // (the strip mutates decls; the next quiet pass then converges).
+    // Cleanup 2 — strip a redundant zero/default init (`var acc = 0` → `var acc : int`). DEFERRED
+    // to a converged pass: a const-folded local must keep its init until const_prop_locals
+    // propagates it into uses; nulling it earlier strands the use. Sets changed → caller re-infers.
     if (!changed) {
         si = length(blk.list) - 1
         while (si >= 0) {
@@ -1343,6 +1240,767 @@ def public fold_body(var func : FunctionPtr) : bool {
             }
             si --
         }
+    }
+    return changed
+}
+
+// ===== Preshader extraction + CSE =====
+// Two pure-AST passes on the converged body: hoist maximal globals-only subtrees to top-of-body
+// `_preshader_N` lets, then CSE-dedup repeated subtrees. See flatten.rst / the plan for the why.
+
+def private psh_simple_name(fullname : string) : string {
+    let t1 = find(fullname, 96, 0)
+    if (t1 < 0) return fullname
+    let t2 = find(fullname, 96, t1 + 1)
+    let endp = t2 < 0 ? length(fullname) : t2
+    return slice(fullname, t1 + 1, endp)
+}
+
+def private psh_reserved(name : das_string) : bool {
+    return name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
+}
+
+// True if the subtree carries a graph node (operator or call) — i.e. hoisting it saves per-pixel
+// work. A bare var / const / member access alone is trivial (no node), so it is inlined as an alias
+// rather than hoisted.
+def private psh_has_compute(e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e is ExprRef2Value) return psh_has_compute((e as ExprRef2Value).subexpr)
+    if (e is ExprOp1 || e is ExprOp2 || e is ExprOp3 || e is ExprCall) return true
+    if (e is ExprField) return psh_has_compute((e as ExprField).value)
+    if (e is ExprSwizzle) return psh_has_compute((e as ExprSwizzle).value)
+    if (e is ExprCast) return psh_has_compute((e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return psh_has_compute((e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return psh_has_compute(o.subexpr) || psh_has_compute(o.index)
+    }
+    return false
+}
+
+struct private PEX {
+    paramNames : table<string>
+    localColor : table<string; bool>    // local name -> uniform (preshader-eligible)?
+    mutableVars : table<string>         // reassigned names (incl. written globals) — never uniform
+    top : array<ExpressionPtr>          // hoisted `_preshader_N` lets, in dependency order
+    dedup : table<string; string>       // describe(init) -> preshader name
+    rename : table<string; ExpressionPtr>   // old local name -> replacement (alias inline / preshader ref)
+    counter : int
+    changed : bool
+}
+
+// Uniform = depends only on globals + literals, no barrier (sampler/noise) call. Leaf rule: a param
+// read is varying; a local read inherits its colored value; anything else is a module global (uniform).
+def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (e |> is_expr_const()) return true
+    if (e is ExprVar) {
+        let nm = "{(e as ExprVar).name}"
+        if (key_exists(pe.mutableVars, nm)) return false   // reassigned (e.g. a written global) → not stable
+        if (key_exists(pe.localColor, nm)) return pe.localColor?[nm] ?? false
+        return !key_exists(pe.paramNames, nm)   // a non-param, non-local read is a module global → uniform
+    }
+    if (e is ExprRef2Value) return pex_eligible(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprField) return pex_eligible(pe, barriers, (e as ExprField).value)
+    if (e is ExprSwizzle) return pex_eligible(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprCast) return pex_eligible(pe, barriers, (e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return pex_eligible(pe, barriers, (e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return pex_eligible(pe, barriers, o.subexpr) && pex_eligible(pe, barriers, o.index)
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (!pex_eligible(pe, barriers, v)) return false
+        }
+        return true
+    }
+    if (e is ExprOp1) return pex_eligible(pe, barriers, (e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return pex_eligible(pe, barriers, o.left) && pex_eligible(pe, barriers, o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return pex_eligible(pe, barriers, o.subexpr) && pex_eligible(pe, barriers, o.left) && pex_eligible(pe, barriers, o.right)
+    }
+    if (e is ExprCall) {
+        let c = e as ExprCall
+        // Surviving calls are all whitelisted pure GPU math; only the caller's barriers (sampler/noise) bar a preshader.
+        if (key_exists(barriers, psh_simple_name("{c.name}"))) return false
+        for (a in c.arguments) {
+            if (!pex_eligible(pe, barriers, a)) return false
+        }
+        return true
+    }
+    return false
+}
+
+// Hoist an eligible+nontrivial subtree into a `_preshader_N` let (deduped by describe), returning
+// the let name. The fresh let is un-inferred; the macro re-infers it after the pass.
+def private pex_hoist_name(var pe : PEX; var e : ExpressionPtr) : string {
+    let key = describe(e)
+    if (key_exists(pe.dedup, key)) return pe.dedup[key]
+    let nm = "_preshader_{pe.counter}"
+    pe.counter ++
+    pe.dedup[key] = nm
+    pe.localColor[nm] = true
+    pe.top |> push <| qmacro_expr(${ let $i(nm) = $e(e); })
+    return nm
+}
+
+// Top-down maximal-subtree extraction: the first eligible+nontrivial node going down is hoisted and
+// replaced with a ref; otherwise recurse children. Handles the bounded post-flatten node set.
+def private pex_extract(var pe : PEX; barriers : table<string>; var e : ExpressionPtr) : ExpressionPtr {
+    if (e == null) return null
+    if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) {
+        let nm = pex_hoist_name(pe, e)
+        pe.changed = true
+        return new ExprVar(at = e.at, name := nm)
+    }
+    if (e is ExprOp1) {
+        var o = e as ExprOp1
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprOp2) {
+        var o = e as ExprOp2
+        o.left = pex_extract(pe, barriers, o.left)
+        o.right = pex_extract(pe, barriers, o.right)
+    } elif (e is ExprOp3) {
+        var o = e as ExprOp3
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+        o.left = pex_extract(pe, barriers, o.left)
+        o.right = pex_extract(pe, barriers, o.right)
+    } elif (e is ExprCall) {
+        var c = e as ExprCall
+        for (i in range(length(c.arguments))) {
+            c.arguments[i] = pex_extract(pe, barriers, c.arguments[i])
+        }
+    } elif (e is ExprField) {
+        var o = e as ExprField
+        o.value = pex_extract(pe, barriers, o.value)
+    } elif (e is ExprSwizzle) {
+        var o = e as ExprSwizzle
+        o.value = pex_extract(pe, barriers, o.value)
+    } elif (e is ExprRef2Value) {
+        var o = e as ExprRef2Value
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprCast) {
+        var o = e as ExprCast
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprPtr2Ref) {
+        var o = e as ExprPtr2Ref
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+    } elif (e is ExprAt) {
+        var o = e as ExprAt
+        o.subexpr = pex_extract(pe, barriers, o.subexpr)
+        o.index = pex_extract(pe, barriers, o.index)
+    } elif (e is ExprMakeTuple) {
+        var o = e as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = pex_extract(pe, barriers, o.values[vi])
+        }
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                fld.value = pex_extract(pe, barriers, fld.value)
+            }
+        }
+    }
+    return e
+}
+
+def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>) : bool {
+    var pe : PEX
+    for (a in func.arguments) {
+        pe.paramNames |> insert("{a.name}")
+    }
+    pe.mutableVars <- collect_mutable(blk)
+    var body : array<ExpressionPtr>
+    for (s0 in blk.list) {
+        var s = s0
+        if (!empty(pe.rename) && reads_any(s, pe.rename)) {
+            s = subst_consts(s, pe.rename)
+        }
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 && !psh_reserved((s as ExprLet).variables[0].name)) {
+            var lc = s as ExprLet
+            let vname = "{lc.variables[0].name}"
+            var init = lc.variables[0].init
+            if (init != null && pex_eligible(pe, barriers, init)) {
+                if (psh_has_compute(init)) {
+                    // Whole uniform let: hoist its init, rename refs to the preshader temp, drop the decl.
+                    let nm = pex_hoist_name(pe, init)
+                    pe.rename[vname] = new ExprVar(at = init.at, name := nm)
+                    pe.changed = true
+                } else {
+                    // Trivial uniform alias (a bare global / member read): inline it at every use.
+                    pe.rename[vname] = clone_expression(init)
+                    pe.changed = true
+                }
+                continue
+            }
+        }
+        // Varying / reserved / multi-var statement: extract buried uniform subtrees, then emit.
+        if (s is ExprLet) {
+            var lc = s as ExprLet
+            for (lv in lc.variables) {
+                if (lv.init != null) {
+                    lv.init = pex_extract(pe, barriers, lv.init)
+                }
+                pe.localColor["{lv.name}"] = false
+            }
+        } elif (s is ExprCopy) {
+            var cp = s as ExprCopy
+            cp.right = pex_extract(pe, barriers, cp.right)
+        } elif (s is ExprReturn) {
+            var rt = s as ExprReturn
+            rt.subexpr = pex_extract(pe, barriers, rt.subexpr)
+        }
+        body |> push(s)
+    }
+    if (pe.changed) {
+        // Replace the body in place: preshader group on top, then the (extracted) varying body.
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (t in pe.top) {
+            blk.list |> emplace(t)
+        }
+        for (b in body) {
+            blk.list |> emplace(b)
+        }
+    }
+    let result = pe.changed
+    delete pe.paramNames
+    delete pe.localColor
+    delete pe.mutableVars
+    delete pe.dedup
+    unsafe {
+        delete pe.rename
+        delete pe.top
+        delete body
+    }
+    return result
+}
+
+// ===== CSE (local value numbering) =====
+// The body is one basic block, so LVN is complete. Value-number pure subtrees by `describe()`, dedup
+// any computed >=2x into one shared let before its first use; uniform dups route to the preshader.
+
+// The base ExprVar of a store target, digging through index/field/swizzle/deref wrappers —
+// `G[i] = v` makes G's reads value-unstable exactly like `G = v` does.
+def private store_base(e : Expression const?) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprAt) return store_base((e as ExprAt).subexpr)
+    if (e is ExprField) return store_base((e as ExprField).value)
+    if (e is ExprSwizzle) return store_base((e as ExprSwizzle).value)
+    if (e is ExprPtr2Ref) return store_base((e as ExprPtr2Ref).subexpr)
+    if (e is ExprRef2Value) return store_base((e as ExprRef2Value).subexpr)
+    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+}
+
+// Names reassigned somewhere in the block (live/loop masks `__flat_*`, any reassigned user `var`).
+// A subtree reading one of these is NOT value-stable — CSE must not share it (its value differs
+// per occurrence), so it is excluded from value numbering. Single-def `__ssa_*` / `let` are safe.
+class private MutCollect : AstVisitor {
+    names : table<string>
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        let base = store_base(expr.left)
+        if (base != null) {
+            names |> insert("{(base as ExprVar).name}")
+        }
+    }
+}
+
+def private collect_mutable(blk : ExprBlock?) : table<string> {
+    var mc = new MutCollect()
+    make_visitor(*mc) $(a) {
+        visit(blk, a)
+    }
+    var r : table<string>
+    for (n in keys(mc.names)) {
+        r |> insert(n)
+    }
+    unsafe {
+        delete mc
+    }
+    return <- r
+}
+
+// One structural walk (O(size)) over the closed post-flatten node set, replacing the old
+// O(#mutableVars * size) per-name count_refs loop. An unknown node kind is conservatively treated
+// as reading a mutable (never CSE through it) — correctness over completeness for this safety gate.
+def private reads_mutable(e : ExpressionPtr; mutableVars : table<string>) : bool {
+    if (e == null || empty(mutableVars) || e |> is_expr_const()) return false
+    if (e is ExprVar) return key_exists(mutableVars, "{(e as ExprVar).name}")
+    if (e is ExprRef2Value) return reads_mutable((e as ExprRef2Value).subexpr, mutableVars)
+    if (e is ExprField) return reads_mutable((e as ExprField).value, mutableVars)
+    if (e is ExprSwizzle) return reads_mutable((e as ExprSwizzle).value, mutableVars)
+    if (e is ExprCast) return reads_mutable((e as ExprCast).subexpr, mutableVars)
+    if (e is ExprPtr2Ref) return reads_mutable((e as ExprPtr2Ref).subexpr, mutableVars)
+    if (e is ExprOp1) return reads_mutable((e as ExprOp1).subexpr, mutableVars)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
+    }
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.index, mutableVars)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (reads_mutable(a, mutableVars)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (reads_mutable(v, mutableVars)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (reads_mutable(fld.value, mutableVars)) return true
+            }
+        }
+        return false
+    }
+    return true
+}
+
+class private CseTally : AstVisitor {
+    collectSample : bool        // clone a representative node per key (cse_body only; the oracle just counts)
+    counts : table<string; int>
+    sample : table<string; ExpressionPtr>
+    mutableVars : table<string>
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        // ExprRef2Value is describe-transparent: tallying wrapper AND wrappee double-counts every
+        // ref-rooted dup (an array/field read), so its count never drops below 2 after sharing and
+        // the round loop spins. Tally the wrappee only.
+        if (expr is ExprRef2Value) {
+            return
+        }
+        if (psh_has_compute(expr) && !reads_mutable(expr, mutableVars)) {
+            let k = "{describe(expr)}"
+            counts[k] = (counts?[k] ?? 0) + 1
+            if (collectSample && !key_exists(sample, k)) {
+                sample[k] = clone_expression(expr)
+            }
+        }
+    }
+}
+
+// Replace every subtree whose describe matches `key` with a ref to `refName`. Top-down: a match is
+// replaced (no recursion into it); otherwise recurse children (the bounded post-flatten node set).
+def private cse_replace_expr(var e : ExpressionPtr; key, refName : string) : ExpressionPtr {
+    if (e == null) return null
+    if (psh_has_compute(e) && "{describe(e)}" == key) {
+        return new ExprVar(at = e.at, name := refName)
+    }
+    if (e is ExprOp1) {
+        var o = e as ExprOp1
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprOp2) {
+        var o = e as ExprOp2
+        o.left = cse_replace_expr(o.left, key, refName)
+        o.right = cse_replace_expr(o.right, key, refName)
+    } elif (e is ExprOp3) {
+        var o = e as ExprOp3
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+        o.left = cse_replace_expr(o.left, key, refName)
+        o.right = cse_replace_expr(o.right, key, refName)
+    } elif (e is ExprCall) {
+        var c = e as ExprCall
+        for (i in range(length(c.arguments))) {
+            c.arguments[i] = cse_replace_expr(c.arguments[i], key, refName)
+        }
+    } elif (e is ExprField) {
+        var o = e as ExprField
+        o.value = cse_replace_expr(o.value, key, refName)
+    } elif (e is ExprSwizzle) {
+        var o = e as ExprSwizzle
+        o.value = cse_replace_expr(o.value, key, refName)
+    } elif (e is ExprRef2Value) {
+        var o = e as ExprRef2Value
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprCast) {
+        var o = e as ExprCast
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprPtr2Ref) {
+        var o = e as ExprPtr2Ref
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+    } elif (e is ExprAt) {
+        var o = e as ExprAt
+        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
+        o.index = cse_replace_expr(o.index, key, refName)
+    } elif (e is ExprMakeTuple) {
+        var o = e as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = cse_replace_expr(o.values[vi], key, refName)
+        }
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                fld.value = cse_replace_expr(fld.value, key, refName)
+            }
+        }
+    }
+    return e
+}
+
+def private cse_replace_stmt(var s : ExpressionPtr; key, refName : string) {
+    if (s is ExprLet) {
+        var lc = s as ExprLet
+        for (lv in lc.variables) {
+            if (lv.init != null) {
+                lv.init = cse_replace_expr(lv.init, key, refName)
+            }
+        }
+    } elif (s is ExprCopy) {
+        var cp = s as ExprCopy
+        cp.right = cse_replace_expr(cp.right, key, refName)
+    } elif (s is ExprReturn) {
+        var rt = s as ExprReturn
+        rt.subexpr = cse_replace_expr(rt.subexpr, key, refName)
+    }
+}
+
+// Tally EXACTLY the regions cse_replace_stmt rewrites (let inits, copy RHS, return expr) — NOT the
+// whole statement. A dup counted in an unrewritable position (a store's lvalue) can never drop
+// below 2, so the round loop would re-pick the same key and spin to the guard.
+def private cse_tally_stmt(s : ExpressionPtr; a) {
+    if (s is ExprLet) {
+        for (lv in (s as ExprLet).variables) {
+            if (lv.init != null) {
+                visit(lv.init, a)
+            }
+        }
+    } elif (s is ExprCopy) {
+        visit((s as ExprCopy).right, a)
+    } elif (s is ExprReturn) {
+        let rt = s as ExprReturn
+        if (rt.subexpr != null) {
+            visit(rt.subexpr, a)
+        }
+    }
+}
+
+// Count leading contiguous `_preshader_*` lets — the preshader region. A CSE dup whose first use
+// falls inside it is uniform (Pass A already pulled every nontrivial uniform subtree out of the
+// body), so it routes to the preshader.
+def private preshader_prefix_len(blk : ExprBlock?) : int {
+    var k = 0
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 &&
+                (s as ExprLet).variables[0].name |> starts_with("_preshader_")) {
+            k ++
+        } else {
+            break
+        }
+    }
+    return k
+}
+
+// `counter` is owned by the caller's cse/alias loop — fresh per-call numbering would collide a
+// second call's `_cse_0` with a surviving first-call `_cse_0` (error[30704] shadowing).
+def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {
+    var anyChange = false
+    var guard = 0
+    // Reassigned vars are stable across rounds (cse only ever adds `let`s), so collect once.
+    var mutableVars <- collect_mutable(blk)
+    while (guard < 4096) {
+        guard ++
+        // Tally every nontrivial subtree across the block, recording its first statement index.
+        var counts : table<string; int>
+        var sample : table<string; ExpressionPtr>
+        var firstStmt : table<string; int>
+        for (i in range(length(blk.list))) {
+            var ct = new CseTally()
+            ct.collectSample = true
+            ct.mutableVars := mutableVars
+            make_visitor(*ct) $(a) {
+                cse_tally_stmt(blk.list[i], a)
+            }
+            for (k in keys(ct.counts)) {
+                counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
+                if (!key_exists(firstStmt, k)) {
+                    firstStmt[k] = i
+                    sample[k] = ct.sample?[k] ?? null
+                }
+            }
+            unsafe {
+                delete ct
+            }
+        }
+        // Pick the largest subtree computed >=2x (largest → fewer rounds; nested dups surface next).
+        var bestKey = ""
+        var bestLen = 0
+        for (k in keys(counts)) {
+            if ((counts?[k] ?? 0) >= 2 && length(k) > bestLen) {
+                bestKey = k
+                bestLen = length(k)
+            }
+        }
+        if (bestKey == "") {
+            delete counts
+            delete firstStmt
+            unsafe {
+                delete sample
+            }
+            break
+        }
+        let fi = firstStmt?[bestKey] ?? 0
+        let uniform = fi < preshader_prefix_len(blk)
+        let nm = uniform ? "_preshader_cse_{counter}" : "_cse_{counter}"
+        counter ++
+        // `sample` holds a tally-time (pre-replace) clone; cse_replace mutates the tree, not it.
+        var src = sample?[bestKey] ?? null
+        for (s in blk.list) {
+            cse_replace_stmt(s, bestKey, nm)
+        }
+        var theLet = qmacro_expr(${ let $i(nm) = $e(src); })
+        var newlist : array<ExpressionPtr>
+        newlist |> reserve(length(blk.list) + 1)
+        for (i in range(length(blk.list))) {
+            if (i == fi) {
+                newlist |> push(theLet)
+            }
+            newlist |> push(blk.list[i])
+        }
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (m in newlist) {
+            blk.list |> emplace(m)
+        }
+        delete counts
+        delete firstStmt
+        unsafe {
+            delete sample
+            delete newlist
+        }
+        anyChange = true
+    }
+    delete mutableVars
+    return anyChange
+}
+
+// ===== Pure-alias elimination =====
+// Collapse `let X = <bare var V>` copies (V not reassigned) into direct refs to V and drop the let —
+// clears CSE's `_cse_a = _cse_b` leftovers and unroll/fold's `p_0 = ro`. General, not CSE-specific.
+
+// The bare ExprVar under any chain of ExprRef2Value wrappers, else null.
+def private alias_source(e : Expression const?) : ExpressionPtr {
+    if (e == null) return null
+    if (e is ExprRef2Value) return alias_source((e as ExprRef2Value).subexpr)
+    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+}
+
+def private eliminate_aliases(var blk : ExprBlock?) : bool {
+    var mutableVars <- collect_mutable(blk)
+    var rename : table<string; ExpressionPtr>
+    var body : array<ExpressionPtr>
+    var changed = false
+    for (s0 in blk.list) {
+        // Resolve already-collapsed aliases first, so chains (let a = b; let b = c) fold in one pass.
+        var s = !empty(rename) && reads_any(s0, rename) ? subst_consts(s0, rename) : s0
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            let lvName = "{(s as ExprLet).variables[0].name}"
+            let src = alias_source((s as ExprLet).variables[0].init)
+            // Skip if either the alias var X or the source V is reassigned — renaming a reassigned X rewrites its stores onto the const source.
+            if (src != null && !key_exists(mutableVars, lvName) &&
+                    !key_exists(mutableVars, "{(src as ExprVar).name}")) {
+                rename[lvName] = clone_expression(src)
+                changed = true
+                continue
+            }
+        }
+        body |> push(s)
+    }
+    if (changed) {
+        while (!empty(blk.list)) {
+            blk.list |> erase(length(blk.list) - 1)
+        }
+        for (b in body) {
+            blk.list |> emplace(b)
+        }
+    }
+    delete mutableVars
+    unsafe {
+        delete rename
+        delete body
+    }
+    return changed
+}
+
+// ===== Completeness oracle (test-framework facing) =====
+// Mirrors flatten.das FoldResidualVisitor: flags a uniform subtree still inline in the varying body
+// or a pure subtree computed >=2x un-shared. Empty ⇒ complete; checked over the COMPILED twin.
+
+// True if the subtree hides a maximal eligible-nontrivial node (one preshader extraction missed).
+def private pex_residual_expr(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+    if (e == null) return false
+    if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) return true
+    if (e is ExprOp1) return pex_residual_expr(pe, barriers, (e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        return pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (pex_residual_expr(pe, barriers, a)) return true
+        }
+        return false
+    }
+    if (e is ExprField) return pex_residual_expr(pe, barriers, (e as ExprField).value)
+    if (e is ExprSwizzle) return pex_residual_expr(pe, barriers, (e as ExprSwizzle).value)
+    if (e is ExprRef2Value) return pex_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
+    if (e is ExprCast) return pex_residual_expr(pe, barriers, (e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return pex_residual_expr(pe, barriers, (e as ExprPtr2Ref).subexpr)
+    if (e is ExprAt) {
+        let o = e as ExprAt
+        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.index)
+    }
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (pex_residual_expr(pe, barriers, v)) return true
+        }
+        return false
+    }
+    if (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (pex_residual_expr(pe, barriers, fld.value)) return true
+            }
+        }
+    }
+    return false
+}
+
+def public opt_residuals(var func : FunctionPtr; barriers : table<string>) : array<string> {
+    var res : array<string>
+    if (func == null || func.body == null || !(func.body is ExprBlock)) return <- res
+    var blk = func.body as ExprBlock
+    // Post-optimize coloring: a `_preshader_*` let is uniform, every other local is varying.
+    var pe : PEX
+    for (a in func.arguments) {
+        pe.paramNames |> insert("{a.name}")
+    }
+    pe.mutableVars <- collect_mutable(blk)
+    for (s in blk.list) {
+        if (s is ExprLet) {
+            for (lv in (s as ExprLet).variables) {
+                pe.localColor["{lv.name}"] = lv.name |> starts_with("_preshader_")
+            }
+        }
+    }
+    // Preshader residual: a uniform subtree still inline in the varying region (index >= prefix).
+    let prefix = preshader_prefix_len(blk)
+    for (i in range(length(blk.list))) {
+        if (i < prefix) {
+            continue
+        }
+        let s = blk.list[i]
+        var hit = false
+        if (s is ExprLet) {
+            for (lv in (s as ExprLet).variables) {
+                if (lv.init != null && pex_residual_expr(pe, barriers, lv.init)) {
+                    hit = true
+                }
+            }
+        } elif (s is ExprCopy) {
+            hit = pex_residual_expr(pe, barriers, (s as ExprCopy).right)
+        } elif (s is ExprReturn) {
+            hit = pex_residual_expr(pe, barriers, (s as ExprReturn).subexpr)
+        }
+        if (hit) {
+            res |> push("an un-extracted uniform subtree (preshader miss)")
+            break
+        }
+    }
+    // CSE residual: any pure subtree (no mutable read) still computed >=2x — tallying the same
+    // rewritable regions cse_body does, so an unrewritable lvalue dup is not a false positive.
+    var counts : table<string; int>
+    for (i in range(length(blk.list))) {
+        var ct = new CseTally()
+        ct.mutableVars := pe.mutableVars
+        make_visitor(*ct) $(a) {
+            cse_tally_stmt(blk.list[i], a)
+        }
+        for (k in keys(ct.counts)) {
+            counts[k] = (counts?[k] ?? 0) + (ct.counts?[k] ?? 0)
+        }
+        unsafe {
+            delete ct
+        }
+    }
+    for (k in keys(counts)) {
+        if ((counts?[k] ?? 0) >= 2) {
+            res |> push("a repeated subtree '{k}' (>=2x) not CSE'd")
+            break
+        }
+    }
+    // Alias residual: a pure single-def `let X = <bare var V>` copy (neither X nor V reassigned)
+    // the cleanup should collapse. A reassigned X (`var X = V` reused across copies) is a real var.
+    for (s in blk.list) {
+        if (s is ExprLet && length((s as ExprLet).variables) == 1) {
+            let lvName = "{(s as ExprLet).variables[0].name}"
+            let src = alias_source((s as ExprLet).variables[0].init)
+            if (src != null && !key_exists(pe.mutableVars, lvName) &&
+                    !key_exists(pe.mutableVars, "{(src as ExprVar).name}")) {
+                res |> push("a pure alias let '{lvName}' = '{(src as ExprVar).name}'")
+                break
+            }
+        }
+    }
+    delete pe.paramNames
+    delete pe.localColor
+    delete pe.mutableVars
+    delete counts
+    return <- res
+}
+
+def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>) : bool {
+    //! Post-fold optimize pass: hoist uniform (globals+literals) subtrees to top-of-body
+    //! `_preshader_N` lets, then CSE-dedup repeated subtrees. `barriers` = sampler/noise call names
+    //! that must stay per-pixel. Runs once after the fold fixpoint; caller re-infers after.
+    if (!(func.body is ExprBlock)) return false
+    var blk = func.body as ExprBlock
+    var changed = extract_preshader(func, blk, barriers)
+    // cse and alias enable each other (a collapsed alias canonicalises names, exposing fresh dups),
+    // so iterate the pair to a fixpoint. Converges in a couple of iterations now that the tally is
+    // occurrence-exact; an exhausted guard means an oscillation regression — warn, never hang.
+    var guard = 0
+    var cseCounter = 0
+    while (guard < 16) {
+        guard ++
+        var round = false
+        if (cse_body(blk, cseCounter)) {
+            round = true
+        }
+        if (eliminate_aliases(blk)) {
+            round = true
+        }
+        if (!round) {
+            break
+        }
+        changed = true
+    }
+    if (guard >= 16) {
+        to_log(LOG_WARNING, "flatten: cse/alias loop guard exhausted in {func.name} (oscillation?)\n")
     }
     return changed
 }

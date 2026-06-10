@@ -141,3 +141,7 @@ doc/sphinx-build-latex/environment.pickle
 opencode.json
 test-results/
 logs/
+# flatten-fuzz transient dumps (generated source + failure/residual reproducers)
+_flatten_fuzz_*.das
+flatten_fuzz_fail_*.das
+flatten_fuzz_residual_*.das
