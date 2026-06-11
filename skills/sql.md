@@ -219,7 +219,7 @@ to_log(LOG_INFO, "SQL: {_sql_text(db |> select_from(type<Car>) |> _where(_.Price
 
 ### Composability
 
-Inner `_where` / `_select` compose freely. User-defined `[call_macro]` wrappers cascade through the analyzer — write `[call_macro(name="when_price_lt")]` that expands to `_where(it, _.Price < val)` and use `_sql(db |> select_from(type<Car>) |> when_price_lt(200))`. The wrapper's body becomes the same `where_` shape the analyzer sees for a hand-written `_where`. Tested by `tests/dasSQLITE/test_07_sql_composability.das`.
+Inner `_where` / `_select` compose freely. User-defined `[call_macro]` wrappers cascade through the analyzer — write `[call_macro(name="when_price_lt")]` that expands to `_where(it, _.Price < val)` and use `_sql(db |> select_from(type<Car>) |> when_price_lt(200))`. The wrapper's body becomes the same `where_` shape the analyzer sees for a hand-written `_where`.
 
 ## `_each_sql` — streaming
 
@@ -697,8 +697,6 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 
 ## Reference
 
-- Tutorials — every shipped feature has a runnable file under [tutorials/sql/](../tutorials/sql/) (45 files). Teaching order is documented in [modules/dasSQLITE/TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md).
-- Implementation — [daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das), [daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das), [daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das).
-- Design notes — [API_REWORK.md](../modules/dasSQLITE/API_REWORK.md) (the master plan; per-chunk decision log), [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md) (migrations design walk), [API_CHECKED.md](../modules/dasSQLITE/API_CHECKED.md) (parity audit), [API_MISSING.md](../modules/dasSQLITE/API_MISSING.md) (deferred-feature list).
-- Tests — `tests/dasSQLITE/` — every operator + macro has a focused test, plus `failed_*.das` files for compile-error cases.
+- Tutorials — every shipped feature has a runnable file under `tutorials/sql/` (45 files).
+- Implementation — `modules/dasSQLITE/daslib/sqlite_boost.das`, `sqlite_linq.das`, `sqlite_migrate.das`.
 - Related skills — `skills/json.md` (`@sql_json` columns), `skills/linq.md` (`_sql` is LINQ-shaped), `skills/das_macros.md` (`[sql_table]` / `_sql` are macros), `skills/gc_migration.md` (`SqlRunner` is one of the residual smart_ptr types).

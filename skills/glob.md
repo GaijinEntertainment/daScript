@@ -94,7 +94,7 @@ parse_file_list("zzz.das,assets/**/*.png,aaa.das", files)
 // the glob's matches sit between them, sorted within their slice
 ```
 
-If you're rolling your own expansion (don't, unless `parse_file_list` doesn't fit), the same pattern: per-glob `sort()` + `append`, never a final global sort. See the regression test in [tests/fio/expand_glob_test.das](tests/fio/expand_glob_test.das) (`test_parse_file_list_order_preserved`).
+If you're rolling your own expansion (don't, unless `parse_file_list` doesn't fit), the same pattern: per-glob `sort()` + `append`, never a final global sort.
 
 ## Performance and correctness gotchas
 
