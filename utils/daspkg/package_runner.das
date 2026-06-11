@@ -6,6 +6,7 @@ options strict_smart_pointers = true
 
 module package_runner shared public
 
+require daslib/ast
 require daslib/debugger
 require daslib/fio
 require daslib/daspkg public

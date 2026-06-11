@@ -328,8 +328,8 @@ Without this, the leak detector reports "GC APP LEAK" at exit.
 
 After migrating `.das` code:
 
-1. **Compile-only check:** `bin/Release/daslang.exe -compile-only your_file.das`
-2. **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test your_tests/`
+1. **Compile-only check:** `bin/daslang -compile-only your_file.das`
+2. **Run tests:** `bin/daslang dastest/dastest.das -- --test your_tests/`
 3. **Check for GC leaks:** look for "GC COMPILE LEAK" / "GC APP LEAK" in output
 4. **Common compile errors after migration:**
    - `"can only move to from a reference"` → change `<-` to `=`

@@ -682,49 +682,6 @@ namespace das
         }
     }
 
-    void ExprMakeLocal::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
-        useStackRef = ref;
-        useCMRES = cmres;
-        doesNotNeedSp = true;
-        doesNotNeedInit = true;
-        stackTop = sp;
-        extraOffset = off;
-    }
-
-    // variant
-
-    void ExprMakeVariant::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
-        auto mkBaseT = makeType;    // element view - makeType may be a fixed-array chain
-        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
-        int stride = makeType->getStride();
-        // we go through all fields, and if its [[ ]] field
-        // we tell it to piggy-back on our current sp, with appropriate offset
-        int index = 0;
-        for ( const auto & decl : variants ) {
-            auto fieldVariant = mkBaseT->findArgumentIndex(decl->name);
-            DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
-            if ( decl->value->rtti_isMakeLocal() ) {
-                auto fieldOffset = mkBaseT->getVariantFieldOffset(fieldVariant);
-                uint32_t offset =  extraOffset + index*stride + fieldOffset;
-                auto mkl = static_cast<ExprMakeLocal*>(decl->value);
-                mkl->setRefSp(ref, cmres, sp, offset);
-                mkl->doesNotNeedInit = false;
-            } else if ( decl->value->rtti_isCall() ) {
-                auto cll = static_cast<ExprCall*>(decl->value);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            } else if ( decl->value->rtti_isInvoke() ) {
-                auto cll = static_cast<ExprInvoke*>(decl->value);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            }
-            index++;
-        }
-    }
-
     vector<SimNode *> SimulateVisitor::simulateExprMakeVariant(const ExprMakeVariant *mkv) {
         gc_guard gc_scope;
         vector<SimNode *> simlist;
@@ -818,42 +775,6 @@ namespace das
             block->list[i] = simlist[i];
         setE(expr, block);
         return expr;
-    }
-
-    // structure
-
-    void ExprMakeStruct::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
-        auto mkBaseT = makeType;    // element view - makeType may be a fixed-array chain
-        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
-        // if it's a handle type, we can't reuse the make-local chain
-        if ( mkBaseT->baseType == Type::tHandle ) return;
-        // we go through all fields, and if its [[ ]] field
-        // we tell it to piggy-back on our current sp, with appropriate offset
-        int total = int(structs.size());
-        int stride = makeType->getStride();
-        for ( int index=0; index != total; ++index ) {
-            auto & fields = structs[index];
-            for ( const auto & decl : *fields ) {
-                auto field = mkBaseT->structType->findField(decl->name);
-                DAS_ASSERT(field && "should have failed in type infer otherwise");
-                if ( decl->value->rtti_isMakeLocal() ) {
-                    uint32_t offset =  extraOffset + index*stride + field->offset;
-                    auto mkl = static_cast<ExprMakeLocal*>(decl->value);
-                    mkl->setRefSp(ref, cmres, sp, offset);
-                } else if ( decl->value->rtti_isCall() ) {
-                    auto cll = static_cast<ExprCall*>(decl->value);
-                    if ( cll->allowCmresSkip() ) {
-                        cll->doesNotNeedSp = true;
-                    }
-                } else if ( decl->value->rtti_isInvoke() ) {
-                    auto cll = static_cast<ExprInvoke*>(decl->value);
-                    if ( cll->allowCmresSkip() ) {
-                        cll->doesNotNeedSp = true;
-                    }
-                }
-            }
-        }
     }
 
     vector<SimNode *> SimulateVisitor::simulateExprMakeStruct(const ExprMakeStruct *mks) {
@@ -1065,31 +986,6 @@ namespace das
         return expr;
     }
 
-    // make array
-
-    void ExprMakeArray::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
-        int total = int(values.size());
-        uint32_t stride = recordType->getSizeOf();
-        for ( int index=0; index != total; ++index ) {
-            auto & val = values[index];
-            if ( val->rtti_isMakeLocal() ) {
-                uint32_t offset =  extraOffset + index*stride;
-                auto mkl = static_cast<ExprMakeLocal*>(val);
-                mkl->setRefSp(ref, cmres, sp, offset);
-            } else if ( val->rtti_isCall() ) {
-                auto cll = static_cast<ExprCall*>(val);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            } else if ( val->rtti_isInvoke() ) {
-                auto cll = static_cast<ExprInvoke*>(val);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            }
-        }
-    }
 
     vector<SimNode *> SimulateVisitor::simulateExprMakeArray(const ExprMakeArray *mka) {
         vector<SimNode *> simlist;
@@ -1166,31 +1062,6 @@ namespace das
             block->list[i] = simlist[i];
         setE(expr, block);
         return expr;
-    }
-
-    // make tuple
-
-    void ExprMakeTuple::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
-        int total = int(values.size());
-        for ( int index=0; index != total; ++index ) {
-            auto & val = values[index];
-            if ( val->rtti_isMakeLocal() ) {
-                uint32_t offset =  extraOffset + makeType->getTupleFieldOffset(index);
-                auto mkl = static_cast<ExprMakeLocal*>(val);
-                mkl->setRefSp(ref, cmres, sp, offset);
-            } else if ( val->rtti_isCall() ) {
-                auto cll = static_cast<ExprCall*>(val);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            } else if ( val->rtti_isInvoke() ) {
-                auto cll = static_cast<ExprInvoke*>(val);
-                if ( cll->allowCmresSkip() ) {
-                    cll->doesNotNeedSp = true;
-                }
-            }
-        }
     }
 
     vector<SimNode *> SimulateVisitor::simulateExprMakeTuple(const ExprMakeTuple *mkt) {

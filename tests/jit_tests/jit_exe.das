@@ -1,8 +1,8 @@
 // This file tests creating JIT executable.
 options gen2
 options no_aot
+require daslib/ast
 require daslib/fio
-require daslib/rtti
 require strings
 
 require dastest/testing_boost
@@ -16,7 +16,7 @@ let GLOBAL_INIT_EXE = "{OUTPUT_DIR}/jit_exe_test_global_init"
 def write_hello_script() : bool {
     var ok = false
     mkdir_rec(OUTPUT_DIR)
-    fopen(SCRIPT_PATH, "w") <| $(f) {
+    fopen(SCRIPT_PATH, "w") $(f) {
         if (f != null) {
             fprint(f, "options gen2\n")
             fprint(f, "[export] def main() \{ print(\"Hello World!\\n\"); \}\n")
@@ -34,7 +34,7 @@ def write_hello_script() : bool {
 def write_global_init_script() : bool {
     var ok = false
     mkdir_rec(OUTPUT_DIR)
-    fopen(GLOBAL_INIT_SCRIPT, "w") <| $(f) {
+    fopen(GLOBAL_INIT_SCRIPT, "w") $(f) {
         if (f != null) {
             fprint(f, "options gen2\n")
             fprint(f, "let MAIN_DIR = get_das_root()\n")
@@ -57,16 +57,16 @@ def compile_to_exe(t : T?; src : string; out : string) : bool {
         remove_result(exe_path)
     }
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.jit_enabled = true
             cop.jit_exe_mode = true
             cop.jit_dll_mode = false
             access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
             cop.jit_output_path := out
-            compile_file(src, access, unsafe(addr(mg)), cop) <| $(ok, program, errors) {
+            compile_file(src, access, unsafe(addr(mg)), cop) $(ok, program, _errors) {
                 t |> equal(ok, true)
-                simulate(program) <| $(sok, context, serrors) {
+                simulate(program) $(sok, _context, _serrors) {
                     t |> equal(sok, true)
                     // No need to execute, we already created binary.
                 }
@@ -79,7 +79,7 @@ def compile_to_exe(t : T?; src : string; out : string) : bool {
 def run_exe(exe : string) : string {
     var output = ""
     unsafe {
-        popen("{exe}.exe") <| $(f) {
+        popen("{exe}.exe") $(f) {
             while (!feof(f)) {
                 output += fgets(f)
             }
@@ -111,12 +111,11 @@ def test_executable(t : T?) {
     // shared lib, and Windows lacks RPATH so the spawned process can't find
     // libDaScript.dll. Skip without daslang JIT or a shared-lib build for the
     // same reason — there's no library to call into at runtime.
-    if (get_platform_name() == "windows") { return ; }
-    if (!jit_enabled() || !das_is_dll_build()) { return ; }
-    t |> run("hello world") <| @(t : T?) {
+    if (get_platform_name() == "windows" || !jit_enabled() || !das_is_dll_build()) { return ; }
+    t |> run("hello world") @(t : T?) {
         test_hello_world(t)
     }
-    t |> run("global init builtin (issue #2582)") <| @(t : T?) {
+    t |> run("global init builtin (issue #2582)") @(t : T?) {
         test_global_init_builtin(t)
     }
 }

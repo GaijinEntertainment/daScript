@@ -314,6 +314,37 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das {
+
+
+    int adapt_field_offset ( const char * fName, const StructInfo * info ) {
+        for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
+            if ( strcmp(info->fields[i]->name,fName)==0 ) {
+                return info->fields[i]->offset;
+            }
+        }
+        DAS_VERIFYF(0,"mapping %s not found. not fully implemented derived class %s", fName, info->name);
+        return 0;
+    }
+
+    int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i ) {
+        for ( uint32_t is=info->count; i!=is; ++i ) {
+            if ( strcmp(info->fields[i]->name,fName)==0 ) {
+                return info->fields[i]->offset;
+            }
+        }
+        DAS_VERIFYF(0,"mapping %s not found. not fully implemented derived class %s", fName, info->name);
+        return 0;
+    }
+
+    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info ) {
+        return pClass + adapt_field_offset(fName,info);
+    }
+
+    Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
+        char * field = adapt_field(funcName, pClass, info);
+        return field ? *(Func*)field : Func((void *)nullptr);
+    }
+
     template <>
     struct das_default_vector_size<AnnotationArgumentList> {
         static __forceinline uint32_t size( const AnnotationArgumentList & value ) {
@@ -972,7 +1003,7 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
-    vector<pair<string,Type>> getCodeOfPolicyOptions() {
+    DAS_API vector<pair<string,Type>> getCodeOfPolicyOptions() {
         vector<pair<string,Type>> options;
         Module dummyMod;
         ModuleLibrary dummy(&dummyMod);
@@ -1063,47 +1094,6 @@ namespace das {
             das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
         }
         ctx->delRef();
-    }
-
-    void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
-        return rtti_builtin_compile_ex(modName, str, cop, true, block, context, at);
-    }
-
-    void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
-        str = str ? str : ((char *)"");
-        TextWriter issues;
-        uint32_t str_len = stringLengthSafe(*context, str);
-        auto access = make_smart<FileAccess>();
-        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
-        access->setFileInfo(modName, das::move(fileInfo));
-        ModuleGroup dummyLibGroup;
-        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, exportAll, false, cop);
-        if ( program ) {
-            if (program->failed()) {
-                for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(false),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            } else {
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(true),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            }
-        } else {
-            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
-        }
     }
 
     Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
@@ -1336,43 +1326,6 @@ namespace das {
 
 #if !DAS_NO_FILEIO
 
-    void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
-        TextWriter issues;
-        if ( !access ) access = make_smart<FsFileAccess>();
-        auto program = compileDaScript(modName, access, issues, *module_group, cop);
-        if ( program ) {
-            if (program->failed()) {
-                for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(false),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            } else {
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(true),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                daScriptEnvironment::getBound()->g_Program = program;
-                context->invoke(block, args, nullptr, at);
-                daScriptEnvironment::getBound()->g_Program.reset();
-            }
-        } else {
-            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
-        }
-    }
-
-    smart_ptr<FileAccess> makeFileAccess( char * pak, Context *, LineInfoArg * ) {
-        return get_file_access(pak);
-    }
-
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
         if ( !fname ) context->throw_error_at(at, "expecting file name");
         const char * safeStr = str ? str : "";
@@ -1382,16 +1335,6 @@ namespace das {
     }
 
 #else
-    smart_ptr<FileAccess> makeFileAccess( char *, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
-        return nullptr;
-    }
-
-    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies & cop,
-            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
-    }
-
     bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
         return false;
@@ -1775,15 +1718,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_has_module)>(*this, lib, "has_module",
                 SideEffects::modifyExternal, "rtti_has_module")
                     ->arg("name");
-            addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
-                SideEffects::modifyExternal, "rtti_builtin_compile")
-                    ->args({"module_name","codeText","codeOfPolicies","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_compile_ex)>(*this, lib, "compile",
-                SideEffects::modifyExternal, "rtti_builtin_compile_ex")
-                    ->args({"module_name","codeText","codeOfPolicies","exportAll","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
-                SideEffects::modifyExternal, "rtti_builtin_compile_file")
-                    ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
                 SideEffects::modifyExternal, "builtin_expected_errors")
                     ->args({"program","block","context","line"});
@@ -1810,9 +1744,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
                 SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
                     ->args({"serializer","block","context","line"});
-            addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
-                SideEffects::modifyExternal, "makeFileAccess")
-                    ->args({"project","context","at"});
             addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
                 SideEffects::modifyExternal, "introduceFile")
                     ->args({"access","fileName","text","context","line"});

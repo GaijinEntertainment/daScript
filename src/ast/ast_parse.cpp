@@ -1,12 +1,15 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_gc_report.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
+#include "daScript/simulate/fs_file_info.h"
+#include "daScript/das_project_specific.h"
 
 #include "../parser/parser_state.h"
 
@@ -25,7 +28,49 @@ int das_yyparse(yyscan_t yyscanner);
 void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das2_yyparse(yyscan_t yyscanner);
 
+// get_file_access lives in the compiler lib: when given a pak it compiles the
+// project-config .das (compileDaScript), so it must sit on the compiler side.
+// The project-specific override stays in HAL (project_specific_file_info.cpp),
+// reached here via get_project_specific_file_access().
+DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
+    if ( auto specific = das::get_project_specific_file_access() )
+        return specific(pak);
+#if !DAS_NO_FILEIO
+    if ( pak && *pak ) {
+        das::ModuleGroup dummyLibGroup;
+        das::TextWriter tout;
+        auto program = das::compileDaScript(pak, das::make_smart<das::FsFileAccess>(), tout, dummyLibGroup);
+        return das::make_smart<das::FsFileAccess>(pak, program);
+    } else {
+        return das::make_smart<das::FsFileAccess>();
+    }
+#else
+    DAS_FATAL_ERROR(
+        "daslang is configured with DAS_NO_FILEIO. However file access is not specified."
+        "set_project_specific_fs_callbacks or link-time dependency needs to be specified."
+    )
+    return nullptr;
+#endif
+}
+
 namespace das {
+
+    // defined in ast_module.cpp (runtime); appends a parsed builtin module's content
+    bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName );
+
+    bool compileBuiltinModule ( Module * module, const string & modName, const unsigned char * const str, unsigned int str_len ) {
+        TextWriter issues;
+        auto access = make_smart<FileAccess>();
+        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
+        access->setFileInfo(modName, das::move(fileInfo));
+        ModuleGroup dummyLibGroup;
+        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
+        module->ownFileInfo = access->letGoOfFileInfo(modName);
+        DAS_ASSERTF(module->ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
+        auto result = appendBuiltinModuleContent(module, program, modName);
+        program->thisModule->module_gc_root->gc_dump_to_thread_root();
+        return result;
+    }
 
     bool isUtf8Text ( const char * src, uint32_t length ) {
         if ( length>=3  ) {
@@ -866,7 +911,7 @@ namespace das {
             restartInfer:
             {
                 auto timeI = ref_time_ticks();
-                program->inferTypes(logs, libGroup);
+                inferTypes(program.get(), logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 uint64_t inferLegT = get_time_usec(timeI);
                 myInferT += inferLegT;
@@ -893,7 +938,7 @@ namespace das {
                 if (!program->failed()) {
                     if (program->getOptimize()) {
                         callCompilationCallback(moduleName, fileName, "optimize");
-                        program->optimize(logs,libGroup);
+                        optimizeProgram(program.get(),logs,libGroup);
                     } else {
                         program->buildAccessFlags(logs);
                     }

@@ -74,8 +74,8 @@ namespace das
     typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
-    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
-    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
 
@@ -640,7 +640,7 @@ namespace das
         Expression(const LineInfo & a) : at(a) { gc_magic = GC_MAGIC_EXPRESSION; }
         string describe() const;
         virtual ~Expression() {}
-        friend StringWriter& operator<< (StringWriter& stream, const Expression & func);
+        friend DAS_API StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
         static ExpressionPtr autoDereference ( ExpressionPtr expr );
@@ -744,8 +744,6 @@ namespace das
         return expr ? static_cast<ExprType*>(expr) : new ExprType();
     }
 
-    bool isLocalOrGlobal ( ExpressionPtr expr );
-
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324)
@@ -836,7 +834,7 @@ namespace das
     public:
         Function() { gc_magic = GC_MAGIC_FUNCTION; }
         virtual ~Function() {}
-        friend StringWriter& operator<< (StringWriter& stream, const Function & func);
+        friend DAS_API StringWriter& operator<< (StringWriter& stream, const Function & func);
         void getMangledName(TextWriter & ss) const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
@@ -1019,10 +1017,10 @@ namespace das
 
     };
 
-    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
+    DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    uint64_t getFunctionAotHash ( Function * fun );
-    string getAotHashComment ( const Function * fun );
+    DAS_API uint64_t getFunctionAotHash ( Function * fun );
+    DAS_API string getAotHashComment ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
@@ -1123,7 +1121,7 @@ namespace das
         verifyAll = 0xffffffff
     };
 
-    bool isValidBuiltinName ( const string & name, bool canPunkt = false );
+    DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
     class DAS_API Module {
     public:
@@ -1169,7 +1167,7 @@ namespace das
             if ( objModule->visibleEverywhere ) return true;
             return requireModule.find(objModule) != requireModule.end();
         }
-        bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
+        friend DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted, const string & expectedFileName = string() );
         static void Initialize();
@@ -1696,8 +1694,6 @@ namespace das
         bool patchAnnotations();
         void fixupAnnotations();
         void normalizeOptionTypes ();
-        void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
-        void inferTypesDirty(TextWriter & logs, bool verbose);
         bool relocatePotentiallyUninitialized(TextWriter & logs);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
         void inferLint(TextWriter & logs);
@@ -1711,7 +1707,6 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void validateAst();
-        void optimize(TextWriter & logs, ModuleGroup & libGroup);
         bool inScopePodAnalysis(TextWriter & logs);
         bool escapeAnalysis(TextWriter & logs);             // pure analysis: sets Variable::does_not_escape
         bool scopeFreeOptimization(TextWriter & logs);      // consumes the analysis result: emits scope-exit frees
@@ -1823,14 +1818,20 @@ namespace das
     DAS_API Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 
     // this one works for single module only
-    DAS_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // this one collectes dependencies and compiles with modules
-    DAS_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
-    DAS_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
+    DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+
+    // optimization pass (compiler lib); runs after type inference
+    void optimizeProgram ( Program * program, TextWriter & logs, ModuleGroup & libGroup );
+
+    // compile an embedded builtin module's source into `module` (compiler lib)
+    DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
 
     // collect script prerequisits
     DAS_API bool getPrerequisits ( const string & fileName,

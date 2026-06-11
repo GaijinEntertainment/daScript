@@ -155,8 +155,8 @@ The rule applies to any sequence-consuming high-order primitive, including strin
 Despite all the above, sometimes the right answer is `for`:
 
 ```das
-for (itd in typeDecl.dim) {
-    write(writer, ",{itd}>")
+for (argT in typeDecl.argTypes) {
+    write(writer, ",{describe(argT)}>")
 }
 ```
 
@@ -176,7 +176,7 @@ Do NOT shoehorn side effects into `_select` lambdas — they're meant to be pure
 let xs <- to_array(map(each(arr), @(x) { return f(x); }))
 
 // Functional + iterator surgery in one expression:
-let args <- to_array(map(each(typeDecl.dim).reverse(), @(itd) { return ",{itd}>"; }))
+let args <- to_array(map(each(typeDecl.argTypes).reverse(), @(argT) { return ",{describe(argT)}>"; }))
 reverse(args)
 write(writer, "{join(args, "")}")
 ```
@@ -194,8 +194,8 @@ let xs <- arr._where(_.flag)._select(_.name).to_array()._fold()
 let csv = (arr._select(_.name).to_array()._fold()) |> join(", ")
 
 // Plain for-loop — the body has a side effect:
-for (itd in typeDecl.dim) {
-    write(writer, ",{itd}>")
+for (argT in typeDecl.argTypes) {
+    write(writer, ",{describe(argT)}>")
 }
 ```
 

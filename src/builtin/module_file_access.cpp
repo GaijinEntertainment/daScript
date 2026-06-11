@@ -17,10 +17,9 @@ namespace das {
         if (context) delete context;
     }
 
-    ModuleFileAccess::ModuleFileAccess ( const string & pak, const FileAccessPtr & access ) {
-        ModuleGroup dummyLibGroup;
+    ModuleFileAccess::ModuleFileAccess ( const string & pak, const ProgramPtr & program ) {
         TextWriter tout;
-        if ( auto program = compileDaScript(pak, access, tout, dummyLibGroup) ) {
+        if ( program ) {
             if ( program->failed() ) {
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );

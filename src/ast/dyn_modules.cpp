@@ -14,7 +14,7 @@ namespace das {
 
 // Defined in module_builtin_fio.cpp — re-attempts modules whose dlopen was
 // deferred during the folder scan (sibling-module dependency loaded out of order).
-void retry_pending_dynamic_modules();
+DAS_API void retry_pending_dynamic_modules();
 
 static constexpr const char *MODULE_SUFFIX = ".das_module";
 static constexpr const char *INIT_NAME = "initialize";

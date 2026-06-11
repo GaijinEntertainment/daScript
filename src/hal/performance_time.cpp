@@ -79,7 +79,7 @@ extern "C" int64_t get_time_nsec ( int64_t reft ) {
     return ref_time_ticks() - reft;
 }
 
-extern "C" int64_t ref_time_delta_to_usec ( int64_t ref ) {
+extern "C" DAS_API int64_t ref_time_delta_to_usec ( int64_t ref ) {
     return ref / 1000LL;
 }
 
@@ -106,7 +106,7 @@ extern "C" int64_t get_time_nsec ( int64_t reft ) {
     return ref_time_ticks() - reft;
 }
 
-extern "C" int64_t ref_time_delta_to_usec ( int64_t ref ) { return ref / 1000LL; }
+extern "C" DAS_API int64_t ref_time_delta_to_usec ( int64_t ref ) { return ref / 1000LL; }
 
 
 #else // osx
@@ -125,6 +125,6 @@ extern "C" int64_t get_time_nsec ( int64_t reft ) {
     return ref_time_ticks() - reft;
 }
 
-extern "C" int64_t ref_time_delta_to_usec ( int64_t ref ) { return ref / 1000LL; }
+extern "C" DAS_API int64_t ref_time_delta_to_usec ( int64_t ref ) { return ref / 1000LL; }
 
 #endif

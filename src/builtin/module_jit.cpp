@@ -28,7 +28,6 @@
 #include "misc/include_fmt.h"
 
 #include "module_builtin_rtti.h"
-#include "module_builtin_ast.h"
 
 #include <stdlib.h>
 #include <stdio.h>

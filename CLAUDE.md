@@ -70,6 +70,9 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/version_update.md` | Bumping the daslang version number |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
+| `skills/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
+| `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
+| `skills/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
 | `skills/pr_review_iteration.md` | Working an open PR through CI failures and Copilot/human review feedback after the PR is created |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
@@ -91,7 +94,9 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
-**Doc improvements at stopping points.** When a task wraps and you spot a typo or factual error in CLAUDE.md or `skills/*.md` — fix it in-place and flag the edit in the end-of-turn summary. Anything more — clarifications, additions, restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers** — propose first. Default toward propose-first; doc edits direct future Claude behavior and silent diffs are not OK.
+**Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
+
+**Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
@@ -106,8 +111,9 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets
-- **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`
+- **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`. **Arrow shorthand for single-expression blocks:** `arr |> sort() $(a, b) => a < b`. Defaulted parameters sitting between the explicit args and a trailing block are padded automatically — don't spell them out
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture). **Inline arrow form:** `@(x) => expr` (capture lambda) and `@@(x) => expr` (no-capture function pointer) — preferred for short transforms passed as arguments: `sometimes(pat, @@(x) => fast(x, 2.0lf))`
+- **Function/method arrow body:** `def add(a, b : int) : int => a + b` — single-expression body, return type optional (`def add(a, b : int) => a + b` infers). Works on class methods too: `def get() : int => count + 2`
 - **Generator:** `$() { yield value; }` or `$ { yield value; }`
 - **Tuple `=>`:** `a => b` creates `tuple<auto;auto>`
 - **`typeinfo`:** `typeinfo trait_name(type<T>)` — trait name outside parens
@@ -122,6 +128,16 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **`-const`** strips constness in type expressions — used with `reinterpret` for interior mutability: `unsafe(reinterpret<MyStruct? -const>(addr(self)))`
 - **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
 - **OR types in params** (`T1 | T2 | …`) — a parameter may list alternative accepted types: `int | float | double`, or heterogeneous forms like `array<int> | table<auto> | auto(NT)`. This is a **generic "OR" type, NOT a runtime tagged variant** — the function is monomorphized per the concrete argument type that matches one alternative, so each instantiation sees that concrete type with no per-call dispatch or unpacking cost. Don't "hoist the union cast out of the loop" — there is no union value; a cast like `float(n)` inside the body is just a trivial concrete cast in each instantiation. Use it to widen an overload set in one signature (e.g. `def fast(n : int | float | double)` accepting bare ints, floats, and doubles at the same call site)
+
+### Fixed arrays (structural since 0.6.3)
+
+`int[10]` is a **structural type** (`Type::tFixedArray`), not a qualifier vector on the element: one node per dimension, element in `firstType`, size in `fixedDim`, outermost first (`int[3][4]` = FA(3, FA(4, int))); ref/const/temporary live on the chain head. Operations act on the **outermost level only** (the one-peel rule).
+
+- **Generic binding:** `auto(TT)` binds the WHOLE array (`TT = int[3][4]`); `auto(TT)[]` peels one level (`TT = int[4]`, parameter constness inherited); `TT - []` in a return/alias removes ONE level — pre-0.6.3 docs saying "removes all dims" describe the deleted flattened world
+- **`safe_addr(arr)` on a fixed array returns a pointer to the FIRST ELEMENT** (C-style decay; multi-dim peels one level: `int[2][3]` → `int[3]?#`) — this is what makes `glGetBooleanv(what, safe_addr(flags4))`-style C interop work
+- **Typedefs compose:** `typedef M4 = float[4]` then `M4[10]` is `float[10][4]` — array-ness survives aliasing and generic substitution (the pre-0.6.3 flattening bugs are gone)
+- **Runtime `TypeInfo` is still flattened** (`dim[]`/`dimSize`) — only the AST is structural. C++ `TypeDecl::isArray()` means "is a fixed array" in both pre- and post-rework daslang (useful for external modules spanning versions)
+- Macro authors: das-side `TypeDecl` fields are `fixedDim`/`fixedDimExpr` (NOT `dim`/`dimExpr` — deleted); typemacro payloads live in `typeMacroExpr`; build chains with `make_fixed_array_type(total, element)` from `daslib/ast_boost` — details in `skills/das_macros.md`
 
 ### Important defaults
 
