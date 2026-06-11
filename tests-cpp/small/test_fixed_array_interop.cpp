@@ -15,8 +15,8 @@ TEST_CASE("typeFactory produces tFixedArray chains") {
         auto t = typeFactory<int[4]>::make(lib);
         REQUIRE(t->baseType == Type::tFixedArray);
         CHECK_EQ(t->fixedDim, 4);
-        CHECK(t->isNativeDim);
-        CHECK_FALSE(t->ref);
+        CHECK(bool(t->isNativeDim));    // bool() — doctest binds operands by reference, bit-fields can't
+        CHECK_FALSE(bool(t->ref));
         REQUIRE(t->firstType != nullptr);
         CHECK_EQ(t->firstType->baseType, Type::tInt);
         CHECK_EQ(t->describe(), "int[4]");
@@ -37,7 +37,7 @@ TEST_CASE("typeFactory produces tFixedArray chains") {
         auto t = typeFactory<TDim<int32_t,4>>::make(lib);
         REQUIRE(t->baseType == Type::tFixedArray);
         CHECK_EQ(t->fixedDim, 4);
-        CHECK_FALSE(t->isNativeDim);
+        CHECK_FALSE(bool(t->isNativeDim));
         CHECK_EQ(t->firstType->baseType, Type::tInt);
         auto nested = typeFactory<TDim<TDim<int32_t,4>,3>>::make(lib);
         CHECK_EQ(nested->describe(), "int[3][4]");
@@ -46,14 +46,14 @@ TEST_CASE("typeFactory produces tFixedArray chains") {
         auto elem = new TypeDecl(Type::tInt);
         elem->constant = true;
         auto t = makeFixedArrayTypeDecl(4, elem);
-        CHECK(t->constant);
-        CHECK_FALSE(t->firstType->constant);
+        CHECK(bool(t->constant));
+        CHECK_FALSE(bool(t->firstType->constant));
     }
     SUBCASE("makeArgumentType composes through the FA-aware classifiers") {
         auto t = makeArgumentType<int[4]>(lib);
         REQUIRE(t->baseType == Type::tFixedArray);
-        CHECK_FALSE(t->ref);          // isRefType() branch clears ref, skips constant
-        CHECK_FALSE(t->constant);
+        CHECK_FALSE(bool(t->ref));    // isRefType() branch clears ref, skips constant
+        CHECK_FALSE(bool(t->constant));
     }
 }
 

@@ -105,10 +105,10 @@ TEST_CASE("gen2 grammar builds tFixedArray chains") {
     SUBCASE("const hoists to the chain head, element stays bare") {
         auto h3 = fieldType(p,"Foo","f3");
         auto e3 = checkChain(h3,{4},Type::tInt);
-        CHECK(h3->constant);
-        CHECK_FALSE(e3->constant);
+        CHECK(bool(h3->constant));    // bool() — doctest binds operands by reference, bit-fields can't
+        CHECK_FALSE(bool(e3->constant));
         auto h4 = fieldType(p,"Foo","f4");
-        CHECK(h4->constant);
+        CHECK(bool(h4->constant));
         CHECK(h3->isSameType(*h4, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes));
     }
     SUBCASE("[] is the dimAuto sentinel, no dim expr") {
@@ -130,8 +130,8 @@ TEST_CASE("gen2 grammar builds tFixedArray chains") {
     SUBCASE("late dim splices in FRONT (gen1 quirk preserved): int[3] const [4] is [4][3]") {
         auto t = fieldType(p,"Foo","f8");
         checkChain(t,{4,3},Type::tInt);
-        CHECK(t->constant);                       // hoisted from the inner chain head
-        CHECK_FALSE(t->firstType->constant);
+        CHECK(bool(t->constant));                 // hoisted from the inner chain head
+        CHECK_FALSE(bool(t->firstType->constant));
     }
     SUBCASE("mixed dim_list [3][] keeps text order (gen2-only - error in gen1)") {
         checkChain(fieldType(p,"Foo","f9"),{3,TypeDecl::dimAuto},Type::tInt);
@@ -173,14 +173,14 @@ TEST_CASE("gen1 grammar builds tFixedArray chains") {
     SUBCASE("const hoists to the chain head") {
         auto t = fieldType(p,"Foo","f5");
         auto e = checkChain(t,{3},Type::tInt);
-        CHECK(t->constant);
-        CHECK_FALSE(e->constant);
+        CHECK(bool(t->constant));
+        CHECK_FALSE(bool(e->constant));
     }
     SUBCASE("late dim splices in FRONT: int[3] const [4] is [4][3], const on head") {
         auto t = fieldType(p,"Foo","f6");
         checkChain(t,{4,3},Type::tInt);
-        CHECK(t->constant);
-        CHECK_FALSE(t->firstType->constant);
+        CHECK(bool(t->constant));
+        CHECK_FALSE(bool(t->firstType->constant));
     }
 }
 
@@ -242,8 +242,8 @@ TEST_CASE("mangled name parse builds tFixedArray and round-trips the emit") {
     SUBCASE("qualifier prefixes land on the FA head") {
         auto t = reparse("C&[4]i");
         checkChain(t,{4},Type::tInt);
-        CHECK(t->constant);
-        CHECK(t->ref);
+        CHECK(bool(t->constant));
+        CHECK(bool(t->ref));
         CHECK_EQ(t->getMangledName(), "C&[4]i");
     }
     SUBCASE("Y<> immediately after [d] labels THAT node - the [3][4]Y<M4>[4]f golden") {
@@ -270,8 +270,8 @@ TEST_CASE("mangled name parse builds tFixedArray and round-trips the emit") {
         auto full = built->getMangledName(true);
         CHECK_EQ(full, "[3]-[]-Ci");
         auto t = reparse(full);
-        CHECK(t->removeDim);
-        CHECK(t->removeConstant);
+        CHECK(bool(t->removeDim));
+        CHECK(bool(t->removeConstant));
         CHECK_EQ(t->getMangledName(true), full);
     }
     SUBCASE("FA nested in containers round-trips") {
