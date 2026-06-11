@@ -374,7 +374,7 @@ def document_module_ast_boost(_root : string) {
         group_by_regex("Annotations", mod, %regex~(append.*|add.*)%%),
         group_by_regex("Expression generation", mod, %regex~(override_method|panic_expr_as|make_static_assert_false|convert_to_expression)%%),
         group_by_regex("Visitors", mod, %regex~(visit.*)%%),
-        group_by_regex("Type generation", mod, %regex~(function_to_type)%%),
+        group_by_regex("Type generation", mod, %regex~(function_to_type|make_fixed_array_type)%%),
         group_by_regex("Type casts", mod, %regex~(`is`|`as`|walk_and_convert)%%),
         hide_group(group_by_regex("Clonning", mod, %regex~(clone)%%)),
         group_by_regex("Setup", mod, %regex~setup.*$%%)
