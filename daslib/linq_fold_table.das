@@ -273,7 +273,7 @@ def private make_probe_miss(termName : string; dName : string) : Expression? {
 def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var adapter : TableAdapter?; at : LineInfo) : Expression? {
     if (adapter.lane == TableLane.VALUES) return null
     let n = length(calls)
-    if (n < 1) return null
+    if (n < 1 || n > 3) return null
     var termCall = calls[n - 1]._0
     let termName = calls[n - 1]._1.name
     let termArgs = length(termCall.arguments)
@@ -285,16 +285,11 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
     let pName = qn("plk_p", at)
     // keys-lane elements ARE the key, so the probe local doubles as the residual/projection binder
     let bindName = adapter.lane == TableLane.KEYS ? kName : qn("plk_kv", at)
-    var predBody : Expression?
-    var nw = 0
-    while (nw < n - 1 && calls[nw]._1.name == "where_" && length(calls[nw]._0.arguments) == 2) {
-        nw++
-    }
-    if (nw == 0) {
+    var predArg : Expression?
+    if (n == 1) {
         // predicate-form terminators, and the keys-lane contains
-        if (n != 1) return null
         if ((termName == "any" || termName == "count") && termArgs == 2) {
-            predBody = peel_lambda_rename_var(termCall.arguments[1], bindName)
+            predArg = termCall.arguments[1]
         } elif (termName == "contains" && termArgs == 2 && adapter.lane == TableLane.KEYS) {
             // element evaluated exactly once on both paths — no invariance/purity gate needed
             keyX = clone_expression(termCall.arguments[1])
@@ -302,24 +297,22 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
             return null
         }
     } else {
-        if (nw == n - 2) {
-            if (calls[nw]._1.name != "select" || length(calls[nw]._0.arguments) != 2
+        // collapse_chained_wheres ran at flatten time, so a leading where run is already ONE call here
+        if (calls[0]._1.name != "where_" || length(calls[0]._0.arguments) != 2) return null
+        predArg = calls[0]._0.arguments[1]
+        if (n == 3) {
+            if (calls[1]._1.name != "select" || length(calls[1]._0.arguments) != 2
                     || (termName != "first" && termName != "first_or_default")) {
                 return null
             }
-            selCall = calls[nw]._0
-        } elif (nw != n - 1
-                || (!((termName == "any" || termName == "count" || termName == "first") && termArgs == 1)
-                    && !(termName == "first_or_default" && termArgs == 2))) {
+            selCall = calls[1]._0
+        } elif (!((termName == "any" || termName == "count" || termName == "first") && termArgs == 1)
+                && !(termName == "first_or_default" && termArgs == 2)) {
             return null
         }
-        // a leading run of where_ calls AND-merges (in order) before conjunct extraction — the same
-        // collapse the scan path applies downstream, so both spellings hit one extraction shape
-        for (wi in range(nw)) {
-            predBody = merge_where_cond(predBody, peel_lambda_rename_var(calls[wi]._0.arguments[1], bindName))
-        }
     }
-    if (predBody != null) {
+    if (predArg != null) {
+        var predBody = peel_lambda_rename_var(predArg, bindName)
         keyX = extract_key_probe(predBody, adapter.lane, bindName, residual)
     }
     if (keyX == null) return null
