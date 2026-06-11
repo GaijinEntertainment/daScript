@@ -446,6 +446,14 @@ extern "C" {
         builtin_array_unlock_mutable(arr, context, at);
     }
 
+    DAS_API void jit_table_lock ( Table & tab, Context * context, LineInfoArg * at ) {
+        builtin_table_lock(tab, context, at);
+    }
+
+    DAS_API void jit_table_unlock ( Table & tab, Context * context, LineInfoArg * at ) {
+        builtin_table_unlock(tab, context, at);
+    }
+
     DAS_API int32_t jit_str_cmp ( char * a, char * b ) {
         return strcmp(a ? a : "",b ? b : "");
     }
@@ -638,6 +646,8 @@ extern "C" {
     void *das_get_jit_free_persistent() { return (void *)&jit_free_persistent; }
     void *das_get_jit_array_lock() { return (void *)&builtin_array_lock; }
     void *das_get_jit_array_unlock() { return (void *)&builtin_array_unlock; }
+    void *das_get_jit_table_lock() { return (void *)&builtin_table_lock; }
+    void *das_get_jit_table_unlock() { return (void *)&builtin_table_unlock; }
     void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
@@ -1177,6 +1187,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_array_lock");
             addExtern<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
                 SideEffects::none, "das_get_jit_array_unlock");
+            addExtern<DAS_BIND_FUN(das_get_jit_table_lock)>(*this, lib, "get_jit_table_lock",
+                SideEffects::none, "das_get_jit_table_lock");
+            addExtern<DAS_BIND_FUN(das_get_jit_table_unlock)>(*this, lib, "get_jit_table_unlock",
+                SideEffects::none, "das_get_jit_table_unlock");
             addExtern<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
                 SideEffects::none, "das_get_jit_table_at");
             addExtern<DAS_BIND_FUN(das_get_jit_table_erase)>(*this, lib, "get_jit_table_erase",
