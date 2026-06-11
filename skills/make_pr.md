@@ -150,6 +150,15 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 
 **What this catches:** struct-layout drift (i32 vs i64 fields in JIT mirror), mixed-width arithmetic (i64 × i32), missing intrinsic lowering after a runtime-side widening. The two suggested tests cover array indexing + table operations; widen the smoke list to `tests/soa/test_soa_basic.das` and `tests/language/typeAlias.das` if you touched generic-instance lowering or capture frames.
 
+## 2.7. Type-system / daslib-generics changes — sequence smoke + externals sweep
+
+If the PR changes the type system, generic binding rules, AST node layout, or widely-instantiated daslib generics (`builtin.das`, `safe_addr.das`, …), two CI gates have no overlap with the standard test suite:
+
+1. **Sequence smoke** — the only pre-merge lane that compiles GLFW-gated `.das` (dasOpenGL helpers etc.). Build the runtime module targets and run `examples/games/sequence/ci_smoke_test.ps1` (`.sh` on POSIX) — exact commands in `skills/preflight.md`.
+2. **Externals sweep** — `extended_checks` installs external dasImgui from ITS master against your branch; an ABI break vs external repos reds CI on an unrelated-looking step. Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
+
+Skip for changes that can't alter what external/module-gated code sees (tests-only, docs-only, tool-local).
+
 ## 3. Build and run AOT tests
 
 **IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files.
@@ -184,8 +193,11 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 - Public functions in `daslib/*.das` (added, removed, renamed, or signature changed)
 - `//!` doc-comments in `daslib/*.das` files
 - C++ bindings in `modules/*/src/*.cpp` or `src/builtin/*.cpp` that add new public functions, types, or struct fields
+- **Struct fields or enum values added, REMOVED, or reordered** in any C++ type documented under `doc/source/stdlib/handmade/` — das2rst validates handmade docs **positionally** (line 1 = type description, line N+1 = Nth field/value), so a removed field is just as CI-fatal as an added one
 - RST files in `doc/source/` (handwritten tutorials, reference pages, TOCs)
 - `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
+
+Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs six gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
 
 **Which substeps to run** — match what changed, not "all in order":
 
@@ -236,12 +248,13 @@ grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'
 
 Must return empty. If not, go back to step 4a and add the missing function to a group.
 
-### 4f. Clean Sphinx build
+### 4f. Clean Sphinx build — BOTH builders
 
-MUST delete cache — cached builds hide errors:
+CI runs `sphinx-build -W` for **latex AND html** — they catch different warning sets (latex chokes on some table/unicode constructs html accepts). MUST delete cache — cached builds hide errors:
 
 ```bash
-rm -rf doc/sphinx-build site/doc
+rm -rf doc/sphinx-build site/doc build/latex
+sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex
 sphinx-build -b html -d doc/sphinx-build doc/source site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
 tail -3 /tmp/sphinx_out.txt
 grep -iE "warning:|error:" /tmp/sphinx_out.txt
@@ -259,9 +272,13 @@ Common Sphinx issues:
 - **Malformed table**: Grid/simple table column widths don't align
 - **Unexpected indentation**: Content after directive must be indented consistently
 
-### 4g. Stage doc changes
+### 4g. Stage doc changes — including NEW generated files
 
-Add all changed/new files in `doc/` and `doc/reflections/` to the commit. For squashed branches, amend the existing commit.
+Add all changed/new files in `doc/` and `doc/reflections/` to the commit. For squashed branches, amend the existing commit. CI fails if das2rst generated files that aren't tracked — verify:
+
+```bash
+git ls-files --others --exclude-standard doc/source/stdlib/   # must be empty
+```
 
 See `skills/documentation_rst.md` for full details on doc conventions, tutorial RST, and cross-references.
 
@@ -273,17 +290,11 @@ Run the MCP `format_file` tool on all changed `.das` files in a single batched c
 
 Do NOT format files you didn't change — only format files that are part of the PR.
 
-### CI `das-fmt` ≠ MCP `format_file` — verify named-arg spacing
+### CI formatter = in-tree `utils/das-fmt/dasfmt.das`
 
-CI's `extended_checks` job runs `./bin/Release/daslang ./das-fmt/dasfmt.das -- --path ./ --verify` (plus a compiled `das-fmt.exe` pass). The `das-fmt/dasfmt.das` file is NOT in the repo tree — CI fetches it externally — and it is **stricter** than MCP `format_file` on at least one rule:
+CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify` — the script is **in the repo tree** and wraps the same `daslib/das_source_formatter` engine as MCP `format_file`, so the two agree (probe-verified: both rewrite `Foo(a=1)` → `Foo(a = 1)`). The pre-push hook runs the exact CI command on tracked files; if the hook passes, the CI formatter gate passes.
 
-| MCP `format_file` accepts | CI `das-fmt` requires |
-|---|---|
-| `Foo(a=1, b=2)` | `Foo(a = 1, b = 2)` (spaces around `=` in named args) |
-
-`bin/Release/das-fmt.exe` built from `utils/dasFormatter/` is the **v1→v2 syntax converter**, NOT the same formatter — running it locally does not reproduce CI.
-
-**Before pushing:** mentally format named-arg constructor / call sites with spaces around `=`. If CI `extended_checks` fails on a format diff after MCP said "already formatted", fix the spacing and re-push (or amend, on a squashed branch).
+**Name trap:** a locally built `bin/Release/das-fmt.exe` (the CMake `das-fmt` target, from `utils/dasFormatter/`) is the **v1→v2 syntax converter**, not the formatter. CI's `das-fmt.exe` verify pass works because CI first overwrites that binary with an `-exe`-compiled `dasfmt.das`. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`).
 
 ## 6. Create the PR
 
@@ -302,9 +313,10 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |
+| Type-system/generics | sequence smoke (`skills/preflight.md`) + externals sweep (`skills/abi_break_sweep.md`) | Only for type-system / AST-layout / daslib-generics changes |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
-| Docs | `das2rst.das` + stubs + Sphinx | Only if daslib/C++ bindings/RST changed |
+| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx latex AND html | Any daslib/src-builtin/RST change triggers all six gates — `skills/preflight.md` |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
 | Wrap-up curation | `skills/task_wrap_up.md` | Optional. Add answers for cache misses, edit cached answers this PR invalidated |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
