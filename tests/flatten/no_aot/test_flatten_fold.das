@@ -115,7 +115,32 @@ def test_flatten_fold(t : T?) {
     }
     t |> run("optimize corpus folds clean (test_flatten_opt.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_opt.das")
-        t |> success(n >= 7, "expected >=7 twins, checked {n}")
+        t |> success(n >= 14, "expected >=14 twins, checked {n}")
+        // regroup-to-share FIRED proof: reassoc canonicalizes alpha to `(e - b) + 1f`, so a
+        // shared `_cse_` let only appears when the regroup re-paired `1f - b` for the CSE
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_opt.das")
+        let rg = bodies?["r_oneminus_flat"] ?? ""
+        t |> success(rg |> find("_cse_") >= 0, "regrouped '1 - b' must CSE-share with the albedo use: {rg}")
+        let ra = bodies?["r_anyconst_flat"] ?? ""
+        t |> success(ra |> find("_cse_") >= 0, "regrouped '0.5 - b' must CSE-share: {ra}")
+        delete bodies
+    }
+    t |> run("dot corpus fuses clean (test_flatten_dot.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_dot.das")
+        t |> success(n >= 12, "expected >=12 twins, checked {n}")
+        // weighted + negated lanes in one chain land in the mask: dot(a, (2, 3, -4))
+        // the hadd must come back as a dot call (symmetric-oracle guard: fuser and residual
+        // share dot_chain_groups, so only a POSITIVE assert catches a matcher break blinding both)
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_dot.das")
+        let h4 = bodies?["d_hadd4_flat"] ?? ""
+        t |> success(h4 |> find("dot(") >= 0, "v.x+v.y+v.z+v.w must fuse to dot: {h4}")
+        let lu = bodies?["d_luma_flat"] ?? ""
+        t |> success(lu |> find("dot(") >= 0, "weighted lanes must fuse to dot: {lu}")
+        let ne = bodies?["d_nested_flat"] ?? ""
+        t |> success(ne |> find("dot(") >= 0, "lane sum inside a call arg must fuse: {ne}")
+        let wn = bodies?["d_wneg_flat"] ?? ""
+        t |> success(wn |> find("float3(2f,3f,-4f)") >= 0, "weighted/negated lanes must land in the mask: {wn}")
+        delete bodies
     }
     t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")

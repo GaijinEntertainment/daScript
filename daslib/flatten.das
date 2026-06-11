@@ -758,25 +758,33 @@ def public flatten_fold(var func : FunctionPtr; no_fast_math : bool = false; exp
 }
 
 [macro_function]
-def public flatten_optimize(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : bool {
+def public flatten_log_cse : bool {
+    //! True when the COMPILING module sets `options _flatten_log_cse = true` — dump each twin's
+    //! final CSE value-number cache (pure-subtree tally + const-minus shapes) after the optimize
+    //! fixpoint. COMPILE-TIME ONLY: patch code reads it once, runtime tools pass their flag.
+    return compiling_program()._options |> find_arg("_flatten_log_cse") ?as tBool ?? false
+}
+
+[macro_function]
+def public flatten_optimize(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false; log_cse : bool = false) : bool {
     //! Post-fold optimize pass (delegates to `flatten_preshade_cse`): hoist uniform subtrees to
-    //! per-draw `_preshader_` lets + CSE-dedup + rcp-rewrite divisions by a uniform (fast-math).
-    //! Run after the `flatten_fold` fixpoint; `barriers` = the backend's sampler/intrinsic names.
-    return flatten_preshade_cse(func, barriers, no_fast_math)
+    //! per-draw `_preshader_` lets + regroup const-minus sums toward live `C - x` twins + CSE-dedup
+    //! + rcp-rewrite uniform divisions. After the `flatten_fold` fixpoint; `barriers` = sampler names.
+    return flatten_preshade_cse(func, barriers, no_fast_math, log_cse)
 }
 
 [macro_function]
 def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false) : bool {
-    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): re-pack ctor lane patterns, `a*b ± c`
-    //! into `mad(a,b,c)`, and the expanded lerp shape back into `lerp(a,b,t)`. Call on the optimized,
-    //! re-inferred body and repeat across re-inference until it returns false.
+    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into
+    //! `dot(v, mask)`, re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape
+    //! back into lerp. Call on the optimized, re-inferred body; repeat until it returns false.
     return fuse_body(func, no_fast_math)
 }
 
 def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
     //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
     //! has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division,
-    //! no un-packed ctor lane pattern.
+    //! no un-packed ctor lane pattern, no un-fused lane sum, no regroup-to-share miss.
     var res : array<string>
     ast_gc_guard() {
         res <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math)
@@ -942,7 +950,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to
             // type the new lets, then fuse next cycle.
             set_flatten_phase(func, PHASE_OPTIMIZED)
-            if (flatten_optimize(twin, FLATTEN_BARRIERS, flatten_no_fast_math())) {
+            if (flatten_optimize(twin, FLATTEN_BARRIERS, flatten_no_fast_math(), flatten_log_cse())) {
                 astChanged = true
                 return true
             }
