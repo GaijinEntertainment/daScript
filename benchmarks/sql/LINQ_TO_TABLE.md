@@ -4,10 +4,22 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 6 committed — arc complete** (to_table sink; stage 5 = join probe + table-lead
-joins, 2742f6db2; stage 4 = point-lookup folds, ac441c4a0; stage 3 = `%linq!` table sources,
-29d23baf6; stage 2 = TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba;
-master's fixed-array rework merged in after stage 5, 1ab3e6a67).
+Status: **stage 7 committed** (group_by fusion — `can_group_by` + `build_group_by_adapter` on
+`TableAdapter`, riding `plan_group_by_core` with the usage-pruned slot walk as the bucket-fill
+loop; stage 6 = to_table sink; stage 5 = join probe + table-lead joins, 2742f6db2; stage 4 =
+point-lookup folds, ac441c4a0; stage 3 = `%linq!` table sources, 29d23baf6; stage 2 =
+TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba; master's fixed-array
+rework merged in after stage 5, 1ab3e6a67; the JIT inline slot walk landed separately, #3100).
+
+Stage 7 findings:
+- **Two overrides were the whole change**: the group_by splice pattern was already adapter-generic
+  (`can_group_by_source` gate → `build_group_by_adapter` → `plan_group_by_core`), so enabling
+  tables = `can_group_by() == true` + a fresh-`TableAdapter` `build_group_by_adapter`. The kv
+  usage-pruner sees the whole accumulation body (key expr + reducer updates + upstream
+  where/select segments), so a group key over `kv.value.brand` walks `values(tab)` alone.
+- m7 `groupby_*` INTERP 144–201 → 30–50 ns/op (count 163→31, ~5×); JIT 44–73 → 8.4–11 (count
+  43.5→8.4, another ~5× — the fused emit rides #3100's inline slot walk). `join_groupby_*` stays
+  on the cascade (deferred edge below).
 
 Stage 6 findings:
 - **Tier-2 surface required for typing**: `_fold`'s argument must fully type before the macro
@@ -224,6 +236,10 @@ End of arc: `skills/linq.md` + linq docs mention the table source.
 
 ## Deferred edges (named, not built)
 
+- **`join |> group_by` over a table lead**: `TableAdapter.build_group_by_adapter` declines the
+  upstream-join arm (returns null → tier-2). The fix is a TableJoin analog of `ArrayJoinAdapter`
+  (lead loop from the pruned slot walk, srcB hash/probe from the stage-5 pieces); the
+  `join_groupby_*` m7 cells are the numbers it would improve. Revisit on demand.
 - **Point-lookup conjunct extraction**: `where(kv.key == X && <residual>)` (incl. the collapsed
   multi-where form) could probe and evaluate the residual on the probed element only. The matcher
   currently declines compound predicates; add when a real chain wants it.

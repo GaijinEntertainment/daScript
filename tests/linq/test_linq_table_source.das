@@ -619,3 +619,113 @@ def test_to_table_sink(t : T?) {
         delete arr
     }
 }
+
+[test]
+def test_table_group_by(t : T?) {
+    t |> run("kv lane: count + sum per group agrees with a hand loop") @(t : T?) {
+        var tab <- make_int_table(20)
+        let groups <- _fold(each_kv(tab)
+                            ._group_by(_.key % 3)
+                            ._select((K = _._0, N = _._1 |> count(), S = _._1 |> select($(kv : IKV) => kv.value) |> sum()))
+                            .to_array())
+        var expN : table<int; int>
+        var expS : table<int; int>
+        for (k, v in keys(tab), values(tab)) {
+            expN[k % 3] ++
+            expS[k % 3] += v
+        }
+        t |> equal(length(groups), length(expN))
+        for (g in groups) {
+            t |> equal(g.N, expN?[g.K] ?? -1)
+            t |> equal(g.S, expS?[g.K] ?? -1)
+        }
+        delete expN
+        delete expS
+        delete tab
+    }
+    t |> run("values lane: group key + reducer over struct values") @(t : T?) {
+        var tab <- make_pt_table()
+        let groups <- _fold(values(tab)
+                            ._group_by(_.x % 2)
+                            ._select((K = _._0, MaxY = _._1 |> select($(p : Pt) => p.y) |> max()))
+                            .to_array())
+        t |> equal(length(groups), 2)
+        for (g in groups) {
+            t |> equal(g.MaxY, g.K == 0 ? 40 : 30)
+        }
+        delete tab
+    }
+    t |> run("keys lane: group over raw keys") @(t : T?) {
+        var tab <- make_int_table(10)
+        let groups <- _fold(keys(tab)._group_by(_ % 4)._select((K = _._0, N = _._1 |> length)).to_array())
+        t |> equal(length(groups), 4)
+        var total = 0
+        for (g in groups) {
+            total += g.N
+        }
+        t |> equal(total, 10)
+        delete tab
+    }
+    t |> run("upstream where + select segments feed the bucket fill") @(t : T?) {
+        var tab <- make_int_table(20)
+        let groups <- _fold(each_kv(tab)
+                            ._where(_.key % 2 == 0)
+                            ._select(_.value)
+                            ._group_by(_ % 40)
+                            ._select((K = _._0, N = _._1 |> length))
+                            .to_array())
+        // even keys 0..18 -> values 0,20,..,180; % 40 buckets {0, 20}, 5 each
+        t |> equal(length(groups), 2)
+        for (g in groups) {
+            t |> equal(g.N, 5)
+        }
+        delete tab
+    }
+    t |> run("having + trailing where + order") @(t : T?) {
+        var tab <- make_int_table(12)
+        let groups <- _fold(each_kv(tab)
+                            ._group_by(_.key % 5)
+                            ._having(_._1 |> length >= 2)
+                            ._select((K = _._0, S = _._1 |> select($(kv : IKV) => kv.value) |> sum()))
+                            ._where(_.S > 60)
+                            ._order_by(_.S)
+                            .to_array())
+        // buckets 0..4 sizes 3,3,2,2,2; sums 150,180,90,120,150 -> having keeps all, where keeps S>60
+        t |> equal(length(groups), 5)
+        var prev = -1
+        for (g in groups) {
+            t |> success(g.S > 60 && g.S >= prev)
+            prev = g.S
+        }
+        delete tab
+    }
+    t |> run("count terminator counts groups") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(each_kv(tab)._group_by(_.key % 3)._select((K = _._0, N = _._1 |> length)).count()), 3)
+        delete tab
+    }
+    t |> run("empty table yields no groups") @(t : T?) {
+        let e : table<int; int>
+        let groups <- _fold(each_kv(e)._group_by(_.key)._select((K = _._0, N = _._1 |> length)).to_array())
+        t |> equal(length(groups), 0)
+    }
+    t |> run("fused agrees with the tier-2 iterator path") @(t : T?) {
+        var tab <- make_int_table(15)
+        let fused <- _fold(each_kv(tab)
+                           ._group_by(_.key % 4)
+                           ._select((K = _._0, N = _._1 |> count()))
+                           .to_array())
+        var tier2 <- unsafe(each_kv(tab)) |> _group_by(_.key % 4) |> _select((K = _._0, N = _._1 |> length)) |> to_array()
+        t |> equal(length(fused), length(tier2))
+        var t2 : table<int; int>
+        for (g in tier2) {
+            t2[g.K] = g.N
+        }
+        for (g in fused) {
+            t |> equal(g.N, t2?[g.K] ?? -1)
+        }
+        delete t2
+        delete tier2
+        delete tab
+    }
+}

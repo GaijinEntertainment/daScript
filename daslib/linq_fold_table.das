@@ -125,8 +125,17 @@ class TableAdapter : SourceAdapter {
     def override const can_join() : bool {
         return true   // rides emit_array_join: direct-return lead loop via wrap_source_loop
     }
+    def override const can_group_by() : bool {
+        return true   // plan_group_by_core drives the bucket-fill through wrap_source_loop (kv pruning free)
+    }
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_array_join(c, ctx, at)
+    }
+    def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
+        // join |> group_by over a table lead stays a deferred edge (LINQ_TO_TABLE.md) — null bails to tier-2
+        if (c.single |> key_exists("upstream_join")) return null
+        return new TableAdapter(tabExpr = clone_expression(tabExpr), srcName = qn("tsrc", at),
+                                elemType = clone_type(elemType), lane = lane)
     }
     def override arrayTop() : Expression? {
         // Feeds the reserve hint (type_has_length covers tables). The backward-index reverse lanes that
