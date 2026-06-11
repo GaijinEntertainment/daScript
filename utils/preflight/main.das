@@ -112,9 +112,13 @@ def run_argv(args : array<string>) : tuple<rc : int; out : string> {
     return run_argv(args, 0.0)
 }
 
-def tool_available(exe : string) : bool {
-    let r = run_argv([exe, "--version"], 30.0)
+def tool_available(exe, probe_flag : string) : bool {
+    let r = run_argv([exe, probe_flag], 30.0)
     return r.rc == 0
+}
+
+def tool_available(exe : string) : bool {
+    return tool_available(exe, "--version")
 }
 
 def seconds_since(t0 : int64) : double {
@@ -690,7 +694,9 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
     } else {
         args <- ["env", "BIN={bin_dir}", "bash", "examples/games/sequence/ci_smoke_test.sh", cwd]
         if (get_platform_name() == "linux" && !has_env_variable("DISPLAY")) {
-            if (tool_available("xvfb-run")) {
+            // xvfb-run is a wrapper script: -h is its documented flag; --version
+            // support varies by distro version
+            if (tool_available("xvfb-run", "-h")) {
                 var wrapped <- ["xvfb-run", "-a"]
                 wrapped |> push_from(args)
                 args <- wrapped
