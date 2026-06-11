@@ -224,10 +224,12 @@ PR1 findings:
 
 End of arc: `skills/linq.md` + linq docs mention the table source.
 
-## Late stage (planned) — reducer shapes & cleanups
+## Late stage (planned) — reducer shapes & general code hygiene
 
-Cross-source cleanups surfaced while writing stage-7 tests; none are table-specific, all live in
-the shared group_by/reducer surface and benefit every `_fold` source.
+Cross-source cleanups; none are table-specific. Items 1–2 are user-facing reducer-shape fixes,
+items 3–4 are codebase hygiene investigations (the linq_fold surface is workable but "a tad too
+unwieldy" — the table adapter took several stages, and many fuses read as "add this hook, because
+reasons" rather than falling out of the architecture).
 
 1. **Identity-lambda reducers**: `_._1 |> max($(v) => v)` (also `min`/`sum`/`average`) fails with
    30303 today — the untyped lambda can't infer on the tier-2 lazy-bucket surface, and
@@ -239,7 +241,23 @@ the shared group_by/reducer surface and benefit every `_fold` source.
    element type into the lambda. Thread the type through so the annotation becomes optional;
    today's explicit-type requirement is a usability trap (the error is an opaque 30303, not
    "annotate the param").
-3. (Collect further candidates here as they surface.)
+3. **match.das adoption survey (linq_fold* + sqlite_* family)**: flatten_opt's move to
+   `daslib/match` bought both fewer lines and more readable matchers; the linq spine-walkers are
+   full of the same hand-rolled `is ExprCall` / `as` / null-guard chains. Prime candidates:
+   `match_key_probe_side` / `extract_key_probe` (manual `ExprRef2Value` peeling + `ExprField`
+   checks), `extract_*_source` gates, and the sqlite_linq chain decomposition. Survey first,
+   convert where the match form is a strict readability win.
+4. **SourceAdapter interface audit**: all initially-wanted adapters now exist (11 classes:
+   Array/Zip/ArrayJoin/Decs/DecsJoin/Xml/XmlJoin/Json/JsonJoin/Table/ProjectedSource) — audit the
+   ~20-method interface against real usage and remove the scaffolding it forces. Known smells:
+   `arrayTop()`/`arraySrcName()` are still marked "transitional … removed once all consumers move
+   into subclass methods" yet remain load-bearing (reserve hint reads them; adapters override
+   them with comments explaining which distant gate reads what); the `build_group_by_adapter`
+   upstream-join arm repeats ~30 lines of keyaLam/keybLam/resultLam validation across
+   Array/Decs/Xml/Json; two overlapping reverse hooks (`emit_reverse_skip_into_tail` vs
+   `emit_reverse_last_backward`); emit fns reconstruct `headCalls` from stringly-keyed captures
+   ("mirrors emit_loop_or_count_lane_decs"). Goal: a new source should not need "several stages"
+   of hook-by-hook enablement for the standard fuse set.
 
 ## Risks / watch items
 
