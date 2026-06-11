@@ -97,6 +97,16 @@ work. Cut the PR only after the rework has landed and been merged in here. At th
 re-validate the `each_kv` dim-array-value reject overload and `auto(valT)[]` matching — fixed
 arrays are exactly what is being reworked.
 
+**Merge done (2026-06-11, after stage 5):** rework (#3095) merged in; one conflict in
+`daslib/builtin.das` — master deleted the dim-array `values()` overloads (plain `auto(valT)`
+now binds the whole `T[N]`), our `each_kv` block kept. Re-validation: `auto(valT)[]` in table
+value position still matches dim-valued tables (the reject overload fires its 31400), and the
+plain `each_kv` generic still does NOT match `table<K; V[N]>` (table-position generic matching
+doesn't bind fixed-array values), so the explicit rejects remain the right design — without
+them the dim case would be a cryptic 30341, not a workable path. The dim-array-valued each_kv
+deferred edge is therefore engine-gated (table generic matcher), not ours. Gates green: full
+INTERP 10965/10971 (0 failed, 6 skipped), AOT linq 1949/1949, JIT linq 1949/1949.
+
 PR1 findings:
 - **Pre-existing generator-lowering bug, fixed in PR1**: the yield-for lowering emitted
   `loop &&= _builtin_iterator_first(...)` per source — short-circuiting `first()` on later
