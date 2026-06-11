@@ -438,7 +438,7 @@ class PerfLintVisitor : AstVisitor {
     def is_workhorse_numeric(t : TypeDecl?) : bool {
         //! True if the type is one of the six numeric workhorse scalars (int, uint,
         //! int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         let bt = t.baseType
         return (bt == Type.tInt || bt == Type.tUInt
                 || bt == Type.tInt64 || bt == Type.tUInt64
@@ -507,7 +507,7 @@ class PerfLintVisitor : AstVisitor {
         //! `operator |` overload exists. Vectors/ints/etc. don't get here —
         //! the caller restricts to int-cast inputs whose underlying type is
         //! either bitfield or enum.
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         if (t.baseType == Type.tBitfield) return true
         if (t.baseType == Type.tEnumeration) return enum_has_or_operator(t)
         return false
@@ -584,7 +584,7 @@ class PerfLintVisitor : AstVisitor {
         //!   skip         — not flaggable: value-shape-changing conversions
         //!                  (array<uint8>, uri, text_range, other handled types)
         //!                  and anything else.
-        if (arg == null || arg._type == null || !empty(arg._type.dim)) return Perf025Kind.skip
+        if (arg == null || arg._type == null) return Perf025Kind.skip
         let bt = arg._type.baseType
         if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
             || bt == Type.tFloat || bt == Type.tDouble || bt == Type.tString
@@ -771,12 +771,11 @@ class PerfLintVisitor : AstVisitor {
     def is_known_length_source(src : Expression?) : bool {
         if (src == null || src._type == null) return false
         let bt = src._type.baseType
-        // fixed arrays have dim > 0; otherwise we accept any baseType whose
-        // length is determined at the start of the loop.
+        // any source whose length is determined at the start of the loop
         return (bt == Type.tArray || bt == Type.tString
                 || bt == Type.tRange || bt == Type.tRange64
                 || bt == Type.tURange || bt == Type.tURange64
-                || !empty(src._type.dim))
+                || bt == Type.tFixedArray)
     }
 
     def override preVisitExprForSource(expr : ExprFor?; src : ExpressionPtr; last : bool) : void {
@@ -1036,7 +1035,7 @@ class PerfLintVisitor : AstVisitor {
             state.disqualified = true
         } else {
             let bt = src._type.baseType
-            let is_array_src = bt == Type.tArray || !empty(src._type.dim)
+            let is_array_src = bt == Type.tArray || bt == Type.tFixedArray
             if (!is_array_src) {
                 state.disqualified = true
             }

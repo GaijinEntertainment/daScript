@@ -347,21 +347,28 @@ class GlslExport : AstVisitor {
         let st = build_string() $(var tw) {
             // if t.flags.ref
             //    tw |> write("& ") // inout?
-            if (t.baseType == Type.tStructure) {
-                tw |> write("{t.structType.name}")
-            } elif (t.baseType == Type.tHandle) {
-                peek(t.annotation.name) $(aname) {
+            // element kind lives at the chain leaf; [d] suffixes come from the chain
+            var et = t
+            while (et.baseType == Type.tFixedArray && et.firstType != null) {
+                et = et.firstType
+            }
+            if (et.baseType == Type.tStructure) {
+                tw |> write("{et.structType.name}")
+            } elif (et.baseType == Type.tHandle) {
+                peek(et.annotation.name) $(aname) {
                     tw |> write(glsl_handle_types?[aname] ?? "error")
                 }
-            } elif (glsl_types |> key_exists(t.baseType)) {
-                tw |> write(glsl_types?[t.baseType] ?? "error")
+            } elif (glsl_types |> key_exists(et.baseType)) {
+                tw |> write(glsl_types?[et.baseType] ?? "error")
             } else {
-                error("unsupported type {t.baseType}", t.at)
+                error("unsupported type {et.baseType}", t.at)
                 tw |> write("error")
             }
             if (write_dim) {
-                for (d in t.dim) {
-                    tw |> write("[{d}]")
+                var lvl = t
+                while (lvl.baseType == Type.tFixedArray && lvl.firstType != null) {
+                    tw |> write("[{lvl.fixedDim}]")
+                    lvl = lvl.firstType
                 }
             }
         }
@@ -369,6 +376,14 @@ class GlslExport : AstVisitor {
     }
     def describe_glsl_type(t : TypeDeclPtr) {
         return describe_glsl_type_ex(t, true)
+    }
+    def write_dim_suffix(t : TypeDeclPtr) {
+        // GLSL declarator suffix: one [d] per chain level, outermost first
+        var lvl = t
+        while (lvl.baseType == Type.tFixedArray && lvl.firstType != null) {
+            *writer |> write("[{lvl.fixedDim}]")
+            lvl = lvl.firstType
+        }
     }
     def glsl_function_name(fun : FunctionPtr) {
         var funname = build_string() $(var tw) {
@@ -416,10 +431,10 @@ class GlslExport : AstVisitor {
         return st
     }
     def produce_zero(t : TypeDeclPtr) {
-        if (!empty(t.dim)) {
+        if (t.baseType == Type.tFixedArray) {
             *writer |> write("{describe_glsl_type(t)}(")
-            var ct <- clone_type(t.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
-            for (d in range(t.dim[0])) {
+            var ct <- clone_type(t.firstType)   // element of the fixed-array chain
+            for (d in range(t.fixedDim)) {
                 if (d != 0) {
                     *writer |> write(",")
                 }
@@ -714,9 +729,7 @@ class GlslExport : AstVisitor {
         }
     }
     def override visitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) {
-        for (d in decl._type.dim) {
-            *writer |> write("[{d}]")
-        }
+        write_dim_suffix(decl._type)
         *writer |> write(";")
         newLine(1)
     }
@@ -753,7 +766,7 @@ class GlslExport : AstVisitor {
     }
     def override preVisitFunction(fun : FunctionPtr) {
         if (caps.restrict_array_as_result) {
-            if (!empty(fun.result.dim)) {
+            if (fun.result.baseType == Type.tFixedArray) {
                 error("returning arrays is prohibited in this shader model", fun.at)
             }
         }
@@ -839,16 +852,14 @@ class GlslExport : AstVisitor {
         }
         line(arg.at)
         *writer |> write("{describe_glsl_type_ex(arg._type,false)} {arg.name}")
-        for (d in arg._type.dim) {
-            *writer |> write("[{d}]")
-        }
+        write_dim_suffix(arg._type)
     }
     def override visitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) {
         if (arg.init == null) {
             var needZero = true
             if (caps.restrict_array_as_result) {
                 if (caps.allow_unitialized_local_arrays) {
-                    if (!empty(arg._type.dim)) {
+                    if (arg._type.baseType == Type.tFixedArray) {
                         needZero = false
                     }
                 }
@@ -926,7 +937,7 @@ class GlslExport : AstVisitor {
     def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
         line(arg.at)
         if (caps.restrict_array_as_result) {
-            if (!empty(arg._type.dim)) {
+            if (arg._type.baseType == Type.tFixedArray) {
                 let need_init = arg.annotation |> find_arg("need_init") ?as tBool ?? true
                 let group_shared = arg.annotation |> find_arg("groupshared") ?as tBool ?? false
                 if (need_init && !group_shared) {
@@ -1033,9 +1044,7 @@ class GlslExport : AstVisitor {
                 }
             }
             *writer |> write("{describe_glsl_type_ex(arg._type,false)} {arg.name}")
-            for (d in arg._type.dim) {
-                *writer |> write("[{d}]")
-            }
+            write_dim_suffix(arg._type)
             if (arg.init == null && needInit) {
                 *writer |> write(" = ")
                 produce_zero(arg._type)
@@ -1288,7 +1297,7 @@ class GlslExport : AstVisitor {
     }
 // for
     def isDimFor(svar : ExpressionPtr) {
-        return !empty(svar._type.dim)
+        return svar._type.baseType == Type.tFixedArray
     }
     def isRangeFor(svar : ExpressionPtr) {
         let bt = svar._type.baseType
@@ -1334,7 +1343,8 @@ class GlslExport : AstVisitor {
                 *writer |> write(" && ")
             }
             if (isDimFor(source)) {
-                let sdim = source._type.dim[length(source._type.dim) - 1]
+                // the loop indexes ONE level - bound is the outer (head) count
+                let sdim = source._type.fixedDim
                 *writer |> write("{svar.name}!={sdim}")
                 let newsrc = "{describe_subexpression(source)}[{svar.name}]"
                 renames |> push((name = "{iter}", repl = newsrc))
@@ -1856,7 +1866,7 @@ def bind_uniform_function_name(fnMain : FunctionPtr) {
 
 [macro_function]
 def is_glsl_structure(arg; name : string) {
-    if (arg._type.baseType == Type.tStructure && empty(arg._type.dim)) {
+    if (arg._type.baseType == Type.tStructure) {
         if (arg._type.structType._module.name == "glsl_common" && arg._type.structType.name == name) return true
     }
     return false
@@ -1891,7 +1901,7 @@ def get_decl_type_from_name(name : string) {
 
 [macro_function]
 def get_decl_info(typ : TypeDeclPtr; arguments : AnnotationArgumentList) : tuple<ok : bool; info : FieldDeclInfo> {
-    if (!empty(typ.dim) || !(typ.isNumeric || typ.isVectorType)) return (ok = false, info = FieldDeclInfo())
+    if (typ.baseType == Type.tFixedArray || !(typ.isNumeric || typ.isVectorType)) return (ok = false, info = FieldDeclInfo())
     var fdi = FieldDeclInfo(
         sizei = arguments |> find_arg("size") ?as tInt ?? -1,
         typet = get_decl_type_from_name(arguments |> find_arg("type") ?as tString ?? ""),

@@ -421,6 +421,15 @@ namespace das {
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
                 resT->alias.clear();
+                if ( decl->removeDim && resT->baseType==Type::tFixedArray && resT->firstType ) {
+                    // TT -[] unwraps one fixed-array level; qualifiers ride to the new head
+                    auto peeled = new TypeDecl(*resT->firstType);
+                    peeled->at = resT->at;
+                    peeled->ref = resT->ref;
+                    peeled->constant = resT->constant;
+                    peeled->temporary = resT->temporary;
+                    resT = peeled;
+                }
                 return resT;
             } else {
                 return nullptr;
@@ -556,6 +565,15 @@ namespace das {
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
                 // resT->alias.clear(); // this may speed things up, but it breaks typemacro-based aliases
+                if ( decl->removeDim && resT->baseType==Type::tFixedArray && resT->firstType ) {
+                    // TT -[] unwraps one fixed-array level; qualifiers ride to the new head
+                    auto peeled = new TypeDecl(*resT->firstType);
+                    peeled->at = resT->at;
+                    peeled->ref = resT->ref;
+                    peeled->constant = resT->constant;
+                    peeled->temporary = resT->temporary;
+                    resT = peeled;
+                }
                 return resT;
             } else {
                 return decl;

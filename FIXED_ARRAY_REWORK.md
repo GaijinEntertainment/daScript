@@ -446,6 +446,34 @@ ast_match.das (structural FA matching), match.das, typemacro_boost (field rename
 (perf_lint/style_lint), is_local, templates_boost, decs_boost, clargs, rst.das; MCP
 describe_type sanity.
 Exit: no in-tree consumers of the compat properties left.
+**IMPLEMENTED.** `typeMacroExpr` exposed das-side (module_builtin_ast_annotations_1);
+all typemacro/typeDecl/tag payload readers renamed off the `.dimExpr` compat name
+(typemacro_boost, templates_boost, clargs, ast_match $t-tag, sqlite_boost Option
+unwrap, tutorials/macros + tests/typemacro fixtures). ~50 `.dim` gate reads swapped
+to `baseType==tFixedArray` (or deleted where an adjacent baseType pin subsumed them)
+across style_lint/perf_lint/is_local/sort_boost/ast_boost/shader_dsl_boost/
+sqlite_linq/fix-lint-errors. match.das: the dim[last] INNERMOST reads (struct/variant/
+array count checks) → head `fixedDim` (struct/variant dim arms were dead on master
+too — the isStructure gate rejects dim'd values; array arm is the live one, now
+consistent with its one-peel recT). ast_match generate_type_match: flattened dim
+list+entries compare → per-node `fixedDim` compare (chain depth/shape rides the
+existing firstType recursion); payload compare renamed. rst.das describe_type: FA
+chains previously fell through to the raw enum-name fallback (quiet 1f-era doc
+regression) — proper FA arm added (element text + per-level \[d]); legacy suffix loop
+deleted. dasGlsl glsl_internal: describe_glsl_type_ex element-walk + chain suffix
+(was erroring on FA heads), write_dim_suffix helper replaces 3 suffix loops,
+produce_zero head reads, for-loop bound was another INNERMOST read (sort-bug family)
+→ head fixedDim. removeDim `-[]` GAP CLOSED (deferred from 1f): structural one-level
+peel at the two pointer-returning alias-substitution sites (inferAlias +
+inferPartialAliases; quals ride to the new head); dead legacy-vector erase in
+applyAutoContracts deleted; pinned as `type<TT - []>` ← int[2][4] = "int const[4]"
+in test_target_inference (note: formatter spells the contract `- []`). RIDE-ALONG:
+18 pre-existing lint warnings in sqlite_boost fixed (file now touched → hook lints
+it): 10 PERF020, 5 PERF023, 2 LINT010, 1 LINT013. Exit grep CLEAN: remaining
+`.dim` hits are runtime-TypeInfo emission (aot_cpp/llvm_jit, flattened by design)
+and a game field. Gates: 10808/10808 interp, 10147/10147 AOT (two-pass),
+10387/10387 JIT, dasSQLITE 904/904, tests/match 51/51, typemacro 11/11, zero leaks
+all lanes, fmt+lint clean on all 21 das files.
 
 ### Stage 6 — Externals + compat removal
 Sweep D:\DASPKG modules (dasImgui, dasSQLITE, ...); delete `.dim`/`.dimExpr` compat

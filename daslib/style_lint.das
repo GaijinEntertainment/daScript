@@ -281,7 +281,7 @@ class StyleLintVisitor : AstVisitor {
         //! True for the scalar types that have a matching `operator ??` overload in
         //! daslib/json_boost — see lines 85-140 of json_boost.das. Bitfield and enum
         //! `from_JV` overloads exist but have no `??` counterpart, so they stay silent.
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         let bt = t.baseType
         return (bt == Type.tInt    || bt == Type.tUInt
                 || bt == Type.tInt8  || bt == Type.tUInt8
@@ -525,7 +525,7 @@ class StyleLintVisitor : AstVisitor {
 
     def is_bitfield_value_type(t : TypeDecl?) : bool {
         //! True for plain bitfield-typed expressions (not arrays of bitfield).
-        return t != null && t.baseType == Type.tBitfield && empty(t.dim)
+        return t != null && t.baseType == Type.tBitfield
     }
 
     def extract_single_bit_name(expr : Expression? const; bf_type : TypeDecl?) : string {
@@ -894,8 +894,7 @@ class StyleLintVisitor : AstVisitor {
             // host instantiations and compiler-synthesized vars).
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || v._type.baseType != Type.tArray
-                || !empty(v._type.dim)) continue
+                || v._type == null || v._type.baseType != Type.tArray) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 let stmt = blk.list[j]
@@ -1182,10 +1181,10 @@ class StyleLintVisitor : AstVisitor {
 
     def is_struct_or_struct_ptr(t : TypeDecl?) : bool {
         //! Match struct values AND pointers-to-struct, both flat (not array).
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         let is_struct_val = t.baseType == Type.tStructure
         let is_struct_ptr = (t.baseType == Type.tPointer && t.firstType != null
-                && t.firstType.baseType == Type.tStructure && empty(t.firstType.dim))
+                && t.firstType.baseType == Type.tStructure)
         return is_struct_val || is_struct_ptr
     }
 
@@ -1268,7 +1267,7 @@ class StyleLintVisitor : AstVisitor {
 
     def is_jv_table_type(t : TypeDecl?) : bool {
         //! Matches `table<string; JsonValue?>` (or any pointer-to-JsonValue value type).
-        if (t == null || t.baseType != Type.tTable || !empty(t.dim)
+        if (t == null || t.baseType != Type.tTable
                 || t.firstType == null
                 || t.firstType.baseType != Type.tString) return false
         return is_jv_pointer_type(t.secondType)
@@ -1342,7 +1341,7 @@ class StyleLintVisitor : AstVisitor {
         for (v in elet.variables) {
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || !empty(v._type.dim)) continue
+                || v._type == null) continue
             let isArray = v._type.baseType == Type.tArray
             let isTable = v._type.baseType == Type.tTable
             if ((!isArray && !isTable)

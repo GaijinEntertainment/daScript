@@ -284,10 +284,10 @@ def private append_index_lookup(arch_name : string; var qblock : ExprBlock?; a; 
         vtype.flags.constant = true
     } elif (getter == "get_ro") {
         vtype.flags.constant = true
-        // if length(a._type.dim)==0
+        // if a._type.baseType != Type.tFixedArray
         vtype.flags.ref = true
     } else {
-        // if length(a._type.dim)==0
+        // if a._type.baseType != Type.tFixedArray
         vtype.flags.ref = true
     }
         // else

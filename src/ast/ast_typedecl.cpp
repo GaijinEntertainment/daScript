@@ -236,7 +236,6 @@ namespace das
         TT->constant = (TT->constant || autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
         TT->temporary = (TT->temporary || autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
         TT->safeWhenUninitialized = TT->safeWhenUninitialized || autoT->safeWhenUninitialized;
-        if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.erase(TT->dim.begin());
         TT->removeConstant = false;
         TT->removeDim = false;
         TT->removeRef = false;

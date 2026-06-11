@@ -587,8 +587,8 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
 
     // ── $t tag — capture TypeDeclPtr ────────────────────────
     if (pat_type.baseType == Type.alias && pat_type.flags.isTag) {
-        if (pat_type.firstType != null && length(pat_type.firstType.dimExpr) == 1) {
-            let tag_expr = pat_type.firstType.dimExpr[0]
+        if (pat_type.firstType != null && length(pat_type.firstType.typeMacroExpr) == 1) {
+            let tag_expr = pat_type.firstType.typeMacroExpr[0]
             if (tag_expr != null && tag_expr is ExprVar) {
                 let tmp = next_var(index)
                 body |> push <| qmacro_expr(${ var $i(tmp) = clone_type($i(td_var)); }) // nolint:LINT004
@@ -685,29 +685,22 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         }
     }
 
-    // ── dim — compare fixed dimensions ──────────────────────
-    let n_dim = length(pat_type.dim)
-    if (n_dim > 0) {
-        var dc = qmacro(length($i(td_var).dim) != $v(n_dim))
-        body |> push <| qm_type_guard(at, expr_var, dc)
-        for (d, i in pat_type.dim, range(n_dim)) {
-            {
-                var c = qmacro($i(td_var).dim[$v(i)] != $v(d))
-                body |> push <| qm_type_guard(at, expr_var, c)
-            }
-        }
+    // ── fixedDim — chain depth/shape rides the firstType recursion ──
+    if (pat_type.baseType == Type.tFixedArray) {
+        var c = qmacro($i(td_var).fixedDim != $v(pat_type.fixedDim))
+        body |> push <| qm_type_guard(at, expr_var, c)
     }
 
-    // ── dimExpr — these are Expressions, use generate_match ──
-    let n_dimexpr = length(pat_type.dimExpr)
+    // ── typeMacroExpr — these are Expressions, use generate_match ──
+    let n_dimexpr = length(pat_type.typeMacroExpr)
     if (n_dimexpr > 0) {
-        var dc = qmacro(length($i(td_var).dimExpr) != $v(n_dimexpr))
+        var dc = qmacro(length($i(td_var).typeMacroExpr) != $v(n_dimexpr))
         body |> push <| qm_type_guard(at, expr_var, dc)
-        for (dexpr, i in pat_type.dimExpr, range(n_dimexpr)) {
+        for (dexpr, i in pat_type.typeMacroExpr, range(n_dimexpr)) {
             let pat_expr = dexpr
             if (pat_expr != null) {
                 let child_var = next_var(index)
-                body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(td_var).dimExpr[$v(i)]); })
+                body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(td_var).typeMacroExpr[$v(i)]); })
                 generate_match(pat_expr, child_var, body, index, at)
             }
         }
@@ -1312,7 +1305,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         || name == "iteratorsTags"
                         || name == "iteratorsAt" || name == "iteratorVariables" || name == "iteratorsTupleExpansion" || name == "iteratorsAka"
                         || name == "visibility" || name == "allowIteratorOptimization" || name == "canShadow"
-                        || !empty(xtype.dim))
+                        || xtype.baseType == Type.tFixedArray)
                 var p8 : int8?
                 unsafe {
                     p8 = (reinterpret<int8?> pattern) + int(offset)
@@ -1588,7 +1581,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     // Field-by-field matching via annotation reflection
     for_each_field(*ann) $(name, _cppName, xtype, offset) {
         return if (offset == 0xFFFFFFFFu || qm_skip_field(rtti, name))
-        if (!empty(xtype.dim)) {
+        if (xtype.baseType == Type.tFixedArray) {
             panic("qmatch: fixed-size array field '{name}' not supported")
         }
         var p8 : int8?

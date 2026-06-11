@@ -403,6 +403,21 @@ def describe_type(td : TypeDecl?) {
             if (!empty(td.alias)) {
                 write(writer, "({td.alias})")
             }
+        } elif (baseType == Type.tFixedArray) {
+            // element text first, then one [d] per chain level (outermost first);
+            // clone-walks so the recursion gets a plain non-const pointer
+            var elemT = clone_type(td)
+            while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
+                elemT = clone_type(elemT.firstType)
+            }
+            write(writer, describe_type(elemT))
+            var lvl = clone_type(td)
+            while (lvl.baseType == Type.tFixedArray && lvl.firstType != null) {
+                write(writer, "\\ [")
+                write(writer, lvl.fixedDim)
+                write(writer, "]")
+                lvl = clone_type(lvl.firstType)
+            }
         } elif (baseType == Type.tHandle) {
             let hname = string(td.annotation.name)
             if (hname |> starts_with("dasvector`smart_ptr`")) {// 20 characters
@@ -562,11 +577,6 @@ def describe_type(td : TypeDecl?) {
         }
         // if td.flags.constant
         //     write(writer," const")
-        for (d in td.dim) {
-            write(writer, "\\ [")
-            write(writer, d)
-            write(writer, "]")
-        }
         if (td.flags.ref) {
             write(writer, "\\ &")
         }

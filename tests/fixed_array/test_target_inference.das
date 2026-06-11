@@ -22,6 +22,10 @@ def dim_name_var(var a : auto(TT)[]) : string {
     return typeinfo typename(type<TT>)
 }
 
+def peel_name(a : auto(TT)) : string {
+    return typeinfo typename(type<TT - []>)
+}
+
 def zeroed_count(a : auto(TT)) : int {
     var z = default<TT>
     var n = 0
@@ -70,6 +74,10 @@ def test_peel_one_level(t : T?) {
     t |> run("1D keeps preferring the dim overload") @(t : T?) {
         let i4 : int[4]
         t |> equal(pick(i4), "dim")
+    }
+    t |> run("TT -[] unwraps one level") @(t : T?) {
+        let i24 : int[2][4]
+        t |> equal(peel_name(i24), "int const[4]")
     }
 }
 

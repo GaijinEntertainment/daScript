@@ -77,7 +77,7 @@ def describe_function_short(func : FunctionPtr) {
 
 def isExpression(t : TypeDeclPtr; top : bool = true) : bool {
     //! Returns true if the type declaration refers to an AST expression node type.
-    if (t == null || !empty(t.dim)) {
+    if (t == null) {
         return false
     } elif (t.baseType == Type.tHandle) {
         if (t.annotation._module.name == "ast_core") {
@@ -105,10 +105,8 @@ def is_same_or_inherited(parent, child : Structure const?) {
 def is_class_method(cinfo : StructurePtr; finfo : TypeDeclPtr) {
     //! Returns true if the function type declaration is a method of the given class structure.
     if (finfo.baseType != Type.tFunction
-            || !empty(finfo.dim)
             || empty(finfo.argTypes)
-            || finfo.argTypes[0].baseType != Type.tStructure
-            || !empty(finfo.argTypes[0].dim)) return false
+            || finfo.argTypes[0].baseType != Type.tStructure) return false
     return !!is_same_or_inherited(finfo.argTypes[0].structType, cinfo)
 }
 
@@ -862,7 +860,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
 def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
     //! Recursively converts raw data to an AST expression based on type information.
     // print("0x{intptr(data)} {describe(info)}\n")
-    if (info.baseType == Type.tFixedArray || !empty(info.dim)) {
+    if (info.baseType == Type.tFixedArray) {
         return walk_and_convert_dim(data, info, at)
     } elif (info.baseType == Type.tArray) {
         return walk_and_convert_array(data, info, at)
