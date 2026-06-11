@@ -122,6 +122,12 @@ class TableAdapter : SourceAdapter {
     def override can_reserve_by_length() : bool {
         return true   // length(tab) is O(1); the shared reserve hint reads arrayTop/arraySrcName
     }
+    def override const can_join() : bool {
+        return true   // rides emit_array_join: direct-return lead loop via wrap_source_loop
+    }
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+        return emit_array_join(c, ctx, at)
+    }
     def override arrayTop() : Expression? {
         // Feeds the reserve hint (type_has_length covers tables). The backward-index reverse lanes that
         // also read arrayTop gate on array_source, which is false here — matchTop stays iterator-typed.
@@ -146,10 +152,14 @@ class TableAdapter : SourceAdapter {
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_table_walk(lane, srcName, bindName, perElement, breakGuard, at)
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+    def override invoke_param_type() : TypeDeclPtr {
         // Const-accepting param: the source table is often a `let`, and a non-const source adds-const cleanly.
         var tabType = strip_const_ref(clone_type(tabExpr._type))
         tabType.flags.constant = true
+        return tabType
+    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+        var tabType = invoke_param_type()
         var tabClone = clone_expression(tabExpr)
         tabClone.genFlags.alwaysSafe = true
         let sn = srcName

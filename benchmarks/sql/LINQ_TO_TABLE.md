@@ -4,8 +4,35 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 4 committed** (point-lookup folds; stage 3 = `%linq!` table sources, 29d23baf6;
-stage 2 = TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba).
+Status: **stage 5 committed** (join probe + table-lead joins; stage 4 = point-lookup folds,
+ac441c4a0; stage 3 = `%linq!` table sources, 29d23baf6; stage 2 = TableAdapter + m7, 571fe879e;
+stage 1 = `each_kv` builtin, 8751bb9ba).
+
+Stage 5 findings:
+- **`emit_array_join` generalized instead of a parallel `emit_table_join`**: the lead loop, bind
+  name, and lead invoke-param spelling now come from the adapter (`wrap_source_loop` /
+  `bind_name` / new `invoke_param_type` capability), so `TableAdapter.emit_join_hook` just routes
+  to `emit_array_join` and the kv usage-pruner sees the whole probe body for free — a table-lead
+  join touching only `c.value.*` walks `values(tab)` alone. Any future direct-return loop source
+  joins the same way; decs/xml/json keep their own hooks (nested-callback walks).
+- **srcB probe**: `join_srcb_table_call` (each_kv/keys over a table in the srcb slot) +
+  `join_keyb_is_bare_key` (peeled keyb is bare `d.key` / bare set element) switch the emitter to
+  `build_join_probe_pieces` — srcB binds the user's table (const param), no internal
+  `table<KEY; array<TUPB>>`, no build loop; the per-A probe usage-prunes like the point lookup
+  (count-no-where / key-only → `key_exists`, value shapes → by-ref bind off `tab?[k]`, whole-pair
+  → kv tuple bind). Skipping keyb's per-B evaluation is unobservable (a bare field read is pure
+  by construction — no `has_sideeffects` gate needed, unlike stage 4's X).
+- **Shared per-pair core**: `build_join_pair_core` factored out of `build_join_standalone_pieces`
+  (which keeps the group-join arm + bucket wrap); both builders emit identical per-pair
+  statements, so hash-mode AST is unchanged for the decs/xml/json callers of the standalone
+  builder. Group joins never probe — their result consumes the whole bucket.
+- The `_join` predicate splitter is **position-based** (`<a-side> == <b-side>`); a flipped
+  `d.key == a` fails to compile for any source (pre-existing). The probe matcher therefore only
+  sees keyb on the b-side.
+- m7 (2026-06-11 sweep): table-lead joins leave tier-2 — `join_count` 195.0 → 65.6 ns/elem
+  INTERP (33.1 JIT), `join_where_count` 229.1 → 81.4 (37.9 JIT). The probe A/B pair:
+  `join_probe` 47.3 vs `join_probe_build` 79.1 INTERP (24.2 vs 38.1 JIT) — skipping the
+  internal hash is ~1.7× on identical rows.
 
 Stage 4 findings:
 - `try_table_point_lookup` (linq_fold_table.das) runs in the dispatcher arm BEFORE pattern dispatch;
@@ -172,6 +199,12 @@ End of arc: `skills/linq.md` + linq docs mention the table source.
   values, buffer `(orderKey, key)` surrogates and materialize survivors via `tab?[key]` — K
   probes instead of N value copies. The table handle is its key; clean fit for the existing
   4-hook surface. Revisit once m7 numbers show whether it matters.
+- **decs/xml/json lead × table srcB probe**: those leads keep their own `emit_join_hook`
+  (nested-callback walks) and hash a table srcB like any iterator. Correct, just unprobed —
+  port `build_join_probe_pieces` into their hooks if a real chain wants it.
+- **Group-join probe**: a table srcB group join could bind a 0/1-element bucket from the probe
+  instead of hashing; the result lambda consumes `array<B>`, so it needs a synthesized
+  one-element array per hit. Hashed build is correct; revisit on demand.
 - Set-ops probe (`except`/`intersect` where the *other* side is a `table<K>`) — rides the
   engine-wide set-ops edge.
 - Fused-kv-over-non-copyable values (loosening the uniform gate) — only if a real use case

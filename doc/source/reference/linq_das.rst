@@ -361,6 +361,11 @@ source is built exactly like the first (untyped → array/table, typed → the
 ``from_in`` dispatch), so it may be a different kind of source than the left —
 a table works on either side (its kv pair is that side's row, e.g.
 ``on c.brand equals p.key``); note a table left source walks in slot order.
+A right-side table joined on its **bare key** — ``equals p.key``, or the bare
+element for a ``table<K>`` set — fuses as a per-row key probe of that table
+(no internal join hash gets built); any other right-key expression keeps the
+ordinary hashed join. Either way the results are identical — table keys are
+unique, so the probed "bucket" is the same 0-or-1 rows the hash would hold.
 
 The reader picks one of two emit shapes from the **post-join** clauses (it
 transpiles before type inference and cannot see the source, so it decides

@@ -126,6 +126,10 @@ class SourceAdapter {
     def arraySrcName() : string {
         return ""
     }
+    def invoke_param_type() : TypeDeclPtr {     // invoke-param spelling for the source argument (join lane's lead param)
+        var top = arrayTop()
+        return top != null ? invoke_src_param_type(top) : null
+    }
 }
 
 // Decorator adapter — absorbs a leading `_select(f)` source projection: binds `projName = f(innerBind)` atop
@@ -163,11 +167,9 @@ class ProjectedSourceAdapter : SourceAdapter {
     }
 }
 
-// ===== Field-pruning row-usage scanner (shared by the XML / JSON source adapters) =====
-// Scan a chain body for which Row fields it reads, so a deferred source's per-element materialization
-// reads only those fields. Pure AST (bind name → field reads); each adapter keeps its own per-field read
-// / full-row build. A whole-`it` ref (to_array push_clone, identity select, pass-to-fn) sets
-// allFieldsUsed → the caller falls back to full materialization.
+// ===== Field-pruning row-usage scanner (shared by the XML / JSON / table source adapters) =====
+// Scans a chain body for which Row fields it reads so per-element materialization fetches only those;
+// a whole-`it` ref (to_array push_clone, identity select, pass-to-fn) sets allFieldsUsed → full row.
 
 class RowUsageScanner : AstVisitor {
     bindName      : string
@@ -5541,6 +5543,120 @@ def extract_join_lead_where(var c : Captures) : Expression? {
     return call != null ? call.arguments[1] : null
 }
 
+// JoinPairCore — per-matched-(a,b)-pair statements shared by the hashed-join builder (wraps them in the
+// bucket walk) and the table-srcB probe builder (runs them once per key hit). pairStmts reference
+// tupAName + bElemName. Group joins are NOT built here (their result consumes the whole bucket).
+struct JoinPairCore {
+    preludeStmts  : array<Expression?>
+    pairStmts     : array<Expression?>
+    returnStmt    : Expression?
+    invokeRetType : TypeDeclPtr
+    cntName       : string   // count terminator's accumulator; "" otherwise
+}
+
+[macro_function]
+def build_join_pair_core(
+                         var joinCall  : ExprCall?;
+                         var whereLam  : Expression?;
+                         var selectLam : Expression?;
+                         countOnly     : bool;
+                         tupAName      : string;
+                         bElemName     : string;
+                         namePrefix    : string;
+                         at            : LineInfo
+                         ) : JoinPairCore? {
+    let cntName     = qn(namePrefix + "_cnt", at)
+    let bufName     = qn(namePrefix + "_buf", at)
+    let resBindName = qn(namePrefix + "_res", at)
+    var preludeStmts : array<Expression?>
+    var pairStmts : array<Expression?>
+    var returnStmt : Expression?
+    var invokeRetType : TypeDeclPtr
+    if (countOnly) {
+        invokeRetType = new TypeDecl(baseType = Type.tInt, at = at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(cntName) : int = 0
+        }
+        if (whereLam == null) {
+            pairStmts |> push <| qmacro_expr() {
+                $i(cntName) ++
+            }
+        } else {
+            // HAVING-shape: bind result, evaluate predicate, conditional incr.
+            var resultLam = joinCall.arguments[4]
+            if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
+            var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
+            if (resultBody == null) return null
+            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
+            var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
+            pairStmts |> push_from <| qmacro_block_to_array() {
+                let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                if ($e(wherePred)) {
+                    $i(cntName) ++
+                }
+            }
+        }
+        returnStmt = qmacro_expr() {
+            return $i(cntName)
+        }
+        return <- new JoinPairCore(preludeStmts <- preludeStmts, pairStmts <- pairStmts,
+                                   returnStmt = returnStmt, invokeRetType = invokeRetType, cntName = cntName)
+    }
+    var resultLam = joinCall.arguments[4]
+    if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
+    var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
+    if (resultBody == null) return null
+    // Buffer element type = after-select projection when select is trailing, else result-lam return type. Use peel_lambda_single_return universally: selCall._type.firstType may stay as unresolved typedecl(result_selector(type<TT>)) when chain doesn't end with to_array() (array-overload select returns array directly so no enclosing wrap forces resolution). Lambda-body's _type is always resolved post inner-first expansion.
+    var resultType : TypeDeclPtr
+    if (selectLam != null) {
+        var selBody = peel_lambda_single_return(selectLam)
+        if (selBody == null || selBody._type == null) return null
+        resultType = strip_const_ref(clone_type(selBody._type))
+    } else {
+        // strip_const_ref: a scalar/field result (`$(c,d)=>c.name`, `string const&`) would make the buffer
+        // `array<string const>` and push_clone fail (error[30913]). A named-tuple result is already a
+        // fresh non-const value (no-op there) — which is why only bare-scalar join projections tripped it.
+        resultType = strip_const_ref(clone_type(resultLam._type.firstType))
+    }
+    if (resultType == null) return null
+    invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)
+    preludeStmts |> push <| qmacro_expr() {
+        var $i(bufName) : array<$t(resultType)>
+    }
+    let needBind = selectLam != null || whereLam != null
+    if (needBind) {
+        let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
+        var pushExpr : Expression?
+        if (selectLam != null) {
+            var projBody = peel_lambda_replace_var(selectLam, qmacro($i(resBindName)))
+            pushExpr = qmacro($i(bufName) |> push_clone($e(projBody)))
+        } else {
+            pushExpr = qmacro($i(bufName) |> push_clone($i(resBindName)))
+        }
+        if (whereLam != null) {
+            var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
+            pairStmts |> push_from <| qmacro_block_to_array() {
+                let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                if ($e(wherePred)) {
+                    $e(pushExpr)
+                }
+            }
+        } else {
+            pairStmts |> push_from <| qmacro_block_to_array() {
+                let $i(resBindName) : $t(joinResultType) = $e(resultBody)
+                $e(pushExpr)
+            }
+        }
+    } else {
+        pairStmts |> push <| qmacro($i(bufName) |> push_clone($e(resultBody)))
+    }
+    returnStmt = qmacro_expr() {
+        return <- $i(bufName)
+    }
+    return <- new JoinPairCore(preludeStmts <- preludeStmts, pairStmts <- pairStmts,
+                               returnStmt = returnStmt, invokeRetType = invokeRetType, cntName = "")
+}
+
 [macro_function]
 def build_join_standalone_pieces(
                                  var joinCall   : ExprCall?;
@@ -5558,46 +5674,34 @@ def build_join_standalone_pieces(
                                  ) : JoinStandalonePieces? {
     let bElemName   = qn(namePrefix + "_b", at)
     let arrName     = qn(namePrefix + "_arr", at)
-    let cntName     = qn(namePrefix + "_cnt", at)
     let bufName     = qn(namePrefix + "_buf", at)
-    let resBindName = qn(namePrefix + "_res", at)
     let emptyArrName = qn(namePrefix + "_empty", at)   // group-join: empty bucket for an unmatched left row
     var preludeStmts : array<Expression?>
     var probeInnerStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
     var groupEmptyExpr : Expression?   // group-join only: the `buf |> push_clone(result(a, <empty>))` for the outer branch
-    if (countOnly) {
-        invokeRetType = new TypeDecl(baseType = Type.tInt, at = at)
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(cntName) : int = 0
-        }
-        if (whereLam == null) {
+    if (!isGroupJoin) {
+        var core = build_join_pair_core(joinCall, whereLam, selectLam, countOnly, tupAName, bElemName, namePrefix, at)
+        if (core == null) return null
+        preludeStmts <- core.preludeStmts
+        returnStmt = core.returnStmt
+        invokeRetType = core.invokeRetType
+        if (countOnly && whereLam == null) {
             // Fast path (PR D2-A guarantee): bucket-length sum at bucket granularity, never enters per-pair loop.
+            let cntName = core.cntName
             probeInnerStmts |> push <| qmacro_expr() {
                 $i(cntName) += length($i(arrName))
             }
         } else {
-            // HAVING-shape: bind result, evaluate predicate, conditional incr.
-            var resultLam = joinCall.arguments[4]
-            if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
-            var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
-            if (resultBody == null) return null
-            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
-            var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
+            var pairStmts <- core.pairStmts
             probeInnerStmts |> push <| qmacro_expr() {
                 for ($i(bElemName) in $i(arrName)) {
-                    let $i(resBindName) : $t(joinResultType) = $e(resultBody)
-                    if ($e(wherePred)) {
-                        $i(cntName) ++
-                    }
+                    $b(pairStmts)
                 }
             }
         }
-        returnStmt = qmacro_expr() {
-            return $i(cntName)
-        }
-    } elif (isGroupJoin) {
+    } else {
         // group join: the result's 2nd param is the WHOLE bucket (the group), so we emit one buffer row per
         // left row (no per-match inner loop). emit_*_join guarantees no trailing where/select/count reaches here.
         var resultLam = joinCall.arguments[4]
@@ -5618,66 +5722,6 @@ def build_join_standalone_pieces(
         var resultBodyEmpty = peel_lambda_rename_2vars(resultLam, tupAName, emptyArrName)
         if (resultBodyEmpty == null) return null
         groupEmptyExpr = qmacro($i(bufName) |> push_clone($e(resultBodyEmpty)))
-        returnStmt = qmacro_expr() {
-            return <- $i(bufName)
-        }
-    } else {
-        var resultLam = joinCall.arguments[4]
-        if (resultLam == null || resultLam._type == null || resultLam._type.firstType == null) return null
-        var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, bElemName)
-        if (resultBody == null) return null
-        // Buffer element type = after-select projection when select is trailing, else result-lam return type. Use peel_lambda_single_return universally: selCall._type.firstType may stay as unresolved typedecl(result_selector(type<TT>)) when chain doesn't end with to_array() (array-overload select returns array directly so no enclosing wrap forces resolution). Lambda-body's _type is always resolved post inner-first expansion.
-        var resultType : TypeDeclPtr
-        if (selectLam != null) {
-            var selBody = peel_lambda_single_return(selectLam)
-            if (selBody == null || selBody._type == null) return null
-            resultType = strip_const_ref(clone_type(selBody._type))
-        } else {
-            // strip_const_ref: a scalar/field result (`$(c,d)=>c.name`, `string const&`) would make the buffer
-            // `array<string const>` and push_clone fail (error[30913]). A named-tuple result is already a
-            // fresh non-const value (no-op there) — which is why only bare-scalar join projections tripped it.
-            resultType = strip_const_ref(clone_type(resultLam._type.firstType))
-        }
-        if (resultType == null) return null
-        invokeRetType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(resultType), at = at)
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(bufName) : array<$t(resultType)>
-        }
-        let needBind = selectLam != null || whereLam != null
-        if (needBind) {
-            let joinResultType = strip_const_ref(clone_type(resultLam._type.firstType))
-            var pushExpr : Expression?
-            if (selectLam != null) {
-                var projBody = peel_lambda_replace_var(selectLam, qmacro($i(resBindName)))
-                pushExpr = qmacro($i(bufName) |> push_clone($e(projBody)))
-            } else {
-                pushExpr = qmacro($i(bufName) |> push_clone($i(resBindName)))
-            }
-            if (whereLam != null) {
-                var wherePred = peel_lambda_replace_var(whereLam, qmacro($i(resBindName)))
-                probeInnerStmts |> push <| qmacro_expr() {
-                    for ($i(bElemName) in $i(arrName)) {
-                        let $i(resBindName) : $t(joinResultType) = $e(resultBody)
-                        if ($e(wherePred)) {
-                            $e(pushExpr)
-                        }
-                    }
-                }
-            } else {
-                probeInnerStmts |> push <| qmacro_expr() {
-                    for ($i(bElemName) in $i(arrName)) {
-                        let $i(resBindName) : $t(joinResultType) = $e(resultBody)
-                        $e(pushExpr)
-                    }
-                }
-            }
-        } else {
-            probeInnerStmts |> push <| qmacro_expr() {
-                for ($i(bElemName) in $i(arrName)) {
-                    $i(bufName) |> push_clone($e(resultBody))
-                }
-            }
-        }
         returnStmt = qmacro_expr() {
             return <- $i(bufName)
         }
@@ -5721,6 +5765,145 @@ def build_join_standalone_pieces(
     )
 }
 
+// srcb (arguments[1] of `join(...)`) spelled as `each_kv(tab)` / `keys(tab)` — the table-probe candidate.
+// Name + table-typed-arg match like extract_table_source (values() carries no key, so it stays hashed).
+[macro_function]
+def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
+    if (joinCall == null || (joinCall.arguments |> length) < 2) return null
+    var srcb = joinCall.arguments[1]
+    if (srcb == null || !(srcb is ExprCall)) return null
+    var call = srcb as ExprCall
+    let name = get_call_short_name(call)
+    if ((name != "each_kv" && name != "keys")
+            || call._type == null || !call._type.isIterator || call._type.firstType == null
+            || (call.arguments |> length) != 1) {
+        return null
+    }
+    let srcT = call.arguments[0]._type
+    if (srcT == null || !srcT.isGoodTableType) return null
+    return call
+}
+
+// keyb (peeled, binder renamed to bindName) selects the table key itself: bare `kv.key` (kv lane) or the
+// bare element (keys lane). Then the join key IS the table key and a lookup replaces the bucket walk.
+[macro_function]
+def join_keyb_is_bare_key(var keybBody : Expression?; bindName : string; kvLane : bool) : bool {
+    var k = keybBody
+    if (k != null && k is ExprRef2Value) {
+        k = (k as ExprRef2Value).subexpr
+    }
+    if (!kvLane) {
+        return k != null && k is ExprVar && (k as ExprVar).name == bindName
+    }
+    if (k == null || !(k is ExprField)) return false
+    var f = k as ExprField
+    if (f.name != "key") return false
+    var base = f.value
+    if (base != null && base is ExprRef2Value) {
+        base = (base as ExprRef2Value).subexpr
+    }
+    return base != null && base is ExprVar && (base as ExprVar).name == bindName
+}
+
+// Table-srcB twin of build_join_standalone_pieces: unique table keys ⇒ bucket size ≤ 1, so there is no
+// internal hash — probeOuter looks the lead key up in the table bound at tabSrcName. Group joins never
+// come here (caller gates); the count-no-where fast path probes key_exists only.
+[macro_function]
+def build_join_probe_pieces(
+                            var joinCall   : ExprCall?;
+                            var whereLam   : Expression?;
+                            var selectLam  : Expression?;
+                            var leadWhereLam : Expression?;
+                            countOnly      : bool;
+                            var keyaBody   : Expression?;
+                            tupAName       : string;
+                            tabSrcName     : string;
+                            srcbKv         : bool;
+                            namePrefix     : string;
+                            at             : LineInfo
+                            ) : JoinStandalonePieces? {
+    let bElemName = qn(namePrefix + "_b", at)
+    let kName     = qn(namePrefix + "_k", at)
+    let pName     = qn(namePrefix + "_p", at)
+    var core = build_join_pair_core(joinCall, whereLam, selectLam, countOnly, tupAName, bElemName, namePrefix, at)
+    if (core == null) return null
+    var pairStmts <- core.pairStmts
+    var probeOuter : Expression?
+    if (countOnly && whereLam == null) {
+        // membership is enough — pairStmts is the bare `cnt++` (the bucket-length analog for a unique key)
+        probeOuter = qmacro_expr() {
+            if (key_exists($i(tabSrcName), $e(keyaBody))) {
+                $b(pairStmts)
+            }
+        }
+    } elif (srcbKv) {
+        // kv lane, pruned to what the pair statements read from b: key-only shapes stay on key_exists,
+        // value shapes bind by reference from the probed pointer (no copy), whole-pair use binds the kv
+        // tuple. Safe-index is unsafe (rehash-dangling ptr) — fine, the generated invoke never mutates.
+        let vName = qn(namePrefix + "_v", at)
+        var pairBlock = qmacro_block() {
+            $b(pairStmts)
+        }
+        var (allUsed, usedFields) = collect_row_usage(pairBlock, bElemName)
+        if (allUsed) {
+            probeOuter = qmacro_block() {
+                let $i(kName) = $e(keyaBody)
+                let $i(pName) = unsafe($i(tabSrcName)?[$i(kName)])
+                if ($i(pName) != null) {
+                    let $i(bElemName) = (key = $i(kName), value = *$i(pName))
+                    $e(pairBlock)
+                }
+            }
+        } else {
+            var fieldToLocal <- { "key" => kName, "value" => vName }
+            var flatBlock = flatten_row_to_locals(pairBlock, bElemName, fieldToLocal)
+            if (usedFields |> has_value("value")) {
+                probeOuter = qmacro_block() {
+                    let $i(kName) = $e(keyaBody)
+                    let $i(pName) = unsafe($i(tabSrcName)?[$i(kName)])
+                    if ($i(pName) != null) {
+                        let $i(vName) & = unsafe(*$i(pName))
+                        $e(flatBlock)
+                    }
+                }
+            } else {
+                probeOuter = qmacro_block() {
+                    let $i(kName) = $e(keyaBody)
+                    if (key_exists($i(tabSrcName), $i(kName))) {
+                        $e(flatBlock)
+                    }
+                }
+            }
+        }
+    } else {
+        // keys lane: the element IS the key
+        probeOuter = qmacro_block() {
+            let $i(kName) = $e(keyaBody)
+            if (key_exists($i(tabSrcName), $i(kName))) {
+                let $i(bElemName) = $i(kName)
+                $b(pairStmts)
+            }
+        }
+    }
+    // Leading `where` — same fusion as the hashed builder: filter srcA inside the per-A probe.
+    if (leadWhereLam != null) {
+        var leadPred = peel_lambda_rename_var(leadWhereLam, tupAName)
+        if (leadPred == null) return null
+        var probeInner = probeOuter
+        probeOuter = qmacro_expr() {
+            if ($e(leadPred)) {
+                $e(probeInner)
+            }
+        }
+    }
+    return <- new JoinStandalonePieces(
+        preludeStmts <- core.preludeStmts,
+        probeOuter <- probeOuter,
+        returnStmt = core.returnStmt,
+        invokeRetType = core.invokeRetType
+    )
+}
+
 // ── join splice (one pattern for every source) ───────
 // `can_join()` admits the adapter; `emit_join_hook()` supplies the source-specific emit + srcb gate
 // (null → tier-2). decs / array / xml each override emit_join_hook — no parallel per-source pattern.
@@ -5750,7 +5933,9 @@ def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? 
 [macro_function]
 def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // nolint:STYLE014 — emits a hashed equi-join as a 2-source invoke (mirrors Zip's 2-source wrap):
-    // build a hash from srcB, probe it with srcA. Generated code (canonical no-count/no-where/no-select shape):
+    // build a hash from srcB, probe it with srcA. The lead loop and param spelling come from the adapter
+    // (wrap_source_loop / invoke_param_type), so any direct-return loop source rides this — array `for`,
+    // table slot walk. Generated code (canonical no-count/no-where/no-select shape, array lead):
     //   invoke(
     //       (srcA, srcB) {
     //           var buf  : array<Result>
@@ -5770,6 +5955,9 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     //   count()    → `var cnt = 0`; probe body is `cnt += length(bucket)` (bucket-length fast path, no per-pair loop); `return cnt`
     //   where(p)   → per pair: `let res = result(a, b); if (p(res)) { ...push/incr... }`
     //   select(f)  → push `f(res)` instead of `res` (buffer element type = f's return type)
+    // Table-srcB probe: when srcB is `each_kv(tab)` / `keys(tab)` joined on its bare key (inner join only),
+    // there is no hash/build loop — srcB binds the table itself and the per-A probe is a key lookup
+    // (build_join_probe_pieces). Unique table keys make probe ≡ hash semantics exactly.
     var joinCall = c.single["join"]
     if (!srcb_is_array_shaped(c, "join")) return null   // srcb must be array/iterator-shaped (formerly the array_join_srcb_is_array requires gate, moved here so the unified pattern asks the adapter)
     let isGroupJoin = c.single_name |> key_exists("join") && c.single_name["join"] == "group_join"
@@ -5801,41 +5989,55 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
     let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
     if (!is_primitive_join_key_type(keyType)) return null
-    let srcAName  = qn("ajoin_srcA", at)
+    let srcAName  = ctx.src->arraySrcName()
     let srcBName  = qn("ajoin_srcB", at)
-    let tupAName  = qn("ajoin_tup_a", at)
+    let tupAName  = ctx.src->bind_name(at)
     let tupBName  = qn("ajoin_tup_b", at)
     let hashName  = qn("ajoin_hash", at)
     var keyaBody = peel_lambda_rename_var(keyaLam, tupAName)
     var keybBody = peel_lambda_rename_var(keybLam, tupBName)
     if (keyaBody == null || keybBody == null) return null
     let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-    var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, isGroupJoin, "ajoin", at)
+    var srcbTab = join_srcb_table_call(joinCall)
+    let srcbKv = srcbTab != null && get_call_short_name(srcbTab) == "each_kv"
+    let probeMode = srcbTab != null && !isGroupJoin && join_keyb_is_bare_key(keybBody, tupBName, srcbKv)
+    var pieces : JoinStandalonePieces?
+    if (probeMode) {
+        pieces = build_join_probe_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, srcBName, srcbKv, "ajoin", at)
+    } else {
+        pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, isGroupJoin, "ajoin", at)
+    }
     if (pieces == null) return null
     var allStmts : array<Expression?>
     allStmts |> push_from(pieces.preludeStmts)
-    allStmts |> push <| qmacro_expr() {
-        var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
-    }
-    allStmts |> push <| qmacro_expr() {
-        for ($i(tupBName) in $i(srcBName)) {
-            // nolint:PERF006 per-key bucket size unknown ahead of time
-            $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
+    if (!probeMode) {
+        allStmts |> push <| qmacro_expr() {
+            var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+        }
+        allStmts |> push <| qmacro_expr() {
+            for ($i(tupBName) in $i(srcBName)) {
+                // nolint:PERF006 per-key bucket size unknown ahead of time
+                $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
+            }
         }
     }
-    allStmts |> push <| qmacro_expr() {
-        for ($i(tupAName) in $i(srcAName)) {
-            $e(pieces.probeOuter)
-        }
-    }
+    allStmts |> push <| ctx.src->wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at)
     allStmts |> push(pieces.returnStmt)
     var invokeRetType = pieces.invokeRetType
     var topClone = clone_expression(topSrc)
     topClone.genFlags.alwaysSafe = true
-    var srcbClone = clone_expression(srcbSrc)
+    var srcbArg = probeMode ? srcbTab.arguments[0] : srcbSrc
+    var srcbClone = clone_expression(srcbArg)
     srcbClone.genFlags.alwaysSafe = true
-    let srcAParamType = invoke_src_param_type(topSrc)
-    let srcBParamType = invoke_src_param_type(srcbSrc)
+    let srcAParamType = ctx.src->invoke_param_type()
+    var srcBParamType : TypeDeclPtr
+    if (probeMode) {
+        // bind the user's table itself, const-accepting (a non-const source adds-const cleanly)
+        srcBParamType = strip_const_ref(clone_type(srcbArg._type))
+        srcBParamType.flags.constant = true
+    } else {
+        srcBParamType = invoke_src_param_type(srcbSrc)
+    }
     var emission = qmacro(invoke(
         $($i(srcAName) : $t(srcAParamType), $i(srcBName) : $t(srcBParamType)) : $t(invokeRetType) {
             $b(allStmts)

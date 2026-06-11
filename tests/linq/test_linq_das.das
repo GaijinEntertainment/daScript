@@ -286,7 +286,8 @@ def test_table_arbitrary_range_var_name(t : T?) {
 
 [test]
 def test_table_as_join_right_source(t : T?) {
-    // a table works on either side of a join (tier-2; the kv pair is that side's row).
+    // a table works on either side of a join (the kv pair is that side's row). A right-side table
+    // joined on its bare `.key` fuses as a key probe — no internal join hash.
     // left side is the array → result follows array order, deterministic
     let cars <- mk_cars()
     let prio <- { "eco" => 10, "lux" => 99 }
@@ -301,13 +302,36 @@ def test_table_as_join_right_source(t : T?) {
 def test_table_as_join_left_source(t : T?) {
     let cars <- mk_cars()
     let prio <- { "eco" => 10, "lux" => 99 }
-    // left side is the table → slot order, so sort before asserting
+    // left side is the table → fused slot walk; slot order, so sort before asserting
     var rows <- %linq! from p in prio join c in cars on p.key equals c.brand select "{c.name}={p.value}" %%
     rows |> sort()
     t |> equal(length(rows), 3)
     t |> equal(rows[0], "cheap=10")
     t |> equal(rows[1], "lux=99")
     t |> equal(rows[2], "mid=10")
+}
+
+[test]
+def test_set_as_join_source(t : T?) {
+    // a table<K> set joins on its bare element — membership probe
+    let cars <- mk_cars()
+    let vip : table<string> <- { "lux" }
+    let names <- %linq! from c in cars join b in vip on c.brand equals b select c.name %%
+    t |> equal(length(names), 1)
+    t |> equal(names[0], "lux")
+}
+
+[test]
+def test_table_join_into_group(t : T?) {
+    // `into` (group join) over a table right source stays OUTER — the probe never fires (its result
+    // consumes the whole bucket), the hashed walk does
+    let cars <- mk_cars()
+    let prio <- { "eco" => 10 }
+    let rows <- %linq! from c in cars join p in prio on c.brand equals p.key into ps select (Name = c.name, N = length(ps)) %%
+    t |> equal(length(rows), 3)
+    t |> equal(rows[0].N, 1)
+    t |> equal(rows[1].N, 1)
+    t |> equal(rows[2].N, 0)
 }
 
 // ===== orderby (single key, optional `descending`) =====

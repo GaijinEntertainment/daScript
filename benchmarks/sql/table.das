@@ -10,20 +10,31 @@ require _common public
 let N = 100000
 
 typedef CarKV = tuple<key : int; value : Car>
+typedef DKV = tuple<key : int; value : Dealer>
 
 var g_t : table<int; Car>
 var g_dealers : array<Dealer>
+var g_dealer_t : table<int; Dealer>   // dealers keyed by id — the join_probe srcB
+var g_dealer_kv : array<DKV>          // same rows pre-materialized in slot order — the build-side baseline
 
 [init]
 def table_bench_init {
     g_t <- fixture_table(N)
     g_dealers <- fixture_dealers_array()
+    for (d in g_dealers) {
+        g_dealer_t |> insert(d.id, d)
+    }
+    for (k, v in keys(g_dealer_t), values(g_dealer_t)) {
+        g_dealer_kv |> push((key = k, value = v))
+    }
 }
 
 [finalize]
 def table_bench_fini {
     delete g_t
     delete g_dealers
+    delete g_dealer_t
+    delete g_dealer_kv
 }
 
 [benchmark]
@@ -285,6 +296,38 @@ def join_count_m7(b : B?) {
                                                     $(c : CarKV, d : Dealer) => c.value.dealer_id == d.id,
                                                     $(c : CarKV, d : Dealer) => (c.value.name, d.name))
                                            |> count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def join_probe_m7(b : B?) {
+    // srcB is a table joined on its bare key → fused key probe, no internal join hash
+    b |> run("join_probe", N) {
+        let c = _fold(unsafe(each_kv(g_t)) |> _join(unsafe(each_kv(g_dealer_t)),
+                                $(c : CarKV, d : DKV) => c.value.dealer_id == d.key,
+                                $(c : CarKV, d : DKV) => (CarPrice = c.value.price, DealerName = d.value.name))
+                       |> _where(_.CarPrice > 500)
+                       |> count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def join_probe_build_m7(b : B?) {
+    // build-side baseline: identical rows from the pre-materialized kv array — the join hashes srcB
+    b |> run("join_probe_build", N) {
+        let c = _fold(unsafe(each_kv(g_t)) |> _join(g_dealer_kv,
+                                $(c : CarKV, d : DKV) => c.value.dealer_id == d.key,
+                                $(c : CarKV, d : DKV) => (CarPrice = c.value.price, DealerName = d.value.name))
+                       |> _where(_.CarPrice > 500)
+                       |> count())
         b |> accept(c)
         if (c == 0) {
             b->failNow()

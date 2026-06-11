@@ -278,6 +278,196 @@ def test_table_point_lookup(t : T?) {
     }
 }
 
+typedef IKV = tuple<key : int; value : int>
+
+// Joins: a table in the srcB slot joined on its bare key (`d.key` / bare set element) probes the user's
+// table instead of building the join's internal hash; a table lead rides the same emitter through the
+// pruned slot walk. Either way must agree with the hash/hand-loop semantics: inner joins drop misses,
+// keep lead duplicates; group joins stay outer.
+
+[test]
+def test_table_join_srcb_probe(t : T?) {
+    t |> run("inner join on the table key: count + rows in lead order") @(t : T?) {
+        var ids <- [0, 1, 1, 4, 9, 2, 0, 7]   // dups stay, 9/7 miss
+        var dtab <- make_int_table(5)
+        let n = _fold(ids |> _join(unsafe(each_kv(dtab)),
+                                   $(a : int, d : IKV) => a == d.key,
+                                   $(a : int, d : IKV) => d.value)
+                          |> count())
+        t |> equal(n, 6)
+        var got <- _fold(ids |> _join(unsafe(each_kv(dtab)),
+                                      $(a : int, d : IKV) => a == d.key,
+                                      $(a : int, d : IKV) => (A = a, V = d.value))
+                             |> to_array())
+        var expected <- [(A = 0, V = 0), (A = 1, V = 10), (A = 1, V = 10), (A = 4, V = 40), (A = 2, V = 20), (A = 0, V = 0)]
+        t |> equal(length(got), length(expected))
+        for (i in range(length(expected))) {
+            t |> equal(got[i].A, expected[i].A)
+            t |> equal(got[i].V, expected[i].V)
+        }
+        delete got
+        delete expected
+        delete dtab
+        delete ids
+    }
+    t |> run("trailing where + select on the probed pair") @(t : T?) {
+        var ids <- [0, 1, 1, 4, 9, 2, 0, 7]
+        var dtab <- make_int_table(5)
+        var got <- _fold(ids |> _join(unsafe(each_kv(dtab)),
+                                      $(a : int, d : IKV) => a == d.key,
+                                      $(a : int, d : IKV) => (A = a, V = d.value))
+                             |> _where(_.V > 5)
+                             |> _select("{_.A}:{_.V}")
+                             |> to_array())
+        t |> equal(length(got), 4)
+        t |> equal(got[0], "1:10")
+        t |> equal(got[1], "1:10")
+        t |> equal(got[2], "4:40")
+        t |> equal(got[3], "2:20")
+        delete got
+        delete dtab
+        delete ids
+    }
+    t |> run("empty table srcB matches nothing") @(t : T?) {
+        var ids <- [0, 1, 2]
+        let e : table<int; int>
+        let n = _fold(ids |> _join(unsafe(each_kv(e)),
+                                   $(a : int, d : IKV) => a == d.key,
+                                   $(a : int, d : IKV) => d.value)
+                          |> count())
+        t |> equal(n, 0)
+        delete ids
+    }
+    t |> run("set srcB joins on membership") @(t : T?) {
+        var ids <- [0, 1, 1, 4, 9]
+        var s : table<int> <- { 1, 4 }
+        let n = _fold(ids |> _join(unsafe(keys(s)),
+                                   $(a : int, k : int) => a == k,
+                                   $(a : int, k : int) => a)
+                          |> count())
+        t |> equal(n, 3)
+        delete s
+        delete ids
+    }
+    t |> run("non-bare b key stays hashed and agrees") @(t : T?) {
+        var ids <- [0, 1, 1, 4, 9, 2, 0, 7]
+        var dtab <- make_int_table(5)
+        // value/10 == key for this fixture, so the hashed walk must find the same 6 pairs
+        let n = _fold(ids |> _join(unsafe(each_kv(dtab)),
+                                   $(a : int, d : IKV) => a == d.value / 10,
+                                   $(a : int, d : IKV) => d.value)
+                          |> count())
+        t |> equal(n, 6)
+        delete dtab
+        delete ids
+    }
+    t |> run("group join over a table srcB stays outer") @(t : T?) {
+        var ids <- [0, 9, 4]
+        var dtab <- make_int_table(5)
+        var got <- _fold(ids |> _group_join(unsafe(each_kv(dtab)),
+                                            $(a : int, d : IKV) => a == d.key,
+                                            $(a : int, ds : array<IKV>) => (A = a, N = length(ds)))
+                             |> to_array())
+        t |> equal(length(got), 3)
+        t |> equal(got[0].N, 1)
+        t |> equal(got[1].N, 0)
+        t |> equal(got[2].N, 1)
+        delete got
+        delete dtab
+        delete ids
+    }
+    t |> run("table lead joining a table srcB probes both sides") @(t : T?) {
+        var ctab <- make_int_table(8)
+        var dtab <- make_int_table(5)
+        let n = _fold(each_kv(ctab) |> _join(unsafe(each_kv(dtab)),
+                                             $(c : IKV, d : IKV) => c.key == d.key,
+                                             $(c : IKV, d : IKV) => c.value + d.value)
+                                    |> count())
+        t |> equal(n, 5)
+        delete dtab
+        delete ctab
+    }
+}
+
+[test]
+def test_table_join_lead(t : T?) {
+    t |> run("table lead, array srcB: count keeps bucket multiplicity") @(t : T?) {
+        var ctab <- make_int_table(10)
+        var darr <- [0, 2, 2, 4, 11]
+        let n = _fold(each_kv(ctab) |> _join(darr,
+                                             $(c : IKV, d : int) => c.key == d,
+                                             $(c : IKV, d : int) => (K = c.key, V = c.value))
+                                    |> count())
+        t |> equal(n, 4)
+        delete darr
+        delete ctab
+    }
+    t |> run("table lead to_array agrees with a hand loop in slot order") @(t : T?) {
+        var ctab <- make_int_table(10)
+        var darr <- [0, 2, 2, 4, 11]
+        var expected : array<int>
+        for (k, v in keys(ctab), values(ctab)) {
+            for (d in darr) {
+                if (k == d) {
+                    expected |> push(v + d)
+                }
+            }
+        }
+        var got <- _fold(each_kv(ctab) |> _join(darr,
+                                                $(c : IKV, d : int) => c.key == d,
+                                                $(c : IKV, d : int) => c.value + d)
+                                       |> to_array())
+        t |> equal(length(got), length(expected))
+        for (i in range(length(expected))) {
+            t |> equal(got[i], expected[i])
+        }
+        delete got
+        delete expected
+        delete darr
+        delete ctab
+    }
+    t |> run("lead where filters before the join") @(t : T?) {
+        var ctab <- make_int_table(10)
+        var darr <- [0, 2, 2, 4, 11]
+        let n = _fold(each_kv(ctab) |> _where(_.key > 1)
+                                    |> _join(darr,
+                                             $(c : IKV, d : int) => c.key == d,
+                                             $(c : IKV, d : int) => c.value)
+                                    |> count())
+        t |> equal(n, 3)
+        delete darr
+        delete ctab
+    }
+    t |> run("values lane lead") @(t : T?) {
+        var ctab <- make_int_table(10)
+        var darr <- [0, 2, 2, 4, 11]
+        let n = _fold(values(ctab) |> _join(darr,
+                                            $(v : int, d : int) => v == d * 10,
+                                            $(v : int, d : int) => v)
+                                   |> count())
+        t |> equal(n, 4)
+        delete darr
+        delete ctab
+    }
+    t |> run("table lead group_join stays outer over every slot") @(t : T?) {
+        var ctab <- make_int_table(10)
+        var darr <- [0, 2, 2, 4, 11]
+        var got <- _fold(each_kv(ctab) |> _group_join(darr,
+                                                      $(c : IKV, d : int) => c.key == d,
+                                                      $(c : IKV, ds : array<int>) => length(ds))
+                                       |> to_array())
+        t |> equal(length(got), 10)
+        var total = 0
+        for (n in got) {
+            total += n
+        }
+        t |> equal(total, 4)
+        delete got
+        delete darr
+        delete ctab
+    }
+}
+
 // Tier-2 over the raw each_kv iterator (no _fold) — the [unsafe_outside_of_for] contract requires the
 // explicit unsafe(...) wrap at a bare chain head; fused chains rewrite the head before inference.
 
