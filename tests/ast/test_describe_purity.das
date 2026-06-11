@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options rtti
 
 require dastest/testing_boost public
 require daslib/ast
