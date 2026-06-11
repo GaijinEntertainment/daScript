@@ -2274,9 +2274,11 @@ class public CppAot : AstVisitor {
             write(*ss, "{get_variant_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isHandle) {
             if (field._type.isString) {
-                // c-cast const char * etc string casts to char * or char * const
+                // two-step cast: inner (const char *) picks the const-qualified conversion on
+                // const owners (e.g. operator const char*() const), outer strips pointee-const
+                // since das string always lowers to char * and is immutable anyway
                 if (field.value._type.flags.constant) {
-                    write(*ss, "((const char * const)(");
+                    write(*ss, "((char *)(const char *)(");
                 } else {
                     write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                 }
@@ -2289,9 +2291,9 @@ class public CppAot : AstVisitor {
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
                 if (field._type.isString) {
-                    // c-cast const char * etc string casts to char * or char * const
+                    // two-step cast, same as the by-value handle case above
                     if (field.value._type.flags.constant) {
-                        write(*ss, "((const char * const)(");
+                        write(*ss, "((char *)(const char *)(");
                     } else {
                         write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                     }

@@ -4665,8 +4665,8 @@ class public LlvmJitVisitor : AstVisitor {
         let ann_ty = get_llvm_type_for_annotation_argument_info()
         var fields = fixed_array(
             types.ConstI32(uint64(int(arg.basicType))),
-            get_string_constant_ptr(g_builder, "{arg.name}"),
-            arg.basicType == Type.tString ? get_string_constant_ptr(g_builder, "{arg.sValue}") : LLVMConstPointerNull(types.LLVMVoidPtrType()),
+            get_string_constant_ptr(g_builder, arg.name),
+            arg.basicType == Type.tString ? get_string_constant_ptr(g_builder, arg.sValue) : LLVMConstPointerNull(types.LLVMVoidPtrType()),
             types.ConstI32(uint64(uint(arg.iValue))))
         return LLVMConstNamedStruct(ann_ty, array_data_ptr(fields), 4u)
     }
@@ -4708,8 +4708,8 @@ class public LlvmJitVisitor : AstVisitor {
             args_ptr = g_builder |> LLVMBuildPointerCast(args_global, types.LLVMVoidPtrType(), "")
         }
         var fields = fixed_array(
-            get_string_constant_ptr(g_builder, "{ann.name}"),
-            get_string_constant_ptr(g_builder, "{ann.module_name}"),
+            get_string_constant_ptr(g_builder, ann.name),
+            get_string_constant_ptr(g_builder, ann.module_name),
             args_ptr,
             types.ConstI32(ann.count |> uint64()),
             LLVMConstPointerNull(types.LLVMVoidPtrType()))
