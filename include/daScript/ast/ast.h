@@ -17,10 +17,6 @@
 #define DAS_ALLOW_ANNOTATION_LOOKUP     1
 #endif
 
-#ifndef DAS_THREAD_SAFE_ANNOTATIONS
-#define DAS_THREAD_SAFE_ANNOTATIONS    1
-#endif
-
 
 namespace das
 {
@@ -1181,6 +1177,7 @@ namespace das
         static void ClearSharedModules();
         static void CollectSharedModules();
         static TypeAnnotation * resolveAnnotation ( const TypeInfo * info );
+        static Annotation * resolveAnnotation ( const AnnotationInfo * info );
         static Type findOption ( const string & name );
         static void foreach(const callable<bool(Module * module)> & func);
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
@@ -1483,12 +1480,13 @@ namespace das
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
+        AnnotationArgumentInfo * makeAnnotationArguments ( const AnnotationArgumentList & list, uint32_t & count );
+        AnnotationInfo * makeAnnotationList ( const AnnotationList & list, uint32_t & count );
         void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
-        bool                            rtti = false;
     public:
         das_hash_map<string,StructInfo *>        smn2s;
         das_hash_map<string,TypeInfo *>          tmn2t;

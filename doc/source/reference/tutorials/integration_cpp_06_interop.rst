@@ -96,21 +96,22 @@ The ``TypeInfo`` union
 .. code-block:: cpp
 
    union {
-       StructInfo *             structType;        // tStructure
-       EnumInfo *               enumType;           // tEnumeration
-       mutable TypeAnnotation * annotation_or_name; // tHandle
+       StructInfo *     structType;      // tStructure
+       EnumInfo *       enumType;        // tEnumeration
+       AnnotationInfo * annotation_info; // tHandle
    };
 
 .. warning::
 
    Accessing the wrong union member is **undefined behavior**.  Always
    check ``ti->type`` before accessing ``structType``, ``enumType``, or
-   ``annotation_or_name``.
+   ``annotation_info``.
 
 For handled types (``type == tHandle``), use ``ti->getAnnotation()``
-to safely resolve the annotation — it handles tagged-pointer resolution
-automatically.  ``das_to_string(Type::tHandle)`` returns an empty string;
-use ``ti->getAnnotation()->name`` for the type name.
+to safely resolve the live ``TypeAnnotation`` — ``annotation_info`` only
+carries the annotation name and module name (resolved lazily against the
+registered modules and cached).  ``das_to_string(Type::tHandle)`` returns
+an empty string; use ``ti->getAnnotation()->name`` for the type name.
 
 
 Registering interop functions

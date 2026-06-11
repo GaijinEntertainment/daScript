@@ -362,7 +362,7 @@ Key capabilities (vs ``addExtern``):
 * ``vec4f`` argument type = "any" — accepts any daslang type
 
 **TypeInfo union warning:** ``TypeInfo`` has a union —
-``structType``, ``enumType``, and ``annotation_or_name`` share memory.
+``structType``, ``enumType``, and ``annotation_info`` share memory.
 Which member is valid depends on ``ti->type``:
 
 * ``tStructure`` → ``ti->structType``

@@ -639,10 +639,53 @@ class public DebugVarCache {
 }
 
 
+def private writeAnnotationArgInit(var sb : StringBuilderWriter; arg : AnnotationArgumentInfo) {
+    if (arg.basicType == Type.tBool) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.bValue})")
+    } elif (arg.basicType == Type.tString) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{arg.sValue}\")")
+    } elif (arg.basicType == Type.tInt) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.iValue})")
+    } elif (arg.basicType == Type.tFloat) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.fValue}f)")
+    }
+}
+
+// emits AnnotationArgumentInfo + AnnotationInfo statics for a Struct/Func/Enum info
+def private writeAnnotationList(var writer : StringBuilderWriter?; info; baseName : string) {
+    if (info.annotation_count == 0u) return ;
+    for (ai in range(int(info.annotation_count))) {
+        unsafe {
+            let ann & = get_annotation(*info, ai)
+            if (ann.count > 0u) {
+                let annArgs = build_string() $(var sb) {
+                    for (gi in range(int(ann.count))) {
+                        if (gi != 0) { write(sb, ", "); }
+                        writeAnnotationArgInit(sb, get_annotation_argument(ann, gi))
+                    }
+                }
+                write(*writer, "AnnotationArgumentInfo {baseName}_ann_{ai}_args[{int(ann.count)}] = \{ {annArgs} \};\n")
+            }
+        }
+    }
+    let anns = build_string() $(var sb) {
+        for (ai in range(int(info.annotation_count))) {
+            if (ai != 0) { write(sb, ", "); }
+            unsafe {
+                let ann & = get_annotation(*info, ai)
+                let argsRef = ann.count > 0u ? "{baseName}_ann_{ai}_args" : "nullptr"
+                write(sb, "AnnotationInfo(\"{ann.name}\", \"{ann.module_name}\", {argsRef}, {int(ann.count)}u)")
+            }
+        }
+    }
+    write(*writer, "AnnotationInfo {baseName}_ann[{int(info.annotation_count)}] = \{ {anns} \};\n")
+}
+
 class public AotDebugInfoHelper {
     //! Helper for generating debug type and variable information in AOT C++ output.
     private info2Name  = new DebugVarCache()
     private info2TypeName = new DebugVarCache()
+    private annInfoNames : table<string; string>    // "module::name" -> emitted AnnotationInfo identifier
     helper : DebugInfoHelper? = new DebugInfoHelper(uninitialized)
     cross_platform : bool = false
     def operator delete {
@@ -695,6 +738,7 @@ class public AotDebugInfoHelper {
                 write(writer, "extern TypeInfo {typeInfoName(ti)};\n");
             })
             write(writer, "\n");
+            writeHandledAnnotations(unsafe(addr(writer)));
             helper |> debug_helper_iter_enums($(_name, ti){
                 describeCppEnumInfoValues(unsafe(addr(writer)), ti);
                 write(writer, "EnumInfo {enumInfoName(ti)} = \{ {describeCppEnumInfo(ti)} \};\n");
@@ -726,20 +770,60 @@ class public AotDebugInfoHelper {
             write(writer, "    for (auto& ann : annotations) \{\n")
             write(writer, "        ann.resolveAnnotation();\n")
             write(writer, "    \}\n")
-            helper |> debug_helper_iter_structs($(_name, si) {
-                if (si.fields == null) return ;
-                for (fi in range(si.count)) {
-                    let fld & = unsafe(si.fields[fi])
-                    if (fld.annotation_arguments == null || empty(*fld.annotation_arguments)) continue;
-                    write(writer, "    {structInfoName(si)}_field_{fi}.annotation_arguments = &{structInfoName(si)}_field_{fi}_ann;\n")
-                }
-            })
             write(writer, "\}\n\n")
             info2Name.clear();
             info2TypeName.clear();
+            annInfoNames |> clear()
         }
     }
 
+
+    def registerHandledAnnotation(var writer : StringBuilderWriter?; info : TypeInfo?) {
+        if (info._type != Type.tHandle) return ;
+        let ann = info.annotation
+        let key = "{ann._module.name}::{ann.name}"
+        if (annInfoNames |> key_exists(key)) return ;
+        let ident = "__handled_ann_{length(annInfoNames)}"
+        annInfoNames[key] = ident
+        write(*writer, "AnnotationInfo {ident} = \{ \"{ann.name}\", \"{ann._module.name}\", nullptr, 0u \};\n")
+    }
+
+    // dedup'd AnnotationInfo statics for every handled type referenced from any TypeInfo/VarInfo
+    def writeHandledAnnotations(var writer : StringBuilderWriter?) {
+        helper |> debug_helper_iter_types($(_name, ti) {
+            registerHandledAnnotation(writer, ti);
+        })
+        helper |> debug_helper_iter_structs($(_name, si) {
+            if (si.fields == null) return ;
+            for (fi in range(si.count)) {
+                registerHandledAnnotation(writer, unsafe(si.fields[fi]));
+            }
+        })
+        helper |> debug_helper_iter_funcs($(_name, fni) {
+            if (fni.fields == null) return ;
+            for (fi in range(fni.count)) {
+                registerHandledAnnotation(writer, unsafe(fni.fields[fi]));
+            }
+        })
+    }
+
+    def annInfoRef(info : TypeInfo?) : string {
+        let ann = info.annotation
+        return "&" + annInfoNames.get_value("{ann._module.name}::{ann.name}")
+    }
+
+    def writeVarAnnotationArgs(var writer : StringBuilderWriter?; fld : VarInfo?; arrName : string) {
+        if (fld.annotation_argument_count == 0u) return ;
+        let annArgs = build_string() $(var sb) {
+            for (ai in range(int(fld.annotation_argument_count))) {
+                if (ai != 0) { write(sb, ", "); }
+                unsafe {
+                    writeAnnotationArgInit(sb, get_annotation_argument(*fld, ai))
+                }
+            }
+        }
+        write(*writer, "AnnotationArgumentInfo {arrName}[{int(fld.annotation_argument_count)}] = \{ {annArgs} \};\n")
+    }
 
     def describeCppVarInfo(struct_name : string; info : VarInfo?; suffix : string) {
         return build_string() $(writer) {
@@ -761,6 +845,7 @@ class public AotDebugInfoHelper {
         }
     }
     def describeCppStructInfoFields(var writer : StringBuilderWriter?; info : StructInfo?) {
+        writeAnnotationList(writer, info, structInfoName(info));
         if (info.fields == null) return ;
         for (fi in range(info.count)) {
             let suffix = "_var_{info.hash:d}";
@@ -769,30 +854,11 @@ class public AotDebugInfoHelper {
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
             let prefix = (info.module_name |> !empty(info.module_name)) ? "{info.module_name}::" : "";
+            writeVarAnnotationArgs(writer, fld, "{structInfoName(info)}_field_{fi}_ann");
+            let fldAnnRef = fld.annotation_argument_count > 0u ? ", {structInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
             // info.name is the struct's daslang name; mangle if C++ keyword so offsetof()
             // in describeCppVarInfo sees the same identifier the struct decl emitted.
-            write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + aotSuffixNameEx(info.name, "_S"), fld,suffix)} \};\n");
-            if (fld.annotation_arguments != null) {
-                if (length(*fld.annotation_arguments) > 0) {
-                    let annArgs = build_string() $(var sb) {
-                        var first = true
-                        for (arg in *fld.annotation_arguments) {
-                            if (!first) { write(sb, ", "); }
-                            first = false
-                            if (arg.basicType == Type.tBool) {
-                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.bValue})")
-                            } elif (arg.basicType == Type.tString) {
-                                write(sb, "AnnotationArgument(\"{arg.name}\", string(\"{arg.sValue}\"))")
-                            } elif (arg.basicType == Type.tInt) {
-                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.iValue})")
-                            } elif (arg.basicType == Type.tFloat) {
-                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.fValue}f)")
-                            }
-                        }
-                    }
-                    write(*writer, "static AnnotationArguments {structInfoName(info)}_field_{fi}_ann = \{ {annArgs} \};\n")
-                }
-            }
+            write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + aotSuffixNameEx(info.name, "_S"), fld,suffix)}{fldAnnRef} \};\n");
         }
         let fields = (each(range(info.count))
             ._select("&{structInfoName(info)}_field_{_}")
@@ -810,10 +876,12 @@ class public AotDebugInfoHelper {
                 write(writer, "nullptr, ")
             }
             let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_struct_cppname(info)}>::size" : "{info.size:d}";
-            write(writer, "{info.count:d}, {info_size}, UINT64_C(0x{info.init_mnh:x}), nullptr, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
+            let annRef = info.annotation_count > 0u ? "{structInfoName(info)}_ann" : "nullptr";
+            write(writer, "{info.count:d}, {info_size}, UINT64_C(0x{info.init_mnh:x}), {annRef}, {int(info.annotation_count)}u, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
         }
     }
     def describeCppFuncInfoFields(var writer : StringBuilderWriter?; info : FuncInfo?) {
+        writeAnnotationList(writer, info, funcInfoName(info));
         if (info.fields == null) return ;
         for (fi in range(info.count)) {
             let suffix = "_var_{info.hash:d}";
@@ -821,7 +889,9 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, fld,suffix)} \};\n");
+            writeVarAnnotationArgs(writer, fld, "{funcInfoName(info)}_field_{fi}_ann");
+            let fldAnnRef = fld.annotation_argument_count > 0u ? ", {funcInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
+            write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, fld,suffix)}{fldAnnRef} \};\n");
         }
 
         let fields = (each(range(info.count))
@@ -839,6 +909,9 @@ class public AotDebugInfoHelper {
                 write(writer, "nullptr, ")
             }
             write(writer, "{info.count:d}, {info.stackSize:d}, &{typeInfoName(info.result)}, nullptr,0,UINT64_C(0x{info.hash:x}), 0x{info.flags:x}");
+            if (info.annotation_count > 0u) {
+                write(writer, ", {funcInfoName(info)}_ann, {int(info.annotation_count)}u");
+            }
         }
     }
     def describeCppEnumInfoValues(var writer : StringBuilderWriter?; einfo : EnumInfo?) {
@@ -866,9 +939,11 @@ class public AotDebugInfoHelper {
             .to_array()
             ._fold()) |> join(", ")
         write(*writer, "EnumValueInfo * {enumInfoName(einfo)}_values [] = \{ {enum_vals} \};\n");
+        writeAnnotationList(writer, einfo, enumInfoName(einfo));
     }
     def describeCppEnumInfo(info : EnumInfo?) {
-        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x}), {info.flags:d}";
+        let annRef = info.annotation_count > 0u ? ", {enumInfoName(info)}_ann, {int(info.annotation_count)}u" : "";
+        return "\"{info.name}\", \"{info.module_name}\", {enumInfoName(info)}_values, {info.count:d}, UINT64_C(0x{info.hash:x}), {info.flags:d}{annRef}";
     }
     def describeCppTypeInfo(info : TypeInfo?; suffix : string = "") {
         return build_string() $(writer) {
@@ -891,20 +966,8 @@ class public AotDebugInfoHelper {
             }
             write_sep();
             if (info._type == Type.tHandle) {
-                let ann_ptr : void? = info.annotation_or_name
-                let int_ptr = unsafe(reinterpret<uint64>(ann_ptr));
-                if ((int_ptr & uint64(1)) != uint64(0)) {
-                    let tname = unsafe(reinterpret<string>(int_ptr ^ uint64(1)));  // already comes from string allocator
-                    write(writer, "DAS_MAKE_ANNOTATION(\"{tname}\")");
-                } else {
-                    // we add ~ at the beginning of the name for padding
-                    // if name is allocated by the compiler, it does not guarantee that it is aligned
-                    // we check if there is a ~ at the beginning of the name, and if it is - we skip it
-                    // that way we can accept both aligned and unaligned names
-                    write(writer, "DAS_MAKE_ANNOTATION(\"~{info.annotation_or_name._module.name}::{info.annotation_or_name.name}\")");
-                }
+                write(writer, annInfoRef(info));
             } else {
-                assert(info._type != Type.tHandle);
                 write(writer, "nullptr");
             }
             write_sep();
@@ -1195,7 +1258,6 @@ class public CppAot : AstVisitor {
     //! Main AST visitor that generates C++ ahead-of-time compiled code from daslang AST.
 /*
     CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
-        helper.rtti = program.options.getBoolOption("rtti",false);
         prologue = program.options.getBoolOption("aot_prologue",false) ||
             program.getDebugger();
         solidContext = program.policies.solid_context || program.options.getBoolOption("solid_context",false);
@@ -4150,7 +4212,6 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                                             solidContext = program.policies.solid_context ||
                                                     (program._options |> find_arg("solid_context") ?as tBool ?? false),
                                             cross_platform = cop.cross_platform)
-                cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
                 cpp_aot.helper.cross_platform = cop.cross_platform;
                 make_visitor(*cpp_aot) $(adapter) {
                     cpp_aot.adapter := adapter
@@ -4226,7 +4287,6 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                                                 (program._options |> find_arg("solid_context") ?as tBool ?? false),
                                         cross_platform = cop.cross_platform,
                                         aot_filter_function = func_name)
-            cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
             cpp_aot.helper.cross_platform = cop.cross_platform;
             make_visitor(*cpp_aot) $(adapter) {
                 cpp_aot.adapter := adapter

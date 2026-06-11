@@ -8,3 +8,4 @@ flags associated with the structure
 number of fields in the structure
 size of the structure in bytes
 index of the first GC field in the structure, i.e. field which requires garbage collection marking
+number of annotations attached to the structure

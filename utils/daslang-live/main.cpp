@@ -182,8 +182,7 @@ static void auto_tick_agents() {
 
 struct CompileResult {
     // moduleGroup owns the non-builtin dep modules (deletes them on reset()).
-    // Program/Context hold raw Module* into it via library.modules and TypeInfo
-    // (vi->annotation_arguments → FieldDeclaration::annotation), so it must
+    // Program/Context hold raw Module* into it via library.modules, so it must
     // outlive program+ctx. Declared first → destroyed last.
     unique_ptr<ModuleGroup> moduleGroup;
     ProgramPtr program;
