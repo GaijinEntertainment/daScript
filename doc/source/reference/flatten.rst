@@ -144,6 +144,21 @@ constant *arithmetic* but not constant *constructors*, and never a runtime-opera
 or reassociation), done here under a shader's fast-math assumption (``x*0 → 0`` fires by
 default; ``options _flatten_no_fast_math`` turns the float forms off — see below).
 
+**Swizzle lane fold.** A swizzle over a value whose lanes are separable — a float
+constructor of any arity, a vector const literal, or another swizzle — resolves every
+output lane to its provenance and re-emits the cheapest equivalent form. A selection
+covering one whole base hands back the base itself (``float4(v, 1f).xyz → v`` — the
+endemic *helper-returns-float4-with-alpha* shape; the constructor, the extract and the
+dropped lanes' compute all die), or one composed swizzle (``float4(v.zyx, 1f).xz → v.zx``,
+``v.zyx.xz → v.zx``); a single lane hands back the scalar argument
+(``float3(a, b, c).y → b``); the rest re-pack as a narrower constructor, splat, or const
+literal (``float4(sin(x), x, 3f, cos(x)).yz → float2(x, 3f)`` — the ``sin``/``cos`` die).
+Component-read scalar arguments decompose too, so ``float3(v.x, v.y, v.z).xyz``
+re-vectorizes to ``v``. Pure lane selection is bit-exact, so the fold is never
+fast-math gated. The one cost gate: a *partial* run of a base inside a re-pack
+(``float3(v2, s).yz`` would need a ``v2.y`` extract the original didn't pay for) is left
+alone — lane reads are full instructions on the target ISA.
+
 The fold and the typer's const-fold are *mutually-enabling*, so the fold phase
 **iterates to a fixpoint**. Flattening folds the runtime-operand identities the
 typer will not (``0*b → 0``); the re-infer between passes then const-folds the
@@ -448,8 +463,8 @@ Public API
     Test-framework / fuzzer introspection: walks a compiled twin's final body
     and returns a description for each const-foldable residual a complete fold
     should have collapsed — an unconditional algebraic identity (``x*1``,
-    ``x+0``, …), an all-const foldable call, a const-condition select, or
-    ``!const``. Empty means clean. It runs over the *compiled* output (not at
+    ``x+0``, …), an all-const foldable call, a const-condition select,
+    ``!const``, or a swizzle over decomposable lanes. Empty means clean. It runs over the *compiled* output (not at
     transform time), so it covers backend paths such as ``[pixel_shader]`` and
     is the fold-completeness oracle for both ``tests/flatten/test_flatten_fold.das``
     (the ``[flatten]`` + const-identity corpus and every example shader) and the
