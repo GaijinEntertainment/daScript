@@ -418,6 +418,28 @@ one overload where natural nesting allows). Un-reject fixed arrays in apply.das 
 contracts.das where they now just work.
 Exit: new multi-dim/typedef'd-array tests pass through the generic stdlib; LOC visibly
 negative.
+**IMPLEMENTED.** Probe (D:\Work\fa_scratch\stage4_generics_probe.das) showed the
+generalization mostly ALREADY HOLDS via natural nesting — each (multi-dim rows +
+typedef'd M4[N] elements), find_index(_if) over rows, subarray over rows (returns
+array<int[2]>, FA element preserved), clone_dim multi-dim, finalize_dim over
+array<T>[N] all just work; pinned in tests/fixed_array/test_stdlib_generics.das.
+ONE real gap fixed: sort-with-row-cmp — the [builtin_array_sort] transformCall
+(module_builtin_runtime_sort.cpp) BYPASSES the daslib body and rewrote the call from
+the chain LEAF (my 1e boot-gate port preserved master's dim.back() semantics: leaf
+element + leaf size stride + INNERMOST length — wrong rows, silent garbage on master
+too); now one-peel from the head (element=row, stride=row size, length=outer count;
+1-D bit-identical), routing rows to __builtin_sort_dim_any_cblock — the daslib else
+arm was already correct. No-cmp multi-dim sort now errors cleanly ("no matching <
+(int[2], int[2])") where master silently flat-sorted dim.back() scalars.
+apply.das: both "can't apply to dim" macro_verify rejects + 3 internal
+assert(empty(.dim)) DELETED — dead post-flip (FA fails the adjacent baseType gates
+with better messages). contracts.das: expect_any_array dim-read → baseType==
+tFixedArray (still accepts FA); expect_any_enum / expect_any_vector_type dim clauses
+dropped (redundant — FA head baseType already fails). DEFERRED to Stage 5: the 1f
+`-[]` removeDim gap (zero in-tree users; macro-API territory). Cosmetic, noted:
+typeinfo typename of an M4[N] element prints structural "float[4][4]", not "M4"
+(display label vs typename canonicalization). Gates: 10807/10807 interp, 10146/10146
+AOT (two-pass), 10386/10386 JIT, zero leaks all lanes, fmt+lint clean.
 
 ### Stage 5 — Macro/tooling ports
 ast_match.das (structural FA matching), match.das, typemacro_boost (field rename), lints

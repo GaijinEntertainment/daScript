@@ -110,7 +110,6 @@ def private inline_apply_field(nameStr : string; var access : ExpressionPtr; fie
 [macro_function]
 def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : string; at : LineInfo; var names : array<string>; hasExtraArg : bool) {
     assert(stype.baseType == Type.tStructure)
-    assert(empty(stype.dim))
     let nfields = frange.y - frange.x
     var selfT = clone_type(stype)
     selfT.flags |= TypeDeclFlags.isExplicit | TypeDeclFlags.explicitConst
@@ -164,7 +163,6 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; fnname : string; at : LineInfo
 [macro_function]
 def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string; at : LineInfo; var names : array<string>) {
     assert(stype.baseType == Type.tTuple)
-    assert(empty(stype.dim))
     let nfields = frange.y - frange.x
     var selfT = clone_type(stype)
     selfT.flags |= TypeDeclFlags.isExplicit | TypeDeclFlags.explicitConst
@@ -215,7 +213,6 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; fnname : string; at : LineInfo)
 [macro_function]
 def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : string; at : LineInfo; var names : array<string>) {
     assert(stype.baseType == Type.tVariant)
-    assert(empty(stype.dim))
     let nfields = frange.y - frange.x
     var selfT = clone_type(stype)
     selfT.flags |= TypeDeclFlags.isExplicit | TypeDeclFlags.explicitConst
@@ -348,7 +345,6 @@ class ApplyMacro : AstCallMacro {
             return null
         }
         var argT = clone_type(expr.arguments[0]._type)
-        macro_verify(empty(argT.dim), prog, expr.at, "can't apply to dim")
         macro_verify(argT.baseType == Type.tStructure || argT.baseType == Type.tTuple || argT.baseType == Type.tVariant,
             prog, expr.at, "can only apply to {describe(expr.arguments[0]._type)}")
         macro_verify(expr.arguments[1] is ExprMakeBlock, prog, expr.at, "expecting make block, i.e. $(..)")
@@ -531,7 +527,6 @@ class ApplyImmMacro : AstCallMacro {
             return null
         }
         var argT = clone_type(expr.arguments[0]._type)
-        macro_verify(empty(argT.dim), prog, expr.at, "can't apply_imm to dim")
         macro_verify(argT.baseType == Type.tStructure, prog, expr.at, "apply_imm supports struct only")
         macro_verify(expr.arguments[1] is ExprMakeBlock, prog, expr.at, "expecting make block, i.e. $(..)")
         macro_verify(apply_block_inline_safe(expr.arguments[1]), prog, expr.at,

@@ -491,8 +491,7 @@ namespace das
             }
             const auto & arg = call->arguments[0];
             if ( arg->type->baseType==Type::tFixedArray ) {
-                auto faT = arg->type;   // innermost fixed-array node (matches old dim.back() semantics)
-                while ( faT->firstType && faT->firstType->baseType==Type::tFixedArray ) faT = faT->firstType;
+                auto faT = arg->type;   // chain head: sort the outermost level (rows of a multi-dim array)
                 auto arrType = new TypeDecl(*faT->firstType);
                 auto newCall = static_cast<ExprCall*>(call->clone());
                 auto stride = arrType->getSizeOf();
