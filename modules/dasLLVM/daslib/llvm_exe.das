@@ -374,11 +374,17 @@ class CollectExternVisitor : AstVisitor {
                 register_new_from_annotation(name, expr.typeexpr.annotation)
             }
         } else {
-            if (!empty(expr.typeexpr.dim)) {
-                if (expr.typeexpr.baseType == Type.tHandle) {
+            if (expr.typeexpr.baseType == Type.tFixedArray) {
+                // the handle gate lives on the chain element (the head is tFixedArray);
+                // borrow-walk — this pass runs outside ast_gc_guard, clones would leak
+                var elemT = expr.typeexpr
+                while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
+                    elemT = elemT.firstType
+                }
+                if (elemT.baseType == Type.tHandle) {
                     let name = uid.get_new(expr.typeexpr)
                     if (initialize(name)) {
-                        register_new_from_annotation(name, expr.typeexpr.annotation)
+                        register_new_from_annotation(name, elemT.annotation)
                     }
                 } else {
                     if (expr.initializer) {

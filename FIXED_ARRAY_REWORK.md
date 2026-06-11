@@ -382,14 +382,33 @@ KNOWN LINT GAP surfaced by the var-param test probe (pre-existing on master, NOT
 FA-specific): LINT003 suggests `let` for a var passed to a never-writing `var` param —
 access_ref only sets via SideEffects::modifyArgument, and the write-tracking is
 optimizer-shared (conservative marking would cascade modifyArgument up the call graph).
-Proper fix = new access flag (PR-#2736-style 4-site checklist + serializer bump) —
-Boris's call, not landed here; the test exercises its var param instead (mutable row
+Proper fix = new access flag (PR-#2736-style 4-site checklist + serializer bump).
+FILED as issue #3090 (Boris: "lets file an issue, fix it follow up at some point") —
+follow-up outside this rework; the test exercises its var param instead (mutable row
 copy through the peeled binding, a real assertion).
 
 ### Stage 3 — JIT
 `modules/dasLLVM/daslib/llvm_jit.das` port (element type, bounds checks, loop ranges from
 nesting; TypeInfo globals unchanged — flattened); bump `LLVM_JIT_CODEGEN_VERSION`.
 Exit: JIT tests green.
+**IMPLEMENTED.** llvm_jit_common.das: type_to_llvm_type's flatten-walk + reversed
+LLVMArrayType wrap → one tFixedArray recursion arm (`LLVMArrayType(recurse(firstType),
+fixedDim)`, identical nesting); dim_element_type_to_llvm_type gate swapped (leaf walk
+kept — it wants the scalar element). llvm_jit.das: 8 mechanical gate/`dim[0]`→
+`fixedDim` swaps (ExprNew codegen, call-arg classification, ExprAt, ExprSafeAt incl.
+the ptr-to-FA arm, iterator first()/next(), cast, for-source assert); TypeInfo-globals
+emission (info.dim) untouched — flattened forever. LATENT BUG FIXED in BOTH
+registration passes (llvm_jit.das preVisitExprNew + llvm_exe.das twin): the
+`new Handle[N]` tHandle gate read raw `baseType==tHandle` under the dim gate — dead in
+the FA world (head is tFixedArray) — so the new`handle pointer was never registered;
+now walks to the chain element (1f fixed only the codegen visitor). The walk must
+BORROW, not clone: these passes run outside ast_gc_guard and run on DLL cache HITS too
+— a clone-walk version leaked 12 TypeDecl nodes per `new <T[N]>` test and exposed a
+SECOND pre-existing fragility: das::gc_thread_root_report_detailed AVs while
+describing leaked nodes whose subtrees were collected (C++ side, surfaced to Boris,
+not chased here). LLVM_JIT_CODEGEN_VERSION 0x23→0x24. Gates: full-tree dastest -jit
+10374/10374 (gc folder excluded by -jit design) after a fresh-cache prewarm, zero GC
+leaks, zero crashes; lint+format clean on all four files.
 
 ### Stage 4 — daslib payoff
 ~~Delete the `[]` workaround families in builtin.das~~ + ~~get_key subtest enablement~~ —

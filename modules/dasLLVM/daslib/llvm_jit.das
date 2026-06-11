@@ -1289,7 +1289,7 @@ class public LlvmJitVisitor : AstVisitor {
             new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr), 0u), "")
             setE(expr, new_ptr)
         } else {
-            if (!empty(expr.typeexpr.dim)) {
+            if (expr.typeexpr.baseType == Type.tFixedArray) {
                 let count = expr.typeexpr.countOf
                 var arr : LLVMOpaqueValue?
                 at_function_entry() {
@@ -1491,7 +1491,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_struct")
                 params |> push(ptrValue)
-            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || !empty(a._type.dim)) && (extern_func != null)) {
+            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || a._type.baseType == Type.tFixedArray) && (extern_func != null)) {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
@@ -2594,9 +2594,9 @@ class public LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, ptr_idx)
             }
-        } elif (!empty(subExprT.dim)) {
-            let maxIndex = subExprT.dim[0]
-            var etype = clone_type(subExprT.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
+        } elif (subExprT.baseType == Type.tFixedArray) {
+            let maxIndex = subExprT.fixedDim
+            var etype = clone_type(subExprT.firstType)   // element of the fixed-array chain
             check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if (expr.atFlags.r2v) {
@@ -2662,12 +2662,12 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         var res : LLVMOpaqueValue?;
-        if (!empty(subExprT.dim) || (subExprT.isPointer && !empty(subExprT.firstType.dim))) {
+        if (subExprT.baseType == Type.tFixedArray || (subExprT.isPointer && subExprT.firstType.baseType == Type.tFixedArray)) {
             // element of the fixed-array chain, behind one pointer level when present
-            let maxIndex = subExprT.isPointer ? subExprT.firstType.dim[0] : subExprT.dim[0]
+            let maxIndex = subExprT.isPointer ? subExprT.firstType.fixedDim : subExprT.fixedDim
             var etype = subExprT.isPointer ? clone_type(subExprT.firstType.firstType) : clone_type(subExprT.firstType)
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            var if_not_null = empty(subExprT.dim) ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
+            var if_not_null = subExprT.baseType != Type.tFixedArray ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             res = build_select(if_not_null, resType) {
                 var maxIdx = types.ConstI32(uint64(maxIndex))
                 let (nidx, nmax) = normalize_int_widths(tidx, maxIdx)
@@ -3693,13 +3693,13 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMPositionBuilderAtEnd(g_builder, okay)
                 range2[ssrc] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
-            } elif (!empty(ssrc._type.dim)) {// []->first()
-                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
+            } elif (ssrc._type.baseType == Type.tFixedArray) {// []->first()
+                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain
                 var element_type = type_to_llvm_type(svar._type)
                 var sdim = getE(ssrc)
                 var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, types.ConstI32(0ul), "dim_0")
                 LLVMBuildStore(g_builder, s0, getV(svar))
-                let dimSize = ssrc._type.dim[0]
+                let dimSize = ssrc._type.fixedDim
                 var tail = types.ConstI32(uint64(dimSize - 1))
                 // Stash end-element pointer as-is; compare directly in next-step.
                 // Previous code ptrtoint'd to LLVMIntPtrType which is statically i64
@@ -3817,8 +3817,8 @@ class public LlvmJitVisitor : AstVisitor {
                 var nextOk = append_basic_block("for_{svar.name}_next_ok")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
-            } elif (!empty(ssrc._type.dim)) {// []->next()
-                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain (the .dim compat view is read-only)
+            } elif (ssrc._type.baseType == Type.tFixedArray) {// []->next()
+                var etype = clone_type(ssrc._type.firstType)   // element of the fixed-array chain
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
                 var svar_i = build_array_index(svar_v, types.ConstI32(1ul), etype, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
@@ -5145,7 +5145,7 @@ class public LlvmJitVisitor : AstVisitor {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isPointer && (subT.isPointer || subT.isRefType)) {
             res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
-        } elif (!empty(ect.dim) && subT.isPointer) {
+        } elif (ect.baseType == Type.tFixedArray && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isInteger && (ect.baseType == Type.tInt64 || ect.baseType == Type.tUInt64) && subT.isPointer) {
             res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
@@ -7046,9 +7046,15 @@ class public ResolveExternVisitor : AstVisitor {
             }
             dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
         } else {
-            if (!empty(expr.typeexpr.dim)) {
-                if (expr.typeexpr.baseType == Type.tHandle) {
-                    var new_handle_ptr = get_jit_new(expr.typeexpr.annotation)
+            if (expr.typeexpr.baseType == Type.tFixedArray) {
+                // the handle gate lives on the chain element (the head is tFixedArray);
+                // borrow-walk — this pass runs outside ast_gc_guard, clones would leak
+                var elemT = expr.typeexpr
+                while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
+                    elemT = elemT.firstType
+                }
+                if (elemT.baseType == Type.tHandle) {
+                    var new_handle_ptr = get_jit_new(elemT.annotation)
                     if (new_handle_ptr == null) {
                         failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
                         return
@@ -7484,7 +7490,7 @@ class public DisableJitVisitor : AstVisitor {
     def override preVisitExprForBody(expr : ExprFor?) : void {
         for (_, ssrc in expr.iteratorVariables, expr.sources) {
             assume ssrc_t = ssrc._type
-            if (ssrc_t.isRange || !empty(ssrc_t.dim) ||
+            if (ssrc_t.isRange || ssrc_t.baseType == Type.tFixedArray ||
                 ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
                 ssrc_t.isString) {
             } elif (!disable) {
