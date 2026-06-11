@@ -87,25 +87,6 @@ namespace das {
                   decl->at,CompilationError::invalid_type);
             */
         }
-        /*
-        if ( decl->dim.size() && decl->ref ) {
-            error("can't declare an array of references, " + describeType(decl), "", "",
-                  decl->at,CompilationError::invalid_type);
-        }
-        */
-        uint64_t size = 1;
-        for (auto di : decl->dim) {
-            if (di <= 0) {
-                error("array dimension can't be 0 or less: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_array_dimension);
-            }
-            size *= di;
-            if (size > 0x7fffffff) {
-                error("array is too big: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::exceeds_array);
-                break;
-            }
-        }
         if (decl->baseType == Type::tFunction || decl->baseType == Type::tLambda || decl->baseType == Type::tBlock || decl->baseType == Type::tVariant ||
             decl->baseType == Type::tTuple) {
             if (decl->argNames.size() && decl->argNames.size() != decl->argTypes.size()) {
@@ -118,10 +99,6 @@ namespace das {
             }
         }
         if (decl->baseType == Type::tVoid) {
-            if (decl->dim.size()) {
-                error("can't declare an array of void: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_array);
-            }
             if (decl->ref) {
                 error("can't declare a void reference: '" + describeType(decl) + "'", "", "",
                       decl->at, CompilationError::invalid_type);
@@ -418,7 +395,6 @@ namespace das {
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || constUnderDim || decl->constant) && !decl->removeConstant;
                 resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
-                resT->dim = decl->dim;
                 resT->aotAlias = false;
                 resT->alias.clear();
                 if ( decl->removeDim && resT->baseType==Type::tFixedArray && resT->firstType ) {
@@ -562,7 +538,6 @@ namespace das {
                 resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                 resT->implicit = (resT->implicit || decl->implicit);
                 resT->explicitConst = (resT->explicitConst || decl->explicitConst);
-                resT->dim = decl->dim;
                 resT->aotAlias = false;
                 // resT->alias.clear(); // this may speed things up, but it breaks typemacro-based aliases
                 if ( decl->removeDim && resT->baseType==Type::tFixedArray && resT->firstType ) {
@@ -741,36 +716,7 @@ namespace das {
                       type->at, CompilationError::invalid_array_dimension);
             }
         }
-        if (type->baseType != Type::typeDecl && type->baseType != Type::typeMacro) {
-            for (size_t i = 0, is = type->dim.size(); i != is; ++i) {
-                if (type->dim[i] == TypeDecl::dimConst) {
-                    if (i<type->dimExpr.size() && type->dimExpr[i]) {
-                        if (auto constExpr = getConstExpr(type->dimExpr[i])) {
-                            if (constExpr->type->isIndex()) {
-                                auto cI = static_cast<ExprConstInt*>(constExpr);
-                                auto dI = cI->getValue();
-                                if (dI > 0) {
-                                    type->dim[i] = dI;
-                                    any = true;
-                                } else {
-                                    error("array dimension can't be 0 or less", "", "",
-                                          type->at, CompilationError::invalid_array_dimension);
-                                }
-                            } else {
-                                error("array dimension must be int32 or uint32", "", "",
-                                      type->at, CompilationError::invalid_array_dimension_type);
-                            }
-                        } else {
-                            error("array dimension must be constant", "", "",
-                                  type->at, CompilationError::invalid_array_dimension);
-                        }
-                    } else {
-                        error("can't deduce array dimension", "", "",
-                              type->at, CompilationError::invalid_array_dimension);
-                    }
-                }
-            }
-        } else if (type->baseType == Type::typeDecl) {
+        if (type->baseType == Type::typeDecl) {
             if (type->typeMacroExpr.size() != 1) {
                 error("typeDecl must have exactly one dimension", "", "",
                       type->at, CompilationError::invalid_type_dimension);

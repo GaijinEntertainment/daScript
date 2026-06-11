@@ -83,9 +83,6 @@ namespace das {
     TypeDecl * appendDimExpr ( TypeDecl * chain, Expression * dimExpr, const LineInfo & at );
     TypeDecl * attachDimChain ( TypeDecl * chain, TypeDecl * element );
     TypeDecl * appendAutoDim ( TypeDecl * typeDecl, const LineInfo & at );
-    // THE THIRD PARSER (FIXED_ARRAY_REWORK.md): utils/dasFormatter still builds the old
-    // dim/dimExpr world; this overload dies with those fields at the end of Stage 1
-    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr );
     void implAddGenericFunction ( yyscan_t scanner, Function * func );
     Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax );

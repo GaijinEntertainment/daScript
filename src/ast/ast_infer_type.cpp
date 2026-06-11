@@ -1780,7 +1780,7 @@ namespace das {
                                         }
                                     } else {
                                         auto stf = sttf->type;
-                                        if (stf && stf->dim.size() == 0 && (stf->baseType == Type::tBlock || stf->baseType == Type::tFunction || stf->baseType == Type::tLambda)) {
+                                        if (stf && (stf->baseType == Type::tBlock || stf->baseType == Type::tFunction || stf->baseType == Type::tLambda)) {
                                             reportAstChanged();
                                             expr->isInvokeMethod = false;
                                             // we replace invoke(foo.GetValue,cast<auto> foo,...) with invoke(foo.GetValue,...)
@@ -2202,7 +2202,7 @@ namespace das {
                 return new ExprConstInt(expr->at, align);
             } else if (expr->trait == "is_dim") {
                 reportAstChanged();
-                return new ExprConstBool(expr->at, expr->typeexpr->dim.size() != 0 || expr->typeexpr->baseType == Type::tFixedArray);
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tFixedArray);
             } else if (expr->trait == "dim") {
                 if (expr->typeexpr->isExprTypeAnywhere()) {
                     error("typeinfo(dim " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim", "", "",
@@ -2212,9 +2212,6 @@ namespace das {
                 if (expr->typeexpr->baseType == Type::tFixedArray) {
                     reportAstChanged();
                     return new ExprConstInt(expr->at, expr->typeexpr->fixedDim);
-                } else if (expr->typeexpr->dim.size()) {
-                    reportAstChanged();
-                    return new ExprConstInt(expr->at, expr->typeexpr->dim[0]);
                 } else {
                     error("typeinfo(dim non_array) is prohibited, " + describeType(expr->typeexpr), "", "",
                           expr->at, CompilationError::invalid_typeinfo_dim);
@@ -2238,9 +2235,6 @@ namespace das {
                 if (expr->typeexpr->secondType->baseType == Type::tFixedArray) {
                     reportAstChanged();
                     return new ExprConstInt(expr->at, expr->typeexpr->secondType->fixedDim);
-                } else if (expr->typeexpr->secondType->dim.size()) {
-                    reportAstChanged();
-                    return new ExprConstInt(expr->at, expr->typeexpr->secondType->dim[0]);
                 } else {
                     error("typeinfo(dim_table_value table<...,non_array>) is prohibited, " + describeType(expr->typeexpr), "", "",
                           expr->at, CompilationError::invalid_typeinfo_dim_table);
@@ -2402,7 +2396,7 @@ namespace das {
             } else if (expr->trait == "is_iterable") {
                 reportAstChanged();
                 bool iterable = false;
-                if (expr->typeexpr->dim.size() || expr->typeexpr->baseType == Type::tFixedArray) {
+                if (expr->typeexpr->baseType == Type::tFixedArray) {
                     iterable = true;
                 } else if (expr->typeexpr->isGoodIteratorType()) {
                     iterable = true;
@@ -2433,16 +2427,16 @@ namespace das {
                 return new ExprConstBool(expr->at, expr->typeexpr->isNumeric());
             } else if (expr->trait == "is_int") {
                 reportAstChanged();
-                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt && expr->typeexpr->dim.size() == 0);
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt);
             } else if (expr->trait == "is_int64") {
                 reportAstChanged();
-                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt64 && expr->typeexpr->dim.size() == 0);
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tInt64);
             } else if (expr->trait == "is_float") {
                 reportAstChanged();
-                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tFloat && expr->typeexpr->dim.size() == 0);
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tFloat);
             } else if (expr->trait == "is_double") {
                 reportAstChanged();
-                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tDouble && expr->typeexpr->dim.size() == 0);
+                return new ExprConstBool(expr->at, expr->typeexpr->baseType == Type::tDouble);
             } else if (expr->trait == "is_numeric_comparable") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->isNumericComparable());
@@ -2920,7 +2914,7 @@ namespace das {
                     reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                     return Visitor::visit(expr);
                 }
-            } else if (finalizeType->dim.size() || finalizeType->baseType == Type::tFixedArray) {
+            } else if (finalizeType->baseType == Type::tFixedArray) {
                 reportAstChanged();
                 auto cloneFn = new ExprCall(expr->at, "finalize_dim");
                 cloneFn->arguments.push_back(expr->subexpr->clone());
@@ -3004,10 +2998,6 @@ namespace das {
                   expr->at, CompilationError::cant_ascend);
         } else if (expr->subexpr->type->baseType == Type::tHandle) {
             const auto &subt = expr->subexpr->type;
-            if (!subt->dim.empty()) {
-                error("array of handled type cannot be allocated on the heap: '" + describeType(subt) + "'", "", "",
-                      expr->at, CompilationError::invalid_ascend_array_handle_type);
-            }
             if (!subt->annotation->canNew()) {
                 error("cannot allocate on the heap this handled type at all: '" + describeType(subt) + "'", "", "",
                       expr->at, CompilationError::invalid_ascend_handle_type);
@@ -3277,7 +3267,7 @@ namespace das {
                 expr->type->constant |= seT->constant;
             }
         } else {
-            if (ixT->isRange() && (seT->isGoodArrayType() || seT->dim.size() || seT->baseType==Type::tFixedArray)) { // a[range(b)] into subset(a,range(b))
+            if (ixT->isRange() && (seT->isGoodArrayType() || seT->baseType==Type::tFixedArray)) { // a[range(b)] into subset(a,range(b))
                 auto subset = new ExprCall(expr->at, "subarray");
                 subset->arguments.push_back(expr->subexpr->clone());
                 subset->arguments.push_back(expr->index->clone());
@@ -3303,7 +3293,7 @@ namespace das {
                 expr->type = new TypeDecl(seT->getVectorBaseType());
                 expr->type->ref = seT->ref;
                 expr->type->constant = seT->constant;
-            } else if (!seT->dim.size() && seT->baseType != Type::tFixedArray) {
+            } else if (seT->baseType != Type::tFixedArray) {
                 error("type can't be indexed: '" + describeType(seT) + "'", "", "",
                       expr->subexpr->at, CompilationError::cant_index);
                 return Visitor::visit(expr);
@@ -3311,18 +3301,10 @@ namespace das {
                 error("type dimensions are not resolved yet: '" + describeType(seT) + "'", "", "",
                       expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
                 return Visitor::visit(expr);
-            } else if (seT->baseType == Type::tFixedArray) {
+            } else {
                 // peel one level - same element-access pattern as tArray
                 TypeDecl::clone(expr->type, seT->firstType);
                 expr->type->ref = true;
-                expr->type->constant |= seT->constant;
-            } else {
-                TypeDecl::clone(expr->type, seT);
-                expr->type->ref = true;
-                expr->type->dim.erase(expr->type->dim.begin());
-                if (!expr->type->dimExpr.empty()) {
-                    expr->type->dimExpr.erase(expr->type->dimExpr.begin());
-                }
                 expr->type->constant |= seT->constant;
             }
         }
@@ -3377,7 +3359,7 @@ namespace das {
                 // }
                 // expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 // expr->type->constant |= seT->constant;
-            } else if (seT->isVectorType() || seT->isGoodArrayType() || seT->dim.size() || seT->baseType==Type::tFixedArray) {
+            } else if (seT->isVectorType() || seT->isGoodArrayType() || seT->baseType==Type::tFixedArray) {
                 // arrays accept int/int64/uint/uint64; vector and fixed_array — int/uint only
                 if (seT->isGoodArrayType() ? !ixT->isIndexExt() : !ixT->isIndex()) {
                     expr->type = nullptr;
@@ -3406,20 +3388,6 @@ namespace das {
                     } else {
                         expr->type = new TypeDecl(Type::tPointer);
                         expr->type->firstType = new TypeDecl(*seT->firstType);
-                        expr->type->firstType->constant |= seT->constant;
-                    }
-                } else if (seT->dim.size()) {
-                    if (!seT->isAutoArrayResolved()) {
-                        error("type dimensions are not resolved yet '" + describeType(seT) + "'", "", "",
-                              expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
-                        return Visitor::visit(expr);
-                    } else {
-                        expr->type = new TypeDecl(Type::tPointer);
-                        expr->type->firstType = new TypeDecl(*seT);
-                        expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
-                        if (!expr->type->firstType->dimExpr.empty()) {
-                            expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
-                        }
                         expr->type->firstType->constant |= seT->constant;
                     }
                 }
@@ -3472,7 +3440,7 @@ namespace das {
             expr->type = new TypeDecl(Type::tPointer);
             expr->type->firstType = new TypeDecl(*seT->secondType);
             expr->type->constant |= seT->constant;
-        } else if (expr->subexpr->type->dim.size() || expr->subexpr->type->baseType==Type::tFixedArray) {
+        } else if (expr->subexpr->type->baseType==Type::tFixedArray) {
             if (!safeExpression(expr)) {
                 error("safe-index of fixed_array<> must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe_fixed_array_safe_index);
@@ -3488,15 +3456,7 @@ namespace das {
                       expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
             }
             expr->type = new TypeDecl(Type::tPointer);
-            if (seT->baseType==Type::tFixedArray) {
-                expr->type->firstType = new TypeDecl(*seT->firstType);
-            } else {
-                expr->type->firstType = new TypeDecl(*seT);
-                expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
-                if (!expr->type->firstType->dimExpr.empty()) {
-                    expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
-                }
-            }
+            expr->type->firstType = new TypeDecl(*seT->firstType);
             expr->type->firstType->constant |= seT->constant;
         } else if (expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef()) {
             if (!ixT->isIndex()) {
@@ -4869,7 +4829,7 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprWith *expr) {
         if (auto wT = expr->with->type) {
             StructurePtr pSt = nullptr;
-            if (wT->dim.size() || wT->baseType == Type::tFixedArray) {
+            if (wT->baseType == Type::tFixedArray) {
                 error("with array in undefined, " + describeType(wT), "", "",
                       expr->at, CompilationError::invalid_with_array_type);
             } else if (wT->isStructure()) {
@@ -4965,13 +4925,6 @@ namespace das {
                 pVar->type = new TypeDecl(*src->type->firstType);
                 pVar->type->ref = true;
                 pVar->type->constant |= src->type->constant;
-            } else if (src->type->dim.size()) {
-                pVar->type = new TypeDecl(*src->type);
-                pVar->type->ref = true;
-                pVar->type->dim.erase(pVar->type->dim.begin());
-                if (!pVar->type->dimExpr.empty()) {
-                    pVar->type->dimExpr.erase(pVar->type->dimExpr.begin());
-                }
             } else if (src->type->isGoodIteratorType()) {
                 if (src->type->isConst()) {
                     error("can't iterate over const iterator", "", "",
@@ -5067,8 +5020,7 @@ namespace das {
         }
         // now, for the one where we did not find anything
         if (that->type) {
-            if (!that->type->dim.size() &&
-                that->type->baseType != Type::tFixedArray &&
+            if (that->type->baseType != Type::tFixedArray &&
                 !that->type->isGoodIteratorType() &&
                 !that->type->isGoodArrayType() &&
                 !that->type->isRange() &&
@@ -5851,7 +5803,7 @@ namespace das {
         }
         if (!expr->func) {
             auto var = findMatchingBlockOrLambdaVariable(expr->name); // if this is lambda_var(args...) or such
-            if (var && var->type && var->type->dim.size() == 0) {     // we promote to vname(args...) to invoke(vname,args...)
+            if (var && var->type) {     // we promote to vname(args...) to invoke(vname,args...)
                 auto bt = var->type->baseType;
                 if (bt == Type::tBlock || bt == Type::tLambda || bt == Type::tFunction) {
                     reportAstChanged();
@@ -5871,7 +5823,7 @@ namespace das {
                 if (expr->name.find("::") == string::npos) { // we only promote to Struct`call() or self->call() if its not blah::call, _::call, or __::call
                     auto memFn = bt->structType->findField(expr->name);
                     if (memFn && memFn->type) {
-                        if (memFn->type->dim.size() == 0 && (memFn->type->baseType == Type::tBlock || memFn->type->baseType == Type::tLambda || memFn->type->baseType == Type::tFunction)) {
+                        if (memFn->type->baseType == Type::tBlock || memFn->type->baseType == Type::tLambda || memFn->type->baseType == Type::tFunction) {
                             reportAstChanged();
                             if (memFn->classMethod) {
                                 auto self = new ExprVar(expr->at, "self");

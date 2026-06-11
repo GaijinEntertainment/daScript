@@ -449,7 +449,6 @@ namespace das {
             return Visitor::visit(expr);
         }
         uint32_t resDim = uint32_t(expr->variants.size());
-        resT->dim.clear();
         if (resDim > 1) {
             resT = makeFixedArrayTypeDecl(int32_t(resDim), resT);
         }

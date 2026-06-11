@@ -8,16 +8,6 @@
 #include "daScript/ast/ast.h"
 using namespace das;
 
-namespace {
-
-TypeDecl * makeOldDim ( Type bt, std::initializer_list<int32_t> dims ) {
-    auto t = new TypeDecl(bt);
-    for ( auto d : dims ) t->dim.push_back(d);
-    return t;
-}
-
-}
-
 TEST_CASE("typeFactory produces tFixedArray chains") {
     gc_guard guard;
     ModuleLibrary lib;
@@ -70,36 +60,27 @@ TEST_CASE("typeFactory produces tFixedArray chains") {
 TEST_CASE("makeTypeInfo flattens tFixedArray chains byte-equal to dim-vector input") {
     gc_guard guard;
     ModuleLibrary lib;
-    SUBCASE("flattened TypeInfo parity") {
-        DebugInfoHelper faHelp, oldHelp;
+    SUBCASE("flattened TypeInfo") {
+        DebugInfoHelper faHelp;
         auto fa = typeFactory<int[3][4]>::make(lib);
         auto faInfo = faHelp.makeTypeInfo(nullptr, fa);
-        auto oldInfo = oldHelp.makeTypeInfo(nullptr, makeOldDim(Type::tInt,{3,4}));
         CHECK_EQ(faInfo->type, Type::tInt);
-        REQUIRE_EQ(faInfo->dimSize, oldInfo->dimSize);
         REQUIRE_EQ(faInfo->dimSize, 2u);
         CHECK_EQ(faInfo->dim[0], 3u);
         CHECK_EQ(faInfo->dim[1], 4u);
-        CHECK_EQ(faInfo->size, oldInfo->size);
-        CHECK_EQ(faInfo->flags, oldInfo->flags);
-        CHECK_EQ(faInfo->hash, oldInfo->hash);
+        CHECK_EQ(faInfo->size, 48u);
     }
     SUBCASE("head qualifiers ride into the flattened flags") {
-        DebugInfoHelper faHelp, oldHelp;
+        DebugInfoHelper faHelp;
         auto fa = makeFixedArrayTypeDecl(4, new TypeDecl(Type::tInt));
         fa->constant = true;
         auto faInfo = faHelp.makeTypeInfo(nullptr, fa);
-        auto old = makeOldDim(Type::tInt,{4});
-        old->constant = true;
-        auto oldInfo = oldHelp.makeTypeInfo(nullptr, old);
         CHECK((faInfo->flags & TypeInfo::flag_isConst) != 0u);
-        CHECK_EQ(faInfo->flags, oldInfo->flags);
-        CHECK_EQ(faInfo->hash, oldInfo->hash);
     }
-    SUBCASE("cache key is shared - chain and flattened mangled text are identical") {
+    SUBCASE("cache key is the chain mangled name") {
         DebugInfoHelper help;
         auto a = help.makeTypeInfo(nullptr, typeFactory<int[4]>::make(lib));
-        auto b = help.makeTypeInfo(nullptr, makeOldDim(Type::tInt,{4}));
+        auto b = help.makeTypeInfo(nullptr, typeFactory<int[4]>::make(lib));
         CHECK_EQ(a, b);   // same helper, same mangled key, same TypeInfo node
     }
 }

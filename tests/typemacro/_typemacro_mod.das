@@ -7,7 +7,7 @@
 //   typeMacroExpr[3] — ExprConstBool (wrap into an array or not)
 //   typeMacroExpr[4] — ExprConstString (mode tag, "arr" expected when wrapping)
 // NOTE: this module reads the typeMacroExpr field directly; array results are
-// built with make_fixed_array_type (the .dim compat view is read-only).
+// built with make_fixed_array_type.
 options gen2
 options no_aot
 

@@ -92,27 +92,6 @@ namespace das {
         return attachDimChain(fa, typeDecl);
     }
 
-    // THE THIRD PARSER (FIXED_ARRAY_REWORK.md): utils/dasFormatter still builds the old
-    // dim/dimExpr world; this overload dies with those fields at the end of Stage 1
-    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr ) {
-        if ( dimExpr ) {
-            int32_t dI = TypeDecl::dimConst;
-            if ( dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
-                auto cI = (ExprConst *) dimExpr;
-                auto bt = cI->baseType;
-                if ( bt==Type::tInt || bt==Type::tUInt ) {
-                    dI = cast<int32_t>::to(cI->value);
-                }
-            }
-            typeDecl->dim.push_back(dI);
-            typeDecl->dimExpr.push_back(dimExpr);
-        } else {
-            typeDecl->dim.push_back(TypeDecl::dimAuto);
-            typeDecl->dimExpr.push_back(nullptr);
-        }
-        typeDecl->removeDim = false;
-    }
-
     vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
         vector<ExpressionPtr> argList;
         if (arguments == nullptr) {

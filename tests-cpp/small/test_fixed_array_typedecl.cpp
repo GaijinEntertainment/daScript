@@ -1,8 +1,7 @@
-// Stage 1a of the tFixedArray rework (FIXED_ARRAY_REWORK.md): the structural
-// Type::tFixedArray machinery is additive and nothing in the language produces FA nodes
-// yet, so this suite hand-builds them and proves the new arms against equivalent
-// old-style dim-vector nodes — text (describe/mangled/cpp), size family, identity,
-// lifecycle, hashes, and classification parity.
+// Structural Type::tFixedArray machinery (FIXED_ARRAY_REWORK.md): text
+// (describe/mangled/cpp), size family, identity, lifecycle, hashes, and
+// classification. Originally a parity suite against equivalent dim-vector nodes;
+// those fields are gone, so the expected values are pinned as literals.
 #include <doctest/doctest.h>
 #include "daScript/daScript.h"
 #include "daScript/ast/ast.h"
@@ -18,12 +17,6 @@ TypeDecl * makeFA ( int32_t d, TypeDecl * elem ) {
     return fa;
 }
 
-TypeDecl * makeOldDim ( Type bt, std::initializer_list<int32_t> dims ) {
-    auto t = new TypeDecl(bt);
-    for ( auto d : dims ) t->dim.push_back(d);
-    return t;
-}
-
 TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
     auto t = new TypeDecl(bt);
     TypeDecl * result = t;
@@ -35,42 +28,23 @@ TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
 
 }
 
-TEST_CASE("tFixedArray text matches dim-vector nodes") {
+TEST_CASE("tFixedArray text") {
     gc_guard guard;
     SUBCASE("describe") {
-        CHECK_EQ(makeFAChain(Type::tInt,{4})->describe(),
-                 makeOldDim(Type::tInt,{4})->describe());
-        CHECK_EQ(makeFAChain(Type::tFloat,{3,4,4})->describe(),
-                 makeOldDim(Type::tFloat,{3,4,4})->describe());
+        CHECK_EQ(makeFAChain(Type::tInt,{4})->describe(), "int[4]");
         CHECK_EQ(makeFAChain(Type::tFloat,{3,4,4})->describe(), "float[3][4][4]");
-        auto faAuto = makeFAChain(Type::tInt,{TypeDecl::dimAuto});
-        auto oldAuto = makeOldDim(Type::tInt,{TypeDecl::dimAuto});
-        CHECK_EQ(faAuto->describe(), oldAuto->describe());
-        CHECK_EQ(faAuto->describe(), "int[]");
+        CHECK_EQ(makeFAChain(Type::tInt,{TypeDecl::dimAuto})->describe(), "int[]");
         auto faConst = makeFAChain(Type::tInt,{4});
         faConst->constant = true;
-        auto oldConst = makeOldDim(Type::tInt,{4});
-        oldConst->constant = true;
-        CHECK_EQ(faConst->describe(), oldConst->describe());
         CHECK_EQ(faConst->describe(), "int const[4]");
     }
     SUBCASE("mangled name") {
-        CHECK_EQ(makeFAChain(Type::tInt,{4})->getMangledName(),
-                 makeOldDim(Type::tInt,{4})->getMangledName());
         CHECK_EQ(makeFAChain(Type::tInt,{4})->getMangledName(), "[4]i");
-        CHECK_EQ(makeFAChain(Type::tFloat,{3,4,4})->getMangledName(),
-                 makeOldDim(Type::tFloat,{3,4,4})->getMangledName());
         CHECK_EQ(makeFAChain(Type::tFloat,{3,4,4})->getMangledName(), "[3][4][4]f");
         auto faQ = makeFAChain(Type::tInt,{4});
         faQ->constant = true;
         faQ->ref = true;
-        auto oldQ = makeOldDim(Type::tInt,{4});
-        oldQ->constant = true;
-        oldQ->ref = true;
-        CHECK_EQ(faQ->getMangledName(), oldQ->getMangledName());
         CHECK_EQ(faQ->getMangledName(), "C&[4]i");
-        CHECK_EQ(makeFAChain(Type::tInt,{4})->getMangledNameHash(),
-                 makeOldDim(Type::tInt,{4})->getMangledNameHash());
     }
     SUBCASE("mid-chain alias mangles per level (settled: natural recursion)") {
         auto m4 = makeFAChain(Type::tFloat,{4,4});
@@ -79,38 +53,27 @@ TEST_CASE("tFixedArray text matches dim-vector nodes") {
         CHECK_EQ(m4x3->getMangledName(), "[3][4]Y<M4>[4]f");
     }
     SUBCASE("describeCppType") {
-        CHECK_EQ(describeCppType(makeFAChain(Type::tInt,{3,4})),
-                 describeCppType(makeOldDim(Type::tInt,{3,4})));
         CHECK_EQ(describeCppType(makeFAChain(Type::tInt,{3,4})), "TDim<TDim<int32_t,4>,3>");
     }
 }
 
-TEST_CASE("tFixedArray size family matches dim-vector nodes") {
+TEST_CASE("tFixedArray size family") {
     gc_guard guard;
     auto fa = makeFAChain(Type::tFloat,{3,4,4});
-    auto old = makeOldDim(Type::tFloat,{3,4,4});
-    CHECK_EQ(fa->getSizeOf64(), old->getSizeOf64());
     CHECK_EQ(fa->getSizeOf64(), uint64_t(192));
-    CHECK_EQ(fa->getCountOf64(), old->getCountOf64());
     CHECK_EQ(fa->getCountOf64(), uint64_t(48));
-    CHECK_EQ(fa->getStride64(), old->getStride64());
     CHECK_EQ(fa->getStride64(), uint64_t(64));
-    CHECK_EQ(fa->getBaseSizeOf64(), old->getBaseSizeOf64());
     CHECK_EQ(fa->getBaseSizeOf64(), uint64_t(4));
-    CHECK_EQ(fa->getAlignOf(), old->getAlignOf());
+    CHECK_EQ(fa->getAlignOf(), 4);
     SUBCASE("float3[4] stays 48 bytes (memory matters)") {
         auto fa3 = makeFAChain(Type::tFloat3,{4});
-        auto old3 = makeOldDim(Type::tFloat3,{4});
-        CHECK_EQ(fa3->getSizeOf64(), old3->getSizeOf64());
         CHECK_EQ(fa3->getSizeOf64(), uint64_t(48));
-        CHECK_EQ(fa3->getAlignOf(), old3->getAlignOf());
+        CHECK_EQ(fa3->getAlignOf(), 4);
     }
     SUBCASE("unresolved dims fail sizeof") {
-        bool faFailed = false, oldFailed = false;
+        bool faFailed = false;
         makeFAChain(Type::tInt,{TypeDecl::dimAuto})->getSizeOf64(faFailed);
-        makeOldDim(Type::tInt,{TypeDecl::dimAuto})->getSizeOf64(oldFailed);
         CHECK(faFailed);
-        CHECK_EQ(faFailed, oldFailed);
     }
 }
 
@@ -123,7 +86,6 @@ TEST_CASE("tFixedArray identity") {
     auto f44b = makeFAChain(Type::tFloat,{4,4});
     auto f34  = makeFAChain(Type::tFloat,{3,4});
     auto justInt = new TypeDecl(Type::tInt);
-    auto oldI4 = makeOldDim(Type::tInt,{4});
     auto arrInt = new TypeDecl(Type::tArray);
     arrInt->firstType = new TypeDecl(Type::tInt);
     auto same = [](TypeDecl * a, TypeDecl * b) {
@@ -135,8 +97,6 @@ TEST_CASE("tFixedArray identity") {
     CHECK_FALSE(same(f44a,f34));
     CHECK_FALSE(same(i4a,justInt));
     CHECK_FALSE(same(i4a,arrInt));
-    // the two representations never meet within one build; structural inequality is by design
-    CHECK_FALSE(same(i4a,oldI4));
     CHECK(i4a->isSameExactType(*i4b));
     CHECK_FALSE(i4a->isSameExactType(*i3));
     SUBCASE("outer const participates per constMatters") {
@@ -186,56 +146,47 @@ TEST_CASE("tFixedArray lifecycle and hashes") {
     }
 }
 
-TEST_CASE("tFixedArray classification parity with dim-vector nodes") {
+TEST_CASE("tFixedArray classification") {
     gc_guard guard;
     auto fa = makeFAChain(Type::tInt,{4});
-    auto old = makeOldDim(Type::tInt,{4});
     CHECK(fa->isArray());
-    CHECK_EQ(fa->isArray(), old->isArray());
     CHECK(fa->isFixedArray());
-    CHECK_EQ(fa->isRefType(), old->isRefType());
-    CHECK_EQ(fa->canCopy(), old->canCopy());
-    CHECK_EQ(fa->canMove(), old->canMove());
-    CHECK_EQ(fa->canClone(), old->canClone());
-    CHECK_EQ(fa->isPod(), old->isPod());
-    CHECK_EQ(fa->isRawPod(), old->isRawPod());
-    CHECK_EQ(fa->isNoHeapType(), old->isNoHeapType());
-    CHECK_EQ(fa->isLocal(), old->isLocal());
-    CHECK_EQ(fa->isShareable(), old->isShareable());
-    CHECK_EQ(fa->isWorkhorseType(), old->isWorkhorseType());
-    CHECK_EQ(fa->isFoldable(), old->isFoldable());
-    CHECK_EQ(fa->canInitWithZero(), old->canInitWithZero());
-    CHECK_EQ(fa->isPolicyType(), old->isPolicyType());
-    CHECK_EQ(fa->isVecPolicyType(), old->isVecPolicyType());
-    CHECK_EQ(fa->unsafeInit(), old->unsafeInit());
-    CHECK_EQ(fa->needInScope(), old->needInScope());
-    CHECK_EQ(fa->gcFlags(), old->gcFlags());
-    CHECK_EQ(fa->isAuto(), old->isAuto());
-    CHECK_EQ(fa->isAutoOrAlias(), old->isAutoOrAlias());
-    CHECK_EQ(fa->isAutoArrayResolved(), old->isAutoArrayResolved());
-    CHECK_EQ(fa->isExprType(), old->isExprType());
+    CHECK(fa->isRefType());
+    CHECK(fa->canCopy());
+    CHECK(fa->canMove());
+    CHECK(fa->canClone());
+    CHECK(fa->isPod());
+    CHECK(fa->isRawPod());
+    CHECK(fa->isNoHeapType());
+    CHECK(fa->isLocal());
+    CHECK(fa->isShareable());
+    CHECK_FALSE(fa->isWorkhorseType());
+    CHECK_FALSE(fa->isFoldable());
+    CHECK_FALSE(fa->canInitWithZero());
+    CHECK(fa->isPolicyType());
+    CHECK_FALSE(fa->isVecPolicyType());
+    CHECK_FALSE(fa->unsafeInit());
+    CHECK_FALSE(fa->needInScope());
+    CHECK_EQ(fa->gcFlags(), 0u);
+    CHECK_FALSE(fa->isAuto());
+    CHECK_FALSE(fa->isAutoOrAlias());
+    CHECK(fa->isAutoArrayResolved());
+    CHECK_FALSE(fa->isExprType());
     SUBCASE("string element carries string gc flags through the FA level") {
         auto faS = makeFAChain(Type::tString,{4});
-        auto oldS = makeOldDim(Type::tString,{4});
-        CHECK_EQ(faS->gcFlags(), oldS->gcFlags());
-        CHECK_EQ(faS->hasStringData(), oldS->hasStringData());
+        CHECK((faS->gcFlags() & TypeDecl::gcFlag_stringHeap) != 0u);
         CHECK(faS->hasStringData());
     }
     SUBCASE("auto dims register as auto") {
         auto faA = makeFAChain(Type::tInt,{TypeDecl::dimAuto});
-        auto oldA = makeOldDim(Type::tInt,{TypeDecl::dimAuto});
-        CHECK_EQ(faA->isAuto(), oldA->isAuto());
         CHECK(faA->isAuto());
-        CHECK_EQ(faA->isAutoArrayResolved(), oldA->isAutoArrayResolved());
         CHECK_FALSE(faA->isAutoArrayResolved());
         auto faElemAuto = makeFA(4, new TypeDecl(Type::autoinfer));
         CHECK(faElemAuto->isAuto());
     }
     SUBCASE("dimConst registers as expression type") {
         auto faC = makeFAChain(Type::tInt,{TypeDecl::dimConst});
-        auto oldC = makeOldDim(Type::tInt,{TypeDecl::dimConst});
-        CHECK_EQ(faC->isExprType(), oldC->isExprType());
         CHECK(faC->isExprType());
-        CHECK_EQ(faC->isAliasOrExpr(), oldC->isAliasOrExpr());
+        CHECK(faC->isAliasOrExpr());
     }
 }

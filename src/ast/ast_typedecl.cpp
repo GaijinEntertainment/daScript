@@ -116,11 +116,6 @@ namespace das
     }
 
     bool TypeDecl::isExprTypeAnywhere(das_set<Structure*> & dep) const {
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimConst ) {
-                return true;
-            }
-        }
         if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimConst ) {
             return true;
         }
@@ -142,11 +137,6 @@ namespace das
     }
 
     bool TypeDecl::isExprType() const {
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimConst ) {
-                return true;
-            }
-        }
         if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimConst ) {
             return true;
         }
@@ -162,11 +152,6 @@ namespace das
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
         if ( baseType==Type::typeDecl || baseType==Type::typeMacro ) {
-            for ( size_t i=0, is=dimExpr.size(); i!=is; ++i ) {
-                if ( dimExpr[i] ) {
-                    dimExpr[i] = dimExpr[i]->visit(vis);
-                }
-            }
             for ( size_t i=0, is=typeMacroExpr.size(); i!=is; ++i ) {
                 if ( typeMacroExpr[i] ) {
                     typeMacroExpr[i] = typeMacroExpr[i]->visit(vis);
@@ -175,14 +160,6 @@ namespace das
         } else if ( baseType==Type::tFixedArray ) {
             if ( fixedDim==TypeDecl::dimConst && fixedDimExpr ) {
                 fixedDimExpr = fixedDimExpr->visit(vis);
-            }
-        } else {
-            for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
-                if ( dim[i]==TypeDecl::dimConst ) {
-                    if ( i<dimExpr.size() && dimExpr[i] ) {
-                        dimExpr[i] = dimExpr[i]->visit(vis);
-                    }
-                }
             }
         }
         if ( firstType ) {
@@ -277,7 +254,6 @@ namespace das
             if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
                 auto TT = new TypeDecl(*pass);
                 TT->alias = decl->alias;
-                TT->dim.clear();
                 TT->constant = false;
                 TT->temporary = false;
                 TT->ref = false;
@@ -288,7 +264,6 @@ namespace das
             if ( !pass->alias.empty() && aliases.find(pass->alias)==aliases.end() ) {
                 auto TT = new TypeDecl(*decl);
                 TT->alias = pass->alias;
-                TT->dim.clear();
                 TT->constant = false;
                 TT->temporary = false;
                 TT->ref = false;
@@ -393,18 +368,6 @@ namespace das
         // auto & can't be inferred from non-ref
         if ( autoT->ref && !initT->isRef() )
             return nullptr;
-        // auto[][][] can't be inferred from non-array
-        if ( autoT->dim.size() ) {
-            if ( autoT->dim.size()!=initT->dim.size() )
-                return nullptr;
-            for ( size_t di=0, dis=autoT->dim.size(); di!=dis; ++di ) {
-                int32_t aDI = autoT->dim[di];
-                int32_t iDI = initT->dim[di];
-                if ( aDI!=TypeDecl::dimAuto && aDI!=iDI ) {
-                    return nullptr;
-                }
-            }
-        }
         // auto[] has to match a fixed array of the same outer size (dimAuto = wildcard)
         if ( autoT->baseType==Type::tFixedArray ) {
             if ( initT->baseType!=Type::tFixedArray || !initT->firstType )
@@ -527,9 +490,6 @@ namespace das
     void TypeDecl::getLookupHash(uint64_t & hash) const {
         hash = hashmix(hash, baseType);
         hash = hashmix(hash, flagsWithoutAliasCache(this));
-        for ( auto d : dim ) {
-            hash = hashmix(hash, d);
-        }
         if ( baseType==Type::tFixedArray ) {
             hash = hashmix(hash, fixedDim);
         }
@@ -593,15 +553,6 @@ namespace das
         for ( auto & argN : argNames ) {
             hb.updateString(argN);
         }
-       for ( auto & d : dim ) {
-            hb.update(d);
-        }
-        for ( auto & de : dimExpr ) {
-            hb.update(de != nullptr);
-            if ( de ) {
-                wr << *(de);
-            }
-        }
         if ( baseType==Type::tFixedArray ) {
             hb.update(fixedDim);
             hb.update(fixedDimExpr != nullptr);
@@ -659,15 +610,6 @@ namespace das
         }
         for ( auto & argN : argNames ) {
             hb.updateString(argN);
-        }
-       for ( auto & d : dim ) {
-            hb.update(d);
-        }
-        for ( auto & de : dimExpr ) {
-            hb.update(de != nullptr);
-            if ( de ) {
-                wr << *(de);
-            }
         }
         if ( baseType==Type::tFixedArray ) {
             hb.update(fixedDim);
@@ -902,13 +844,6 @@ namespace das
         if ( constant ) {
             stream << " const";
         }
-        for ( auto d : dim ) {
-            if ( d==-1 ) {
-                stream << "[]";
-            } else {
-                stream << "[" << d << "]";
-            }
-        }
         if ( baseType==Type::tFixedArray ) {
             for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
                 if ( t->fixedDim==TypeDecl::dimAuto ) {
@@ -969,15 +904,6 @@ namespace das
         structType = decl.structType;
         enumType = decl.enumType;
         annotation = decl.annotation;
-        dim = decl.dim;
-        dimExpr.reserve(decl.dimExpr.size());
-        for ( auto & de : decl.dimExpr ) {
-            if ( de ) {
-                dimExpr.push_back(de->clone());
-            } else {
-                dimExpr.push_back(nullptr);
-            }
-        }
         fixedDim = decl.fixedDim;
         if ( decl.fixedDimExpr ) {
             fixedDimExpr = decl.fixedDimExpr->clone();
@@ -1025,15 +951,6 @@ namespace das
         dest->structType = src->structType;
         dest->enumType = src->enumType;
         dest->annotation = src->annotation;
-        dest->dim = src->dim;
-        dest->dimExpr.resize(src->dimExpr.size());
-        for ( size_t i=0; i!=src->dimExpr.size(); ++i ) {
-            if ( src->dimExpr[i] ) {
-                dest->dimExpr[i] = src->dimExpr[i]->clone();
-            } else {
-                dest->dimExpr[i] = nullptr;
-            }
-        }
         dest->fixedDim = src->fixedDim;
         dest->fixedDimExpr = src->fixedDimExpr ? src->fixedDimExpr->clone() : nullptr;
         dest->typeMacroExpr.resize(src->typeMacroExpr.size());
@@ -1068,7 +985,6 @@ namespace das
         if ( firstType ) firstType->gc_collect(target, from);
         if ( secondType ) secondType->gc_collect(target, from);
         for ( auto t : argTypes ) if ( t ) t->gc_collect(target, from);
-        for ( auto & de : dimExpr ) if ( de ) de->gc_collect(target, from);
         if ( fixedDimExpr ) fixedDimExpr->gc_collect(target, from);
         for ( auto & de : typeMacroExpr ) if ( de ) de->gc_collect(target, from);
         // this??
@@ -1095,19 +1011,6 @@ namespace das
         aliasCacheValid = true;
         aliasCacheHasAlias = hasAny;
         return hasAny;
-    }
-    const vector<int32_t> & TypeDecl::dimCompat() const {
-        if ( baseType==Type::tFixedArray ) {
-            vector<int32_t> flat;
-            for ( auto t = this; t->baseType==Type::tFixedArray && t->firstType; t = t->firstType ) {
-                flat.push_back(t->fixedDim);
-            }
-            // refill only when stale, so a nested read of the same node can't invalidate
-            // an iterator held over a previous read
-            if ( dimCompatCache != flat ) dimCompatCache = das::move(flat);
-            return dimCompatCache;
-        }
-        return dim;
     }
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto, bool * constUnderDim ) {
         if (!aliasCacheValid) computeAliasCache();
@@ -1805,12 +1708,6 @@ namespace das
                 return false;
             }
         if ( fixedDim != decl.fixedDim ) return false;
-        if ( dim.size() != decl.dim.size() ) return false;
-        for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
-            if ( dim[i] != decl.dim[i] ) {
-                return false;
-            }
-        }
         if ( !isSameExactNullType(firstType,decl.firstType) ) return false;
         if ( !isSameExactNullType(secondType,decl.secondType) ) return false;
         if ( argTypes.size() != decl.argTypes.size() ) return false;
@@ -1858,9 +1755,6 @@ namespace das
             if ( temporary != decl.temporary ) {
                 return false;
             }
-        }
-        if ( dim!=decl.dim ) {
-            return false;
         }
         switch ( baseType ) {
         case Type::tHandle:
@@ -2343,12 +2237,6 @@ namespace das
     }
 
     bool TypeDecl::isAliasOrExpr() const {
-        // if its dim[expr]
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimConst ) {
-                return true;
-            }
-        }
         // auto is auto.... or auto....?
         if ( baseType==Type::typeMacro ) {
             return true;
@@ -2391,11 +2279,6 @@ namespace das
     }
 
     bool TypeDecl::isAutoArrayResolved() const {
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto || di==TypeDecl::dimConst ) {
-                return false;
-            }
-        }
         for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
             if ( t->fixedDim==TypeDecl::dimAuto || t->fixedDim==TypeDecl::dimConst ) {
                 return false;
@@ -2406,12 +2289,6 @@ namespace das
 
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?5
-        // also dim[] is aito
-        for (auto di : dim) {
-            if (di == TypeDecl::dimAuto) {
-                return true;
-            }
-        }
         switch ( baseType ) {
         case Type::typeMacro:
         case Type::typeDecl:
@@ -2453,12 +2330,6 @@ namespace das
 
     bool TypeDecl::isAutoWithoutOptions(bool & hasOptions) const {
         // auto is auto.... or auto....?
-        // also dim[] is aito
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto ) {
-                return true;
-            }
-        }
         if ( baseType==Type::typeMacro ) {
             return true;
         } else if ( baseType==Type::typeDecl ) {
@@ -2503,12 +2374,6 @@ namespace das
 
     bool TypeDecl::isAutoOrAlias() const {
         // auto is auto.... or auto....?
-        // also dim[] is aito
-        for (auto di : dim) {
-            if (di == TypeDecl::dimAuto) {
-                return true;
-            }
-        }
         switch ( baseType ) {
         case Type::typeMacro:
         case Type::typeDecl:
@@ -2550,7 +2415,7 @@ namespace das
     }
 
     bool TypeDecl::isFoldable() const {
-        if ( dim.size() || ref )
+        if ( ref )
             return false;
         switch ( baseType ) {
             case Type::tBool:
@@ -2593,8 +2458,6 @@ namespace das
     }
 
     bool TypeDecl::isCtorType() const {
-        if ( dim.size() )
-            return false;
         switch ( baseType ) {
             // case Type::tBool:
             case Type::tInt8:
@@ -2633,9 +2496,7 @@ namespace das
     }
 
     bool TypeDecl::isTableKeyType() const {
-        if ( dim.size() ) {
-            return false;
-        } else if ( isWorkhorseType() ) {
+        if ( isWorkhorseType() ) {
             return true;
         } else if ( baseType==Type::tHandle && annotation->isRefType()==false ) {
             return true;
@@ -2645,8 +2506,6 @@ namespace das
     }
 
     bool TypeDecl::isWorkhorseType() const {
-        if ( dim.size() )
-            return false;
         switch ( baseType ) {
             case Type::tBool:
             case Type::tInt8:
@@ -2690,8 +2549,6 @@ namespace das
     }
 
     bool TypeDecl::canInitWithZero() const {
-        if ( dim.size() )
-            return false;
         if ( isVectorType() )
             return true;
         switch ( baseType ) {
@@ -2720,8 +2577,6 @@ namespace das
     }
 
     bool TypeDecl::isPolicyType() const {
-        if ( dim.size() )
-            return true;
         switch ( baseType ) {
             case Type::tVoid:
             case Type::tEnumeration:
@@ -2755,7 +2610,7 @@ namespace das
     }
 
     bool TypeDecl::isVecPolicyType() const {
-        if ( dim.size() || baseType==Type::tFixedArray )
+        if ( baseType==Type::tFixedArray )
             return false;
         if ( baseType==Type::tString ) {
             return false;
@@ -2784,7 +2639,6 @@ namespace das
     }
 
     bool TypeDecl::isRefType() const {
-        if ( dim.size() ) return true;
         if ( baseType==Type::tHandle ) return annotation->isRefType();
         return baseType==Type::tTuple || baseType==Type::tVariant ||
                 baseType==Type::tStructure || baseType==Type::tArray ||
@@ -2838,11 +2692,6 @@ namespace das
     // type chain is fully resolved, and not aliased \ auto
     bool TypeDecl::isFullySealed(das_set<const Structure *> & all ) const {
         if (baseType==Type::autoinfer || baseType==Type::alias) return false;
-        for (auto di : dim) {
-            if (di == TypeDecl::dimAuto) {
-                return false;
-            }
-        }
         if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimAuto ) {
             return false;
         }
@@ -2930,7 +2779,6 @@ namespace das
     }
 
     bool TypeDecl::isFloatOrDouble() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tFloat:
         case Type::tDouble:
@@ -2941,12 +2789,10 @@ namespace das
     }
 
     bool TypeDecl::isBool() const {
-        if (dim.size() != 0) return false;
         return baseType==Type::tBool;
     }
 
     bool TypeDecl::isInteger() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
@@ -2967,7 +2813,6 @@ namespace das
     }
 
     bool TypeDecl::isSignedInteger() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt:
         case Type::tInt8:
@@ -2980,7 +2825,6 @@ namespace das
     }
 
     bool TypeDecl::isUnsignedInteger() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tUInt:
         case Type::tBitfield:
@@ -2997,7 +2841,6 @@ namespace das
     }
 
     bool TypeDecl::isSignedIntegerOrIntVec() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt:
         case Type::tInt8:
@@ -3013,7 +2856,6 @@ namespace das
     }
 
     bool TypeDecl::isUnsignedIntegerOrIntVec() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tUInt:
         case Type::tBitfield:
@@ -3034,7 +2876,6 @@ namespace das
 
 
     bool TypeDecl::isNumeric() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
@@ -3057,7 +2898,6 @@ namespace das
     }
 
     bool TypeDecl::isNumericStorage() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt8:
         case Type::tUInt8:
@@ -3070,7 +2910,6 @@ namespace das
     }
 
     bool TypeDecl::isNumericComparable() const {
-        if (dim.size() != 0) return false;
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
@@ -3089,11 +2928,11 @@ namespace das
     }
 
     bool TypeDecl::isIndex() const {
-        return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
+        return baseType==Type::tInt || baseType==Type::tUInt;
     }
 
     bool TypeDecl::isIndexExt() const {
-        return (baseType==Type::tInt || baseType==Type::tUInt || baseType==Type::tInt64 || baseType==Type::tUInt64) && dim.size()==0;
+        return baseType==Type::tInt || baseType==Type::tUInt || baseType==Type::tInt64 || baseType==Type::tUInt64;
     }
 
     int TypeDecl::getTupleFieldOffset ( int index ) const {
@@ -3368,9 +3207,6 @@ namespace das
 
     uint64_t TypeDecl::getCountOf64() const {
         uint64_t size = 1;
-        for ( auto i : dim ) {
-            size *= i;
-        }
         for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
             size *= uint64_t(t->fixedDim);
         }
@@ -3388,12 +3224,6 @@ namespace das
     }
 
     uint64_t TypeDecl::getSizeOf64(bool & failed) const {
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto || di==TypeDecl::dimConst ) {
-                failed = true;
-                return 0;
-            }
-        }
         for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
             if ( t->fixedDim==TypeDecl::dimAuto || t->fixedDim==TypeDecl::dimConst ) {
                 failed = true;
@@ -3414,13 +3244,7 @@ namespace das
             // size of one outer-level element, same meaning the dim-vector form had
             return firstType ? firstType->getSizeOf64() : 0;
         }
-        uint64_t size = 1;
-        if ( dim.size() > 1 ) {
-            for ( size_t i=1, is=dim.size(); i!=is; ++i ) {
-                size *= dim[i];
-            }
-        }
-        return getBaseSizeOf64() * size;
+        return getBaseSizeOf64();
     }
 
     int TypeDecl::findArgumentIndex( const string & name ) const {
@@ -3514,11 +3338,6 @@ namespace das
                 firstType->getMangledName(ss, fullName);
             }
             return;
-        }
-        if ( dim.size() ) {
-            for ( auto d : dim ) {
-                ss << "[" << d << "]";
-            }
         }
         if ( fullName ) {
             if ( removeDim )        ss << "-[]";
@@ -3879,7 +3698,7 @@ namespace das
     }
 
     bool isConstRedundantForCpp ( const TypeDecl * type ) {
-        if ( type->dim.size() ) return false;
+        if ( type->baseType==Type::tFixedArray ) return false;
         if ( type->isVectorType() ) return true;
         switch ( type->baseType ) {
             case Type::tBool:
@@ -3973,11 +3792,6 @@ namespace das
                 // can't skip const
             } else {
                 skipConst = CpptSkipConst::yes;
-            }
-        }
-        if ( type->dim.size() ) {
-            for ( size_t d=0, ds=type->dim.size(); d!=ds; ++d ) {
-                stream << "TDim<";
             }
         }
         if ( baseType==Type::alias ) {
@@ -4091,11 +3905,6 @@ namespace das
             stream << "))";
         } else {
             stream << das_to_cppString(baseType);
-        }
-        if ( type->dim.size() ) {
-            for ( auto itd=type->dim.rbegin(), itds=type->dim.rend(); itd!=itds; ++itd ) {
-                stream << "," << *itd << ">";
-            }
         }
         if ( skipConst==CpptSkipConst::no ) {
             if ( type->constant ) {

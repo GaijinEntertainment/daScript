@@ -30,7 +30,6 @@ namespace das {
     static bool isEscapeFreePtr ( const TypeDeclPtr & typ ) {
         if ( !typ ) return false;
         if ( typ->ref || typ->constant ) return false;
-        if ( !typ->dim.empty() ) return false;
         if ( typ->baseType != Type::tPointer ) return false;
         if ( typ->smartPtr ) return false;
         if ( !typ->firstType || typ->firstType->baseType != Type::tStructure ) return false;
