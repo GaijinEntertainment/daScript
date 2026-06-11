@@ -224,6 +224,23 @@ PR1 findings:
 
 End of arc: `skills/linq.md` + linq docs mention the table source.
 
+## Late stage (planned) — reducer shapes & cleanups
+
+Cross-source cleanups surfaced while writing stage-7 tests; none are table-specific, all live in
+the shared group_by/reducer surface and benefit every `_fold` source.
+
+1. **Identity-lambda reducers**: `_._1 |> max($(v) => v)` (also `min`/`sum`/`average`) fails with
+   30303 today — the untyped lambda can't infer on the tier-2 lazy-bucket surface, and
+   `recognize_reducer_specs` has no identity arm either. Fix both ends: recognize the identity
+   inner-select and canonicalize to the bare form (`max()`), and make the tier-2 generic accept
+   it so unfused chains agree.
+2. **Untyped inner-select lambda params**: `_._1 |> select($(c) => c.value.price) |> sum()`
+   requires an explicit param type (`$(c : CarKV)`) — the lazy bucket's `select` doesn't flow the
+   element type into the lambda. Thread the type through so the annotation becomes optional;
+   today's explicit-type requirement is a usability trap (the error is an opaque 30303, not
+   "annotate the param").
+3. (Collect further candidates here as they surface.)
+
 ## Risks / watch items
 
 - **Mangler ICE 50609** (iterator element-const collision) — `each_kv` yields `-const` non-ref
