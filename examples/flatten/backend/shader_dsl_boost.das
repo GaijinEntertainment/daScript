@@ -766,7 +766,7 @@ class ValidateShaderVisitor : AstVisitor {
             if (v._type.isPointer) {
                 errors.push(("shader code doesn't support pointer types", unsafe(addr(v.at))))
             }
-            if (!empty(v._type.dim)) {
+            if (v._type.baseType == Type.tFixedArray) {
                 errors.push(("shader code doesn't support vector literals; use float2/3/4 types instead", unsafe(addr(v.at))))
             }
             // A mutable `var` is an accumulator: it may be reassigned later via
@@ -1026,7 +1026,7 @@ class ValidateShaderVisitor : AstVisitor {
             if (arg._type.isPointer) {
                 errors.push(("shader properties can't be pointers", unsafe(addr(arg.at))))
             }
-            if (!empty(arg._type.dim)) {
+            if (arg._type.baseType == Type.tFixedArray) {
                 errors.push(("shader properties can't be vectors; use float2/3/4 types instead", unsafe(addr(arg.at))))
             }
             // if (!arg._type.isConst) {

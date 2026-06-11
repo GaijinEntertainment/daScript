@@ -502,12 +502,14 @@ namespace das
             {
                 lock_guard<recursive_mutex> guard(walkMutex);
                 if ( !ati ) {
-                    // gc_local: scratch TypeDecl just to drive makeTypeInfo —
+                    // gc_local: scratch TypeDecls just to drive makeTypeInfo —
                     // read once, never stored on the result. RAII unlinks from
                     // the thread gc_root immediately and deletes at scope exit.
-                    gc_local<TypeDecl> dimType(new TypeDecl(*vecType));
-                    dimType->ref = 0;
-                    dimType->dim.push_back(1);
+                    // BOTH nodes need a guard - the fixed-array head does not own its element.
+                    auto elemType = new TypeDecl(*vecType);
+                    gc_local<TypeDecl> elemGuard(elemType);
+                    elemType->ref = 0;
+                    gc_local<TypeDecl> dimType(makeFixedArrayTypeDecl(1, elemType));
                     ati = helpA.makeTypeInfo(nullptr, dimType);
                     ati->flags |= TypeInfo::flag_isHandled;
                 }

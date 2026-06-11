@@ -327,7 +327,7 @@ namespace das {
     }
 
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
-        if ( type->dim.size() || type->ref ) return nullptr;
+        if ( type->ref || type->baseType==Type::tFixedArray ) return nullptr;
         switch ( type->baseType ) {
             case Type::tBool:           return new ExprConstBool(at, cast<bool>::to(value));
             case Type::tInt8:           return new ExprConstInt8(at, cast<int8_t>::to(value));

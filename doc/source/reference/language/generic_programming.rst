@@ -292,21 +292,43 @@ Generic function arguments, result, and inferred type aliases can be operated on
         var temp : TT -& = a        // TT -& is not a local reference
     }
 
-``[]`` specifies that the argument is a static array of arbitrary dimension:
+``[]`` specifies that the argument is a fixed-size array:
 
 .. code-block:: das
 
-    def foo ( a : auto[] )          // accepts static array of any type of any size
+    def foo ( a : auto[] )          // accepts a fixed-size array of any type and size
 
-``-[]`` will remove static array dimension from the matching type:
+A named alias under ``[]`` binds the element of the *outermost* level — one level is
+peeled. The binding inherits the argument's constness: a non-``var`` parameter binds
+the alias const, a ``var`` parameter binds it mutable:
+
+.. code-block:: das
+
+    def rows ( a : auto(TT)[] ) {       // for a : float[4][4], TT is float const[4]
+        print(typeinfo typename(type<TT>))
+    }
+    def rows_rw ( var a : auto(TT)[] ) {  // for a : float[4][4], TT is float[4]
+        a[0] = a[1]                       // rows are mutable here
+    }
+
+A plain named alias (no ``[]``) binds the *whole* matched type, fixed-array
+dimensions included:
+
+.. code-block:: das
+
+    def whole ( a : auto(TT) ) {    // for a : int[4], TT is int const[4]
+        var z = default<TT>         // a zero-initialized int[4]
+    }
+
+``-[]`` will remove one fixed-array level from the matching type:
 
 .. code-block:: das
 
     def take_dim( a : auto(TT) ) {
-        var temp : TT -[]           // temp is type of element of a
+        var temp : TT -[]           // temp is one level shallower than a
     }
     // if a is int[10] temp is int
-    // if a is int[10][20][30] temp is still int
+    // if a is int[10][20][30] temp is int[20][30]
 
 ``implicit`` specifies that both temporary and regular types can be matched, but the type will be treated as specified. ``implicit`` is _UNSAFE_:
 

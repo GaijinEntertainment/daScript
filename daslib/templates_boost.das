@@ -739,7 +739,7 @@ class private QRulesVisitor : AstVisitor {
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
         //! Visits type declaration and processes type tags.
         if ((typ.baseType == Type.alias) && (typ.flags.isTag)) {
-            if (typ.firstType == null || typ.firstType.dimExpr |> length != 1) {
+            if (typ.firstType == null || typ.firstType.typeMacroExpr |> length != 1) {
                 compiling_program() |> macro_error(typ.at, "unsupported type tag")
                 failed = true
                 return <- typ
@@ -757,7 +757,7 @@ class private QRulesVisitor : AstVisitor {
                     new ExprConstString(at = typ.at, value := new_tag_name) |> generatedExpr(),
                     new ExprCall(at = typ.at, name := "add_type_ptr_ref",
                         arguments := array<Expression?>(
-                            clone_expression(typ.firstType.dimExpr[0]),
+                            clone_expression(typ.firstType.typeMacroExpr[0]),
                             new ExprConstBitfield(at = typ.at, value := ntyp.flags)
                         )
                     )

@@ -1130,11 +1130,11 @@ namespace das {
         // 3. one with dim is more specialized, than one without
         //      if both have dim, one with actual value is more specialized, than the other one
         {
-            int d1 = t1->dim.size() ? t1->dim[0] : 0;
-            int d2 = t2->dim.size() ? t2->dim[0] : 0;
+            int d1 = t1->baseType==Type::tFixedArray ? t1->fixedDim : 0;
+            int d2 = t2->baseType==Type::tFixedArray ? t2->fixedDim : 0;
             if (d1 != d2) {
                 if (d1 && d2) {
-                    return d1 == -1 ? -1 : 1;
+                    return d1 == TypeDecl::dimAuto ? -1 : 1;
                 } else {
                     return d1 ? 1 : -1;
                 }
@@ -1152,8 +1152,8 @@ namespace das {
         // 5. if both are typemacros, we need to pick the more specialized one
         if (t1->baseType == Type::typeMacro && t2->baseType == Type::typeMacro) {
             // the one with more arguments wins
-            size_t d1 = t1->dimExpr.size();
-            size_t d2 = t2->dimExpr.size();
+            size_t d1 = t1->typeMacroExpr.size();
+            size_t d2 = t2->typeMacroExpr.size();
             if (d1 != d2) {
                 return d1 < d2 ? -1 : 1;
             }
@@ -1162,11 +1162,11 @@ namespace das {
             bool more = false;
             for (size_t d = 0; d != d1; ++d) {
                 TypeDeclPtr t1Arg = nullptr, t2Arg = nullptr;
-                if (t1->dimExpr[d]->rtti_isTypeDecl()) {
-                    t1Arg = static_cast<ExprTypeDecl*>(t1->dimExpr[d])->typeexpr;
+                if (t1->typeMacroExpr[d]->rtti_isTypeDecl()) {
+                    t1Arg = static_cast<ExprTypeDecl*>(t1->typeMacroExpr[d])->typeexpr;
                 }
-                if (t2->dimExpr[d]->rtti_isTypeDecl()) {
-                    t2Arg = static_cast<ExprTypeDecl*>(t2->dimExpr[d])->typeexpr;
+                if (t2->typeMacroExpr[d]->rtti_isTypeDecl()) {
+                    t2Arg = static_cast<ExprTypeDecl*>(t2->typeMacroExpr[d])->typeexpr;
                 }
                 if (t1Arg && t2Arg) {
                     // only if both are types, we can compare
@@ -1195,7 +1195,7 @@ namespace das {
         //    DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
 
         // if its an array or a pointer, we compare specialization of subtype
-        if (t1->baseType == Type::tPointer || t1->baseType == Type::tArray || t1->baseType == Type::tIterator) {
+        if (t1->baseType == Type::tPointer || t1->baseType == Type::tArray || t1->baseType == Type::tIterator || t1->baseType == Type::tFixedArray) {
             return moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
             // if its a table, we compare both subtypes
         } else if (t1->baseType == Type::tTable) {

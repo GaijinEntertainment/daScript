@@ -1135,22 +1135,27 @@ namespace das {
         switch ( baseType ) {
             case Type::typeMacro:
             case Type::typeDecl:
-                ser << alias << dimExpr;
+                ser << alias;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
+            case Type::tFixedArray:
+                ser << alias << firstType << fixedDim << fixedDimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
+                                argTypes.empty(), argNames.empty());
+                break;
             case Type::alias:
-                ser << alias << firstType << dim << dimExpr;
+                ser << alias << firstType;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
                                 !alias.empty(), argTypes.empty(), argNames.empty());
                 break;
             case option:
-                ser << argTypes << dim << dimExpr;
+                ser << argTypes;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 alias.empty(), !argTypes.empty(), argNames.empty());
                 break;
             case autoinfer:
-                ser << dim << dimExpr << alias;
+                ser << alias;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
@@ -1180,7 +1185,7 @@ namespace das {
             case tFloat4:
             case tDouble:
             case tString:
-                ser << alias << dim << dimExpr;
+                ser << alias;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
@@ -1188,17 +1193,17 @@ namespace das {
             case tURange:
             case tRange64:
             case tURange64: // blow up!
-                ser << alias << dim << dimExpr;
+                ser << alias;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
             case tStructure:
-                ser << alias << structType << dim << dimExpr;
+                ser << alias << structType;
                 DAS_VERIFYF_MULTI(!annotation, !!structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
             case tHandle:
-                ser << alias << annotation << dim << dimExpr;
+                ser << alias << annotation;
                 DAS_VERIFYF_MULTI(!!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
@@ -1206,7 +1211,7 @@ namespace das {
             case tEnumeration8:
             case tEnumeration16:
             case tEnumeration64:
-                ser << alias << enumType << dim << dimExpr;
+                ser << alias << enumType;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !!enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
@@ -1214,31 +1219,31 @@ namespace das {
             case tBitfield8:
             case tBitfield16:
             case tBitfield64:
-                ser << alias << argNames << dim << dimExpr;
+                ser << alias << argNames;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty());
                 break;
             case tIterator:
             case tPointer:
             case tArray: // blow up!
-                ser << alias << firstType << dim << dimExpr;
+                ser << alias << firstType;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
             case tFunction:
             case tLambda:
             case tBlock:
-                ser << alias << firstType << argTypes << argNames << dim << dimExpr;
+                ser << alias << firstType << argTypes << argNames;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType);
                 break;
             case tTable:
-                ser << alias << firstType << secondType << dim << dimExpr;
+                ser << alias << firstType << secondType;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !!firstType,
                                 argTypes.empty(), argNames.empty());
                 break;
             case tTuple:
             case tVariant:
-                ser << alias << argTypes << argNames << dim << dimExpr;
+                ser << alias << argTypes << argNames;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 !argTypes.empty());
                 break;
@@ -1246,6 +1251,10 @@ namespace das {
                 SERIALIZER_VERIFYF(false,  "not expected to be here");
                 break;
         }
+
+        // unconditional: typeMacro/typeDecl payload, and the tag payload riding on an
+        // autoinfer firstType (FIXED_ARRAY_REWORK.md, 1b)
+        ser << typeMacroExpr;
 
         ser << flags << at << module;
     }
@@ -2698,7 +2707,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 89;
+        static constexpr uint32_t currentVersion = 91;   // 91: TypeDecl dim/dimExpr fields deleted (FIXED_ARRAY_REWORK.md, stage 6)
         return currentVersion;
     }
 

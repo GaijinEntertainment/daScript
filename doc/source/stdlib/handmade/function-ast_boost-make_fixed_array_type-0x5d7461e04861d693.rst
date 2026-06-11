@@ -1,0 +1,1 @@
+Wraps ``element`` into a fixed-array type node (``Type tFixedArray``) of size ``total``. The ref, const, and temporary qualifiers are moved from the element onto the new chain head, which is their canonical position.

@@ -2229,7 +2229,7 @@ def private try_recognize_sql_function_proj(val : ExpressionPtr; var q : SqlQuer
 // a whole-row carry var (transparent-identifier `(c=c,b=b)`) falls through to the clean row-object reject
 // instead of reaching pred_to_sql (which deref-crashes on a bare struct receiver).
 def private is_sql_renderable_scalar(td : TypeDecl?) : bool {
-    if (td == null || td.isAutoOrAlias || !empty(td.dim)) return false
+    if (td == null || td.isAutoOrAlias || td.baseType == Type.tFixedArray) return false
     let bt = td.baseType
     return (bt == Type.tInt  || bt == Type.tInt8  || bt == Type.tInt16  || bt == Type.tInt64
         || bt == Type.tUInt || bt == Type.tUInt8 || bt == Type.tUInt16 || bt == Type.tUInt64

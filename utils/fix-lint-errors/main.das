@@ -669,7 +669,7 @@ class FixerVisitor : AstVisitor {
     def is_workhorse_numeric(t : TypeDecl? const) : bool {
         //! Six numeric workhorse scalars (int, uint, int64, uint64, float, double).
         //! Mirrors perf_lint's gate so the fixer matches what the lint flags.
-        return false if (t == null || !empty(t.dim))
+        return false if (t == null || t.baseType == Type.tFixedArray)
         let bt = t.baseType
         return (bt == Type.tInt || bt == Type.tUInt
                 || bt == Type.tInt64 || bt == Type.tUInt64

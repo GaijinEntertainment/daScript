@@ -80,7 +80,9 @@ namespace das {
     void varDeclToTypeDecl ( yyscan_t scanner, TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     Annotation * findAnnotation ( yyscan_t scanner, const string & name, const LineInfo & at );
     void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at, bool genericMode = false );
-    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr );
+    TypeDecl * appendDimExpr ( TypeDecl * chain, Expression * dimExpr, const LineInfo & at );
+    TypeDecl * attachDimChain ( TypeDecl * chain, TypeDecl * element );
+    TypeDecl * appendAutoDim ( TypeDecl * typeDecl, const LineInfo & at );
     void implAddGenericFunction ( yyscan_t scanner, Function * func );
     Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax );

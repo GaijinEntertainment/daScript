@@ -771,7 +771,7 @@ namespace das {
         virtual void preVisit ( ExprNew * expr ) override {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
-            if ( expr->type->dim.size() ) {
+            if ( expr->type->baseType==Type::tFixedArray ) {
                 auto sz = uint32_t(expr->type->getCountOf()*sizeof(char *));
                 expr->stackTop = allocateStack(sz);
                 if ( log ) {

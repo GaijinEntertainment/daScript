@@ -695,15 +695,17 @@ namespace das
 
     void ExprMakeVariant::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
+        auto mkBaseT = makeType;    // element view - makeType may be a fixed-array chain
+        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
         int stride = makeType->getStride();
         // we go through all fields, and if its [[ ]] field
         // we tell it to piggy-back on our current sp, with appropriate offset
         int index = 0;
         for ( const auto & decl : variants ) {
-            auto fieldVariant = makeType->findArgumentIndex(decl->name);
+            auto fieldVariant = mkBaseT->findArgumentIndex(decl->name);
             DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
             if ( decl->value->rtti_isMakeLocal() ) {
-                auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
+                auto fieldOffset = mkBaseT->getVariantFieldOffset(fieldVariant);
                 uint32_t offset =  extraOffset + index*stride + fieldOffset;
                 auto mkl = static_cast<ExprMakeLocal*>(decl->value);
                 mkl->setRefSp(ref, cmres, sp, offset);
@@ -727,6 +729,8 @@ namespace das
         gc_guard gc_scope;
         vector<SimNode *> simlist;
         int index = 0;
+        auto mkBaseT = mkv->makeType;   // element view - makeType may be a fixed-array chain
+        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
         int stride = mkv->makeType->getStride();
         // init with 0 it its 'default' initialization
         if ( stride && mkv->variants.empty() ) {
@@ -749,7 +753,7 @@ namespace das
         }
         // now fields
         for ( const auto & decl : mkv->variants ) {
-            auto fieldVariant = mkv->makeType->findArgumentIndex(decl->name);
+            auto fieldVariant = mkBaseT->findArgumentIndex(decl->name);
             DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
             // lets set variant index
             uint32_t voffset = mkv->extraOffset + index*stride;
@@ -766,7 +770,7 @@ namespace das
             }
             simlist.push_back(svi);
             // field itself
-            auto fieldOffset = mkv->makeType->getVariantFieldOffset(fieldVariant);
+            auto fieldOffset = mkBaseT->getVariantFieldOffset(fieldVariant);
             uint32_t offset =  voffset + fieldOffset;
             SimNode * cpy = nullptr;
             if ( decl->value->rtti_isMakeLocal() ) {
@@ -820,8 +824,10 @@ namespace das
 
     void ExprMakeStruct::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
+        auto mkBaseT = makeType;    // element view - makeType may be a fixed-array chain
+        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
         // if it's a handle type, we can't reuse the make-local chain
-        if ( makeType->baseType == Type::tHandle ) return;
+        if ( mkBaseT->baseType == Type::tHandle ) return;
         // we go through all fields, and if its [[ ]] field
         // we tell it to piggy-back on our current sp, with appropriate offset
         int total = int(structs.size());
@@ -829,7 +835,7 @@ namespace das
         for ( int index=0; index != total; ++index ) {
             auto & fields = structs[index];
             for ( const auto & decl : *fields ) {
-                auto field = makeType->structType->findField(decl->name);
+                auto field = mkBaseT->structType->findField(decl->name);
                 DAS_ASSERT(field && "should have failed in type infer otherwise");
                 if ( decl->value->rtti_isMakeLocal() ) {
                     uint32_t offset =  extraOffset + index*stride + field->offset;
@@ -855,12 +861,16 @@ namespace das
         vector<SimNode *> simlist;
         // init with 0
         int total = int(mks->structs.size());
+        auto mkBaseT = mks->makeType;   // element view - makeType may be a fixed-array chain
+        while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;
         int stride = mks->makeType->getStride();
         // note: if its an empty tuple init, like [[tuple<int;float>]] and its embedded - we need to zero it out
-        bool emptyEmbeddedTuple = ( mks->makeType->baseType==Type::tTuple && total==0);
+        bool emptyEmbeddedTuple = ( mkBaseT->baseType==Type::tTuple && total==0);
         bool partialyInitStruct = !mks->doesNotNeedInit && !mks->initAllFields;
         if ( (emptyEmbeddedTuple || partialyInitStruct) && stride ) {
-            int bytes = das::max(total,1) * stride;
+            // zero provided elements means zero-init the WHOLE declared shape (default<T[N]>) -
+            // stride is one outer element, which under-counts fixed-array makeTypes
+            int bytes = total ? total * stride : int(mks->makeType->getSizeOf());
             SimNode * init0;
             if ( mks->useCMRES ) {
                 if ( bytes==0 ) {
@@ -877,7 +887,7 @@ namespace das
             }
             if (init0) simlist.push_back(init0);
         }
-        if ( mks->makeType->baseType == Type::tStructure ) {
+        if ( mkBaseT->baseType == Type::tStructure ) {
             for ( int index=0; index != total; ++index ) {
                 if ( mks->constructor ) {
                     uint32_t offset = mks->extraOffset + index*stride;
@@ -895,7 +905,7 @@ namespace das
                 }
                 auto & fields = mks->structs[index];
                 for ( const auto & decl : *fields ) {
-                    auto field = mks->makeType->structType->findField(decl->name);
+                    auto field = mkBaseT->structType->findField(decl->name);
                     DAS_ASSERT(field && "should have failed in type infer otherwise");
                     uint32_t offset = mks->extraOffset + index*stride + field->offset;
                     SimNode * cpy;
@@ -931,7 +941,7 @@ namespace das
                 }
             }
         } else {
-            auto ann = mks->makeType->annotation;
+            auto ann = mkBaseT->annotation;
             // making fake variable, which points to out field
             string fakeName = "__makelocal";
             auto fakeVariable = new Variable();
@@ -946,7 +956,8 @@ namespace das
                 fakeVariable->extraLocalOffset = mks->extraOffset;
                 fakeVariable->type->ref = true;
                 if ( total != 1 ) {
-                    fakeVariable->type->dim.push_back(total);
+                    // wrap hoists ref onto the fixed-array head (canonical form)
+                    fakeVariable->type = makeFixedArrayTypeDecl(total, fakeVariable->type);
                 }
             }
             fakeVariable->generated = true;
@@ -1808,14 +1819,16 @@ namespace das
             typeInfo = context.thisHelper->makeTypeInfo(nullptr, expr->subexpr->type);
         }
         SimNode * result;
-        if ( expr->subexpr->type->baseType==Type::tHandle ) {
+        auto ascBaseT = expr->subexpr->type;    // element view - may be a fixed-array chain
+        while ( ascBaseT->baseType==Type::tFixedArray && ascBaseT->firstType ) ascBaseT = ascBaseT->firstType;
+        if ( ascBaseT->baseType==Type::tHandle ) {
             DAS_ASSERTF(expr->useStackRef,"new of handled type should always be over stackref");
-            auto ne = expr->subexpr->type->annotation->simulateGetNew(context, at);
+            auto ne = ascBaseT->annotation->simulateGetNew(context, at);
             result = context.code->makeNode<SimNode_AscendNewHandleAndRef>(at, se, ne, bytes, expr->stackTop);
         } else {
             bool persistent = false;
-            if ( expr->subexpr->type->baseType==Type::tStructure ) {
-                persistent = expr->subexpr->type->structType->persistent;
+            if ( ascBaseT->baseType==Type::tStructure ) {
+                persistent = ascBaseT->structType->persistent;
             }
             if ( expr->useStackRef ) {
                 result = context.code->makeNode<SimNode_AscendAndRef>(at, se, bytes, expr->stackTop, typeInfo, persistent);
@@ -1830,12 +1843,14 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprNew * expr) {
         const auto &at = expr->at;
         SimNode * newNode;
-        if ( expr->typeexpr->baseType == Type::tHandle ) {
-            DAS_ASSERT(expr->typeexpr->annotation->canNew() && "how???");
+        auto newBaseT = expr->typeexpr;     // element view - may be a fixed-array chain
+        while ( newBaseT->baseType==Type::tFixedArray && newBaseT->firstType ) newBaseT = newBaseT->firstType;
+        if ( newBaseT->baseType == Type::tHandle ) {
+            DAS_ASSERT(newBaseT->annotation->canNew() && "how???");
             if ( expr->initializer ) {
                 auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, expr->arguments));
                 sv_simulateCall(expr->func, expr, pCall);
-                pCall->cmresEval = expr->typeexpr->annotation->simulateGetNew(context, at);
+                pCall->cmresEval = newBaseT->annotation->simulateGetNew(context, at);
                 if ( !pCall->cmresEval ) {
                     context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
                                             at, CompilationError::internal_expression );
@@ -1843,7 +1858,7 @@ namespace das
                 setE(expr, pCall);
                 return expr;
             } else {
-                newNode = expr->typeexpr->annotation->simulateGetNew(context, at);
+                newNode = newBaseT->annotation->simulateGetNew(context, at);
                 if ( !newNode ) {
                     context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
                                             at, CompilationError::internal_expression );
@@ -1851,10 +1866,13 @@ namespace das
             }
         } else {
             bool persistent = false;
-            if ( expr->typeexpr->baseType == Type::tStructure ) {
-                persistent = expr->typeexpr->structType->persistent;
+            if ( newBaseT->baseType == Type::tStructure ) {
+                persistent = newBaseT->structType->persistent;
             }
-            int32_t bytes = expr->type->firstType->getBaseSizeOf();
+            // expr->type is FA(...,ptr) for `new T[N]` - walk to the pointer node for the pointee size
+            auto ptrT = expr->type;
+            while ( ptrT->baseType==Type::tFixedArray && ptrT->firstType ) ptrT = ptrT->firstType;
+            int32_t bytes = ptrT->firstType->getBaseSizeOf();
             if ( expr->initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_NewWithInitializer>(
                     int(expr->arguments.size()), at, bytes, persistent);
@@ -1867,7 +1885,7 @@ namespace das
                 newNode = context.code->makeNode<SimNode_New>(at, bytes, persistent);
             }
         }
-        if ( expr->type->dim.size() ) {
+        if ( expr->type->baseType==Type::tFixedArray ) {
             uint32_t count = expr->type->getCountOf();
             setE(expr, context.code->makeNode<SimNode_NewArray>(at, newNode, expr->stackTop, count));
         } else {
@@ -1941,7 +1959,7 @@ namespace das
                 };
             }
         } else {
-            uint32_t range = expr->subexpr->type->dim[0];
+            uint32_t range = uint32_t(expr->subexpr->type->fixedDim);
             uint32_t stride = expr->subexpr->type->getStride();
             if ( expr->index->rtti_isConstant() ) {
             // if its constant index, like a[3]..., we try to let node bellow simulate
@@ -2092,8 +2110,8 @@ namespace das
                     }
                     setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
                 }
-            } else if ( seT->dim.size() ) {
-                uint32_t range = seT->dim[0];
+            } else if ( seT->baseType==Type::tFixedArray ) {
+                uint32_t range = uint32_t(seT->fixedDim);
                 uint32_t stride = seT->getStride();
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
@@ -2148,8 +2166,8 @@ namespace das
                     }
                     setE(expr, context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
                 }
-            } else if ( seT->dim.size() ) {
-                uint32_t range = seT->dim[0];
+            } else if ( seT->baseType==Type::tFixedArray ) {
+                uint32_t range = uint32_t(seT->fixedDim);
                 uint32_t stride = seT->getStride();
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
@@ -3081,7 +3099,7 @@ namespace das
         for ( auto & src : expr->sources ) {
             if ( !src->type ) continue;
             if ( src->type->isArray() ) {
-                fixedSize = das::min(fixedSize, src->type->dim[0]);
+                fixedSize = das::min(fixedSize, src->type->fixedDim);
                 fixedArrays = true;
             } else if ( src->type->isGoodArrayType() ) {
                 dynamicArrays = true;
@@ -3159,11 +3177,11 @@ namespace das
                             expr->sources[t]
                         );
                     }
-                } else if ( expr->sources[t]->type->dim.size() ) {
+                } else if ( expr->sources[t]->type->baseType==Type::tFixedArray ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
                         expr->sources[t]->at,
                         getE(expr->sources[t]),
-                        expr->sources[t]->type->dim[0],
+                        uint32_t(expr->sources[t]->type->fixedDim),
                         expr->sources[t]->type->getStride());
                 } else {
                     DAS_ASSERTF(0, "we should not be here. we are doing iterator for on an unsupported type.");
