@@ -4,7 +4,28 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 2 committed** (TableAdapter + m7; stage 1 = `each_kv` builtin, 8751bb9ba).
+Status: **stage 3 committed** (`%linq!` table sources; stage 2 = TableAdapter + m7, 571fe879e;
+stage 1 = `each_kv` builtin, 8751bb9ba).
+
+Stage 3 findings:
+- The untyped `from c in <src>` now emits the **1-arg `from_in(src)`** for every source (the reader
+  can't tell an array from a table); FromInMacro dispatches at infer time — `table<K;V>` →
+  `each_kv`, `table<K>` set → `keys`, anything else → `each` (arrays land on the identical fused
+  emission as before, ast-verified). The `unsafe($c(...))` qmacro form puts `alwaysSafe` on the call
+  itself (templates_boost `carry_tag_safe_flags`), so extractors/peel_each still see a bare ExprCall.
+- **Call-macro reject/defer idiom**: macro_error + `return null` (the `_sql` idiom). Returning
+  `call` after an error report-ast-changes every pass and churns to the 50-pass infer cap (30507).
+  All FromInMacro rejects switched to null; the "source type is not inferred" arm (now also gated on
+  `isAutoOrAlias`) doubles as the DEFER — errors clear per pass while other inference progresses
+  (a local `var tab <- {...}` source reaches the visit before its own type settles), and only stick
+  if the source genuinely never infers.
+- A rejecting `from_in` leaves the chain head unresolved, so `_fold`'s "expecting linq expression"
+  verify lands on the same generated line with the same cerr — the error report collapses the pair
+  to ONE 50503 (`+1 more on this line`); failed-test `expect` counts are post-collapse.
+- **Joins over tables already work on either side** (tier-2; the kv pair is that side's row) —
+  tested both directions. Stage 5's probe will optimize the table-as-srcB case.
+- The non-copyable-value gate composes through the reader unchanged: fused dispatch declines,
+  tier-2 instantiates the real `each_kv`, one clean 31400.
 
 Stage 2 findings:
 - m7 INTERP profile (2026-06-10 sweep): pruned scans sit between array and XML — `sum_aggregate`
@@ -120,6 +141,12 @@ End of arc: `skills/linq.md` + linq docs mention the table source.
 
 ## Deferred edges (named, not built)
 
+- **Multiple-`from` (cross / SelectMany) over tables**: the unfused `_cross_join` arm passes the
+  bare source text so the array×array overload resolves without an `each` unsafe trip; a table
+  there has no overload (confusing 30303 cascade). `cross_join` has iterator overloads, so routing
+  the unfused untyped sources through `from_in` would work — but it changes overload selection for
+  every existing untyped array cross query. Documented as unsupported (join a table instead);
+  revisit on demand.
 - **Key-as-handle deferred materialization**: for `order_by` over kv with large (copyable)
   values, buffer `(orderKey, key)` surrogates and materialize survivors via `tab?[key]` — K
   probes instead of N value copies. The table handle is its key; clean fit for the existing
