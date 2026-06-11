@@ -690,7 +690,7 @@ def test_table_group_by(t : T?) {
                             ._where(_.S > 60)
                             ._order_by(_.S)
                             .to_array())
-        // buckets 0..4 sizes 3,3,2,2,2; sums 150,180,90,120,150 -> having keeps all, where keeps S>60
+        // buckets 0..4 sizes 3,3,2,2,2; sums 150,180,90,110,130 -> having keeps all, where keeps S>60
         t |> equal(length(groups), 5)
         var prev = -1
         for (g in groups) {
