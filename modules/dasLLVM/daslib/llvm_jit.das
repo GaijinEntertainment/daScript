@@ -331,6 +331,21 @@ def public is_workhorse_table_key(t : Type) : bool {
         || t == Type.tBool || t == Type.tFloat || t == Type.tDouble)
 }
 
+// Per-source state of an inline table slot walk (a `keys(tab)` / `values(tab)` for-loop source
+// over a workhorse-keyed table) — set up by the first() arm, advanced by next(), torn down by
+// emit_iterator_close. Non-string keys are open-addressed at every capacity (1-byte CTRL array),
+// so the walk is a flat `ctrl[slot] > CTRL_TOMBSTONE` scan with no regime branch.
+struct TableWalkState {
+    slot    : LLVMOpaqueValue?   // alloca i64 — current slot cursor
+    cap     : LLVMOpaqueValue?   // i64 capacity, loaded once at first()
+    ctrlPtr : LLVMOpaqueValue?   // i8* — open-addressed control bytes
+    basePtr : LLVMOpaqueValue?   // typed keys* (keys lane) / i8* data (values lane)
+    origin  : LLVMOpaqueValue?   // raw KEYS/DATA at first() — modified-during-iteration check
+    tabPtr  : LLVMOpaqueValue?   // Table* — unlock + the origin recheck at close
+    isKeys  : bool
+    stride  : int                // value stride in bytes (values lane; keys GEP by element type)
+}
+
 [macro]
 class public LlvmJitVisitor : AstVisitor {
     adapter : VisitorAdapter?
@@ -358,6 +373,7 @@ class public LlvmJitVisitor : AstVisitor {
     forBodyToExpr : table<ExprBlock?; ExprFor?>     // for-loop body block -> ExprFor (for iterator close on return path)
     skipCall : table<ExprCall?>
     range2 : table<Expression?; LLVMOpaqueValue?>       // for loop - range - where to
+    tableWalk : table<Expression?; TableWalkState>      // for loop - inline table slot-walk sources
     callBlock : LLVMOpaqueValue?
     g_builder : LLVMOpaqueBuilder?
     g_di_builder : LLVMOpaqueDIBuilder?
@@ -3627,6 +3643,100 @@ class public LlvmJitVisitor : AstVisitor {
         return cf.func.flags.builtIn && cf.func._module.name == "$" && (cf.func.name == "count" || cf.func.name == "ucount")
     }
 
+    // A `keys(tab)` / `values(tab)` for-loop source over a workhorse-keyed table — the inline
+    // slot-walk fast path. String / non-workhorse keys keep the generic C++ iterator (different
+    // liveness regimes; see runtime_table.h tableLiveSlot). The daslib generics instantiate into
+    // the compiling module under the origin-prefixed name `builtin`keys`<hash>` — the backtick
+    // prefix is compiler-generated, so it can't collide with a user function.
+    def table_walk_is_keys_call(cf : ExprCall?) {
+        return starts_with(cf.func.name, "builtin`keys`")
+    }
+
+    def is_table_keys_values(expr : ExpressionPtr) {
+        if (!(expr is ExprCall)) return false
+        var cf = expr as ExprCall
+        if (cf.func == null || length(cf.arguments) != 1
+                || !(starts_with(cf.func.name, "builtin`keys`") || starts_with(cf.func.name, "builtin`values`"))) return false
+        assume tabT = cf.arguments[0]._type
+        if (tabT == null || !tabT.isGoodTableType) return false
+        return is_workhorse_table_key(tabT.firstType.baseType)
+    }
+
+    def build_table_lock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
+        var params = fixed_array(
+            LLVMBuildPointerCast(g_builder, tab_ptr, types.LLVMVoidPtrType(), ""),
+            get_context_param(),
+            get_line_info_ptr(at),
+        )
+        var typ = g_fn_types[FN_JIT_TABLE_LOCK]
+        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_LOCK), params, "")
+    }
+
+    def build_table_unlock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
+        var params = fixed_array(
+            LLVMBuildPointerCast(g_builder, tab_ptr, types.LLVMVoidPtrType(), ""),
+            get_context_param(),
+            get_line_info_ptr(at),
+        )
+        var typ = g_fn_types[FN_JIT_TABLE_UNLOCK]
+        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_UNLOCK), params, "")
+    }
+
+    // Advance state.slot to the next live slot (ctrl byte > CTRL_TOMBSTONE) — the open-addressed
+    // walk core shared by the table-walk first()/next() arms. Leaves slot == cap when exhausted.
+    def build_table_walk_scan(state : TableWalkState) {
+        var bb_cond = append_basic_block("twalk_scan_cond")
+        var bb_check = append_basic_block("twalk_scan_check")
+        var bb_inc = append_basic_block("twalk_scan_inc")
+        var bb_done = append_basic_block("twalk_scan_done")
+        LLVMBuildBr(g_builder, bb_cond)
+        LLVMPositionBuilderAtEnd(g_builder, bb_cond)
+        var s = LLVMBuildLoad2(g_builder, types.t_int64, state.slot, "twalk.s")
+        var inb = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, s, state.cap, "twalk.inb")
+        LLVMBuildCondBr(g_builder, inb, bb_check, bb_done)
+        LLVMPositionBuilderAtEnd(g_builder, bb_check)
+        var cp = LLVMBuildGEP2(g_builder, types.t_int8, state.ctrlPtr, s, "twalk.cp")
+        var c = LLVMBuildLoad2(g_builder, types.t_int8, cp, "twalk.c")
+        var live = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntUGT, c, LLVMConstInt(types.t_int8, 1ul, 0), "twalk.live")
+        LLVMBuildCondBr(g_builder, live, bb_done, bb_inc)
+        LLVMPositionBuilderAtEnd(g_builder, bb_inc)
+        var s1 = LLVMBuildAdd(g_builder, s, LLVMConstInt(types.t_int64, 1ul, 0), "twalk.s1")
+        LLVMBuildStore(g_builder, s1, state.slot)
+        LLVMBuildBr(g_builder, bb_cond)
+        LLVMPositionBuilderAtEnd(g_builder, bb_done)
+    }
+
+    // Store the loop variable for the current slot: keys copy the key out (guarded against the
+    // past-end read on an exhausted/empty table when `guarded`); values store a pointer into the
+    // data block (safe at table_end, exactly like the C++ iterator).
+    def build_table_walk_store_var(state : TableWalkState; svar : VariablePtr; guarded : bool) {
+        var s = LLVMBuildLoad2(g_builder, types.t_int64, state.slot, "twalk.s")
+        if (state.isKeys) {
+            var keyElemTy = type_to_llvm_type(svar._type)
+            if (guarded) {
+                var bb_read = append_basic_block("twalk_key_read")
+                var bb_skip = append_basic_block("twalk_key_skip")
+                var inb = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, s, state.cap, "twalk.kinb")
+                LLVMBuildCondBr(g_builder, inb, bb_read, bb_skip)
+                LLVMPositionBuilderAtEnd(g_builder, bb_read)
+                var kp = LLVMBuildGEP2(g_builder, keyElemTy, state.basePtr, s, "twalk.kp")
+                var k = LLVMBuildLoad2(g_builder, keyElemTy, kp, "twalk.k")
+                LLVMBuildStore(g_builder, k, getV(svar))
+                LLVMBuildBr(g_builder, bb_skip)
+                LLVMPositionBuilderAtEnd(g_builder, bb_skip)
+            } else {
+                var kp = LLVMBuildGEP2(g_builder, keyElemTy, state.basePtr, s, "twalk.kp")
+                var k = LLVMBuildLoad2(g_builder, keyElemTy, kp, "twalk.k")
+                LLVMBuildStore(g_builder, k, getV(svar))
+            }
+        } else {
+            var off = LLVMBuildMul(g_builder, s, LLVMConstInt(types.t_int64, uint64(state.stride), 0), "twalk.voff")
+            var vp = LLVMBuildGEP2(g_builder, types.t_int8, state.basePtr, off, "twalk.vp")
+            vp = LLVMBuildPointerCast(g_builder, vp, get_type_pointer(svar._type), "twalk.vpc")
+            LLVMBuildStore(g_builder, vp, getV(svar))
+        }
+    }
+
     def override preVisitExprFor(expr : ExprFor?) : void {
         var lblk = LoopBlock(
             loop_start = append_basic_block("for_start"),
@@ -3641,7 +3751,7 @@ class public LlvmJitVisitor : AstVisitor {
             forBodyToExpr[expr.body as ExprBlock] = expr
         }
         for (ssrc in expr.sources) {
-            if (is_count_or_ucount(ssrc)) {
+            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc)) {
                 skipCall |> insert(ssrc as ExprCall)
             }
         }
@@ -3734,6 +3844,51 @@ class public LlvmJitVisitor : AstVisitor {
                     visit(ccount.arguments[0], adapter)
                     visit(ccount.arguments[1], adapter)
                     LLVMBuildStore(g_builder, getE(ccount.arguments[0]), getV(svar))
+                } elif (is_table_keys_values(ssrc)) {
+                    // table keys/values ->first(): inline slot walk — lock, load the header once,
+                    // scan to the first live ctrl byte. The skipped call never allocates a C++ iterator.
+                    var ctab = ssrc as ExprCall
+                    visit(ctab.arguments[0], adapter)
+                    var tab = getE(ctab.arguments[0])
+                    build_table_lock_call(tab, ssrc.at)
+                    var hdr = load_table_header(tab)
+                    var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "twalk.cap")
+                    var sizeV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.SIZE), "twalk.size")
+                    var ctrlV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "twalk.ctrl")
+                    let isKeys = table_walk_is_keys_call(ctab)
+                    var rawBase = LLVMBuildExtractValue(g_builder, hdr, uint(isKeys ? JIT_TABLE.KEYS : JIT_TABLE.DATA), "twalk.base")
+                    let i8ptr = LLVMPointerType(types.t_int8, 0u)
+                    var state = TableWalkState(
+                        cap = cap,
+                        ctrlPtr = LLVMBuildPointerCast(g_builder, ctrlV, i8ptr, "twalk.ctrlp"),
+                        origin = rawBase,
+                        tabPtr = tab,
+                        isKeys = isKeys,
+                        stride = isKeys ? 0 : ctab.arguments[0]._type.secondType.sizeOf
+                    )
+                    if (isKeys) {
+                        state.basePtr = LLVMBuildPointerCast(g_builder, rawBase,
+                            LLVMPointerType(type_to_llvm_type(svar._type), 0u), "twalk.keysp")
+                    } else {
+                        state.basePtr = LLVMBuildPointerCast(g_builder, rawBase, i8ptr, "twalk.datap")
+                    }
+                    at_function_entry() {
+                        state.slot = LLVMBuildAlloca(g_builder, types.t_int64, "twalk_slot_{svar.name}")
+                    }
+                    LLVMBuildStore(g_builder, LLVMConstInt(types.t_int64, 0ul, 0), state.slot)
+                    tableWalk[ssrc] = state
+                    // need_loop &= size != 0 (the C++ first() returns (bool)table->size)
+                    var nonEmpty = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, sizeV,
+                        LLVMConstInt(LLVMTypeOf(sizeV), 0ul, 0), "twalk.nonempty")
+                    var okay = append_basic_block("for_{svar.name}_not_empty")
+                    var not_okay = append_basic_block("for_{svar.name}_empty")
+                    LLVMBuildCondBr(g_builder, nonEmpty, okay, not_okay)
+                    LLVMPositionBuilderAtEnd(g_builder, not_okay)
+                    LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop) // need loop, no
+                    LLVMBuildBr(g_builder, okay)
+                    LLVMPositionBuilderAtEnd(g_builder, okay)
+                    build_table_walk_scan(state)
+                    build_table_walk_store_var(state, svar, true)
                 } else {
                     var seq = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(ssrc._type), getE(ssrc), ssrc._type.alignOf, "")
                     var piter = LLVMBuildExtractValue(g_builder, seq, uint(JIT_SEQUENCE.ITERATOR), "")
@@ -3844,6 +3999,19 @@ class public LlvmJitVisitor : AstVisitor {
                     var vvar = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(svar._type), getV(svar), svar._type.alignOf, "")
                     var vadd = LLVMBuildAdd(g_builder, vvar, getE(ccount.arguments[1]), "")
                     LLVMBuildStore(g_builder, vadd, getV(svar))
+                } elif (is_table_keys_values(ssrc)) {
+                    // table keys/values ->next(): advance the cursor, scan to the next live slot
+                    var state = tableWalk[ssrc]
+                    var s = LLVMBuildLoad2(g_builder, types.t_int64, state.slot, "twalk.ns")
+                    var s1 = LLVMBuildAdd(g_builder, s, LLVMConstInt(types.t_int64, 1ul, 0), "twalk.ns1")
+                    LLVMBuildStore(g_builder, s1, state.slot)
+                    build_table_walk_scan(state)
+                    var s2 = LLVMBuildLoad2(g_builder, types.t_int64, state.slot, "twalk.ns2")
+                    var done = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, s2, state.cap, "twalk.done")
+                    var nextOk = append_basic_block("for_{svar.name}_next_ok")
+                    LLVMBuildCondBr(g_builder, done, lblk.loop_end, nextOk)
+                    LLVMPositionBuilderAtEnd(g_builder, nextOk)
+                    build_table_walk_store_var(state, svar, false)
                 } else {
                     var rcond = build_iter_next(ssrc.at, getE(ssrc), getV(svar))
                     var nextOk = append_basic_block("for_{svar.name}_next_ok")
@@ -3896,6 +4064,22 @@ class public LlvmJitVisitor : AstVisitor {
                 if (is_count_or_ucount(ssrc)) {
                     // we do nothing for count
                     pass
+                } elif (is_table_keys_values(ssrc)) {
+                    // table keys/values ->close(): the realloc check mirrors the C++ iterator
+                    // (catches mutation on shared/hopeless tables that bypass the lock), then unlock
+                    let state & = unsafe(tableWalk[ssrc])
+                    var hdr2 = load_table_header(state.tabPtr)
+                    var base2 = LLVMBuildExtractValue(g_builder, hdr2,
+                        uint(state.isKeys ? JIT_TABLE.KEYS : JIT_TABLE.DATA), "twalk.base2")
+                    var moved = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, base2, state.origin, "twalk.moved")
+                    var bb_bad = append_basic_block("twalk_close_moved")
+                    var bb_ok = append_basic_block("twalk_close_ok")
+                    LLVMBuildCondBr(g_builder, moved, bb_bad, bb_ok)
+                    LLVMPositionBuilderAtEnd(g_builder, bb_bad)
+                    build_exception("table was modified during iteration", ssrc.at)
+                    LLVMBuildBr(g_builder, bb_ok)
+                    LLVMPositionBuilderAtEnd(g_builder, bb_ok)
+                    build_table_unlock_call(state.tabPtr, ssrc.at)
                 } else {
                     build_iter_close(getE(ssrc), getV(svar))
                 }

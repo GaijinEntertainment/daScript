@@ -58,6 +58,8 @@ let public FN_JIT_FREE_HEAP         = "jit_free_heap"
 let public FN_JIT_FREE_PERSISTENT   = "jit_free_persistent"
 let public FN_JIT_ARRAY_LOCK        = "jit_array_lock"
 let public FN_JIT_ARRAY_UNLOCK      = "jit_array_unlock"
+let public FN_JIT_TABLE_LOCK        = "jit_table_lock"
+let public FN_JIT_TABLE_UNLOCK      = "jit_table_unlock"
 let public FN_JIT_STR_CMP           = "jit_str_cmp"
 let public FN_JIT_STR_CAT           = "jit_str_cat"
 let public FN_JIT_PROLOGUE          = "jit_prologue"
@@ -611,6 +613,21 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
     LLVMAddAttributesToFunction(jit_array_unlock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0, 2), nocapture)
+
+    // void jit_table_lock ( Table & tab, Context * context, LineInfoArg * at )
+    var jit_table_lock = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_LOCK,
+        LLVMFunctionType(g_prim_t.t_void,
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_table_lock, get_jit_table_lock())
+    LLVMAddAttributesToFunction(jit_table_lock, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgumentRange(jit_table_lock, urange(0, 2), nocapture)
+    // void jit_table_unlock ( Table & tab, Context * context, LineInfoArg * at )
+    var jit_table_unlock = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_UNLOCK,
+        LLVMFunctionType(g_prim_t.t_void,
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_table_unlock, get_jit_table_unlock())
+    LLVMAddAttributesToFunction(jit_table_unlock, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgumentRange(jit_table_unlock, urange(0, 2), nocapture)
 
     // int jit_str_cmp ( char * a, char * b )
     var jit_str_cmp = LLVMAddFunctionWithType(g_mod, FN_JIT_STR_CMP,
