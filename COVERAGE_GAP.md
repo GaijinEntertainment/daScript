@@ -52,8 +52,17 @@ Process: per-stage plan → implement → review, same as FIXED_ARRAY_REWORK.md.
   lint + clang syntax-only pass on changed C++. `--full` adds interp/AOT/JIT
   suites, tests-cpp, all six doc gates, sequence smoke, CI-only-das compile
   sweep. Parallelize on big machines.
+- **Cross-platform is a requirement, not a nicety**: the same tool must run on
+  Windows (primary dev box), macOS, and WSL/Linux. Implications: pure `.das` +
+  clargs + `fio` path helpers (no shell-specific constructs); syntax pass is
+  `clang-cl /Zs` on Windows and `clang -fsyntax-only` elsewhere behind one
+  flag; binary/build-dir discovery handles both MSVC multi-config
+  (`bin/Release/daslang.exe`) and single-config (`build/daslang`) layouts;
+  gates that need missing host tools (sphinx, clang) degrade to an explicit
+  SKIP with the install hint, never a silent pass.
 - clang syntax-only checker for changed `.cpp`/`.h` (`clang-cl /Zs` with
-  project includes) — the 80/20 for the MSVC-vs-clang diagnostic gap.
+  project includes on Windows, `clang -fsyntax-only` on mac/Linux) — the
+  80/20 for the MSVC-vs-clang diagnostic gap.
 - Docs-gate runner mirroring doc.yml steps 1–6 exactly.
 - CI-only das surface list (dasOpenGL, sequence, release tooling …) compiled
   via `compile_check` with proper mounts.
