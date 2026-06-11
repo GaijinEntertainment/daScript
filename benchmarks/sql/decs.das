@@ -915,6 +915,33 @@ def to_array_filter_m4(b : B?) {
 }
 
 [benchmark]
+def to_table_m4(b : B?) {
+    // fused insert-loop sink: the chain lands straight in the result table
+    b |> run("to_table", N) {
+        var tab <- _fold(from_decs_template(type<DecsCar>) |> _select((_.id => _.price)) |> to_table())
+        b |> accept(length(tab))
+        if (empty(tab)) {
+            b->failNow()
+        }
+        delete tab
+    }
+}
+
+[benchmark]
+def to_table_staged_m4(b : B?) {
+    // staged baseline: materialize the kv tuples to an array, then convert
+    b |> run("to_table_staged", N) {
+        var rows <- _fold(from_decs_template(type<DecsCar>) |> _select((_.id => _.price)) |> to_array())
+        var tab <- to_table_move(rows)
+        b |> accept(length(tab))
+        if (empty(tab)) {
+            b->failNow()
+        }
+        delete tab
+    }
+}
+
+[benchmark]
 def where_join_count_m4(b : B?) {
     b |> run("where_join_count", N) {
         let c = _fold(from_decs_template(type<DecsCar>) |> _where(_.price > 500)

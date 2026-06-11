@@ -261,11 +261,165 @@ def first_or_default_match_m7(b : B?) {
 }
 
 [benchmark]
+def groupby_average_m7(b : B?) {
+    b |> run("groupby_average", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      AvgPrice = _._1 |> select($(c : CarKV) => c.value.price) |> average()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
 def groupby_count_m7(b : B?) {
     b |> run("groupby_count", N) {
         let groups <- _fold(unsafe(each_kv(g_t))
                             ._group_by(_.value.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_first_m7(b : B?) {
+    b |> run("groupby_first", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      FirstCar = _._1 |> first()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_having_count_m7(b : B?) {
+    b |> run("groupby_having_count", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._having(_._1 |> length >= 5)
+                            ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_having_hidden_sum_m7(b : B?) {
+    b |> run("groupby_having_hidden_sum", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._having(_._1 |> select($(c : CarKV) => c.value.price) |> sum > 50000)
+                            ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_having_post_where_m7(b : B?) {
+    b |> run("groupby_having_post_where", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      Total = _._1 |> select($(c : CarKV) => c.value.price) |> sum()))
+                            ._where(_.Total > 9000000)
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_max_m7(b : B?) {
+    b |> run("groupby_max", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      MaxPrice = _._1 |> select($(c : CarKV) => c.value.price) |> max()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_min_m7(b : B?) {
+    b |> run("groupby_min", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      MinPrice = _._1 |> select($(c : CarKV) => c.value.price) |> min()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_multi_reducer_m7(b : B?) {
+    b |> run("groupby_multi_reducer", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      N = _._1 |> length,
+                                      TotalPrice = _._1 |> select($(c : CarKV) => c.value.price) |> sum(),
+                                      MaxPrice   = _._1 |> select($(c : CarKV) => c.value.price) |> max()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_select_order_m7(b : B?) {
+    b |> run("groupby_select_order", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      Total = _._1 |> select($(c : CarKV) => c.value.price) |> sum()))
+                            ._order_by(_.Total)
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_select_sum_m7(b : B?) {
+    b |> run("groupby_select_sum", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._select(_.value.price)
+                            ._group_by(_ % 100)
+                            ._select((K = _._0, S = _._1 |> sum()))
                             .to_array())
         b |> accept(groups)
         if (empty(groups)) {
@@ -290,6 +444,37 @@ def groupby_sum_m7(b : B?) {
 }
 
 [benchmark]
+def groupby_where_count_m7(b : B?) {
+    b |> run("groupby_where_count", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._where(_.value.price > 500)
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0, N = _._1 |> length))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def groupby_where_sum_m7(b : B?) {
+    b |> run("groupby_where_sum", N) {
+        let groups <- _fold(unsafe(each_kv(g_t))
+                            ._where(_.value.price > 500)
+                            ._group_by(_.value.brand)
+                            ._select((Brand = _._0,
+                                      TotalPrice = _._1 |> select($(c : CarKV) => c.value.price) |> sum()))
+                            .to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
 def join_count_m7(b : B?) {
     b |> run("join_count", N) {
         let c = _fold(unsafe(each_kv(g_t)) |> _join(g_dealers,
@@ -298,6 +483,37 @@ def join_count_m7(b : B?) {
                                            |> count())
         b |> accept(c)
         if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def join_groupby_count_m7(b : B?) {
+    b |> run("join_groupby_count", N) {
+        let groups <- _fold(unsafe(each_kv(g_t)) |> _join(g_dealers,
+                                                          $(c : CarKV, d : Dealer) => c.value.dealer_id == d.id,
+                                                          $(c : CarKV, d : Dealer) => (Brand = c.value.brand, DealerId = d.id))
+                                                 |> _group_by(_.Brand)
+                                                 |> _select((Brand = _._0, N = _._1 |> count())))
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def join_groupby_to_array_m7(b : B?) {
+    b |> run("join_groupby_to_array", N) {
+        let groups <- _fold(unsafe(each_kv(g_t)) |> _join(g_dealers,
+                                                          $(c : CarKV, d : Dealer) => c.value.dealer_id == d.id,
+                                                          $(c : CarKV, _d : Dealer) => (Brand = c.value.brand, Price = c.value.price))
+                                                 |> _group_by(_.Brand)
+                                                 |> _select((Brand = _._0,
+                                                             Total = _._1 |> select($(t : tuple<Brand : int; Price : int>) => t.Price) |> sum())))
+        b |> accept(groups)
+        if (empty(groups)) {
             b->failNow()
         }
     }
@@ -330,6 +546,20 @@ def join_probe_build_m7(b : B?) {
                        |> count())
         b |> accept(c)
         if (c == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def join_select_m7(b : B?) {
+    b |> run("join_select", N) {
+        let rows <- _fold(unsafe(each_kv(g_t)) |> _join(g_dealers,
+                                                        $(c : CarKV, d : Dealer) => c.value.dealer_id == d.id,
+                                                        $(c : CarKV, d : Dealer) => (CarName = c.value.name, DealerId = d.id))
+                                               |> _select(_.CarName))
+        b |> accept(rows)
+        if (empty(rows)) {
             b->failNow()
         }
     }
@@ -421,6 +651,19 @@ def order_distinct_take_m7(b : B?) {
 }
 
 [benchmark]
+def order_reverse_normalized_m7(b : B?) {
+    b |> run("order_reverse_normalized", N) {
+        unsafe {
+            let rows <- _fold(each_kv(g_t)._order_by(_.value.price).reverse().take(10).to_array())
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+[benchmark]
 def order_take_desc_m7(b : B?) {
     b |> run("order_take_desc", N) {
         let rows <- _fold(unsafe(each_kv(g_t))._order_by_descending(_.value.price).take(10).to_array())
@@ -458,10 +701,36 @@ def point_lookup_scan_m7(b : B?) {
 }
 
 [benchmark]
+def reverse_distinct_by_m7(b : B?) {
+    b |> run("reverse_distinct_by", N) {
+        unsafe {
+            let rows <- _fold(each_kv(g_t).reverse()._distinct_by(_.value.brand).to_array())
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+[benchmark]
 def reverse_take_m7(b : B?) {
     b |> run("reverse_take", N) {
         unsafe {
             let rows <- _fold(each_kv(g_t).reverse().take(10).to_array())
+            b |> accept(rows)
+            if (empty(rows)) {
+                b->failNow()
+            }
+        }
+    }
+}
+
+[benchmark]
+def reverse_take_select_m7(b : B?) {
+    b |> run("reverse_take_select", N) {
+        unsafe {
+            let rows <- _fold(each_kv(g_t).reverse().take(10)._select(_.value.name).to_array())
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -712,5 +981,20 @@ def to_table_staged_m7(b : B?) {
             b->failNow()
         }
         delete tab
+    }
+}
+
+[benchmark]
+def where_join_count_m7(b : B?) {
+    b |> run("where_join_count", N) {
+        let c = _fold(unsafe(each_kv(g_t)) |> _where(_.value.price > 500)
+                                           |> _join(g_dealers,
+                                                    $(c : CarKV, d : Dealer) => c.value.dealer_id == d.id,
+                                                    $(c : CarKV, d : Dealer) => (CarPrice = c.value.price, DealerId = d.id))
+                                           |> count())
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
+        }
     }
 }
