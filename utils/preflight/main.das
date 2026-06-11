@@ -313,7 +313,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp)) {
-        let note = ctx.changed_hdr > 0 ? " ({ctx.changed_hdr} changed header(s) are validated via their includers in full builds)" : ""
+        let note = ctx.changed_hdr > 0 ? " — {ctx.changed_hdr} changed header(s) NOT validated by this gate; compile their includers (cmake --build) or rely on CI's clang lanes" : ""
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no .cpp files changed vs {ctx.base}{note}")
     }
@@ -322,7 +322,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
             detail = "clang not found — install LLVM (clang-cl/clang on PATH) or pass --clang <path>")
     }
     // in-scope TUs: core + tests-cpp. Module/util TUs need external or
-    // build-generated headers; the clang-cl full build covers those.
+    // build-generated headers; CI's clang-cl lane covers those.
     var in_scope : array<string>
     var skipped : array<string>
     for (f in ctx.changed_cpp) {
@@ -335,7 +335,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     }
     if (empty(in_scope)) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "changed C++ is outside src/include/tests-cpp ({join(skipped, ", ")}) — needs module deps, covered by full clang-cl build")
+            detail = "changed C++ is outside src/include/tests-cpp ({join(skipped, ", ")}) — needs module/external deps; no local clang gate compiles it, CI's clang-cl lane does")
     }
     var flags : array<string>
     if (ctx.clang_is_cl) {
