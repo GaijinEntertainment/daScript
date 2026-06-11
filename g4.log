@@ -1,0 +1,447 @@
+MSBuild version 17.14.14+a129329f1 for .NET Framework
+
+  Checking File Globs
+  libUriParserDyn.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\build\libUriParserDyn.dir\Release\libUriParserDyn.lib
+  Generating include/modules/external_declare.inc
+  Generating include/modules/external_need.inc
+  Generating include/modules/external_pull.inc
+  Generating include/modules/external_resolve.inc
+  libDaScriptDyn_runtime.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\bin\Release\libDaScriptDyn_runtime.dll
+  libDaScriptDyn.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\bin\Release\libDaScriptDyn.dll
+  Auto build dll exports
+  dasModuleHV.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasHV\dasModuleHV.shared_module
+  dasModuleLiveHost.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasLiveHost\dasModuleLiveHost.shared_module
+  dasModuleStdDlg.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasStdDlg\dasModuleStdDlg.shared_module
+  dasModuleUnitTest.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasUnitTest\dasModuleUnitTest.shared_module
+  dasModulePUGIXML.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasPUGIXML\dasModulePUGIXML.shared_module
+  dasModuleMinfft.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasMinfft\dasModuleMinfft.shared_module
+  dasModuleGlfw.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasGlfw\dasModuleGlfw.shared_module
+  dasModuleAudio.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasAudio\dasModuleAudio.shared_module
+  dasModuleStbImage.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\modules\dasStbImage\dasModuleStbImage.shared_module
+  daslang.vcxproj -> E:\daslang\daScript\hopeful-dewdney-b0681c\bin\Release\daslang.exe
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/44_compile_and_run.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/18_classes.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/18_with_boost.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/13_blocks.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/06_arrays.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/19_generics.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/08_structs.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/33_algorithm.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/07_strings.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/05_functions.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/04_tools_and_function_calling.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/37_utility_patterns.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/10_tables.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/17_move_copy_clone.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/17_qmacro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/12_typeinfo_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/16_template_type_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/20_lifetime.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/32_operator_overloading.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/11_tuples_and_variants.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/09_for_loop_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/14_pass_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/09_enumerations.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/15_type_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/18_classes.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/13_blocks.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/06_arrays.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/19_generics.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/08_structs.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/10_tables.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/20_lifetime.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/17_move_copy_clone.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/32_operator_overloading.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/11_tuples_and_variants.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/05_functions.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/08_midi.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/12_typeinfo_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_07_per_voice_fx.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_12_synthesis.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/pass_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/qmacro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_10_adsr_envelopes.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/function_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/tag_function_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/13_enumeration_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/09_for_loop_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_13_samples.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/enum_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_16_live_reloading.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/09_enumerations.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/37_utility_patterns.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_14_sf2_soundfont.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/17_qmacro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/18_with_boost.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/15_type_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  [lint] 'main' has 5 top-level statements (>4)
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/14_pass_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_08_effects_filters.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/44_compile_and_run.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/16_template_type_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/33_algorithm.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/enum_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/15_iterators_and_generators.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/07_strings.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/tag_function_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/for_loop_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/template_type_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_11_scales_music_theory.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_15_midi_files.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/qmacro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/04_tools_and_function_calling.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/pass_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/15_iterators_and_generators.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/13_enumeration_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_06_stacking_combining.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/function_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/53_clargs.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/tutorial_openai_server.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/16_modules.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/tutorial_helpers.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_03_mini_notation_advanced.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/capture_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/06_streaming.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/16_modules.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/advanced_function_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/for_loop_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/tutorial_helpers.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/when_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/07_basic.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/54_glob.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/06_audio.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_04_time_manipulation.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/54_glob.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/block_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/capture_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/template_type_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/03_sound_control.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_10_adsr_envelopes.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/02_calculator.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_02_mini_notation_fundamentals.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/advanced_function_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/47_data_walker.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/when_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/53_clargs.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_12_synthesis.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_07_per_voice_fx.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/01_hello_world.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/block_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/tutorial_openai_server.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/47_data_walker.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_13_samples.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/08_midi.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_09_signals_modulation.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/01_hello_world.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/04_control_flow.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/06_streaming.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_14_sf2_soundfont.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/49_async.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/45_debug_agents.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/02_variables.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/02_playing_files.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/06_audio.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_01_hello_pattern.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/04_control_flow.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/05_tag_function_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/51_delegate.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/02_variables.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_08_effects_filters.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/45_debug_agents.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_11_scales_music_theory.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_15_midi_files.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/01_call_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/48_apply.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/11_reader_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/01_first_chat.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_16_live_reloading.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/14_lambdas.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/01_hello_sound.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/02_calculator.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/46_apply_in_context.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_06_stacking_combining.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/50_soa.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/03_sound_control.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/52_option_and_result.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/14_lambdas.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/11_reader_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/07_basic.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/call_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/05_tag_function_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/08_variant_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/21_error_handling.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/34_decs.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/typeinfo_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/31_regex.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_03_mini_notation_advanced.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/type_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/49_async.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/03_csv_parser.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/01_call_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/51_delegate.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/40_coroutines.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_04_time_manipulation.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/typeinfo_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/02_building_xml.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/02_when_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/48_apply.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/46_apply_in_context.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_05_euclidean_rhythms.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/02_playing_files.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/03_function_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/50_soa.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/31_regex.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_02_mini_notation_fundamentals.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/52_option_and_result.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/01_request_response.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/03_structured_outputs.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/type_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/call_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/03_operators.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/01_first_chat.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/05_embeddings_and_models.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/02_conversations_and_params.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/21_error_handling.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/01_hello_sound.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/02_dispatch_line.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/08_variant_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/03_operators.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/03_xpath.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/01_parsing_and_navigation.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/03_batch.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_01_hello_pattern.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_09_signals_modulation.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/55_linq_decs.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/43_interfaces.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/40_coroutines.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/04_email_validator.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/02_when_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/04_spatial_audio.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/42_testing_tools.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/01_hello_parser.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/44_helper.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/03_csv_parser.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/34_decs.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/03_function_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/12_function_pointers.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/44_helper.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/02_building_xml.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/01_request_response.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/05_json_parser.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/56_linq_query.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/12_function_pointers.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/04_advanced_function_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/02_conversations_and_params.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/07_wav_io.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/27_testing.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/07_streaming_chat.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/03_structured_outputs.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/02_dispatch_line.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/jsonrpc/03_batch.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/05_embeddings_and_models.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/06_debugging.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/43_interfaces.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/01_parsing_and_navigation.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/03_xpath.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/04_serialization.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/07_block_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/06_structure_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/26_contracts.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/05_linq_over_xml.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/42_testing_tools.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_05_euclidean_rhythms.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/04_email_validator.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/04_spatial_audio.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/04_advanced_function_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/01_hello_parser.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/27_testing.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/structure_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/26_contracts.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/22_unsafe.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/10_capture_macro.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/23_string_format.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/22_unsafe.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/05_reverb.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  [traced] "setup": 1 statement(s)
+  [traced] "process": 1 statement(s), args = (v:int const)
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/07_block_macro.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/23_string_format.das
+  [serializable] Color: 3 serializable field(s), version 1
+  [serializable] Player: 3 serializable field(s), 1 skipped, version 2
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/06_structure_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/05_json_parser.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPEG/06_debugging.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasOPENAI/07_streaming_chat.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/07_wav_io.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/10_capture_macro.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/39_dynamic_type_checking.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/36_pointers.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/28_linq.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/30_json.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/structure_macro_mod.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/24_pattern_matching.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/38_random.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/41_serialization.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/04_serialization.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/38_random.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/36_pointers.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/25_annotations_and_options.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/25_annotations_and_options.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/39_dynamic_type_checking.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasAudio/05_reverb.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/41_serialization.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/24_pattern_matching.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/35_jobque.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/30_json.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/55_linq_decs.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/35_jobque.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/dasPUGIXML/05_linq_over_xml.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/56_linq_query.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_17_hrtf_position.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/29_functional.das
+  Testing tutorial E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/reader_macro_mod.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/29_functional.das
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/macros/reader_macro_mod.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/language/28_linq.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  dry run: E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/daStrudel/daStrudel_17_hrtf_position.das
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt
+  Building Custom Rule E:/daslang/daScript/hopeful-dewdney-b0681c/tutorials/CMakeLists.txt

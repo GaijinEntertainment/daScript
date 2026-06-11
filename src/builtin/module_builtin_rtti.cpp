@@ -1182,7 +1182,10 @@ namespace das {
         case Type::tBool:   return RttiValue::create<bool, RttiBool>(info.bValue, align);
         case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
         case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
-        case Type::tString: return RttiValue::create<char*, RttiString>(context->allocateString(string(info.sValue ? info.sValue : ""), at), align);
+        case Type::tString: {
+            const char * sval = info.sValue ? info.sValue : "";
+            return RttiValue::create<char*, RttiString>(context->allocateString(sval, uint64_t(strlen(sval)), at), align);
+        }
         default: DAS_ASSERT(false); // I guess unreachable?
         }
         return RttiValue{};

@@ -1,0 +1,126 @@
+Test project E:/daslang/daScript/hopeful-dewdney-b0681c/build
+      Start  1: annotation reflection survives Program release
+ 1/59 Test  #1: annotation reflection survives Program release ..............................................   Passed    0.06 sec
+      Start  2: aot.h int32 indexing ΓÇö negative-index corruption + message clarity
+ 2/59 Test  #2: aot.h int32 indexing ΓÇö negative-index corruption + message clarity .....................   Passed    0.04 sec
+      Start  3: interpreter int32 indexing ΓÇö negative-index diagnostic
+ 3/59 Test  #3: interpreter int32 indexing ΓÇö negative-index diagnostic .................................   Passed    0.04 sec
+      Start  4: das_array / das_table layout matches Array / Table at runtime
+ 4/59 Test  #4: das_array / das_table layout matches Array / Table at runtime ...............................   Passed    0.04 sec
+      Start  5: context heap API: allocate / reallocate / free round-trip
+ 5/59 Test  #5: context heap API: allocate / reallocate / free round-trip ...................................   Passed    0.06 sec
+      Start  6: das_array borrowed: daslang reads C-owned data
+ 6/59 Test  #6: das_array borrowed: daslang reads C-owned data ..............................................   Passed    0.06 sec
+      Start  7: das_array context-owned: daslang grows
+ 7/59 Test  #7: das_array context-owned: daslang grows ......................................................   Passed    0.04 sec
+      Start  8:  C reads via das_array_at
+ 8/59 Test  #8:  C reads via das_array_at ...................................................................   Passed    0.04 sec
+      Start  9: das_array C-side resize / lock / unlock without daslang
+ 9/59 Test  #9: das_array C-side resize / lock / unlock without daslang .....................................   Passed    0.06 sec
+      Start 10: das_table fill from daslang
+10/59 Test #10: das_table fill from daslang .................................................................   Passed    0.04 sec
+      Start 11:  C reads via das_table_find
+11/59 Test #11:  C reads via das_table_find .................................................................   Passed    0.05 sec
+      Start 12: das_table insert / find / erase round-trip from C only
+12/59 Test #12: das_table insert / find / erase round-trip from C only ......................................   Passed    0.06 sec
+      Start 13: das_array _i64 API: resize / reserve / at round-trip on small sizes
+13/59 Test #13: das_array _i64 API: resize / reserve / at round-trip on small sizes .........................   Passed    0.05 sec
+      Start 14: das_array_init_borrowed_i64 stores 64-bit count/capacity verbatim
+14/59 Test #14: das_array_init_borrowed_i64 stores 64-bit count/capacity verbatim ...........................   Passed    0.05 sec
+      Start 15: das_array _i64 API: resize past UINT32_MAX (gated)
+15/59 Test #15: das_array _i64 API: resize past UINT32_MAX (gated) ..........................................   Passed    0.04 sec
+      Start 16: das_table_reserve_i64: round-trip on small capacity
+16/59 Test #16: das_table_reserve_i64: round-trip on small capacity .........................................   Passed    0.05 sec
+      Start 17: compilation callback reports success and failure phases
+17/59 Test #17: compilation callback reports success and failure phases .....................................   Passed    0.05 sec
+      Start 18: gen2: top-level statement at EOF without trailing newline
+18/59 Test #18: gen2: top-level statement at EOF without trailing newline ...................................   Passed    0.06 sec
+      Start 19: FileInfo::getLine basic cases
+19/59 Test #19: FileInfo::getLine basic cases ...............................................................   Passed    0.04 sec
+      Start 20: rtti_is_nolint_suppressed truth table
+20/59 Test #20: rtti_is_nolint_suppressed truth table .......................................................   Passed    0.04 sec
+      Start 21: typeFactory produces tFixedArray chains
+21/59 Test #21: typeFactory produces tFixedArray chains .....................................................   Passed    0.04 sec
+      Start 22: makeTypeInfo flattens tFixedArray chains byte-equal to dim-vector input
+22/59 Test #22: makeTypeInfo flattens tFixedArray chains byte-equal to dim-vector input .....................   Passed    0.04 sec
+      Start 23: gen2 grammar builds tFixedArray chains
+23/59 Test #23: gen2 grammar builds tFixedArray chains ......................................................   Passed    0.06 sec
+      Start 24: gen1 grammar builds tFixedArray chains
+24/59 Test #24: gen1 grammar builds tFixedArray chains ......................................................   Passed    0.05 sec
+      Start 25: gen1 {{ }} table literal synthesizes auto[] as a tFixedArray
+25/59 Test #25: gen1 {{ }} table literal synthesizes auto[] as a tFixedArray ................................   Passed    0.05 sec
+      Start 26: mangled name parse builds tFixedArray and round-trips the emit
+26/59 Test #26: mangled name parse builds tFixedArray and round-trips the emit ..............................   Passed    0.04 sec
+      Start 27: tFixedArray text
+27/59 Test #27: tFixedArray text ............................................................................   Passed    0.04 sec
+      Start 28: tFixedArray size family
+28/59 Test #28: tFixedArray size family .....................................................................   Passed    0.04 sec
+      Start 29: tFixedArray identity
+29/59 Test #29: tFixedArray identity ........................................................................   Passed    0.04 sec
+      Start 30: tFixedArray lifecycle and hashes
+30/59 Test #30: tFixedArray lifecycle and hashes ............................................................   Passed    0.04 sec
+      Start 31: tFixedArray classification
+31/59 Test #31: tFixedArray classification ..................................................................   Passed    0.04 sec
+      Start 32: context heap _i64 API: allocate / reallocate / free round-trip
+32/59 Test #32: context heap _i64 API: allocate / reallocate / free round-trip ..............................   Passed    0.06 sec
+      Start 33: legacy uint32_t C-API still works after heap widening
+33/59 Test #33: legacy uint32_t C-API still works after heap widening .......................................   Passed    0.05 sec
+      Start 34: alignMask uint32 truncation guard: 4 GB allocation reports correct bytesAllocated (gated)
+34/59 Test #34: alignMask uint32 truncation guard: 4 GB allocation reports correct bytesAllocated (gated) ...   Passed    0.04 sec
+      Start 35: uint64 size accepts values larger than UINT32_MAX (gated)
+35/59 Test #35: uint64 size accepts values larger than UINT32_MAX (gated) ...................................   Passed    0.04 sec
+      Start 36: jit module resolve ΓÇö exe-relative wins when present
+36/59 Test #36: jit module resolve ΓÇö exe-relative wins when present ....................................   Passed    0.04 sec
+      Start 37: jit module resolve ΓÇö falls back to das_root when exe-relative misses
+37/59 Test #37: jit module resolve ΓÇö falls back to das_root when exe-relative misses ...................   Passed    0.04 sec
+      Start 38: jit module resolve ΓÇö falls back to baked absolute when both miss
+38/59 Test #38: jit module resolve ΓÇö falls back to baked absolute when both miss .......................   Passed    0.04 sec
+      Start 39: jit module resolve ΓÇö exe-relative wins over das_root when both exist
+39/59 Test #39: jit module resolve ΓÇö exe-relative wins over das_root when both exist ...................   Passed    0.04 sec
+      Start 40: jit module resolve ΓÇö empty rel_path skips tier 1+2 and uses absolute
+40/59 Test #40: jit module resolve ΓÇö empty rel_path skips tier 1+2 and uses absolute ...................   Passed    0.04 sec
+      Start 41: jit module resolve ΓÇö empty exe_file still tries das_root
+41/59 Test #41: jit module resolve ΓÇö empty exe_file still tries das_root ...............................   Passed    0.04 sec
+      Start 42: jit module resolve ΓÇö POSIX filesystem root exe path is handled
+42/59 Test #42: jit module resolve ΓÇö POSIX filesystem root exe path is handled .........................   Passed    0.04 sec
+      Start 43: jit module resolve ΓÇö Windows backslash exe path is handled
+43/59 Test #43: jit module resolve ΓÇö Windows backslash exe path is handled .............................   Passed    0.04 sec
+      Start 44: jit module resolve ΓÇö Windows drive-root exe path is handled
+44/59 Test #44: jit module resolve ΓÇö Windows drive-root exe path is handled ............................   Passed    0.04 sec
+      Start 45: MemoryModel shoe growth: many small allocations stay valid across chunks
+45/59 Test #45: MemoryModel shoe growth: many small allocations stay valid across chunks ....................   Passed    0.14 sec
+      Start 46: MemoryModel::grow is 64-bit (no UINT32 clamp / truncation)
+46/59 Test #46: MemoryModel::grow is 64-bit (no UINT32 clamp / truncation) ..................................   Passed    0.04 sec
+      Start 47: optional require: ?guard target
+47/59 Test #47: optional require: ?guard target .............................................................   Passed    0.06 sec
+      Start 48: runWithCatch / clearException contract ΓÇö issue #2523
+48/59 Test #48: runWithCatch / clearException contract ΓÇö issue #2523 ...................................   Passed    0.04 sec
+      Start 49: das_qsort_r baseline
+49/59 Test #49: das_qsort_r baseline ........................................................................   Passed    0.04 sec
+      Start 50: das_sort<T> typed
+50/59 Test #50: das_sort<T> typed ...........................................................................   Passed    0.04 sec
+      Start 51: das_partial_sort_r
+51/59 Test #51: das_partial_sort_r ..........................................................................   Passed    0.04 sec
+      Start 52: das_nth_element_r
+52/59 Test #52: das_nth_element_r ...........................................................................   Passed    0.05 sec
+      Start 53: das_make_heap_r ΓÇö Floyd bottom-up build
+53/59 Test #53: das_make_heap_r ΓÇö Floyd bottom-up build ................................................   Passed    0.04 sec
+      Start 54: das_push_heap_r ΓÇö sift-up appends a new element to existing heap
+54/59 Test #54: das_push_heap_r ΓÇö sift-up appends a new element to existing heap .......................   Passed    0.04 sec
+      Start 55: das_pop_heap_r ΓÇö move max to last position, sift-down [0..n-2]
+55/59 Test #55: das_pop_heap_r ΓÇö move max to last position, sift-down [0..n-2] .........................   Passed    0.04 sec
+      Start 56: bounded-N streaming heap (top_n_by usage pattern)
+56/59 Test #56: bounded-N streaming heap (top_n_by usage pattern) ...........................................   Passed    0.04 sec
+      Start 57: das_stable_sort_r ΓÇö byte path: sorted + stable + permutation
+57/59 Test #57: das_stable_sort_r ΓÇö byte path: sorted + stable + permutation ...........................   Passed    0.04 sec
+      Start 58: das_stable_sort<T> ΓÇö typed path: sorted + stable + permutation
+58/59 Test #58: das_stable_sort<T> ΓÇö typed path: sorted + stable + permutation .........................   Passed    0.04 sec
+      Start 59: das_stable_sort ΓÇö adaptivity (already-sorted / reverse use O(N) comparisons)
+59/59 Test #59: das_stable_sort ΓÇö adaptivity (already-sorted / reverse use O(N) comparisons) ...........   Passed    0.04 sec
+
+100% tests passed, 0 tests failed out of 59
+
+Label Time Summary:
+small    =   2.78 sec*proc (59 tests)
+
+Total Test time (real) =   2.91 sec

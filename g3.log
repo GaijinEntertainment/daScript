@@ -1,0 +1,3 @@
+MSBuild version 17.14.14+a129329f1 for .NET Framework
+MSBUILD : error MSB1009: Project file does not exist.
+Switch: run_utils_tests.vcxproj

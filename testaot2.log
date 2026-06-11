@@ -1,0 +1,65 @@
+[I] test message
+test print message
+[W] warning test
+42100[I] after compile: 0x0 (delta from start: 0)
+[I] after simulate: 0x0 (delta from compile: 0)
+[I] after invoke: 0x0 (delta from simulate: 0)
+[I] after simulate block exit: 0x0 (delta from start: 0)
+[I] after ModuleGroup destroy: 0x0 (delta from start: 0)
+reading past the end of streamreading past the end of stream[I] looking for foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main.das
+[I] looking for foo.random from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/foo/foo_main.das
+[I] looking for bar.bar from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main.das
+[I] looking for left from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for right from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for mid.dle.middle from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for foo.random from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/foo/foo_main.das
+[I] looking for left from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for right from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for mid.dle.middle from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/bar/bar.das
+[I] looking for foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main.das
+[I] looking for bar.bar from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main.das
+[I] including sample.inc from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main_inc.das
+[I] including sample.inc from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/main_inc.das
+[I] is `fio` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/cdp/actions.das`? yes
+[I] is `$` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/cdp/actions.das`? yes
+[I] is `fio_core` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/cdp/actions.das`? yes
+[I] is `math` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/cdp/actions.das`? yes
+[I] is `strings` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/cdp/actions.das`? yes
+[I] is `fio_core` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/daslib/fio.das`? yes
+[I] is `strings` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/daslib/fio.das`? yes
+[I] is `math` allowed in `E:/daslang/daScript/hopeful-dewdney-b0681c/daslib/fio.das`? yes
+[I] get 'something_unsafe` from `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/unsafe/main.das`
+[I] is `something_unsafe` can be unsafe `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/unsafe/something_unsafe.das`? true
+[I] get 'something_unsafe` from `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/unsafe/main.das`
+[I] is `` can be unsafe `E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/unsafe/main.das`? false
+[I] looking for daslib/strings_boost from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/failed/main.das
+[I] looking for daslib/strings_boost from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/failed/main.das
+[I] looking for pkgA/foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/conflict/main.das
+[I] looking for pkgB/foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/conflict/main.das
+[I] looking for pkgA/foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/conflict/main.das
+[I] looking for pkgB/foo from E:/daslang/daScript/hopeful-dewdney-b0681c/tests/module_tests/_modules/conflict/main.das
+(#0->! Contact
+	(#1->6 Plus (#2->! Group (#3->! Union
+			(#4->! Char `a`)
+			(#5->! Char `b`)
+		)))
+	(#6->! Char `c`)
+)
+early out: ABab
+groups:	
+	1
+:0: FluidR3_GM.sf2 not available
+--- SKIPPED 'test_load_fluidr3' (0.000000s)
+:0: E:/daslang/daScript/hopeful-dewdney-b0681c/examples/daStrudel/midi_sf2_demo/FluidR3_GM.sf2 not available
+--- SKIPPED 'test_modulator_parse_counts' (0.000000s)
+:0: E:/daslang/daScript/hopeful-dewdney-b0681c/examples/daStrudel/midi_sf2_demo/FluidR3_GM.sf2 not available
+--- SKIPPED 'test_modulators_affect_voice' (0.000000s)
+:0: E:/daslang/daScript/hopeful-dewdney-b0681c/examples/daStrudel/midi_sf2_demo/FluidR3_GM.sf2 not available
+--- SKIPPED 'test_default_modulators' (0.000000s)
+:0: FluidR3_GM.sf2 not available
+--- SKIPPED 'test_voice_pitch' (0.000000s)
+:0: FluidR3_GM.sf2 not available
+--- SKIPPED 'test_c_voice_render' (0.000000s)
+uri_compose: HOST = www.google.com
+
+9406 tests, 9400 passed, 0 failed, 0 errors, 6 skipped
