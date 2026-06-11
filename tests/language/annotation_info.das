@@ -38,7 +38,8 @@ def test_struct_annotations(t : T?) {
     t |> equal(int(sinfo.annotation_count), 1)
     var seen_args = 0
     for (ann in each_annotation(*sinfo)) {
-        t |> equal("{ann.name}", "comment")
+        // direct const char*-backed field pass — regression for the AOT (char*)(const char*) cast
+        t |> equal(ann.name, "comment")
         t |> equal(int(ann.count), 5)
         for (arg in each_annotation_argument(ann)) {
             let value = get_annotation_argument_value(arg)
@@ -78,7 +79,7 @@ def test_field_annotations(t : T?) {
             if (fld.name == "a") {
                 t |> equal(int(fld.annotation_argument_count), 1)
                 for (arg in each_annotation_argument(fld)) {
-                    t |> equal("{arg.name}", "v_int")
+                    t |> equal(arg.name, "v_int")
                     t |> equal(get_annotation_argument_value(arg) as tInt, 13)
                 }
                 checked ++

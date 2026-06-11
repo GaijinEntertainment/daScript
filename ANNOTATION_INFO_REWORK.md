@@ -100,11 +100,14 @@ Deprecated (kept working, `[deprecated]`):
 ## das-side string fields and AOT
 
 `AnnotationInfo.name` / `AnnotationArgumentInfo.name` (and `sValue`, `module_name`) are
-`const char *` bound as das `string` — same as `VarInfo.name`. Comparisons and string
-interpolation work in all tiers, but passing the field *directly as a function argument*
-compiles interpreted and fails AOT C++ compilation (`const char*` → `char*`). This is a
-pre-existing emitter wart shared by every `const char *` bound field; the in-tree
-convention is to interpolate (`"{ann.name}"`) when passing onward.
+`const char *` bound as das `string` — same as `VarInfo.name`. Historically, passing such
+a field *directly as a function argument* compiled interpreted but failed AOT C++
+compilation (`const char*` → `char*`): the emitter cast const-owner string field reads to
+`(const char * const)`. Fixed in the follow-up to PR #3101 — const-owner reads now emit a
+two-step cast `((char *)(const char *)(...))`: the inner cast picks the const-qualified
+conversion operator on class-typed members (the `SimpleString` case from f38081856), the
+outer strips pointee-const, which is safe because das strings are immutable and always
+lower to `char *`. Direct field passes now work in all tiers; no interpolation needed.
 
 ## Known pre-existing gap (unchanged)
 
