@@ -205,6 +205,79 @@ def test_table_fold_set_form(t : T?) {
     }
 }
 
+def private bump_key(var c : int&) : int {
+    c++
+    return 2
+}
+
+// Point-lookup folds: `where(kv.key == X)` + terminator → O(1) key probe (key_exists / `tab?[X]`).
+// Probes must agree with the scan on hit AND miss; non-probe shapes must keep riding the scan.
+
+[test]
+def test_table_point_lookup(t : T?) {
+    t |> run("kv any/count/first probes, hit and miss") @(t : T?) {
+        var tab <- make_int_table(10)
+        let k = 7
+        t |> equal(_fold(each_kv(tab)._where(_.key == k).any()), true)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 99).any()), false)
+        t |> equal(_fold(each_kv(tab)._any(_.key == k)), true)
+        t |> equal(_fold(each_kv(tab)._where(_.key == k).count()), 1)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 99).count()), 0)
+        t |> equal(_fold(each_kv(tab)._count(_.key == 3)), 1)
+        let f = _fold(each_kv(tab)._where(k == _.key).first())   // flipped operand side
+        t |> equal(f.key, 7)
+        t |> equal(f.value, 70)
+        let m = _fold(each_kv(tab)._where(_.key == 99).first_or_default(default<tuple<key : int; value : int>>))
+        t |> equal(m.key, 0)
+        delete tab
+    }
+    t |> run("probe + trailing select projects the probed element") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 4)._select(_.value).first()), 40)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 99)._select(_.value).first_or_default(-1)), -1)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 4)._select("{_.key}:{_.value}").first()), "4:40")
+        delete tab
+    }
+    t |> run("keys lane probes + set form contains") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(keys(tab)._where(_ == 5).any()), true)
+        t |> equal(_fold(keys(tab)._where(_ == 5).first()), 5)
+        t |> equal(_fold(keys(tab)._where(_ == 5)._select(_ * 100).first()), 500)
+        t |> equal(_fold(keys(tab).contains(5)), true)
+        t |> equal(_fold(keys(tab).contains(55)), false)
+        delete tab
+        var s : table<string> <- { "x", "y" }
+        t |> equal(_fold(keys(s).contains("y")), true)
+        t |> equal(_fold(keys(s).contains("z")), false)
+        delete s
+    }
+    t |> run("first probe panics on a missing key, like the scan") @(t : T?) {
+        var tab <- make_int_table(4)
+        var panicked = false
+        try {
+            let _r = _fold(each_kv(tab)._where(_.key == 99).first())
+        } recover {
+            panicked = true
+        }
+        t |> equal(panicked, true)
+        delete tab
+    }
+    t |> run("non-probe shapes stay scans and stay correct") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(each_kv(tab)._where(_.key != 5).count()), 9)                      // wrong operator
+        t |> equal(_fold(each_kv(tab)._where(_.key == _.value / 10).count()), 10)          // X references the binder
+        t |> equal(_fold(each_kv(tab)._where(_.key == 5)._where(_.value > 0).any()), true) // collapses to a compound && predicate
+        delete tab
+    }
+    t |> run("impure X stays a scan — per-element evaluation preserved") @(t : T?) {
+        var tab <- make_int_table(4)
+        var evals = 0
+        t |> equal(_fold(each_kv(tab)._where(_.key == bump_key(evals)).count()), 1)
+        t |> equal(evals, 4, "side-effectful X must evaluate per element, not once")
+        delete tab
+    }
+}
+
 // Tier-2 over the raw each_kv iterator (no _fold) — the [unsafe_outside_of_for] contract requires the
 // explicit unsafe(...) wrap at a bare chain head; fused chains rewrite the head before inference.
 

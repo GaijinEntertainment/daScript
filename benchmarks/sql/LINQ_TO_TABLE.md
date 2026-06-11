@@ -4,8 +4,26 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 3 committed** (`%linq!` table sources; stage 2 = TableAdapter + m7, 571fe879e;
-stage 1 = `each_kv` builtin, 8751bb9ba).
+Status: **stage 4 committed** (point-lookup folds; stage 3 = `%linq!` table sources, 29d23baf6;
+stage 2 = TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba).
+
+Stage 4 findings:
+- `try_table_point_lookup` (linq_fold_table.das) runs in the dispatcher arm BEFORE pattern dispatch;
+  shapes per plan — where(key==X)+any/count/first/first_or_default(±select), predicate-form
+  any(p)/count(p), keys-lane contains — all emit through `TableAdapter.wrap_invoke` (probe inside
+  the same 1-param const-table invoke as the walks).
+- **Invariance alone is not enough**: X must also be side-effect free (`has_sideeffects`) — the scan
+  evaluates X per element, a probe once; an impure X (e.g. a counter bump) would change observable
+  behavior. Covered by a regression test asserting per-element evaluation is preserved.
+- Table safe-index `tab?[k]` is **unsafe** (31034 — the pointer dangles on rehash); the generated
+  probe wraps it (the invoke never mutates the table). Deref after the null check is plain `*p`.
+- Scan-semantics mirroring: `first` panics "sequence contains no elements"; `first_or_default`
+  binds its default eagerly before the probe (same order as the early-exit lane / linq.das).
+- `collapse_chained_wheres` runs before dispatch, so `where(key==X)|>where(p)` arrives as one
+  `&&` body → correctly declined (compound predicates keep the scan). Conjunct extraction
+  (probe + residual predicate on the probed element) is a named deferred edge below.
+- m7 INTERP (2026-06-11 sweep): `point_lookup` 0.0 ns/elem (O(1) probe) vs `point_lookup_scan`
+  (the same query forced through the walk via a second always-true where) at full scan cost.
 
 Stage 3 findings:
 - The untyped `from c in <src>` now emits the **1-arg `from_in(src)`** for every source (the reader
@@ -141,6 +159,9 @@ End of arc: `skills/linq.md` + linq docs mention the table source.
 
 ## Deferred edges (named, not built)
 
+- **Point-lookup conjunct extraction**: `where(kv.key == X && <residual>)` (incl. the collapsed
+  multi-where form) could probe and evaluate the residual on the probed element only. The matcher
+  currently declines compound predicates; add when a real chain wants it.
 - **Multiple-`from` (cross / SelectMany) over tables**: the unfused `_cross_join` arm passes the
   bare source text so the array×array overload resolves without an `each` unsafe trip; a table
   there has no overload (confusing 30303 cascade). `cross_join` has iterator overloads, so routing

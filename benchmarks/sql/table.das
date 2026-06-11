@@ -388,6 +388,32 @@ def order_take_desc_m7(b : B?) {
     }
 }
 
+// Point-lookup pair: the fused probe (key-equality where + first_or_default → `g_t?[k]`, O(1) total —
+// per-element ns reads ~0) vs the same query forced onto the linear scan via a second always-true
+// `where` (collapses to a compound `&&` predicate, which the probe matcher correctly declines).
+[benchmark]
+def point_lookup_m7(b : B?) {
+    b |> run("point_lookup", N) {
+        let row = _fold(unsafe(each_kv(g_t))._where(_.key == N / 2).first_or_default(default<CarKV>))
+        b |> accept(row)
+        if (row.key == 0) {
+            b->failNow()
+        }
+    }
+}
+
+[benchmark]
+def point_lookup_scan_m7(b : B?) {
+    b |> run("point_lookup_scan", N) {
+        let row = _fold(unsafe(each_kv(g_t))._where(_.key == N / 2)._where(_.value.price >= 0)
+            .first_or_default(default<CarKV>))
+        b |> accept(row)
+        if (row.key == 0) {
+            b->failNow()
+        }
+    }
+}
+
 [benchmark]
 def reverse_take_m7(b : B?) {
     b |> run("reverse_take", N) {

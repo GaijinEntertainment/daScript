@@ -219,9 +219,6 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
         let valT = tabCall.arguments[0]._type.secondType
         if (tabName != "each_kv" || (valT != null && valT.canCopy)) {
             let lane = tabName == "each_kv" ? TableLane.KV : (tabName == "keys" ? TableLane.KEYS : TableLane.VALUES)
-            if (lane != TableLane.VALUES) {
-                drop_redundant_distinct(calls)   // keys are unique by construction; values can repeat
-            }
             var ttopClone = clone_expression(top)
             // keys/each_kv spell their element `-const` (iterator-variance concern); that flag must not leak into emitted var/buffer type spellings (`array<tuple<…> -const>` breaks push_clone unification).
             if (ttopClone._type != null && ttopClone._type.firstType != null) {
@@ -229,9 +226,17 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
             }
             var elemT = clone_type(tabCall._type.firstType)
             elemT.flags.removeConstant = false
-            return run_splice_adapter(calls, ttopClone, ttopClone,
-                new TableAdapter(tabExpr = clone_expression(tabCall.arguments[0]), srcName = qn("tsrc", at),
-                                 elemType = elemT, lane = lane), exprIsIter, at)
+            var tadapter = new TableAdapter(tabExpr = clone_expression(tabCall.arguments[0]), srcName = qn("tsrc", at),
+                                            elemType = elemT, lane = lane)
+            if (!exprIsIter) {
+                // `where(kv.key == X)` + terminator → O(1) key probe instead of the walk
+                var probe = try_table_point_lookup(calls, tadapter, at)
+                if (probe != null) return probe
+            }
+            if (lane != TableLane.VALUES) {
+                drop_redundant_distinct(calls)   // keys are unique by construction; values can repeat
+            }
+            return run_splice_adapter(calls, ttopClone, ttopClone, tadapter, exprIsIter, at)
         }
     }
     top = peel_each(top)
