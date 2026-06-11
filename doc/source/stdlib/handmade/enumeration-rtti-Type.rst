@@ -53,3 +53,4 @@ Table type.
 Block type.
 Tuple type.
 Variant type.
+Fixed size array type (e.g. int[10]); element type in firstType, size in fixedDim.
