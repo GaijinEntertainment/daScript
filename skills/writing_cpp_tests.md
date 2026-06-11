@@ -78,6 +78,8 @@ Big tests are **not in CI yet** (V1) — local-only via `ninja test-big`.
 | `CHECK_THROWS(expr)` / `CHECK_NOTHROW(expr)` | Exception assertions |
 | `MESSAGE("...")` / `INFO("...")` | Log without checking |
 
+**Bit-fields must be wrapped in `bool(...)`** — doctest's expression decomposition binds operands by reference, and C++ forbids binding a reference to a bit-field. `CHECK(t->ref)` on a `TypeDecl` flag compiles on MSVC but fails on clang/gcc ("non-const reference cannot bind to bit-field") — Release CI on Windows won't catch it, every other lane goes red. Write `CHECK(bool(t->ref))` / `CHECK_FALSE(bool(t->constant))`.
+
 ## TEST_CASE / SUBCASE pattern
 
 One `TEST_CASE` per logical scenario. `SUBCASE`s for variations sharing setup. Each SUBCASE re-runs the TEST_CASE body from the top — so per-subcase fresh `Context`/state is automatic.

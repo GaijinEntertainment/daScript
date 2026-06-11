@@ -35,7 +35,7 @@ module style_lint shared private
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for modules X re-exports (transitive-only) — require those directly and drop X (skipped when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 
 require daslib/ast_boost
 require daslib/is_local
@@ -82,6 +82,9 @@ class StyleLintVisitor : AstVisitor {
     analyze_requires : bool = false
     @do_not_delete this_module : Module?
     used_modules : table<string>
+    // Calls inside UNINSTANCED generic bodies stay unresolved at lint time (func==null)
+    // and leave no used_modules trace; their names gate STYLE030 instead.
+    unresolved_call_names : table<string>
 
     def StyleLintVisitor() {
         pass
@@ -254,6 +257,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
         st029_record_func(expr.func)
+        st029_record_unresolved_call(expr)
         st029_record_module_getter(expr)
         check_block_pipe(expr.at, expr.arguments)
         check_style019_clamp(expr)
@@ -277,7 +281,7 @@ class StyleLintVisitor : AstVisitor {
         //! True for the scalar types that have a matching `operator ??` overload in
         //! daslib/json_boost — see lines 85-140 of json_boost.das. Bitfield and enum
         //! `from_JV` overloads exist but have no `??` counterpart, so they stay silent.
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         let bt = t.baseType
         return (bt == Type.tInt    || bt == Type.tUInt
                 || bt == Type.tInt8  || bt == Type.tUInt8
@@ -521,7 +525,7 @@ class StyleLintVisitor : AstVisitor {
 
     def is_bitfield_value_type(t : TypeDecl?) : bool {
         //! True for plain bitfield-typed expressions (not arrays of bitfield).
-        return t != null && t.baseType == Type.tBitfield && empty(t.dim)
+        return t != null && t.baseType == Type.tBitfield
     }
 
     def extract_single_bit_name(expr : Expression? const; bf_type : TypeDecl?) : string {
@@ -890,8 +894,7 @@ class StyleLintVisitor : AstVisitor {
             // host instantiations and compiler-synthesized vars).
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || v._type.baseType != Type.tArray
-                || !empty(v._type.dim)) continue
+                || v._type == null || v._type.baseType != Type.tArray) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 let stmt = blk.list[j]
@@ -941,7 +944,7 @@ class StyleLintVisitor : AstVisitor {
             || length(call.arguments) != 2) return null
         let recv = call.arguments[0]
         if (recv == null || recv._type == null
-            || recv._type.baseType != Type.tArray || !empty(recv._type.dim)) return null
+            || recv._type.baseType != Type.tArray) return null
         return is_pure_chain(recv) ? recv : null
     }
 
@@ -1063,7 +1066,7 @@ class StyleLintVisitor : AstVisitor {
         //! struct-field initializer → pushes are a deliberate append); 0 = unknown
         //! (pointer root, non-MakeStruct init, where-block).
         var st : Structure const? = null
-        if (v._type != null && v._type.baseType == Type.tStructure && empty(v._type.dim)) {
+        if (v._type != null && v._type.baseType == Type.tStructure) {
             st = v._type.structType
         }
         if (st == null) return 0
@@ -1178,10 +1181,10 @@ class StyleLintVisitor : AstVisitor {
 
     def is_struct_or_struct_ptr(t : TypeDecl?) : bool {
         //! Match struct values AND pointers-to-struct, both flat (not array).
-        if (t == null || !empty(t.dim)) return false
+        if (t == null) return false
         let is_struct_val = t.baseType == Type.tStructure
         let is_struct_ptr = (t.baseType == Type.tPointer && t.firstType != null
-                && t.firstType.baseType == Type.tStructure && empty(t.firstType.dim))
+                && t.firstType.baseType == Type.tStructure)
         return is_struct_val || is_struct_ptr
     }
 
@@ -1264,7 +1267,7 @@ class StyleLintVisitor : AstVisitor {
 
     def is_jv_table_type(t : TypeDecl?) : bool {
         //! Matches `table<string; JsonValue?>` (or any pointer-to-JsonValue value type).
-        if (t == null || t.baseType != Type.tTable || !empty(t.dim)
+        if (t == null || t.baseType != Type.tTable
                 || t.firstType == null
                 || t.firstType.baseType != Type.tString) return false
         return is_jv_pointer_type(t.secondType)
@@ -1338,7 +1341,7 @@ class StyleLintVisitor : AstVisitor {
         for (v in elet.variables) {
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || !empty(v._type.dim)) continue
+                || v._type == null) continue
             let isArray = v._type.baseType == Type.tArray
             let isTable = v._type.baseType == Type.tTable
             if ((!isArray && !isTable)
@@ -1496,6 +1499,59 @@ class StyleLintVisitor : AstVisitor {
         else st029_record_mod(fun._module)
     }
 
+    def st029_record_unresolved_call(expr : ExprCall?) : void {
+        // Calls inside generic bodies that never instantiate stay unresolved
+        // (func==null); keep their unqualified names so STYLE030 can match them
+        // against a required module's exports instead of flagging it unused.
+        if (expr.func != null || !st029_expr_in_scope()) return
+        var nm = "{expr.name}"
+        let sep = nm |> rfind("::")   // strip any module qualification, e.g. `_::foo`
+        if (sep >= 0) {
+            nm = nm |> slice(sep + 2)
+        }
+        if (!empty(nm) && !key_exists(unresolved_call_names, nm)) {
+            unresolved_call_names |> insert(nm)
+        }
+    }
+
+    def st030_exports_unresolved_name(mod : Module?) : bool {
+        // True when `mod` — or a module it publicly re-exports (e.g. daslib/rtti
+        // re-exporting the builtin rtti module) — exports a function or generic whose
+        // name matches an unresolved generic-body call; the require is (potentially)
+        // load-bearing for instantiations the lint pass never sees.
+        if (empty(unresolved_call_names)) return false
+        var seen : table<string>
+        return st030_exports_unresolved_rec(mod, seen)
+    }
+
+    def st030_exports_unresolved_rec(mod : Module?; var seen : table<string>) : bool {
+        var found = false
+        for_each_function(mod, "") $(fn) {
+            if (found) return
+            if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        if (found) return true
+        for_each_generic(mod, "") $(fn) {
+            if (found) return
+            if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        if (found) return true
+        module_for_each_dependency(mod) $(dep, is_pub) {
+            if (found || !is_pub || dep == null) return
+            let dn = "{dep.name}"
+            return if (dn == "" || dn == "$" || dn == "builtin" || key_exists(seen, dn))
+            seen |> insert(dn)
+            if (st030_exports_unresolved_rec(dep, seen)) {
+                found = true
+            }
+        }
+        return found
+    }
+
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
         // Type references — st029_record_mod self-gates on expr_in_scope (global
         // scope or this module's code; never a foreign function body).
@@ -1622,7 +1678,8 @@ class StyleLintVisitor : AstVisitor {
             if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
                 || key_exists(used_modules, mname)
                 || st029_module_provides_macro(mod)
-                || st029_module_has_init(mod)) return
+                || st029_module_has_init(mod)
+                || st030_exports_unresolved_name(mod)) return
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
             var via : array<string>

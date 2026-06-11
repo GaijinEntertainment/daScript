@@ -611,10 +611,10 @@ def public print_help(info : CommandInfo; prog_name : string) : void {
 
 def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
     if (t.baseType == Type.typeMacro) {
-        if (length(t.dimExpr) < 2 || t.dimExpr[0] == null || !(t.dimExpr[0] is ExprConstString)
-                || (t.dimExpr[0] as ExprConstString).value != "Option"
-                || t.dimExpr[1] == null || !(t.dimExpr[1] is ExprTypeDecl)) return null
-        return clone_type((t.dimExpr[1] as ExprTypeDecl).typeexpr)
+        if (length(t.typeMacroExpr) < 2 || t.typeMacroExpr[0] == null || !(t.typeMacroExpr[0] is ExprConstString)
+                || (t.typeMacroExpr[0] as ExprConstString).value != "Option"
+                || t.typeMacroExpr[1] == null || !(t.typeMacroExpr[1] is ExprTypeDecl)) return null
+        return clone_type((t.typeMacroExpr[1] as ExprTypeDecl).typeexpr)
     }
     if (t.baseType != Type.tStructure || t.structType == null) return null
     var has_flag = false

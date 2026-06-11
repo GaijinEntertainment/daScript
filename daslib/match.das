@@ -144,9 +144,8 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
         to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] structure", wths.at)
         return false
     }
-    let wdl = length(what.dim)
     let wthsLength = length(wths.structs)
-    let whatDim = wdl > 0 ? what.dim[wdl - 1] : 1
+    let whatDim = what.baseType == Type.tFixedArray ? what.fixedDim : 1
     if (wthsLength != whatDim) {
         to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false
@@ -230,7 +229,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?;
 
 [macro_function]
 def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; access : Expression?; var to : MatchTo) {
-    let wdl = length(what.dim)
+    let isFA = what.baseType == Type.tFixedArray
     var recT : TypeDeclPtr
     // find if there is ..., get its index
     var tagIndex = INT_MAX
@@ -245,12 +244,12 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
     }
     // check lengths
     let wthsLength = length(wths.values)
-    if (wdl != 0) {// check if static array
+    if (isFA) {// check if static array
         if (dynamic) {
             to.errors |> match_error("{describe(what)} is not a dynamic array", wths.at)
             return false
         }
-        let whatDim = what.dim[wdl - 1]
+        let whatDim = what.fixedDim
         if (tagIndex == INT_MAX) {
             if (whatDim != wthsLength) {
                 to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]] array", wths.at)
@@ -262,8 +261,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
                 return false
             }
         }
-        recT = clone_type(what)
-        recT.dim |> pop()
+        recT = clone_type(what.firstType)   // element of the fixed-array chain
         if (!wths.makeType.isAuto && !is_same_type(recT, wths.makeType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
             to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wthsLength}] ... ]] array", wths.at)
             return false
@@ -309,9 +307,8 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] variant", wths.at)
         return false
     }
-    let wdl = length(what.dim)
     let wthsLength = length(wths.variants)
-    let whatDim = wdl > 0 ? what.dim[wdl - 1] : 1
+    let whatDim = what.baseType == Type.tFixedArray ? what.fixedDim : 1
     if (wthsLength != whatDim) {
         to.errors |> match_error("{describe(what)} number of variant elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false

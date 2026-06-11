@@ -1151,26 +1151,26 @@ static const yytype_int16 yyrline[] =
     3042,  3043,  3044,  3045,  3046,  3047,  3048,  3049,  3053,  3064,
     3068,  3075,  3087,  3094,  3100,  3109,  3114,  3117,  3127,  3140,
     3141,  3142,  3143,  3144,  3148,  3152,  3152,  3152,  3166,  3167,
-    3171,  3175,  3182,  3186,  3193,  3194,  3195,  3196,  3197,  3211,
-    3217,  3217,  3217,  3221,  3226,  3233,  3233,  3240,  3244,  3248,
-    3253,  3258,  3263,  3268,  3272,  3276,  3281,  3285,  3289,  3294,
-    3294,  3294,  3300,  3307,  3307,  3307,  3312,  3312,  3312,  3318,
-    3318,  3318,  3323,  3328,  3328,  3328,  3333,  3333,  3333,  3342,
-    3347,  3347,  3347,  3352,  3352,  3352,  3361,  3366,  3366,  3366,
-    3371,  3371,  3371,  3380,  3380,  3380,  3386,  3386,  3386,  3395,
-    3398,  3409,  3425,  3425,  3430,  3435,  3425,  3460,  3460,  3465,
-    3471,  3460,  3496,  3496,  3501,  3506,  3496,  3546,  3547,  3548,
-    3549,  3550,  3554,  3561,  3568,  3574,  3580,  3587,  3594,  3600,
-    3609,  3612,  3618,  3626,  3631,  3638,  3643,  3650,  3655,  3661,
-    3662,  3666,  3667,  3672,  3673,  3677,  3678,  3682,  3683,  3687,
-    3688,  3689,  3693,  3694,  3695,  3699,  3700,  3704,  3710,  3717,
-    3725,  3732,  3740,  3749,  3749,  3749,  3757,  3757,  3757,  3764,
-    3764,  3764,  3775,  3775,  3775,  3786,  3789,  3795,  3809,  3815,
-    3821,  3827,  3827,  3827,  3841,  3846,  3853,  3872,  3877,  3884,
-    3884,  3884,  3894,  3894,  3894,  3908,  3908,  3908,  3922,  3931,
-    3931,  3931,  3951,  3958,  3958,  3958,  3968,  3973,  3980,  3983,
-    3989,  4008,  4017,  4025,  4045,  4070,  4071,  4075,  4076,  4081,
-    4084,  4087,  4090,  4093,  4096
+    3171,  3175,  3182,  3185,  3191,  3192,  3193,  3194,  3195,  3205,
+    3208,  3208,  3208,  3212,  3217,  3224,  3224,  3231,  3235,  3239,
+    3244,  3249,  3254,  3259,  3263,  3267,  3272,  3276,  3280,  3285,
+    3285,  3285,  3291,  3298,  3298,  3298,  3303,  3303,  3303,  3309,
+    3309,  3309,  3314,  3319,  3319,  3319,  3324,  3324,  3324,  3333,
+    3338,  3338,  3338,  3343,  3343,  3343,  3352,  3357,  3357,  3357,
+    3362,  3362,  3362,  3371,  3371,  3371,  3377,  3377,  3377,  3386,
+    3389,  3400,  3416,  3416,  3421,  3426,  3416,  3451,  3451,  3456,
+    3462,  3451,  3487,  3487,  3492,  3497,  3487,  3537,  3538,  3539,
+    3540,  3541,  3545,  3552,  3559,  3565,  3571,  3578,  3585,  3591,
+    3600,  3603,  3609,  3617,  3622,  3629,  3634,  3641,  3646,  3652,
+    3653,  3657,  3658,  3663,  3664,  3668,  3669,  3673,  3674,  3678,
+    3679,  3680,  3684,  3685,  3686,  3690,  3691,  3695,  3701,  3708,
+    3716,  3723,  3731,  3740,  3740,  3740,  3748,  3748,  3748,  3755,
+    3755,  3755,  3766,  3766,  3766,  3777,  3780,  3786,  3800,  3806,
+    3812,  3818,  3818,  3818,  3832,  3837,  3844,  3863,  3868,  3875,
+    3875,  3875,  3885,  3885,  3885,  3899,  3899,  3899,  3913,  3922,
+    3922,  3922,  3942,  3949,  3949,  3949,  3959,  3964,  3971,  3974,
+    3980,  3999,  4011,  4019,  4039,  4064,  4065,  4069,  4070,  4075,
+    4078,  4081,  4084,  4087,  4090
 };
 #endif
 
@@ -10861,7 +10861,7 @@ yyreduce:
         (yyval.pTypeDecl)->isTag = true;
         (yyval.pTypeDecl)->firstType = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->firstType->at = tokAt(scanner, (yylsp[-1]));
-        (yyval.pTypeDecl)->firstType->dimExpr.push_back((yyvsp[-1].pExpression));
+        (yyval.pTypeDecl)->firstType->typeMacroExpr.push_back((yyvsp[-1].pExpression));
     }
     break;
 
@@ -10998,15 +10998,13 @@ yyreduce:
 
   case 772: /* dim_list: '[' expr ']'  */
                              {
-        (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
-        appendDimExpr((yyval.pTypeDecl), (yyvsp[-1].pExpression));
+        (yyval.pTypeDecl) = appendDimExpr(nullptr, (yyvsp[-1].pExpression), tokAt(scanner,(yylsp[-1])));
     }
     break;
 
   case 773: /* dim_list: dim_list '[' expr ']'  */
                                             {
-        (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
-        appendDimExpr((yyval.pTypeDecl), (yyvsp[-1].pExpression));
+        (yyval.pTypeDecl) = appendDimExpr((yyvsp[-3].pTypeDecl), (yyvsp[-1].pExpression), tokAt(scanner,(yylsp[-1])));
     }
     break;
 
@@ -11035,20 +11033,13 @@ yyreduce:
             das_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,(yylsp[-1])),
                 CompilationError::invalid_array_type);
         }
-        (yyvsp[-1].pTypeDecl)->dim.insert((yyvsp[-1].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.end());
-        (yyvsp[-1].pTypeDecl)->dimExpr.insert((yyvsp[-1].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.end());
-        (yyvsp[-1].pTypeDecl)->removeDim = false;
-        (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
-        (yyvsp[0].pTypeDecl)->dimExpr.clear();
+        (yyval.pTypeDecl) = attachDimChain((yyvsp[0].pTypeDecl), (yyvsp[-1].pTypeDecl));
     }
     break;
 
   case 779: /* type_declaration_no_options: type_declaration_no_options '[' ']'  */
                                                       {
-        (yyvsp[-2].pTypeDecl)->dim.push_back(TypeDecl::dimAuto);
-        (yyvsp[-2].pTypeDecl)->dimExpr.push_back(nullptr);
-        (yyvsp[-2].pTypeDecl)->removeDim = false;
-        (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
+        (yyval.pTypeDecl) = appendAutoDim((yyvsp[-2].pTypeDecl), tokAt(scanner,(yylsp[-1])));
     }
     break;
 
@@ -11071,7 +11062,7 @@ yyreduce:
                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeDecl);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-3]),(yylsp[-1]));
-        (yyval.pTypeDecl)->dimExpr.push_back((yyvsp[-1].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.push_back((yyvsp[-1].pExpression));
     }
     break;
 
@@ -11079,8 +11070,8 @@ yyreduce:
                                                                             {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-1]), (yylsp[0]));
-        (yyval.pTypeDecl)->dimExpr = sequenceToList((yyvsp[0].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-1])), *(yyvsp[-1].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = sequenceToList((yyvsp[0].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-1])), *(yyvsp[-1].s)));
         delete (yyvsp[-1].s);
     }
     break;
@@ -11093,8 +11084,8 @@ yyreduce:
                                                                                                                                                              {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-5]), (yylsp[0]));
-        (yyval.pTypeDecl)->dimExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
         delete (yyvsp[-5].s);
     }
     break;
@@ -12283,8 +12274,11 @@ yyreduce:
 
   case 951: /* make_table_decl: "{{" make_table optional_trailing_semicolon_cur_cur  */
                                                                           {
-        auto mkt = new TypeDecl(Type::autoinfer);
-        mkt->dim.push_back(TypeDecl::dimAuto);
+        auto mkt = new TypeDecl(Type::tFixedArray);
+        mkt->fixedDim = TypeDecl::dimAuto;
+        mkt->at = tokAt(scanner,(yylsp[-2]));
+        mkt->firstType = new TypeDecl(Type::autoinfer);
+        mkt->firstType->at = mkt->at;
         ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = mkt;
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-2]));
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-2])),"to_table_move");

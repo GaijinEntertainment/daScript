@@ -113,7 +113,7 @@ def finalize(var db : SqlRunner) {
 
 def sqlite_version() : string {
     //! Returns the linked libsqlite3 library version (e.g. "3.45.0"). No DB connection needed.
-    return string(sqlite3_libversion())
+    return sqlite3_libversion()
 }
 
 def try_open_sqlite(path : string) : Result<SqlRunner, string> {
@@ -1524,7 +1524,7 @@ def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void
     //! ROLLBACK fires on panic / early return via ``finally`` — best effort.
     let was_in_txn = db |> in_transaction()
     db |> exec(txn_begin_sql(was_in_txn, mode))
-    var success = false
+    var success : bool
     {
         invoke(blk)
         success = true
@@ -1554,7 +1554,7 @@ def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>
     let was_in_txn = db |> in_transaction()
     let begin_err = db |> try_exec(txn_begin_sql(was_in_txn, mode))
     if (begin_err |> is_some) return begin_err
-    var success = false
+    var success : bool
     {
         invoke(blk)
         success = true
@@ -1703,7 +1703,7 @@ def optimize(db : SqlRunner) : void {
 
 def private try_check_impl(db : SqlRunner; sql : string) : Result<array<string>, string> {
     return <- db |> try_run_select(sql,
-        $(var stmt : sqlite3_stmt?) {},
+        $(var _stmt : sqlite3_stmt?) {},
         $(stmt : sqlite3_stmt?) {
             return read_via_adapter(stmt, 0, type<string>)
         })
@@ -2072,7 +2072,7 @@ def private resolve_schema_from_path(p : string) : string {
 def is_option_field_type(td : TypeDeclPtr) : bool {
     if (td == null) return false
     // Pre-instantiation form: typeMacro `$Option<T>` — what [sql_table] sees during structure_macro apply().
-    if (td.baseType == Type.typeMacro && !empty(td.dimExpr) && (td.dimExpr[0] is ExprConstString)) return (td.dimExpr[0] as ExprConstString).value == "Option"
+    if (td.baseType == Type.typeMacro && !empty(td.typeMacroExpr) && (td.typeMacroExpr[0] is ExprConstString)) return (td.typeMacroExpr[0] as ExprConstString).value == "Option"
     // Post-instantiation form: structural named tuple ``tuple<_has_value:bool; _value:T>``.
     // Option is built by daslib/option's typemacro_function as a structural tuple — no
     // module home, no Structure clone. Match the canonical shape.
@@ -2085,14 +2085,14 @@ def is_option_field_type(td : TypeDeclPtr) : bool {
 }
 
 def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
-    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], the
+    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in typeMacroExpr[1], the
     // structural tuple form carries T in argTypes[1] (the `_value` slot).
     if (td == null) return td
     if (td.baseType == Type.typeMacro) {
-        if (length(td.dimExpr) < 2 || td.dimExpr[0] == null || !(td.dimExpr[0] is ExprConstString)
-            || (td.dimExpr[0] as ExprConstString).value != "Option"
-            || td.dimExpr[1] == null || !(td.dimExpr[1] is ExprTypeDecl)) return td
-        return clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
+        if (length(td.typeMacroExpr) < 2 || td.typeMacroExpr[0] == null || !(td.typeMacroExpr[0] is ExprConstString)
+            || (td.typeMacroExpr[0] as ExprConstString).value != "Option"
+            || td.typeMacroExpr[1] == null || !(td.typeMacroExpr[1] is ExprTypeDecl)) return td
+        return clone_type((td.typeMacroExpr[1] as ExprTypeDecl).typeexpr)
     }
     // Post-instantiation form: structural named tuple ``tuple<_has_value:bool; _value:T>``.
     if (td.baseType == Type.tTuple
@@ -2228,7 +2228,7 @@ class SqlIndexMacro : AstStructureAnnotation {
                     has_field = true
                     let ca = find_arg(field.annotation, "sql_column")
                     if (ca is tString) {
-                        resolved = string(ca as tString)
+                        resolved = ca as tString
                     }
                 }
             }
@@ -2308,7 +2308,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
             var pk_col = string(pf.name)
             let pk_anno = find_arg(pf.annotation, "sql_column")
             if (pk_anno is tString) {
-                pk_col = string(pk_anno as tString)
+                pk_col = pk_anno as tString
             }
             return (tab_name = tab, pk_col = pk_col, found = true)
         }
@@ -2326,7 +2326,7 @@ class SqlTableMacro : AstStructureAnnotation {
         var schema_assert_exprs : array<ExpressionPtr>
         let schema_from_arg = find_arg(args, "schema_from")
         if (schema_from_arg is tString) {
-            let raw_path = string(schema_from_arg as tString)
+            let raw_path = schema_from_arg as tString
             if (empty(raw_path)) {
                 errors := "[sql_table]: schema_from=\"\" is invalid — provide a non-empty path to a SQLite database file."
                 return false
@@ -2365,7 +2365,7 @@ class SqlTableMacro : AstStructureAnnotation {
             var col_name = fname
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
-                let cv = string(col_anno as tString)
+                let cv = col_anno as tString
                 if (empty(cv)) {
                     errors := "[sql_table]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
                     return false
@@ -3411,7 +3411,7 @@ class private SqlViewMacro : AstStructureAnnotation {
             var col_name = fname
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
-                let cv = string(col_anno as tString)
+                let cv = col_anno as tString
                 if (empty(cv)) {
                     errors := "[sql_view]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
                     return false
@@ -3709,7 +3709,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
                     errors := "[sql_fts5]: field '{fname}' has both @sql_fts_rank and @sql_column — rank is hardcoded to FTS5's hidden `rank` column. Drop the @sql_column rename."
                     return false
                 }
-                let cv = string(col_anno as tString)
+                let cv = col_anno as tString
                 if (empty(cv)) {
                     errors := "[sql_fts5]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
                     return false
@@ -3961,7 +3961,7 @@ enum SqlFnTag {
 
 [macro_function]
 def private sql_fn_tag_for_type(td : TypeDeclPtr) : tuple<tag : uint8; ok : bool> {
-    if (td == null || !empty(td.dim)) return (tag = uint8(0), ok = false)
+    if (td == null || td.baseType == Type.tFixedArray) return (tag = uint8(0), ok = false)
     if (td.baseType == Type.tInt) return (tag = uint8(SqlFnTag.Int), ok = true)
     if (td.baseType == Type.tInt64) return (tag = uint8(SqlFnTag.Int64), ok = true)
     if (td.baseType == Type.tFloat) return (tag = uint8(SqlFnTag.Float), ok = true)
@@ -4010,13 +4010,12 @@ class private RegisterFunctionMacro : AstCallMacro {
                 "register_function: return type '{describe(fnExpr._type.firstType)}' is unsupported — supported: int, int64, float, double, bool, string")
             return null
         }
-        var dbExpr   = clone_expression(call.arguments[0])
-        var nameExpr = clone_expression(call.arguments[1])
-        var fnClone  = clone_expression(fnExpr)
+        var dbExpr   = call.arguments[0]
+        var nameExpr = call.arguments[1]
         // Optional positional flags. Default both to false.
         var detExpr : ExpressionPtr = nCallArgs >= 4 ? clone_expression(call.arguments[3]) : qmacro(false)
         var donExpr : ExpressionPtr = nCallArgs >= 5 ? clone_expression(call.arguments[4]) : qmacro(false)
-        let nArgsLit = int(nArgs)
+        let nArgsLit = nArgs
         let tag0 = tags[0]
         let tag1 = tags[1]
         let tag2 = tags[2]
@@ -4024,7 +4023,7 @@ class private RegisterFunctionMacro : AstCallMacro {
         let retTag = retR.tag
         // Emit: helper checks rc and panics on failure with the libsqlite3 errmsg.
         var res = qmacro(_::_register_function_check_rc(
-            $e(dbExpr), $e(nameExpr), $e(fnClone), $v(nArgsLit),
+            $e(dbExpr), $e(nameExpr), $e(fnExpr), $v(nArgsLit),
             $v(tag0), $v(tag1), $v(tag2), $v(tag3),
             $v(retTag), $e(detExpr), $e(donExpr)))
         res.force_at(call.at)
@@ -4180,7 +4179,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
             return false
         }
         var reg <- setup_call_list("register`sqlite`functions", func.at, true/*isInit*/, true/*isPrivate*/)
-        let nArgsLit = int(nArgs)
+        let nArgsLit = nArgs
         let tag0 = tags[0]
         let tag1 = tags[1]
         let tag2 = tags[2]
@@ -4249,7 +4248,7 @@ def private resolve_field_index(var st : StructurePtr; field_name : string) : in
 def private field_sql_name_at(var st : StructurePtr; idx : int) : string {
     // @sql_column("X") rename → X; otherwise daslang field name. idx must be in range.
     let ca = find_arg(st.fields[idx].annotation, "sql_column")
-    if (ca is tString) return string(ca as tString)
+    if (ca is tString) return ca as tString
     return string(st.fields[idx].name)
 }
 
@@ -4347,7 +4346,7 @@ class private AddColumnMacro : AstCallMacro {
         let null_clause = is_optional ? "" : " NOT NULL"
         let prefix = "ALTER TABLE \"{table_name}\" ADD COLUMN \"{col_name}\" "
         let suffix = "{null_clause}{default_clause}"
-        var dbExpr = clone_expression(call.arguments[0])
+        var dbExpr = call.arguments[0]
         var res : ExpressionPtr
         if (is_json) {
             let full = "{prefix}TEXT{suffix}"
@@ -4458,8 +4457,7 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
         }
         w |> write(")")
     }
-    var dbExpr = clone_expression(call.arguments[0])
-    var res = qmacro(_::exec($e(dbExpr), $v(ddl)))
+    var res = qmacro(_::exec($e(call.arguments[0]), $v(ddl)))
     res.force_at(call.at)
     return res
 }

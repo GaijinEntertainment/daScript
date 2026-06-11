@@ -30,7 +30,7 @@ namespace das {
         rangeError = false;
         if (!expr) return nullptr;
         if (!targetType) return nullptr;
-        if (targetType->dim.size()) return nullptr;
+        if (targetType->baseType==Type::tFixedArray) return nullptr;
         // Source: ExprConstInt/ExprConstUInt directly, OR ExprOp1("-", such const)
         // (when const-folding is disabled, the parser leaves -N as ExprOp1).
         Expression *constExpr = expr;
@@ -997,7 +997,7 @@ namespace das {
                 } else {
                     return Visitor::visit(expr);
                 }
-            } else if (cloneType->dim.size()) {
+            } else if (cloneType->baseType==Type::tFixedArray) {
                 reportAstChanged();
                 auto cloneFn = new ExprCall(expr->at, "clone_dim");
                 cloneFn->arguments.push_back(expr->left->clone());

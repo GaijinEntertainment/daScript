@@ -230,36 +230,6 @@ def push(var Arr : array<auto(numT)>; varr : numT[] -#) {
 }
 
 [unused_argument(Arr, value)]
-def push(var Arr : array<auto(numT)[]>; varr : numT[] -# ==const) {
-    static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo can_clone_from_const(varr)) {
-                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = varr
-            } else {
-                concept_assert(false, "can't push array of different size")
-            }
-        } else {
-            concept_assert(false, "can't push array of different size")
-        }
-    } else {
-        concept_assert(false, "can't push value, which can't be copied")
-    }
-}
-
-[unused_argument(Arr, value)]
-def push(var Arr : array<auto(numT)[]>; var varr : numT[] -# ==const) {
-    static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = varr
-        } else {
-            concept_assert(false, "can't push array of different size")
-        }
-    } else {
-        concept_assert(false, "can't push value, which can't be copied")
-    }
-}
-
-[unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int | int64) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo is_int(at)) {
@@ -295,21 +265,6 @@ def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
             unsafe {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- t
             }
-        }
-    } else {
-        concept_assert(false, "can't emplace value, which can't be moved")
-    }
-}
-
-[unused_argument(Arr, value)]
-def emplace(var Arr : array<auto(numT)[]>; var value : numT[] -#) {
-    static_if (typeinfo can_move(value)) {
-        static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(value)) {
-            unsafe {
-                Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
-            }
-        } else {
-            concept_assert(false, "can't emplace array of different size")
         }
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
@@ -393,38 +348,6 @@ def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
         }
     } else {
         concept_assert(false, "can't push_clone value, which can't be cloned")
-    }
-}
-
-[unused_argument(Arr, value)]
-def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
-    static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo can_clone_from_const(varr)) {
-                for (t in varr) {
-                    Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := t
-                }
-            } else {
-                concept_assert(false, "can't push-clone value, which can't be cloned from const")
-            }
-        } else {
-            concept_assert(false, "can't push_clone array of different size")
-        }
-    } else {
-        concept_assert(false, "can't push value, which can't be cloned")
-    }
-}
-
-[unused_argument(Arr, value)]
-def push_clone(var Arr : array<auto(numT)[]>; var varr : numT[]) {
-    static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := varr
-        } else {
-            concept_assert(false, "can't push_clone array of different size")
-        }
-    } else {
-        concept_assert(false, "can't push value, which can't be cloned")
     }
 }
 
@@ -755,56 +678,6 @@ def get(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : bl
     }
 }
 
-// same get with []
-
-def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]#&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock_mutable(Tab)
-        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val)))
-        __builtin_table_unlock_mutable(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock_mutable(Tab)
-        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val)))
-        __builtin_table_unlock_mutable(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(var p : valT[typeinfo dim_table_value(Tab)]#&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val)))
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(var p : valT[typeinfo dim_table_value(Tab)]&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        invoke(blk, *(unsafe(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val)))
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
 [unused_argument(Tab, at)]
 def get(Tab : table<auto(keyT)>; at : keyT | #; blk : block<(var p : void?) : void>) {
     concept_assert(false, "get(table<keyT>, ...) is not supported; use 'key_exists' instead")
@@ -825,19 +698,6 @@ def get_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #)
 
 [unused_argument(Tab, at)]
 def get_value(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : valT {
-    static_if (typeinfo is_void(type<valT>)) {
-        concept_assert(false, "can't get value, which is void")
-        return type<valT>
-    } static_elif (typeinfo can_copy(type<valT>)) {
-        return unsafe(Tab[at])
-    } else {
-        concept_assert(false, "can't get value, which can't be copied")
-        return type<valT>
-    }
-}
-
-[unused_argument(Tab, at)]
-def get_value(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #) : valT[typeinfo dim_table_value(Tab)] {
     static_if (typeinfo is_void(type<valT>)) {
         concept_assert(false, "can't get value, which is void")
         return type<valT>
@@ -892,28 +752,6 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : v
 }
 
 [unused_argument(Tab, at, val)]
-def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] ==const | #) {
-    static_if (typeinfo can_clone(val)) {
-        unsafe(Tab[at]) := val
-    } else {
-        concept_assert(false, "can't insert value, which can't be cloned")
-    }
-}
-
-[unused_argument(Tab, at, val)]
-def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[] ==const | #) {
-    static_if (typeinfo can_clone(val)) {
-        static_if (typeinfo can_clone_from_const(val)) {
-            unsafe(Tab[at]) := val
-        } else {
-            concept_assert(false, "can't insert value, which can't be cloned from const")
-        }
-    } else {
-        concept_assert(false, "can't insert value, which can't be cloned")
-    }
-}
-
-[unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         unsafe(Tab[at]) = val
@@ -924,28 +762,6 @@ def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : val
 
 [unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
-    static_if (typeinfo can_copy(type<valT>)) {
-        static_if (typeinfo can_clone_from_const(val)) {
-            unsafe(Tab[at]) = val
-        } else {
-            concept_assert(false, "can't insert value, which can't be cloned from const")
-        }
-    } else {
-        concept_assert(false, "can't insert value, which can't be copied")
-    }
-}
-
-[unused_argument(Tab, at, val)]
-def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] ==const | #) {
-    static_if (typeinfo can_copy(type<valT>)) {
-        unsafe(Tab[at]) = val
-    } else {
-        concept_assert(false, "can't insert value, which can't be copied")
-    }
-}
-
-[unused_argument(Tab, at, val)]
-def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[] ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         static_if (typeinfo can_clone_from_const(val)) {
             unsafe(Tab[at]) = val
@@ -970,15 +786,6 @@ def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : va
 def emplace(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #; var val : smart_ptr<valT>&) {
     static_if (typeinfo can_move(val)) {
         Tab[at] <- val
-    } else {
-        concept_assert(false, "can't emplace value, which can't be moved")
-    }
-}
-
-[unused_argument(Tab, at, val)]
-def emplace(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] -#&) {
-    static_if (typeinfo can_move(val)) {
-        unsafe(Tab[at]) <- val
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
     }
@@ -1138,22 +945,6 @@ def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
-def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
-    unsafe {   // nolint:STYLE025 var-decl of TT[N] -# is sometimes unsafe (is_unsafe_when_uninitialized types)
-        var clone_dest : TT[typeinfo dim(clone_src)] -#
-        clone_dest := clone_src
-        return <- clone_dest
-    }
-}
-
-def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
-    unsafe {   // nolint:STYLE025 var-decl of TT[N] -# is sometimes unsafe (is_unsafe_when_uninitialized types)
-        var clone_dest : TT[typeinfo dim(clone_src)] -#
-        clone_dest := clone_src
-        return <- clone_dest
-    }
-}
-
 def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var clone_dest : TT -#
@@ -1261,30 +1052,6 @@ def clone(var a : table<string; auto(VT)>; var b : table<string; VT> ==const | #
     }
 }
 
-
-def clone(var a : table<auto(KT); auto(VT)[]>; b : table<KT; VT[]> | #) {
-    static_if (typeinfo dim_table_value(a) != typeinfo dim_table_value(b)) {
-        concept_assert(false, "table clone: source and destination tables must have the same value type")
-    } else {
-        clear(a)
-        for (k, v in keys(b), values(b)) {
-            unsafe(a[k]) := v
-        }
-    }
-}
-
-def clone(var a : table<string; auto(VT)[]>; b : table<string; VT[]> | #) {
-    static_if (typeinfo dim_table_value(a) != typeinfo dim_table_value(b)) {
-        concept_assert(false, "table clone: source and destination tables must have the same value type")
-    } else {
-        clear(a)
-        for (k, v in keys(b), values(b)) {
-            let kk := k
-            unsafe(a[kk]) := v
-        }
-    }
-}
-
 [expect_any_vector(args)]
 def clone(var args; var nargs : array<string>) {
     let tot = _::length(nargs)
@@ -1378,20 +1145,6 @@ def values(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<valT&> 
     return <- it
 }
 
-[unsafe_outside_of_for, nodiscard]
-def values(a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim_table_value(a)]& const> {
-    var it : iterator<valT[typeinfo dim_table_value(a)]& const>
-    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>))
-    return <- it
-}
-
-[unsafe_outside_of_for, nodiscard]
-def values(var a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim_table_value(a)]&> {
-    var it : iterator<valT[typeinfo dim_table_value(a)]&>
-    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>))
-    return <- it
-}
-
 def each_kv(a : table<auto(keyT)> ==const | #) {
     concept_assert(false, "can't each_kv a table<...; void> — iterate keys() instead")
 }
@@ -1446,13 +1199,6 @@ def get_key(a : table<auto(keyT)> ==const; value) {
 def get_key(a : table<auto(keyT); auto(valT)>; value : valT&) : keyT -const {
     var result : keyT -const
     __builtin_table_get_key(unsafe(addr(result)), a, unsafe(addr(value)), typeinfo sizeof(type<valT>), typeinfo sizeof(type<keyT>))
-    return result
-}
-
-[nodiscard]
-def get_key(a : table<auto(keyT); auto(valT)[]>; value : valT[typeinfo dim_table_value(a)]) : keyT -const {
-    var result : keyT -const
-    __builtin_table_get_key(unsafe(addr(result)), a, unsafe(addr(value)), typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>), typeinfo sizeof(type<keyT>))
     return result
 }
 

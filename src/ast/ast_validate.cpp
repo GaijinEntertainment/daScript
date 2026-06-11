@@ -95,9 +95,10 @@ namespace das {
             for ( auto & argType : td->argTypes ) {
                 trackTypeDeclTree(argType, "argTypes[]");
             }
-            for ( auto de : td->dimExpr ) {
+            for ( auto de : td->typeMacroExpr ) {
                 trackExpression(de);
             }
+            trackExpression(td->fixedDimExpr);
             currentField = savedField;
         }
         void trackExpression ( Expression * expr ) {
@@ -153,14 +154,16 @@ namespace das {
             if ( !trackNode(td, td->at) ) {
                 reportDuplicateTypeDecl(td);
             }
-            // dimExpr: standard visitor only visits dimExpr when dim==dimConst or baseType is typeDecl/typeMacro.
-            // After inference resolves dimensions, resolved dimExpr stays on gc_root but is skipped.
             if ( td->baseType != Type::typeDecl && td->baseType != Type::typeMacro ) {
-                for ( size_t i=0, is=td->dimExpr.size(); i!=is; ++i ) {
-                    if ( td->dimExpr[i] && (i >= td->dim.size() || td->dim[i] != TypeDecl::dimConst) ) {
-                        trackExpression(td->dimExpr[i]);
-                    }
+                // tag payload sits in typeMacroExpr of an autoinfer node — never visited by
+                // the standard visitor (it only walks typeMacroExpr on typeDecl/typeMacro)
+                for ( auto de : td->typeMacroExpr ) {
+                    trackExpression(de);
                 }
+            }
+            // resolved tFixedArray keeps fixedDimExpr on gc_root but the visitor skips it
+            if ( td->baseType == Type::tFixedArray && td->fixedDim != TypeDecl::dimConst ) {
+                trackExpression(td->fixedDimExpr);
             }
         }
     // Expression — standard visitor path

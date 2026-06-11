@@ -13,7 +13,7 @@ namespace das {
             return ev->local || !(ev->argument || ev->block);
         } else if ( expr->rtti_isAt() ) {
             auto ea = static_cast<ExprAt*>(expr);
-            if ( ea->subexpr && ea->subexpr->type && ea->subexpr->type->dim.size() ) {
+            if ( ea->subexpr && ea->subexpr->type && ea->subexpr->type->baseType==Type::tFixedArray ) {
                 return isLocalOrGlobal(ea->subexpr);
             }
         } else if ( expr->rtti_isField() ) {
@@ -1401,9 +1401,9 @@ namespace das {
     }
 
     string TypeDecl::typeMacroName() const {
-        if ( dimExpr.size()<1 ) return "";
-        if ( dimExpr[0]->rtti_isStringConstant() ) {
-            return ((ExprConstString *)dimExpr[0])->text;
+        if ( typeMacroExpr.size()<1 ) return "";
+        if ( typeMacroExpr[0]->rtti_isStringConstant() ) {
+            return ((ExprConstString *)typeMacroExpr[0])->text;
         } else {
             return "";
         }

@@ -1155,24 +1155,24 @@ static const yytype_int16 yyrline[] =
     3112,  3113,  3114,  3115,  3119,  3130,  3134,  3141,  3153,  3160,
     3166,  3175,  3180,  3190,  3200,  3210,  3223,  3224,  3225,  3226,
     3227,  3231,  3235,  3235,  3235,  3249,  3250,  3254,  3258,  3265,
-    3269,  3273,  3277,  3284,  3287,  3305,  3306,  3310,  3311,  3312,
-    3313,  3314,  3314,  3314,  3318,  3323,  3330,  3337,  3337,  3344,
-    3344,  3351,  3355,  3359,  3364,  3369,  3374,  3379,  3383,  3387,
-    3392,  3396,  3400,  3405,  3405,  3405,  3411,  3418,  3418,  3418,
-    3423,  3423,  3423,  3429,  3429,  3429,  3434,  3439,  3439,  3439,
-    3444,  3444,  3444,  3453,  3458,  3458,  3458,  3463,  3463,  3463,
-    3472,  3477,  3477,  3477,  3482,  3482,  3482,  3491,  3491,  3491,
-    3497,  3497,  3497,  3506,  3509,  3520,  3536,  3538,  3543,  3548,
-    3536,  3574,  3576,  3581,  3587,  3574,  3613,  3615,  3620,  3625,
-    3613,  3666,  3667,  3668,  3669,  3670,  3671,  3672,  3676,  3677,
-    3678,  3679,  3680,  3684,  3691,  3698,  3704,  3710,  3717,  3724,
-    3730,  3739,  3742,  3748,  3756,  3761,  3768,  3773,  3779,  3780,
-    3784,  3785,  3789,  3789,  3789,  3797,  3797,  3797,  3804,  3804,
-    3804,  3815,  3815,  3815,  3822,  3822,  3822,  3833,  3839,  3839,
-    3839,  3853,  3872,  3872,  3872,  3882,  3882,  3882,  3896,  3896,
-    3896,  3910,  3919,  3919,  3919,  3939,  3946,  3946,  3946,  3956,
-    3959,  3970,  3976,  3999,  4007,  4027,  4052,  4053,  4057,  4058,
-    4063,  4066,  4076
+    3268,  3271,  3274,  3280,  3283,  3297,  3298,  3302,  3303,  3304,
+    3305,  3306,  3306,  3306,  3310,  3315,  3322,  3329,  3329,  3336,
+    3336,  3343,  3347,  3351,  3356,  3361,  3366,  3371,  3375,  3379,
+    3384,  3388,  3392,  3397,  3397,  3397,  3403,  3410,  3410,  3410,
+    3415,  3415,  3415,  3421,  3421,  3421,  3426,  3431,  3431,  3431,
+    3436,  3436,  3436,  3445,  3450,  3450,  3450,  3455,  3455,  3455,
+    3464,  3469,  3469,  3469,  3474,  3474,  3474,  3483,  3483,  3483,
+    3489,  3489,  3489,  3498,  3501,  3512,  3528,  3530,  3535,  3540,
+    3528,  3566,  3568,  3573,  3579,  3566,  3605,  3607,  3612,  3617,
+    3605,  3658,  3659,  3660,  3661,  3662,  3663,  3664,  3668,  3669,
+    3670,  3671,  3672,  3676,  3683,  3690,  3696,  3702,  3709,  3716,
+    3722,  3731,  3734,  3740,  3748,  3753,  3760,  3765,  3771,  3772,
+    3776,  3777,  3781,  3781,  3781,  3789,  3789,  3789,  3796,  3796,
+    3796,  3807,  3807,  3807,  3814,  3814,  3814,  3825,  3831,  3831,
+    3831,  3845,  3864,  3864,  3864,  3874,  3874,  3874,  3888,  3888,
+    3888,  3902,  3911,  3911,  3911,  3931,  3938,  3938,  3938,  3948,
+    3951,  3962,  3968,  3991,  3999,  4019,  4044,  4045,  4049,  4050,
+    4055,  4058,  4068
 };
 #endif
 
@@ -9747,7 +9747,7 @@ yyreduce:
         (yyval.pTypeDecl)->isTag = true;
         (yyval.pTypeDecl)->firstType = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->firstType->at = tokAt(scanner, (yylsp[-1]));
-        (yyval.pTypeDecl)->firstType->dimExpr.push_back((yyvsp[-1].pExpression));
+        (yyval.pTypeDecl)->firstType->typeMacroExpr.push_back((yyvsp[-1].pExpression));
     }
     break;
 
@@ -9904,29 +9904,25 @@ yyreduce:
 
   case 779: /* dim_list: '[' expr ']'  */
                              {
-        (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
-        appendDimExpr((yyval.pTypeDecl), (yyvsp[-1].pExpression));
+        (yyval.pTypeDecl) = appendDimExpr(nullptr, (yyvsp[-1].pExpression), tokAt(scanner,(yylsp[-1])));
     }
     break;
 
   case 780: /* dim_list: '[' ']'  */
                 {
-        (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
-        appendDimExpr((yyval.pTypeDecl), nullptr);
+        (yyval.pTypeDecl) = appendDimExpr(nullptr, nullptr, tokAt(scanner,(yylsp[-1])));
     }
     break;
 
   case 781: /* dim_list: dim_list '[' expr ']'  */
                                             {
-        (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
-        appendDimExpr((yyval.pTypeDecl), (yyvsp[-1].pExpression));
+        (yyval.pTypeDecl) = appendDimExpr((yyvsp[-3].pTypeDecl), (yyvsp[-1].pExpression), tokAt(scanner,(yylsp[-1])));
     }
     break;
 
   case 782: /* dim_list: dim_list '[' ']'  */
                               {
-        (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
-        appendDimExpr((yyval.pTypeDecl), nullptr);
+        (yyval.pTypeDecl) = appendDimExpr((yyvsp[-2].pTypeDecl), nullptr, tokAt(scanner,(yylsp[-1])));
     }
     break;
 
@@ -9945,11 +9941,7 @@ yyreduce:
             das2_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,(yylsp[-1])),
                 CompilationError::invalid_array_type);
         }
-        (yyvsp[-1].pTypeDecl)->dim.insert((yyvsp[-1].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.end());
-        (yyvsp[-1].pTypeDecl)->dimExpr.insert((yyvsp[-1].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.end());
-        (yyvsp[-1].pTypeDecl)->removeDim = false;
-        (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
-        (yyvsp[0].pTypeDecl)->dimExpr.clear();
+        (yyval.pTypeDecl) = attachDimChain((yyvsp[0].pTypeDecl), (yyvsp[-1].pTypeDecl));
     }
     break;
 
@@ -9996,7 +9988,7 @@ yyreduce:
                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeDecl);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-3]),(yylsp[-1]));
-        (yyval.pTypeDecl)->dimExpr.push_back((yyvsp[-1].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.push_back((yyvsp[-1].pExpression));
     }
     break;
 
@@ -10004,8 +9996,8 @@ yyreduce:
                                                                       {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-3]), (yylsp[-1]));
-        (yyval.pTypeDecl)->dimExpr = sequenceToList((yyvsp[-1].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-3])), *(yyvsp[-3].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = sequenceToList((yyvsp[-1].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-3])), *(yyvsp[-3].s)));
         delete (yyvsp[-3].s);
     }
     break;
@@ -10014,8 +10006,8 @@ yyreduce:
                                                                             {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-1]), (yylsp[0]));
-        (yyval.pTypeDecl)->dimExpr = sequenceToList((yyvsp[0].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-1])), *(yyvsp[-1].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = sequenceToList((yyvsp[0].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-1])), *(yyvsp[-1].s)));
         delete (yyvsp[-1].s);
     }
     break;
@@ -10028,8 +10020,8 @@ yyreduce:
                                                                                                                                                          {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-5]), (yylsp[0]));
-        (yyval.pTypeDecl)->dimExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
         delete (yyvsp[-5].s);
     }
     break;
@@ -10042,8 +10034,8 @@ yyreduce:
                                                                                                                                                              {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro);
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-5]), (yylsp[0]));
-        (yyval.pTypeDecl)->dimExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
-        (yyval.pTypeDecl)->dimExpr.insert((yyval.pTypeDecl)->dimExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
+        (yyval.pTypeDecl)->typeMacroExpr = typesAndSequenceToList((yyvsp[-2].pTypeDeclList),(yyvsp[0].pExpression));
+        (yyval.pTypeDecl)->typeMacroExpr.insert((yyval.pTypeDecl)->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,(yylsp[-5])), *(yyvsp[-5].s)));
         delete (yyvsp[-5].s);
     }
     break;

@@ -75,6 +75,7 @@ namespace das {
         __forceinline bool isSimpleType () const;
         __forceinline bool isSimpleType ( Type typ ) const;
         __forceinline bool isArray() const;
+        __forceinline bool isFixedArray() const;
         __forceinline bool isGoodIteratorType() const;
         __forceinline bool isGoodArrayType() const;
         __forceinline bool isGoodTableType() const;
@@ -224,7 +225,7 @@ namespace das {
         static void applyRefToRef ( const TypeDeclPtr & TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
-        TypeDecl * findAlias ( const string & name, bool allowAuto = false );
+        TypeDecl * findAlias ( const string & name, bool allowAuto = false, bool * constUnderDim = nullptr );
         bool computeAliasCache();     // eager full walk, populates aliasCacheValid/aliasCacheHasAlias on every visited node; returns true if subtree contains any alias
         int findArgumentIndex(const string & name) const;
         int tupleFieldIndex( const string & name ) const;
@@ -256,8 +257,13 @@ namespace das {
         TypeDeclPtr             secondType = nullptr;     // map.second
         vector<TypeDeclPtr>     argTypes;       // block arguments
         vector<string>          argNames;
-        vector<int32_t>         dim;
-        vector<ExpressionPtr>   dimExpr;
+        // tFixedArray rework (FIXED_ARRAY_REWORK.md): fixedDim/fixedDimExpr are meaningful
+        // only on baseType==tFixedArray nodes (one size per node, element in firstType,
+        // dimAuto/dimConst sentinels apply). typeMacroExpr carries the typeMacro/typeDecl/tag
+        // payload (dimExpr's old duty).
+        int32_t                 fixedDim = 0;
+        ExpressionPtr           fixedDimExpr = nullptr;
+        vector<ExpressionPtr>   typeMacroExpr;
         union {
             struct {
                 bool    ref : 1 ;
@@ -618,12 +624,22 @@ namespace das {
     template <typename TT, int size>
     struct TDim;
 
+    // FIXED_ARRAY_REWORK.md, 1c: wrap an element type in a tFixedArray node, hoisting the
+    // canonical qualifiers — ref/const/temporary live on the outermost FA node only
+    inline TypeDeclPtr makeFixedArrayTypeDecl ( int32_t size, TypeDeclPtr element ) {
+        auto fa = new TypeDecl(Type::tFixedArray);
+        fa->fixedDim = size;
+        fa->firstType = element;
+        fa->ref = element->ref;             element->ref = false;
+        fa->constant = element->constant;   element->constant = false;
+        fa->temporary = element->temporary; element->temporary = false;
+        return fa;
+    }
+
     template <typename TT, int size>
     struct typeFactory<TDim<TT,size>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT>::make(lib);
-            t->dim.push_back(size);
-            return t;
+            return makeFixedArrayTypeDecl(size, typeFactory<TT>::make(lib));
         }
     };
 
@@ -656,8 +672,9 @@ namespace das {
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT>::make(lib);
-            t->dim.push_back(dim);
+            // natural recursion maps C int[3][4] to FA(3, FA(4, int)) — outermost first
+            // (the old dim-vector push produced the inner-first order, a latent bug)
+            auto t = makeFixedArrayTypeDecl(dim, typeFactory<TT>::make(lib));
             t->ref = false;
             t->isNativeDim = true;
             return t;
@@ -783,12 +800,12 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isRange() const {
-        return (baseType==Type::tRange || baseType==Type::tURange ||
-            baseType==Type::tRange64 || baseType==Type::tURange64) && dim.size()==0;
+        return baseType==Type::tRange || baseType==Type::tURange ||
+            baseType==Type::tRange64 || baseType==Type::tURange64;
     }
 
     __forceinline bool TypeDecl::isString() const {
-        return (baseType==Type::tString) && dim.size()==0;
+        return baseType==Type::tString;
     }
 
     __forceinline bool TypeDecl::isSimpleType(Type typ) const {
@@ -796,7 +813,11 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isArray() const {
-        return (bool) dim.size();
+        return baseType==Type::tFixedArray;
+    }
+
+    __forceinline bool TypeDecl::isFixedArray() const {
+        return baseType==Type::tFixedArray;
     }
 
     __forceinline bool TypeDecl::isRef() const {
@@ -808,23 +829,23 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isHandle() const {
-        return (baseType==Type::tHandle) && (dim.size()==0);
+        return baseType==Type::tHandle;
     }
 
     __forceinline bool TypeDecl::isStructure() const {
-        return (baseType==Type::tStructure) && (dim.size()==0);
+        return baseType==Type::tStructure;
     }
 
     __forceinline bool TypeDecl::isTuple() const {
-        return (baseType==Type::tTuple) && (dim.size()==0);
+        return baseType==Type::tTuple;
     }
 
     __forceinline bool TypeDecl::isFunction() const {
-        return (baseType==Type::tFunction) && (dim.size()==0);
+        return baseType==Type::tFunction;
     }
 
     __forceinline bool TypeDecl::isVariant() const {
-        return (baseType==Type::tVariant) && (dim.size()==0);
+        return baseType==Type::tVariant;
     }
 
     __forceinline bool TypeDecl::isMoveableValue() const {
@@ -839,47 +860,47 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isGoodIteratorType() const {
-        return baseType==Type::tIterator && dim.size()==0 && firstType;
+        return baseType==Type::tIterator && firstType;
     }
 
     __forceinline bool TypeDecl::isGoodBlockType() const {
-        return baseType==Type::tBlock && dim.size()==0;
+        return baseType==Type::tBlock;
     }
 
     __forceinline bool TypeDecl::isGoodFunctionType() const {
-        return baseType==Type::tFunction && dim.size()==0;
+        return baseType==Type::tFunction;
     }
 
     __forceinline bool TypeDecl::isGoodLambdaType() const {
-        return baseType==Type::tLambda && dim.size()==0;
+        return baseType==Type::tLambda;
     }
 
     __forceinline bool TypeDecl::isGoodArrayType() const {
-        return baseType==Type::tArray && dim.size()==0 && firstType;
+        return baseType==Type::tArray && firstType;
     }
 
     __forceinline bool TypeDecl::isGoodTupleType() const {
-        return baseType==Type::tTuple && dim.size()==0;
+        return baseType==Type::tTuple;
     }
 
     __forceinline bool TypeDecl::isGoodVariantType() const {
-        return baseType==Type::tVariant && dim.size()==0;
+        return baseType==Type::tVariant;
     }
 
     __forceinline bool TypeDecl::isGoodTableType() const {
-        return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
+        return baseType==Type::tTable && firstType && secondType;
     }
 
     __forceinline bool TypeDecl::isVoid() const {
-        return (baseType==Type::tVoid) && (dim.size()==0);
+        return baseType==Type::tVoid;
     }
 
     __forceinline bool TypeDecl::isPointer() const {
-        return (baseType==Type::tPointer) && (dim.size()==0);
+        return baseType==Type::tPointer;
     }
 
     __forceinline bool TypeDecl::isSmartPointer() const {
-        return (baseType==Type::tPointer) && (smartPtr) && (dim.size()==0);
+        return (baseType==Type::tPointer) && smartPtr;
     }
 
     __forceinline bool TypeDecl::isVoidPointer() const {
@@ -887,17 +908,16 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isBitfield() const {
-        return ((baseType==Type::tBitfield) || (baseType==Type::tBitfield8) ||
-                (baseType==Type::tBitfield16) || (baseType==Type::tBitfield64))
-            && (dim.size()==0);
+        return (baseType==Type::tBitfield) || (baseType==Type::tBitfield8) ||
+                (baseType==Type::tBitfield16) || (baseType==Type::tBitfield64);
     }
 
     __forceinline bool TypeDecl::isIterator() const {
-        return (baseType==Type::tIterator) && (dim.size()==0);
+        return baseType==Type::tIterator;
     }
 
     __forceinline bool TypeDecl::isLambda() const {
-        return (baseType==Type::tLambda) && (dim.size()==0);
+        return baseType==Type::tLambda;
     }
 
     __forceinline bool TypeDecl::isEnumT() const {
@@ -906,11 +926,10 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isEnum() const {
-        return isEnumT() && (dim.size()==0);
+        return isEnumT();
     }
 
     __forceinline bool TypeDecl::isVectorType() const {
-        if ( dim.size() ) return false;
         return isBaseVectorType();
     }
 

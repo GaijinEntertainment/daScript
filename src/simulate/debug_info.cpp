@@ -60,6 +60,7 @@ namespace das
         {   Type::tLambda,      "lambda"},
         {   Type::tTuple,       "tuple"},
         {   Type::tVariant,     "variant"},
+        {   Type::tFixedArray,  "fixed array"},
         {   Type::fakeContext,  "__context"},
         {   Type::fakeLineInfo,  "__lineInfo"},
     };

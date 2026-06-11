@@ -149,7 +149,7 @@ def das_to_cppCTypeString(t : Type) {
 
 
 def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
-    if (!empty(typeDecl.dim)) return false;
+    if (typeDecl.baseType == Type.tFixedArray) return false;
     if (typeDecl.isVectorType) return true;
     match (typeDecl.baseType) {
         if (Type.tBool || Type.tInt8 || Type.tUInt8 || Type.tInt16 || Type.tUInt16 ||
@@ -279,6 +279,17 @@ def aotEnumValueName(name : das_string) {
 }
 
 
+def fa_element(t : TypeDeclPtr) {
+    // element of a tFixedArray chain (a clone of t itself when not dim'd) - structural
+    // reads (argTypes/annotation/variant offsets) live on the element, not the chain
+    // head. Clone-walks so the result is non-const whatever the caller's view is.
+    var e = clone_type(t)
+    while (e.baseType == Type.tFixedArray && e.firstType != null) {
+        e = clone_type(e.firstType)
+    }
+    return e
+}
+
 def describeCppTypeEx(typeDecl : TypeDeclPtr;
                       in_cfg : DescribeConfig;
                       useAlias : CpptUseAlias) {
@@ -295,10 +306,10 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
     let baseType = typeDecl.baseType;
 
     return build_string() $(writer) {
-        for (_ in range(length(typeDecl.dim))) {
-            write(writer, "TDim<");
-        }
-        if (useAlias == CpptUseAlias.yes && typeDecl.flags.aotAlias && !typeDecl.alias.empty()) {
+        if (baseType == Type.tFixedArray && typeDecl.firstType != null) {
+            // natural recursion; inner chain nodes are canonically bare (qualifiers live on the head)
+            write(writer, "TDim<{describeCppTypeEx(typeDecl.firstType,DescribeConfig(cross_platform=cfg.cross_platform),useAlias)},{typeDecl.fixedDim}>")
+        } elif (useAlias == CpptUseAlias.yes && typeDecl.flags.aotAlias && !typeDecl.alias.empty()) {
             write(writer, "{typeDecl.alias}");
         } elif (baseType == Type.alias) {
             write(writer, "DAS_COMMENT(alias)");
@@ -400,7 +411,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 write(writer, "Sequence")
             }
         } elif (baseType == Type.tBlock || baseType == Type.tFunction || baseType == Type.tLambda) {
-            let maybe_const = !typeDecl.flags.constant && typeDecl.baseType == Type.tBlock ? "const " : ""
+            let maybe_const = !typeDecl.flags.constant && baseType == Type.tBlock ? "const " : ""
             var type_name = "void"
             if (typeDecl.firstType != null) {
                 type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
@@ -414,13 +425,6 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        // dim is stored outer-first; C++ TDim<TDim<base,inner>,outer> emits dims
-        // inner-first, so walk dim in reverse.
-        let dim_count = length(typeDecl.dim)
-        for (i in 0..dim_count) {
-            write(writer, ",{typeDecl.dim[dim_count - 1 - i]}>")
-        }
-
         if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
@@ -951,8 +955,8 @@ class public AotDebugInfoHelper {
 };
 
 def public isLocalVec(vtype : TypeDeclPtr) {
-    //! Returns true if the type is a non-reference vector type without dimensions.
-    return empty(vtype.dim) && vtype.isVectorType && !vtype.flags.ref;
+    //! Returns true if the type is a non-reference vector type.
+    return vtype.isVectorType && !vtype.flags.ref;
 }
 
 def public describeLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; cross_platform : bool; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes; skipConst : CpptSkipConst = CpptSkipConst.no) {
@@ -2078,7 +2082,8 @@ class public CppAot : AstVisitor {
             ._fold()) |> join(",")
     }
 
-    def get_variant_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+    def get_variant_field(in_field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let field_type = fa_element(in_field_type)
         let type_str = describeCppType(field_type.argTypes[index], DescribeConfig(cross_platform = cross_platform));
         let maybe_ptr = is_pointer ? "_ptr" : "";
         if (cross_platform) {
@@ -2182,7 +2187,8 @@ class public CppAot : AstVisitor {
         return field;
     }
 // field
-    def get_tuple_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+    def get_tuple_field(in_field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let field_type = fa_element(in_field_type)
         let field_tp = describeCppType(field_type.argTypes[index], DescribeConfig(cross_platform = cross_platform));
         let maybe_ptr = is_pointer ? "_ptr" : "";
         if (cross_platform) {
@@ -2213,6 +2219,10 @@ class public CppAot : AstVisitor {
                     write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                 }
             }
+            if (field._type.flags.isNativeDim) {
+                // native C-array member: pun to the TDim view so iterate/pass/copy/safe-at consumers compile (issue #3077)
+                write(*ss, "das_reinterpret<{describeCppType(field._type, DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
+            }
             aot_previsit_get_field(field_type.annotation, ss, string(field.name));
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
@@ -2223,6 +2233,9 @@ class public CppAot : AstVisitor {
                     } else {
                         write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
                     }
+                }
+                if (field._type.flags.isNativeDim) {
+                    write(*ss, "das_reinterpret<{describeCppType(field._type, DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
                 }
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
@@ -2245,12 +2258,18 @@ class public CppAot : AstVisitor {
             if (field._type.isString) {
                 write(*ss, "))");
             }
+            if (field._type.flags.isNativeDim) {
+                write(*ss, ")");
+            }
         } elif (field.value._type.baseType == Type.tPointer) {
             if (field.value._type.firstType.isHandle) {
                 aot_type_ann_get_field_ptr(field.value._type.firstType.annotation, ss, string(field.name));
                 write(*ss, " /*{field.name}*/");
                 if (field._type.isString) {
                     write(*ss, "))")
+                }
+                if (field._type.flags.isNativeDim) {
+                    write(*ss, ")");
                 }
             } elif (field.value._type.firstType.isTuple) {
                 write(*ss, ")");
@@ -2272,13 +2291,13 @@ class public CppAot : AstVisitor {
         if (expr._type.flags.aotAlias) {
             write(*ss, "das_alias<{expr._type.alias}>::from(");
         }
-        if (!(!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
+        if (!(expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
             let type_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "das_index<{type_str}>::at(");
         }
     }
     def override preVisitExprAtIndex(var expr : ExprAt?; index : ExpressionPtr) {
-        if (!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
+        if (expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
             if (expr.subexpr._type.flags.isNativeDim) {
                 write(*ss, "[");
             } else {
@@ -2304,7 +2323,7 @@ class public CppAot : AstVisitor {
     def override preVisitExprSafeAt(expr : ExprSafeAt?) {
         let isPtr : bool = expr.subexpr._type.isPointer;
         assume seT = isPtr ? expr.subexpr._type.firstType : expr.subexpr._type;
-        if ((!seT.dim |> empty() || seT.isGoodArrayType || seT.isGoodTableType)) {
+        if ((seT.baseType == Type.tFixedArray || seT.isGoodArrayType || seT.isGoodTableType)) {
             let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
             write(*ss, "{type_str}::safe_index(");
         } elif (isPtr && !seT.isVectorType) {
@@ -2896,21 +2915,21 @@ class public CppAot : AstVisitor {
             write(*ss, "(memset((void*)&{nm},0,sizeof({nm})), &{nm}");
             return
         }
-        if (!enew._type.dim |> empty()) {
-            if (enew._type.firstType.isHandle) {
-                let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
-                write(*ss, "das_new_dim_handle<{type_str},{enew._type.dim[0]},{enew._type.flags.smartPtr}");
+        if (enew._type.baseType == Type.tFixedArray) {
+            let ptrType = fa_element(enew._type)   // the fixed-array chain wraps the pointer node; pointee is its firstType
+            if (ptrType.firstType.isHandle) {
+                let type_str = describeCppType(ptrType.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+                write(*ss, "das_new_dim_handle<{type_str},{enew._type.fixedDim},{ptrType.flags.smartPtr}");
                 if (enew.initializer) {
                     panic("internal error. initializer for enew is not supported");
                 } else {
                     write(*ss, ">::make(__context__");
                 }
             } else {
-                let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
-                write(*ss, "das_new_dim<{type_str},{enew._type.dim[0]}");
+                let type_str = describeCppType(ptrType.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+                write(*ss, "das_new_dim<{type_str},{enew._type.fixedDim}");
                 if (enew.initializer) {
                     write(*ss, ">::make_and_init(__context__,[&]() \{ return ");
-                        // << " . " << describeCppType(enew._type.firstType,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))
                     CallFunc_preVisit(enew);
                 } else {
                     write(*ss, ">::make(__context__");
@@ -2990,22 +3009,24 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
-        let variantIndex = find_argument_index(expr._type, string(decl.name));
+        let variantType = fa_element(expr._type)   // dim'd make-variant carries the variant on the chain element
+        let variantIndex = find_argument_index(variantType, string(decl.name));
         if (variantIndex == -1) {
             panic("should not infer otherwise");
         }
-        let type_str = describeCppType(expr._type.argTypes[variantIndex], DescribeConfig(cross_platform = cross_platform));
-        write(*ss, "{tabs()}{get_variant_field(expr._type, variantIndex)}::set(");
+        let type_str = describeCppType(variantType.argTypes[variantIndex], DescribeConfig(cross_platform = cross_platform));
+        write(*ss, "{tabs()}{get_variant_field(variantType, variantIndex)}::set(");
         write(*ss, "{mkvName(expr)}");
         if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
         write(*ss, ") = ");
-        if (expr._type.argTypes[variantIndex].isPointer && decl.value._type.isPointer && expr._type.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(expr._type.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
+        if (variantType.argTypes[variantIndex].isPointer && decl.value._type.isPointer && variantType.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(variantType.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
             write(*ss, "das_auto_cast<{type_str}>::cast(");
         }
     }
     def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
-        let variantIndex = find_argument_index(expr._type, string(decl.name))
-        if (expr._type.argTypes[variantIndex].isPointer && decl.value._type.isPointer && expr._type.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(expr._type.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
+        let variantType = fa_element(expr._type)
+        let variantIndex = find_argument_index(variantType, string(decl.name))
+        if (variantType.argTypes[variantIndex].isPointer && decl.value._type.isPointer && variantType.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(variantType.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
             write(*ss, ")");
         }
         write(*ss, ";\n");
@@ -3080,15 +3101,16 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) {
+        let mkType = fa_element(expr.makeType)   // dim'd make-struct carries the record on the chain element
         write(*ss, "{tabs()}");
         write(*ss, "{decl.flags.moveSemantics ? "das_move((" : "das_copy(("}");
-        if (expr.makeType.baseType == Type.tHandle) {
-            aot_previsit_get_field(expr.makeType.annotation, ss, string(decl.name));
+        if (mkType.baseType == Type.tHandle) {
+            aot_previsit_get_field(mkType.annotation, ss, string(decl.name));
         }
         write(*ss, "{mksName(expr)}");
         if (length(expr.structs) != 1) write(*ss, "({index},__context__)");
-        if (expr.makeType.baseType == Type.tHandle) {
-            aot_visit_get_field(expr.makeType.annotation, ss, string(decl.name));
+        if (mkType.baseType == Type.tHandle) {
+            aot_visit_get_field(mkType.annotation, ss, string(decl.name));
             write(*ss, " /*{decl.name}*/");
         } else {
             write(*ss, ".{aotFieldName(string(decl.name))}");

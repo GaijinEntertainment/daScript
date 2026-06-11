@@ -1119,14 +1119,9 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
 
 def public type_to_llvm_type(t : TypeDeclPtr) {
     var res : LLVMOpaqueType?
-    if (!empty(t.dim)) {
-        var ndt = clone_type(t)
-        ndt.dim |> clear()
-        res = type_to_llvm_type(ndt)
-        let ndim = length(t.dim)
-        for (i in range(ndim)) {
-            res = LLVMArrayType(res, uint(t.dim[ndim - 1 - i]))
-        }
+    if (t.baseType == Type.tFixedArray && t.firstType != null) {
+        // natural recursion: [outer x [inner x elem]] — same nesting the reversed flat walk built
+        res = LLVMArrayType(type_to_llvm_type(t.firstType), uint(t.fixedDim))
     } elif (t.isPointer) {
         res = get_type_pointer(t.firstType)
     } elif (t.isWorkhorseType) {
@@ -1208,11 +1203,13 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
 }
 
 def public dim_element_type_to_llvm_type(typ : TypeDeclPtr) {
-    if (empty(typ.dim)) {
+    if (typ.baseType != Type.tFixedArray) {
         return type_to_llvm_type(typ)
     } else {
         var ndt = clone_type(typ)
-        ndt.dim |> clear()
+        while (ndt.baseType == Type.tFixedArray && ndt.firstType != null) {   // scalar element at the chain leaf
+            ndt = clone_type(ndt.firstType)
+        }
         return type_to_llvm_type(ndt)
     }
 }

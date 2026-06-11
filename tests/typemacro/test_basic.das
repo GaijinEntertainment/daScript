@@ -1,6 +1,6 @@
 // Stage 0 coverage for the tFixedArray rework (FIXED_ARRAY_REWORK.md).
-// Direct tests for the typeMacro payload surface that Stage 1b migrates off
-// TypeDecl.dimExpr: all four grammar forms, const-argument extraction
+// Direct tests for the typeMacro payload surface that Stage 1b migrated to
+// TypeDecl.typeMacroExpr: all four grammar forms, const-argument extraction
 // (int/bool/string), type arguments, and typedecl(expr).
 // Deep indirect coverage lives in tests/option + tests/hash_map + tests/delegate
 // (typemacro_boost-based); this file covers the raw forms those don't touch.

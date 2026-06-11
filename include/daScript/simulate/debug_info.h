@@ -70,7 +70,10 @@ namespace das
         tTable,
         tBlock,
         tTuple,
-        tVariant
+        tVariant,
+        tFixedArray     // AST-only (FIXED_ARRAY_REWORK.md): structural fixed-array TypeDecl node.
+                        //  Runtime TypeInfo never carries it — fixed arrays stay flattened to dim[]
+                        //  at the single AST->TypeInfo conversion point (ast_debug_info_helper.cpp).
     };
 
     enum class RefMatters {

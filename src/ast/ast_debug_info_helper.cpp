@@ -208,6 +208,16 @@ namespace das {
     }
 
     TypeInfo * DebugInfoHelper::makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type ) {
+        // runtime TypeInfo stays flattened forever (FIXED_ARRAY_REWORK.md): chain dims emit
+        // straight into info->dim; element fields read through elemType, whole-type semantics
+        // (size, quals, gc, names) stay on the chain head
+        vector<int32_t> dims;
+        const TypeDecl * elemType = type;
+        while ( elemType->baseType==Type::tFixedArray ) {
+            dims.push_back(elemType->fixedDim);
+            DAS_ASSERTF(elemType->firstType, "tFixedArray chain without an element");
+            elemType = elemType->firstType;
+        }
         if ( info==nullptr ) {
             string mangledName = type->getMangledName();
             auto it = tmn2t.find(mangledName);
@@ -215,24 +225,24 @@ namespace das {
             info = debugInfo->makeNode<TypeInfo>();
             tmn2t[mangledName] = info;
         }
-        info->type = type->baseType;
-        info->dimSize = (uint32_t) type->dim.size();
+        info->type = elemType->baseType;
+        info->dimSize = (uint32_t) dims.size();
         if ( info->dimSize ) {
             info->dim = (uint32_t *) debugInfo->allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
-                info->dim[i] = type->dim[i];
+                info->dim[i] = dims[i];
             }
         }
-        if ( type->baseType==Type::tStructure  ) {
-            info->structType = makeStructureDebugInfo(*type->structType);
-        } else if ( type->isEnumT() ) {
-            info->enumType = type->enumType ? makeEnumDebugInfo(*type->enumType) : nullptr;
-        } else if ( type->annotation ) {
+        if ( elemType->baseType==Type::tStructure  ) {
+            info->structType = makeStructureDebugInfo(*elemType->structType);
+        } else if ( elemType->isEnumT() ) {
+            info->enumType = elemType->enumType ? makeEnumDebugInfo(*elemType->enumType) : nullptr;
+        } else if ( elemType->annotation ) {
 #if DAS_THREAD_SAFE_ANNOTATIONS
-            auto annName = debugInfo->allocateCachedName("~" + type->annotation->module->name + "::" + type->annotation->name);
+            auto annName = debugInfo->allocateCachedName("~" + elemType->annotation->module->name + "::" + elemType->annotation->name);
             info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
 #else
-            info->annotation_or_name = type->annotation;
+            info->annotation_or_name = elemType->annotation;
 #endif
         } else {
             info->annotation_or_name = nullptr;
@@ -258,9 +268,9 @@ namespace das {
             info->flags |= TypeInfo::flag_isImplicit;
         if (type->isRawPod())
             info->flags |= TypeInfo::flag_isRawPod;
-        if (type->smartPtr) {
+        if (elemType->smartPtr) {
             info->flags |= TypeInfo::flag_isSmartPtr;
-            if ( type->smartPtrNative )
+            if ( elemType->smartPtrNative )
                 info->flags |= TypeInfo::flag_isSmartPtrNative;
         }
         auto gcf = type->gcFlags();
@@ -268,36 +278,36 @@ namespace das {
             info->flags |= TypeInfo::flag_heapGC;
         if ( gcf & TypeDecl::gcFlag_stringHeap )
             info->flags |= TypeInfo::flag_stringHeapGC;
-        if ( type->firstType ) {
-            info->firstType = makeTypeInfo(nullptr, type->firstType);
-        } else if ( type->baseType==Type::tStructure && type->structType->parent!=nullptr ) {
-            gc_local<TypeDecl> tdecl(new TypeDecl(type->structType->parent));
+        if ( elemType->firstType ) {
+            info->firstType = makeTypeInfo(nullptr, elemType->firstType);
+        } else if ( elemType->baseType==Type::tStructure && elemType->structType->parent!=nullptr ) {
+            gc_local<TypeDecl> tdecl(new TypeDecl(elemType->structType->parent));
             info->firstType = makeTypeInfo(nullptr, tdecl);
         } else {
             info->firstType = nullptr;
         }
-        if ( type->secondType ) {
-            info->secondType = makeTypeInfo(nullptr, type->secondType);
+        if ( elemType->secondType ) {
+            info->secondType = makeTypeInfo(nullptr, elemType->secondType);
         } else {
             info->secondType = nullptr;
         }
         info->argTypes = nullptr;
-        info->argCount = uint32_t(type->argTypes.size());
+        info->argCount = uint32_t(elemType->argTypes.size());
         if ( info->argCount ) {
             info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
             for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
+                info->argTypes[i] = makeTypeInfo(nullptr, elemType->argTypes[i]);
             }
         }
         info->argNames = nullptr;
-        auto argNamesCount = uint32_t(type->argNames.size());
+        auto argNamesCount = uint32_t(elemType->argNames.size());
         t2cppTypeName[info] = describeCppType(type, CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes);
         if ( argNamesCount ) {
             DAS_ASSERT(info->argCount == 0 || info->argCount == argNamesCount);
             info->argCount = argNamesCount;
             info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
             for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
+                info->argNames[i] = debugInfo->allocateCachedName(elemType->argNames[i]);
             }
         }
         auto mangledName = type->getMangledName();

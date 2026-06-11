@@ -175,13 +175,13 @@ class TypeMacroMacro : AstFunctionAnnotation {
             let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
             assume argDefaultValue = func.arguments[ai].init
-            if (!empty(argType.dim)) {
+            if (argType.baseType == Type.tFixedArray) {
                 errors := "expecting non-array arguments"
                 return false
             }
             if (argDefaultValue == null) {
                 var checkE = qmacro_block() {
-                    if ($v(macroArgIndex) >= length(td.dimExpr)) {
+                    if ($v(macroArgIndex) >= length(td.typeMacroExpr)) {
                         macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} argument")
                         return null
                     }
@@ -190,20 +190,20 @@ class TypeMacroMacro : AstFunctionAnnotation {
             }
             if (argType.baseType == Type.tInt) {
                 var defaultValue = argDefaultValue != null ? clone_expression(argDefaultValue) : quote(0)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstInt>, $e(defaultValue)))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.typeMacroExpr, $v(macroArgIndex), type<ExprConstInt>, $e(defaultValue)))
             } elif (argType.baseType == Type.tBool) {
                 var defaultValue = argDefaultValue != null ? clone_expression(argDefaultValue) : quote(false)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstBool>, $e(defaultValue)))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.typeMacroExpr, $v(macroArgIndex), type<ExprConstBool>, $e(defaultValue)))
             } elif (argType.baseType == Type.tString) {
                 var defaultValue = argDefaultValue != null ? clone_expression(argDefaultValue) : quote("")
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstString>, $e(defaultValue)))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.typeMacroExpr, $v(macroArgIndex), type<ExprConstString>, $e(defaultValue)))
             } elif (is_typedecl_ptr(argType)) {
                 if (argDefaultValue != null) {
                     errors := "TypeDeclPtr argument cannot have default value"
                     return false
                 }
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro(
-                    (td.dimExpr[$v(macroArgIndex)] is ExprTypeDecl) ? (td.dimExpr[$v(macroArgIndex)] as ExprTypeDecl).typeexpr : td.dimExpr[$v(macroArgIndex)]._type)
+                    (td.typeMacroExpr[$v(macroArgIndex)] is ExprTypeDecl) ? (td.typeMacroExpr[$v(macroArgIndex)] as ExprTypeDecl).typeexpr : td.typeMacroExpr[$v(macroArgIndex)]._type)
             } else {
                 errors := "unsupported argument type {describe(argType)}"
                 return false

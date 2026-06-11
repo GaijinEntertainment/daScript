@@ -740,18 +740,12 @@ def decs_array(atype : auto(TT); src : array<uint8>; capacity : int64) {
     //! Low level function returns temporary array of component given specific type of component.
     //! capacity is int64 — archetypes can hold >INT_MAX entities (Phase 8c widening).
     assert(!empty(src))
-    static_if (typeinfo is_dim(atype)) {
-        var dest : array<TT[typeinfo dim(atype)] -const -& -#>
-        unsafe {
-            _builtin_make_temp_array_i64(dest, addr(src[0]), capacity)
-            return <- dest
-        }
-    } else {
-        var dest : array<TT -const -& -#>
-        unsafe {
-            _builtin_make_temp_array_i64(dest, addr(src[0]), capacity)
-            return <- dest
-        }
+    // TT is the full component type either way - a generic alias binds the whole
+    // matched type, fixed arrays included
+    var dest : array<TT -const -& -#>
+    unsafe {
+        _builtin_make_temp_array_i64(dest, addr(src[0]), capacity)
+        return <- dest
     }
 }
 
@@ -764,35 +758,22 @@ def public get(arch : Archetype; name : string; value : auto(TT)) {
         let comp & = unsafe(arch.components[idx])
         if (comp.name == name) {
             unsafe {
-                var cvinfo : TypeInfo const?
-                static_if (typeinfo is_dim(value)) {
-                    cvinfo  = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(value)] -const -& -#>))
-                } else {
-                    cvinfo  = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
-                }
+                let cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
                 if (comp.info.hash != cvinfo.hash) {
                     panic("decs: component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
                 }
-                static_if (typeinfo is_dim(value)) {
-                    return <- decs_array(type<TT[typeinfo dim(value)]>, comp.data, arch.size)
-                } else {
-                    return <- decs_array(type<TT>, comp.data, arch.size)
-                }
+                return <- decs_array(type<TT>, comp.data, arch.size)
             }
         }
     }
     panic("decs: component array {name} not found")
     unsafe {
-        static_if (typeinfo is_dim(value)) {
-            return <- array<TT[typeinfo dim(value)] -const -& -#>()
-        } else {
-            return <- array<TT -const -& -#>()
-        }
+        return <- array<TT -const -& -#>()
     }
 }
 
 [expect_dim(value), unsafe_outside_of_for]
-def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<TT[typeinfo sizeof(value)] -const -& -#> const {
+def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<TT[typeinfo dim(value)] -const -& -#> const {
     //! Returns const temporary array of component given specific name and type of component for array components.
     unsafe {
         return <- get(arch, name, value)
@@ -815,24 +796,13 @@ def public get_default_ro(arch : Archetype; name : string; value : auto(TT)) : i
         let comp & = unsafe(arch.components[idx])
         if (comp.name == name) {
             unsafe {
-                var cvinfo : TypeInfo const?
-                static_if (typeinfo is_dim(value)) {
-                    cvinfo  = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(value)] -const -& -#>))
-                } else {
-                    cvinfo  = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
-                }
+                let cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
                 if (comp.info.hash != cvinfo.hash) {
                     panic("decs: component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
                 }
-                static_if (typeinfo is_dim(value)) {
-                    var it : iterator<TT[typeinfo dim(value)] const&>
-                    _builtin_make_fixed_array_iterator(it, addr(comp.data[0]), arch.size, comp.stride)
-                    return <- it
-                } else {
-                    var it : iterator<TT const&>
-                    _builtin_make_fixed_array_iterator(it, addr(comp.data[0]), arch.size, comp.stride)
-                    return <- it
-                }
+                var it : iterator<TT const&>
+                _builtin_make_fixed_array_iterator(it, addr(comp.data[0]), arch.size, comp.stride)
+                return <- it
             }
         }
     }
@@ -1138,12 +1108,7 @@ def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT 
         var comp & = unsafe(arch.components[cidx])
         if (comp.name == name) {
             unsafe {
-                var cvinfo : TypeInfo const?
-                static_if (typeinfo is_dim(defval)) {
-                    cvinfo = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(defval)] -const -& -#>))
-                } else {
-                    cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
-                }
+                let cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
                 if (comp.info.hash != cvinfo.hash) {
                     panic("decs: get_component {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
                 }
@@ -1162,12 +1127,7 @@ def public get(var cmp : ComponentMap; name : string; var value : auto(TT)) {
     let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
     if (idx < length(cmp) && cmp[idx].name == name) {
         unsafe {
-            var cvinfo : TypeInfo const?
-            static_if (typeinfo is_dim(value)) {
-                cvinfo = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(value)] -const -& -#>))
-            } else {
-                cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
-            }
+            let cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
             if (cmp[idx].info.hash != cvinfo.hash) {
                 panic("decs: get component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
             }
@@ -1179,164 +1139,83 @@ def public get(var cmp : ComponentMap; name : string; var value : auto(TT)) {
 
 def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
     cv.info.mkTypeInfo = @@() : TypeInfo const? {
-        static_if (typeinfo is_dim(value)) {
-            return unsafe(addr(typeinfo rtti_typeinfo(type<array<TT[typeinfo dim(value)] -const -& -#>>)))
-        } else {
-            return unsafe(addr(typeinfo rtti_typeinfo(type<array<TT -const -& -#>>)))
-        }
+        return unsafe(addr(typeinfo rtti_typeinfo(type<array<TT -const -& -#>>)))
     }
     cv.info.dumper = @@(elem : void?) {
         if (elem == null) return ""
-        unsafe {
-            static_if (typeinfo is_dim(value)) {
-                var pTT = reinterpret<TT[typeinfo dim(value)] -const -& -#?> elem
-                return "{*pTT}"
-            } else {
-                var pTT = reinterpret<TT -const -& -#?> elem
-                return "{*pTT}"
-            }
-        }
+        var pTT = unsafe(reinterpret<TT -const -& -#?> elem)
+        return "{*pTT}"
     }
     cv.info.gc = @@(var src : array<uint8>) : lambda {
         // the idea with this one is that we make a lambda
         //  which would capture an array of the right size and type
         //  which points to the right data
         //  and when lambda is deleted - we memzero the temp array
-        static_if (typeinfo is_dim(value)) {
-            var gc_dummy : array<TT[typeinfo dim(value)] -const -& -#>
-            let stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
-            let size = length(src) / stride
-            unsafe {
-                _builtin_make_temp_array(gc_dummy, addr(src[0]), size)
-            }
-            return <- @  capture(<- gc_dummy) {
-                pass
-            } finally {
-                memzero(gc_dummy)
-            }
-        } else {
-            var gc_dummy : array<TT -const -& -#>
-            let stride = typeinfo sizeof(type<TT -const -& -#>)
-            let size = length(src) / stride
-            unsafe {
-                _builtin_make_temp_array(gc_dummy, addr(src[0]), size)
-            }
-            return <- @  capture(<- gc_dummy) {
-                pass
-            } finally {
-                memzero(gc_dummy)
-            }
+        var gc_dummy : array<TT -const -& -#>
+        let stride = typeinfo sizeof(type<TT -const -& -#>)
+        let size = length(src) / stride
+        unsafe {
+            _builtin_make_temp_array(gc_dummy, addr(src[0]), size)
+        }
+        return <- @  capture(<- gc_dummy) {
+            pass
+        } finally {
+            memzero(gc_dummy)
         }
     }
     cv.info.clonner = @@(var dst : array<uint8>; src : array<uint8>) {
         if (empty(src)) return
-        static_if (typeinfo is_dim(value)) {
-            let stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
-            dst |> resize(length(src))
-            let size = length(src) / stride
-            var dsrc, ssrc : array<TT[typeinfo dim(value)] -const -& -#>
-            unsafe {
-                _builtin_make_temp_array(dsrc, addr(dst[0]), size)
-                _builtin_make_temp_array(ssrc, addr(src[0]), size)
-            }
-            for (d, s in dsrc, ssrc) {
-                d := s
-            }
-        } else {
-            let stride = typeinfo sizeof(type<TT -const -& -#>)
-            dst |> resize(length(src))
-            let size = length(src) / stride
-            var dsrc, ssrc : array<TT -const -& -#>
-            unsafe {
-                _builtin_make_temp_array(dsrc, addr(dst[0]), size)
-                _builtin_make_temp_array(ssrc, addr(src[0]), size)
-            }
-            for (d, s in dsrc, ssrc) {
-                d := s
-            }
+        let stride = typeinfo sizeof(type<TT -const -& -#>)
+        dst |> resize(length(src))
+        let size = length(src) / stride
+        var dsrc, ssrc : array<TT -const -& -#>
+        unsafe {
+            _builtin_make_temp_array(dsrc, addr(dst[0]), size)
+            _builtin_make_temp_array(ssrc, addr(src[0]), size)
+        }
+        for (d, s in dsrc, ssrc) {
+            d := s
         }
     }
     cv.info.serializer = @@(var arch : Archive; var src : array<uint8>; name : string) {
-        static_if (typeinfo is_dim(value)) {
-            var stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
-            if (arch.reading) {
-                var wasStride : int
-                arch |> _::serialize(wasStride)
-                if (wasStride != stride) {
-                    panic("decs: component '{name}' stride mismatch, expecting {stride}, got {wasStride}")
-                } else {
-                    var temp : array<TT[typeinfo dim(value)] -const -& -#>
-                    arch |> _::serialize(temp)
-                    let size = length(temp)
-                    src |> resize(size * stride)
-                    if (size > 0) {
-                        unsafe {
-                            memcpy(addr(src[0]), addr(temp[0]), size * stride)
-                        }
-                    }
-                }
+        var stride : int = typeinfo sizeof(type<TT -const -& -#>)
+        if (arch.reading) {
+            var wasStride : int
+            arch |> _::serialize(wasStride)
+            if (wasStride != stride) {
+                panic("decs: component '{name}' stride mismatch, expecting {stride}, got {wasStride}")
             } else {
-                arch |> _::serialize(stride)
-                var ssrc : array<TT[typeinfo dim(value)] -const -& -#>
-                let size = length(src) / stride
-                unsafe {
-                    if (!empty(src)) {
-                        _builtin_make_temp_array(ssrc, addr(src[0]), size)
+                var temp : array<TT -const -& -#>
+                arch |> _::serialize(temp)
+                let size = length(temp)
+                src |> resize(size * stride)
+                if (size > 0) {
+                    unsafe {
+                        memcpy(addr(src[0]), addr(temp[0]), size * stride)
                     }
                 }
-                arch |> serialize(ssrc)
             }
         } else {
-            var stride : int = typeinfo sizeof(type<TT -const -& -#>)
-            if (arch.reading) {
-                var wasStride : int
-                arch |> _::serialize(wasStride)
-                if (wasStride != stride) {
-                    panic("decs: component '{name}' stride mismatch, expecting {stride}, got {wasStride}")
-                } else {
-                    var temp : array<TT -const -& -#>
-                    arch |> _::serialize(temp)
-                    let size = length(temp)
-                    src |> resize(size * stride)
-                    if (size > 0) {
-                        unsafe {
-                            memcpy(addr(src[0]), addr(temp[0]), size * stride)
-                        }
-                    }
+            arch |> _::serialize(stride)
+            var ssrc : array<TT -const -& -#>
+            let size = length(src) / stride
+            unsafe {
+                if (!empty(src)) {
+                    _builtin_make_temp_array(ssrc, addr(src[0]), size)
                 }
-            } else {
-                arch |> _::serialize(stride)
-                var ssrc : array<TT -const -& -#>
-                let size = length(src) / stride
-                unsafe {
-                    if (!empty(src)) {
-                        _builtin_make_temp_array(ssrc, addr(src[0]), size)
-                    }
-                }
-                arch |> serialize(ssrc)
             }
+            arch |> serialize(ssrc)
         }
     }
     static_if (typeinfo can_delete(type<TT -const -& -#>)) {
         cv.info.eraser = @@(var arr : array<uint8>) {
             if (empty(arr)) return
-            static_if (typeinfo is_dim(value)) {
-                let stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
-                for (i in range(length(arr) / stride)) {
-                    let offset = i * stride
-                    unsafe {
-                        var adel = reinterpret<TT[typeinfo dim(value)] -const -& -#?> addr(arr[offset])
-                        delete * adel
-                    }
-                }
-            } else {
-                let stride = typeinfo sizeof(type<TT -const -& -#>)
-                for (i in range(length(arr) / stride)) {
-                    let offset = i * stride
-                    unsafe {
-                        var adel = reinterpret<TT -const -& -#?> addr(arr[offset])
-                        delete * adel
-                    }
+            let stride = typeinfo sizeof(type<TT -const -& -#>)
+            for (i in range(length(arr) / stride)) {
+                let offset = i * stride
+                unsafe {
+                    var adel = reinterpret<TT -const -& -#?> addr(arr[offset])
+                    delete * adel
                 }
             }
         }
@@ -1346,15 +1225,8 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
 def private make_component(name : string; value : auto(TT)) {
     var cv = ComponentValue(name = name)
     unsafe {
-        var tinfo : TypeInfo const?
-        var tname : string
-        static_if (typeinfo is_dim(value)) {
-            tinfo = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(value)] -const -& -#>))
-            tname = typeinfo fulltypename(type<TT[typeinfo dim(value)] -const -& -#>)
-        } else {
-            tinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
-            tname = typeinfo fulltypename(type<TT -const -& -#>)
-        }
+        let tinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
+        let tname = typeinfo fulltypename(type<TT -const -& -#>)
         cv.info = CTypeInfo(basicType = tinfo.basicType, mangledName = get_mangled_name(tinfo),
             fullName = tname, hash = tinfo.hash, size = tinfo.size)
         make_callbacks(cv, value)

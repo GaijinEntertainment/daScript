@@ -453,7 +453,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
     //! Parse a JSON value and return the corresponding value of any type.
     //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(anything)) {
-        var ret : TT[typeinfo dim(anything)]
+        var ret : TT -const -&   // TT IS the matched fixed-array type
         if (v == null || !(v.value is _array)) return <- ret
         unsafe {
             let arr & = v.value as _array

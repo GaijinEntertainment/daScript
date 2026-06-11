@@ -119,11 +119,11 @@ namespace das {
 
         // find type alias name, and resolve it to type
         // without one generic function
-        TypeDeclPtr findFuncAlias(const FunctionPtr &fptr, const string &name) const;
+        TypeDeclPtr findFuncAlias(const FunctionPtr &fptr, const string &name, bool *constUnderDim = nullptr) const;
 
         // find type alias name, and resolve it to type
         // within current context
-        TypeDeclPtr findAlias(const string &name) const;
+        TypeDeclPtr findAlias(const string &name, bool *constUnderDim = nullptr) const;
 
         // infer alias type
         TypeDeclPtr inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr = nullptr, AliasMap *aliases = nullptr, OptionsMap *options = nullptr, bool autoToAlias = false) const;

@@ -32,6 +32,22 @@ def public safe_addr(x : auto(T)& ==const) : T -&? const# {
     }
 }
 
+[tag_function(safe_addr_tag)]
+def public safe_addr(var x : auto(T)[]& ==const) : T -&?# {
+    //! returns temporary pointer to the first element of a fixed array (C-style array decay)
+    unsafe {
+        return reinterpret<T -&?#>(addr(x))
+    }
+}
+
+[tag_function(safe_addr_tag)]
+def public safe_addr(x : auto(T)[]& ==const) : T -&? const# {
+    //! returns temporary pointer to the first element of a fixed array (C-style array decay)
+    unsafe {
+        return reinterpret<T -&? const#>(addr(x))
+    }
+}
+
 [tag_function_macro(tag="safe_addr_tag")]
 class SafeAddrMacro : AstFunctionAnnotation {
     //! This macro reports an error if safe_addr is attempted on the object, which is not local to the scope.
