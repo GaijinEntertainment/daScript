@@ -291,13 +291,13 @@ namespace das {
             subexprType->temporary = false; // array<int#> -> int
         }
     }
-    TypeDeclPtr InferTypes::findFuncAlias(const FunctionPtr &fptr, const string &name) const {
+    TypeDeclPtr InferTypes::findFuncAlias(const FunctionPtr &fptr, const string &name, bool *constUnderDim) const {
         for (auto &arg : fptr->arguments) {
-            if (auto aT = arg->type->findAlias(name, true)) {
+            if (auto aT = arg->type->findAlias(name, true, constUnderDim)) {
                 return aT;
             }
         }
-        if (auto rT = fptr->result->findAlias(name, true)) {
+        if (auto rT = fptr->result->findAlias(name, true, constUnderDim)) {
             return rT;
         }
         TypeDeclPtr rT = nullptr;
@@ -312,7 +312,7 @@ namespace das {
         TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(), name);
         return (!mtd || mtd->isAlias()) ? nullptr : mtd;
     }
-    TypeDeclPtr InferTypes::findAlias(const string &name) const {
+    TypeDeclPtr InferTypes::findAlias(const string &name, bool *constUnderDim) const {
         if (func) {
             for (auto &ast : assumeType) {
                 if (ast->alias == name) {
@@ -321,16 +321,16 @@ namespace das {
             }
             for (auto it = local.rbegin(), its = local.rend(); it != its; ++it) {
                 auto &var = *it;
-                if (auto vT = var->type->findAlias(name)) {
+                if (auto vT = var->type->findAlias(name, false, constUnderDim)) {
                     return vT;
                 }
             }
             for (auto &arg : func->arguments) {
-                if (auto aT = arg->type->findAlias(name)) {
+                if (auto aT = arg->type->findAlias(name, false, constUnderDim)) {
                     return aT;
                 }
             }
-            if (auto rT = func->result->findAlias(name, true)) {
+            if (auto rT = func->result->findAlias(name, true, constUnderDim)) {
                 return rT;
             }
         }
@@ -393,6 +393,7 @@ namespace das {
             if (decl->isTag)
                 return nullptr; // we can never infer a tag type
             TypeDeclPtr aT = nullptr;
+            bool constUnderDim = false;
             if (aliases) {
                 auto it = aliases->find(decl->alias);
                 if (it != aliases->end()) {
@@ -400,7 +401,7 @@ namespace das {
                 }
             }
             if (!aT) {
-                aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                aT = fptr ? findFuncAlias(fptr, decl->alias, &constUnderDim) : findAlias(decl->alias, &constUnderDim);
             }
             if (!aT) {
                 auto bT = nameToBasicType(decl->alias);
@@ -415,7 +416,7 @@ namespace das {
                 auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
-                resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
+                resT->constant = (resT->constant || constUnderDim || decl->constant) && !decl->removeConstant;
                 resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                 resT->dim = decl->dim;
                 resT->aotAlias = false;
@@ -534,6 +535,7 @@ namespace das {
         }
         if (decl->baseType == Type::alias) {
             TypeDeclPtr aT = nullptr;
+            bool constUnderDim = false;
             if (aliases) {
                 auto it = aliases->find(decl->alias);
                 if (it != aliases->end()) {
@@ -541,13 +543,13 @@ namespace das {
                 }
             }
             if (!aT) {
-                aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                aT = fptr ? findFuncAlias(fptr, decl->alias, &constUnderDim) : findAlias(decl->alias, &constUnderDim);
             }
             if (aT) {
                 auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
-                resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
+                resT->constant = (resT->constant || constUnderDim || decl->constant) && !decl->removeConstant;
                 resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                 resT->implicit = (resT->implicit || decl->implicit);
                 resT->explicitConst = (resT->explicitConst || decl->explicitConst);

@@ -331,10 +331,10 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
   (ast_simulate.cpp simulateExprMakeStruct — stride is ONE OUTER ELEMENT and
   under-zeroed). AOT side already correct (das_zero on the whole TDim).
   Target spec ENABLED: `_target_inference.das` → `test_target_inference.das` (expect
-  line dropped; picked up by the AOT glob automatically). Settled decoration: plain
-  `auto(TT)` ← int[4] binds `int const[4]` (param constness rides TT); `auto(TT)[]` ←
-  float[4][4] binds `float[4]` UNQUALIFIED — the `[]` consumed the chain head where
-  qualifiers live. Asymmetric but harmless (generics strip with -const anyway).
+  line dropped; picked up by the AOT glob automatically). Decoration as landed in 1g:
+  plain `auto(TT)` ← int[4] bound `int const[4]`, but `auto(TT)[]` ← float[4][4] bound
+  `float[4]` UNQUALIFIED — REVISED at Stage-2 review (Boris: "it needs to match"), see
+  the decoration note under Stage 2.
   get_key subtest is in (Stage 4 gate satisfied); note get_key is ADDRESS-based — the
   value must reference the table slot (values() iteration), not a local copy.
 
@@ -366,6 +366,25 @@ vs pre-port snapshot = ZERO content changes (28 files differ reorder-only — kn
 hash-iteration emission nondeterminism; sorted-content identical), two-pass test_aot
 build green, AOT run 10134/10134 with test_interop in the set, interpreted 10795/10795,
 fixed_array 97/97, zero GC leaks both modes, format+lint clean.
+**DECORATION SETTLED at Stage-2 review (Boris: "it needs to match")**: `auto(TT)[]`
+binds with the param's constness, same as plain `auto(TT)` — non-var `auto(TT)[]` ←
+float[4][4] = `float const[4]`, var = `float[4]`. This is MASTER PARITY restored (the
+flattened world kept label+const+dims on one node; 1g's unqualified peel was a
+canonical-form artifact) and closes a const-soundness hole (`each(auto(TT)[])` on a
+const view instantiated a mutable-element iterator). Implementation: extraction-time,
+NOT stored-type-time — `TypeDecl::findAlias` gains a `bool * constUnderDim` out-param
+that reports a label found through a const FA head along the PURE FA chain (container
+boundaries bind bare, as always); threaded through findFuncAlias / InferTypes::findAlias;
+inferAlias + inferPartialAliases OR it into the constant merge. Stored instance types
+stay canonical (no inner-node const → no mangled-name churn); the instancing alias MAP
+still clears const (master parity — sibling `b : TT` params take use-site quals).
+KNOWN LINT GAP surfaced by the var-param test probe (pre-existing on master, NOT
+FA-specific): LINT003 suggests `let` for a var passed to a never-writing `var` param —
+access_ref only sets via SideEffects::modifyArgument, and the write-tracking is
+optimizer-shared (conservative marking would cascade modifyArgument up the call graph).
+Proper fix = new access flag (PR-#2736-style 4-site checklist + serializer bump) —
+Boris's call, not landed here; the test exercises its var param instead (mutable row
+copy through the peeled binding, a real assertion).
 
 ### Stage 3 — JIT
 `modules/dasLLVM/daslib/llvm_jit.das` port (element type, bounds checks, loop ranges from
@@ -404,6 +423,10 @@ site-shapes as the in-tree gen1 parser. Caveat: deleting dim/dimExpr at the end 
 Stage 1 breaks its COMPILE, so the field-deletion commit carries the minimal mechanical
 flip (same edit as the in-tree gen1 parser got in 1b — by then the helpers exist);
 the full port/verification of the converter is what lands here at the end.
+
+AFTER THE LAST STAGE (Boris, Stage-2 review): VSCode plugin fixes —
+`D:\DASPKG\daScript-plugin`. Sweep it for rework fallout (TypeDecl dim/dimExpr
+consumers, describe/typename output expectations) once everything else has landed.
 
 ## Standing risk ledger (checked at every stage gate)
 

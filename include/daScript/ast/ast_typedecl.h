@@ -225,7 +225,7 @@ namespace das {
         static void applyRefToRef ( const TypeDeclPtr & TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
-        TypeDecl * findAlias ( const string & name, bool allowAuto = false );
+        TypeDecl * findAlias ( const string & name, bool allowAuto = false, bool * constUnderDim = nullptr );
         bool computeAliasCache();     // eager full walk, populates aliasCacheValid/aliasCacheHasAlias on every visited node; returns true if subtree contains any alias
         int findArgumentIndex(const string & name) const;
         int tupleFieldIndex( const string & name ) const;

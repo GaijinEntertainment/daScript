@@ -17,6 +17,11 @@ def dim_name(a : auto(TT)[]) : string {
     return typeinfo typename(type<TT>)
 }
 
+def dim_name_var(var a : auto(TT)[]) : string {
+    a[0] = a[1] // exercise the var-ness: mutable row copy through the peeled binding
+    return typeinfo typename(type<TT>)
+}
+
 def zeroed_count(a : auto(TT)) : int {
     var z = default<TT>
     var n = 0
@@ -49,11 +54,12 @@ def test_whole_array_binding(t : T?) {
 [test]
 def test_peel_one_level(t : T?) {
     t |> run("auto(TT)[] peels one level off multi-dim") @(t : T?) {
-        // note the asymmetry vs whole-binding: plain auto(TT) keeps the param's constness
-        // on TT ("int const[4]"); the [] form consumed the chain head where qualifiers
-        // live, so the peeled element binds unqualified
+        // decoration matches the plain form (settled at Stage 2 review): the peeled
+        // binding inherits the param's constness — non-var binds const, var binds bare
         let m : float[4][4]
-        t |> equal(dim_name(m), "float[4]")
+        t |> equal(dim_name(m), "float const[4]")
+        var mv : float[4][4]
+        t |> equal(dim_name_var(mv), "float[4]")
     }
     t |> run("multi-dim now prefers the dim overload") @(t : T?) {
         // characterized on master as "plain" (test_generics_current.das documents

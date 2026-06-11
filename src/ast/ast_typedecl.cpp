@@ -1110,7 +1110,7 @@ namespace das
         }
         return dim;
     }
-    TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
+    TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto, bool * constUnderDim ) {
         if (!aliasCacheValid) computeAliasCache();
         if (!aliasCacheHasAlias) return nullptr;        // proven no aliases anywhere
         if (baseType == Type::alias) {
@@ -1121,7 +1121,17 @@ namespace das
             return this;
         }
         if ( firstType ) {
-            if ( auto k = firstType->findAlias(name,allowAuto) ) {
+            if ( auto k = firstType->findAlias(name,allowAuto,constUnderDim) ) {
+                // a binding peeled off a fixed-array chain (auto(TT)[]) inherits the head's
+                // constness - canonical form keeps inner nodes bare, but the flattened world
+                // kept label+const+dims on one node. only the pure FA chain transfers;
+                // a container boundary (array<TT> etc) binds bare, as always.
+                if ( constUnderDim && constant && baseType==Type::tFixedArray ) {
+                    for ( auto t = firstType; t; t = t->firstType ) {
+                        if ( t == k ) { *constUnderDim = true; break; }
+                        if ( t->baseType != Type::tFixedArray ) break;
+                    }
+                }
                 return k;
             }
         }
