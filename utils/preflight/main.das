@@ -577,12 +577,15 @@ def gate_tests_jit(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     // probe: a JIT no-op run tells us whether dasLLVM is in this binary
     let probe_file = path_join(temp_dir_or_cwd(), "preflight_jit_probe.das")
-    fwrite(probe_file, "options gen2\n[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n")
+    if (!fwrite(probe_file, "options gen2\n[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n")) {
+        return GateResult(name = "tests-jit", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "cannot write JIT probe file {probe_file}")
+    }
     let probe = run_argv([ctx.daslang, "-jit", probe_file], 600.0)
     remove(probe_file)
     if (probe.rc != 0) {
         return GateResult(name = "tests-jit", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "JIT probe failed — daslang built without dasLLVM? (-DDAS_LLVM_DISABLED=OFF)", output = probe.out)
+            detail = "JIT probe failed (see output) — most common cause: daslang built without dasLLVM (-DDAS_LLVM_DISABLED=OFF)", output = probe.out)
     }
     return run_test_gate("tests-jit",
         [ctx.daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--timeout", "900", "--test", "tests"],
@@ -615,6 +618,15 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     }
     let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "test_aot", "--parallel"])
     if (b.rc != 0) {
+        // root CMakeLists gates tests/aot out on DAS_AOT_EXAMPLES_DISABLED and
+        // 32-bit Windows — an absent target is a config choice, not a failure.
+        // Unknown-target spellings: MSBuild / Ninja / Make.
+        for (pat in ["MSB1009", "unknown target", "No rule to make target"]) {
+            if (find(b.out, pat) >= 0) {
+                return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
+                    detail = "test_aot target not in this build config (DAS_AOT_EXAMPLES_DISABLED, or 32-bit Windows) — the AOT suite runs on 64-bit CI lanes", output = b.out)
+            }
+        }
         return classify_build_fail("tests-aot",
             "test_aot build failed (new test dirs need tests/aot/CMakeLists.txt registration)", b, ctx.daslang, t0)
     }
