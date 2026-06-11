@@ -1631,13 +1631,18 @@ namespace das {
             vvar->init = rein;
             veqt->variables.push_back(vvar);
             blk->list.push_back(veqt);
-            // loop &= _builtin_iterator_first(it0,pvar0)
+            // loop = _builtin_iterator_first(it0,pvar0) && loop
+            // first() on the LEFT so it runs for EVERY source even when an earlier one came up
+            // empty (matches SimNode_ForWithIterator) — end_loop closes all sources, and closing
+            // a never-opened container iterator unlocks a container whose lock was never taken.
             auto cbif = new ExprCall(expr->at, "_builtin_iterator_first");
             cbif->generated = true;
             cbif->arguments.push_back(new ExprVar(expr->at, srcName));
             cbif->arguments.push_back(new ExprVar(expr->at, pVarName));
-            auto lande = new ExprOp2(expr->at,"&&=",
-                                              new ExprVar(expr->at,loopVar),cbif);
+            auto land = new ExprOp2(expr->at,"&&",
+                                              cbif,new ExprVar(expr->at,loopVar));
+            auto lande = new ExprCopy(expr->at,
+                                              new ExprVar(expr->at,loopVar),land);
             blk->list.push_back(lande);
         }
         auto bll = new ExprLabel(expr->at, begin_loop_label,
