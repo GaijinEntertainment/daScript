@@ -79,9 +79,7 @@ def test_field_chain_container(t : T?) {
     //! Container is `obj.field[i]` — subexpr is the ExprField
     //! `obj.children`, an lvalue chain rooted in `obj` (ExprVar).
     //! The lvalue-chain check passes and pre-bind works.
-    var obj : Owner
-    obj.children |> push(A(f1 = 5, f2 = 6))
-    obj.children |> push(A(f1 = 7, f2 = 8))
+    var obj <- Owner(children <- [A(f1 = 5, f2 = 6), A(f1 = 7, f2 = 8)])
     with_(obj.children[1]) $(elem) {
         elem.f1 = 555
     }

@@ -144,9 +144,7 @@ def test_classify_partial_subset(t : T?) {
 
 [test]
 def test_classify_false_positive_all(t : T?) {
-    var v : Verdict
-    v.false_positives |> push(0)
-    v.false_positives |> push(1)
+    let v <- Verdict(false_positives <- [0, 1])
     let kind = classify_verdict(2, v)
     t |> equal(verdict_kind_to_string(kind), "false_positive")
 }

@@ -241,9 +241,7 @@ struct RegStruct {
 
 [test]
 def test_apply_regular_struct_read(t : T?) {
-    var rs <- RegStruct(inner = Inner(v = 7), tag = 3)
-    rs.nums |> push(10)
-    rs.nums |> push(20)
+    var rs <- RegStruct(inner = Inner(v = 7), tag = 3, nums <- [10, 20])
     var seen = 0
     apply(rs) $(name : string; field) {
         static_if (typeinfo stripped_typename(field) == "Inner") {

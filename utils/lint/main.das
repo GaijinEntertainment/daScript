@@ -297,13 +297,11 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
     let chunks <- parallel_workers::chunk_files(files, n)
     let n_chunks = length(chunks)
 
-    let raw_args <- get_command_line_arguments()
-    if (length(raw_args) < 2) {
-        print("error: --workers requires `daslang main.das` invocation (raw_args has {length(raw_args)} entries)\n")
+    let spawn_prefix <- parallel_workers::spawn_argv_prefix()
+    if (length(spawn_prefix) < 2) {
+        print("error: --workers requires `daslang main.das` invocation ({length(spawn_prefix)} argv entries)\n")
         return <- results
     }
-    let exe = raw_args[0]
-    let script = raw_args[1]
     let tag = "{ref_time_ticks()}"
     var tmperr : string
     let tmpdir = temp_directory(tmperr)
@@ -340,9 +338,8 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
             return <- results
         }
         var argv : array<string>
-        argv |> reserve(12)
-        argv |> push(exe)
-        argv |> push(script)
+        argv |> reserve(length(spawn_prefix) + 12)
+        argv |> push_from(spawn_prefix)
         argv |> push("--")
         argv |> push("--paths-from")
         argv |> push(cp)

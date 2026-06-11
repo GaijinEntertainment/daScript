@@ -7,10 +7,7 @@ require daslib/ast_boost
 require daslib/fio
 require daslib/jobque_boost
 require daslib/strings_boost
-require math
 require strings
-require canonical
-require minhash
 require cluster
 require report
 require exchange
@@ -179,13 +176,11 @@ def shard_path_for(out_path : string; tag : string; kind : string; index : int) 
 def run_parallel_export(files : array<string>; cfg : Config) {
     let workers = compute_worker_count(length(files), cfg.workers)
     let total = length(files)
-    let raw_args <- get_command_line_arguments()
-    if (length(raw_args) < 2) {
-        to_log(LOG_ERROR, "error: --workers requires `daslang main.das` invocation (raw_args has {length(raw_args)} entries)\n")
+    let spawn_prefix <- spawn_argv_prefix()
+    if (length(spawn_prefix) < 2) {
+        to_log(LOG_ERROR, "error: --workers requires `daslang main.das` invocation ({length(spawn_prefix)} argv entries)\n")
         panic("detect-dupe parallel export failed: cannot self-spawn")
     }
-    let exe = raw_args[0]
-    let script = raw_args[1]
     let tag = "{ref_time_ticks()}"
 
     let chunks <- chunk_files(files, workers)
@@ -218,9 +213,8 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         chunk_paths |> push(cp)
         shard_paths |> push(sp)
         var argv : array<string>
-        argv |> reserve(12)
-        argv |> push(exe)
-        argv |> push(script)
+        argv |> reserve(length(spawn_prefix) + 12)
+        argv |> push_from(spawn_prefix)
         argv |> push("--")
         argv |> push("--paths-from")
         argv |> push(cp)

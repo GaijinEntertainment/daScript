@@ -774,13 +774,9 @@ struct Order {
 }
 
 def private mk_orders() : array<Order> {
-    var o1 <- Order(id = 1, customer = "Acme")
-    o1.lines |> emplace(Line(sku = "a", qty = 2))
-    o1.lines |> emplace(Line(sku = "b", qty = 1))
-    var o2 <- Order(id = 2, customer = "Acme")
-    o2.lines |> emplace(Line(sku = "c", qty = 5))
-    var o3 <- Order(id = 3, customer = "Globex")
-    o3.lines |> emplace(Line(sku = "d", qty = 3))
+    var o1 <- Order(id = 1, customer = "Acme", lines <- [Line(sku = "a", qty = 2), Line(sku = "b", qty = 1)])
+    var o2 <- Order(id = 2, customer = "Acme", lines <- [Line(sku = "c", qty = 5)])
+    var o3 <- Order(id = 3, customer = "Globex", lines <- [Line(sku = "d", qty = 3)])
     return <- [o1, o2, o3]
 }
 

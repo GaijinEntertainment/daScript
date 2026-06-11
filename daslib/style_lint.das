@@ -805,6 +805,7 @@ class StyleLintVisitor : AstVisitor {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
         }
+        check_style012_chain_runs(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]
@@ -901,6 +902,222 @@ class StyleLintVisitor : AstVisitor {
                 style_warning("STYLE012: array<T> initialized by a run of push/emplace calls; use an array literal `var a <- [x, <-y, z]` (or `var a <- array<T>(x, y, z)` when you need an explicit element type, e.g. for polymorphic upcasts)", v.at)
             }
         }
+    }
+
+    // --- STYLE012 (chain form): push/emplace run into `rs.nums` / `fo[13].bar.far` ---
+
+    def check_style012_chain_runs(blk : ExprBlock?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        let n = length(blk.list)
+        var i = 0
+        while (i < n) {
+            let recv = chain_push_receiver(blk.list[i])
+            if (recv == null || chain_link_count(recv) < 1) {
+                i++
+                continue
+            }
+            var count = 1
+            while (i + count < n) {
+                let nrecv = chain_push_receiver(blk.list[i + count])
+                if (nrecv == null || !chain_equal(recv, nrecv)) break
+                count++
+            }
+            if (count >= 2) {
+                emit_style012_chain(blk, i, recv)
+            }
+            i += count
+        }
+    }
+
+    def chain_push_receiver(stmt : Expression const?) : Expression const? {
+        //! When stmt is `<pure chain> |> push/emplace(value)` on an array<T>,
+        //! returns the receiver chain expression; null otherwise. Exactly 2 args —
+        //! the 3-arg `push(a, v, at_index)` positional-insert overload must not
+        //! collapse into a literal.
+        if (stmt == null || stmt.genFlags.generated || !(stmt is ExprCall)) return null
+        let call = stmt as ExprCall
+        if (call.func == null || call.func.fromGeneric == null
+            || (call.func.fromGeneric.name != "push" && call.func.fromGeneric.name != "emplace")
+            || length(call.arguments) != 2) return null
+        let recv = call.arguments[0]
+        if (recv == null || recv._type == null
+            || recv._type.baseType != Type.tArray || !empty(recv._type.dim)) return null
+        return is_pure_chain(recv) ? recv : null
+    }
+
+    def peel_chain_adapter(e0 : Expression const?) : Expression const? {
+        //! Strips typer-synthesized value adapters (Ref2Value, Ptr2Ref) that wrap
+        //! chain links on pointer auto-deref — invisible to the user, safe to peel.
+        var e : Expression const? = e0
+        while (e != null) {
+            if (e is ExprRef2Value) {
+                e = (e as ExprRef2Value).subexpr
+            } elif (e is ExprPtr2Ref) {
+                e = (e as ExprPtr2Ref).subexpr
+            } else {
+                break
+            }
+        }
+        return e
+    }
+
+    def is_pure_chain(e0 : Expression const?) : bool {
+        //! Chain grammar: ExprVar root, ExprField links, ExprAt links with a
+        //! const-int/uint/string or simple-var index. Anything else (calls, ?.,
+        //! computed indexes) is impure — receiver identity across the run can't
+        //! be guaranteed, so the run is not collapsible.
+        let e = peel_chain_adapter(e0)
+        if (e == null) return false
+        if (e is ExprVar) return true
+        if (e is ExprField) return is_pure_chain((e as ExprField).value)
+        if (e is ExprAt) {
+            let ea = e as ExprAt
+            let idx = peel_chain_adapter(ea.index)
+            if (idx == null
+                || (!(idx is ExprVar) && !(idx is ExprConstInt)
+                    && !(idx is ExprConstUInt) && !(idx is ExprConstString))) return false
+            return is_pure_chain(ea.subexpr)
+        }
+        return false
+    }
+
+    def chain_link_count(e0 : Expression const?) : int {
+        let e = peel_chain_adapter(e0)
+        if (e is ExprField) return 1 + chain_link_count((e as ExprField).value)
+        if (e is ExprAt) return 1 + chain_link_count((e as ExprAt).subexpr)
+        return 0
+    }
+
+    def chain_equal(a0 : Expression const?; b0 : Expression const?) : bool {
+        let a = peel_chain_adapter(a0)
+        let b = peel_chain_adapter(b0)
+        if (a == null || b == null) return false
+        if (a is ExprVar) {
+            return false if (!(b is ExprVar))
+            return (a as ExprVar).variable == (b as ExprVar).variable
+        }
+        if (a is ExprField) {
+            return false if (!(b is ExprField))
+            let af = a as ExprField
+            let bf = b as ExprField
+            return af.name == bf.name && chain_equal(af.value, bf.value)
+        }
+        if (a is ExprAt) {
+            return false if (!(b is ExprAt))
+            let aa = a as ExprAt
+            let ba = b as ExprAt
+            return chain_index_equal(aa.index, ba.index) && chain_equal(aa.subexpr, ba.subexpr)
+        }
+        return false
+    }
+
+    def chain_index_equal(a0 : Expression const?; b0 : Expression const?) : bool {
+        let a = peel_chain_adapter(a0)
+        let b = peel_chain_adapter(b0)
+        if (a == null || b == null) return false
+        if (a is ExprVar && b is ExprVar) {
+            return (a as ExprVar).variable == (b as ExprVar).variable
+        }
+        if (a is ExprConstInt && b is ExprConstInt) {
+            return (a as ExprConstInt).value == (b as ExprConstInt).value
+        }
+        if (a is ExprConstUInt && b is ExprConstUInt) {
+            return (a as ExprConstUInt).value == (b as ExprConstUInt).value
+        }
+        if (a is ExprConstString && b is ExprConstString) {
+            return (a as ExprConstString).value == (b as ExprConstString).value
+        }
+        return false
+    }
+
+    def chain_describe(e0 : Expression const?) : string {
+        let e = peel_chain_adapter(e0)
+        if (e is ExprVar) return string((e as ExprVar).name)
+        if (e is ExprField) {
+            let ef = e as ExprField
+            return "{chain_describe(ef.value)}.{ef.name}"
+        }
+        if (e is ExprAt) {
+            let ea = e as ExprAt
+            let idx = peel_chain_adapter(ea.index)
+            var istr = "?"
+            if (idx is ExprVar) {
+                istr = string((idx as ExprVar).name)
+            } elif (idx is ExprConstInt) {
+                istr = "{(idx as ExprConstInt).value}"
+            } elif (idx is ExprConstUInt) {
+                istr = "{(idx as ExprConstUInt).value}"
+            } elif (idx is ExprConstString) {
+                istr = "\"{(idx as ExprConstString).value}\""
+            }
+            return "{chain_describe(ea.subexpr)}[{istr}]"
+        }
+        return "?"
+    }
+
+    def ctor_field_state(v : Variable const?; fname : das_string) : int {
+        //! Classifies field `fname` of a just-declared local after construction:
+        //! 1 = provably default-empty (struct value, no struct-field initializer,
+        //! init is null or an ExprMakeStruct without a where-block that does not
+        //! mention the field); 2 = provably initialized (MakeStruct entry or
+        //! struct-field initializer → pushes are a deliberate append); 0 = unknown
+        //! (pointer root, non-MakeStruct init, where-block).
+        var st : Structure const? = null
+        if (v._type != null && v._type.baseType == Type.tStructure && empty(v._type.dim)) {
+            st = v._type.structType
+        }
+        if (st == null) return 0
+        for (fld in st.fields) {
+            if (fld.name == fname) {
+                if (fld.init != null) return 2
+                break
+            }
+        }
+        var ms : ExprMakeStruct const? = null
+        if (v.init != null) {
+            return 0 if (!(v.init is ExprMakeStruct))
+            ms = v.init as ExprMakeStruct
+            return 0 if (ms._block != null)
+        }
+        if (ms != null) {
+            for (row in ms.structs) {
+                for (mf in *row) {
+                    if (mf.name == fname) return 2
+                }
+            }
+        }
+        return 1
+    }
+
+    def emit_style012_chain(blk : ExprBlock?; idx : int; recv : Expression const?) : void {
+        let head = blk.list[idx]
+        // Fresh-construction fold: chain is `v.field`, v declared in the statement
+        // right above. Provably-empty field → fold suggestion; field explicitly
+        // initialized → deliberate append, stay silent; unknown → general arm.
+        if (idx > 0 && blk.list[idx - 1] is ExprLet) {
+            let elet = blk.list[idx - 1] as ExprLet
+            let e = peel_chain_adapter(recv)
+            if (e is ExprField) {
+                let ef = e as ExprField
+                let base = peel_chain_adapter(ef.value)
+                if (base is ExprVar) {
+                    let bvar = (base as ExprVar).variable
+                    for (v in elet.variables) {
+                        if (v != bvar || v.flags.generated || v.flags.inScope) continue
+                        let state = ctor_field_state(v, ef.name)
+                        if (state == 1) {
+                            let tname = string(v._type.structType.name)
+                            style_warning("STYLE012: array field '{ef.name}' of freshly constructed '{v.name}' filled by a run of push/emplace; fold an array literal into the constructor `var {v.name} <- {tname}({ef.name} <- [x, <-y, z], ...)`", head.at)
+                            return
+                        }
+                        if (state == 2) return
+                        break
+                    }
+                }
+            }
+        }
+        let chain = chain_describe(recv)
+        style_warning("STYLE012: run of push/emplace into '{chain}'; use an array literal move-assign `{chain} <- [x, <-y, z]` (suppress with nolint when appending to existing content is intended)", head.at)
     }
 
     // --- STYLE013: struct var with default/empty init then a run of field assignments ---
@@ -1212,9 +1429,11 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def is_push_or_emplace_of(call : ExprCall?; target : Variable?) : bool {
+        // Exactly 2 args — the 3-arg `push(a, v, at_index)` positional-insert
+        // overload must not collapse into a literal.
         if (call.func == null || call.func.fromGeneric == null
             || (call.func.fromGeneric.name != "push" && call.func.fromGeneric.name != "emplace")
-            || length(call.arguments) < 2) return false
+            || length(call.arguments) != 2) return false
         var arg = call.arguments[0]
         if (arg is ExprRef2Value) {
             arg = (arg as ExprRef2Value.subexpr)
