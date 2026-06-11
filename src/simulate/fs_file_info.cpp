@@ -91,8 +91,8 @@ namespace das {
         createFileSystems();
     }
 
-    FsFileAccess::FsFileAccess ( const string & pak, const FileAccessPtr & access )
-        : ModuleFileAccess (pak, access) {
+    FsFileAccess::FsFileAccess ( const string & pak, const smart_ptr<Program> & program )
+        : ModuleFileAccess (pak, program) {
         createFileSystems();
     }
 

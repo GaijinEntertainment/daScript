@@ -34,7 +34,7 @@ module style_lint shared private
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
-//!   STYLE029 — non-public 'require X' used only for modules X re-exports (transitive-only) — require those directly and drop X (skipped when X provides macros or [init])
+//!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
 //!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 
 require daslib/ast_boost
@@ -1683,26 +1683,21 @@ class StyleLintVisitor : AstVisitor {
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
             var via : array<string>
-            var used_any = false
+            var used_count = 0
             for (cm in keys(closure)) {
                 if (!key_exists(used_modules, cm)) continue
-                used_any = true
+                used_count++
                 if (closure?[cm] ?? false) via |> push(cm)
             }
             var line_at = at
-            if (!empty(via)) {
-                sort(via)
-                let mods = build_string() $(w) {
-                    for (i in range(length(via))) {
-                        if (i > 0) { w |> write(", ") }
-                        w |> write(via[i])
-                    }
-                }
-                style_warning("STYLE029: require {req_name} is used only for modules it re-exports ({mods}); require those directly and drop {req_name}", line_at)
+            // >=2 used re-exports = aggregation facade; single used builtin has
+            // no requirable replacement — both stay silent.
+            if (used_count == 1 && !empty(via)) {
+                let mods = via[0]
+                style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", line_at)
                 return
             }
-            // Skip when only builtin-facade re-exports are used (legitimate).
-            return if (used_any)
+            return if (used_count > 0)
             // Nothing direct, nothing transitive, no macro/[init] — genuinely unused.
             style_warning("STYLE030: require {req_name} is unused — no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
         }

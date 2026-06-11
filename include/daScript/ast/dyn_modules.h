@@ -12,7 +12,7 @@ class TextWriter;
 //   containing `.das_module`), bypassing the modules/<name> scan. Path basenames
 //   shadow same-named entries in das_root and project_root.
 // During initialization process it calls `initialize` in files `.das_module`.
-DAS_API bool require_dynamic_modules(smart_ptr<FileAccess> file_access,
+DAS_CC_API bool require_dynamic_modules(smart_ptr<FileAccess> file_access,
                                      const string &das_root,
                                      const string &project_root,
                                      const vector<string> &load_modules,

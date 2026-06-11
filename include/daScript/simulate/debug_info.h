@@ -258,11 +258,12 @@ namespace das
 
     struct SimFunction;
     class Context;
+    class Program;
 
     class DAS_API ModuleFileAccess : public FileAccess {
     public:
         ModuleFileAccess();
-        ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
+        ModuleFileAccess ( const string & pak, const smart_ptr<Program> & program );
         virtual ~ModuleFileAccess();
         bool failed() const { return !context || !modGet; }
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;

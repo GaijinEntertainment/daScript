@@ -147,7 +147,7 @@ public:
 
         // Compile the embedded module (the abstract class definition).
         // The XDD .inc file provides the byte array and its size.
-        compileBuiltinModule("class_adapters_module.das",
+        compileBuiltinModule(this, "class_adapters_module.das",
             class_adapters_module_das,
             sizeof(class_adapters_module_das));
     }

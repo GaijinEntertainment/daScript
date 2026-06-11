@@ -269,6 +269,13 @@ class CollectExternVisitor : AstVisitor {
         if (empty(cpp_name)) return
         let reg_fn_name = "jit_register_{cpp_name}"
         to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
+        // ast_core / network_core live in the compiler lib, so emitting their
+        // jit_register thunk references compiler-only symbols — the standalone
+        // exe must then link the whole compiler lib. This catches dependency
+        // registrations (here in ensure_module) that the used_modules gate misses.
+        if (mod_name == "ast_core" || mod_name == "network_core") {
+            needs_whole_lib = true
+        }
         var reg_fn = LLVMAddFunctionWithType(g_mod, reg_fn_name, register_mod_type)
         LLVMBuildCall2(init_builder, register_mod_type, reg_fn, array<LLVMValueRef>(), "")
     }
@@ -1049,8 +1056,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
     var needs_whole_lib = sort_needs_whole_lib
+    // ast_core and network_core live in the compiler lib, so registering them
+    // (jit_register_Module_Ast / _Network) pulls compiler-only symbols — the
+    // standalone exe must then link the whole compiler lib. rtti_core used to
+    // be listed here because it hosted the compile builtins (rtti_builtin_compile
+    // -> parseDaScript); those moved to the ast module, so rtti_core is now
+    // fully self-contained in the runtime lib and no longer needs it.
     for (mod_name in keys(used_modules)) {
-        if (mod_name == "rtti_core") {
+        if (mod_name == "ast_core" || mod_name == "network_core") {
             needs_whole_lib = true
             break
         }

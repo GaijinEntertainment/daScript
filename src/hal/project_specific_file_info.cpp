@@ -29,26 +29,11 @@ namespace das {
         specificGetCloneContext = getCloneContext;
     }
 
+    // exposes the project-specific override to the compiler-lib get_file_access
+    GetFileAccessFunc get_project_specific_file_access() { return specificGetFileAccess; }
+
 } // namespace das
 
-DAS_API smart_ptr<das::FileAccess> get_file_access( char * pak ) {
-    if (specificGetFileAccess)
-        return specificGetFileAccess(pak);
-#if !DAS_NO_FILEIO
-    if ( pak && *pak ) {
-        return make_smart<FsFileAccess>(pak, make_smart<FsFileAccess>());
-    } else {
-        return make_smart<FsFileAccess>();
-    }
-#else
-    DAS_FATAL_ERROR(
-        "daslang is configured with DAS_NO_FILEIO. However file access is not specified."
-        "set_project_specific_fs_callbacks or link-time dependency in project_specific_file_info.cpp "
-        "needs to be speicied."
-    )
-    return nullptr;
-#endif
-}
 
 DAS_API Context * get_context( int stackSize ) {
     if (specificGetNewContext)

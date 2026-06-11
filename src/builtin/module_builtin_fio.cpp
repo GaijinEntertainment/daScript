@@ -215,7 +215,7 @@ namespace das {
     bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
     void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
-    void retry_pending_dynamic_modules () GENERATE_IO_STUB
+    DAS_API void retry_pending_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
@@ -1416,7 +1416,7 @@ namespace das {
     // in a prior pass now succeeds and may unblock others. Keep iterating while a
     // pass loads at least one; stop when a pass makes no progress (remaining
     // entries have genuinely-missing .so files — left silent, matching Quiet).
-    void retry_pending_dynamic_modules() {
+    DAS_API void retry_pending_dynamic_modules() {
         bool progress = true;
         while (progress && !g_pending_dynamic_modules.empty()) {
             progress = false;

@@ -641,4 +641,7 @@ namespace das {
         virtual void preVisitArrayComprehensionWhere(ExprArrayComprehension *expr, Expression *where) override;
         virtual ExpressionPtr visit(ExprArrayComprehension *expr) override;
     };
+
+    void inferTypes ( Program * program, TextWriter & logs, ModuleGroup & libGroup );
+    void inferTypesDirty ( Program * program, TextWriter & logs, bool verbose );
 }

@@ -18,6 +18,8 @@
 
 using namespace das;
 
+das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+
 // -----------------------------------------------------------------------
 // Custom file access — restrict which modules scripts can require
 // -----------------------------------------------------------------------
@@ -238,7 +240,7 @@ void tutorial() {
     //   annotation_allowed()   — whitelist annotations
     //
     // The host loads it via:
-    //   FsFileAccess(projectPath, make_smart<FsFileAccess>())
+    //   get_file_access(projectPath)
     // which compiles the project file, simulates it, and looks up
     // the exported callbacks by name.
     // ================================================================
@@ -247,8 +249,7 @@ void tutorial() {
         string projectPath = getDasRoot()
             + "/tutorials/integration/cpp/16_sandbox.das_project";
 
-        auto fAccess = make_smart<FsFileAccess>(projectPath,
-                                                make_smart<FsFileAccess>());
+        auto fAccess = get_file_access((char *) projectPath.c_str());
 
         CodeOfPolicies policies;
         // The .das_project handles module/unsafe/option restrictions,
@@ -267,8 +268,7 @@ void tutorial() {
 
         // Try a script that uses unsafe — blocked by module_allowed_unsafe()
         {
-            auto fAccess = make_smart<FsFileAccess>(projectPath,
-                                                    make_smart<FsFileAccess>());
+            auto fAccess = get_file_access((char *) projectPath.c_str());
             fAccess->setFileInfo("unsafe_test.das",
                 make_unique<TextFileInfo>(UNSAFE_SCRIPT,
                                          uint32_t(strlen(UNSAFE_SCRIPT)),
@@ -281,8 +281,7 @@ void tutorial() {
         // Try a script that requires a blocked module
         tout << "\n";
         {
-            auto fAccess = make_smart<FsFileAccess>(projectPath,
-                                                    make_smart<FsFileAccess>());
+            auto fAccess = get_file_access((char *) projectPath.c_str());
             fAccess->setFileInfo("blocked_test.das",
                 make_unique<TextFileInfo>(BLOCKED_MODULE_SCRIPT,
                                          uint32_t(strlen(BLOCKED_MODULE_SCRIPT)),

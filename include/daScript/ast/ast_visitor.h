@@ -306,7 +306,7 @@ namespace das {
         vector<ExpressionPtr>   with;
     };
 
-    AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
+    DAS_API AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
 
     class PassVisitor : public Visitor {
     public:

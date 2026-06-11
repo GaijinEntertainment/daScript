@@ -741,36 +741,23 @@ src/ast/ast_dispatch.cpp
 src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
-src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_program.cpp
-src/ast/ast_infer_type.cpp
-src/ast/ast_infer_type_report.cpp
-src/ast/ast_infer_type_function.cpp
-src/ast/ast_infer_type_helper.cpp
-src/ast/ast_infer_type_op.cpp
-src/ast/ast_infer_type_make.cpp
-src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
-src/ast/ast_const_folding.cpp
-src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_gc_report.cpp
 src/ast/ast_inscope_pod.cpp
 src/ast/ast_escape_analysis.cpp
-src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
-src/ast/ast_parse.cpp
 src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
-src/ast/dyn_modules.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
@@ -802,23 +789,15 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
+src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
-src/builtin/module_builtin_ast.cpp
-src/builtin/module_builtin_ast_serialize.cpp
-src/builtin/module_builtin_ast_flags.cpp
-src/builtin/module_builtin_ast_annotations.cpp
-src/builtin/module_builtin_ast_annotations_1.cpp
-src/builtin/module_builtin_ast_annotations_2.cpp
-src/builtin/module_builtin_ast_annotations_3.cpp
-src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
 src/builtin/module_jit.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
-src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
@@ -1094,16 +1073,40 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
 ENDMACRO()
 
 SET(LIBDASCRIPT_RUNTIME_SRC
-    ${PARSER_GENERATED_SRC}
-    ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+    ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${MAIN_SRC}
-    ${DAGOR_NOISE_SRC} ${DAS_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
+    ${DAGOR_NOISE_SRC} ${DAS_HASH_MAP_SRC} ${FAST_FLOAT_SRC}
 )
 
 SET(LIBDASCRIPT_COMPILER_SRC
     ${SIMULATE_FUSION_SRC}
+    ${PARSER_GENERATED_SRC}
+    ${PARSER_SRC}
+    ${DASCRIPT_FMT_SRC}
+    src/ast/ast_parse.cpp
+    src/ast/ast_optimize.cpp
+    src/ast/ast_const_folding.cpp
+    src/ast/ast_block_folding.cpp
+    src/ast/ast_unused.cpp
+    src/ast/ast_lint.cpp
+    src/ast/dyn_modules.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp
+    src/ast/ast_infer_type.cpp
+    src/ast/ast_infer_type_report.cpp
+    src/ast/ast_infer_type_function.cpp
+    src/ast/ast_infer_type_helper.cpp
+    src/ast/ast_infer_type_op.cpp
+    src/ast/ast_infer_type_make.cpp
+    src/ast/ast_generate.cpp
+    src/builtin/module_builtin_ast.cpp
+    src/builtin/module_builtin_ast_flags.cpp
+    src/builtin/module_builtin_ast_annotations.cpp
+    src/builtin/module_builtin_ast_annotations_1.cpp
+    src/builtin/module_builtin_ast_annotations_2.cpp
+    src/builtin/module_builtin_ast_annotations_3.cpp
+    src/builtin/module_builtin_ast_adapters.cpp
+    src/builtin/module_builtin_network.cpp
 )
 
 # Eventually libDaScript_runtime will contain only minimal subset of sources
@@ -1134,6 +1137,11 @@ target_compile_definitions(libDaScriptDyn_runtime PUBLIC
 # compiles empty in Release/Debug.
 target_sources(libDaScript_runtime    PRIVATE src/misc/alloc_tracker_overrides.cpp)
 target_sources(libDaScriptDyn_runtime PRIVATE src/misc/alloc_tracker_overrides.cpp)
+# The compiler lib is a separate binary (own CRT new/delete on Windows). Without
+# its own copy of the override, parser/infer/ast allocations escape the tracker
+# and read as cross-module orphan frees (false leaks in the RelWithDebInfo report).
+target_sources(libDaScript    PRIVATE src/misc/alloc_tracker_overrides.cpp)
+target_sources(libDaScriptDyn PRIVATE src/misc/alloc_tracker_overrides.cpp)
 
 target_link_libraries(libDaScript libDaScript_runtime)
 target_link_libraries(libDaScriptDyn libDaScriptDyn_runtime)
