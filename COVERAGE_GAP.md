@@ -79,3 +79,32 @@ Process: per-stage plan → implement → review, same as FIXED_ARRAY_REWORK.md.
 - Nightly cron on daspkg-index building every index package against daslang
   master — external ABI breakage surfaces as a nightly signal instead of
   inside an unrelated PR's extended_checks.
+
+## Stage 2 follow-ups (found while building utils/preflight, 2026-06-11)
+
+- **`.das_package` examples need a CLEAN daspkg install to be testable.**
+  `examples/games/sequence` resolves requires against a gitignored local
+  install (`modules/das-cards`) that only the smoke script refreshes — a
+  stale copy produced phantom compile errors (missing `card_mesh_ttf_path`)
+  against a green master. Options, discussable: (a) preflight scans for
+  `.das_package`, daspkg-installs fresh, then compile-checks — makes a
+  verify tool mutate + hit the network; (b) keep install-then-test inside
+  each example's smoke script (status quo, sequence only); (c) a separate
+  CI job that fresh-installs and tests every `.das_package`-bearing example
+  — pairs naturally with the Stage 4 nightly index cron. Leaning (c) with
+  preflight staying read-only.
+- **JIT-to-exe BUNDLE exes fail to load locally while master CI is green.**
+  Two data points, same family: `exe_paths_module_resolve` ctest
+  (`uses_sqlite.exe`, 0xC0000135 DLL-not-found, bundle layout) and the
+  sequence smoke's bundled `sequence.exe --smoke` (0xC0000139
+  entrypoint-not-found, fresh daspkg install + release, all artifacts
+  shipped). Triage so far: a trivial `daslang -exe` probe links AND runs
+  clean with the Dyn DLLs colocated, and clearing `.jitted_scripts` changes
+  nothing — so the plain -exe pipeline is healthy and the breakage is
+  specific to bundle exes' load-time imports (shipped `.shared_module` /
+  runtime-DLL pairing on this DLL-flavor build). Chase both together.
+- **Binary-staleness warning.** A `bin/.../daslang` older than the tree
+  produces convincing-but-wrong gate output (a stale binary's das2rst
+  regenerated handmade stubs under pre-rename `rtti` names). preflight
+  could compare the binary mtime against the newest `src/` commit and
+  WARN before running binary-derived gates.
