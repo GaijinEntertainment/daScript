@@ -4,7 +4,23 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 1 committed** (`each_kv` builtin, 8751bb9ba).
+Status: **stage 2 committed** (TableAdapter + m7; stage 1 = `each_kv` builtin, 8751bb9ba).
+
+Stage 2 findings:
+- m7 INTERP profile (2026-06-10 sweep): pruned scans sit between array and XML — `sum_aggregate`
+  13.4 ns/elem (array 2.1, XML 54.3, JSON 146.7), `contains_match` 6.6 via the keys-pruned walk,
+  pure-select `count` hits the O(1) shortcut (0.0). Deferred markers: `groupby_count` 162.6 /
+  `groupby_sum` 192.8 / `join_count` 195.0 / `join_where_count` 229.1 / `reverse_take` 58.7 —
+  the tier-2 cells stages 4–5 erase.
+- The qmacro grammar only allows `$i()` in the FIRST iterator slot of a multi-source `for` — the
+  kv zip header uses literal `_tab_kv_key_` / `_tab_kv_value_` names (ZipAdapter's itA/itB trade).
+- `keys()` yields NON-const elements (writable temp copies) — the engine-visible bind is a `let`
+  rebind (workhorse copy, free); push_clone's `==const` composition needs it.
+- `keys`/`each_kv` spell their element `-const` (iterator variance); the dispatcher clears
+  `removeConstant` on the cloned types or `array<tuple<…> -const>` buffer spellings break
+  push_clone unification.
+- Bare `<src>.to_array()` is not a recognized chain for ANY source (only suffix variants like
+  `where_to_array` exist) — a keys-snapshot needs an op in the chain. Shared engine edge.
 
 **Branch strategy (Boris, 2026-06-10):** the ENTIRE arc stays on `bbatkin/linq-table-each-kv`
 as stacked stage commits — no per-stage PRs. A major fixed-array rework is in flight on master;

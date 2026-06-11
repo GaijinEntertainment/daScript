@@ -92,6 +92,24 @@ def public fixture_json(n : int) : JsonValue? {
     return JV([for (c in fixture_array(n)); JV(c)])
 }
 
+// Table fold lane (m7): same Car schema keyed by id in a table<int; Car>. Same deterministic row
+// generator as fixture_array so the table lane is directly comparable to the array (m3f) lane; table
+// slot order is unspecified, so m7 expectations stay order-insensitive (aggregates / counts).
+def public fixture_table(n : int) : table<int; Car> {
+    var t <- {
+        for (i in range(n));
+        i + 1 => Car(
+            id = i + 1,
+            name = "Car{i}",
+            price = (i * 37) % 1000,
+            brand = i % BRAND_COUNT,
+            year = 2010 + (i * 7) % 16,
+            dealer_id = (i % DEALER_COUNT) + 1
+        )
+    }
+    return <- t
+}
+
 def public fixture_dealers_array() : array<Dealer> {
     var arr : array<Dealer>
     arr |> resize(DEALER_COUNT)
