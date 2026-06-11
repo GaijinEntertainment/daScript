@@ -150,6 +150,47 @@ def to_table(a : array<auto(TT)>; key : block<(v : TT -&) : auto>; elementSelect
     return <- to_table_impl_const(a, type<TT -const -&>, key, elementSelector)
 }
 
+def to_table(var a : iterator<tuple<auto(keyT); auto(valT)> const>) : table<keyT -const; valT> {
+    //! Collects an iterator of `(key, value)` tuples (e.g. an `each_kv` chain or a `k => v`
+    //! projection) into a `table<keyT; valT>`. Duplicate keys keep the last occurrence.
+    var tab : table<keyT -const; valT>
+    for (x in a) {
+        tab[x._0] := x._1
+    }
+    return <- tab
+}
+
+def to_table(var a : iterator<auto(keyT) const>) : table<keyT -const> {
+    //! Collects an iterator of bare hashable keys into the `table<keyT>` set form.
+    var tab : table<keyT -const>
+    for (at in a) {
+        __builtin_table_set_insert(tab, at)
+    }
+    return <- tab
+}
+
+def to_table(a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -const; valT> {
+    //! Collects an array of `(key, value)` tuples into a `table<keyT; valT>` without consuming
+    //! the source (values are cloned). Duplicate keys keep the last occurrence.
+    var tab : table<keyT -const; valT>
+    tab |> reserve(length(a))
+    for (x in a) {
+        tab[x._0] := x._1
+    }
+    return <- tab
+}
+
+def to_table(a : array<auto(keyT)>) : table<keyT -const> {
+    //! Collects an array of bare hashable keys into the `table<keyT>` set form without
+    //! consuming the source.
+    var tab : table<keyT -const>
+    tab |> reserve(length(a))
+    for (at in a) {
+        __builtin_table_set_insert(tab, at)
+    }
+    return <- tab
+}
+
 [unused_argument(tt)]
 def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
     //! Concatenates two arrays or iterators

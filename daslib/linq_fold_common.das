@@ -427,7 +427,7 @@ var alias_table : table<string; array<string>> <- {
                                      "min_max_average", "min_max_average_by",
                                      "any", "all", "contains", "first", "first_or_default",
                                      "last", "last_or_default", "single", "single_or_default",
-                                     "element_at", "element_at_or_default"],
+                                     "element_at", "element_at_or_default", "to_table"],
     // PR D1 — order-by-with-key (excludes bare `order` / `order_descending` which lack a key arg).
     // Used by plan_group_by's trailing_order slot.
     "order_by_family"            => ["order_by", "order_by_descending"]
@@ -956,8 +956,9 @@ enum LinqLane {
 def classify_terminator(name : string) : LinqLane {
     if (name == "count") return LinqLane.COUNTER
     // take/skip/take_while/skip_while trailing (after to_array strip) → ARRAY lane with implicit materialization.
+    // to_table is a materializer like the no-terminator (to_array) shape — same ARRAY lane, table buffer.
     if (name == "where_" || name == "select" || name == "take" || name == "skip"
-            || name == "take_while" || name == "skip_while") return LinqLane.ARRAY
+            || name == "take_while" || name == "skip_while" || name == "to_table") return LinqLane.ARRAY
     if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
     // EARLY_EXIT is also the dispatch lane for full-walk single-return terminators (last/single/element_at/aggregate) — same emit_early_exit_lane shape, different per-op state.
     if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains"
@@ -1354,6 +1355,7 @@ struct FoldArraySpec {
     prologueStmts    : array<Expression?>   // BEFORE bufDecl — takeN bind, etc.
     bufElemType      : TypeDeclPtr
     bufName          : string
+    bufDeclStmt      : Expression?          // non-null replaces the default `var buf : array<bufElemType>` decl (e.g. a table buffer for to_table)
     postBufDeclStmts : array<Expression?>   // AFTER bufDecl + optional dsetDecl, BEFORE reserve — e.g. early-return guards (bounded_heap)
     reserveStmts     : array<Expression?>   // AFTER postBufDecl, BEFORE source-loop — caller composes
     preCondStmts    : array<Expression?>   // bound-vars INSIDE for-loop body, OUTSIDE if-gate
@@ -1429,8 +1431,12 @@ def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?;
     bodyStmts |> push_from(spec.prologueStmts)
     let bufName = spec.bufName
     var bufElemType = spec.bufElemType
-    bodyStmts |> push <| qmacro_expr() {
-        var $i(bufName) : array<$t(bufElemType)>
+    if (spec.bufDeclStmt != null) {
+        bodyStmts |> push <| spec.bufDeclStmt
+    } else {
+        bodyStmts |> push <| qmacro_expr() {
+            var $i(bufName) : array<$t(bufElemType)>
+        }
     }
     if (spec.distinctGate != null) {
         let dg = spec.distinctGate
@@ -2366,6 +2372,100 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         prepend_binds(stmts, intermediateBinds)
         wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
         loopBody = prepend_precond(wrap_with_condition(stmts_to_expr(stmts), whereCond), preCondStmts)
+    } elif (lastName == "to_table") {
+        // to_table materializer — the array arm's skeleton with a table buffer and key inserts.
+        // Map form splits a `(k => v)` projection so each side evaluates once; other projections
+        // bind to a local first. Duplicate keys keep the last occurrence (das insert semantics).
+        var termCall = c.single["term"]
+        // null type, or the selector-based to_table(key, elementSelector) — keep the tier-2 path
+        if (termCall._type == null || length(termCall.arguments) != 1) return null
+        var tabType = strip_const_ref(clone_type(termCall._type))
+        let isSet = tabType.secondType == null || tabType.secondType.baseType == Type.tVoid
+        var stmts : array<Expression?>
+        var pushExpr : Expression?
+        if (isSet) {
+            var keyExpr = projection != null ? projection : qmacro($i(itName))
+            pushExpr = qmacro_expr() {
+                $i(accName) |> insert($e(keyExpr))
+            }
+        } elif (projection == null) {
+            // spell the kv access with the element tuple's real field names — the kv usage-pruner
+            // maps named fields (`.key`/`.value` on an each_kv lane); positional `._0` would not bind
+            var f0 = "_0"
+            var f1 = "_1"
+            let elemTupT = top._type.firstType
+            if (elemTupT != null && elemTupT.argNames |> length == 2) {
+                f0 = string(elemTupT.argNames[0])
+                f1 = string(elemTupT.argNames[1])
+            }
+            pushExpr = qmacro_expr() {
+                $i(accName)[$i(itName).$f(f0)] := $i(itName).$f(f1)
+            }
+        } else {
+            var proj = projection
+            if (proj is ExprRef2Value) {
+                proj = (proj as ExprRef2Value).subexpr
+            }
+            if (proj is ExprMakeTuple) {
+                var mt = proj as ExprMakeTuple
+                if (mt.values |> length != 2) return null
+                var keyExpr = mt.values[0]
+                var valExpr = mt.values[1]
+                pushExpr = qmacro_expr() {
+                    $i(accName)[$e(keyExpr)] := $e(valExpr)
+                }
+            } else {
+                let kvbName = qn("kvb", at)
+                var bindInit = qmacro_expr() {
+                    let $i(kvbName) := $e(projection)
+                }
+                var bindInsert = qmacro_expr() {
+                    $i(accName)[$i(kvbName)._0] := $i(kvbName)._1
+                }
+                var bindStmts : array<Expression?> <- [bindInit, bindInsert]
+                pushExpr = stmts_to_expr(bindStmts)
+            }
+        }
+        stmts |> push(wrap_with_condition(pushExpr, postTakeWhereCond))
+        prepend_binds(stmts, intermediateBinds)
+        wrap_with_ranges(stmts, skipExpr, takeExpr, skipWhileCond, takeWhileCond, names)
+        var perElementPush = stmts_to_expr(stmts)
+        var prologueStmts : array<Expression?>
+        append_ranges_prelude(prologueStmts, skipExpr, takeExpr, skipWhileCond, names)
+        // Reserve only on an unfiltered walk — a where-thinned table over-reserves hash buckets
+        // (worse than an array's slack), so the gate is stricter than the array arm's.
+        var reserveStmts : array<Expression?>
+        if (ctx.src->can_reserve_by_length() && whereCond == null && postTakeWhereCond == null) {
+            let rtop = ctx.src->arrayTop()
+            if (rtop != null && rtop._type != null && type_has_length(rtop._type)) {
+                if (takeExpr != null) {
+                    reserveStmts |> push <| qmacro_expr() {
+                        $i(accName) |> reserve($e(takeExpr) < length($i(srcName)) ? $e(takeExpr) : length($i(srcName)))
+                    }
+                } else {
+                    reserveStmts |> push <| qmacro_expr() {
+                        $i(accName) |> reserve(length($i(srcName)))
+                    }
+                }
+            }
+        }
+        var bufDecl = qmacro_expr() {
+            var $i(accName) : $t(tabType)
+        }
+        var tailStmts : array<Expression?>
+        tailStmts |> push(buffer_return(accName, false))
+        return emit_fold_array_lane(FoldArraySpec(
+            bufDeclStmt = bufDecl,
+            bufElemType = elementType,
+            bufName = accName,
+            prologueStmts <- prologueStmts,
+            reserveStmts <- reserveStmts,
+            preCondStmts <- preCondStmts,
+            whereCond = whereCond,
+            perElementPush = perElementPush,
+            tailStmts <- tailStmts,
+            wrapIter = false
+        ), ctx.src, at)
     } else {
         // Range-prelude in prologueStmts so the lane emits it BEFORE bufDecl — matches the emit_array_lane shape.
         var stmts : array<Expression?>

@@ -687,3 +687,30 @@ def to_array_filter_m7(b : B?) {
         }
     }
 }
+
+[benchmark]
+def to_table_m7(b : B?) {
+    // fused insert-loop sink: the kv chain lands straight in the result table, reserve from O(1) length
+    b |> run("to_table", N) {
+        var tab <- _fold(unsafe(each_kv(g_t)) |> _select((_.key => _.value.price)) |> to_table())
+        b |> accept(length(tab))
+        if (empty(tab)) {
+            b->failNow()
+        }
+        delete tab
+    }
+}
+
+[benchmark]
+def to_table_staged_m7(b : B?) {
+    // staged baseline: materialize the kv tuples to an array, then convert — the shape without the sink arm
+    b |> run("to_table_staged", N) {
+        var rows <- _fold(unsafe(each_kv(g_t)) |> _select((_.key => _.value.price)) |> to_array())
+        var tab <- to_table_move(rows)
+        b |> accept(length(tab))
+        if (empty(tab)) {
+            b->failNow()
+        }
+        delete tab
+    }
+}

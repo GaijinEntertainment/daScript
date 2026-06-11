@@ -4,9 +4,37 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 5 committed** (join probe + table-lead joins; stage 4 = point-lookup folds,
-ac441c4a0; stage 3 = `%linq!` table sources, 29d23baf6; stage 2 = TableAdapter + m7, 571fe879e;
-stage 1 = `each_kv` builtin, 8751bb9ba).
+Status: **stage 6 committed — arc complete** (to_table sink; stage 5 = join probe + table-lead
+joins, 2742f6db2; stage 4 = point-lookup folds, ac441c4a0; stage 3 = `%linq!` table sources,
+29d23baf6; stage 2 = TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba;
+master's fixed-array rework merged in after stage 5, 1ab3e6a67).
+
+Stage 6 findings:
+- **Tier-2 surface required for typing**: `_fold`'s argument must fully type before the macro
+  runs, so the selector-free `to_table` generics in `daslib/linq.das` are load-bearing — map vs
+  set in the fused emit falls out of the *resolved* terminator type (`secondType == void`), not
+  from chain inspection. Iterator forms are const-qualified (`tuple<…> const` / `auto(keyT)
+  const`) — the standard 50609 mangler-ICE defuse — and the named kv tuple matches the
+  positional `tuple<auto;auto>` generic directly.
+- **The fused arm is ~60 lines riding existing machinery**: `to_table` joins
+  `loop_terminator_family` + the ARRAY materializer lane; a new `FoldArraySpec.bufDeclStmt` slot
+  swaps the array buffer decl for the table decl and `emit_fold_array_lane` does the rest
+  (where/select/ranges/reserve plumbing shared with to_array chains).
+- **Field names matter for the kv pruner**: the pass-through insert must spell `it.key` /
+  `it.value` (the element tuple's real field names), not positional `._0`/`._1` — the row-usage
+  scanner maps named fields only, and an unmapped reference leaves the bind var undeclared.
+  A `(k => v)` MakeTuple projection splits so each side evaluates exactly once.
+- **`to_table_move` is not a chain terminator**: over an iterator there is nothing to steal —
+  elements are yielded temporaries, so "move" reduces to clone. The consuming builtin
+  `to_table_move(array)` forms still serve materialized arrays (the bench staged baseline uses
+  exactly that); a fused move of non-copyable select-temps stays a deferred edge
+  (fused-kv-non-copyable).
+- **decs needs an explicit decline**: `emit_loop_or_count_lane_decs` falls through unknown
+  terminators to its implicit-to_array arm, which would mis-emit an array for a table-typed
+  expr — guarded with `if (termName == "to_table") return null` (tier-2 cascade).
+- **where-after-select + any terminator already cascades** (pre-existing lane behavior, count
+  and to_table alike) — not a stage-6 regression; left as-is.
+- m7: `to_table` 32.3 vs `to_table_staged` 71.5 ns/elem INTERP (~2.2× over materialize-then-convert).
 
 Stage 5 findings:
 - **`emit_array_join` generalized instead of a parallel `emit_table_join`**: the lead loop, bind

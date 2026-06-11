@@ -280,6 +280,10 @@ def test_table_point_lookup(t : T?) {
 
 typedef IKV = tuple<key : int; value : int>
 
+def flip_kv(kv : IKV) : tuple<int; int> {
+    return (kv.value => kv.key)
+}
+
 // Joins: a table in the srcB slot joined on its bare key (`d.key` / bare set element) probes the user's
 // table instead of building the join's internal hash; a table lead rides the same emitter through the
 // pruned slot walk. Either way must agree with the hash/hand-loop semantics: inner joins drop misses,
@@ -492,5 +496,126 @@ def test_each_kv_tier2(t : T?) {
         }
         let n = unsafe(each_kv(tab)) |> _where(_.key % 2 == 0) |> count()
         t |> equal(n, 3)
+    }
+}
+
+[test]
+def test_to_table_sink(t : T?) {
+    t |> run("kv pass-through + where agrees with a hand loop") @(t : T?) {
+        var src <- make_int_table(6)
+        var expected : table<int; int>
+        for (k, v in keys(src), values(src)) {
+            if (k > 1) {
+                expected[k] = v
+            }
+        }
+        var got <- _fold(each_kv(src) |> _where(_.key > 1) |> to_table())
+        t |> equal(length(got), length(expected))
+        for (k, v in keys(expected), values(expected)) {
+            t |> equal(got?[k] ?? -1, v)
+        }
+        delete got
+        delete expected
+        delete src
+    }
+    t |> run("projection remaps keys and values") @(t : T?) {
+        var src <- make_int_table(5)
+        var got <- _fold(each_kv(src) |> _select((_.key * 2) => _.value + 1) |> to_table())
+        t |> equal(length(got), 5)
+        t |> equal(got?[8] ?? -1, 41)
+        delete got
+        delete src
+    }
+    t |> run("bare to_table clones the table through the fused walk") @(t : T?) {
+        var src <- make_int_table(5)
+        var got <- _fold(each_kv(src) |> to_table())
+        t |> equal(length(got), 5)
+        t |> equal(got?[0] ?? -1, 0)
+        t |> equal(got?[4] ?? -1, 40)
+        delete got
+        delete src
+    }
+    t |> run("keys chain lands in the set form") @(t : T?) {
+        var src <- make_int_table(5)
+        var got <- _fold(keys(src) |> _where(_ != 3) |> to_table())
+        t |> equal(length(got), 4)
+        t |> success(key_exists(got, 0) && !key_exists(got, 3))
+        delete got
+        delete src
+    }
+    t |> run("array source with a tuple projection") @(t : T?) {
+        var arr <- [for (i in range(4)); i + 1]
+        var got <- _fold(arr |> _select(_ => _ * _) |> to_table())
+        t |> equal(length(got), 4)
+        t |> equal(got?[3] ?? -1, 9)
+        delete got
+        delete arr
+    }
+    t |> run("duplicate keys keep the last occurrence") @(t : T?) {
+        var arr <- [for (i in range(6)); i]
+        var got <- _fold(arr |> _select((_ % 2) => _) |> to_table())
+        t |> equal(length(got), 2)
+        t |> equal(got?[0] ?? -1, 4)
+        t |> equal(got?[1] ?? -1, 5)
+        delete got
+        delete arr
+    }
+    t |> run("take bounds the walk and the reserve") @(t : T?) {
+        var src <- make_int_table(5)
+        var got <- _fold(keys(src) |> take(2) |> to_table())
+        t |> equal(length(got), 2)
+        delete got
+        delete src
+    }
+    t |> run("non-tuple-literal projection rides the bind arm") @(t : T?) {
+        var src <- make_int_table(5)
+        var got <- _fold(each_kv(src) |> _select(flip_kv(_)) |> to_table())
+        t |> equal(length(got), 5)
+        t |> equal(got?[40] ?? -1, 4)
+        delete got
+        delete src
+    }
+    t |> run("string keys through the fused map arm") @(t : T?) {
+        var src <- make_int_table(4)
+        var got <- _fold(each_kv(src) |> _select(("k{_.key}" => _.value)) |> to_table())
+        t |> equal(length(got), 4)
+        t |> equal(got?["k2"] ?? -1, 20)
+        delete got
+        delete src
+    }
+    t |> run("tier-2 iterator to_table agrees with the fused emit") @(t : T?) {
+        var src <- make_int_table(6)
+        var fused <- _fold(each_kv(src) |> _where(_.key % 2 == 0) |> to_table())
+        var tier2 <- to_table(unsafe(each_kv(src)) |> _where(_.key % 2 == 0))
+        t |> equal(length(fused), length(tier2))
+        for (k, v in keys(tier2), values(tier2)) {
+            t |> equal(fused?[k] ?? -1, v)
+        }
+        delete fused
+        delete tier2
+        delete src
+    }
+    t |> run("array-input to_table forms borrow the source") @(t : T?) {
+        var pairs <- [for (i in range(3)); (i => i * i)]
+        var m <- to_table(pairs)
+        t |> equal(length(pairs), 3)   // source intact
+        t |> equal(length(m), 3)
+        t |> equal(m?[2] ?? -1, 4)
+        var bare <- [for (i in range(4)); i * 100]
+        var s <- to_table(bare)
+        t |> equal(length(bare), 4)
+        t |> success(key_exists(s, 300))
+        delete s
+        delete bare
+        delete m
+        delete pairs
+    }
+    t |> run("selector-based to_table keeps its tier-2 path") @(t : T?) {
+        var arr <- [for (i in range(4)); i]
+        var got <- to_table(to_sequence(arr), $(x : int) => x, $(x : int) => x * 10)
+        t |> equal(length(got), 4)
+        t |> equal(got?[3] ?? -1, 30)
+        delete got
+        delete arr
     }
 }
