@@ -57,6 +57,12 @@ def d_dup(v : float2) : float {
     return v.x + v.x + v.y
 }
 
+// ----- weighted AND negated lanes in one chain -> dot(a, (2, 3, -4)) -----
+[flatten]
+def d_wneg(a : float3) : float {
+    return 2.0 * a.x + 3.0 * a.y - 4.0 * a.z
+}
+
 // ----- two base vectors in one sum -> two independent dots -----
 [flatten]
 def d_two(a : float2; b : float2) : float {
@@ -106,11 +112,12 @@ def test_flatten_dot(t : T?) {
             fapprox(t, d_luma_flat(float3(v, v * 0.5, -v)), d_luma(float3(v, v * 0.5, -v)))
         }
     }
-    t |> run("negated / mixed / repeated lanes — value approx") @(t : T?) {
+    t |> run("negated / mixed / repeated / weighted-negated lanes — value approx") @(t : T?) {
         for (v in GRID) {
             fapprox(t, d_neg_flat(float3(v, 7.5, 1.0)), d_neg(float3(v, 7.5, 1.0)))
             fapprox(t, d_mixed_flat(float3(v, -v, 1.0), v * 0.25), d_mixed(float3(v, -v, 1.0), v * 0.25))
             fapprox(t, d_dup_flat(float2(v, 7.5)), d_dup(float2(v, 7.5)))
+            fapprox(t, d_wneg_flat(float3(v, -v, 2.5)), d_wneg(float3(v, -v, 2.5)))
         }
     }
     t |> run("two base vectors — value approx") @(t : T?) {

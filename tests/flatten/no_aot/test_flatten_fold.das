@@ -127,7 +127,8 @@ def test_flatten_fold(t : T?) {
     }
     t |> run("dot corpus fuses clean (test_flatten_dot.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_dot.das")
-        t |> success(n >= 11, "expected >=11 twins, checked {n}")
+        t |> success(n >= 12, "expected >=12 twins, checked {n}")
+        // weighted + negated lanes in one chain land in the mask: dot(a, (2, 3, -4))
         // the hadd must come back as a dot call (symmetric-oracle guard: fuser and residual
         // share dot_chain_groups, so only a POSITIVE assert catches a matcher break blinding both)
         var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_dot.das")
@@ -137,6 +138,8 @@ def test_flatten_fold(t : T?) {
         t |> success(lu |> find("dot(") >= 0, "weighted lanes must fuse to dot: {lu}")
         let ne = bodies?["d_nested_flat"] ?? ""
         t |> success(ne |> find("dot(") >= 0, "lane sum inside a call arg must fuse: {ne}")
+        let wn = bodies?["d_wneg_flat"] ?? ""
+        t |> success(wn |> find("float3(2f,3f,-4f)") >= 0, "weighted/negated lanes must land in the mask: {wn}")
         delete bodies
     }
     t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
