@@ -16,6 +16,7 @@ options gen2
 require daslib/fio public
 require daslib/jobque_boost public
 require math
+require strings
 
 
 // Below this many work items, the daslang startup cost dominates over
@@ -90,6 +91,40 @@ def public chunk_files(items : array<string>; n_chunks : int) : array<array<stri
         out |> emplace(chunk)
     }
     return <- out
+}
+
+
+// Argv prefix for self-spawning workers: everything before the `--`
+// separator, so binary flags like `-dasroot <path>` survive into workers.
+// Without a separator, everything up to and including the first `.das`
+// script argument; [exe, script] only as a last resort.
+def public spawn_argv_prefix() : array<string> {
+    let raw_args <- get_command_line_arguments()
+    var prefix : array<string>
+    prefix |> reserve(length(raw_args))
+    var saw_sep = false
+    for (a in raw_args) {
+        if (a == "--") {
+            saw_sep = true
+            break
+        }
+        prefix |> push(a)
+    }
+    if (!saw_sep) {
+        prefix |> resize(0)
+        var found_script = false
+        for (a in raw_args) {
+            prefix |> push(a)
+            if (a |> ends_with(".das")) {
+                found_script = true
+                break
+            }
+        }
+        if (!found_script && length(prefix) > 2) {
+            prefix |> resize(2)
+        }
+    }
+    return <- prefix
 }
 
 

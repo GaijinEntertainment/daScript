@@ -34,7 +34,7 @@ def clone(var dst : GameState; src : GameState) {
 
 def make_inventory() : Inventory {
     var inv : Inventory
-    inv.items |> push("sword")
+    inv.items |> push("sword")  // nolint:STYLE012 — tutorial demonstrates building up then moving out
     inv.items |> push("shield")
     inv.weight = 15
     return <- inv     // must use <- because Inventory contains array
@@ -152,9 +152,7 @@ def main {
     // Define a custom 'clone' function to control how := works.
     // The signature is: def clone(var dst : T; src : T)
 
-    var game = GameState(name = "save1", level = 5)
-    game.scores |> push(100)
-    game.scores |> push(200)
+    let game <- GameState(name = "save1", level = 5, scores <- [100, 200])
 
     let save := game    // uses our custom clone below
     print("game:  level={game.level}, scores={game.scores}\n")

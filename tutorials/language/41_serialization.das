@@ -205,7 +205,7 @@ def demo_nested() {
     var state : GameState  // nolint:STYLE013 — tutorial demonstrates incremental field setup with nested table inserts
     state.player = Player(name = "Knight", hp = 80, x = 10.0, y = 20.0)
     state.level = 3
-    state.inventory.items |> push("sword")
+    state.inventory.items |> push("sword")  // nolint:STYLE012 — same incremental-setup demo
     state.inventory.items |> push("shield")
     state.inventory.counts |> insert("sword", 1)
     state.inventory.counts |> insert("shield", 1)
