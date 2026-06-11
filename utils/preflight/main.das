@@ -10,9 +10,11 @@ options persistent_heap
 // CI-only-das compile sweep, the six doc gates, tests-cpp (ctest -L small),
 // interpreter/JIT/AOT suites, and the sequence smoke.
 //
-// Cross-platform: Windows / macOS / Linux+WSL. All subprocesses go through
-// popen_argv (no shell, no quoting trap); a gate whose host tool or module
-// is missing reports SKIP with an install/rebuild hint, never a silent pass.
+// Cross-platform: Windows / macOS / Linux+WSL. Subprocesses go through
+// popen_argv (no shell, no quoting trap), with one exception: the sequence
+// gate runs CI's own smoke scripts under pwsh/bash by design. A gate whose
+// host tool or module is missing reports SKIP with an install/rebuild hint,
+// never a silent pass.
 
 require daslib/clargs
 require daslib/fio
@@ -656,7 +658,10 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
     var args : array<string>
     if (get_platform_name() == "windows") {
         let shell = tool_available("pwsh") ? "pwsh" : "powershell"
-        let cmd = "$env:BIN = '{bin_dir}'; & 'examples/games/sequence/ci_smoke_test.ps1' '{cwd}'; exit $LASTEXITCODE"
+        // single-quoted PS literals: escape embedded quotes by doubling
+        let bin_dir_ps = replace(bin_dir, "'", "''")
+        let cwd_ps = replace(cwd, "'", "''")
+        let cmd = "$env:BIN = '{bin_dir_ps}'; & 'examples/games/sequence/ci_smoke_test.ps1' '{cwd_ps}'; exit $LASTEXITCODE"
         args <- [shell, "-NoProfile", "-Command", cmd]
     } else {
         args <- ["env", "BIN={bin_dir}", "bash", "examples/games/sequence/ci_smoke_test.sh", cwd]

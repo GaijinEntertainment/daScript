@@ -18,12 +18,13 @@ daslang utils/preflight/main.das -- --only docs,ci-das
 daslang utils/preflight/main.das -- --skip tests-aot --full
 ```
 
-Cross-platform (Windows / macOS / Linux+WSL): all subprocesses go through
-`popen_argv` (no shell), the C++ syntax pass uses `clang-cl /Zs` on Windows
-(preferring the VS-bundled clang — the same binary CI's ClangCL toolset uses)
-and `clang -fsyntax-only` elsewhere, and a gate whose host tool or module is
-missing reports `SKIP` with an install/rebuild hint instead of passing
-silently. Exit code is non-zero when any gate fails.
+Cross-platform (Windows / macOS / Linux+WSL): subprocesses go through
+`popen_argv` (no shell) — except the sequence gate, which by design runs CI's
+own smoke scripts under pwsh/bash. The C++ syntax pass uses `clang-cl /Zs` on
+Windows (preferring the VS-bundled clang — the same binary CI's ClangCL
+toolset uses) and `clang -fsyntax-only` elsewhere, and a gate whose host tool
+or module is missing reports `SKIP` with an install/rebuild hint instead of
+passing silently. Exit code is non-zero when any gate fails.
 
 `ci_only_das.txt` lists the in-repo das surface that no default local build
 compiles (dasOpenGL today); see the header comment there before adding

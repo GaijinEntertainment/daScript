@@ -99,10 +99,12 @@ Process: per-stage plan → implement → review, same as FIXED_ARRAY_REWORK.md.
   sequence smoke's bundled `sequence.exe --smoke` (0xC0000139
   entrypoint-not-found, fresh daspkg install + release, all artifacts
   shipped). Triage so far: a trivial `daslang -exe` probe links AND runs
-  clean with the Dyn DLLs colocated, and clearing `.jitted_scripts` changes
-  nothing — so the plain -exe pipeline is healthy and the breakage is
-  specific to bundle exes' load-time imports (shipped `.shared_module` /
-  runtime-DLL pairing on this DLL-flavor build). Chase both together.
+  clean with the Dyn DLLs colocated; clearing `.jitted_scripts` changes
+  nothing; and a fully fresh one-shot rebuild (runtime DLLs + all shipped
+  modules + exe relinked together) still loads 0xC0000139 — so it is NOT
+  artifact staleness. Remaining suspect: the DLL-flavor daslang config
+  (local `.vscode` build) vs CI's static daslang, in the bundle exe's
+  load-time import chain. Chase both together.
 - **Binary-staleness warning.** A `bin/.../daslang` older than the tree
   produces convincing-but-wrong gate output (a stale binary's das2rst
   regenerated handmade stubs under pre-rename `rtti` names). preflight
