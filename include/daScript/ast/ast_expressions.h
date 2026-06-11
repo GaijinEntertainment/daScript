@@ -1404,7 +1404,6 @@ namespace das
         ExprMakeLocal ( const LineInfo & at )
             : Expression(at) { __rtti = "ExprMakeLocal"; }
         virtual bool rtti_isMakeLocal() const override { return true; }
-        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off );
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         TypeDeclPtr                 makeType = nullptr;
@@ -1429,7 +1428,6 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeStruct"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeStruct() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1462,7 +1460,6 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeVariant"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeVariant() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1476,7 +1473,6 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeArray"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeArray() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1493,7 +1489,6 @@ namespace das
         virtual bool rtti_isMakeTuple() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         bool isKeyValue = false;
