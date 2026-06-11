@@ -535,6 +535,12 @@ site-shapes as the in-tree gen1 parser. Caveat: deleting dim/dimExpr at the end 
 Stage 1 breaks its COMPILE, so the field-deletion commit carries the minimal mechanical
 flip (same edit as the in-tree gen1 parser got in 1b — by then the helpers exist);
 the full port/verification of the converter is what lands here at the end.
+**RESOLVED (Boris, Stage-6 review): leave das-fmt alone, fix later → issue #3094.**
+The mechanical flip landed in Stage 6; its 8 failing `--tests` self-tests are
+PRE-EXISTING — proven identical on master 4d2e98f22, branch pre-deletion 1cf7e4f66,
+and post-deletion 326b9f925 (worktree A/B/C builds). All 8 are the converter's own
+verify-compile environment (conversion text correct; same texts compile via
+daslang.exe); zero CI coverage. Tool is migration-era, rarely used.
 
 AFTER THE LAST STAGE (Boris, Stage-2 review): VSCode plugin fixes —
 `D:\DASPKG\daScript-plugin`. Sweep it for rework fallout (TypeDecl dim/dimExpr

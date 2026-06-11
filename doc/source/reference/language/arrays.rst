@@ -76,6 +76,41 @@ This expands to:
 
 	let arr : float[4] = fixed_array<float>(1.,2.,3.,4.5)
 
+Fixed-size arrays can be multi-dimensional. Dimensions read outermost first —
+``float[4][4]`` is 4 rows of ``float[4]`` — and indexing peels one level at a time:
+
+.. code-block:: das
+
+  var m : float[4][4]
+  m[1][2] = 5.0          // m[1] is a float[4] row; m[1][2] is a float
+  var total = 0.0
+  for ( row in m ) {     // iterates the 4 rows
+    total += row[2]
+  }
+
+Fixed-size array types compose with type aliases, including arrays of aliased arrays:
+
+.. code-block:: das
+
+  typedef M4 = float[4][4]
+
+  var stack : M4[10]       // 10 matrices
+  stack[0][1][2] = 3.0
+
+Unlike dynamic arrays, fixed-size arrays of copyable elements copy with plain
+assignment:
+
+.. code-block:: das
+
+  var a = fixed_array(1, 2, 3, 4)
+  var b = a       // b is a copy
+  b[0] = 99       // a[0] is still 1
+
+``typeinfo dim`` returns the outermost dimension of a fixed-size array. See
+:ref:`Generic Programming <generic_programming>` for how fixed-size arrays bind to
+generic arguments (``auto(TT)`` binds the whole array, ``auto(TT)[]`` peels one
+level, ``-[]`` removes one level).
+
 Dynamic arrays can also be constructed inline:
 
 .. code-block:: das
