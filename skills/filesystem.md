@@ -169,12 +169,13 @@ if (r is error) {
 ## Temp files & dirs
 
 ```das
-let dir = create_temp_directory("build_") ?? ""    // null/empty on failure
-let f   = create_temp_file("dump_", ".log") ?? ""
-let td  = temp_directory() ?? ""
+var err : string
+let dir = create_temp_directory("build_", err)     // "" + err set on failure
+let f   = create_temp_file("dump_", ".log", err)
+let td  = temp_directory(err)
 ```
 
-All three return absolute paths; the `_result` variants surface a real error string if creation failed (disk full, permission denied, etc.).
+All three return absolute paths (empty string on failure, with the `error` out-param set). There are NO zero/short-arg optional-returning forms — `temp_directory()` is a compile error. The `_result` variants (`temp_directory_result()`, `create_temp_file_result(prefix, ext)`, `create_temp_directory_result(prefix)`) wrap the same calls into `fs_result_string` for exhaustive matching.
 
 ## Disk space
 

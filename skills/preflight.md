@@ -6,8 +6,14 @@ was an **oracle mismatch** — a gate CI enforces that no local step mirrored �
 not a wrong change. This file maps every PR-triggered lane to its exact local
 mirror, or says honestly that there isn't one.
 
-A `utils/preflight` tool automating the common tiers is planned
-(`COVERAGE_GAP.md` Stage 2); until it lands, these are the manual commands.
+**`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
+runs the fast tier (format + lint + clang syntax pass on changed C++, seconds);
+`-- --full` adds dasgen freshness, the CI-only-das compile sweep, the six doc
+gates, ctest, the interp/JIT/AOT suites, and the sequence smoke. `--list-gates`
+shows the menu; `--only <names>` / `--skip <names>` select subsets. Gates whose
+host tool or module is missing report `SKIP` with an install/rebuild hint. The
+tables below remain the reference for what each gate mirrors and for running
+any step by hand.
 
 **Conventions.** `<daslang>` = your compiler binary: `bin/Release/daslang.exe`
 (Windows MSVC multi-config), `bin/daslang` (Ninja single-config — what CI's

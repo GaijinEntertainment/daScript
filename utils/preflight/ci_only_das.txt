@@ -1,0 +1,12 @@
+# CI-only das surface: in-repo files no default local build compiles, swept by
+# the preflight `ci-das` gate with `daslang -compile-only`.
+# Format: <glob> | <native modules whose absence means SKIP, comma-separated> | <rebuild hint>
+# A compile failure whose missing prerequisite is NOT in the allow-skip list is a FAIL.
+#
+# Only list files whose requires resolve entirely in-repo. Surfaces that pull
+# external daspkg packages (examples/games/sequence -> das-cards) belong to the
+# `sequence` gate instead — its ci_smoke_test script installs the deps fresh,
+# while a bare -compile-only would read whatever stale gitignored install is
+# lying around and report phantom errors.
+modules/dasOpenGL/opengl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
+modules/dasOpenGL/glsl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
