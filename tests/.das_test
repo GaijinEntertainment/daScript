@@ -51,7 +51,7 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
-    if (folder_name == "ast_match") {
+    if (folder_name == "ast_match" || folder_name == "ast") {
         let args <- get_command_line_arguments()
         for (arg in args) {
             if (arg == "--use-aot" || arg == "-jit") {
