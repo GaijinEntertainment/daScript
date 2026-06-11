@@ -6,15 +6,15 @@ require dastest/testing_boost public
 require daslib/flatten
 require math
 
-//! Differential net for the flatten OPTIMIZE arc (preshader extraction + CSE).
-//! Both passes are VALUE-EXACT — they only hoist and dedup pure subtrees, never
-//! regroup or round — so twins compare with exact `equal` (unlike the reassoc
-//! arc). ONE carve-out: PHASE_FUSED re-packs a vector mul-add into `mad`, which
-//! runs hardware-fused (FMA, single rounding), so a vector twin where that fires
-//! (p_vec) compares approx. The FIRED proof (a `_preshader_` let on top, a shared
-//! `_cse_` let) lives in `no_aot/test_flatten_fold.das` (empty
-//! `flatten_opt_residuals`) and the cap_preshader / cap_cse node-count shaders;
-//! here we only assert the optimization preserved the result.
+//! Differential net for the flatten OPTIMIZE arc (preshader extraction + CSE +
+//! regroup-to-share). Hoist/dedup passes are VALUE-EXACT, so their twins compare
+//! with exact `equal` (unlike the reassoc arc). Carve-outs compare approx: a twin
+//! where PHASE_FUSED packs a mul-add into hardware-fused `mad` (p_vec, the r_*
+//! returns), and the regroup twins themselves (re-pairing `C - x` moves the float
+//! association). The FIRED proof (a `_preshader_` let on top, a shared `_cse_`
+//! let) lives in `no_aot/test_flatten_fold.das` (empty `flatten_opt_residuals`)
+//! and the cap_preshader / cap_cse node-count shaders; here we only assert the
+//! optimization preserved the result.
 
 // Module globals are UNIFORM (preshader-eligible); function params are VARYING.
 var G_GAIN = 2.5
@@ -122,6 +122,29 @@ def c_store(a : int; b : int) : int {
     return G_BUF[(a * 3 + b) & 7]
 }
 
+// ----- regroup-to-share: reassoc canonicalizes `1 - b + e` to `(e - b) + 1` which splits the
+// `1 - b` the albedo line carries whole; the regroup re-pairs it so CSE shares ONE node -----
+[flatten]
+def r_oneminus(b : float; e : float; c : float) : float {
+    let albedo = c * (1.0 - b)
+    let alpha = 1.0 - b + e
+    return albedo + alpha * 2.0
+}
+
+// ----- regroup is keyed on the exact const, not just 1.0 -----
+[flatten]
+def r_anyconst(b : float; e : float; c : float) : float {
+    let p = c * (0.5 - b)
+    let q = 0.5 - b + e
+    return p + q * 2.0
+}
+
+// ----- no grouped twin anywhere -> no regroup, canonical order stands (differential guard) -----
+[flatten]
+def r_notwin(b : float; e : float) : float {
+    return 1.0 - b + e
+}
+
 var GRID : array<float>
 
 [init]
@@ -195,6 +218,14 @@ def test_flatten_opt(t : T?) {
         for (v in GRID) {
             let n = int(v)
             t |> equal(c_at_flat(n, n + 1), c_at(n, n + 1))
+        }
+    }
+    t |> run("regroup-to-share: const-minus re-pairs toward the grouped twin (approx — fused mad)") @(t : T?) {
+        for (v in GRID) {
+            fapprox(t, r_oneminus_flat(v, v * 0.5, -v), r_oneminus(v, v * 0.5, -v))
+            fapprox(t, r_anyconst_flat(v, v * 0.5, -v), r_anyconst(v, v * 0.5, -v))
+            // no twin -> reassoc's canonical `(e - b) + 1` stands (approx: the association moved)
+            fapprox(t, r_notwin_flat(v, v * 0.5), r_notwin(v, v * 0.5))
         }
     }
     t |> run("CSE: indexed-store base is mutable (no read shared across stores)") @(t : T?) {
