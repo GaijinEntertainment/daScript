@@ -14,6 +14,8 @@ Stage 2 findings:
   the tier-2 cells stages 4–5 erase.
 - The qmacro grammar only allows `$i()` in the FIRST iterator slot of a multi-source `for` — the
   kv zip header uses literal `_tab_kv_key_` / `_tab_kv_value_` names (ZipAdapter's itA/itB trade).
+  Filed as [#3096](https://github.com/GaijinEntertainment/daScript/issues/3096) (grammar fix
+  and/or a templates_boost loop-builder helper).
 - `keys()` yields NON-const elements (writable temp copies) — the engine-visible bind is a `let`
   rebind (workhorse copy, free); push_clone's `==const` composition needs it.
 - `keys`/`each_kv` spell their element `-const` (iterator variance); the dispatcher clears
