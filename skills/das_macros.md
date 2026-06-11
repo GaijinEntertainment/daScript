@@ -112,6 +112,16 @@ Note adapters can still *emit* code referencing the contributor's symbols by nam
 - **`typeDecl.argTypes`** — array of `TypeDeclPtr` representing function-type arguments (indices: 0 = first parameter). For interface method fields, `argTypes[0]` is the `self` parameter — check `.isConst` to determine if the method is const.
 - **Interior mutability pattern** — when a const getter needs to lazily mutate a cache: declare param as `self : T ==const`, then `var pS = unsafe(reinterpret<T? -const>(addr(self)))` to strip const for cache mutation. Used in `daslib/interfaces.das` for const-only interface proxy caching.
 
+### Fixed arrays in the AST (tFixedArray, since 0.6.3)
+
+`int[3][4]` is a chain of `TypeDecl` nodes, NOT a `dim` vector on the element — the `dim`/`dimExpr` fields are **deleted**:
+
+- One node per dimension: `baseType == Type.tFixedArray`, element in `firstType`, size in `fixedDim`, **outermost first** (`int[3][4]` = FA(3, FA(4, int))). Operate on the head's `fixedDim`/`firstType` and recurse — never assume one node covers all dims (the one-peel rule).
+- `fixedDim` sentinels pre-inference: `TypeDecl.dimAuto` (-1) for `[]`, `TypeDecl.dimConst` (-2) while `fixedDimExpr` awaits constant folding. Post-inference both are resolved; `fixedDim <= 0` reaching final verify is an error.
+- ref/const/temporary qualifiers live on the **chain head only**. Build chains with `make_fixed_array_type(total, element)` from `daslib/ast_boost` — it hoists the element's qualifiers onto the new head for you.
+- **Typemacro payloads moved**: `$mytag(args...)` argument expressions are in `typeMacroExpr`, not `dimExpr`. Update any pre-0.6.3 macro that read `t.dimExpr` for tag payloads.
+- Walking to the element: `var leaf = t; while (leaf.baseType == Type.tFixedArray && leaf.firstType != null) { leaf = leaf.firstType; }` — collect `fixedDim` per level if you need the flattened dims (runtime `TypeInfo.dim[]` stays flattened; only the AST is structural).
+
 ## Shared AST-match helpers
 
 `daslib/ast_match.das` exposes a small set of public helpers harvested from `linq_fold` + `sqlite_linq` during the 2026-05 refactor. Reach for these BEFORE writing a new `is X / as X` cascade — they capture the exact semantics each pattern was hand-rolling, with module-gating and generic-instantiation transparency baked in.
