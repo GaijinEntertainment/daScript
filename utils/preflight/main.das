@@ -138,6 +138,12 @@ def temp_dir_or_cwd() : string {
     return empty(td) ? "." : td
 }
 
+// unique per run — the system temp dir is shared across checkouts, so a
+// fixed name lets concurrent preflights clobber each other's files
+def unique_temp_path(prefix, suffix : string) : string {
+    return path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
+}
+
 def non_empty_lines(s : string) : array<string> {
     var out : array<string>
     for (raw in split(s, "\n")) {
@@ -271,7 +277,7 @@ def gate_format(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "format", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "git ls-files failed", output = ls.out)
     }
-    let list_file = path_join(temp_dir_or_cwd(), "preflight_fmt_list.txt")
+    let list_file = unique_temp_path("preflight_fmt_list", ".txt")
     if (!fwrite(list_file, ls.out)) {
         return GateResult(name = "format", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "cannot write {list_file}")
@@ -388,6 +394,14 @@ def gate_dasgen(ctx : PreflightCtx) : GateResult {
 
 // ===== docs gates (mirror doc.yml 1-6) =====
 
+def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
+    let names = ["docs/sphinx-latex", "docs/sphinx-html"]
+    results |> reserve(length(results) + length(names))
+    for (g in names) {
+        results |> emplace(GateResult(name = g, status = GateStatus.Skip, detail = reason))
+    }
+}
+
 def docs_skip_all(reason : string; var results : array<GateResult>&) {
     let names = ["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html"]
     results |> reserve(length(results) + length(names))
@@ -455,15 +469,16 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
     // gates 5+6: sphinx -W, latex then html. Delete the doctree cache first —
     // CI builds from a fresh clone, a stale local cache hides warnings.
     if (!tool_available("sphinx-build")) {
-        let sphinx_gates = ["docs/sphinx-latex", "docs/sphinx-html"]
-        results |> reserve(length(results) + length(sphinx_gates))
-        for (g in sphinx_gates) {
-            results |> emplace(GateResult(name = g, status = GateStatus.Skip,
-                detail = "sphinx-build not found — pip install -r doc/requirements.txt"))
-        }
+        skip_sphinx_gates("sphinx-build not found — pip install -r doc/requirements.txt", results)
         return
     }
     rmdir_rec("doc/sphinx-build")
+    if (stat("doc/sphinx-build").is_valid) {
+        // running sphinx against a cache we failed to delete would be an
+        // untrustworthy PASS — refuse instead
+        skip_sphinx_gates("cannot delete doc/sphinx-build (locked?) — remove it and re-run", results)
+        return
+    }
     t0 = ref_time_ticks()
     let r5 = run_argv(["sphinx-build", "-W", "--keep-going", "-b", "latex", "-d", "doc/sphinx-build", "doc/source", "build/latex"])
     results |> emplace(GateResult(name = "docs/sphinx-latex", status = r5.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
@@ -576,7 +591,7 @@ def gate_tests_interp(ctx : PreflightCtx) : GateResult {
 def gate_tests_jit(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     // probe: a JIT no-op run tells us whether dasLLVM is in this binary
-    let probe_file = path_join(temp_dir_or_cwd(), "preflight_jit_probe.das")
+    let probe_file = unique_temp_path("preflight_jit_probe", ".das")
     if (!fwrite(probe_file, "options gen2\n[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n")) {
         return GateResult(name = "tests-jit", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "cannot write JIT probe file {probe_file}")
