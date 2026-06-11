@@ -1,0 +1,1 @@
+Resolves an ``AnnotationInfo`` to the live ``Annotation`` object by looking up its module and name among the registered modules. Returns null when the annotation's module is no longer registered. Successful lookups are cached.

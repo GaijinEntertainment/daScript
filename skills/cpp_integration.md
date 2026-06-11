@@ -289,10 +289,10 @@ Where `vec4f` as an `ArgType` means "any type" — the argument accepts any dasl
 - `vec4f` argument type = "any" — accept arguments of any daslang type
 - Used internally for `sprint`, `hash`, `write`, `binary_save/load`, `invoke_in_context`
 
-**TypeInfo union warning**: `TypeInfo` has a union — `structType`, `enumType`, and `annotation_or_name` share the same memory. Which member is valid depends on `ti->type`:
+**TypeInfo union warning**: `TypeInfo` has a union — `structType`, `enumType`, and `annotation_info` share the same memory. Which member is valid depends on `ti->type`:
 - `tStructure` → `ti->structType` (StructInfo *)
 - `tEnumeration` / `tEnumeration8` / `tEnumeration16` → `ti->enumType` (EnumInfo *)
-- `tHandle` → use `ti->getAnnotation()` (resolves tagged pointer safely)
+- `tHandle` → use `ti->getAnnotation()` (resolves the name-based `AnnotationInfo` to the live `TypeAnnotation` and caches)
 
 Accessing the wrong union member is **undefined behavior**. `das_to_string(Type::tHandle)` returns an empty string — use `ti->getAnnotation()->name` for handled type names.
 

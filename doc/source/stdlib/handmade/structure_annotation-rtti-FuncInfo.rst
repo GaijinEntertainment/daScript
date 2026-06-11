@@ -11,3 +11,4 @@ number of arguments in the function
 stack size in bytes
 number of local variables
 number of accessed global variables
+number of annotations attached to the function

@@ -28,6 +28,8 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(VarInfo,VarInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(LocalVariableInfo,LocalVariableInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FuncInfo,FuncInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgumentInfo,AnnotationArgumentInfo)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationInfo,AnnotationInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgumentList,AnnotationArgumentList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationDeclaration,AnnotationDeclaration)
@@ -559,6 +561,25 @@ namespace das {
         }
     };
 
+    struct AnnotationArgumentInfoAnnotation : ManagedStructureAnnotation <AnnotationArgumentInfo,false> {
+        AnnotationArgumentInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgumentInfo", ml) {
+            addFieldEx ( "basicType", "type", offsetof(AnnotationArgumentInfo, type), makeType<Type>(ml) );
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
+            addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
+            addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
+        }
+    };
+
+    struct AnnotationInfoAnnotation : ManagedStructureAnnotation <AnnotationInfo,false> {
+        AnnotationInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
+            addField<DAS_BIND_MANAGED_FIELD(count)>("count");
+        }
+    };
+
     TypeDeclPtr makeAnnotationDeclarationFlags() {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "AnnotationDeclarationFlags";
@@ -737,6 +758,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
+            addField<DAS_BIND_MANAGED_FIELD(annotation_count)>("annotation_count");
             fieldType = makeType<EnumValueInfo>(*mlib);
             fieldType->ref = true;
         }
@@ -767,6 +789,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             addField<DAS_BIND_MANAGED_FIELD(init_mnh)>("init_mnh");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            addField<DAS_BIND_MANAGED_FIELD(annotation_count)>("annotation_count");
         }
         void init () {
             fieldType = makeType<VarInfo>(*mlib);
@@ -841,8 +864,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
             addField<DAS_BIND_MANAGED_FIELD(nextGcField)>("nextGcField");
-            addFieldEx ( "annotation_arguments", "annotation_arguments",
-                        offsetof(VarInfo, annotation_arguments), makeType<const AnnotationArguments *>(ml) );
+            addField<DAS_BIND_MANAGED_FIELD(annotation_argument_count)>("annotation_argument_count");
             // default values
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(value)>("value");
@@ -882,6 +904,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             addField<DAS_BIND_MANAGED_FIELD(localCount)>("localCount");
             addField<DAS_BIND_MANAGED_FIELD(globalCount)>("globalCount");
+            addField<DAS_BIND_MANAGED_FIELD(annotation_count)>("annotation_count");
             fieldType = makeType<VarInfo>(*mlib);
             fieldType->ref = true;
         }
@@ -1025,7 +1048,6 @@ namespace das {
     struct DebugInfoHelperAnnotation : ManagedStructureAnnotation<DebugInfoHelper> {
         DebugInfoHelperAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation<DebugInfoHelper> ("DebugInfoHelper", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         }
     };
 
@@ -1133,7 +1155,6 @@ namespace das {
 
     void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         module->enumerations.foreach([&](auto penum){
             EnumInfo * info = helper.makeEnumDebugInfo(*penum);
             vec4f args[1] = {
@@ -1150,6 +1171,21 @@ namespace das {
         case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
         case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
         case Type::tString: return RttiValue::create<char*, RttiString>(context->allocateString(info.sValue, at), align);
+        default: DAS_ASSERT(false); // I guess unreachable?
+        }
+        return RttiValue{};
+    }
+
+    RttiValue rtti_builtin_argument_info_value(const AnnotationArgumentInfo & info, Context * context, LineInfoArg * at ) {
+        const auto align = sizeof(vec4f) - sizeof(int32_t);
+        switch (info.type) {
+        case Type::tBool:   return RttiValue::create<bool, RttiBool>(info.bValue, align);
+        case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
+        case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
+        case Type::tString: {
+            const char * sval = info.sValue ? info.sValue : "";
+            return RttiValue::create<char*, RttiString>(context->allocateString(sval, uint64_t(strlen(sval)), at), align);
+        }
         default: DAS_ASSERT(false); // I guess unreachable?
         }
         return RttiValue{};
@@ -1206,7 +1242,6 @@ namespace das {
 
     void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         module->structures.foreach([&](auto structPtr){
             if ( structPtr->isTemplate ) return;
             StructInfo * info = helper.makeStructureDebugInfo(*structPtr);
@@ -1217,22 +1252,63 @@ namespace das {
         });
     }
 
+    // deprecated shim: reconstructs AST-shaped (Annotation*, AnnotationArgumentList) pairs
+    // from the POD AnnotationInfo copies for the duration of the block invoke
     void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context, LineInfoArg * at ) {
-        if ( info.annotation_list ) {
-            auto al = (const AnnotationList *) info.annotation_list;
-            for ( const auto & adp : *al ) {
-                vec4f args[2] = {
-                    cast<Annotation *>::from(adp->annotation),
-                    cast<AnnotationArgumentList *>::from(&adp->arguments)
-                };
-                context->invoke(block, args, nullptr, at);
+        for ( uint32_t ai=0, ais=info.annotation_count; ai!=ais; ++ai ) {
+            const auto & adp = info.annotations[ai];
+            auto ann = Module::resolveAnnotation(&adp);
+            if ( !ann ) continue;   // annotation module no longer registered
+            AnnotationArgumentList arguments;
+            arguments.reserve(adp.count);
+            for ( uint32_t i=0, is=adp.count; i!=is; ++i ) {
+                const auto & arg = adp.arguments[i];
+                AnnotationArgument a;
+                a.type = arg.type;
+                a.name = arg.name;
+                if ( arg.type==Type::tString ) a.sValue = arg.sValue ? arg.sValue : "";
+                a.iValue = arg.iValue;
+                arguments.push_back(a);
             }
+            vec4f args[2] = {
+                cast<Annotation *>::from(ann),
+                cast<AnnotationArgumentList *>::from(&arguments)
+            };
+            context->invoke(block, args, nullptr, at);
         }
+    }
+
+    const AnnotationInfo & rtti_builtin_struct_annotation ( const StructInfo & info, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(index)>=info.annotation_count ) context->throw_error_at(at, "annotation index out of range, %i of %u", index, info.annotation_count);
+        return info.annotations[index];
+    }
+
+    const AnnotationInfo & rtti_builtin_func_annotation ( const FuncInfo & info, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(index)>=info.annotation_count ) context->throw_error_at(at, "annotation index out of range, %i of %u", index, info.annotation_count);
+        return info.annotations[index];
+    }
+
+    const AnnotationInfo & rtti_builtin_enum_annotation ( const EnumInfo & info, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(index)>=info.annotation_count ) context->throw_error_at(at, "annotation index out of range, %i of %u", index, info.annotation_count);
+        return info.annotations[index];
+    }
+
+    const AnnotationArgumentInfo & rtti_builtin_annotation_argument ( const AnnotationInfo & info, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(index)>=info.count ) context->throw_error_at(at, "annotation argument index out of range, %i of %u", index, info.count);
+        return info.arguments[index];
+    }
+
+    const AnnotationArgumentInfo & rtti_builtin_var_annotation_argument ( const VarInfo & info, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(index)>=info.annotation_argument_count ) context->throw_error_at(at, "annotation argument index out of range, %i of %u", index, info.annotation_argument_count);
+        return info.annotation_arguments[index];
+    }
+
+    Annotation * rtti_builtin_resolve_annotation ( const AnnotationInfo & info ) {
+        return Module::resolveAnnotation(&info);
     }
 
     void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         module->functions.foreach([&](auto funcPtr){
             if ( funcPtr->isTemplate ) return;
             FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
@@ -1245,7 +1321,6 @@ namespace das {
 
     void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         module->generics.foreach([&](auto funcPtr){
             FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
             vec4f args[1] = {
@@ -1257,7 +1332,6 @@ namespace das {
 
     void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         module->globals.foreach([&](auto var){
             VarInfo * info = helper.makeVariableDebugInfo(*var);
             vec4f args[1] = {
@@ -1286,7 +1360,6 @@ namespace das {
     void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
         const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
-        helper.rtti = true;
         for ( auto & it : ann.fields ) {
             const auto & fld = it.second;
             TypeInfo * info = helper.makeTypeInfo(nullptr, fld.decl);
@@ -1653,6 +1726,8 @@ namespace das {
             addAnnotation(new AstSerializerAnnotation(lib));
             addEnumeration(new EnumerationType());
             addAnnotation(new AnnotationArgumentAnnotation(lib));
+            addAnnotation(new AnnotationArgumentInfoAnnotation(lib));
+            addAnnotation(new AnnotationInfoAnnotation(lib));
             addVectorAnnotation<AnnotationArguments>(this,lib,"AnnotationArguments");
             addVectorAnnotation<AnnotationArgumentList>(this,lib,"AnnotationArgumentList");
             addAnnotation(new ProgramAnnotation(lib));
@@ -1771,6 +1846,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_argument_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value",
                 SideEffects::modifyExternal, "rtti_builtin_argument_value")
                     ->args({"info","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_argument_info_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value",
+                SideEffects::modifyExternal, "rtti_builtin_argument_info_value")
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "module_for_each_enumeration",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_enumeration")
                     ->args({"module","block","context","line"});
@@ -1788,7 +1866,25 @@ namespace das {
                     ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation",
                 SideEffects::modifyExternal, "rtti_builtin_structure_for_each_annotation")
-                    ->args({"struct","block","context","line"});
+                    ->args({"struct","block","context","line"})->setDeprecated("use each_annotation() instead");
+            addExtern<DAS_BIND_FUN(rtti_builtin_struct_annotation), SimNode_ExtFuncCallRef>(*this, lib, "get_annotation",
+                SideEffects::none, "rtti_builtin_struct_annotation")
+                    ->args({"struct","index","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_func_annotation), SimNode_ExtFuncCallRef>(*this, lib, "get_annotation",
+                SideEffects::none, "rtti_builtin_func_annotation")
+                    ->args({"function","index","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_enum_annotation), SimNode_ExtFuncCallRef>(*this, lib, "get_annotation",
+                SideEffects::none, "rtti_builtin_enum_annotation")
+                    ->args({"enumeration","index","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_annotation_argument), SimNode_ExtFuncCallRef>(*this, lib, "get_annotation_argument",
+                SideEffects::none, "rtti_builtin_annotation_argument")
+                    ->args({"annotation","index","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_var_annotation_argument), SimNode_ExtFuncCallRef>(*this, lib, "get_annotation_argument",
+                SideEffects::none, "rtti_builtin_var_annotation_argument")
+                    ->args({"variable","index","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_resolve_annotation)>(*this, lib, "resolve_annotation",
+                SideEffects::accessExternal, "rtti_builtin_resolve_annotation")
+                    ->arg("annotation");
             addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field",
                 SideEffects::invokeAndAccessExternal, "rtti_builtin_basic_struct_for_each_field")
                     ->args({"annotation","block","context","line"});

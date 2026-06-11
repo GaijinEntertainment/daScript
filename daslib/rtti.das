@@ -10,9 +10,76 @@ require strings
 typedef FileAccessPtr = smart_ptr<FileAccess>
 
 
-[generic]
+//! Deprecated: resolves each AnnotationInfo back to the live Annotation object and
+//! reconstructs an AST-shaped argument list per invoke. Use `each_annotation` instead.
+[generic, deprecated]
 def structure_for_each_annotation(st : StructInfo; subexpr : block<(ann : Annotation; args : AnnotationArguments) : void>) {
     rtti_builtin_structure_for_each_annotation(st, subexpr)
+}
+
+def private each_annotation_range(pinfo; annotation_count : uint) {
+    return <- generator<AnnotationInfo const&> {
+        for (index in range(int(annotation_count))) {
+            unsafe {
+                yield get_annotation(*pinfo, index)
+            }
+        }
+        return false
+    }
+}
+
+//! Iterates annotations (`[name(args)]`) of a structure, function, or enumeration.
+[generic]
+def each_annotation(info : StructInfo) {
+    unsafe {
+        let pinfo = addr(info)
+        return <- each_annotation_range(pinfo, info.annotation_count)
+    }
+}
+
+[generic]
+def each_annotation(info : FuncInfo) {
+    unsafe {
+        let pinfo = addr(info)
+        return <- each_annotation_range(pinfo, info.annotation_count)
+    }
+}
+
+[generic]
+def each_annotation(info : EnumInfo) {
+    unsafe {
+        let pinfo = addr(info)
+        return <- each_annotation_range(pinfo, info.annotation_count)
+    }
+}
+
+def private each_annotation_argument_range(pinfo; argument_count : uint) {
+    return <- generator<AnnotationArgumentInfo const&> {
+        for (index in range(int(argument_count))) {
+            unsafe {
+                yield get_annotation_argument(*pinfo, index)
+            }
+        }
+        return false
+    }
+}
+
+//! Iterates the arguments of one annotation.
+[generic]
+def each_annotation_argument(info : AnnotationInfo) {
+    unsafe {
+        let pinfo = addr(info)
+        return <- each_annotation_argument_range(pinfo, info.count)
+    }
+}
+
+//! Iterates field/global annotation arguments (`@name = value` on a field).
+[generic]
+def each_annotation_argument(info : VarInfo) {
+    unsafe {
+        let pinfo = addr(info)
+        return <- each_annotation_argument_range(pinfo, info.annotation_argument_count)
+    }
 }
 
 [generic]

@@ -36,23 +36,21 @@ namespace das {
             embed = false;
             optional = false;
             string name = vi->name ? vi->name : "";
-            if ( vi->annotation_arguments ) {
-                auto aa = (AnnotationArguments *) vi->annotation_arguments;
-                for ( auto arg : *aa ) {
-                    if ( arg.name=="enum_as_int" && arg.type==Type::tBool ) {
-                        enumAsInt = arg.bValue;
-                    } else if ( arg.name=="unescape" && arg.type==Type::tBool ) {
-                        unescape = arg.bValue;
-                    } else if ( arg.name=="embed" && arg.type==Type::tBool ) {
-                        embed = arg.bValue;
-                    } else if ( arg.name=="optional" && arg.type==Type::tBool ) {
-                        optional = arg.bValue;
-                    } else if ( arg.name=="rename" ) {
-                        if ( arg.type==Type::tString ) {
-                            name = arg.sValue;
-                        } else if ( arg.type==Type::tBool && !name.empty() && name[0]=='_' ) {
-                            name = name.substr(1);
-                        }
+            for ( uint32_t ai=0, ais=vi->annotation_argument_count; ai!=ais; ++ai ) {
+                const auto & arg = vi->annotation_arguments[ai];
+                if ( strcmp(arg.name,"enum_as_int")==0 && arg.type==Type::tBool ) {
+                    enumAsInt = arg.bValue;
+                } else if ( strcmp(arg.name,"unescape")==0 && arg.type==Type::tBool ) {
+                    unescape = arg.bValue;
+                } else if ( strcmp(arg.name,"embed")==0 && arg.type==Type::tBool ) {
+                    embed = arg.bValue;
+                } else if ( strcmp(arg.name,"optional")==0 && arg.type==Type::tBool ) {
+                    optional = arg.bValue;
+                } else if ( strcmp(arg.name,"rename")==0 ) {
+                    if ( arg.type==Type::tString ) {
+                        name = arg.sValue;
+                    } else if ( arg.type==Type::tBool && !name.empty() && name[0]=='_' ) {
+                        name = name.substr(1);
                     }
                 }
             }

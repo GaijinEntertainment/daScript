@@ -254,18 +254,16 @@ namespace das {
 
         static string getFieldName(VarInfo * vi) {
             string name = vi->name ? vi->name : "";
-            if (vi->annotation_arguments) {
-                auto aa = (AnnotationArguments *)vi->annotation_arguments;
-                for (auto & arg : *aa) {
-                    if (arg.name == "rename") {
-                        if (arg.type == Type::tString) {
-                            name = arg.sValue;
-                        } else if (arg.type == Type::tBool && !name.empty() && name[0] == '_') {
-                            // @rename _field — strip leading underscore
-                            name = name.substr(1);
-                        }
-                        break;
+            for (uint32_t ai = 0, ais = vi->annotation_argument_count; ai != ais; ++ai) {
+                const auto & arg = vi->annotation_arguments[ai];
+                if (strcmp(arg.name, "rename") == 0) {
+                    if (arg.type == Type::tString) {
+                        name = arg.sValue;
+                    } else if (arg.type == Type::tBool && !name.empty() && name[0] == '_') {
+                        // @rename _field — strip leading underscore
+                        name = name.substr(1);
                     }
+                    break;
                 }
             }
             return name;

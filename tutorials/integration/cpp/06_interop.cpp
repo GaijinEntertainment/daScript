@@ -32,11 +32,11 @@ using namespace das;
 vec4f describe_type(Context & context, SimNode_CallBase * call, vec4f * args) {
     TypeInfo * ti = call->types[0];  // TypeInfo for the first argument
 
-    // NOTE: TypeInfo has a union: structType / enumType / annotation_or_name
+    // NOTE: TypeInfo has a union: structType / enumType / annotation_info
     // Which member is valid depends on ti->type:
     //   tStructure   → structType (StructInfo *)
     //   tEnumeration → enumType   (EnumInfo *)
-    //   tHandle      → annotation_or_name (use getAnnotation())
+    //   tHandle      → annotation_info (use getAnnotation())
     // Accessing the wrong union member is undefined behavior!
 
     TextWriter tw;

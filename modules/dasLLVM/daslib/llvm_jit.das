@@ -42,21 +42,6 @@ var active_filenames : table<string>
 // on the first hit and needs no size guard. json_find -35%. Flip + bump CODEGEN_VERSION to re-A/B.
 let JIT_PACKED_FIND_STR_EARLY_OUT = true
 
-// VarInfo annotation type on c++ side is `vector`.
-// They cannot be allocated as global variable and require
-// Memory managment - ctors/dtors, same as FileInfo.
-struct AnnotationVarInfoEntry {
-    varinfo    : LLVMOpaqueValue?
-    ann_global : LLVMOpaqueValue?
-    count      : int
-}
-var annotation_varinfo_list : array<AnnotationVarInfoEntry>
-
-// (parent_global, resolvent_str_global) pairs for tHandle typeinfo slot 0.
-// Static initializer leaves slot 0 null; runtime ctor writes the tagged pointer
-// because wasm32 forbids widening ptrtoint inside .data initializers.
-var handle_typeinfo_pending : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
-
 [macro_function]
 def private get_expr_ptr(expr : ExpressionPtr) {
     return expr
@@ -196,97 +181,6 @@ def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; j
     LLVMBuildRetVoid(dtor_builder)
 
     return (constructor, destructor)
-}
-
-[macro_function]
-def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; jit_mode : bool) {
-    var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
-    var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
-    defer() {
-        LLVMDisposeBuilder(ctor_builder)
-        LLVMDisposeBuilder(dtor_builder)
-    }
-    let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
-    let constructor = LLVMAddFunctionWithType(g_mod, "annotations_constructor", functionType)
-    let destructor  = LLVMAddFunctionWithType(g_mod, "annotations_destructor",  functionType)
-    if (!jit_mode) {
-        set_private_linkage(constructor)
-        set_private_linkage(destructor)
-    } else {
-        set_public_linkage(constructor)
-        set_public_linkage(destructor)
-    }
-    let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
-    LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
-    let entry_dtor = LLVMAppendBasicBlockInContext(g_ctx, destructor,  "entry_dtor")
-    LLVMPositionBuilderAtEnd(dtor_builder, entry_dtor)
-    let void_ptr = types.LLVMVoidPtrType()
-    var initFuncType = LLVMFunctionType(types.t_void,
-        fixed_array<LLVMTypeRef>(void_ptr, types.t_int32, void_ptr))
-    var freeFuncType = LLVMFunctionType(types.t_void,
-        fixed_array<LLVMTypeRef>(void_ptr))
-    var initFunc = LLVMAddFunctionWithType(g_mod, "jit_initialize_varinfo_annotations", initFuncType)
-    LLVMAddGlobalMapping(g_engine, initFunc, get_initialize_varinfo_annotations())
-    var freeFunc = LLVMAddFunctionWithType(g_mod, "jit_free_varinfo_annotations",       freeFuncType)
-    LLVMAddGlobalMapping(g_engine, freeFunc, get_free_varinfo_annotations())
-    for (entry in entries) {
-        var ctorArgs = array<LLVMValueRef>(
-            ctor_builder |> LLVMBuildPointerCast(entry.varinfo,    void_ptr, ""),
-            types.ConstI32(entry.count |> uint64()),
-            ctor_builder |> LLVMBuildPointerCast(entry.ann_global, void_ptr, ""))
-        LLVMBuildCall2(ctor_builder, initFuncType, initFunc, ctorArgs, "")
-        var dtorArgs = array<LLVMValueRef>(
-            dtor_builder |> LLVMBuildPointerCast(entry.varinfo,    void_ptr, ""))
-        LLVMBuildCall2(dtor_builder, freeFuncType, freeFunc, dtorArgs, "")
-    }
-    LLVMBuildRetVoid(ctor_builder)
-    LLVMBuildRetVoid(dtor_builder)
-    return (constructor, destructor)
-}
-
-[macro_function]
-def generate_handle_typeinfo_ctor_dtor(types : PrimitiveTypes; entries : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; jit_mode : bool) {
-    // Slot 0 (annotation_or_name) of every tHandle TypeInfo holds
-    //   ((TypeAnnotation*)(intptr_t(annName)|1))
-    // wasm32 forbids widening ptrtoint inside .data initializers (the cast
-    // must run post-relocation), so the tagged pointer is materialized at
-    // runtime by this constructor function. globalopt would otherwise fold
-    // the ctor-only store back into the static initializer — the parent
-    // global is marked externally_initialized to block that.
-    var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
-    defer() {
-        LLVMDisposeBuilder(ctor_builder)
-    }
-    let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
-    let constructor = LLVMAddFunctionWithType(g_mod, "handle_typeinfo_constructor", functionType)
-    if (!jit_mode) {
-        set_private_linkage(constructor)
-    } else {
-        set_public_linkage(constructor)
-    }
-    let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
-    LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
-
-    let void_ptr = types.LLVMVoidPtrType()
-    let void_ptr_ptr = LLVMPointerType(void_ptr, 0u)
-    let one = LLVMConstInt(types.t_int64, 1 |> uint64(), 0)
-    for ((parent_global, resolvent_str) in entries) {
-        // tagged = (i8*)(ptrtoint(resolvent) + 1)
-        // Mark parent as externally_initialized: globalopt would otherwise
-        // fold ctor-only stores back into the static initializer, which
-        // re-introduces the ptrtoint ConstantExpr that wasm32 cannot lower
-        // in .data. The attribute is LLVM's intended signal for
-        // "runtime-initialized by external code, don't fold".
-        LLVMSetExternallyInitialized(parent_global, 1)
-        let nameInt   = LLVMBuildPtrToInt(ctor_builder, resolvent_str, types.t_int64, "nameInt")
-        let taggedInt = LLVMBuildAdd(ctor_builder, nameInt, one,                      "taggedInt")
-        let taggedPtr = LLVMBuildIntToPtr(ctor_builder, taggedInt, void_ptr,          "taggedPtr")
-        // slot 0 is at offset 0 — alias parent_global as i8** and store.
-        let slot0 = LLVMBuildBitCast(ctor_builder, parent_global, void_ptr_ptr, "slot0")
-        LLVMBuildStore(ctor_builder, taggedPtr, slot0)
-    }
-    LLVMBuildRetVoid(ctor_builder)
-    return (constructor, unsafe(reinterpret<LLVMOpaqueValue?>(null)))
 }
 
 [macro_function]
@@ -4621,7 +4515,7 @@ class public LlvmJitVisitor : AstVisitor {
     def get_llvm_type_for_typeinfo() : LLVMTypeRef {
         let void_ptr = types.LLVMVoidPtrType()
         return StructType(types) <| fixed_array(
-            void_ptr,        // union StructInfo *, EnumInfo *, TypeAnnotation *
+            void_ptr,        // union StructInfo *, EnumInfo *, AnnotationInfo *
             void_ptr,        // TypeInfo * firstType
             void_ptr,        // TypeInfo * secondType
             void_ptr,        // TypeInfo ** argTypes
@@ -4640,7 +4534,7 @@ class public LlvmJitVisitor : AstVisitor {
         let void_ptr = types.LLVMVoidPtrType()
         return StructType(types) <| fixed_array(
         // Typeinfo fields
-            void_ptr,        // union StructInfo *, EnumInfo *, TypeAnnotation *
+            void_ptr,        // union StructInfo *, EnumInfo *, AnnotationInfo *
             void_ptr,        // TypeInfo * firstType
             void_ptr,        // TypeInfo * secondType
             void_ptr,        // TypeInfo ** argTypes
@@ -4656,7 +4550,8 @@ class public LlvmJitVisitor : AstVisitor {
         // Own fields
             types.LLVMFloat4Type(), // union { vec4f value; char * sValue }
             void_ptr,         // const char * name
-            void_ptr,         // void * annotation_arguments
+            void_ptr,         // AnnotationArgumentInfo * annotation_arguments
+            types.t_int32,  // uint32_t annotation_argument_count
             types.t_int32,  // uint32_t offset
             types.t_int32   // uint32_t nextGcField
         )
@@ -4668,7 +4563,7 @@ class public LlvmJitVisitor : AstVisitor {
             void_ptr,        // const char* name
             void_ptr,        // const char* module_name
             void_ptr,        // VarInfo **  fields
-            void_ptr,        // void *      annotation_list
+            void_ptr,        // AnnotationInfo * annotations
 
             types.t_int64, // uint64_t hash
             types.t_int64, // uint64_t init_mnh
@@ -4676,7 +4571,8 @@ class public LlvmJitVisitor : AstVisitor {
             types.t_int32, // uint32_t flags
             types.t_int32, // uint32_t count
             types.t_int32, // uint32_t size
-            types.t_int32)
+            types.t_int32, // uint32_t firstGcField
+            types.t_int32) // uint32_t annotation_count
     }
 
     def get_llvm_type_for_enumvalueinfo() : LLVMTypeRef {
@@ -4686,13 +4582,23 @@ class public LlvmJitVisitor : AstVisitor {
             types.t_int64)
     }
 
-    def get_llvm_type_for_annotation_arg_pod() : LLVMTypeRef {
+    def get_llvm_type_for_annotation_argument_info() : LLVMTypeRef {
+        let void_ptr = types.LLVMVoidPtrType()
+        return StructType(types) <| fixed_array(
+            types.t_int32,  // Type type
+            void_ptr,       // const char * name
+            void_ptr,       // const char * sValue
+            types.t_int32)  // int32_t iValue  (covers bool/int/float union)
+    }
+
+    def get_llvm_type_for_annotation_info() : LLVMTypeRef {
         let void_ptr = types.LLVMVoidPtrType()
         return StructType(types) <| fixed_array(
             void_ptr,       // const char * name
-            void_ptr,       // const char * sValue
-            types.t_int32,  // int32_t type
-            types.t_int32)  // int32_t iValue  (covers bool/int/float union)
+            void_ptr,       // const char * module_name
+            void_ptr,       // AnnotationArgumentInfo * arguments
+            types.t_int32,  // uint32_t count
+            void_ptr)       // Annotation * resolved (lazy cache, starts null)
     }
 
     def get_llvm_type_for_enuminfo(len : uint) : LLVMTypeRef {
@@ -4703,7 +4609,9 @@ class public LlvmJitVisitor : AstVisitor {
             void_ptr,        // EnumValueInfo **  fields
             types.t_int32,   // uint32_t count
             types.t_int64,   // uint64_t hash
-            types.t_int32)   // uint32_t flags (EnumInfo::flag_unsigned for uint*-backed enums)
+            types.t_int32,   // uint32_t flags (EnumInfo::flag_unsigned for uint*-backed enums)
+            void_ptr,        // AnnotationInfo * annotations
+            types.t_int32)   // uint32_t annotation_count
     }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -4753,22 +4661,86 @@ class public LlvmJitVisitor : AstVisitor {
         return <- init_values
     }
 
+    def create_annotation_argument_info(arg : AnnotationArgumentInfo) : LLVMValueRef {
+        let ann_ty = get_llvm_type_for_annotation_argument_info()
+        var fields = fixed_array(
+            types.ConstI32(uint64(int(arg.basicType))),
+            get_string_constant_ptr(g_builder, "{arg.name}"),
+            arg.basicType == Type.tString ? get_string_constant_ptr(g_builder, "{arg.sValue}") : LLVMConstPointerNull(types.LLVMVoidPtrType()),
+            types.ConstI32(uint64(uint(arg.iValue))))
+        return LLVMConstNamedStruct(ann_ty, array_data_ptr(fields), 4u)
+    }
+
+    // (arguments_ptr, count) — emits an AnnotationArgumentInfo[] global, or (null, 0)
+    def create_annotation_arguments_global(vi : VarInfo?) : tuple<LLVMValueRef; uint> {
+        if (vi.annotation_argument_count == 0u) {
+            return (LLVMConstPointerNull(types.LLVMVoidPtrType()), 0u)
+        }
+        let ann_ty = get_llvm_type_for_annotation_argument_info()
+        var ann_vals : array<LLVMValueRef>
+        ann_vals |> reserve(int(vi.annotation_argument_count))
+        for (i in range(int(vi.annotation_argument_count))) {
+            unsafe {
+                ann_vals |> push <| create_annotation_argument_info(get_annotation_argument(*vi, i))
+            }
+        }
+        let n = vi.annotation_argument_count
+        let ann_global = LLVMAddGlobal(g_mod, LLVMArrayType(ann_ty, n), "varinfo_annotations")
+        set_globalvar_linkage(ann_global)
+        ann_global |> LLVMSetInitializer <| LLVMConstArray(ann_ty, array_data_ptr(ann_vals), n)
+        return (g_builder |> LLVMBuildPointerCast(ann_global, types.LLVMVoidPtrType(), ""), n)
+    }
+
+    // one AnnotationInfo constant, including its (optionally emitted) argument array global
+    def create_annotation_info_value(ann : AnnotationInfo) : LLVMValueRef {
+        let info_ty = get_llvm_type_for_annotation_info()
+        let arg_ty = get_llvm_type_for_annotation_argument_info()
+        var args_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
+        if (ann.count > 0u) {
+            var arg_vals : array<LLVMValueRef>
+            arg_vals |> reserve(int(ann.count))
+            for (gi in range(int(ann.count))) {
+                arg_vals |> push <| create_annotation_argument_info(get_annotation_argument(ann, gi))
+            }
+            let args_global = LLVMAddGlobal(g_mod, LLVMArrayType(arg_ty, ann.count), "annotation_info_args")
+            set_globalvar_linkage(args_global)
+            args_global |> LLVMSetInitializer <| LLVMConstArray(arg_ty, array_data_ptr(arg_vals), ann.count)
+            args_ptr = g_builder |> LLVMBuildPointerCast(args_global, types.LLVMVoidPtrType(), "")
+        }
+        var fields = fixed_array(
+            get_string_constant_ptr(g_builder, "{ann.name}"),
+            get_string_constant_ptr(g_builder, "{ann.module_name}"),
+            args_ptr,
+            types.ConstI32(ann.count |> uint64()),
+            LLVMConstPointerNull(types.LLVMVoidPtrType()))
+        return LLVMConstNamedStruct(info_ty, array_data_ptr(fields), 5u)
+    }
+
+    // (annotations_ptr, count) — packs AnnotationInfo constants into an array global, or (null, 0)
+    def pack_annotation_list(var ann_vals : array<LLVMValueRef>) : tuple<LLVMValueRef; uint> {
+        if (ann_vals |> empty()) {
+            return (LLVMConstPointerNull(types.LLVMVoidPtrType()), 0u)
+        }
+        let info_ty = get_llvm_type_for_annotation_info()
+        let n = ann_vals |> length() |> uint()
+        let list_global = LLVMAddGlobal(g_mod, LLVMArrayType(info_ty, n), "annotation_info_list")
+        set_globalvar_linkage(list_global)
+        list_global |> LLVMSetInitializer <| LLVMConstArray(info_ty, array_data_ptr(ann_vals), n)
+        return (g_builder |> LLVMBuildPointerCast(list_global, types.LLVMVoidPtrType(), ""), n)
+    }
+
     def get_value_for_varinfo(vi : VarInfo?) : LLVMValueRef {
-        // get_llvm_type_for_typeinfo(); // VarInfo : TypeInfo
-        // types.LLVMFloat4Type(); // union { vec4f value; char * sValue }
-        // void_ptr;         // const char * name
-        // void_ptr;         // void * annotation_arguments
-        // types.t_int32;  // uint32_t offset
-        // types.t_int32   // uint32_t nextGcField
         var init_values <- get_typeinfo_fields(unsafe(reinterpret<TypeInfo?> vi))
 
         var x = types.ConstReal(0f |> double())
         var y = types.ConstReal(0f |> double())
         var z = types.ConstReal(0f |> double())
         var w = types.ConstReal(0f |> double())
+        var (ann_ptr, ann_count) = create_annotation_arguments_global(vi)
         init_values |> push <| LLVMBuildFloat4_xyzw(g_builder, types, x, y, z, w, "float4")
         init_values |> push <| get_string_constant_ptr(g_builder, vi.name)
-        init_values |> push <| LLVMConstPointerNull(types.LLVMVoidPtrType())
+        init_values |> push <| ann_ptr
+        init_values |> push <| types.ConstI32(ann_count |> uint64())
         init_values |> push <| types.ConstI32(vi.offset       |> uint64())
         init_values |> push <| types.ConstI32(vi.nextGcField  |> uint64())
         let ty = get_llvm_type_for_varinfo()
@@ -4785,30 +4757,7 @@ class public LlvmJitVisitor : AstVisitor {
             set_globalvar_linkage(varinfo)
             let vi = unsafe(ei[i])
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(vi)
-            queue_handle_typeinfo_if_needed(unsafe(reinterpret<TypeInfo?> vi), varinfo)
             array_init |> push <| unsafe(reinterpret<LLVMValueRef>(varinfo))
-            if (vi.annotation_arguments != null) {
-                let ann_ty = get_llvm_type_for_annotation_arg_pod()
-                var ann_vals : array<LLVMValueRef>
-                for (arg in *vi.annotation_arguments) {
-                    var fields = fixed_array(
-                        get_string_constant_ptr(g_builder, string(arg.name)),
-                        get_string_constant_ptr(g_builder, string(arg.sValue)),
-                        types.ConstI32(uint64(int(arg.basicType))),
-                        types.ConstI32(uint64(uint(arg.iValue))))
-                    ann_vals |> push <| LLVMConstNamedStruct(ann_ty, array_data_ptr(fields), 4u) // nolint:PERF006 annotation count unknown
-                }
-                if (!(ann_vals |> empty())) {
-                    let n = ann_vals |> length() |> uint()
-                    let ann_global = LLVMAddGlobal(g_mod, LLVMArrayType(ann_ty, n), "varinfo_annotations")
-                    set_globalvar_linkage(ann_global)
-                    ann_global |> LLVMSetInitializer <| LLVMConstArray(ann_ty, array_data_ptr(ann_vals), n)
-                    annotation_varinfo_list |> push <| AnnotationVarInfoEntry(
-                        varinfo = varinfo,
-                        ann_global = ann_global,
-                        count = int(n))
-                }
-            }
         }
         let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len)
         let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
@@ -4825,13 +4774,22 @@ class public LlvmJitVisitor : AstVisitor {
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         set_globalvar_linkage(struct_info_global)
         enuminfo_cache[ei] = struct_info_global
+        var ann_vals : array<LLVMValueRef>
+        for (i in range(int(ei.annotation_count))) {
+            unsafe {
+                ann_vals |> push <| create_annotation_info_value(get_annotation(*ei, i))    // nolint:PERF006 count known small
+            }
+        }
+        var (ann_ptr, ann_count) = pack_annotation_list(ann_vals)
         var init_values <- [
             get_string_constant_ptr(g_builder, ei.name),
             get_string_constant_ptr(g_builder, ei.module_name),
             create_enumvalueinfo_global_array(ei.fields, ei.count),
             types.ConstI32(ei.count |> uint64()),
             LLVMConstInt(types.t_int64, ei.hash, 0),
-            types.ConstI32(ei.flags |> uint64())
+            types.ConstI32(ei.flags |> uint64()),
+            ann_ptr,
+            types.ConstI32(ann_count |> uint64())
         ]
         struct_info_global |> LLVMSetInitializer() <| make_initializer(ty, init_values)
         return struct_info_global
@@ -4843,12 +4801,18 @@ class public LlvmJitVisitor : AstVisitor {
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
         set_globalvar_linkage(struct_info_global)
         structinfo_cache[si] = struct_info_global
-        var void_ptr = types.LLVMVoidPtrType()
+        var ann_vals : array<LLVMValueRef>
+        for (i in range(int(si.annotation_count))) {
+            unsafe {
+                ann_vals |> push <| create_annotation_info_value(get_annotation(*si, i))    // nolint:PERF006 count known small
+            }
+        }
+        var (ann_ptr, ann_count) = pack_annotation_list(ann_vals)
         var init_values <- [
             get_string_constant_ptr(g_builder, si.name),
             get_string_constant_ptr(g_builder, si.module_name),
             create_struct_fields_global_array(si.fields, si.count),
-            LLVMConstPointerNull(void_ptr), // NOTE: annotations are not used right now
+            ann_ptr,
 
             LLVMConstInt(types.t_int64, si.hash, 0),
             LLVMConstInt(types.t_int64, si.init_mnh, 0),
@@ -4856,7 +4820,8 @@ class public LlvmJitVisitor : AstVisitor {
             types.ConstI32(si.flags |> uint64()),
             types.ConstI32(si.count |> uint64()),
             types.ConstI32(si.size  |> uint64()),
-            types.ConstI32(si.firstGcField |> uint64())]
+            types.ConstI32(si.firstGcField |> uint64()),
+            types.ConstI32(ann_count |> uint64())]
         struct_info_global |> LLVMSetInitializer() <| make_initializer(ty, init_values)
         return struct_info_global
     }
@@ -4904,15 +4869,26 @@ class public LlvmJitVisitor : AstVisitor {
         return global
     }
 
-    // For tHandle: emits resolvent string global + queues (parent, resolvent)
-    // for runtime slot-0 store. Parent's slot 0 stays null in the static
-    // initializer — wasm32 forbids widening ptrtoint inside .data initializers.
-    def queue_handle_typeinfo_if_needed(info : TypeInfo?; parent_global : LLVMValueRef) {
-        if (info == null || info.basicType != Type.tHandle) return
-        let resolvent = "~{info.annotation._module.name}::{info.annotation.name}"
-        var llvm_resolvent = g_builder |> get_string_constant_ptr(resolvent)
-        LLVMSetAlignment(llvm_resolvent, 2u)
-        handle_typeinfo_pending |> push((parent_global, llvm_resolvent))
+    // For tHandle: dedup'd static AnnotationInfo { name, module_name, null, 0, null }.
+    // Plain pointer-to-global in slot 0 — no tagged pointer, no runtime ctor
+    // (the old ptrtoint|1 scheme needed one because wasm32 forbids widening
+    // ptrtoint inside .data initializers).
+    def create_handled_annotation_global(info : TypeInfo?) : LLVMValueRef {
+        let key = "{info.annotation._module.name}::{info.annotation.name}"
+        if (handled_ann_cache |> key_exists(key)) return handled_ann_cache[key]
+        let ty = get_llvm_type_for_annotation_info()
+        var fields = fixed_array(
+            get_string_constant_ptr(g_builder, string(info.annotation.name)),
+            get_string_constant_ptr(g_builder, string(info.annotation._module.name)),
+            LLVMConstPointerNull(types.LLVMVoidPtrType()),
+            types.ConstI32(0ul),
+            LLVMConstPointerNull(types.LLVMVoidPtrType()))
+        let ann_global = LLVMAddGlobal(g_mod, ty, "handled_annotation_info")
+        set_globalvar_linkage(ann_global)
+        ann_global |> LLVMSetInitializer <| LLVMConstNamedStruct(ty, array_data_ptr(fields), 5u)
+        let res = g_builder |> LLVMBuildPointerCast(ann_global, types.LLVMVoidPtrType(), "")
+        handled_ann_cache[key] = res
+        return res
     }
 
     def rec_create_type_info_global(info : TypeInfo?) {
@@ -4922,8 +4898,7 @@ class public LlvmJitVisitor : AstVisitor {
             initValues[i] = LLVMConstPointerNull(types.LLVMVoidPtrType())
         }
         if (info.basicType == Type.tHandle) {
-            // slot 0 stays null — parent-site queue_handle_typeinfo_if_needed
-            // arranged the runtime store.
+            initValues[0] = create_handled_annotation_global(info)
         } elif (info.basicType == Type.tStructure) {
             var t = create_struct_global_pointer(info.structType)
             initValues[0] = t
@@ -4982,7 +4957,6 @@ class public LlvmJitVisitor : AstVisitor {
 
         typeinfo_cache[ti] = type_info_global
 
-        queue_handle_typeinfo_if_needed(ti, type_info_global)
         let init_values <- get_typeinfo_fields(ti)
         var type_info_init = LLVMGetUndef(type_info_type)
         for (i in urange(init_values |> length())) {
@@ -5000,6 +4974,7 @@ class public LlvmJitVisitor : AstVisitor {
     typeinfo_cache :   table<TypeInfo?; LLVMValueRef>
     enuminfo_cache :   table<EnumInfo?; LLVMValueRef>
     varinfo_cache :    table<VarInfo?; LLVMValueRef>
+    handled_ann_cache : table<string; LLVMValueRef>    // "module::name" -> AnnotationInfo global
 
 // ExprDebug
     def override visitExprDebug(expr : ExprDebug?) : ExpressionPtr {
@@ -7593,8 +7568,7 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 }
 
 // During JIT compilation we create some complex
-// global types (fileInfo, varAnnotations),
-// that can't be const initialized.
+// global types (fileInfo), that can't be const initialized.
 // This function creates single global constructor
 // that will be called at the startup of compiled
 // object file.
@@ -7602,25 +7576,20 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool) {
     let ctor_dtor <- [
         // FileInfo
-        generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode),
-        // VarInfo
-        generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode),
-        generate_handle_typeinfo_ctor_dtor(*types, handle_typeinfo_pending, jit_mode)
+        generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode)
     ]
     ctor_dtor |> add_ctor_dtor_function(types)
 
     reset_codegen_accumulators()
 }
 
-// Clears the per-codegen-run accumulators (filenames / varinfo / handle typeinfo).
+// Clears the per-codegen-run accumulators (filenames).
 // Normally drained at the tail of generate_global_ctors_dtors; also called from
 // the JIT failure path (reset_jit_globals_after_failure) so a file that panics
 // mid-codegen doesn't leave stale fileinfo entries that crash the next file's
 // ctor generation with assert(variable != null).
 def public reset_codegen_accumulators() {
     active_filenames = table<string>()
-    annotation_varinfo_list |> clear()
-    handle_typeinfo_pending |> clear()
 }
 
 [macro_function]
