@@ -4,7 +4,14 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **PR1 in flight** (`each_kv` builtin).
+Status: **stage 1 committed** (`each_kv` builtin, 8751bb9ba).
+
+**Branch strategy (Boris, 2026-06-10):** the ENTIRE arc stays on `bbatkin/linq-table-each-kv`
+as stacked stage commits — no per-stage PRs. A major fixed-array rework is in flight on master;
+merging that INTO this branch once (after it lands) beats making every rework merge fight this
+work. Cut the PR only after the rework has landed and been merged in here. At that merge,
+re-validate the `each_kv` dim-array-value reject overload and `auto(valT)[]` matching — fixed
+arrays are exactly what is being reworked.
 
 PR1 findings:
 - **Pre-existing generator-lowering bug, fixed in PR1**: the yield-for lowering emitted
@@ -43,7 +50,7 @@ PR1 findings:
 - No profiling pre-PR; straight to m7 bench lanes. Scan lanes before the join probe. Sink in
   this arc.
 
-## PR sequence
+## Stage sequence (commits on this branch)
 
 1. **`each_kv` in builtin.das** — the validated shape next to `keys`/`values`
    (`[unsafe_outside_of_for, nodiscard]`); das2rst "Containers" group; tests
