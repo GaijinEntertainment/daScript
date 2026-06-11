@@ -110,3 +110,12 @@ Process: per-stage plan → implement → review, same as FIXED_ARRAY_REWORK.md.
   regenerated handmade stubs under pre-rename `rtti` names). preflight
   could compare the binary mtime against the newest `src/` commit and
   WARN before running binary-derived gates.
+- **Gate-duration baseline + regression warning.** Persist per-gate wall
+  times locally (gitignored) after each run; on the next run compare
+  against the recorded baseline and WARN when a gate is far off — ~10%
+  drift is noise, ~2x is indicative of a regression (compiler slowdown,
+  a lint rule gone pathological, doc-build growth). Care: per-changed-
+  file gates (lint, cpp-syntax) scale with the diff size, so normalize
+  per file or baseline only the fixed-cost gates (format sweep, dasgen,
+  docs, test suites). Pairs with the binary-staleness warning — both
+  are "preflight sanity-checks its own run" features.
