@@ -142,6 +142,24 @@ def test_flatten_fold(t : T?) {
         t |> success(wn |> find("float3(2f,3f,-4f)") >= 0, "weighted/negated lanes must land in the mask: {wn}")
         delete bodies
     }
+    t |> run("swizzle corpus folds clean (test_flatten_swizzle.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_swizzle.das")
+        t |> success(n >= 14, "expected >=14 twins, checked {n}")
+        // the FIRED proof (symmetric-oracle guard: fold arm and residual share
+        // swizzle_fold_classify, so only a POSITIVE assert catches a matcher break blinding both)
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_swizzle.das")
+        let c3 = bodies?["s_ctor3_flat"] ?? ""
+        t |> success(c3 |> find("float4") < 0, "float4(v,1f).xyz must collapse to v: {c3}")
+        let nx = bodies?["s_nestedxz_flat"] ?? ""
+        t |> success(nx |> find("v.zx") >= 0, "float4(v.zyx,1f).xz must compose to v.zx: {nx}")
+        let dd = bodies?["s_dropdead_flat"] ?? ""
+        t |> success(dd |> find("sin") < 0 && dd |> find("float2(x,3f)") >= 0,
+            "dropped lanes' compute must die with the re-pack: {dd}")
+        // the cost-gate control: a partial base run must survive UN-folded (and un-flagged)
+        let pt = bodies?["s_partial_flat"] ?? ""
+        t |> success(pt |> find(".yz") >= 0, "a partial base run must stay put: {pt}")
+        delete bodies
+    }
     t |> run("mad/lerp corpus fuses clean (test_flatten_mad.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_mad.das")
         t |> success(n >= 20, "expected >=20 twins, checked {n}")

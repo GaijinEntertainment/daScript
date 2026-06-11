@@ -865,6 +865,11 @@ class private FoldResidualVisitor : AstVisitor {
             found |> push("an unfolded constant '!'")
         }
     }
+    def override preVisitExprSwizzle(var expr : ExprSwizzle?) : void {
+        if (is_unfolded_swizzle_lanes(expr)) {
+            found |> push("an un-folded swizzle over decomposable lanes ('ctor(…).mask' should re-pack)")
+        }
+    }
 }
 
 def public flatten_fold_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
