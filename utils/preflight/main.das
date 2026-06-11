@@ -117,12 +117,8 @@ def tool_available(exe : string) : bool {
     return r.rc == 0
 }
 
-def now_seconds() : double {
-    return double(ref_time_ticks())
-}
-
-def seconds_since(t0 : double) : double {
-    return double(get_time_usec(int64(t0))) / 1000000.0lf
+def seconds_since(t0 : int64) : double {
+    return double(get_time_usec(t0)) / 1000000.0lf
 }
 
 def split_csv(s : string) : array<string> {
@@ -267,7 +263,7 @@ def collect_changed_files(base : string; var das_files, cpp_files : array<string
 // ===== gate runners =====
 
 def gate_format(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     // mirror .githooks/pre-push: verify TRACKED files only, so gitignored
     // scratch that never reaches CI can't fail the gate
     let ls = run_argv(["git", "ls-files", "--cached", "--", "*.das"])
@@ -289,7 +285,7 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_lint(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     if (empty(ctx.changed_das)) {
         return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no .das files changed vs {ctx.base}")
@@ -305,7 +301,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp)) {
         let note = ctx.changed_hdr > 0 ? " ({ctx.changed_hdr} changed header(s) are validated via their includers in full builds)" : ""
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
@@ -377,7 +373,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_dasgen(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     let r = run_argv([ctx.daslang, "dasgen/gen_bind.das"])
     if (r.rc != 0) {
         return GateResult(name = "dasgen", status = GateStatus.Fail, seconds = seconds_since(t0),
@@ -401,7 +397,7 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
 }
 
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
-    var t0 = now_seconds()
+    var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
     let r1 = run_argv([ctx.daslang, "doc/reflections/das2rst.das"])
     if (r1.rc != 0 && find(r1.out, "missing prerequisite") >= 0) {
@@ -414,7 +410,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
         output = r1.out))
 
     // gate 2: no `// stub` in handmade docs
-    t0 = now_seconds()
+    t0 = ref_time_ticks()
     var stubs : array<string>
     dir("doc/source/stdlib/handmade") $(name) {
         return if (extension(name) != ".rst")
@@ -429,7 +425,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
         output = join(stubs, "\n")))
 
     // gate 3: no Uncategorized sections in generated docs
-    t0 = now_seconds()
+    t0 = ref_time_ticks()
     var uncategorized : array<string>
     dir("doc/source/stdlib/generated") $(name) {
         return if (extension(name) != ".rst")
@@ -447,13 +443,14 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
         output = join(uncategorized, "\n")))
 
     // gate 4: no untracked generated RST
-    t0 = now_seconds()
+    t0 = ref_time_ticks()
     let r4 = run_argv(["git", "ls-files", "--others", "--exclude-standard", "doc/source/stdlib/"])
     let untracked <- non_empty_lines(r4.out)
-    results |> emplace(GateResult(name = "docs/untracked", status = empty(untracked) ? GateStatus.Pass : GateStatus.Fail,
+    let untracked_ok = r4.rc == 0 && empty(untracked)
+    results |> emplace(GateResult(name = "docs/untracked", status = untracked_ok ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0),
-        detail = empty(untracked) ? "" : "das2rst generated new files — git add them",
-        output = join(untracked, "\n")))
+        detail = untracked_ok ? "" : (r4.rc != 0 ? "git ls-files failed (rc={r4.rc})" : "das2rst generated new files — git add them"),
+        output = r4.rc != 0 ? r4.out : join(untracked, "\n")))
 
     // gates 5+6: sphinx -W, latex then html. Delete the doctree cache first —
     // CI builds from a fresh clone, a stale local cache hides warnings.
@@ -467,11 +464,11 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
         return
     }
     rmdir_rec("doc/sphinx-build")
-    t0 = now_seconds()
+    t0 = ref_time_ticks()
     let r5 = run_argv(["sphinx-build", "-W", "--keep-going", "-b", "latex", "-d", "doc/sphinx-build", "doc/source", "build/latex"])
     results |> emplace(GateResult(name = "docs/sphinx-latex", status = r5.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0), detail = r5.rc == 0 ? "" : "latex builder warnings (warnings-as-errors)", output = r5.out))
-    t0 = now_seconds()
+    t0 = ref_time_ticks()
     let r6 = run_argv(["sphinx-build", "-W", "--keep-going", "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
     results |> emplace(GateResult(name = "docs/sphinx-html", status = r6.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0), detail = r6.rc == 0 ? "" : "html builder warnings (warnings-as-errors)", output = r6.out))
@@ -480,7 +477,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
 // ===== CI-only das compile sweep =====
 
 def gate_ci_das(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     let list_path = "utils/preflight/ci_only_das.txt"
     let list_text = fread(list_path)
     if (empty(list_text)) {
@@ -545,7 +542,7 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
 // ===== test suites =====
 
 def run_test_gate(name : string; args : array<string>; fail_hint : string) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     let r = run_argv(args, 3600.0)
     return GateResult(name = name, status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0), detail = r.rc == 0 ? "" : fail_hint, output = r.out)
@@ -556,7 +553,7 @@ def run_test_gate(name : string; args : array<string>; fail_hint : string) : Gat
 // import-links libDaScriptDyn*.dll, so the daslang HOSTING preflight pins
 // them and no child build can ever relink — SKIP with a two-step hint
 // (CI's static daslang doesn't have this; fresh targets skip the relink).
-def classify_build_fail(gate, base : string; r : tuple<rc : int; out : string>; daslang : string; t0 : double) : GateResult {
+def classify_build_fail(gate, base : string; r : tuple<rc : int; out : string>; daslang : string; t0 : int64) : GateResult {
     var detail = base
     var status = GateStatus.Fail
     if (find(r.out, "LNK1104") >= 0) {
@@ -577,7 +574,7 @@ def gate_tests_interp(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_tests_jit(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     // probe: a JIT no-op run tells us whether dasLLVM is in this binary
     let probe_file = path_join(temp_dir_or_cwd(), "preflight_jit_probe.das")
     fwrite(probe_file, "options gen2\n[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n")
@@ -593,7 +590,7 @@ def gate_tests_jit(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     if (empty(ctx.build_dir)) {
         return GateResult(name = "tests-cpp", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
@@ -611,7 +608,7 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_tests_aot(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     if (empty(ctx.build_dir)) {
         return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
@@ -635,7 +632,7 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
 }
 
 def gate_sequence(ctx : PreflightCtx) : GateResult {
-    let t0 = now_seconds()
+    let t0 = ref_time_ticks()
     if (empty(ctx.build_dir)) {
         return GateResult(name = "sequence", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
@@ -788,7 +785,7 @@ def main() : int {
     to_log(LOG_INFO, "preflight: {tier} tier; daslang={ctx.daslang}; base={cfg.base}; {n_das} das / {n_cpp} cpp changed\n")
 
     var results : array<GateResult>
-    let t_all = now_seconds()
+    let t_all = ref_time_ticks()
     for (info in gate_table()) {
         continue if (!want_gate(cfg, info))
         to_log(LOG_INFO, "[RUN ] {info.name}\n")
