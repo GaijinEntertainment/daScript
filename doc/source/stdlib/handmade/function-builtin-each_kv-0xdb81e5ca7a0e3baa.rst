@@ -1,0 +1,1 @@
+Iterates over a table as ``(key, value)`` named tuples. Both fields are copies — a read-only view in unspecified (slot) order; the value type must be copyable, and non-copyable values (arrays, tables) are rejected at compile time.

@@ -148,6 +148,9 @@ Source-side entry points
    * - ``unsafe(from_xml_node(node[, name], type<Row>))``
      - ``extract_xml_source`` (``XmlAdapter``, ``modules/dasPUGIXML/daslib/linq_fold_xml.das``)
      - Optional source — only when the ``pugixml`` module is linked (``require ?pugixml`` + ``static_if (typeinfo builtin_module_exists(pugixml))``). Emits an inlined DOM child-element walk replacing the generator, and **field-prunes** the per-element materialization (pass 2b): the chain body is scanned for the ``Row`` fields it reads, and only those attributes are read via ``read_xml_field`` into scalar locals — unread fields (notably ``string`` fields, whose ``clone_string`` is the alloc cost) are never touched, so a float-only chain runs alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (``to_array`` / identity ``_select(_)`` / pass-to-fn) routes to the full ``build_xml_row`` instead. The ``XmlAdapter`` **rides every pattern row** (``try_splice_patterns`` runs with no ``onlyRow`` restriction); per-row ``requires`` predicates and the adapter's capability hooks (``can_join`` / ``can_group_by`` / ``defers_materialization`` / the ``non_array_source`` gate) decide what fuses, and a shape it can't fuse cascades to tier-2 — see :ref:`linq_fold_xml_patterns` for the full fuse/defer breakdown. ``unsafe`` is required (the source is ``[unsafe_outside_of_for]``) and the node is passed by value (``var root`` — ``_fold``'s macro-arg inference skips the const&→value copy).
+   * - ``unsafe(each_kv(tab))`` / ``keys(tab)`` / ``values(tab)``
+     - ``extract_table_source`` (``TableAdapter``, ``daslib/linq_fold_table.das``)
+     - In-tree source — recognized by name **plus** a table-typed argument (``table<K;V>`` / ``table<K>``), so an unrelated user ``keys`` never fires it. The kv lane (``each_kv``) binds ``kv.key`` / ``kv.value`` and **usage-prunes the walk**: a chain touching only ``.value`` walks ``values(tab)`` alone, only ``.key`` (or neither) walks ``keys(tab)`` alone — half the slot-skip work of the zipped two-iterator form, which is emitted only when both sides (or the whole pair) are read. A whole-pair escape binds a named-tuple copy, so the kv lane fuses **copyable value types only** — a non-copyable-valued ``each_kv`` falls through and the surviving instantiation concept-asserts (error 31400; the keys/values lanes still fuse such tables). Bare ``count()`` / ``long_count()`` folds to O(1) ``length(tab)``; a plain ``distinct`` over raw keys/kv elements is **dropped** before matching (keys are unique by construction; only uniqueness-preserving prefix ops allow the drop — a preceding ``select`` keeps the distinct, and the values lane always keeps it). **Point-lookup folds** (``try_table_point_lookup``): a key-equality ``where`` (``kv.key == X``, bare ``k == X`` on the keys lane, either operand order; predicate-form ``any(p)`` / ``count(p)`` too) against a loop-invariant, side-effect-free ``X`` folds the whole walk to an O(1) probe — ``any`` / keys-lane ``contains(X)`` → ``key_exists(tab, X)``, ``count`` → ``key_exists ? 1 : 0``, ``first`` / ``first_or_default`` (± one trailing ``select``) → a ``tab?[X]`` probe with the scan's exact semantics (panic on a missing ``first``, eagerly-bound default value otherwise). Anything else — compound ``&&`` predicates, other comparison operators, an ``X`` that reads the binder or has side effects (the scan evaluates ``X`` per element, the probe once) — keeps the scan. ``order_by`` / ``take`` / ``first`` observe the table's unspecified slot order, exactly like a hand ``for (k, v in keys(t), values(t))`` loop. **Joins fuse on either side** (``can_join`` is on; the adapter rides the shared ``emit_array_join`` through its own ``wrap_source_loop``): a table *lead* walks its pruned slot iterator(s) as the probe loop; a table in the *srcB slot* joined on its bare key — ``d.key`` on the kv lane, the bare element on a ``keys(set)`` source — skips the join's internal ``table<KEY; array<TUPB>>`` entirely and probes the user's table per lead row (``join_keyb_is_bare_key`` + ``build_join_probe_pieces``; unique table keys make the probe ≡ hash semantics exactly). The probe is itself usage-pruned: count-no-where and key-only shapes stay on ``key_exists``, value shapes bind the matched value **by reference** from a ``tab?[k]`` pointer (no copy), and only a whole-pair use binds the kv tuple. A non-bare b-key keeps the hashed build over the kv iterator; ``group_join`` (outer — its result consumes the whole bucket) always keeps it. ``can_group_by`` is off and reverse has no backward slot walk — those shapes cascade to tier-2 (see ``benchmarks/sql/LINQ_TO_TABLE.md``). **``to_table()`` sinks fuse** (table-buffer materializer row above): the chain inserts straight into the result table — a bare ``each_kv(tab).to_table()`` is a reserve-ahead table clone through the fused walk, and a ``keys(tab)`` chain lands in the ``table<K>`` set form. ``unsafe`` is required at an unfused chain head (the sources are ``[unsafe_outside_of_for]``); fused chains rewrite the head before inference.
    * - ``unsafe(from_json(jv, type<Row>))``
      - ``extract_json_source`` (``JsonAdapter``, ``daslib/linq_fold_json.das``)
      - In-tree source — the adapter is compiled in unconditionally (no ``static_if`` gate, unlike XML's pugixml one), but a program only pulls JSON into scope by requiring ``json`` / ``json_boost`` itself. ``extract_json_source`` matches a ``from_json`` whose first argument is a ``json::JsonValue?``, so a JSON-less program returns null and the chain falls to the array tier. The adapter pulls in **no** json dependency — it emits ``from_json`` / ``read_json_field`` by name (resolved at the user's splice site, like ``linq_fold_decs`` emits ``for_each_archetype``; ``from_JV`` is emitted only for a non-struct element type). Emits an inlined ``for (e in jv.value as _array)`` walk replacing the generator, and **field-prunes** the per-element materialization (pass 2b): only the keys the chain reads are pulled via ``read_json_field`` by name — unread keys (notably ``string`` fields whose materialization clones) are never touched, so a scalar-only chain skips ~all of the full per-row build (3.6× over the full materialize — see ``benchmarks/micro/json_source_shapes.das``). A whole-row escape reads **every** top-level field by name (``emit_full_row_by_name``), so a custom whole-row ``from_JV(Row)`` override is **not** honored (Option B — this is a flat query source, not a deserializer; materialize the array with an explicit ``from_JV`` first for that). ``unsafe`` is required (the source is ``[unsafe_outside_of_for]``). Deferred materialization mirrors XML: order/distinct/take buffer a cheap ``(orderKey, JsonValue?)`` surrogate and materialize only the K survivors — by name (``emit_full_row_by_name``), so a struct survivor reads each field by key; only a non-struct ``Row`` falls back to ``outBind <- from_JV(handle, type<Row>)``. The ``JsonAdapter`` also fuses ``join`` / ``join |> group_by`` (``emit_join_hook`` + ``JsonJoinAdapter`` off ``build_group_by_adapter``'s upstream-join arm), reusing the array-join machinery (``build_join_standalone_pieces`` / ``build_join_adapter_pieces``): srcB is collected into a ``table<KEY; array<TUPB>>`` and the field-pruned array walk is the probe side, so the join key reads only its own field per element (e.g. ``read_json_field(jcur, "brand", …)``). Standalone ``group_join`` and a trailing ``where`` / ``select`` / ``count`` over group-join rows defer to tier-2, mirroring XML.
@@ -189,6 +192,9 @@ Array-source patterns
    * - ``._where(P).take_while(P2).<...>`` / ``.skip_while(P2).<...>``
      - ``plan_loop_or_count`` (predicate-driven ranges)
      - ``take_while`` exits on first non-match; ``skip_while`` toggles state.
+   * - ``._where(P)._select(K => V).to_table()`` (and bare / set forms)
+     - ``plan_loop_or_count`` (table-buffer materializer)
+     - Insert-loop straight into the result table — no intermediate array. A ``(k => v)`` tuple projection splits so key and value each evaluate once; other tuple projections bind to a local; a scalar chain lands in the ``table<K>`` set form. Reserve from O(1) source length on unfiltered walks. Duplicate keys keep the last occurrence (das ``insert`` semantics, not C#'s throw). The selector-based ``to_table(key, elementSelector)`` and decs sources keep the tier-2 path.
    * - ``._order_by(K).first()`` / ``.first_or_default()``
      - ``plan_order_family`` (streaming-min) → ``emit_streaming_min``
      - Single ``var best`` + ``var seen``, no buffer; one comparison per element.
@@ -420,12 +426,16 @@ Array-array equi-join
 ``emit_array_join`` is the array-source mirror of ``emit_decs_join`` —
 hashed equi-join over two array / iterator sources. Algorithm is
 identical (collect srcb into ``table<KEY; array<TUPB>>`` in one pass,
-then walk srca and probe via ``table.get``) but the per-source
-iteration is a plain ``for (elem in src) { ... }`` loop instead of
-``for_each_archetype + build_decs_inner_for``. Both sources bind as
-invoke parameters (2-source wrap, mirrors ``Zip``). Same primitive
-equi-key gate as the decs side; non-primitive keys cascade to
-``join_impl_const``.
+then walk srca and probe via ``table.get``) but the lead iteration
+comes from the adapter (``wrap_source_loop`` / ``bind_name`` /
+``invoke_param_type``), so any direct-return loop source rides it —
+``ArrayAdapter`` frames a plain ``for (elem in src)``, ``TableAdapter``
+its pruned slot walk (vs ``for_each_archetype + build_decs_inner_for``
+on the decs side). Both sources bind as invoke parameters (2-source
+wrap, mirrors ``Zip``). Same primitive equi-key gate as the decs side;
+non-primitive keys cascade to ``join_impl_const``. When srcB is a
+table walked on its bare key, the internal hash is skipped entirely —
+see the table-source row above and the probe row below.
 
 .. list-table::
    :header-rows: 1
@@ -465,6 +475,28 @@ equi-key gate as the decs side; non-primitive keys cascade to
        ``join`` is the separate trailing slot. Composes with the trailing
        ``_where`` / ``_select`` forms. Wrapping lives in the shared
        ``build_join_standalone_pieces``, so decs / XML / JSON inherit it.
+   * - ``arrA |> _join(unsafe(each_kv(tab)), <on a == d.key>, ...)`` (or ``keys(set)`` with a bare-element key; any terminator/where/select form above)
+     - probe mode (``join_srcb_table_call`` + ``join_keyb_is_bare_key`` → ``build_join_probe_pieces``)
+     - **Table-srcB probe**: the b-key selector IS the table key, so no
+       hash and no build loop — srcB binds the user's table itself
+       (const param) and the per-A probe is a key lookup. Unique table
+       keys ⇒ bucket ≤ 1 ⇒ probe ≡ hash semantics exactly (b-key is a
+       bare field read, so skipping its per-B evaluation is
+       unobservable). Usage-pruned like the point-lookup fold:
+       count-no-where / key-only shapes probe ``key_exists`` (value
+       never touched), value shapes bind by reference from
+       ``tab?[k]``, a whole-pair use binds the kv tuple. Non-bare
+       b-keys and ``group_join`` keep the hashed build over the kv
+       iterator. Composes with every lead the emitter serves (array
+       lead, table lead — table×table probes both sides).
+   * - ``unsafe(each_kv(tabA)) |> _join(srcB, on, into) |> ...`` (table lead; ``keys`` / ``values`` lanes too)
+     - pattern ``join_general`` → ``TableAdapter.emit_join_hook`` → ``emit_array_join``
+     - **Table lead**: same emitter, lead loop framed by
+       ``TableAdapter.wrap_source_loop`` — the kv usage-pruner sees the
+       whole probe body (key lambda + result + trailing where/select),
+       so a join touching only ``c.value.*`` walks ``values(tab)``
+       alone. All srcB modes compose (hashed array/iterator srcB,
+       table-srcB probe); ``group_join`` stays outer over every slot.
    * - ``arrA |> _group_join(arrB, on, into)`` (+ optional leading ``_where``)
      - pattern ``join_general`` with the ``group_join`` literal (``isGroupJoin``)
      - C# GroupJoin (**outer**): one result row per srcA row — ``result(a,
@@ -474,10 +506,11 @@ equi-key gate as the decs side; non-primitive keys cascade to
        "group_join"]``; ``isGroupJoin`` threads through
        ``build_join_standalone_pieces``, which rebinds the result lambda's 2nd
        param to the whole bucket (``array<TUPB>``) so the per-group aggregate
-       runs inside the result. **Array sources only** — decs / XML / JSON group joins
-       defer to tier-2 (their ``emit_join_hook`` returns ``null`` for
+       runs inside the result. **Array / table leads only** — decs / XML / JSON
+       group joins defer to tier-2 (their ``emit_join_hook`` returns ``null`` for
        ``group_join``); a trailing ``where`` / ``select`` / ``count`` over the
-       group rows also defers.
+       group rows also defers, and a table srcB keeps the hashed build (the
+       probe never serves group joins).
    * - ``arrA |> _join(arrB, ...) |> _group_by(K) |> _select(reduce) |> count() / to_array()``
      - ``plan_group_by_core`` via ``SourceAdapter.ArrayJoin`` (chunk N+2)
      - Cross-arm composition. ``emit_group_by``'s Array branch
@@ -646,8 +679,9 @@ Common cases that fall back:
   ``join_impl``.
 - **Aggregations on lazy groupings**: ``_group_by_lazy(K)._select(F)``
   with a non-bucket-reducing ``_select``.
-- **Materialization-only chains** that the standard linq surface
-  already lowers efficiently — e.g. ``to_table()`` on a finite array.
+- **Selector-based ``to_table(key, elementSelector)``** — the 3-arg form
+  keeps its tier-2 generic; only the selector-free ``to_table()``
+  terminator splices (see the table-buffer materializer row above).
 - **Chained ``_select(f) |> _select(g)`` with an impure inner**
   (``_ % N``, ``_ / N``, user-call inner that the typer can't prove
   pure). The ``collapse_chained_selects`` pre-pass is gated on

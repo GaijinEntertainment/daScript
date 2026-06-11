@@ -1145,6 +1145,52 @@ def values(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<valT&> 
     return <- it
 }
 
+def each_kv(a : table<auto(keyT)> ==const | #) {
+    concept_assert(false, "can't each_kv a table<...; void> — iterate keys() instead")
+}
+
+def each_kv(var a : table<auto(keyT)> ==const | #) {
+    concept_assert(false, "can't each_kv a table<...; void> — iterate keys() instead")
+}
+
+def each_kv(a : table<auto(keyT); auto(valT)[]> ==const | #) {
+    concept_assert(false, "each_kv of a table with dim-array values is not supported")
+}
+
+def each_kv(var a : table<auto(keyT); auto(valT)[]> ==const | #) {
+    concept_assert(false, "each_kv of a table with dim-array values is not supported")
+}
+
+[unsafe_outside_of_for, nodiscard]
+def each_kv(a : table<auto(keyT); auto(valT)> ==const | #) : iterator<tuple<key : keyT; value : valT> -const> {
+    //! Iterates over a table as `(key, value)` named tuples. Both fields are copies (read-only view);
+    //! requires a copyable value type — non-copyable values (arrays, tables) are rejected at compile time.
+    concept_assert(typeinfo can_copy(type<valT>), "each_kv requires a copyable value type")
+    var kit <- unsafe(keys(a))
+    var vit <- unsafe(values(a))
+    return <- generator<tuple<key : keyT; value : valT> -const> capture(<- kit, <- vit) {
+        for (k, v in kit, vit) {
+            yield (key = k, value = v)
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for, nodiscard]
+def each_kv(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<tuple<key : keyT; value : valT> -const> {
+    //! Iterates over a table as `(key, value)` named tuples. Both fields are copies (read-only view);
+    //! requires a copyable value type — non-copyable values (arrays, tables) are rejected at compile time.
+    concept_assert(typeinfo can_copy(type<valT>), "each_kv requires a copyable value type")
+    var kit <- unsafe(keys(a))
+    var vit <- unsafe(values(a))
+    return <- generator<tuple<key : keyT; value : valT> -const> capture(<- kit, <- vit) {
+        for (k, v in kit, vit) {
+            yield (key = k, value = v)
+        }
+        return false
+    }
+}
+
 def get_key(a : table<auto(keyT)> ==const; value) {
     concept_assert(false, "can't get_key of a table<...; void>")
 }

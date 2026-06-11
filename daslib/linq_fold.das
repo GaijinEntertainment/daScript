@@ -36,6 +36,7 @@ require daslib/linq_fold_common public
 require daslib/linq_fold_array public
 require daslib/linq_fold_decs public
 require daslib/linq_fold_json public          // in-tree JSON source adapter — emits by name, pulls in no json dep
+require daslib/linq_fold_table public         // in-tree table source adapter — each_kv/keys/values chain heads
 require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — loaded only when pugixml is linked
 require ?sqlite sqlite/linq_fold_sql         // optional SQL source pass-through — loaded only when sqlite is linked
 
@@ -210,6 +211,33 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
         return run_splice_adapter(calls, jtopClone, jtopClone,
             new JsonAdapter(jsonExpr = clone_expression(jsonCall.arguments[0]), srcName = qn("jsrc", at),
                             elemType = clone_type(jsonCall._type.firstType)), exprIsIter, at)
+    }
+    // Table adapter (in-tree, no static_if — extract_table_source name-matches each_kv/keys/values with a table-typed arg). The kv lane fuses only copyable values: a non-copyable-valued each_kv falls through to the array tier, where the surviving each_kv instantiation concept-asserts with the user-facing message.
+    var tabCall = extract_table_source(top)
+    if (tabCall != null) {
+        let tabName = get_call_short_name(tabCall)
+        let valT = tabCall.arguments[0]._type.secondType
+        if (tabName != "each_kv" || (valT != null && valT.canCopy)) {
+            let lane = tabName == "each_kv" ? TableLane.KV : (tabName == "keys" ? TableLane.KEYS : TableLane.VALUES)
+            var ttopClone = clone_expression(top)
+            // keys/each_kv spell their element `-const` (iterator-variance concern); that flag must not leak into emitted var/buffer type spellings (`array<tuple<…> -const>` breaks push_clone unification).
+            if (ttopClone._type != null && ttopClone._type.firstType != null) {
+                ttopClone._type.firstType.flags.removeConstant = false
+            }
+            var elemT = clone_type(tabCall._type.firstType)
+            elemT.flags.removeConstant = false
+            var tadapter = new TableAdapter(tabExpr = clone_expression(tabCall.arguments[0]), srcName = qn("tsrc", at),
+                                            elemType = elemT, lane = lane)
+            if (!exprIsIter) {
+                // `where(kv.key == X)` + terminator → O(1) key probe instead of the walk
+                var probe = try_table_point_lookup(calls, tadapter, at)
+                if (probe != null) return probe
+            }
+            if (lane != TableLane.VALUES) {
+                drop_redundant_distinct(calls)   // keys are unique by construction; values can repeat
+            }
+            return run_splice_adapter(calls, ttopClone, ttopClone, tadapter, exprIsIter, at)
+        }
     }
     top = peel_each(top)
     var topClone = clone_expression(top)

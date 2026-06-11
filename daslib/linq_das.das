@@ -14,17 +14,21 @@ require daslib/linq_boost public
 // The `%linq! … %%` inline reader macro rewrites a C#-like query into a `_fold(...)` chain:
 //
 //     %linq! from c in cars where c.price > 100 orderby c.price select c.name %%
-//        →   ( _fold( each(cars) |> _where($(c) => c.price > 100) |> _order_by($(c) => c.price) |> _select($(c) => c.name) |> to_array() ) )
+//        →   ( _fold( from_in(cars) |> _where($(c) => c.price > 100) |> _order_by($(c) => c.price) |> _select($(c) => c.name) |> to_array() ) )
 //     %linq! from c in cars group c by c.brand %%
-//        →   ( _fold( each(cars) |> _group_by_lazy($(c) => c.brand) |> to_array() ) )
+//        →   ( _fold( from_in(cars) |> _group_by_lazy($(c) => c.brand) |> to_array() ) )
 //     %linq! from c in cars join d in dealers on c.brand equals d.brand select (N = c.name, City = d.city) %%
-//        →   ( _fold( each(cars) |> _join(each(dealers), $(c, d) => c.brand == d.brand, $(c, d) => (N = c.name, City = d.city)) |> to_array() ) )
+//        →   ( _fold( from_in(cars) |> _join(from_in(dealers), $(c, d) => c.brand == d.brand, $(c, d) => (N = c.name, City = d.city)) |> to_array() ) )
 //     %linq! from c in cars from d in dealers select (N = c.name, City = d.city) %%
 //        →   ( _fold( (cars) |> _cross_join((dealers), $(c, d) => (N = c.name, City = d.city)) |> to_array() ) )
 //
-// An untyped `from c in <arr>` is an array source. A typed `from c : Row in <src>` selects a non-array
-// source: `decs` (a keyword marker → `from_decs_template`), or any value whose type the `from_in` call
-// macro dispatches (a SQL runner → `select_from`, an XML node → `from_xml_node`). The range variable is
+// (`from_in(arr)` resolves during inference to `each(arr)` — see FromInMacro at the bottom.)
+//
+// An untyped `from c in <src>` is an array or table source — the 1-arg `from_in` call macro dispatches
+// by the value type (array → `each`, `table<K;V>` → `each_kv` with `kv.key`/`kv.value`, `table<K>` set →
+// `keys`). A typed `from c : Row in <src>` selects a row-typed source: `decs` (a keyword marker →
+// `from_decs_template`), or any value whose type the 2-arg `from_in` dispatches (a SQL runner →
+// `select_from`, an XML node → `from_xml_node`). The range variable is
 // spliced verbatim as the block parameter. `orderby <expr> [descending]` is a single sort key. `group c
 // by <key>` is a terminal yielding `tuple<key; array<elem>>` per bucket — IGrouping, in-memory sources
 // only (over SQL it errors: SQL needs an aggregating projection). A trailing `iterator` keyword yields an
@@ -234,13 +238,14 @@ def private strip_trailing_keyword(text : string; kw : string) : tuple<string; b
 }
 
 // Source builder for a clause. `fused` distinguishes a source that will be a fused `_fold` chain head /
-// fused-op source (single-`from`, `join` — keep `each` so the fusion picks the array up as a loop source)
-// from an UNFUSED operator argument (the uncorrelated multiple-`from`, whose `_cross_join` runs at tier-3
-// passthrough — pass the bare array so `each`'s `[unsafe_outside_of_for]` does not trip and the array×array
-// cross_join overload is selected). array (untyped) → each(...) / bare; decs (keyword marker) →
-// from_decs_template; any other typed value source → from_in (dispatches by the source value's type).
+// fused-op source (single-`from`, `join`) from an UNFUSED operator argument (the uncorrelated
+// multiple-`from`, whose `_cross_join` runs at tier-3 passthrough — pass the bare array so `each`'s
+// `[unsafe_outside_of_for]` does not trip and the array×array cross_join overload is selected). An
+// untyped fused source goes through the 1-arg `from_in` (the reader can't tell an array from a table;
+// the call macro dispatches by the inferred value type: table → each_kv/keys, anything else → each);
+// decs (keyword marker) → from_decs_template; a typed value source → 2-arg from_in.
 def private build_src(rowType : string; srcText : string; fused : bool) : string {
-    if (rowType == "") return fused ? "each({srcText})" : "({srcText})"
+    if (rowType == "") return fused ? "from_in({srcText})" : "({srcText})"
     if (srcText == "decs") return "from_decs_template(type<{rowType}>)"
     return "from_in({srcText}, type<{rowType}>)"
 }
@@ -1230,20 +1235,45 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
 
 [call_macro(name="from_in")]
 class FromInMacro : AstCallMacro {
-    //! Typed-source dispatcher for the C# query form `from c : Row in <src>`. Rewrites
-    //! `from_in(src, type<Row>)` to the concrete `_fold` source builder by `src`'s type — a SQL runner
-    //! → `select_from`, an XML node → `from_xml_node`, a JSON value → `from_json`. Must be a call macro:
-    //! a plain function would leave `from_in(...)` at the chain head, which `_fold`'s name-based source
+    //! Source dispatcher for the C# query `from` clause. The typed form `from c : Row in <src>` arrives
+    //! as `from_in(src, type<Row>)` and rewrites to the concrete `_fold` source builder by `src`'s type —
+    //! a SQL runner → `select_from`, an XML node → `from_xml_node`, a JSON value → `from_json`. The
+    //! UNTYPED form `from c in <src>` arrives as `from_in(src)` — a table → `each_kv` (`keys` for the
+    //! `table<K>` set form), anything else → `each` (the array path). Must be a call macro: a plain
+    //! function would leave `from_in(...)` at the chain head, which `_fold`'s name-based source
     //! detection cannot route.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
-        if (length(call.arguments) != 2) {
-            macro_error(prog, call.at, "from_in(src, type<Row>): expected 2 arguments")
-            return call
+        // Every reject below is macro_error + return null (the `_sql` idiom): infer stabilizes and the
+        // error sticks. Returning `call` instead would report-ast-changed every pass and churn to the
+        // 50-pass cap (30507). The not-inferred arm doubles as the DEFER: errors clear per pass, so while
+        // other inference still progresses (e.g. a local `var tab <- {...}` source settling) the error is
+        // discarded and the macro re-runs; it only sticks if the source genuinely never infers.
+        if (length(call.arguments) != 1 && length(call.arguments) != 2) {
+            macro_error(prog, call.at, "from_in(src[, type<Row>]): expected 1 or 2 arguments")
+            return null
         }
         let srcT = call.arguments[0]._type
-        if (srcT == null) {
+        if (srcT == null || srcT.isAutoOrAlias) {
             macro_error(prog, call.at, "from_in: source type is not inferred")
-            return call
+            return null
+        }
+        if (length(call.arguments) == 1) {
+            // Untyped `from c in <src>` — table sources dispatch on the value type; anything else keeps
+            // the historical array emit (`each` carries its own diagnostics for non-iterable sources).
+            // `unsafe(...)` over a $c tag lands as alwaysSafe on the call itself ([unsafe_outside_of_for]
+            // heads are fine fused or unfused), and extractors/peel_each see the bare ExprCall.
+            if (srcT.isGoodTableType) {
+                if (srcT.secondType == null || srcT.secondType.baseType == Type.tVoid)
+                    return qmacro(unsafe($c("keys")($e(call.arguments[0]))))
+                return qmacro(unsafe($c("each_kv")($e(call.arguments[0]))))
+            }
+            return qmacro(unsafe($c("each")($e(call.arguments[0]))))
+        }
+        // A table source carries its row shape (tuple<key;value> / the key type) — the annotation has
+        // nothing to add and the typed builders below would all mis-fire. Reject early with the fix.
+        if (srcT.isGoodTableType) {
+            macro_error(prog, call.at, "linq: a table source takes no row-type annotation — write `from kv in <tab>` (kv.key / kv.value)")
+            return null
         }
         // SQL: db is a sqlite_boost::SqlRunner → select_from(db, type<Row>)
         if (srcT.structType != null && srcT.structType.name == "SqlRunner"
@@ -1260,8 +1290,8 @@ class FromInMacro : AstCallMacro {
                 && srcT.firstType.structType.name == "JsonValue"
                 && srcT.firstType.structType._module != null && srcT.firstType.structType._module.name == "json")
             return qmacro(unsafe($c("from_json")($e(call.arguments[0]), $e(call.arguments[1]))))
-        macro_error(prog, call.at, "linq: unsupported source for `from c : Row in <src>` — expected a SQL runner, an XML node, or a JSON value (use `in decs` for decs, or an array for the untyped `from c in <arr>` form)")
-        return call
+        macro_error(prog, call.at, "linq: unsupported source for `from c : Row in <src>` — expected a SQL runner, an XML node, or a JSON value (use `in decs` for decs; arrays and tables use the untyped `from c in <src>` form)")
+        return null
     }
 }
 
@@ -1269,8 +1299,9 @@ class FromInMacro : AstCallMacro {
 class LinqDasReader : AstReaderMacro {
     //! C#-style LINQ query reader macro.
     //! ``%linq! from c [: Row] in src [where <pred>] [ join d [: RowB] in B on <kA> equals <kB> | from d [: RowB] in B ] [orderby <expr> [descending]] ( select <proj> | group c by <key> ) [iterator] %%``
-    //! rewrites to a ``_fold(...)`` chain. Sources: array (untyped `from c in arr`), or a typed
-    //! ``from c : Row in src`` over decs / SQL / XML / JSON. ``orderby`` is a single sort key; ``group c by <key>``
+    //! rewrites to a ``_fold(...)`` chain. Sources: array or table (untyped `from c in src`, dispatched
+    //! by value type — a ``table<K;V>`` binds ``kv.key``/``kv.value`` pairs, a ``table<K>`` set binds
+    //! keys), or a typed ``from c : Row in src`` over decs / SQL / XML / JSON. ``orderby`` is a single sort key; ``group c by <key>``
     //! is a terminal yielding ``tuple<key; array<elem>>`` buckets (in-memory sources only). A second range
     //! variable comes from either a ``join`` (single inner equi-join) or a second ``from`` (SelectMany):
     //! uncorrelated (``from d in B``) is the cross product, emitting ``_cross_join`` (pushes down to a SQL

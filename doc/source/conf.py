@@ -268,8 +268,11 @@ latex_elements = {
 \DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
 \DeclareUnicodeCharacter{2195}{\ensuremath{\updownarrow}}
 \DeclareUnicodeCharacter{2260}{\ensuremath{\neq}}
+\DeclareUnicodeCharacter{2261}{\ensuremath{\equiv}}
 \DeclareUnicodeCharacter{2264}{\ensuremath{\leq}}
 \DeclareUnicodeCharacter{2265}{\ensuremath{\geq}}
+\DeclareUnicodeCharacter{21D2}{\ensuremath{\Rightarrow}}
+\DeclareUnicodeCharacter{00D7}{\ensuremath{\times}}
 ''',
 
 # Latex figure (float) alignment

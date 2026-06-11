@@ -324,6 +324,8 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         if (rangeInfo.postTakeWhereCond == null) return null
     }
     // Terminator classification mirrors plan_decs_unroll imperative (linq_fold.das:5781-5791); differs from classify_terminator's 4-lane split because decs has dedicated min_max_by / walk / element_at emit fns with hoisted state.
+    // to_table is not implemented for decs — decline before the implicit-to_array arm mis-emits an array for a table-typed expr.
+    if (termName == "to_table") return null
     let isAccum = (termName == "count" || termName == "long_count" || termName == "sum"
         || termName == "min" || termName == "max" || termName == "average")
     let isEarlyExit = (termName == "first" || termName == "first_or_default"

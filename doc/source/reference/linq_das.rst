@@ -20,7 +20,10 @@ rewrites to, and is re-parsed in place as:
 
 .. code-block:: das
 
-    var names <- ( _fold( each(cars) |> _where($(c) => c.price > 100) |> _select($(c) => c.name) |> to_array() ) )
+    var names <- ( _fold( from_in(cars) |> _where($(c) => c.price > 100) |> _select($(c) => c.name) |> to_array() ) )
+
+where ``from_in(cars)`` resolves during inference to ``each(cars)`` (see
+`Sources`_ — for a table source it resolves to ``each_kv`` / ``keys`` instead).
 
 The macro lives in the lexer's inline reader-macro slot (``%name!``), so a
 query is an ordinary expression — it can be assigned, passed as an argument, or
@@ -45,7 +48,9 @@ between body clauses** — it is inlined away before the rest is parsed (see
 :ref:`linq_das_let`):
 
 - ``from <var> in <source>`` — the element bind ``<var>`` names the per-row
-  value. With no type annotation, ``<source>`` is an ``array<T>``.
+  value. With no type annotation, ``<source>`` is an ``array<T>`` or a table —
+  a ``table<K;V>`` binds read-only ``(key, value)`` pairs (``kv.key`` /
+  ``kv.value``), a ``table<K>`` set binds its keys.
 - ``let <name> = <expr>`` — optional, repeatable, and free to appear between any
   body clauses; binds a computed value reused in the clauses that follow it (see
   :ref:`linq_das_let`).
@@ -78,15 +83,22 @@ Clauses may span multiple lines inside the ``%linq! … %%`` body.
 Sources
 -------
 
-An **untyped** ``from c in <arr>`` is an array source. A **typed** range
-variable ``from c : Row in <src>`` selects a non-array source — the row type
-``Row`` is supplied on the range variable (C#-faithful ``from Type c in src``)
-because the source value alone does not carry it:
+An **untyped** ``from c in <src>`` is an array or table source, dispatched by
+the source value's type. A **typed** range variable ``from c : Row in <src>``
+selects a row-typed source — the row type ``Row`` is supplied on the range
+variable (C#-faithful ``from Type c in src``) because the source value alone
+does not carry it:
 
 .. code-block:: das
 
     // array (untyped) — `each(arr)`
     var a <- %linq! from c in cars where c.price > 100 select c.name %%
+
+    // table<K;V> (untyped) — `each_kv(tab)`: read-only (key, value) pairs, fused by the TableAdapter
+    var t <- %linq! from kv in carsById where kv.value.price > 100 select kv.value.name %%
+
+    // table<K> set (untyped) — `keys(s)`
+    var k <- %linq! from id in soldIds where id > 100 select id %%
 
     // decs — the `decs` keyword marker → `from_decs_template(type<CarComp>)`
     var d <- %linq! from c : CarComp in decs where c.price > 100 select c.name %%
@@ -100,12 +112,18 @@ because the source value alone does not carry it:
     // JSON — a JsonValue? array → `from_json`, fused by the JsonAdapter
     var j <- %linq! from c : Car in carsJson where c.price > 100 select c.name %%
 
-For value sources (SQL, XML, JSON) the reader emits
-``from_in(<src>, type<Row>)``; the ``from_in`` call macro dispatches on the
-source value's type to the concrete builder (so a new backend is a new
-``from_in`` branch, never a parser change). ``decs`` has no source value, so it
-is emitted directly as ``from_decs_template`` and never goes through
-``from_in``. The row type's required annotation depends on the source —
+Untyped sources go through the 1-arg ``from_in(<src>)``, typed value sources
+(SQL, XML, JSON) through ``from_in(<src>, type<Row>)``; the ``from_in`` call
+macro dispatches on the source value's type to the concrete builder (so a new
+backend is a new ``from_in`` branch, never a parser change). ``decs`` has no
+source value, so it is emitted directly as ``from_decs_template`` and never
+goes through ``from_in``. A table element is the ``each_kv`` named tuple
+``(key, value)`` — both fields are **copies** (read-only view), the value type
+must be copyable (a ``table<K; array<T>>`` source rejects at compile time —
+see :ref:`the table source row in linq_fold_patterns <linq_fold_patterns>`),
+and slot order is unspecified, so add an ``orderby`` when the result order
+matters. A table source takes no row-type annotation (its element shape comes
+from the table type itself). The row type's required annotation depends on the source —
 ``[decs_template]`` for decs, ``[sql_table]`` / ``[sql_view]`` for SQL, a plain
 struct for XML and JSON. The JSON source is a ``JsonValue?`` holding a JSON
 **array** of objects (``from c : Car in jv["cars"]`` descends into a nested
@@ -142,7 +160,7 @@ own ``_where`` filter, AND-folded in source order:
 
     // two predicates — both apply
     var names <- %linq! from c in cars where c.price > 100 where c.brand == "eco" select c.name %%
-    // expands to: _fold( each(cars) |> _where($(c) => c.price > 100) |> _where($(c) => c.brand == "eco") |> _select($(c) => c.name) |> to_array() )
+    // expands to: _fold( from_in(cars) |> _where($(c) => c.price > 100) |> _where($(c) => c.brand == "eco") |> _select($(c) => c.name) |> to_array() )
 
 Over a **SQL** source the predicates push down as one ANDed ``WHERE`` (a single
 statement, no intermediate materialize). On a two-source query (``join`` / second
@@ -339,8 +357,15 @@ Join
 
 ``join <var2> [ : <Row2> ] in <src2> on <keyA> equals <keyB>`` adds a single
 **inner equi-join** — one new range variable, one equality key. The second
-source is built exactly like the first (untyped → array, typed → the
-``from_in`` dispatch), so it may be a different kind of source than the left.
+source is built exactly like the first (untyped → array/table, typed → the
+``from_in`` dispatch), so it may be a different kind of source than the left —
+a table works on either side (its kv pair is that side's row, e.g.
+``on c.brand equals p.key``); note a table left source walks in slot order.
+A right-side table joined on its **bare key** — ``equals p.key``, or the bare
+element for a ``table<K>`` set — fuses as a per-row key probe of that table
+(no internal join hash gets built); any other right-key expression keeps the
+ordinary hashed join. Either way the results are identical — table keys are
+unique, so the probed "bucket" is the same 0-or-1 rows the hash would hold.
 
 The reader picks one of two emit shapes from the **post-join** clauses (it
 transpiles before type inference and cannot see the source, so it decides
@@ -459,6 +484,10 @@ subset. Both slots are repeatable (see :ref:`linq_das_filtering`):
 **Transparent identifier** — a post-from ``where`` / ``orderby`` or a ``group``
 terminal carries ``(c, b)`` as a pair, in-memory only (same SQL boundary as
 ``join``).
+
+Table sources are **not supported** in a multiple-``from`` query (the
+cross/flatten arms are array-shaped) — ``join`` a table instead, or
+materialize it first.
 
 Correlated ``from`` (flatten)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -98,6 +98,30 @@ There are several tripwires to know about — they're not arbitrary, they fall o
 - **String `join(arr, sep)` lives in `strings` / `strings_boost`** — `linq` itself has a different `join` (SQL-style two-iterator inner join with key + result projection). They coexist; the typer picks the right one by argument types. If you see "module strings_boost is not visible" and "missing argument blk" pointed at your join call, you're missing `require daslib/strings_boost` (or `require strings`).
 - **The `_` placeholder is local to the closest enclosing `_<op>(...)`.** If you nest, give inner closures explicit names (`@@(x) => ...`). Don't try to shadow `_` between outer and inner shorthand calls.
 
+### Table sources and the `to_table` sink
+
+A `table<K;V>` (or `table<K>` set) is a first-class chain source — no key/value arrays needed:
+
+```das
+// each_kv yields (key, value) named tuples; keys/values give one lane.
+// Wrap the head in unsafe(...) — the sources are [unsafe_outside_of_for].
+let pricey = _fold(unsafe(each_kv(cars)) |> _where(_.value.price > 500) |> count())
+let ids <- _fold(unsafe(keys(cars)) |> _where(_ > 100) |> to_array())
+
+// to_table() lands a chain in a table: kv (or any (k => v) tuple) chain → table<K;V>,
+// scalar chain → table<K> set. Duplicate keys keep the last occurrence.
+var byId <- _fold(each(orders) |> _select(_.id => _.total) |> to_table())
+var index <- _fold(unsafe(each_kv(cars)) |> _where(_.value.in_stock) |> to_table())
+```
+
+The fused emitter walks only the iterators the chain touches (a `.value`-only chain never
+touches keys), folds `where(kv.key == X) … first/any/count` to an O(1) probe, joins on a bare
+table key by probing the table instead of hashing, and inserts straight into the `to_table`
+result with no intermediate array. `%linq!` queries dispatch table sources automatically
+(`from kv in tab`). Slot order is unspecified — don't write order-sensitive expectations over
+table chains. The 3-arg `to_table(it, keyBlock, elementSelectorBlock)` ToDictionary form also
+exists (tier-2 only). Full pattern reference: `doc/source/reference/linq_fold_patterns.rst`.
+
 ## Don't mix styles
 
 Pick **one** style per transformation and stay in it:
