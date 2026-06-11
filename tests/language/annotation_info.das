@@ -8,8 +8,9 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require daslib/rtti
+require strings
 
-[comment(v_int = 13, v_float = 1.5, v_bool = true, v_str = "hello")]
+[comment(v_int = 13, v_float = 1.5, v_bool = true, v_str = "hello", v_esc = "q\"uote\\back\nline")]
 struct AnnotatedStruct {
     @v_int = 13 a : int
     @v_float = 1.5 b : float
@@ -38,7 +39,7 @@ def test_struct_annotations(t : T?) {
     var seen_args = 0
     for (ann in each_annotation(*sinfo)) {
         t |> equal("{ann.name}", "comment")
-        t |> equal(int(ann.count), 4)
+        t |> equal(int(ann.count), 5)
         for (arg in each_annotation_argument(ann)) {
             let value = get_annotation_argument_value(arg)
             if (arg.name == "v_int") {
@@ -53,11 +54,18 @@ def test_struct_annotations(t : T?) {
             } elif (arg.name == "v_str") {
                 t |> success(value is tString, "v_str should be string")
                 t |> equal(value as tString, "hello")
+            } elif (arg.name == "v_esc") {
+                t |> success(value is tString, "v_esc should be string")
+                // annotation string_constant unescapes only \" — backslashes stay
+                // literal; build the expected value from chars to stay independent
+                // of expression-string escape rules
+                let expected = "q" + to_char(34) + "uote" + to_char(92) + to_char(92) + "back" + to_char(92) + "nline"
+                t |> equal(value as tString, expected)
             }
             seen_args ++
         }
     }
-    t |> equal(seen_args, 4)
+    t |> equal(seen_args, 5)
 }
 
 [test]
@@ -147,7 +155,7 @@ def test_deprecated_structure_for_each_annotation(t : T?) {
     unsafe {
         structure_for_each_annotation(*sinfo) $(ann; args) {
             t |> equal("{ann.name}", "comment")
-            t |> equal(length(args), 4)
+            t |> equal(length(args), 5)
             for (arg in args) {
                 if (arg.name == "v_int") {
                     t |> equal(arg.iValue, 13)

@@ -643,11 +643,11 @@ def private writeAnnotationArgInit(var sb : StringBuilderWriter; arg : Annotatio
     if (arg.basicType == Type.tBool) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.bValue})")
     } elif (arg.basicType == Type.tString) {
-        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{arg.sValue}\")")
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{escape(arg.sValue)}\")")
     } elif (arg.basicType == Type.tInt) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.iValue})")
     } elif (arg.basicType == Type.tFloat) {
-        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.fValue}f)")
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {to_cpp_float(arg.fValue)})")
     }
 }
 
