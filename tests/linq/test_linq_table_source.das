@@ -210,8 +210,9 @@ def private bump_key(var c : int&) : int {
     return 2
 }
 
-// Point-lookup folds: `where(kv.key == X)` + terminator → O(1) key probe (key_exists / `tab?[X]`).
-// Probes must agree with the scan on hit AND miss; non-probe shapes must keep riding the scan.
+// Point-lookup folds: `where(kv.key == X [&& residual])` + terminator → O(1) key probe (key_exists /
+// `tab?[X]`), residual conjuncts evaluated on the probed element only. Probes must agree with the scan
+// on hit AND miss; non-probe shapes (key-eq not the leftmost conjunct) must keep riding the scan.
 
 [test]
 def test_table_point_lookup(t : T?) {
@@ -251,7 +252,46 @@ def test_table_point_lookup(t : T?) {
         t |> equal(_fold(keys(s).contains("z")), false)
         delete s
     }
-    t |> run("first probe panics on a missing key, like the scan") @(t : T?) {
+    t |> run("residual conjuncts route to the probed element only") @(t : T?) {
+        var tab <- make_int_table(10)
+        let h = _fold(each_kv(tab)._where(_.key == 5 && _.value > 0).first_or_default(default<IKV>))
+        t |> equal(h.key, 5)
+        t |> equal(h.value, 50)
+        let rf = _fold(each_kv(tab)._where(_.key == 5 && _.value > 500).first_or_default(default<IKV>))
+        t |> equal(rf.key, 0, "residual-false on a hit routes to the miss path")
+        let ms = _fold(each_kv(tab)._where(_.key == 99 && _.value > 0).first_or_default(default<IKV>))
+        t |> equal(ms.key, 0)
+        t |> equal(_fold(each_kv(tab)._any(_.key == 3 && _.value == 30)), true)
+        t |> equal(_fold(each_kv(tab)._any(_.key == 3 && _.value == 31)), false)
+        t |> equal(_fold(each_kv(tab)._count(_.key == 3 && _.value == 30)), 1)
+        t |> equal(_fold(each_kv(tab)._count(_.key == 3 && _.value == 31)), 0)
+        // three conjuncts AND-rebuild in order; trailing select projects the probed element
+        t |> equal(_fold(each_kv(tab)._where(_.key == 6 && _.value > 0 && _.value < 100)._select(_.value).first_or_default(-1)), 60)
+        // `key == 2 && key == 3` probes 2, then the residual re-check fails — agrees with the scan
+        t |> equal(_fold(each_kv(tab)._where(_.key == 2 && _.key == 3).count()), 0)
+        delete tab
+    }
+    t |> run("consecutive wheres AND-merge before conjunct extraction") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 5)._where(_.value > 0).any()), true)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 5)._where(_.value > 500).any()), false)
+        t |> equal(_fold(each_kv(tab)._where(_.key == 4)._where(_.value > 0)._select(_.value).first()), 40)
+        delete tab
+    }
+    t |> run("keys lane residual") @(t : T?) {
+        var tab <- make_int_table(10)
+        t |> equal(_fold(keys(tab)._where(_ == 8 && _ % 2 == 0).first_or_default(-1)), 8)
+        t |> equal(_fold(keys(tab)._where(_ == 7 && _ % 2 == 0).first_or_default(-1)), -1)
+        delete tab
+    }
+    t |> run("residual evaluates once, like the scan (keys are unique)") @(t : T?) {
+        var tab <- make_int_table(4)
+        var evals = 0
+        t |> equal(_fold(each_kv(tab)._where(_.key == 2 && bump_key(evals) > 0).count()), 1)
+        t |> equal(evals, 1, "residual must run once, on the probed element")
+        delete tab
+    }
+    t |> run("first probe panics on a missing key or a failed residual, like the scan") @(t : T?) {
         var tab <- make_int_table(4)
         var panicked = false
         try {
@@ -260,13 +300,20 @@ def test_table_point_lookup(t : T?) {
             panicked = true
         }
         t |> equal(panicked, true)
+        panicked = false
+        try {
+            let _r = _fold(each_kv(tab)._where(_.key == 2 && _.value > 999).first())
+        } recover {
+            panicked = true
+        }
+        t |> equal(panicked, true)
         delete tab
     }
     t |> run("non-probe shapes stay scans and stay correct") @(t : T?) {
         var tab <- make_int_table(10)
-        t |> equal(_fold(each_kv(tab)._where(_.key != 5).count()), 9)                      // wrong operator
-        t |> equal(_fold(each_kv(tab)._where(_.key == _.value / 10).count()), 10)          // X references the binder
-        t |> equal(_fold(each_kv(tab)._where(_.key == 5)._where(_.value > 0).any()), true) // collapses to a compound && predicate
+        t |> equal(_fold(each_kv(tab)._where(_.key != 5).count()), 9)                       // wrong operator
+        t |> equal(_fold(each_kv(tab)._where(_.key == _.value / 10).count()), 10)           // X references the binder
+        t |> equal(_fold(each_kv(tab)._where(_.value > 0)._where(_.key == 5).any()), true)  // key-eq not leftmost
         delete tab
     }
     t |> run("impure X stays a scan — per-element evaluation preserved") @(t : T?) {

@@ -191,9 +191,9 @@ class TableAdapter : SourceAdapter {
     }
 }
 
-// ===== Point-lookup folds — `where(kv.key == X)` + terminator → O(1) key probe =====
-// any/contains → key_exists, count → key_exists?1:0, first[_or_default] (± select) → tab?[X] probe,
-// with the scan's exact semantics. Full shape/decline table: linq_fold_patterns.rst (table source row).
+// ===== Point-lookup folds — `where(kv.key == X [&& residual])` + terminator → O(1) key probe =====
+// any/contains → key_exists, count → key_exists?1:0, first[_or_default] (± select) → tab?[X] probe, with the
+// scan's exact semantics; residual conjuncts run on the probed element only. Table: linq_fold_patterns.rst.
 
 [macro_function]
 def private match_key_probe_side(var keySide, otherSide : Expression?; lane : TableLane; bindName : string) : Expression? {
@@ -218,35 +218,83 @@ def private match_key_probe_side(var keySide, otherSide : Expression?; lane : Ta
     return clone_expression(otherSide)
 }
 
-// Decompose a peeled predicate body (binder renamed to bindName) as `<key-ref> == X`. Returns cloned X.
+// Decompose a peeled predicate body (binder renamed to bindName) as `<key-ref> == X [&& conjunct …]`;
+// returns cloned X, AND-rebuilds the rest into residual. Key-equality must be LEFTMOST: keys are unique, so
+// right of it runs at most once on both paths (no purity gate); a LEFT conjunct runs per scan element — decline.
 [macro_function]
-def private extract_key_probe(var pred : Expression?; lane : TableLane; bindName : string) : Expression? {
-    if (pred == null || !(pred is ExprOp2)) return null
-    var op2 = pred as ExprOp2
+def private extract_key_probe(var pred : Expression?; lane : TableLane; bindName : string; var residual : Expression?&) : Expression? {
+    // peel the left-assoc `&&` spine; right arms collect outermost-first (= reversed source order)
+    var leaf = pred
+    var conjuncts : array<Expression?>
+    while (leaf != null && leaf is ExprOp2 && (leaf as ExprOp2).op == "&&") {
+        var andOp = leaf as ExprOp2
+        conjuncts |> push(andOp.right)
+        leaf = andOp.left
+    }
+    if (leaf == null || !(leaf is ExprOp2)) return null
+    var op2 = leaf as ExprOp2
     if (op2.op != "==") return null
     var probe = match_key_probe_side(op2.left, op2.right, lane, bindName)
     if (probe == null) {
         probe = match_key_probe_side(op2.right, op2.left, lane, bindName)
     }
+    if (probe == null) return null
+    for (c in conjuncts) {
+        var cc = clone_expression(c)
+        residual = residual == null ? cc : merge_where_cond(cc, residual)
+    }
     return probe
+}
+
+// Miss-path emission per terminator: any → false, count → 0, first_or_default → bound default, first → panic.
+[macro_function]
+def private make_probe_miss(termName : string; dName : string) : Expression? {
+    if (termName == "any") {
+        return qmacro_expr() {
+            return false
+        }
+    }
+    if (termName == "count") {
+        return qmacro_expr() {
+            return 0
+        }
+    }
+    if (termName == "first_or_default") {
+        return qmacro_expr() {
+            return $i(dName)
+        }
+    }
+    return qmacro_expr() {
+        panic("sequence contains no elements")
+    }
 }
 
 [macro_function]
 def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var adapter : TableAdapter?; at : LineInfo) : Expression? {
     if (adapter.lane == TableLane.VALUES) return null
     let n = length(calls)
-    if (n < 1 || n > 3) return null
+    if (n < 1) return null
     var termCall = calls[n - 1]._0
     let termName = calls[n - 1]._1.name
     let termArgs = length(termCall.arguments)
     var selCall : ExprCall?
-    var predArg : Expression?
     var keyX : Expression?
-    let bindName = qn("plk_it", at)
-    if (n == 1) {
+    var residual : Expression?
+    let kName = qn("plk_k", at)
+    let dName = qn("plk_d", at)
+    let pName = qn("plk_p", at)
+    // keys-lane elements ARE the key, so the probe local doubles as the residual/projection binder
+    let bindName = adapter.lane == TableLane.KEYS ? kName : qn("plk_kv", at)
+    var predBody : Expression?
+    var nw = 0
+    while (nw < n - 1 && calls[nw]._1.name == "where_" && length(calls[nw]._0.arguments) == 2) {
+        nw++
+    }
+    if (nw == 0) {
         // predicate-form terminators, and the keys-lane contains
+        if (n != 1) return null
         if ((termName == "any" || termName == "count") && termArgs == 2) {
-            predArg = termCall.arguments[1]
+            predBody = peel_lambda_rename_var(termCall.arguments[1], bindName)
         } elif (termName == "contains" && termArgs == 2 && adapter.lane == TableLane.KEYS) {
             // element evaluated exactly once on both paths — no invariance/purity gate needed
             keyX = clone_expression(termCall.arguments[1])
@@ -254,43 +302,47 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
             return null
         }
     } else {
-        if (calls[0]._1.name != "where_" || length(calls[0]._0.arguments) != 2) return null
-        predArg = calls[0]._0.arguments[1]
-        if (n == 3) {
-            if (calls[1]._1.name != "select" || length(calls[1]._0.arguments) != 2
+        if (nw == n - 2) {
+            if (calls[nw]._1.name != "select" || length(calls[nw]._0.arguments) != 2
                     || (termName != "first" && termName != "first_or_default")) {
                 return null
             }
-            selCall = calls[1]._0
-        } elif (!((termName == "any" || termName == "count" || termName == "first") && termArgs == 1)
-                && !(termName == "first_or_default" && termArgs == 2)) {
+            selCall = calls[nw]._0
+        } elif (nw != n - 1
+                || (!((termName == "any" || termName == "count" || termName == "first") && termArgs == 1)
+                    && !(termName == "first_or_default" && termArgs == 2))) {
             return null
         }
+        // a leading run of where_ calls AND-merges (in order) before conjunct extraction — the same
+        // collapse the scan path applies downstream, so both spellings hit one extraction shape
+        for (wi in range(nw)) {
+            predBody = merge_where_cond(predBody, peel_lambda_rename_var(calls[wi]._0.arguments[1], bindName))
+        }
     }
-    if (predArg != null) {
-        var predBody = peel_lambda_rename_var(predArg, bindName)
-        keyX = extract_key_probe(predBody, adapter.lane, bindName)
+    if (predBody != null) {
+        keyX = extract_key_probe(predBody, adapter.lane, bindName, residual)
     }
     if (keyX == null) return null
     let sn = adapter.srcName
-    // boolean / counting probes
-    if (termName == "any" || termName == "contains") {
+    // residual-free boolean / counting probes — bare key_exists, no element touch
+    if (residual == null && (termName == "any" || termName == "contains")) {
         var anyStmts <- qmacro_block_to_array() {
             return key_exists($i(sn), $e(keyX))
         }
         return adapter->wrap_invoke(anyStmts, null, false, at)
     }
-    if (termName == "count") {
+    if (residual == null && termName == "count") {
         var cntStmts <- qmacro_block_to_array() {
             return key_exists($i(sn), $e(keyX)) ? 1 : 0
         }
         return adapter->wrap_invoke(cntStmts, null, false, at)
     }
-    // element probes: first / first_or_default, ± trailing select
-    var retT = strip_const_ref(clone_type(termCall._type))
-    retT.flags.removeConstant = false
-    let kName = qn("plk_k", at)
-    let dName = qn("plk_d", at)
+    // element probes: first / first_or_default ± select, and any/count carrying a residual conjunct
+    var retT : TypeDeclPtr
+    if (termName == "first" || termName == "first_or_default") {
+        retT = strip_const_ref(clone_type(termCall._type))
+        retT.flags.removeConstant = false
+    }
     var stmts : array<Expression?>
     if (termName == "first_or_default") {
         // eager default bind, matching linq.das argument evaluation order
@@ -301,49 +353,59 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
     stmts |> push <| qmacro_expr() {
         let $i(kName) = $e(keyX)
     }
-    var missTail : Expression?
-    if (termName == "first_or_default") {
-        missTail = qmacro_expr() {
-            return $i(dName)
-        }
-    } else {
-        missTail = qmacro_expr() {
-            panic("sequence contains no elements")
-        }
-    }
     if (adapter.lane == TableLane.KEYS) {
         stmts |> push <| qmacro_expr() {
             if (!key_exists($i(sn), $i(kName))) {
-                $e(missTail)
+                $e(make_probe_miss(termName, dName))
             }
         }
-        if (selCall != null) {
-            var proj = peel_lambda_rename_var(selCall.arguments[1], kName)
-            stmts |> push <| qmacro_expr() {
-                return $e(proj)
-            }
-        } else {
-            stmts |> push <| qmacro_expr() {
-                return $i(kName)
+    } else {
+        // KV lane: probe the value pointer, materialize the (key, value) pair on hit. Table safe-index is
+        // unsafe (the pointer dangles on rehash) — fine here, the generated invoke never mutates the table.
+        stmts |> push_from <| qmacro_block_to_array() {
+            let $i(pName) = unsafe($i(sn)?[$i(kName)])
+            if ($i(pName) == null) {
+                $e(make_probe_miss(termName, dName))
             }
         }
-        return adapter->wrap_invoke(stmts, retT, false, at)
+        if (residual != null || selCall != null) {
+            stmts |> push <| qmacro_expr() {
+                let $i(bindName) = (key = $i(kName), value = *$i(pName))
+            }
+        }
     }
-    // KV lane: probe the value pointer, materialize the (key, value) pair on hit. Table safe-index is
-    // unsafe (the pointer dangles on rehash) — fine here, the generated invoke never mutates the table.
-    let pName = qn("plk_p", at)
-    stmts |> push_from <| qmacro_block_to_array() {
-        let $i(pName) = unsafe($i(sn)?[$i(kName)])
-        if ($i(pName) == null) {
-            $e(missTail)
+    // residual conjuncts evaluate on the probed element only — false routes to the same miss path
+    if (residual != null) {
+        stmts |> push <| qmacro_expr() {
+            if (!$e(residual)) {
+                $e(make_probe_miss(termName, dName))
+            }
         }
+    }
+    if (termName == "any") {
+        stmts |> push <| qmacro_expr() {
+            return true
+        }
+        return adapter->wrap_invoke(stmts, null, false, at)
+    }
+    if (termName == "count") {
+        stmts |> push <| qmacro_expr() {
+            return 1
+        }
+        return adapter->wrap_invoke(stmts, null, false, at)
     }
     if (selCall != null) {
-        let bName = qn("plk_kv", at)
-        var proj = peel_lambda_rename_var(selCall.arguments[1], bName)
-        stmts |> push_from <| qmacro_block_to_array() {
-            let $i(bName) = (key = $i(kName), value = *$i(pName))
+        var proj = peel_lambda_rename_var(selCall.arguments[1], bindName)
+        stmts |> push <| qmacro_expr() {
             return $e(proj)
+        }
+    } elif (adapter.lane == TableLane.KEYS) {
+        stmts |> push <| qmacro_expr() {
+            return $i(kName)
+        }
+    } elif (residual != null) {
+        stmts |> push <| qmacro_expr() {
+            return $i(bindName)
         }
     } else {
         stmts |> push <| qmacro_expr() {
