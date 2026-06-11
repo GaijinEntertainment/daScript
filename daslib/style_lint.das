@@ -944,7 +944,7 @@ class StyleLintVisitor : AstVisitor {
             || length(call.arguments) != 2) return null
         let recv = call.arguments[0]
         if (recv == null || recv._type == null
-            || recv._type.baseType != Type.tArray || !empty(recv._type.dim)) return null
+            || recv._type.baseType != Type.tArray) return null
         return is_pure_chain(recv) ? recv : null
     }
 
@@ -1066,7 +1066,7 @@ class StyleLintVisitor : AstVisitor {
         //! struct-field initializer → pushes are a deliberate append); 0 = unknown
         //! (pointer root, non-MakeStruct init, where-block).
         var st : Structure const? = null
-        if (v._type != null && v._type.baseType == Type.tStructure && empty(v._type.dim)) {
+        if (v._type != null && v._type.baseType == Type.tStructure) {
             st = v._type.structType
         }
         if (st == null) return 0
