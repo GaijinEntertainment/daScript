@@ -76,6 +76,10 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/linq.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |
 | `skills/decs.md` | Programming with `daslib/decs` / `decs_boost` — entities, components, queries, `[decs_template]`, stages, bulk creation, `from_decs` linq bridge |
 | `skills/regex.md` | Writing regular expressions in `.das` code |
+| `skills/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` (covers `strings`, `daslib/strings_boost`, `daslib/strings_convert`) |
+| `skills/glob.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
+| `skills/sql.md` | SQL via `dasSQLITE` — `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]`, the `_sql(...)` LINQ-to-SQL flagship, custom-type adapters, `@sql_json` / `@sql_blob` columns, transactions, migrations |
+| `skills/gc_migration.md` | Migrating older code (external repos, archived projects) from `smart_ptr<T>` AST patterns to gc_node |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into `dasStrudel` |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
@@ -151,7 +155,7 @@ Quick rules:
 - Tools that build AST at runtime (outside the compile pipeline) must wrap their scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
 - daslang has garbage collection, but plain `var arr : array<T>` does NOT finalize on scope exit. Either declare with `var inscope` (smart_ptr only), call `delete` explicitly, or move out via `<-`. Per-frame leaks in hot paths usually trace to a local `var arr` never deleted.
 
-For migrating older code that uses `var inscope`/`<-` on AST types, see `skills/das_macros.md`.
+Full migration table (when reading older docs that say `var inscope` or `<-` for AST types): **`skills/gc_migration.md`**.
 
 ### Context heaps and threading
 

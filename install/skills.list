@@ -13,6 +13,8 @@ decs.md
 detect_dupe.md
 dynamic_modules.md
 filesystem.md
+gc_migration.md
+glob.md
 jobque_debugging.md
 json.md
 linq.md
@@ -20,6 +22,8 @@ mcp_tools.md
 memory_leak_detection.md
 project_overview.md
 regex.md
+sql.md
+strings.md
 strudel_port.md
 writing_tests.md
 xml.md
