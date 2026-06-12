@@ -3533,8 +3533,9 @@ namespace das
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
         int macroStackSize = getContextStackSize();
-        if ( policies.aot_macros || policies.jit_enabled ) {
-            // quote lowering (daslib/quote) is active: a lowered quote evaluates one large
+        if ( policies.aot_macros || policies.jit_enabled || options.getBoolOption("aot_macros", false) ) {
+            // quote lowering (daslib/quote) is active (same triggers as its QuotePass gate,
+            // including the per-module option): a lowered quote evaluates one large
             // construction frame per quote, and macro-called functions evaluate theirs on
             // THIS context's stack at macro-apply time. Size only the macro context — a
             // global policies.stack bump would leak into produced exe/wasm runtime stacks.
