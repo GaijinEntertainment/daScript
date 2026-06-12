@@ -299,14 +299,18 @@ replacing the misleading "Internal jit error" panic). The QuotePass gate stays
       module-cache state at compile time — single-folder runs passed, full-tree
       root-form runs failed deterministically (bisect: my code at master folder set
       still failed; zero-predecessor root form still failed → not contamination at all,
-      a per-file stack margin). FIX (matches the `-aot-macros` design, which always
-      shipped with a 1MB stack): the jit lane applies the same bump — `daslang -jit`
-      (main.cpp), dastest under `-jit` (suite.das + dastest.das ser path), jit.exe
-      (utils/jit/main.das) — and macro-module programs inherit consumer policies, so
-      macro contexts get the headroom too. Known sharp edge for embedders: enabling
-      `policies.jit_enabled` without a stack bump can still overflow on a big quote
-      evaluated at macro time — durable fix is chunking the lowered construction into
-      bounded frames (Phase 6 candidate).
+      a per-file stack margin). FIX: `Program::makeMacroModule` sizes the MACRO context
+      to `max(getContextStackSize(), 1MB)` when `aot_macros || jit_enabled` — the
+      headroom lands exactly where lowered quotes evaluate at macro-apply time, for any
+      embedder, with no driver changes. First attempt was a `policies.stack = 1MB` bump
+      in the three jit drivers (main.cpp / dastest / jit.exe), mirroring the
+      `-aot-macros` flow — REGRESSION: `policies.stack` also sizes the PRODUCED
+      program's runtime context, so cross-compiled wasm executables tried to carve 1MB
+      out of wasm linear memory and trapped at runtime (CI `wasm_cross`, f2s.wasm
+      "thrown Wasm exception"). Reverted; the `-aot-macros` global bump keeps its
+      historical behavior. Durable fix remains chunking the lowered construction into
+      bounded frames (Phase 6 candidate) — that would let macro contexts drop the
+      special-casing entirely.
 - [ ] Decide + implement JIT-of-macro-contexts: lift the `is_compiling_macros()` skip in
       llvm_macro.das behind a policy. This is the compile-time payoff twin of AOT'd
       macro modules. Separate PR; needs its own bake time.

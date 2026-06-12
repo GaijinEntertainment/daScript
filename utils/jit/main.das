@@ -255,9 +255,6 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                 // can't emit IR for them -> "Failed to get IR for functions ...").
                 cop.aot_module = true
                 cop.threadlock_context = true
-                // jit_enabled triggers quote lowering; lowered construction frames need
-                // the same stack bump the -aot-macros / dastest flows apply
-                cop.stack = 1024u * 1024u
                 if (tool.exe) {
                     cop.jit_exe_mode = true
                     cop.jit_dll_mode = false

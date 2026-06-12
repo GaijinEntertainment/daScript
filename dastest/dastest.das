@@ -377,11 +377,6 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
                     cop.fail_on_no_aot = ctx.use_aot
                     cop.threadlock_context = true
                     cop.jit_enabled = jit_enabled()
-                    if (jit_enabled()) {
-                        // jit_enabled triggers quote lowering; lowered construction frames
-                        // need the same stack bump suite.das applies (see suite.das)
-                        cop.stack = 1024u * 1024u
-                    }
                     compile_file(file, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                         if (!ok) {
                             log::error("Failed to compile {file}\n{output}")

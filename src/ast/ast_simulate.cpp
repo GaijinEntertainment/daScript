@@ -3532,7 +3532,15 @@ namespace das
 
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
-        thisModule->macroContext = get_context(getContextStackSize());
+        int macroStackSize = getContextStackSize();
+        if ( policies.aot_macros || policies.jit_enabled ) {
+            // quote lowering (daslib/quote) is active: a lowered quote evaluates one large
+            // construction frame per quote, and macro-called functions evaluate theirs on
+            // THIS context's stack at macro-apply time. Size only the macro context — a
+            // global policies.stack bump would leak into produced exe/wasm runtime stacks.
+            macroStackSize = das::max(macroStackSize, 1 * 1024 * 1024);
+        }
+        thisModule->macroContext = get_context(macroStackSize);
         thisModule->macroContext->category = uint32_t(das::ContextCategory::macro_context);
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;

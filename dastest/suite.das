@@ -161,10 +161,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.aot = ctx.use_aot
             cop.fail_on_no_aot = ctx.use_aot
             cop.aot_macros = ctx.aot_macros
-            if (ctx.aot_macros || jit_enabled()) {
+            if (ctx.aot_macros) {
                 // a lowered quote evaluates one large make-struct construction frame
-                // (same bump the `daslang -aot -aot-macros` flow applies); jit_enabled
-                // triggers the same lowering, and macro contexts inherit this stack size
+                // (same bump the `daslang -aot -aot-macros` flow applies)
                 cop.stack = 1024u * 1024u
             }
             cop.threadlock_context = true
