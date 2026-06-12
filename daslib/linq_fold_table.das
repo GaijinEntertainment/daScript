@@ -197,26 +197,9 @@ class TableAdapter : SourceAdapter {
 // scan's exact semantics; residual conjuncts run on the probed element only. Table: linq_fold_patterns.rst.
 
 [macro_function]
-def private is_key_ref(keySide : Expression?; lane : TableLane; bindName : string) : bool {
-    // `<bind>.key` on the kv lane, the bare `<bind>` element on keys/values
-    match (keySide) {
-        if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
-            return lane == TableLane.KV
-        }
-        if (ExprVar(name = match_expr(bindName))) {
-            return lane != TableLane.KV
-        }
-        if (_) {
-            return false
-        }
-    }
-    return false
-}
-
-[macro_function]
 def private match_key_probe_side(var keySide, otherSide : Expression?; lane : TableLane; bindName : string) : Expression? {
     // X must be loop-invariant AND side-effect free — the scan evaluates X per element, a probe once
-    if (!is_key_ref(keySide, lane, bindName)
+    if (!is_bare_key_ref(keySide, bindName, lane == TableLane.KV)
             || expr_uses_var(otherSide, bindName) || has_sideeffects(otherSide)) {
         return null
     }

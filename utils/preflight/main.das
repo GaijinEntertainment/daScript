@@ -475,20 +475,19 @@ def gate_dasgen(ctx : PreflightCtx) : GateResult {
 
 // ===== docs gates (mirror doc.yml 1-6) =====
 
-def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
-    let names = ["docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"]
+def skip_gates(names : array<string>; reason : string; var results : array<GateResult>&) {
     results |> reserve(length(results) + length(names))
     for (g in names) {
         results |> emplace(GateResult(name = g, status = GateStatus.Skip, detail = reason))
     }
 }
 
+def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
+    skip_gates(["docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
+}
+
 def docs_skip_all(reason : string; var results : array<GateResult>&) {
-    let names = ["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"]
-    results |> reserve(length(results) + length(names))
-    for (g in names) {
-        results |> emplace(GateResult(name = g, status = GateStatus.Skip, detail = reason))
-    }
+    skip_gates(["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
 }
 
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {

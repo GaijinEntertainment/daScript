@@ -5965,11 +5965,12 @@ def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
     return call
 }
 
-// keyb (peeled, binder renamed to bindName) selects the table key itself: bare `kv.key` (kv lane) or the
-// bare element (keys lane). Then the join key IS the table key and a lookup replaces the bucket walk.
+// body (peeled, binder renamed to bindName) selects the table key itself: bare `kv.key` (kv lane) or the
+// bare element (keys lane). Shared by join keyb (key IS the table key ⇒ lookup replaces the bucket walk)
+// and the point-lookup probe matcher in linq_fold_table.
 [macro_function]
-def join_keyb_is_bare_key(var keybBody : Expression?; bindName : string; kvLane : bool) : bool {
-    match (keybBody) {
+def is_bare_key_ref(keyBody : Expression?; bindName : string; kvLane : bool) : bool {
+    match (keyBody) {
         if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
             return kvLane
         }
@@ -6178,7 +6179,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
     var srcbTab = join_srcb_table_call(joinCall)
     let srcbKv = srcbTab != null && get_call_short_name(srcbTab) == "each_kv"
-    let probeMode = srcbTab != null && !isGroupJoin && join_keyb_is_bare_key(keybBody, tupBName, srcbKv)
+    let probeMode = srcbTab != null && !isGroupJoin && is_bare_key_ref(keybBody, tupBName, srcbKv)
     var pieces : JoinStandalonePieces?
     if (probeMode) {
         pieces = build_join_probe_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, srcBName, srcbKv, "ajoin", at)
