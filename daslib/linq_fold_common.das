@@ -4450,10 +4450,7 @@ def is_identity_lambda(lam : Expression const?) : bool {
     if (length(eb.arguments) != 1 || length(eb.list) != 1) return false
     let st = eb.list[0]
     if (st == null || !(st is ExprReturn)) return false
-    var body : Expression const? = (st as ExprReturn).subexpr
-    if (body != null && body is ExprRef2Value) {
-        body = (body as ExprRef2Value).subexpr
-    }
+    let body = match_peel_r2v((st as ExprReturn).subexpr)
     return body != null && body is ExprVar && (body as ExprVar).name == eb.arguments[0].name
 }
 
