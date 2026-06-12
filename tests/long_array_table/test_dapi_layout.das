@@ -32,7 +32,7 @@ def test_dapi_array_data_pointer_non_null(t : T?) {
 
 [test]
 def test_dapi_table_size_tombstones_match(t : T?) {
-    var tab : table<int; int>
+    var tab : table<int; int>  // nolint:STYLE031 — layout after the canonical insert path is under test
     tab |> insert(1, 100)
     tab |> insert(2, 200)
     tab |> insert(3, 300)

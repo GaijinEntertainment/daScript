@@ -20,7 +20,7 @@ def main {
 
     // === Declaring a table ===
     // table<KeyType; ValueType> — note the semicolon between key and value types.
-    var ages : table<string; int>
+    var ages : table<string; int>  // nolint:STYLE031 — tutorial demonstrates insert API
 
     // === Inserting values ===
     // Use insert() with pipe syntax

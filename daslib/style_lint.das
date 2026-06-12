@@ -29,6 +29,7 @@ module style_lint shared private
 //!   STYLE020 — from_JV(v, type<T>, defV) on a scalar — use 'v ?? defV' (operator ?? from json_boost)
 //!   STYLE021 — table<string; JsonValue?> built by repeated insert — use 'var v = JV((k1=..., k2=...))'
 //!   STYLE022 — bitfield compound-bit-set/clear ('foo |= BfT.m' / 'foo &= ~BfT.m') — use field-assign 'foo.m = true' / 'foo.m = false'
+//!   STYLE023 — bitfield test via int-cast ('int(bf & BfT.m) != 0' / '== 0') — use 'bf.m' / '!bf.m' directly
 //!   STYLE024 — redundant 'unsafe' wrap; inner expression / block body has no operation requiring unsafe — drop the wrap
 //!   STYLE025 — 'unsafe { ... }' block where only one statement needs unsafe — narrow to 'unsafe(<sub-expr>)'
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
@@ -36,6 +37,7 @@ module style_lint shared private
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
 //!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
 
 require daslib/ast_boost
 require daslib/is_local
@@ -872,6 +874,7 @@ class StyleLintVisitor : AstVisitor {
             check_style013_struct_field_init(blk, expr as ExprLet)
             check_style021_jv_table_init(blk, expr as ExprLet)
             check_style027_for_loop_comprehension(blk, expr as ExprLet)
+            check_style031_table_init(blk, expr as ExprLet)
         }
     }
 
@@ -1259,10 +1262,14 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE021: table<string; JsonValue?> built via repeated insert → JV(named-tuple) ---
 
     def is_jv_pointer_type(t : TypeDecl?) : bool {
+        // JsonValue is a das struct (daslib/json.das), not a handled type — match
+        // tPointer → tStructure by name + defining module.
         if (t == null || t.baseType != Type.tPointer || t.firstType == null
-                || t.firstType.baseType != Type.tHandle
-                || t.firstType.annotation == null) return false
-        return t.firstType.annotation.name == "JsonValue"
+                || t.firstType.baseType != Type.tStructure
+                || t.firstType.structType == null) return false
+        return (t.firstType.structType.name == "JsonValue"
+            && t.firstType.structType._module != null
+            && t.firstType.structType._module.name == "json")
     }
 
     def is_jv_table_type(t : TypeDecl?) : bool {
@@ -1443,6 +1450,121 @@ class StyleLintVisitor : AstVisitor {
         }
         if (!(arg is ExprVar)) return false
         return (arg as ExprVar).variable == target
+    }
+
+    // --- STYLE031: table<K;V> / table<K> var then contiguous insert/[]= instead of literal ---
+
+    def is_table_insert_of(call : ExprCall?; target : Variable?; nargs : int) : bool {
+        // Map flavor lowers to insert(t, k, v) (3 args), set flavor to insert(t, k) (2 args).
+        if (call.func == null || call.func.fromGeneric == null
+            || call.func.fromGeneric.name != "insert"
+            || length(call.arguments) != nargs) return false
+        var arg = call.arguments[0]
+        if (arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value.subexpr)
+        }
+        if (!(arg is ExprVar)) return false
+        return (arg as ExprVar).variable == target
+    }
+
+    def at_assign_key(stmt : Expression?) : Expression? {
+        // Precondition: is_at_assign_of(stmt, target) held — LHS is ExprAt.
+        var lhs : Expression? = null
+        if (stmt is ExprCopy) {
+            lhs = (stmt as ExprCopy).left
+        } elif (stmt is ExprClone) {
+            lhs = (stmt as ExprClone).left
+        } elif (stmt is ExprMove) {
+            lhs = (stmt as ExprMove).left
+        }
+        return null if (lhs == null)
+        return (lhs as ExprAt).index
+    }
+
+    def const_key_repr(key0 : Expression?) : string {
+        //! Type-tagged stringification of the key when it is a constant literal;
+        //! "" for computed keys (not comparable at lint time).
+        var key = key0
+        if (key != null && key is ExprRef2Value) {
+            key = (key as ExprRef2Value).subexpr
+        }
+        if (key == null) return ""
+        if (key is ExprConstString) return "s:{(key as ExprConstString).value}"
+        if (key is ExprConstInt) return "i:{(key as ExprConstInt).value}"
+        if (key is ExprConstUInt) return "u:{(key as ExprConstUInt).value}"
+        if (key is ExprConstInt64) return "i64:{(key as ExprConstInt64).value}"
+        if (key is ExprConstUInt64) return "u64:{(key as ExprConstUInt64).value}"
+        if (key is ExprConstFloat) return "f:{(key as ExprConstFloat).value}"
+        if (key is ExprConstDouble) return "d:{(key as ExprConstDouble).value}"
+        if (key is ExprConstBool) return "b:{(key as ExprConstBool).value}"
+        if (key is ExprConstEnumeration) return "e:{(key as ExprConstEnumeration).value}"
+        return ""
+    }
+
+    def check_style031_table_init(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        // Find this ExprLet's index in the enclosing block's statement list.
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        if (idx < 0 || idx + 1 >= n) return
+        for (v in elet.variables) {
+            // Only flag uninitialized table locals from user code (skip generic
+            // host instantiations and compiler-synthesized vars).
+            if (v.init != null
+                || v.flags.generated || v.flags.inScope
+                || v._type == null || v._type.baseType != Type.tTable) continue
+            let isSet = v._type.secondType == null || v._type.secondType.baseType == Type.tVoid
+            var count = 0
+            var dup_const_key = false
+            {
+                var seen_keys : table<string>
+                for (j in range(idx + 1, n)) {
+                    let stmt = blk.list[j]
+                    var key : Expression? = null
+                    if (stmt is ExprCall && is_table_insert_of(stmt as ExprCall, v, isSet ? 2 : 3)) {
+                        key = (stmt as ExprCall).arguments[1]
+                    } elif (!isSet && is_at_assign_of(stmt, v)) {
+                        key = at_assign_key(stmt)
+                    } else {
+                        break
+                    }
+                    let repr = const_key_repr(key)
+                    if (repr != "") {
+                        if (key_exists(seen_keys, repr)) {
+                            dup_const_key = true
+                        }
+                        seen_keys |> insert(repr)
+                    }
+                    count++
+                }
+                delete seen_keys
+            }
+            // Duplicate constant keys stay silent: sequential inserts overwrite
+            // (last wins), but a literal rejects them at compile time (error 30706).
+            if (count < 2 || dup_const_key) continue
+            // STYLE021 owns the table<string; JsonValue?> const-key run (the
+            // JV((k1=..., k2=...)) form is the stronger suggestion).
+            if (is_jv_table_type(v._type)) {
+                var jv = 0
+                for (j in range(idx + 1, n)) {
+                    let stmt = blk.list[j]
+                    if (!(stmt is ExprCall) || !is_insert_of_const_key(stmt as ExprCall, v)) break
+                    jv++
+                }
+                continue if (jv >= 2)
+            }
+            if (isSet) {
+                style_warning("STYLE031: table<K> set initialized by a run of insert calls; use a set literal move-assign `var {v.name} <- \{k1, k2, ...\}`", v.at)
+            } else {
+                style_warning("STYLE031: table<K;V> initialized by a run of insert/`[]=` statements; use a table literal move-assign `var {v.name} <- \{k1 => v1, k2 => v2, ...\}`", v.at)
+            }
+        }
     }
 
     // --- STYLE014/STYLE015: large comment blocks (post-visit pass) ---

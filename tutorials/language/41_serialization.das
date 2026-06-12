@@ -112,10 +112,7 @@ def demo_arrays() {
 
 def demo_tables() {
     print("\n=== table serialization ===\n")
-    var inventory : table<string; int>
-    inventory |> insert("sword", 1)
-    inventory |> insert("potion", 5)
-    inventory |> insert("arrow", 20)
+    var inventory <- { "sword" => 1, "potion" => 5, "arrow" => 20 }
 
     var data <- mem_archive_save(inventory)
     print("  serialized size: {length(data)} bytes\n")
