@@ -3943,6 +3943,7 @@ namespace das {
                             if (!found->init) {
                                 error("bitfield constant '" + expr->name + "' of type " + describeType(alias) + " is not initialized", "", "",
                                       expr->at, CompilationError::missing_bitfield_init);
+                                return Visitor::visit(expr);
                             } else if (!found->init->type || !found->init->type->constant || !found->init->type->isBitfield()) {
                                 error("not a valid bitfield constant " + expr->name + " of type " + describeType(found->type), "", "",
                                       expr->at, CompilationError::invalid_bitfield);
@@ -4394,10 +4395,8 @@ namespace das {
                     error("can't access private variable '" + expr->name + "'", "not visible due to privacy:\n" + errs.str(), "",
                           expr->at, CompilationError::invalid_variable_private);
                 } else {
-                    if (verbose) {
-                        error("can't locate variable '" + expr->name + "'", "", "",
-                          expr->at, CompilationError::lookup_variable);
-                    }
+                    error("can't locate variable '" + expr->name + "'", "", "",
+                      expr->at, CompilationError::lookup_variable);
                 }
             } else {
                 error("can't locate variable '" + expr->name + "'", "", "",
@@ -4416,10 +4415,8 @@ namespace das {
                 error("too many matching variables '" + expr->name + "'", "candidates are:\n" + errs.str(), "",
                       expr->at, CompilationError::ambiguous_variable);
             } else {
-                if (verbose) {
-                    error("too many matching variables '" + expr->name + "'", "", "",
-                      expr->at, CompilationError::ambiguous_variable);
-                }
+                error("too many matching variables '" + expr->name + "'", "", "",
+                  expr->at, CompilationError::ambiguous_variable);
             }
         }
         return Visitor::visit(expr);

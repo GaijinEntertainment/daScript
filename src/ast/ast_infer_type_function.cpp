@@ -279,6 +279,7 @@ namespace das {
                     break;
                 }
                 if (totalAliases == aliases.size()) {
+                    program->updateAliasMapCallback = nullptr;
                     return false;
                 }
             }
@@ -1619,6 +1620,7 @@ namespace das {
                             error("unknown type of argument " + clone->arguments[ai]->name + "; can't instance " + describeFunction(oneGeneric), "",
                                   "provide argument type explicitly",
                                   expr->at, CompilationError::lookup_argument_type);
+                            program->updateAliasMapCallback = nullptr;
                             return nullptr;
                         }
                     }

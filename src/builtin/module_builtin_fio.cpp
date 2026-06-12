@@ -1366,8 +1366,8 @@ namespace das {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
                 auto err_msg = "dynamic module `" + string(mod_name) + "` — failed to load: " + actualPath
                     + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
-                context->to_err(at, err_msg.c_str());
-                if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                if (context) context->to_err(at, err_msg.c_str());
+                if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                     context->throw_error(err_msg.c_str());
                 }
             } else {
