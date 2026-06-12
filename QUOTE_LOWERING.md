@@ -198,13 +198,33 @@ behavioral check that the spliced result still compiles/runs via `apply_template
 - negative: `-aot-macros` without lowering available → Phase 1 hard error fires;
   jit + unlowered quote → clean `unsupported` message (not "Internal jit error")
 
-## Phase 4 — AOT lane
+## Phase 4 — AOT lane (IN PROGRESS)
 
-- [ ] Wire `-aot-macros` into the tests/aot flow for `tests/quote/` (investigate how
-      per-directory dasAot invocation passes flags; register dir in tests/aot/CMakeLists).
-- [ ] test_aot run green on tests/quote.
+No `-aot-macros` harness wiring turned out to be needed: the per-module
+`options aot_macros` in the lowered fixture triggers lowering identically during dasAot
+generation and at test_aot runtime, so hashes line up by construction. Registered as
+test_aot_quote + test_aot_quote_modules (fixtures via DAS_AOT_LIB, linq/_common pattern).
+
+Findings from the first test_aot build of the lowered fixture's generated C++:
+
+- `module_find_enumeration` needed a `DAS_CC_API` declaration in
+  include/daScript/simulate/aot_builtin_ast.h (AOT emits direct calls by C++ name).
+- `ExprBlock.stackCleanVars` (vector<pair<uint32,uint32>>) reached the reconstruction:
+  post-infer allocateStack bookkeeping, always empty in quoted trees, and its type has
+  no AOT mapping (C2665 on das_arg<vector<TTuple<8,…>>>). Blacklisted — correct
+  semantically AND drops dead runtime work.
+
+- [x] Register tests/quote in tests/aot/CMakeLists.txt.
+- [x] test_aot: tests/quote 20/20 — with `fail_on_no_aot` active, so the lowered
+      reconstruction functions LINKED as AOT stubs and ran native (the unlowered
+      fixture's quote functions are noAot-exempt and interpret, as designed).
+      tests/aot regression 134/134.
+- [x] Full tests/ tree under test_aot: 10123 tests, 10117 passed, 0 failed, 6 skipped —
+      same skip set as the daslang baseline, +20 new quote tests.
 - [ ] Hash-mismatch fallback test: AOT objects built with `-aot-macros`, runtime without
       (and vice versa) must fall back to interpreter cleanly, not link garbage.
+      (Deferred — exercise alongside the `-aot-macros` default-on decision; the noAot
+      exemption side is already covered by the unlowered fixture under test_aot.)
 
 ## Phase 5 — JIT lane (FOLLOW-UP: starts only after Phase 4 is green)
 

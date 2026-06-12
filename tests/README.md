@@ -842,6 +842,18 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | test_result.das | `Result<T, E>` — ok/err constructors, map/map_err/and_then/or_else, unwrap family, operators `??`/`==`, to_option/err_to_option bridges, if_ok/if_err, chaining | |
 | test_result_non_copyable.das | `Result<array<int>, string>` — every constructor/combinator/unwrap/operator with a non-copyable T, plus `move_ok` and `move_err` | |
 
+## quote/
+
+> A/B equivalence for the daslib/quote lowering (QuotePass, `aot_macros`): each shape is quoted through the interpreter SimNode path and the lowered reconstruction path, and the describe output must match.
+
+| File | Description | Expects errors |
+|---|---|---|
+| _quote_entities.das | Shared enum/struct in a named module so describes qualify identically on both sides *(helper)* | |
+| _quote_shapes.das | Reference fixture — quote/qmacro shapes through the SimNode path *(helper)* | |
+| _quote_shapes_lowered.das | Lowered twin — identical body + `options aot_macros` *(helper)* | |
+| test_quote_lowering.das | Per-shape describe equality: consts/escapes/non-ASCII, calls, splices, blocks+finally, make-struct, enum/struct/container types, table/tuple literals, capture lambdas, generators, block_to_array | |
+| test_quote_lowered_main.das | Lowered quotes in the anonymous main module — by-name alias fallback for local enum/struct types, splice substitution | |
+
 ## regex/
 
 | File | Description | Expects errors |

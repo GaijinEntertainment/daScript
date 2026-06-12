@@ -165,6 +165,7 @@ let blacklist = [
     ("ast_core::ExprVar", "pBlock"), // loop
     ("ast_core::EnumEntry", "value"), // loop
     ("ast_core::EnumEntry", "at"), // ignore it for now
+    ("ast_core::ExprBlock", "stackCleanVars"), // post-infer bookkeeping (allocateStack); always empty in quoted trees, and its vector<pair> type has no AOT mapping
     ("rtti_core::AnnotationArgument", "at"),
     ("ast_core::CaptureEntry", "at"), // ignore it for now
     ("ast_core::MakeFieldDecl", "at"), // ignore it for now

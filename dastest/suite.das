@@ -164,7 +164,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             if (ctx.aot_macros) {
                 // a lowered quote evaluates one large make-struct construction frame
                 // (same bump the `daslang -aot -aot-macros` flow applies)
-                cop.stack = 1 * 1024 * 1024
+                cop.stack = 1024u * 1024u
             }
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()

@@ -12,7 +12,7 @@ module _quote_shapes shared
 require daslib/ast
 require daslib/templates_boost
 require daslib/strings_boost
-require _quote_entities
+require _quote_entities // nolint:STYLE030 referenced only inside quoted trees (parse-time type resolution), invisible to symbol-use
 
 def public shape_consts : string {
     var res = ""
@@ -163,10 +163,7 @@ def public shape_block_to_array : string {
             foo()
             bar(1, "x")
         }
-        var parts : array<string>
-        for (e in arr) {
-            parts |> push(describe_expression(e))
-        }
+        var parts <- [for (e in arr); describe_expression(e)]
         res = parts |> join(";")
         delete parts
     }
