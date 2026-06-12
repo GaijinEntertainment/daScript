@@ -2,10 +2,11 @@ options gen2
 options rtti
 options indenting = 4
 
-// Reference fixture for the quote-lowering A/B suite: quotes run through the
-// interpreter SimNode path (clone of the parsed tree). The lowered twin
-// (_quote_shapes_lowered.das) is IDENTICAL except for the module name and
-// `options aot_macros` — keep the bodies in sync.
+// Twin fixture for the quote-lowering A/B suite: _quote_shapes runs quotes through
+// the interpreter SimNode path (clone of the parsed tree), _quote_shapes_lowered
+// (`options aot_macros`) through the lowered reconstruction code. The two files are
+// IDENTICAL except for the module name and the `options aot_macros` line — keep
+// the bodies in sync.
 
 module _quote_shapes shared
 
