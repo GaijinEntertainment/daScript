@@ -1584,7 +1584,8 @@ Detection requires the variable's static type to be exactly
 ``table<string; JsonValue?>``, zero initial value, and a contiguous run
 of ≥ 2 ``insert`` calls whose key is an ``ExprConstString`` and whose
 receiver resolves to the same variable. Computed keys disqualify the
-chain.
+chain — such runs fall through to :ref:`STYLE031 <style031>` instead
+(a table literal accepts computed keys, ``JV((...))`` does not).
 
 .. code-block:: das
 
@@ -1812,6 +1813,40 @@ it. Suppress a deliberate keep with ``// nolint:STYLE030``.
     require strings                             // STYLE030
 
     // Good — remove the require
+
+.. _style031:
+
+STYLE031 — table ``var`` initialized by a run of ``insert`` / ``[]=``
+======================================================================
+
+Declaring an empty ``table<K;V>`` (or a ``table<K>`` set) and populating
+it with ≥ 2 contiguous ``t |> insert(k, v)`` calls or ``t[k] = v``
+assignments is the table counterpart of STYLE012. A table (set) literal
+move-assign expresses the same construction in one statement.
+
+Detection anchors on the uninitialized table declaration and accepts a
+mixed run of exact-arity inserts (3-arg map form, 2-arg set form) and
+``t[k] = v`` at-assigns (map only). Computed keys are fine — a
+runtime-duplicate key in a literal is last-wins, identical to sequential
+inserts. A run containing a duplicate **constant** key stays silent:
+sequential inserts overwrite, but a literal rejects duplicate constant
+keys at compile time (error 30706), so the rewrite would not compile.
+``table<string; JsonValue?>`` runs with constant keys are owned by
+STYLE021 (the ``JV((k1=..., k2=...))`` form is the stronger suggestion).
+
+.. code-block:: das
+
+    // Bad
+    var t : table<string; int>
+    t |> insert("a", 1)                         // STYLE031
+    t["b"] = 2
+    var s : table<int>
+    s |> insert(5)                              // STYLE031 (set flavor)
+    s |> insert(7)
+
+    // Good
+    var t <- { "a" => 1, "b" => 2 }
+    var s <- { 5, 7 }
 
 -----
 Tests

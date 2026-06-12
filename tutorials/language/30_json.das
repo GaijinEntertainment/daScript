@@ -218,7 +218,7 @@ def modifying_json() {
     print("\n=== Modifying JSON ===\n")
 
     // Build an object by hand
-    var tab : table<string; JsonValue?>
+    var tab : table<string; JsonValue?>  // nolint:STYLE021 — tutorial demonstrates incremental building
     tab |> insert("name", JV("Alice"))
     tab |> insert("age", JV(30))
     var obj = JV(tab)

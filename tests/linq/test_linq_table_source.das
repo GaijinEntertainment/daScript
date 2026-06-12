@@ -19,12 +19,12 @@ def make_int_table(n : int) : table<int; int> {
 }
 
 def make_pt_table : table<string; Pt> {
-    var t : table<string; Pt>
-    t |> insert("a", Pt(x = 1, y = 10))
-    t |> insert("b", Pt(x = 2, y = 20))
-    t |> insert("c", Pt(x = 3, y = 30))
-    t |> insert("d", Pt(x = 4, y = 40))
-    return <- t
+    return <- {
+        "a" => Pt(x = 1, y = 10),
+        "b" => Pt(x = 2, y = 20),
+        "c" => Pt(x = 3, y = 30),
+        "d" => Pt(x = 4, y = 40)
+    }
 }
 
 [test]
