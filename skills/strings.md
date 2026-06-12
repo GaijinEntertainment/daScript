@@ -82,7 +82,7 @@ let result = build_string() $(var writer) {
 - `writer |> write_char(c)` — single int-as-char.
 - `writer |> write_chars(c, n)` — repeat one char n times.
 - `writer |> write_escape_string(s)` — write with escape sequences applied (use for emitting JSON-like literals).
-- `writer |> fmt(spec, val)` / `writer |> format(spec, val)` — printf-style formatting for one numeric value. `fmt` takes the per-type overloads (int8…double); `format` is the int/uint/int64/uint64/float/double set.
+- `writer |> fmt(spec, val)` / `writer |> format(spec, val)` — printf-style formatting for one numeric value. `fmt` takes the per-type overloads (int8…double); `format` is the int/uint/int64/uint64/float/double set. The spec is **colon-prefixed, no `%`**: `fmt(":.2f", v)` — a `"%.2f"` spec compiles but panics at runtime ("invalid format string"). The string-returning forms exist too; there `format(spec, v)` is **deprecated** — use `fmt(spec, v) : string`.
 - **String interpolation** `"{x} {y}"` is sugar for `build_string` — fine for one-off small constructions, but inside a loop or for long pipelines, write the explicit `build_string` so the writer is reused.
 
 `perf_lint` flags some bad patterns here (PERF002 string concat in loops, PERF005 unnecessary `string(das_string)` casts) — see `skills/perf_lint.md`.
