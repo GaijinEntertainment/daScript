@@ -173,6 +173,32 @@ prints:
 	let  bus:auto const = "busbus"
 	let  t:auto const = bus
 
+``$i`` works in every slot of a multi-name list — all iterator slots of a multi-source ``for``
+loop or comprehension, every name of a multi-name variable declaration, and shared-type block
+argument groups (``$($i(a), $i(b) : int)``):
+
+.. code-block:: das
+
+    let kName = "kk"
+    let vName = "vv"
+    let srcName = "tab"
+    var loop = qmacro_block() {
+        for ($i(kName), $i(vName) in keys($i(srcName)), values($i(srcName))) {
+            process($i(kName), $i(vName))
+        }
+    }
+    print(describe(loop))
+
+prints:
+
+.. code-block:: text
+
+     {
+        for ( kk, vv in keys(tab),values(tab) ) {
+            process(kk,vv);
+        }
+    }
+
 $f(field-name)
 ^^^^^^^^^^^^^^
 

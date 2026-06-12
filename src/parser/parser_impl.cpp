@@ -1017,12 +1017,21 @@ namespace das {
         pLet->inScope = inScope;
         pLet->isTupleExpansion = decl->isTupleExpansion;
         if ( decl->pTypeDecl ) {
+            size_t nameIndex = 0;
             for ( const auto & name_at : *decl->pNameList ) {
-                if ( !pLet->find(name_at.name) ) {
+                // tagged names (`$i(expr)`) all parse to the same literal placeholder — skip the
+                // dup check for them; post-substitution duplicates surface during type inference
+                if ( name_at.tag || !pLet->find(name_at.name) ) {
                     VariablePtr pVar = new Variable();
                     pVar->name = name_at.name;
                     pVar->aka = name_at.aka;
                     pVar->at = name_at.at;
+                    // the front tag travels as an ExprTag wrapper around the whole let (below);
+                    // later tagged slots carry per-variable tag+source, same as block arguments
+                    if ( name_at.tag && nameIndex>0 ) {
+                        pVar->tag = true;
+                        pVar->source = name_at.tag;
+                    }
                     if ( decl->pNameList->size()>1 ) {
                         pVar->type = new TypeDecl(*decl->pTypeDecl);
                     } else {
@@ -1047,6 +1056,7 @@ namespace das {
                     das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,
                         CompilationError::already_declared_local);
                 }
+                nameIndex ++;
             }
         }
         if ( auto pTagExpr = decl->pNameList->front().tag ) {
@@ -1067,11 +1077,17 @@ namespace das {
         for ( auto pDecl : decl ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
-                    if ( !pLet->find(name_at.name) ) {
+                    if ( name_at.tag || !pLet->find(name_at.name) ) {
                         VariablePtr pVar = new Variable();
                         pVar->name = name_at.name;
                         pVar->aka = name_at.aka;
                         pVar->at = name_at.at;
+                        // no ExprTag wrapper in the list form — every tagged name travels
+                        // as per-variable tag+source, same as block arguments
+                        if ( name_at.tag ) {
+                            pVar->tag = true;
+                            pVar->source = name_at.tag;
+                        }
                         if ( pDecl->pNameList->size()>1 ) {
                             pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                         } else {
