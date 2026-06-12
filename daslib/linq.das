@@ -1516,6 +1516,72 @@ def max_by(src : array<auto(TT)>; key) : TT -& -const {
 }
 
 [unused_argument(tt)]
+def private max_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    var maxx : typedecl(selector(type<TT>)) - const - &
+    var first : bool = true
+    for (x in src) {
+        let k = selector(x)
+        if (first) {
+            maxx := k
+            first = false
+        } elif (_::less(maxx, k)) {
+            maxx := k
+        }
+    }
+    return <- maxx
+}
+
+[unused_argument(tt)]
+def private max_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    return <- max_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
+}
+
+def max(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Maximum of ``selector(x)`` over iterator elements (C# ``Max(selector)``).
+    //! Returns the projected value; see ``max_by`` for the element-returning form.
+    return <- max_sel_impl(src, type<TT -const -&>, selector)
+}
+
+def max(src : array<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Maximum of ``selector(x)`` over array elements (C# ``Max(selector)``).
+    //! Returns the projected value; see ``max_by`` for the element-returning form.
+    return <- max_sel_impl_const(src, type<TT -const -&>, selector)
+}
+
+[unused_argument(tt)]
+def private min_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    var minn : typedecl(selector(type<TT>)) - const - &
+    var first : bool = true
+    for (x in src) {
+        let k = selector(x)
+        if (first) {
+            minn := k
+            first = false
+        } elif (_::less(k, minn)) {
+            minn := k
+        }
+    }
+    return <- minn
+}
+
+[unused_argument(tt)]
+def private min_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    return <- min_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
+}
+
+def min(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Minimum of ``selector(x)`` over iterator elements (C# ``Min(selector)``).
+    //! Returns the projected value; see ``min_by`` for the element-returning form.
+    return <- min_sel_impl(src, type<TT -const -&>, selector)
+}
+
+def min(src : array<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Minimum of ``selector(x)`` over array elements (C# ``Min(selector)``).
+    //! Returns the projected value; see ``min_by`` for the element-returning form.
+    return <- min_sel_impl_const(src, type<TT -const -&>, selector)
+}
+
+[unused_argument(tt)]
 def private min_max_impl(var src; tt : auto(TT)) : tuple<TT -& -const, TT -& -const> {
     var minn : TT -& -const
     var maxx : TT -& -const
@@ -1670,6 +1736,30 @@ def sum(src : array<auto(TT)>) : TT -const -& {
     }
 }
 
+[unused_argument(tt)]
+def private sum_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    var total : typedecl(selector(type<TT>)) - const - &
+    for (x in src) {
+        total += selector(x)
+    }
+    return <- total
+}
+
+[unused_argument(tt)]
+def private sum_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
+    return <- sum_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
+}
+
+def sum(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Sum of ``selector(x)`` over iterator elements (C# ``Sum(selector)``).
+    return <- sum_sel_impl(src, type<TT -const -&>, selector)
+}
+
+def sum(src : array<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
+    //! Sum of ``selector(x)`` over array elements (C# ``Sum(selector)``).
+    return <- sum_sel_impl_const(src, type<TT -const -&>, selector)
+}
+
 def average(var src : iterator<auto(TT)>) : double {
     //! Averages elements in an iterator. Always returns ``double``
     //! (matches SQL ``AVG`` / C# ``Average``); element type must cast to ``double``.
@@ -1696,6 +1786,40 @@ def average(src : array<auto(TT)>) : double {
             total += x
         } else {
             total += double(x)
+        }
+        count ++
+    }
+    return count != 0ul ? total / double(count) : 0lf
+}
+
+def average(var src : iterator<auto(TT)>; selector) : double {
+    //! Average of ``selector(x)`` over iterator elements (C# ``Average(selector)``).
+    //! Always returns ``double``; the projected type must cast to ``double``.
+    var total : double = 0lf
+    var count : uint64 = 0ul
+    for (x in src) {
+        let k = selector(x)
+        static_if (typeinfo stripped_typename(k) == typeinfo stripped_typename(default<double>)) {
+            total += k
+        } else {
+            total += double(k)
+        }
+        count ++
+    }
+    return count != 0ul ? total / double(count) : 0lf
+}
+
+def average(src : array<auto(TT)>; selector) : double {
+    //! Average of ``selector(x)`` over array elements (C# ``Average(selector)``).
+    //! Always returns ``double``; the projected type must cast to ``double``.
+    var total : double = 0lf
+    var count : uint64 = 0ul
+    for (x in src) {
+        let k = selector(x)
+        static_if (typeinfo stripped_typename(k) == typeinfo stripped_typename(default<double>)) {
+            total += k
+        } else {
+            total += double(k)
         }
         count ++
     }

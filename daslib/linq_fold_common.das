@@ -4406,14 +4406,14 @@ def is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; 
     if (c.func.fromGeneric != null) {
         fnName = string(c.func.fromGeneric.name)
     }
-    if ((c.arguments |> length) != 1) return (false, "", null)
+    let nArgs = c.arguments |> length
     // Bare reducer: `<reducer>(<bind>._1)`
-    if (fnName == "length" || fnName == "count" || fnName == "long_count"
-            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
+    if (nArgs == 1 && (fnName == "length" || fnName == "count" || fnName == "long_count"
+            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average")) {
         if (peel_tuple_field_read(c.arguments[0], bindName, 1)) return (true, fnName, null)
     }
     // Inner-select reducer: `<reducer>(select(<bind>._1, <lambda>))`
-    if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
+    if (nArgs == 1 && (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average")) {
         let inner = c.arguments[0]
         if (inner != null && inner is ExprCall) {
             let innerCall = inner as ExprCall
@@ -4428,7 +4428,32 @@ def is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; 
             }
         }
     }
+    // Direct selector reducer: `<reducer>(<bind>._1, <lambda>)` ≡ inner-select form (the 2-arg
+    // tier-2 overloads in linq.das). An identity lambda canonicalizes to the bare reducer.
+    // `first`/`count` stay 1-arg only — their C# 2-arg forms take a PREDICATE, not a selector.
+    if (nArgs == 2 && (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "average")) {
+        if (peel_tuple_field_read(c.arguments[0], bindName, 1)) {
+            if (is_identity_lambda(c.arguments[1])) return (true, fnName, null)
+            return (true, "{fnName}_inner_select", c.arguments[1])
+        }
+    }
     return (false, "", null)
+}
+
+[macro_function]
+def is_identity_lambda(lam : Expression const?) : bool {
+    if (lam == null || !(lam is ExprMakeBlock)) return false
+    let blk = (lam as ExprMakeBlock)._block
+    if (blk == null || !(blk is ExprBlock)) return false
+    let eb = blk as ExprBlock
+    if (length(eb.arguments) != 1 || length(eb.list) != 1) return false
+    let st = eb.list[0]
+    if (st == null || !(st is ExprReturn)) return false
+    var body : Expression const? = (st as ExprReturn).subexpr
+    if (body != null && body is ExprRef2Value) {
+        body = (body as ExprRef2Value).subexpr
+    }
+    return body != null && body is ExprVar && (body as ExprVar).name == eb.arguments[0].name
 }
 
 struct ReducerSpec {
