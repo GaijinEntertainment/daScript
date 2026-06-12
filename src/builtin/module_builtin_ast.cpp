@@ -801,10 +801,18 @@ namespace das {
     }
 
     template <typename F>
-    static auto apply_to_vec(void* vec, string_view tstr, F apply) {
-        if (tstr == "string") {
-            return apply(static_cast<vector<const char *>*>(vec));
-        } else if (tstr == "$::das_string") {
+    static auto apply_to_vec(void* vec, TypeDecl * type, F apply) {
+        auto tstr = type->describe();
+        if (tstr == "ast_core::MakeFieldDecl?") {
+            // MakeStruct IS-A vector<MakeFieldDeclPtr> via multiple inheritance; the vector
+            // subobject is not at offset 0, the cast chain performs the base adjustment.
+            return apply(static_cast<vector<MakeFieldDeclPtr>*>((MakeStruct*)vec));
+        }
+        if (type->baseType == Type::tPointer || tstr == "string") {
+            // post-gc_node every AST node vector is a plain vector of raw pointers
+            return apply(static_cast<vector<void*>*>(vec));
+        }
+        if (tstr == "$::das_string") {
             return apply(static_cast<vector<string>*>(vec));
         } else if (tstr == "ast_core::CaptureEntry") {
             return apply(static_cast<vector<CaptureEntry>*>(vec));
@@ -818,11 +826,6 @@ namespace das {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         } else if (tstr == "rtti_core::LineInfo") {
             return apply(static_cast<vector<LineInfo>*>(vec));
-        } else if (tstr == "ast::MakeStruct*") {
-            return apply(static_cast<vector<MakeStructPtr>*>(vec));
-        } else if (tstr == "ast::MakeFieldDecl*") {
-            auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
-            return apply(static_cast<vector<MakeFieldDeclPtr>*>(vec2));
         } else if (tstr == "ast_core::EnumEntry") {
             return apply(static_cast<vector<Enumeration::EnumEntry>*>(vec));
         }
@@ -831,18 +834,17 @@ namespace das {
     }
 
     void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * /*context*/, LineInfoArg * /*at*/) {
-        auto tstr = type->describe();
         auto get_at = [idx](auto *vec) {
             return static_cast<void*>(&vec->at(idx));
         };
-        return apply_to_vec(vec, tstr, get_at);
+        return apply_to_vec(vec, type, get_at);
     }
 
     int32_t getVectorLength(void* vec, TypeDecl * type, Context * /*context*/, LineInfoArg * /*at*/) {
         auto get_size = [](auto *vec) {
             return vec->size();
         };
-        return (int) apply_to_vec(vec, type->describe(), get_size);
+        return (int) apply_to_vec(vec, type, get_size);
     }
 
     uint32_t getHandledTypeFieldOffset ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at ) {

@@ -130,9 +130,7 @@ def public cvt_to_mks(var args) : MakeStruct? {
     var res = new MakeStruct(uninitialized);
     *res |> resize(length(args))
     for (arg, i in args, count()) {
-        {
-            move_new((*res)[i]) <| arg;
-        }
+        (*res)[i] = arg;
     }
     return res;
 }
@@ -227,7 +225,10 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
     for (idx in range(get_vector_length(field_values, src_tp))) {
         {
             var arg_expr = convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp, idx))), src_tp, at);
-            if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
+            // retarget the element make-struct to the InitData wrapper type when get_dst_type
+            // substituted one; pointer compare (dst_tp != src_tp) is always true after clone_type,
+            // and writing makeType through a reinterpret of a non-ExprMakeStruct stomps the node
+            if (dst_tp.baseType != Type.tString && describe(dst_tp) != describe(src_tp) && arg_expr is ExprMakeStruct) {
                 var make_str = unsafe(reinterpret<ExprMakeStruct?>(arg_expr));
                 make_str.makeType = clone_type(dst_tp);
                 args |> emplace(make_str);
@@ -407,7 +408,10 @@ class QuotePass : AstPassMacro {
     //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
-        if (!compiling_program().policies.aot_macros) return false // nothing to do
+        // Triggered by the aot_macros policy (`daslang -aot -aot-macros`) or per-module
+        // `options aot_macros` (self-contained tests, interpreted A/B).
+        let lower = compiling_program().policies.aot_macros || (prog._options |> find_arg("aot_macros") ?as tBool ?? false)
+        if (!lower) return false // nothing to do
         var astVisitor = new QuoteConverter()
         make_visitor(*astVisitor) $(astVisitorAdapter) {
             visit(prog, astVisitorAdapter)

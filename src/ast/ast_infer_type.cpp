@@ -1437,9 +1437,10 @@ namespace das {
         expr->type = new TypeDecl(Type::tPointer);
         expr->type->firstType = new TypeDecl(Type::tHandle);
         expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression");
-        // mark quote as noAot
+        // mark quote as noAot, unless daslib/quote lowering will replace it
+        // (aot_macros policy or per-module `options aot_macros` — same gate as QuotePass)
         if (func) {
-            if (!program->policies.aot_macros) {
+            if (!program->policies.aot_macros && !program->options.getBoolOption("aot_macros", false)) {
                 func->noAot = true;
             }
         }

@@ -511,6 +511,15 @@ class NoAotMarker : AstVisitor {
             }
         }
     }
+    // quote that was not lowered. without aot_macros infer already made the function noAot
+    // (then this stays silent); with aot_macros set it means daslib/quote lowering did not
+    // run — the module with the quote is missing daslib/templates_boost (or daslib/quote)
+    def override preVisitExprQuote(expr : ExprQuote?) {
+        if (func != null && !func.flags.noAot) {
+            func.flags.noAot = true
+            to_log(LOG_ERROR, "{describe(expr.at)}: quote( ) survived to AOT with aot_macros enabled — daslib/quote lowering did not run; require daslib/templates_boost (or daslib/quote) in the module containing the quote. Function '{func.name}' excluded from AOT.\n")
+        }
+    }
 };
 
 class public PrologueMarker : AstVisitor {
@@ -1812,6 +1821,13 @@ class public CppAot : AstVisitor {
     }
     def override visitExprMove(var that : ExprMove?) : ExpressionPtr {
         write(*ss, ")");
+        return that;
+    }
+// quote
+    def override visitExprQuote(var that : ExprQuote?) : ExpressionPtr {
+        // unreachable: NoAotMarker excludes functions with surviving quotes. a panic here
+        // would be swallowed by runMacroFunction, so write a hard #error into the C++ instead
+        write(*ss, "\n#error quote( ) was not lowered (daslib/quote) at {describe(that.at)}\n")
         return that;
     }
 // op1
