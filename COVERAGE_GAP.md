@@ -95,11 +95,20 @@ src+tests-cpp TUs = 5-7 s warm, ~30 s cold):
   `_debug.shared_module` coexist with Release by design). Recipes, not
   standing gates.
 
-## Stage 4 — CI
+## Stage 4 — CI (shipped 2026-06-12)
 
-- Nightly cron on daspkg-index building every index package against daslang
-  master — external ABI breakage surfaces as a nightly signal instead of
-  inside an unrelated PR's extended_checks.
+`.github/workflows/nightly_daspkg_index.yml`: nightly cron (+ dispatch) in
+THIS repo — fat runners, in-tree `utils/daspkg`, signal lands where daslang
+devs look. Builds daslang master (extended_checks' linux recipe, sccache
+restore-only), then daspkg-installs every package in
+`borisbat/daspkg-index/packages.json` at its **default-branch HEAD**
+(resolved per repo via `gh api` — 5 of 9 use `main`, not `master`; release
+tags deliberately NOT used, they lag legitimately after an ABI sweep).
+The list is fetched at run time, so new packages need no workflow edit; the
+one future-edit case is a native package needing a system lib outside the
+extended_checks apt set — v2 answer is an optional `"apt"` field in
+packages.json. Other v2 follow-up: per-package smoke/require-probe metadata
+so the sweep loads what it installs, not just builds it.
 
 ## Stage 2 follow-ups (found while building utils/preflight, 2026-06-11)
 
