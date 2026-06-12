@@ -67,12 +67,33 @@ Process: per-stage plan → implement → review, same as FIXED_ARRAY_REWORK.md.
 - CI-only das surface list (dasOpenGL, sequence, release tooling …) compiled
   via `compile_check` with proper mounts.
 
-## Stage 3 — local build matrix
+## Stage 3 — local build matrix (downscoped by decision, 2026-06-11)
 
-- clang-cl CMake preset in a gitignored alt build dir, wired into
-  `preflight --full` (compile-focused; full builds affordable but rarely needed).
-- mingw preset: deferred unless a mingw-specific failure class appears.
-- Debug-config build target for the fused-path divergence family.
+No local clang-cl/mingw build dirs. The preset idea died on two facts:
+(a) the only recorded incident in this family (the doctest bit-field) is
+frontend-level — the Stage 2 syntax pass catches it; the residual classes
+(link divergence, codegen-only issues) are rare and arrive batched in one
+cheap-to-iterate CI log; (b) all build dirs of one source tree share `bin/`,
+`lib/`, and `modules/<X>/*.shared_module` outputs (only Debug gets a
+`_debug` suffix), so a local clang-cl Release build clobbers the primary
+MSVC artifacts — isolating it would need a root-CMakeLists output knob,
+upstream complexity for speculative benefit.
+
+What shipped instead (measured: full `/Zs` frontend sweep of all 157
+src+tests-cpp TUs = 5-7 s warm, ~30 s cold):
+
+- `cpp-syntax` escalates to the full src+tests-cpp sweep whenever a core
+  header (`.h`/`.hpp`/`.inc`) changed — closes the header-ripple /
+  template-instantiation gap, the one real class a full clang build would
+  have added over the syntax pass.
+- `-I{build_dir}/include` added to the gate — latent false-FAIL for TUs
+  including configure-generated `modules/external_*.inc`
+  (e.g. `src/simulate/fs_file_info.cpp`).
+- skills/preflight.md: the verbatim clang-cl mirror is marked
+  separate-clone-only (the clobber); the Debug-config recipe for the
+  fused-path family is documented as safe in-checkout (`bin/Debug/`,
+  `_debug.shared_module` coexist with Release by design). Recipes, not
+  standing gates.
 
 ## Stage 4 — CI
 

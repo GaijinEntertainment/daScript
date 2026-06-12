@@ -7,7 +7,8 @@ not a wrong change. This file maps every PR-triggered lane to its exact local
 mirror, or says honestly that there isn't one.
 
 **`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
-runs the fast tier (format + lint + clang syntax pass on changed C++, seconds);
+runs the fast tier (format + lint + clang frontend pass on changed C++ —
+escalating to a full src+tests-cpp sweep when a header changed; seconds);
 `-- --full` adds dasgen freshness, the CI-only-das compile sweep, the six doc
 gates, ctest, the interp/JIT/AOT suites, and the sequence smoke. `--list-gates`
 shows the menu; `--only <names>` / `--skip <names>` select subsets. Gates whose
@@ -44,7 +45,7 @@ Per-lane steps: build → JIT prewarm → JIT test sweep → interpreter sweep �
 | JIT sweep | `<daslang> dastest/dastest.das -jit -- --jit-opt-level=3 --color --failures-only --timeout 900 --test tests` | Windows-local `clang-cl` link failures are env noise — the catchable class is LLVM verifier errors; full end-to-end JIT needs WSL/mac. See `skills/make_pr.md` §2.5 for the 2-test smoke version |
 | Small C++ tests | `ctest --test-dir build --build-config Release -L small --output-on-failure` | drop `--build-config` on single-config generators. **Run this after touching `tests-cpp/`** — and remember MSVC tolerates C++ that clang/gcc reject (the doctest bit-field incident); see `skills/writing_cpp_tests.md` |
 | AOT sweep | `cmake --build build --config Release --target test_aot`, then `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test tests` | Release lanes only in CI |
-| Debug lanes | same suite against a **Debug build** | Debug bypasses the fused interpreter permutations — a fix that lands only in the fused path passes Release everywhere and trips Debug; conversely fused-path bugs need Release. If you touched `src/simulate/simulate_fusion_*`, run both configs |
+| Debug lanes | `cmake --build build --config Debug --target daslang`, then the sweep against `bin/Debug/daslang.exe` — safe in-checkout: Debug coexists with Release by design (`bin/Debug/`, `_debug.shared_module` suffix) | Debug bypasses the fused interpreter permutations — a fix that lands only in the fused path passes Release everywhere and trips Debug; conversely fused-path bugs need Release. If you touched `src/simulate/simulate_fusion_*`, run both configs |
 | Sanitizer lanes (linux Release asan/tsan/ubsan) | WSL: `CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_USE_SANITIZER=<asan\|tsan\|ubsan>`, then the JIT sweep on `tests/language` | not mirrorable on Windows/mac. CI applies LSan suppressions (`format_error`, `uriParseSingleUriA`, `uriMakeOwner`) — see the workflow's Test step |
 | linux_arm / darwin lanes | mac: same commands as linux. From Windows: not mirrorable | ARM-specific reds (LLVM SelectionDAG, alignment) are CI-only signals |
 
@@ -67,22 +68,36 @@ dasClangBind bindings, run the self-binder locally per `skills/clang_bind_build.
 
 ## build.yml — build_windows_clangcl
 
-Fully mirrorable on a Windows dev box, in a separate (gitignored) build dir:
+The preflight `cpp-syntax` gate mirrors this lane's frontend: a clang-cl `/Zs`
+pass (parse + semantic analysis + template instantiation — no codegen) on your
+changed C++, escalating to ALL ~160 src+tests-cpp TUs (~15-30 s) when any core
+header changed, since a header edit can break template instantiation in TUs
+the diff never touched. What it cannot catch — link-stage divergence and
+codegen-only issues — is rare, arrives batched in one CI log, and is cheap to
+fix post-CI.
+
+A full local mirror is possible but **destructive in the main checkout**: all
+build dirs of one source tree share `bin/`, `lib/`, and the
+`modules/<X>/*.shared_module` outputs (only Debug gets a `_debug` suffix), so
+CI's verbatim configure+build below overwrites your MSVC Release binaries and
+Release shared modules. Run it in a separate clone or worktree only:
 
 ```powershell
+# SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
 cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
 cmake --build build-clangcl --config Release --parallel
 ```
 
-The cheap tier — seconds, catches most MSVC-vs-clang diagnostics without a
-full build — is a syntax-only pass on just the files you changed:
+Manual single-file check (what the gate automates):
 
 ```powershell
-# from a VS dev prompt (clang-cl on PATH); add -I flags for daScript includes
-clang-cl /Zs /std:c++17 -Iinclude -I3rdparty/fmt-10.1.0/include <changed>.cpp
+# from a VS dev prompt (clang-cl on PATH)
+clang-cl /Zs /EHsc /std:c++17 -Iinclude -I3rdparty/fmt/include -I3rdparty/uriparser/include -Itests-cpp/3rdparty -Ibuild/include <changed>.cpp
 ```
 
-(mac/WSL equivalent: `clang -fsyntax-only -std=c++17 -Iinclude ... <changed>.cpp`.)
+(mac/WSL equivalent: `clang -fsyntax-only -std=c++17 ...`.) `-Ibuild/include`
+matters — the configure-generated `modules/external_*.inc` headers live there,
+and TUs like `src/simulate/fs_file_info.cpp` include them.
 
 ## extended_checks.yml
 
