@@ -1591,7 +1591,7 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
     top level API
 */
 
-def is_valid(var re : Regex) {
+def is_valid(re : Regex) {
     //! returns `true` if enumeration compiled correctly
     return re.root != null
 }
@@ -1760,7 +1760,7 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
     }
 }
 
-def private expand_replacement(var regex : Regex; str : string; replacement : string; match_start, match_end : int) : string {
+def private expand_replacement(regex : Regex; str : string; replacement : string; match_start, match_end : int) : string {
     //! Expands replacement template with group references: $0 or $& for whole match,
     //! $1-$9 for numbered groups, ${name} for named groups, $$ for literal $.
     return build_string() $(writer) {

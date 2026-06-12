@@ -107,7 +107,7 @@ def initialize_token_templates(var ctx : FormatterCtx) {
 }
 
 
-def isUtf8Bom(var text : array<uint8>&) : bool {
+def isUtf8Bom(text : array<uint8>&) : bool {
     return (length(text) >= 3 &&
         uint(text[0]) == 0xEF && uint(text[1]) == 0xBB && uint(text[2]) == 0xBF)
 }
@@ -392,7 +392,7 @@ struct ParenCounter {
 }
 
 
-def update_paren(var ctx : FormatterCtx; index : int; var paren_counter : ParenCounter&) {
+def update_paren(ctx : FormatterCtx; index : int; var paren_counter : ParenCounter&) {
     if (ctx |> eq(index, "<")) {
         paren_counter.angle++
     }
@@ -429,7 +429,7 @@ def update_paren(var ctx : FormatterCtx; index : int; var paren_counter : ParenC
 }
 
 
-def find_pair_paren(var ctx : FormatterCtx; from_index : int) : int {
+def find_pair_paren(ctx : FormatterCtx; from_index : int) : int {
     var pc : ParenCounter
     for (j in range(from_index + 1, length(ctx.tokens))) {
         ctx |> update_paren(j, pc)
@@ -439,7 +439,7 @@ def find_pair_paren(var ctx : FormatterCtx; from_index : int) : int {
 }
 
 
-def find_pair_square(var ctx : FormatterCtx; from_index : int) : int {
+def find_pair_square(ctx : FormatterCtx; from_index : int) : int {
     var pc : ParenCounter
     for (j in range(from_index + 1, length(ctx.tokens))) {
         ctx |> update_paren(j, pc)
@@ -449,7 +449,7 @@ def find_pair_square(var ctx : FormatterCtx; from_index : int) : int {
 }
 
 
-def find_pair_angle(var ctx : FormatterCtx; from_index : int) : int {
+def find_pair_angle(ctx : FormatterCtx; from_index : int) : int {
     var pc : ParenCounter
     for (j in range(from_index + 1, length(ctx.tokens))) {
         ctx |> update_paren(j, pc)
@@ -542,7 +542,7 @@ def mark_tokens_as_type_inside_angle(var ctx : FormatterCtx; i : int) {
 }
 
 
-def search_token_in_line(var ctx : FormatterCtx; from_index : int; str : string const) : int {
+def search_token_in_line(ctx : FormatterCtx; from_index : int; str : string const) : int {
     var pc : ParenCounter
     for (j in range(from_index, length(ctx.tokens))) {
         ctx |> update_paren(j, pc)

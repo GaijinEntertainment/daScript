@@ -1233,7 +1233,7 @@ def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
 // ── decs group_by splice (Slice 5e — state-table over for_each_archetype) ───────
 
 [macro_function]
-def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; ctx : EmitCtx; at : LineInfo) : Expression? {
     // PR D2-A: keep collect+probe inline (not via adapter_wrap_source_loop) to preserve the count-no-where bucket-length fast path.
     // Bail to tier-2 unless both sides are from_decs_template eager bridges and it's a plain join — group join
     // over a decs source isn't spliced yet (the array adapter handles group joins).

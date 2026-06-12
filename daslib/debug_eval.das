@@ -278,7 +278,7 @@ def getStructFieldOffset(var st : TokenStream; ident : string; var result : Resu
 }
 
 [unused_argument(st)]
-def getTupleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
+def getTupleFieldOffset(var st : TokenStream; ident : string; result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     var size = 0
     for (cnt in range(result.tinfo.argCount)) {
         let tinfo = unsafe(result.tinfo.argTypes[cnt])
@@ -291,7 +291,7 @@ def getTupleFieldOffset(var st : TokenStream; ident : string; var result : Resul
 }
 
 [unused_argument(st)]
-def getVectorOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
+def getVectorOffset(var st : TokenStream; ident : string; result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     let ofs = getVectorOffset(result.tinfo.basicType, ident)
     return (offset = -1, tinfo = TypeInfo(uninitialized)) if (ofs < 0)
     let fieldSize = getVectorElementSize(result.tinfo.basicType)
@@ -303,7 +303,7 @@ def getVectorOffset(var st : TokenStream; ident : string; var result : Result) :
 }
 
 [unused_argument(st)]
-def getHandleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
+def getHandleFieldOffset(var st : TokenStream; ident : string; result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     unsafe {
         var ann = unsafe(reinterpret<TypeAnnotation?> result.tinfo.annotation)
         if (ann == null) return (offset = -1, tinfo = TypeInfo(uninitialized))

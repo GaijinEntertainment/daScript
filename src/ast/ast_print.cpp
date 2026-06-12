@@ -291,6 +291,7 @@ namespace das {
             if ( printVarAccess && var->access_ref ) ss << "/*ref*/";
             if ( printVarAccess && var->access_pass ) ss << "/*pass*/";
             if ( printVarAccess && var->access_get ) ss << "/*get*/";
+            if ( printVarAccess && var->access_info_pass_mutable ) ss << "/*pass_mut*/";
             ss << var->name << " : " << var->type->describe();
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -420,6 +421,7 @@ namespace das {
             if ( printVarAccess && arg->access_ref ) ss << "/*ref*/";
             if ( printVarAccess && arg->access_pass ) ss << "/*pass*/";
             if ( printVarAccess && arg->access_get ) ss << "/*get*/";
+            if ( printVarAccess && arg->access_info_pass_mutable ) ss << "/*pass_mut*/";
             ss << arg->name;
             if ( !arg->aka.empty() ) ss << " aka " << arg->aka;
             ss << ":" << arg->type->describe();
@@ -620,6 +622,7 @@ namespace das {
             if ( printVarAccess && var->access_ref ) ss << "/*ref*/";
             if ( printVarAccess && var->access_pass ) ss << "/*pass*/";
             if ( printVarAccess && var->access_get ) ss << "/*get*/";
+            if ( printVarAccess && var->access_info_pass_mutable ) ss << "/*pass_mut*/";
             ss << var->name;
             if ( !var->aka.empty() ) ss << " aka " << var->aka;
             if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";

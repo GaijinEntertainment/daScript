@@ -4084,7 +4084,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
     }
 }
 
-def public setAotHashes(program : ProgramPtr; var ctx : Context) {
+def public setAotHashes(program : ProgramPtr; ctx : Context) {
     //! Computes semantic and AOT hashes for all used functions in the program.
     // compute semantic hash for each used function
     var fni = 0;

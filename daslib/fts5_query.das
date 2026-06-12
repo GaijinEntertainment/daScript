@@ -72,7 +72,7 @@ def private _skip_ws(var st : ParseState) {
     }
 }
 
-def private _peek(var st : ParseState) : uint {
+def private _peek(st : ParseState) : uint {
     if (st.pos >= length(st.src)) return 0u
     return st.src[st.pos]
 }

@@ -1573,7 +1573,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     document_topic("Fields", doc_file, topic("structure_annotation", mod, string(value.name)), "Annotation {value.name}", tab, is_nosearch(string(value.name)))
 }
 
-def document_structure_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
+def document_structure_annotations(doc_file : file; mods : array<Module?>; hook = DocsHook()) {
     var any = false
     for (mod in mods) {
         if (any) break
@@ -1599,7 +1599,7 @@ def document_enumeration_annotation(doc_file : file; mod : Module?; value) {
     document_topic(doc_file, topic("enumeration_macro", mod, string(value.name)), "Enumeration annotation {value.name}")
 }
 
-def document_enumeration_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
+def document_enumeration_annotations(doc_file : file; mods : array<Module?>; hook = DocsHook()) {
     var any = false
     for (mod in mods) {
         if (any) break
@@ -1626,7 +1626,7 @@ def document_function_annotation(doc_file : file; mod : Module?; value) {
     document_topic(doc_file, topic("function_annotation", mod, string(value.name)), "Function annotation {value.name}")
 }
 
-def document_function_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
+def document_function_annotations(doc_file : file; mods : array<Module?>; hook = DocsHook()) {
     var any = false
     for (mod in mods) {
         if (any) break
@@ -1652,7 +1652,7 @@ def document_annotation(doc_file : file; mod : Module?; value) {
     document_topic(doc_file, topic("annotation", mod, string(value.name)), "Annotation {value.name}")
 }
 
-def document_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
+def document_annotations(doc_file : file; mods : array<Module?>; hook = DocsHook()) {
     var any = false
     for (mod in mods) {
         if (any) break
@@ -2145,7 +2145,7 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
 }
 
 
-def public document(name : string; var mod : Module?; fname : string; var groups : array<DocGroup>; var hook : DocsHook = DocsHook()) {
+def public document(name : string; var mod : Module?; fname : string; var groups : array<DocGroup>; hook : DocsHook = DocsHook()) {
     //! Document single module given list of `DocGropus`.
     //! This will generate RST file with documentation for the module.
     //! Functions which do not match any `DocGroup` will be placed in the `Uncategorized` group.
@@ -2153,7 +2153,7 @@ def public document(name : string; var mod : Module?; fname : string; var groups
     documents(name, mods, fname, groups, hook)
 }
 
-def public document(name : string; var mod : Module?; fname : string; var groups : array<DocGroup>; var hook : DocsHook; nosearch : array<string>) {
+def public document(name : string; var mod : Module?; fname : string; var groups : array<DocGroup>; hook : DocsHook; nosearch : array<string>) {
     //! Same as `document`, with a per-module `nosearch` symbol-name list (see `documents`).
     let mods : array<Module?> = [mod]
     documents(name, mods, fname, groups, hook, nosearch)
@@ -2166,13 +2166,13 @@ struct public DocsHook {
 }
 
 
-def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook = DocsHook()) {
+def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; hook : DocsHook = DocsHook()) {
     //! Generates complete RST documentation for a set of modules into the specified file.
     let none : array<string>
     documents(name, mods, fname, groups, hook, none)
 }
 
-def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook; nosearch : array<string>) {
+def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; hook : DocsHook; nosearch : array<string>) {
     //! Same as `documents`, plus `nosearch`: symbol names whose value/field tables are
     //! excluded from the search index (the symbol and its description stay indexed).
     clear(seen_function_labels)

@@ -61,6 +61,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT011: int literal promoted to float/double with precision loss
     //!   - LINT012: unused function argument (class-method and [extern] args skipped — signature is dictated externally)
     //!   - LINT013: unused block argument
+    //!   - LINT014: mutable (var) function argument is never written — drop the var
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -228,7 +229,10 @@ class LintVisitor : AstVisitor {
             }
             return
         }
-        if (can_make_const && v.flags.inScope) return // inscope variables can't be const — delete/finalize at scope exit requires mutability
+        // inScope variables can't be const — delete/finalize at scope exit requires mutability.
+        // access_info_pass_mutable: passed to a mutable-ref slot whose callee never writes —
+        // access_ref stays false, but a `let` no longer matches the signature (issue #3090)
+        if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
             lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
@@ -253,6 +257,26 @@ class LintVisitor : AstVisitor {
         }
     }
 
+    def validate_unwritten_var_argument(fun : FunctionPtr; v : VariablePtr) {
+        if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
+        let name = string(v.name)
+        // skips, in order: leave-it-alone names; `finalize` overloads (the delete protocol
+        // dictates var) and address-taken functions (signature conforms to a function-pointer
+        // type); by-value parameters (a mutable copy is not a caller burden); written params
+        // (access_ref) and params whose mutability a callee's signature demands transitively
+        // (access_info_pass_mutable — the leaf callee gets flagged first; fixing it re-exposes
+        // this one); entirely-unused params (LINT012's report)
+        if ((name |> starts_with("_")) || find(name, "`") >= 0
+                || fun.name == "finalize" || fun.moreFlags.addressTaken
+                || v._type == null || v._type.flags.constant
+                || !(v._type.flags.ref || v._type.isRefType)
+                || v.access_flags.access_ref || v.access_info.access_info_pass_mutable
+                || v.isAccessUnused) {
+            return
+        }
+        lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at)
+    }
+
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
         // class-method signatures are dictated by the base class / interface, and
         // [extern] stubs by the bound C function — unused params there are
@@ -262,6 +286,7 @@ class LintVisitor : AstVisitor {
             if (ann.annotation.name == "extern") return
         }
         validate_argument(arg, "LINT012", "function argument")
+        validate_unwritten_var_argument(fun, arg)
     }
 
     def override preVisitExprBlockArgument(_blk : ExprBlock?; arg : VariablePtr; _lastArg : bool) : void {

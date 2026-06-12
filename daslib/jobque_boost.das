@@ -394,7 +394,7 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
 
 require daslib/archive
 
-def push(stream : Stream?; var data : array<uint8>) {
+def push(stream : Stream?; data : array<uint8>) {
     //! Copy bytes into the stream (at the tail). Bytes are owned by the Stream C++-side
     //! after push — caller may free the source buffer immediately.
     _builtin_stream_push(stream, data)
@@ -405,7 +405,7 @@ def push(stream : Stream?; data : array<uint8> const#) {
     _builtin_stream_push(stream, data)
 }
 
-def push_batch(stream : Stream?; var data : array<array<uint8>>) {
+def push_batch(stream : Stream?; data : array<array<uint8>>) {
     //! Copy a batch of byte blobs into the stream atomically under a single lock.
     _builtin_stream_push_batch(stream, data)
 }
