@@ -1320,7 +1320,7 @@ namespace das {
     }
 
     enum class RegisterOnError {
-        Quiet = 0,      // 'missing .shared_module' message is ignored
+        Quiet = 0,      // missing/unloadable .shared_module is silent (deferred for retry); broken artifacts still report
         ErrorMsg,       // error message is displayed
         Fail,           // error message is displayed and exception is thrown
     };
@@ -1344,7 +1344,10 @@ namespace das {
         return on;
     }
 
-    // Returns DLL handle.
+    // Returns DLL handle, nullptr on failure. on_error governs LOAD failures only:
+    // Quiet defers a failed dlopen to retry_pending_dynamic_modules() (sibling-dep
+    // ordering). A loadable-but-broken artifact (registrator missing, build-id
+    // mismatch) always reports — to the context if any, else LOG(error) (#2580).
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
         string actualPath(path);
 #ifndef NDEBUG
@@ -1367,6 +1370,7 @@ namespace das {
                 auto err_msg = "dynamic module `" + string(mod_name) + "` — failed to load: " + actualPath
                     + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
                 if (context) context->to_err(at, err_msg.c_str());
+                else LOG(LogLevel::error) << err_msg;
                 if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                     context->throw_error(err_msg.c_str());
                 }
@@ -1382,8 +1386,9 @@ namespace das {
         const auto regName = getDynModuleRegistratorName(mod_name);
         auto rawFn = getFunctionAddress(lib, regName.c_str());
         if (!rawFn) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` — function `" + regName + "` not found in `" + path + "`\n";
+            auto err_msg = "dynamic module `" + string(mod_name) + "` — function `" + regName + "` not found in `" + actualPath + "`\n";
             if (context) context->to_err(at, err_msg.c_str());
+            else LOG(LogLevel::error) << err_msg;
             if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                 context->throw_error(err_msg.c_str());
             }
@@ -1395,6 +1400,7 @@ namespace das {
         if (!mod) {
             auto err_msg = "dynamic module `" + string(mod_name) + "` — build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
             if (context) context->to_err(at, err_msg.c_str());
+            else LOG(LogLevel::error) << err_msg;
             if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                 context->throw_error(err_msg.c_str());
             }
