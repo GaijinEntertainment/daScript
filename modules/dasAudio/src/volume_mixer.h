@@ -366,7 +366,7 @@ void ma_limiter_porcess_pcm_frames_any ( ma_limiter * limiter, float * InFames, 
     uint32_t attack_samples = limiter->attack_samples;
     for ( uint64_t i=0; i!=nFrames; ++i ) {
         for ( uint32_t j=0; j!=limiter->nChannels; ++j ) {
-            float lookahead_sample = InFames[i*limiter->nChannels + j + attack_samples*limiter->nChannels];
+            float lookahead_sample = InFames[i*limiter->nChannels + j + uint64_t(attack_samples)*limiter->nChannels];
             if (fabs(lookahead_sample) * gain[j] > threshold) {
                 float desired_gain = threshold / fabs(lookahead_sample);
                 gain[j] = gain[j] * attack_coeff + desired_gain * (1 - attack_coeff);

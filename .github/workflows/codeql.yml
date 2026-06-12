@@ -58,7 +58,33 @@ jobs:
             - 3rdparty
             - tests-cpp/3rdparty
 
+    # build-mode none does NOT honor the init paths-ignore for C/C++ results
+    # (a vendored alert under tests-cpp/3rdparty survived two master scans with
+    # that config). Filter the SARIF post-analysis instead, then upload the
+    # filtered file. Dropped results auto-close their alerts on the next scan.
+    # src/parser generated lexers are deliberately NOT excluded — our rule
+    # bodies live in them (a real OOB write hid there).
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
       with:
+        category: "/language:c-cpp"
+        upload: false
+        output: sarif-results
+
+    - name: Filter vendored / generated paths from SARIF
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -**/3rdparty/**
+          -**/stb_*.h
+          -modules/dasSQLITE/sqlite/**
+          -modules/dasMinfft/minfft/**
+          -utils/dasFormatter/ds_parser.cpp
+        input: sarif-results/cpp.sarif
+        output: sarif-results/cpp.sarif
+
+    - name: Upload filtered SARIF
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: sarif-results/cpp.sarif
         category: "/language:c-cpp"

@@ -233,6 +233,7 @@ namespace das
     // ---- channel conversion (loops inside each branch) ----
 
     void rast_convert_channels_u8 ( uint8_t * dst, const uint8_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( num_pixels <= 0 || src_ch <= 0 ) return;   // the memcpy fast-path would turn a negative count into a huge size_t
         if ( src_ch == 1 && dst_ch == 2 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 255; }
         } else if ( src_ch == 1 && dst_ch == 3 ) {
@@ -258,11 +259,12 @@ namespace das
         } else if ( src_ch == 4 && dst_ch == 3 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
         } else if ( src_ch == dst_ch ) {
-            memcpy(dst, src, num_pixels * src_ch);
+            memcpy(dst, src, size_t(num_pixels) * size_t(src_ch));
         }
     }
 
     void rast_convert_channels_u16 ( uint16_t * dst, const uint16_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( num_pixels <= 0 || src_ch <= 0 ) return;   // the memcpy fast-path would turn a negative count into a huge size_t
         if ( src_ch == 1 && dst_ch == 2 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 65535; }
         } else if ( src_ch == 1 && dst_ch == 3 ) {
@@ -288,11 +290,12 @@ namespace das
         } else if ( src_ch == 4 && dst_ch == 3 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
         } else if ( src_ch == dst_ch ) {
-            memcpy(dst, src, num_pixels * src_ch * sizeof(uint16_t));
+            memcpy(dst, src, size_t(num_pixels) * size_t(src_ch) * sizeof(uint16_t));
         }
     }
 
     void rast_convert_channels_f32 ( float * dst, const float * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( num_pixels <= 0 || src_ch <= 0 ) return;   // the memcpy fast-path would turn a negative count into a huge size_t
         if ( src_ch == 1 && dst_ch == 2 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 1.0f; }
         } else if ( src_ch == 1 && dst_ch == 3 ) {
@@ -318,7 +321,7 @@ namespace das
         } else if ( src_ch == 4 && dst_ch == 3 ) {
             for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
         } else if ( src_ch == dst_ch ) {
-            memcpy(dst, src, num_pixels * src_ch * sizeof(float));
+            memcpy(dst, src, size_t(num_pixels) * size_t(src_ch) * sizeof(float));
         }
     }
 
