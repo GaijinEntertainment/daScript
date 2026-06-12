@@ -11,6 +11,7 @@ module linq_fold_common shared public
 require daslib/linq public
 require daslib/ast_boost
 require daslib/ast_match
+require daslib/match
 require daslib/templates_boost
 require daslib/macro_boost
 require strings
@@ -5968,21 +5969,18 @@ def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
 // bare element (keys lane). Then the join key IS the table key and a lookup replaces the bucket walk.
 [macro_function]
 def join_keyb_is_bare_key(var keybBody : Expression?; bindName : string; kvLane : bool) : bool {
-    var k = keybBody
-    if (k != null && k is ExprRef2Value) {
-        k = (k as ExprRef2Value).subexpr
+    match (keybBody) {
+        if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
+            return kvLane
+        }
+        if (ExprVar(name = match_expr(bindName))) {
+            return !kvLane
+        }
+        if (_) {
+            return false
+        }
     }
-    if (!kvLane) {
-        return k != null && k is ExprVar && (k as ExprVar).name == bindName
-    }
-    if (k == null || !(k is ExprField)) return false
-    var f = k as ExprField
-    if (f.name != "key") return false
-    var base = f.value
-    if (base != null && base is ExprRef2Value) {
-        base = (base as ExprRef2Value).subexpr
-    }
-    return base != null && base is ExprVar && (base as ExprVar).name == bindName
+    return false
 }
 
 // Table-srcB twin of build_join_standalone_pieces: unique table keys ⇒ bucket size ≤ 1, so there is no

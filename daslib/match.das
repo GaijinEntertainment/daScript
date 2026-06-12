@@ -421,7 +421,8 @@ def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var 
         return false
     }
     assume value = wthmt.arguments[0]
-    if (value._type != null && !is_same_type(what, value._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
+    if (value._type != null && !is_same_type(what, value._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)
+            && !(is_string_like(what) && is_string_like(value._type))) {   // das_string == string is a language-level compare
         to.errors |> match_error("mismatching expression type {describe(what)} vs {describe(value._type)}", value.at)
         return false
     }

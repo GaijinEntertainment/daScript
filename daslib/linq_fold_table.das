@@ -17,6 +17,7 @@ module linq_fold_table shared public
 
 require daslib/ast_boost
 require daslib/ast_match
+require daslib/match
 require daslib/templates_boost
 require daslib/macro_boost
 require daslib/linq_fold_common public
@@ -196,25 +197,29 @@ class TableAdapter : SourceAdapter {
 // scan's exact semantics; residual conjuncts run on the probed element only. Table: linq_fold_patterns.rst.
 
 [macro_function]
-def private match_key_probe_side(var keySide, otherSide : Expression?; lane : TableLane; bindName : string) : Expression? {
-    var k = keySide
-    if (k != null && k is ExprRef2Value) {
-        k = (k as ExprRef2Value).subexpr
-    }
-    if (lane == TableLane.KV) {
-        if (k == null || !(k is ExprField)) return null
-        var f = k as ExprField
-        if (f.name != "key") return null
-        var base = f.value
-        if (base != null && base is ExprRef2Value) {
-            base = (base as ExprRef2Value).subexpr
+def private is_key_ref(keySide : Expression?; lane : TableLane; bindName : string) : bool {
+    // `<bind>.key` on the kv lane, the bare `<bind>` element on keys/values
+    match (keySide) {
+        if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
+            return lane == TableLane.KV
         }
-        if (base == null || !(base is ExprVar) || (base as ExprVar).name != bindName) return null
-    } else {
-        if (k == null || !(k is ExprVar) || (k as ExprVar).name != bindName) return null
+        if (ExprVar(name = match_expr(bindName))) {
+            return lane != TableLane.KV
+        }
+        if (_) {
+            return false
+        }
     }
+    return false
+}
+
+[macro_function]
+def private match_key_probe_side(var keySide, otherSide : Expression?; lane : TableLane; bindName : string) : Expression? {
     // X must be loop-invariant AND side-effect free — the scan evaluates X per element, a probe once
-    if (expr_uses_var(otherSide, bindName) || has_sideeffects(otherSide)) return null
+    if (!is_key_ref(keySide, lane, bindName)
+            || expr_uses_var(otherSide, bindName) || has_sideeffects(otherSide)) {
+        return null
+    }
     return clone_expression(otherSide)
 }
 
@@ -231,12 +236,11 @@ def private extract_key_probe(var pred : Expression?; lane : TableLane; bindName
         conjuncts |> push(andOp.right)
         leaf = andOp.left
     }
-    if (leaf == null || !(leaf is ExprOp2)) return null
-    var op2 = leaf as ExprOp2
-    if (op2.op != "==") return null
-    var probe = match_key_probe_side(op2.left, op2.right, lane, bindName)
+    var lhs, rhs : ExpressionPtr
+    if (!qmatch(leaf, $e(lhs) == $e(rhs)).matched) return null
+    var probe = match_key_probe_side(lhs, rhs, lane, bindName)
     if (probe == null) {
-        probe = match_key_probe_side(op2.right, op2.left, lane, bindName)
+        probe = match_key_probe_side(rhs, lhs, lane, bindName)
     }
     if (probe == null) return null
     for (c in conjuncts) {
