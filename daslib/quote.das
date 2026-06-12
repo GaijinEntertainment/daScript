@@ -209,6 +209,22 @@ def private create_string_expr(name) {
     return new ExprConstString(value := name);
 }
 
+def private normalize_source_path(p : string) : string {
+    // the same source file may be opened via different spellings at AOT-generation time
+    // and at runtime (slash form, drive-letter case); the path is baked into the lowered
+    // code as a string constant, so it must hash identically — normalize both axes
+    var r = p |> replace("\\", "/")
+    if (length(r) >= 2) {
+        r = r |> modify_data() $(var arr) {
+            let c = uint(arr[0])
+            if (uint(arr[1]) == uint(':') && c >= uint('a') && c <= uint('z')) {
+                arr[0] = uint8(c - uint('a') + uint('A'))
+            }
+        }
+    }
+    return r
+}
+
 
 def private to_array_move_expr(var mkArr : ExprMakeArray?, at : LineInfo) {
     var mkToArrayMove = new ExprCall(at = at, name := "to_array_move")
@@ -311,6 +327,10 @@ def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
         var prev = res_field;
         res_field = new ExprCall(at = parent_loc, name := "clone_line_info",
                                arguments := array<Expression?>(prev))
+    }
+    if (tstr == "rtti_core::FileInfo" && name == "name" && res_field is ExprConstString) {
+        var cs = unsafe(reinterpret<ExprConstString?>(res_field))
+        cs.value := normalize_source_path(string(cs.value))
     }
 
     return create_field_expr(name, clone(res_field), parent_loc, flags);

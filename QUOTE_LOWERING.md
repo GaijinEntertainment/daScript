@@ -215,12 +215,18 @@ Findings from the first test_aot build of the lowered fixture's generated C++:
   semantically AND drops dead runtime work.
 
 - [x] Register tests/quote in tests/aot/CMakeLists.txt.
-- [x] test_aot: tests/quote 20/20 — with `fail_on_no_aot` active, so the lowered
-      reconstruction functions LINKED as AOT stubs and ran native (the unlowered
-      fixture's quote functions are noAot-exempt and interpret, as designed).
-      tests/aot regression 134/134.
-- [x] Full tests/ tree under test_aot: 10123 tests, 10117 passed, 0 failed, 6 skipped —
-      same skip set as the daslang baseline, +20 new quote tests.
+- [x] **Gate correction:** running `test_aot.exe dastest -- --test …` WITHOUT the
+      explicit `-use-aot … --use-aot` pair does NOT enable AOT linking for test files
+      (auto-detect didn't fire) — early "test_aot green" results were largely
+      interpreted. The CI-form invocation is the real gate and exposed:
+- [x] **Path-spelling hash divergence:** the lowered code bakes the source file path as
+      a string constant (FileInfoInitData.name). dasAot generation opened the file as
+      `D:/…` (forward slashes), runtime as `d:\…` → different constant → different
+      own-hash → error[50101] on every `` `quote`lowered`N ``. Fixed at the point the
+      constant enters the tree: `normalize_source_path` in quote.das (separators → `/`,
+      drive letter uppercased). Exactly the skill-documented mismatch class.
+- [x] CI-form full tree under test_aot after the fix: **9439 tests, 9433 passed,
+      0 failed, 0 errors, 6 skipped** — tests/quote linking and passing under real AOT.
 - [ ] Hash-mismatch fallback test: AOT objects built with `-aot-macros`, runtime without
       (and vice versa) must fall back to interpreter cleanly, not link garbage.
       (Deferred — exercise alongside the `-aot-macros` default-on decision; the noAot
