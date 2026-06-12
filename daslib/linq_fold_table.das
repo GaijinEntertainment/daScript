@@ -120,7 +120,7 @@ class TableAdapter : SourceAdapter {
         return true   // single flat for-loop inside the invoke; a mid-loop `return` exits the invoke
     }
     def override can_reserve_by_length() : bool {
-        return true   // length(tab) is O(1); the shared reserve hint reads arrayTop/arraySrcName
+        return true   // length(tab) is O(1); the shared reserve hint reads loop_source_expr/loop_source_name
     }
     def override const can_join() : bool {
         return true   // rides emit_array_join: direct-return lead loop via wrap_source_loop
@@ -137,12 +137,12 @@ class TableAdapter : SourceAdapter {
         return new TableAdapter(tabExpr = clone_expression(tabExpr), srcName = qn("tsrc", at),
                                 elemType = clone_type(elemType), lane = lane)
     }
-    def override arrayTop() : Expression? {
+    def override loop_source_expr() : Expression? {
         // Feeds the reserve hint (type_has_length covers tables). The backward-index reverse lanes that
-        // also read arrayTop gate on array_source, which is false here — matchTop stays iterator-typed.
+        // also read loop_source_expr gate on array_source, which is false here — matchTop stays iterator-typed.
         return tabExpr
     }
-    def override arraySrcName() : string {
+    def override loop_source_name() : string {
         return srcName
     }
     def override bind_name(at : LineInfo) : string {

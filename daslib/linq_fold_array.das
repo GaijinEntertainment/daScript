@@ -13,7 +13,6 @@ require daslib/ast_boost
 require daslib/ast_match
 require daslib/templates_boost
 require daslib/macro_boost
-require strings
 require daslib/linq_fold_common public
 
 // 2-source lockstep zip payload — feeds `for (itA, itB in srcA, srcB) { body }` and the 2-source outer invoke.
@@ -52,10 +51,10 @@ class ArrayAdapter : SourceAdapter {
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_array_join(c, ctx, at)
     }
-    def override arrayTop() : Expression? {
+    def override loop_source_expr() : Expression? {
         return top
     }
-    def override arraySrcName() : string {
+    def override loop_source_name() : string {
         return srcName
     }
     def override bind_name(at : LineInfo) : string {
@@ -120,44 +119,27 @@ class ArrayAdapter : SourceAdapter {
         if (c.single |> key_exists("upstream_join")) {
             // srcA = chain top; srcB = join's second arg. plan_group_by_core consumes the ArrayJoin adapter via wrap_source_loop.
             var joinCall = c.single["upstream_join"]
-            var srcbSrc = joinCall.arguments[1]
-            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null
-                    || !(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) {
+            var core = extract_upstream_join_core(joinCall)
+            var srcb = extract_upstream_join_array_srcb(joinCall)
+            if (core == null || srcb == null) {
                 return null
             }
-            var keyaLam = joinCall.arguments[2]
-            var keybLam = joinCall.arguments[3]
-            var resultLam = joinCall.arguments[4]
-            if (keyaLam == null || keybLam == null || resultLam == null
-                    || keyaLam._type == null || resultLam._type == null
-                    || resultLam._type.firstType == null) {
-                return null
-            }
-            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
-            if (!is_primitive_join_key_type(keyType)) {
-                return null
-            }
-            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
-            var tupAType = strip_const_ref(clone_type(top._type.firstType))
-            var tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
             var topClone = clone_expression(top)
             topClone.genFlags.alwaysSafe = true
-            var srcbClone = clone_expression(srcbSrc)
-            srcbClone.genFlags.alwaysSafe = true
             return new ArrayJoinAdapter(shape = ArrayJoinShape(
                 srcAExpr = topClone,
-                srcBExpr = srcbClone,
+                srcBExpr = srcb.srcbClone,
                 srcAName = qn("ajoin_srcA", at),
                 srcBName = qn("ajoin_srcB", at),
                 srcAType = invoke_src_param_type(top),
-                srcBType = invoke_src_param_type(srcbSrc),
-                tupAType = tupAType,
-                tupBType = tupBType,
-                keyaLam = keyaLam,
-                keybLam = keybLam,
-                resultLam = resultLam,
-                keyType = keyType,
-                resultType = resultType,
+                srcBType = srcb.srcbType,
+                tupAType = strip_const_ref(clone_type(top._type.firstType)),
+                tupBType = srcb.tupBType,
+                keyaLam = core.keyaLam,
+                keybLam = core.keybLam,
+                resultLam = core.resultLam,
+                keyType = core.keyType,
+                resultType = core.resultType,
                 resBindName = qn("ajoin_jres", at)))
         }
         return new ArrayAdapter(top = top, srcName = qn("source", at))

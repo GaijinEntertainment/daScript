@@ -285,49 +285,33 @@ class XmlAdapter : SourceAdapter {
             // join |> group_by over XML: srcA = the XML node (DOM-walked), srcB = join's second arg.
             // plan_group_by_core drives the bucket-fill through XmlJoinAdapter.wrap_source_loop (pruning free).
             var joinCall = c.single["upstream_join"]
-            var srcbSrc = joinCall.arguments[1]
-            if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null
-                    || !(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) {
+            var core = extract_upstream_join_core(joinCall)
+            var srcb = extract_upstream_join_array_srcb(joinCall)
+            if (core == null || srcb == null) {
                 return null
             }
-            var keyaLam = joinCall.arguments[2]
-            var keybLam = joinCall.arguments[3]
-            var resultLam = joinCall.arguments[4]
-            if (keyaLam == null || keybLam == null || resultLam == null
-                    || keyaLam._type == null || resultLam._type == null
-                    || resultLam._type.firstType == null) {
-                return null
-            }
-            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
-            if (!is_primitive_join_key_type(keyType)) {
-                return null
-            }
-            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
-            var tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
-            var srcbClone = clone_expression(srcbSrc)
-            srcbClone.genFlags.alwaysSafe = true
             var nameJoinClone : Expression? = nameArg != null ? clone_expression(nameArg) : null
             return new XmlJoinAdapter(shape = XmlJoinShape(
                 nodeExpr = clone_expression(nodeExpr),
                 srcName = qn("xnode", at),
                 elemType = clone_type(elemType),
                 nameArg = nameJoinClone,
-                srcBExpr = srcbClone,
+                srcBExpr = srcb.srcbClone,
                 srcBName = qn("xjoin_srcB", at),
-                srcBType = invoke_src_param_type(srcbSrc),
-                keyaLam = keyaLam,
-                keybLam = keybLam,
-                resultLam = resultLam,
-                keyType = keyType,
-                tupBType = tupBType,
-                resultType = resultType,
+                srcBType = srcb.srcbType,
+                keyaLam = core.keyaLam,
+                keybLam = core.keybLam,
+                resultLam = core.resultLam,
+                keyType = core.keyType,
+                tupBType = srcb.tupBType,
+                resultType = core.resultType,
                 resBindName = qn("xjoin_jres", at)))
         }
         var nameClone : Expression? = nameArg != null ? clone_expression(nameArg) : null
         return new XmlAdapter(nodeExpr = clone_expression(nodeExpr), srcName = qn("xnode", at),
                               elemType = clone_type(elemType), nameArg = nameClone)
     }
-    def override arraySrcName() : string {
+    def override loop_source_name() : string {
         return srcName
     }
     def override bind_name(at : LineInfo) : string {
