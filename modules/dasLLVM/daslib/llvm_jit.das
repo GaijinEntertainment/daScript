@@ -7645,6 +7645,14 @@ class public DisableJitVisitor : AstVisitor {
         }
     }
 
+    def override preVisitExprQuote(expr : ExprQuote?) : void {
+        // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
+        // ever run; a raw one means lowering didn't fire (e.g. a context compiled without
+        // the policy) — skip the function instead of failing the whole file's codegen
+        to_log(LOG_WARNING, "LLVM JIT: quote( ) without aot_macros lowering at {expr.at}, falling back to interpreter.\n")
+        disable = true
+    }
+
     def override preVisitExprForBody(expr : ExprFor?) : void {
         for (_, ssrc in expr.iteratorVariables, expr.sources) {
             assume ssrc_t = ssrc._type

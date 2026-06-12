@@ -34,7 +34,13 @@ struct OwningNode {
 
 var g_list : array<Node?>
 
+// All workers carry [no_jit]: LLVM JIT doesn't implement force_escape_free — loops grow
+// the heap (failing the flat-heap asserts) and the owning variant's scope-exit free aborts
+// on the mismatched pointer ("not a chunk pointer"). The control is marked too so the
+// grows/stays-flat comparison runs in one engine.
+
 // every use of `p` is a field access -> p does not escape -> freed at scope exit
+[no_jit]
 def sum_nonescaping() : int {
     var total = 0
     for (i in range(N)) {
@@ -45,6 +51,7 @@ def sum_nonescaping() : int {
 }
 
 // multi-variable let: each variable gets its OWN fresh allocation, so both are freed (no alias)
+[no_jit]
 def sum_multi() : int {
     var total = 0
     for (i in range(N)) {
@@ -55,6 +62,7 @@ def sum_multi() : int {
 }
 
 // the free still runs in a function with try/recover (on the normal path)
+[no_jit]
 def sum_with_try() : int {
     var total = 0
     for (i in range(N)) {
@@ -65,6 +73,7 @@ def sum_with_try() : int {
 }
 
 // passed only to a pure built-in (test_escape_pure: no side effects, scalar return) -> freed
+[no_jit]
 def sum_pure_builtin() : int {
     var total = 0
     for (i in range(N)) {
@@ -75,6 +84,7 @@ def sum_pure_builtin() : int {
 }
 
 // non-escaping owner of a heap field; the raw collect frees the owned array too
+[no_jit]
 def sum_owning() : int {
     var total = 0
     for (i in range(N)) {
@@ -84,6 +94,7 @@ def sum_owning() : int {
     return total
 }
 
+[no_jit]
 def sum_escaping() : int {
     var total = 0
     g_list |> reserve(length(g_list) + N)

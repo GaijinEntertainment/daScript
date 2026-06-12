@@ -247,14 +247,73 @@ JIT work in scope before then is the Phase 1 diagnostic (clean `unsupported` mes
 replacing the misleading "Internal jit error" panic). The QuotePass gate stays
 `aot_macros`-only until this phase; extending it to `jit_enabled` lands here.
 
-- [ ] Extend QuotePass gate to `jit_enabled`.
-- [ ] `tests/jit_tests/` coverage for quote under `options jit` (lowered path through
-      LlvmJitVisitor — make-struct of handled types, `to_array_move`, by-name lookups).
+- [x] Extend QuotePass gate to `jit_enabled` (2026-06-12). Two traps found on first contact,
+      both via `daslib/typemacro_boost`:
+      1. **Wrapper return type must be the raw quote's type.** `fn.result = autoinfer` leaked
+         the concrete node type (`quote(0)` → `ExprConstInt?` instead of `Expression?`),
+         breaking `cond ? clone_expression(x) : quote(0)` (30411, cond arms must match
+         exactly). Fix: `fn.result = clone_type(expr._type)` — identity by construction.
+      2. **Macro-module programs must not lower under the jit trigger.** Macro contexts are
+         never JITted (llvm_macro's `is_compiling_macros()` skip), and the lowered
+         construction frames overflowed the macro-context stack at apply time
+         (`stack overflow while calling @typemacro_boost::\`quote\`lowered\`28`). Predicate
+         gotcha: `is_compiling_macros()` reads `Program::isCompilingMacros`, which is only
+         true during `makeMacroModule`'s simulate — at infer time (when QuotePass runs) use
+         `prog.flags.needMacroModule` instead (set at annotation-apply, pre-infer). The
+         infer-time noAot-skip in ast_infer_type.cpp mirrors the same predicate. Raw quotes
+         reaching JIT from such modules fall back per-function via the new
+         DisableJitVisitor `preVisitExprQuote` (warn + disable, replacing whole-file panic).
+- [x] Coverage instead of new jit_tests: lifted the `-jit` folder skips (quote, ast,
+      ast_match, no_aot, gc) in tests/.das_test + the matching `--exclude`s on
+      jit_cache_all_tests, and un-marked `[no_jit]` in tests/template/test_push_block_list
+      (its stated reason — JIT can't lower ExprQuote — is gone; qmacro_block now JITs).
+      Folder results: quote 20/20, ast 1/1, ast_match 380/380 (2 graceful per-function
+      fallbacks in daslib/ast_match — macro module, stays raw by design), flatten/no_aot
+      14/14, gc 48/48, template 10/10.
+- [x] NOT quote-related, surfaced while lifting the gc skip: **LLVM JIT does not implement
+      `force_escape_free` / `force_allocate_on_stack`** — three symptoms in tests/gc
+      (heap grows where interp stays flat; scope-exit free aborts "not a chunk pointer"
+      on JIT-allocated owning nodes under persistent_heap; nested `new Inner` make-struct
+      field arrives null). Scoped per-function `[no_jit]` markers on the workers in
+      test_gc_allocate_on_stack / test_gc_escape_free_frees / test_gc_escape_free keep the
+      rest of the folder JIT-covered. Upstream fix is its own work item.
+- [x] Local full-tree `-jit` sweep caveat (NOT this PR's doing): the in-process sweep
+      aborts (exit 127, no diagnostic) at tests/language/table_operations.das
+      `ta_test_lock_panic` — a deliberate table-lock panic inside jitted code fails to
+      unwind to `recover` and kills the process. **Pre-existing**: reproduces with master
+      daslib state, and the content-addressed dll hash is identical with/without the
+      Phase 5 changes (same codegen input). Local-env specific (LLVM 22.1.5 Windows,
+      opt-level 3); master CI Windows -jit is green (different LLVM, plus the
+      `|| --isolated-mode` fallback built into the CI step). Local full-tree signal
+      obtained with `--exclude table_operations --exclude test_linq_table_source` (the
+      second file is just the next deliberate-panic test the abort moves to); CI is the
+      authoritative gate.
+- [x] **Third trap, found only by the full sweep (order-dependent linq failures):** a
+      module that is macro-CALLED but not itself a macro module (daslib/linq_fold_decs —
+      plain functions invoked from linq_boost's fold macros) has `needMacroModule ==
+      false`, so it DOES lower under the jit trigger — and its lowered quotes then
+      evaluate at macro-apply time on the calling macro module's macro-context stack:
+      `stack overflow while calling @linq_fold_decs::\`quote\`lowered\`17` → 31206 → the
+      consumer file fails to compile (tests/linq/test_linq_fold_terminal_select +
+      test_linq_from_decs). Order-dependent because the overflow margin depends on
+      module-cache state at compile time — single-folder runs passed, full-tree
+      root-form runs failed deterministically (bisect: my code at master folder set
+      still failed; zero-predecessor root form still failed → not contamination at all,
+      a per-file stack margin). FIX (matches the `-aot-macros` design, which always
+      shipped with a 1MB stack): the jit lane applies the same bump — `daslang -jit`
+      (main.cpp), dastest under `-jit` (suite.das + dastest.das ser path), jit.exe
+      (utils/jit/main.das) — and macro-module programs inherit consumer policies, so
+      macro contexts get the headroom too. Known sharp edge for embedders: enabling
+      `policies.jit_enabled` without a stack bump can still overflow on a big quote
+      evaluated at macro time — durable fix is chunking the lowered construction into
+      bounded frames (Phase 6 candidate).
 - [ ] Decide + implement JIT-of-macro-contexts: lift the `is_compiling_macros()` skip in
       llvm_macro.das behind a policy. This is the compile-time payoff twin of AOT'd
       macro modules. Separate PR; needs its own bake time.
-- [ ] `LLVM_JIT_CODEGEN_VERSION` bump only if emitters change (diagnostic-only changes
-      don't).
+- [x] `LLVM_JIT_CODEGEN_VERSION` bump NOT needed: emitters unchanged (gate + collection
+      only), and the dll cache hash folds per-function AOT hashes, so lowered ASTs and
+      changed collection sets self-invalidate. (CLAUDE.md pointer fixed: the constant
+      lives in llvm_jit_run.das, not llvm_macro.das.)
 
 ## Phase 6 — extra coverage + payoff measurement
 

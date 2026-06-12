@@ -24,6 +24,9 @@ struct Node {
 struct Inner { vals : array<int> }
 struct Outer { tag : int; child : Inner ? }
 
+// no_jit: LLVM JIT doesn't implement force_escape_free — here the nested `new Inner`
+// field comes back null (sibling files document the heap-grow / bad-free symptoms)
+[no_jit]
 def churn_nested() : int {
     var acc = 0
     for (i in range(500)) {

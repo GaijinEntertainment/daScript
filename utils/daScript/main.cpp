@@ -286,8 +286,11 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     }
     policies.fail_on_lack_of_aot_export = false;
     policies.aot_macros = aotMacros;    // -aot-macros: force quote lowering (daslib/quote) in a normal run
-    if ( aotMacros ) {
-        policies.stack = 1 * 1024 * 1024;   // a lowered quote evaluates one large construction frame
+    if ( aotMacros || jitEnabled != JitMode::None ) {
+        // a lowered quote evaluates one large construction frame; jit_enabled triggers the
+        // same lowering, and the frame can evaluate at macro-apply time on a macro-context
+        // stack sized from these policies
+        policies.stack = 1 * 1024 * 1024;
     }
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
