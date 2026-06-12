@@ -42,7 +42,7 @@ Problem is - das has sort, sort, and only sort. No heap, no nth_element, no nada
 
 It never is. I can't just merge. I have to measure. Take the ruler, take it out, and see where it lands. This is how das became das. So a matrix was born. The matrix of the benchmarks, that is.
 
-std::sort vs another std::sort (because Apple Clang is more awesome more often), vs qsort (which was later dropped for being dog slow), vs das_sort (and later vs das_sort<T>). repeat for nth_element, make_heap, heap_sort. Different sizes too.
+std::sort vs another std::sort (because Apple Clang is more awesome more often), vs qsort (which was later dropped for being dog slow), vs das_sort (and later vs `das_sort<T>`). repeat for nth_element, make_heap, heap_sort. Different sizes too.
 
 Guess what? It instantly showed that what I had was not IT. A few hours later, what I had became IT enough. Did I mention the Apple Clang runtime? Its good.
 
