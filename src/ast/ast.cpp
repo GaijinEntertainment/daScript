@@ -678,6 +678,7 @@ namespace das {
         pVar->at = at;
         pVar->flags = flags;
         pVar->access_flags = access_flags;
+        pVar->access_info = access_info;
         pVar->initStackSize = initStackSize;
         pVar->annotation = annotation;
         return pVar;

@@ -605,7 +605,7 @@ def public has(arch : Archetype; name : string) {
     return arch.components |> binary_search(Component(name = name)) <| $(x, y) => x.name < y.name
 }
 
-def private can_process_request(var erq : EcsRequest; var arch : Archetype) {
+def private can_process_request(var erq : EcsRequest; arch : Archetype) {
     if (erq.hash == arch.hash) return true
     for (r in erq.req) {
         if (!arch |> has(r)) return false
@@ -1276,7 +1276,7 @@ def public set_direct(var arch : Archetype; name : string; eidx : int; value : a
     set_direct_at(arch, find_component_index(arch, name), eidx, value)
 }
 
-def public has(var cmp : ComponentMap; name : string) {
+def public has(cmp : ComponentMap; name : string) {
     //! Returns true if component map has specified component.
     return binary_search(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
 }

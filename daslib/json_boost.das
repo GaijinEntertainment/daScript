@@ -578,7 +578,7 @@ def JV(value : auto(TT)) : JsonValue? {
                 // walk to the slow per-field invoke fallback (PR #3008). Pivot enum/string handling on a
                 // static type guard with an explicit default `else`, and gate @optional with `if (!skip)`,
                 // so the block stays return-free and inlines.
-                var skip = false
+                var skip = false   // nolint:LINT003 — written only in static_if branches; some instantiations write, some don't
                 if (fieldState.optional) {
                     // skip @optional fields at default (zero) value, matching sprint_json behavior
                     static_if (typeinfo is_string(field)) {

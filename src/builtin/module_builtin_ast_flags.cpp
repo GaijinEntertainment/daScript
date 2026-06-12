@@ -237,6 +237,13 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeVariableAccessInfoFlags() {
+        auto ft = new TypeDecl(Type::tBitfield);
+        ft->alias = "VariableAccessInfoFlags";
+        ft->argNames = { "access_info_pass_mutable" };
+        return ft;
+    }
+
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "CopyFlags";
@@ -279,6 +286,7 @@ namespace das {
         addAlias(makeFunctionSideEffectFlags());
         addAlias(makeVariableFlags());
         addAlias(makeVariableAccessFlags());
+        addAlias(makeVariableAccessInfoFlags());
         addAlias(makeExprBlockFlags());
         addAlias(makeExprAtFlags());
         addAlias(makeExprMakeLocalFlags());

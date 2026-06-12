@@ -1341,7 +1341,7 @@ namespace das {
         ser.tag(HASH_TAG("Variable"));
         ser << name << aka << type << init << source << at << index << stackTop
             << extraLocalOffset << module
-            << initStackSize << flags << access_flags << annotation;
+            << initStackSize << flags << access_flags << access_info << annotation;
     }
 
     void Function::AliasInfo::serialize ( AstSerializer & ser ) {
@@ -2707,7 +2707,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 91;   // 91: TypeDecl dim/dimExpr fields deleted (FIXED_ARRAY_REWORK.md, stage 6)
+        static constexpr uint32_t currentVersion = 92;   // 92: Variable::access_info added (issue #3090)
         return currentVersion;
     }
 

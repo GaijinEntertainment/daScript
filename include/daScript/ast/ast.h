@@ -399,6 +399,14 @@ namespace das
             };
             uint32_t access_flags = 0;
         };
+        // informational detail flags — no semantic meaning of their own; consumers are lints,
+        // refactoring tools, and diagnostics (issue #3090). owned by TrackFieldAndAtFlags.
+        union {
+            struct {
+                bool    access_info_pass_mutable : 1;   // appeared in an argument slot declared as a mutable reference, whether or not the callee writes it
+            };
+            uint32_t access_info = 0;
+        };
 
 
         union {

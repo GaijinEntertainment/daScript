@@ -188,6 +188,23 @@ A ``var`` variable is never mutated. Declare it with ``let`` instead.
     let x = 5
     return x
 
+The rule consults the ``access_info_pass_mutable`` detail flag: a variable
+whose only "mutable" use is being passed to a mutable-ref parameter is *not*
+flagged, even when the callee never writes through it — a ``let`` argument
+would no longer match the ``var`` parameter and the build would break. The
+callee side of that situation is LINT014's report.
+
+.. code-block:: das
+
+    def probe(var a : float[4][4]) : string {   // never writes a — see LINT014
+        return "{a[0][0]}"
+    }
+
+    def caller {
+        var mv : float[4][4]    // no LINT003: `let mv` would not compile
+        print(probe(mv))
+    }
+
 LINT004 — underscore-prefixed variable is used
 ================================================
 
@@ -463,13 +480,52 @@ for LINT012.
         report(found)
     }
 
+LINT014 — mutable (``var``) argument is never written
+======================================================
+
+A by-ref parameter declared ``var`` whose body never writes it forces every
+caller to keep its argument mutable for nothing — and silences LINT003 at
+every call site (see the LINT003 exemption above). Drop the ``var``; callers
+may then declare their arguments with ``let``.
+
+The rule skips: workhorse by-value parameters (a ``var int`` is a mutable
+local copy, not a caller burden), class methods and ``[extern]`` stubs
+(signature dictated externally), ``finalize`` overloads (the delete protocol
+requires ``var``), address-taken functions (signature conforms to a
+function-pointer type), and underscore-prefixed names. It also skips a
+parameter whose pointer-valued data flows into a mutable-pointee slot —
+a store like ``node.next = b.p`` needs the pointer non-const (error 30915),
+which only ``var b`` provides. Slots that accept a const pointer
+(``void?``, ``Foo const?``, and const-pointer results) do not suppress.
+
+**Cascade:** a parameter that is itself passed onward to a mutable-ref slot
+is skipped — the leaf callee is flagged first; once its signature is fixed,
+the next lint run exposes the caller.
+
+.. code-block:: das
+
+    // Bad — b is only read
+    def get_value(var b : Box) : int {      // LINT014 on b
+        return b.value
+    }
+
+    // Good
+    def get_value(b : Box) : int {
+        return b.value
+    }
+
+    // Not flagged — mutability is demanded transitively; fix get_value first
+    def get_twice(var b : Box) : int {
+        return get_value(b) * 2
+    }
+
 .. note::
 
-    ``// nolint:LINT012`` / ``// nolint:LINT013`` suppression is scanned on the
-    **exact reported line** only — not the line above. On a multi-line argument
-    or block-parameter list, place the comment on the specific parameter's
-    line; on a single-line ``def foo(a, b, c)`` a trailing ``// nolint:LINT012``
-    suppresses the whole line.
+    ``// nolint:LINT012`` / ``// nolint:LINT013`` / ``// nolint:LINT014``
+    suppression is scanned on the **exact reported line** only — not the line
+    above. On a multi-line argument or block-parameter list, place the comment
+    on the specific parameter's line; on a single-line ``def foo(a, b, c)`` a
+    trailing ``// nolint:LINT012`` suppresses the whole line.
 
 .. _perf_lint:
 

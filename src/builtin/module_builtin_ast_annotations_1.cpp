@@ -282,6 +282,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(initStackSize)>("initStackSize");
             addFieldEx ( "flags", "flags", offsetof(Variable, flags), makeVariableFlags() );
             addFieldEx ( "access_flags", "access_flags", offsetof(Variable, access_flags), makeVariableAccessFlags() );
+            addFieldEx ( "access_info", "access_info", offsetof(Variable, access_info), makeVariableAccessInfoFlags() );
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             // properties
             addProperty<DAS_BIND_MANAGED_PROP(isAccessUnused)>("isAccessUnused","isAccessUnused");
