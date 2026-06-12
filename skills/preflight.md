@@ -31,7 +31,7 @@ the CI ref, never a working-tree copy.
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
-| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | six doc gates |
+| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | seven doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
 
 ## build.yml — the build matrix
@@ -129,10 +129,10 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | dasImgui install | `<daslang> utils/daspkg/main.das -- install dasImgui --branch master` | **the externals-coupling gate**: CI builds external dasImgui from ITS master against YOUR branch — an ABI break vs externals reds this on an unrelated-looking step. See `skills/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
-## doc.yml — the six gates
+## doc.yml — the seven gates
 
 Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
-`daslib/**` means **any daslib edit** runs all six. CI stops at the FIRST
+`daslib/**` means **any daslib edit** runs all seven. CI stops at the FIRST
 das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
 locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
 `DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
@@ -146,8 +146,16 @@ workflow: `skills/make_pr.md` §4; conventions: `skills/documentation_rst.md`.
 | 4 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
 | 5 | LaTeX sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex` |
 | 6 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
+| 7 | both PDFs compile (latexmk, mirrors CI's latex-action) | `latexmk -pdf -interaction=nonstopmode -halt-on-error -cd build/latex/daslangstdlib.tex` then `…/daslang.tex` |
 
-(The PDF compile after gate 6 is `continue_on_error` — not a gate.)
+Gate 7 is **stricter than CI on purpose**: CI marks the PDF compiles
+`continue_on_error`, so an undeclared unicode char (the U+2261 incident)
+ships broken release PDFs without ever going red. The fix is always one
+line — `\DeclareUnicodeCharacter{XXXX}{…}` in `doc/source/conf.py`
+`latex_elements['preamble']` (sphinx's bundled set covers most common chars;
+only stragglers need declaring). Tool discovery: preflight probes PATH, then
+`~/Library/Python/*/bin` + `~/.local/bin` for sphinx-build and
+`/Library/TeX/texbin` for latexmk (mac: `brew install --cask basictex`).
 
 ## wasm_build.yml
 

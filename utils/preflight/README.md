@@ -9,7 +9,7 @@ manual commands this tool automates live in
 # on changed C++ (full src+tests-cpp sweep when a header changed)
 daslang utils/preflight/main.das
 
-# full tier: adds dasgen freshness, CI-only-das compile sweep, the six doc
+# full tier: adds dasgen freshness, CI-only-das compile sweep, the seven doc
 # gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
 daslang utils/preflight/main.das -- --full
 
