@@ -110,12 +110,43 @@ def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; a
     return match_any(makeType, wths, access_new, to)
 }
 
+def public match_peel_r2v(var e : Expression?) : Expression? {
+    //! Strip post-typer ``ExprRef2Value`` wrappers. The ``match`` macro emits this around the
+    //! source side of AST class patterns so a clean pattern (``ExprField(...)``) matches a
+    //! typer-wrapped source, mirroring ``qmatch``'s transparency rule. ``$v`` captures of
+    //! Expression-typed values go through it too, so they bind the peeled node.
+    while (e != null && e is ExprRef2Value) {
+        e = (e as ExprRef2Value).subexpr
+    }
+    return e
+}
+
+def public match_peel_r2v(e : Expression const?) : Expression const? {
+    //! Pointee-const flavor — same peel, preserves the caller's const view.
+    var c : Expression const? = e
+    while (c != null && c is ExprRef2Value) {
+        c = (c as ExprRef2Value).subexpr
+    }
+    return c
+}
+
 [macro_function]
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
     // if its a pointer to ast::Expression or such, we need to 'as' cast first
     if (wths.makeType.isHandle && isExpression(wths.makeType)
             && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
-        // `is` on a null AST pointer panics — guard like the pointer-to-structure path below
+        // Post-typer ExprRef2Value wrappers are invisible (no surface syntax) — peel the source
+        // side before the RTTI guard, mirroring qmatch. An explicit ExprRef2Value(...) pattern
+        // still matches the wrapper itself. `is` on a null AST pointer panics — both arms guard
+        // for null like the pointer-to-structure path below.
+        if (wths.makeType.annotation.name != "ExprRef2Value") {
+            var peeled = qmacro(match_peel_r2v($e(access)))
+            peeled |> force_at(wths.at)
+            var cond_pz = qmacro($e(peeled) != null)
+            cond_pz |> force_at(wths.at)
+            to.conditions |> emplace(cond_pz)
+            return match_as_is(what, wths, wths.makeType, wths.makeType.annotation.name, peeled, to)
+        }
         var cond_nz = qmacro($e(access) != null)
         cond_nz |> force_at(wths.at)
         to.conditions |> emplace(cond_nz)
@@ -474,7 +505,7 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
     return true
 }
 
-[macro_function, unused_argument(what)]
+[macro_function]
 def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
     var tag = wth as ExprTag
     if (tag.name != "v") {
@@ -487,8 +518,14 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
             to.errors |> match_error("duplicate variable {tname}", tag.at)
             return false
         }
+        var cap = clone_expression(access)
+        // an Expression-typed capture binds the peeled node (see match_peel_r2v)
+        if (what != null && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
+            cap = qmacro(match_peel_r2v($e(cap)))
+            cap |> force_at(tag.at)
+        }
         unsafe {
-            to.declarations[tname] = clone_expression(access)
+            to.declarations[tname] = cap
         }
         log_m("\tadd variable {tname} as {describe(access)}\n")
         return true
