@@ -102,8 +102,9 @@ THIS repo — fat runners, in-tree `utils/daspkg`, signal lands where daslang
 devs look. Builds daslang master (extended_checks' linux recipe, sccache
 restore-only), then daspkg-installs every package in
 `borisbat/daspkg-index/packages.json` at its **default-branch HEAD**
-(resolved per repo via `gh api` — 5 of 9 use `main`, not `master`; release
-tags deliberately NOT used, they lag legitimately after an ABI sweep).
+(resolved per repo via anonymous `git ls-remote --symref` — 5 of 9 use
+`main`, not `master`; release tags deliberately NOT used, they lag
+legitimately after an ABI sweep).
 The list is fetched at run time, so new packages need no workflow edit; the
 one future-edit case is a native package needing a system lib outside the
 extended_checks apt set — v2 answer is an optional `"apt"` field in
