@@ -144,7 +144,7 @@ Note adapters can still *emit* code referencing the contributor's symbols by nam
 
 ## `qmatch` — predicate-style pattern matching
 
-Prefer `qmatch(expr, <pattern>).matched` over hand-rolled `is X / as X` cascades when matching structural AST shapes. `qmatch` is RTTI-strict and won't traverse `ExprRef2Value` — peel first via `qm_peel_ref2value`.
+Prefer `qmatch(expr, <pattern>).matched` over hand-rolled `is X / as X` cascades when matching structural AST shapes. `ExprRef2Value` wrappers are transparent on both sides (pattern + source) — see ast_match.das's header; `$e` captures bind the peeled node.
 
 ```das
 // HAND-ROLLED (avoid)
@@ -178,6 +178,39 @@ Result is `QMatchResult` with `.matched : bool` and `.error : QMatchError` — c
 Canonical examples in `modules/dasSQLITE/daslib/sqlite_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
 
 **Not every probe fits qmatch.** Shapes with cross-statement constraints (e.g., "3 statements with specific types where push target equals res var and recordNames count matches sources count") exceed qmatch's grammar — fall back to hand-rolled `is X / as X` for those. Self-circular file dependencies are also out: `ast_match.das` itself can't use `qmatch` to define its own grammar.
+
+## `match` (daslib/match) — node-class destructuring; pairs with `qmatch`
+
+`daslib/match` is the OTHER pattern matcher, and for AST work the two divide cleanly. Pick by what the pattern looks like:
+
+- **`qmatch`** when the pattern is *daslang source syntax* — `qmatch(that, $e(fa) * $e(fb) + $e(other))`. Operator trees, call shapes, field chains spelled as code.
+- **`match`** when the pattern is *node classes and fields* — `match (e) { if (ExprSwizzle(mask = "xy", value = $v(v))) … }` — or plain value dispatch (`match (op) { if ("*") … }`, enum tables like flatten's `zero_const_of`).
+
+What `match` does that hand-rolled ladders and qmatch don't (all test-pinned in `tests/match/`):
+
+```das
+match (keySide) {
+    // nested class patterns, literal field values, capture; null guard + is/as + ExprRef2Value
+    // peel are all emitted for you
+    if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
+        return lane == TableLane.KV
+    }
+    if (ExprVar(name = match_expr(bindName))) {
+        return lane != TableLane.KV
+    }
+    if (_) {
+        return false
+    }
+}
+return false   // match is statement-shaped; flow analysis wants the trailing return
+```
+
+- **Alternation `||` works in field position** — `ExprOp2(op = "+" || "-")` — and at arm level; guards compose with `&&` referencing captures and locals.
+- **`match_expr(localVar)`** compares a field against a runtime expression (das_string fields compare against `string` locals directly).
+- **das-vector fields can NOT be destructured** — `ExprCall.arguments` / `ExprBlock.list` are `dasvector`-backed and the array-pattern arm rejects them ("is not an array"). Capture the node and index/length-check manually; this is why deep block-shape probes (`extract_decs_bridge`) stay hand-rolled.
+- **Statement-shaped, not expression-shaped** — a tuple-returning recognizer that mixes name dispatch with structural probes (`is_bucket_reducer_call`) usually reads better hand-rolled; convert only when the ladder is the function.
+
+Canonical conversions: `is_key_ref` / `join_keyb_is_bare_key` (daslib/linq_fold_table.das / linq_fold_common.das), flatten_opt's `component_read_of` + `zero_const_of`. flatten_opt and the linq_fold family require BOTH libraries and use each where it fits — do the same.
 
 ## `qmacro` vs `quote` (code generation)
 
@@ -418,24 +451,9 @@ Loud failure tells the user that immediately; silent `return null`
 re-queues the macro and lets the daslang pipeline emit a confusing
 infer-time cascade instead.
 
-### Peel `ExprRef2Value` before `qmatch`
+### `ExprRef2Value` transparency (qmatch + match)
 
-Post-Mode-2-expansion AST walking will see field reads wrapped in `ExprRef2Value`. `qmatch` is RTTI-strict — it matches `ExprField` but not `ExprRef2Value(ExprField(...))`. **Route through `qm_peel_ref2value`** (the single source of truth in `daslib/ast_match.das`) instead of hand-rolling either a `while`-peel or an `if`-peel:
-
-```das
-require daslib/ast_match
-
-qm_peel_ref2value(node)
-if (node == null) {
-    macro_error(prog, at, "_where: ExprRef2Value with null subexpr")
-    return ""
-}
-// now `qmatch(node, _.$f(name))` etc. work as expected
-```
-
-`qm_peel_ref2value` currently uses `while (e is ExprRef2Value)` rather than single-`if`-peeling. The conservative loop is intentional until block-folding is fully audited — `tests/ast_match/test_ref2value_skip.das` exercises a triple-wrap shape, and `src/ast/ast_block_folding.cpp` synthesis paths could theoretically produce a nested wrapper. Once that audit lands, the helper switches to single-`if` peel in one place and every consumer follows automatically.
-
-Auto-peel **inside** `qmatch` itself remains a TODO documented in `daslib/ast_match.das`. Until then, every analyzer entry point that takes an expression coming out of post-expansion (predicate body, projection body, classifier helpers like `is_const_or_captured_var`) needs the `qm_peel_ref2value` call at the top.
+Post-typer AST walking sees field reads wrapped in `ExprRef2Value` (no surface syntax). Both matchers peel it automatically: `qmatch` strips it on the pattern AND source side at every dispatch (ast_match.das header; `$e` captures bind the peeled node), and `match` peels it for AST class patterns + `$v` captures via `match_peel_r2v` (an explicit `ExprRef2Value(...)` pattern in `match` still matches the wrapper itself — only `match` can spell it). Hand-written analyzers that DON'T go through a matcher still need `qm_peel_ref2value(node)` (the in-place helper in `daslib/ast_match.das`) at their entry — never hand-roll the `while (… is ExprRef2Value)` loop.
 
 ### When you really do need raw arguments
 

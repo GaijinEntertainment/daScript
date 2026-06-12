@@ -13,7 +13,20 @@ If a specific file genuinely can't AOT (emitter bug, interpreted-only by design)
 `options no_aot` IN THE FILE **and** exclude it from the directory's AOT glob, with a
 comment + issue link on both. Glob exclusion alone is NOT enough — test_aot still *runs*
 the file and trips 50101 on its missing stubs; `options no_aot` is what makes the runtime
-skip AOT linking for it.
+skip AOT linking for it. (2026-06-11: in-file `options no_aot` currently fails in the AOT
+hash itself — fix incoming on master; until it lands, interp-only tests are gated by the
+directory filter below instead.)
+
+## The `tests/.das_test` directory filter — and its root-path caveat
+
+`tests/.das_test` is a daslang script dastest compiles per run; its `can_visit_folder`
+pinvoke gates whole directories per mode — e.g. `no_aot/`, `ast/`, `ast_match/` are
+skipped under `--use-aot` / `-jit`, module dirs (dasSQLITE, dasPUGIXML…) skip when the
+module isn't built in. **The filter is looked up only at the `--test` ROOT path** —
+`--test tests` finds and applies it, but `--test tests/flatten` looks for
+`tests/flatten/.das_test` (absent) and walks into `no_aot/` unfiltered, producing
+false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests`
+(CI's form) or target individual files — never a subtree that contains gated dirs.
 
 ## Test file structure
 

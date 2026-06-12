@@ -96,29 +96,19 @@ class DecsAdapter : SourceAdapter {
             if (bridgeB == null) {
                 return null
             }
-            var keyaLam = joinCall.arguments[2]
-            var keybLam = joinCall.arguments[3]
-            var resultLam = joinCall.arguments[4]
-            if (keyaLam == null || keybLam == null || resultLam == null
-                    || keyaLam._type == null || resultLam._type == null
-                    || resultLam._type.firstType == null) {
+            var core = extract_upstream_join_core(joinCall)
+            if (core == null) {
                 return null
             }
-            var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
-            if (!is_primitive_join_key_type(keyType)) {
-                return null
-            }
-            var resultType = strip_const_ref(clone_type(resultLam._type.firstType))
-            var tupBType = strip_const_ref(clone_type(bridgeB.elementType))
             return new DecsJoinAdapter(shape = DecsJoinShape(
                 bridgeA = bridge,
                 bridgeB = bridgeB,
-                keyaLam = keyaLam,
-                keybLam = keybLam,
-                resultLam = resultLam,
-                keyType = keyType,
-                tupBType = tupBType,
-                resultType = resultType,
+                keyaLam = core.keyaLam,
+                keybLam = core.keybLam,
+                resultLam = core.resultLam,
+                keyType = core.keyType,
+                tupBType = strip_const_ref(clone_type(bridgeB.elementType)),
+                resultType = core.resultType,
                 resBindName = qn("djoin_jres", at)))
         }
         return new DecsAdapter(bridge = bridge, tupName = qn("decs_tup", at))

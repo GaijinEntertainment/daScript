@@ -11,6 +11,7 @@ module linq_fold_common shared public
 require daslib/linq public
 require daslib/ast_boost
 require daslib/ast_match
+require daslib/match
 require daslib/templates_boost
 require daslib/macro_boost
 require strings
@@ -119,15 +120,17 @@ class SourceAdapter {
     def count_shortcut(opName : string; at : LineInfo) : Expression? {
         return null
     }
-    // transitional source-data getters (removed once all consumers move into subclass methods)
-    def arrayTop() : Expression? {
+    // Generic-lane source feed: the shared array-shaped lanes emit `for`/`length()` against
+    // loop_source_name() and read loop_source_expr() for compile-time facts (reserve hints, srcB
+    // checks; null = decline). Overriding the pair lights up those lanes — see linq_fold.md.
+    def loop_source_expr() : Expression? {
         return null
     }
-    def arraySrcName() : string {
+    def loop_source_name() : string {
         return ""
     }
     def invoke_param_type() : TypeDeclPtr {     // invoke-param spelling for the source argument (join lane's lead param)
-        var top = arrayTop()
+        var top = loop_source_expr()
         return top != null ? invoke_src_param_type(top) : null
     }
 }
@@ -2216,7 +2219,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     // ctx.src IS the source adapter (ArrayAdapter for arrays, XmlAdapter for XML) — the lanes ride it
     // directly. There's no leading-select slot on this pattern, so ctx.src is never a ProjectedSourceAdapter.
     var top = ctx.top
-    let srcName = ctx.src->arraySrcName()
+    let srcName = ctx.src->loop_source_name()
     let itName = qn("it", at)
     let accName = qn("acc", at)
     let names <- make_range_names(at)
@@ -2436,7 +2439,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         // (worse than an array's slack), so the gate is stricter than the array arm's.
         var reserveStmts : array<Expression?>
         if (ctx.src->can_reserve_by_length() && whereCond == null && postTakeWhereCond == null) {
-            let rtop = ctx.src->arrayTop()
+            let rtop = ctx.src->loop_source_expr()
             if (rtop != null && rtop._type != null && type_has_length(rtop._type)) {
                 if (takeExpr != null) {
                     reserveStmts |> push <| qmacro_expr() {
@@ -3385,8 +3388,8 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
     }
     var reserveStmts : array<Expression?>
     if (ctx.src->can_reserve_by_length() && oc.distinctName == "") {
-        let top = ctx.src->arrayTop()
-        let srcName = ctx.src->arraySrcName()
+        let top = ctx.src->loop_source_expr()
+        let srcName = ctx.src->loop_source_name()
         if (top != null && top._type != null && type_has_length(top._type)) {
             reserveStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcName)))
@@ -3707,7 +3710,7 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
 [macro_function]
 def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
-    let srcName = ctx.src->arraySrcName()
+    let srcName = ctx.src->loop_source_name()
     if (!(c.single |> key_exists("take")) || top._type == null || top._type.firstType == null) return null
     var bufElemType = strip_const_ref(clone_type(top._type.firstType))
     var termselLam : Expression?
@@ -3774,7 +3777,7 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
 [macro_function]
 def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var top = ctx.top
-    let srcName = ctx.src->arraySrcName()
+    let srcName = ctx.src->loop_source_name()
     if (!(c.single |> key_exists("dist"))) return null
     let distinctCall = c.single["dist"]
     let distinctName = call_norm_name(distinctCall)
@@ -4035,8 +4038,8 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
     // Reserve hint: array source with no prefilter has known length. Decs has no random-access length — skip.
     var reserveStmts : array<Expression?>
     if (ctx.src->can_reserve_by_length() && whereCond == null) {
-        let top = ctx.src->arrayTop()
-        let srcName = ctx.src->arraySrcName()
+        let top = ctx.src->loop_source_expr()
+        let srcName = ctx.src->loop_source_name()
         if (top != null && top._type != null && type_has_length(top._type)) {
             reserveStmts |> push <| qmacro_expr() {
                 $i(bufName) |> reserve(length($i(srcName)))
@@ -4404,14 +4407,14 @@ def is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; 
     if (c.func.fromGeneric != null) {
         fnName = string(c.func.fromGeneric.name)
     }
-    if ((c.arguments |> length) != 1) return (false, "", null)
+    let nArgs = c.arguments |> length
     // Bare reducer: `<reducer>(<bind>._1)`
-    if (fnName == "length" || fnName == "count" || fnName == "long_count"
-            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
+    if (nArgs == 1 && (fnName == "length" || fnName == "count" || fnName == "long_count"
+            || fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average")) {
         if (peel_tuple_field_read(c.arguments[0], bindName, 1)) return (true, fnName, null)
     }
     // Inner-select reducer: `<reducer>(select(<bind>._1, <lambda>))`
-    if (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average") {
+    if (nArgs == 1 && (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "first" || fnName == "average")) {
         let inner = c.arguments[0]
         if (inner != null && inner is ExprCall) {
             let innerCall = inner as ExprCall
@@ -4426,7 +4429,29 @@ def is_bucket_reducer_call(expr : Expression?; bindName : string) : tuple<bool; 
             }
         }
     }
+    // Direct selector reducer: `<reducer>(<bind>._1, <lambda>)` ≡ inner-select form (the 2-arg
+    // tier-2 overloads in linq.das). An identity lambda canonicalizes to the bare reducer.
+    // `first`/`count` stay 1-arg only — their C# 2-arg forms take a PREDICATE, not a selector.
+    if (nArgs == 2 && (fnName == "sum" || fnName == "min" || fnName == "max" || fnName == "average")) {
+        if (peel_tuple_field_read(c.arguments[0], bindName, 1)) {
+            if (is_identity_lambda(c.arguments[1])) return (true, fnName, null)
+            return (true, "{fnName}_inner_select", c.arguments[1])
+        }
+    }
     return (false, "", null)
+}
+
+[macro_function]
+def is_identity_lambda(lam : Expression const?) : bool {
+    if (lam == null || !(lam is ExprMakeBlock)) return false
+    let blk = (lam as ExprMakeBlock)._block
+    if (blk == null || !(blk is ExprBlock)) return false
+    let eb = blk as ExprBlock
+    if (length(eb.arguments) != 1 || length(eb.list) != 1) return false
+    let st = eb.list[0]
+    if (st == null || !(st is ExprReturn)) return false
+    let body = match_peel_r2v((st as ExprReturn).subexpr)
+    return body != null && body is ExprVar && (body as ExprVar).name == eb.arguments[0].name
 }
 
 struct ReducerSpec {
@@ -5617,6 +5642,59 @@ def is_primitive_join_key_type(keyType : TypeDeclPtr) : bool {
             || keyType.baseType == Type.tBool))
 }
 
+// UpstreamJoinCore — source-independent half of a `join |> group_by` upstream-join arm: keya/keyb/result
+// lambdas validated, primitive-key gate applied, key/result types extracted. The source's
+// build_group_by_adapter adds its own srcB validation and builds its Join shape. null = decline to tier-2.
+struct UpstreamJoinCore {
+    keyaLam    : Expression?
+    keybLam    : Expression?
+    resultLam  : Expression?
+    keyType    : TypeDeclPtr
+    resultType : TypeDeclPtr
+}
+
+[macro_function]
+def extract_upstream_join_core(var joinCall : ExprCall?) : UpstreamJoinCore? {
+    var keyaLam = joinCall.arguments[2]
+    var keybLam = joinCall.arguments[3]
+    var resultLam = joinCall.arguments[4]
+    if (keyaLam == null || keybLam == null || resultLam == null
+            || keyaLam._type == null || resultLam._type == null
+            || resultLam._type.firstType == null) {
+        return null
+    }
+    var keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
+    if (!is_primitive_join_key_type(keyType)) {
+        return null
+    }
+    return new UpstreamJoinCore(keyaLam = keyaLam, keybLam = keybLam, resultLam = resultLam,
+                                keyType = keyType,
+                                resultType = strip_const_ref(clone_type(resultLam._type.firstType)))
+}
+
+// Array-shaped srcB of the upstream-join arm (join's second arg): alwaysSafe clone, invoke-param
+// spelling, element tuple type. Used by sources hashing srcB from an array walk (array/json/xml);
+// decs validates srcB via extract_decs_bridge instead.
+struct UpstreamJoinArraySrcB {
+    srcbClone : Expression?
+    srcbType  : TypeDeclPtr
+    tupBType  : TypeDeclPtr
+}
+
+[macro_function]
+def extract_upstream_join_array_srcb(var joinCall : ExprCall?) : UpstreamJoinArraySrcB? {
+    var srcbSrc = joinCall.arguments[1]
+    if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null
+            || !(srcbSrc._type.isGoodArrayType || srcbSrc._type.isArray || srcbSrc._type.isIterator)) {
+        return null
+    }
+    var srcbClone = clone_expression(srcbSrc)
+    srcbClone.genFlags.alwaysSafe = true
+    return new UpstreamJoinArraySrcB(srcbClone = srcbClone,
+                                     srcbType = invoke_src_param_type(srcbSrc),
+                                     tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType)))
+}
+
 // JoinStandalonePieces — shared output of the standalone hashed-join shape builder. Returned to emit_decs_join_impl / emit_array_join / emit_xml_join which then wrap the source loops differently (decs uses for_each_archetype + build_decs_inner_for; array uses plain `for`; xml uses the DOM walk).
 struct JoinStandalonePieces {
     preludeStmts  : array<Expression?>
@@ -5884,25 +5962,23 @@ def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
     return call
 }
 
-// keyb (peeled, binder renamed to bindName) selects the table key itself: bare `kv.key` (kv lane) or the
-// bare element (keys lane). Then the join key IS the table key and a lookup replaces the bucket walk.
+// body (peeled, binder renamed to bindName) selects the table key itself: bare `kv.key` (kv lane) or the
+// bare element (keys lane). Shared by join keyb (key IS the table key ⇒ lookup replaces the bucket walk)
+// and the point-lookup probe matcher in linq_fold_table.
 [macro_function]
-def join_keyb_is_bare_key(var keybBody : Expression?; bindName : string; kvLane : bool) : bool {
-    var k = keybBody
-    if (k != null && k is ExprRef2Value) {
-        k = (k as ExprRef2Value).subexpr
+def is_bare_key_ref(keyBody : Expression?; bindName : string; kvLane : bool) : bool {
+    match (keyBody) {
+        if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
+            return kvLane
+        }
+        if (ExprVar(name = match_expr(bindName))) {
+            return !kvLane
+        }
+        if (_) {
+            return false
+        }
     }
-    if (!kvLane) {
-        return k != null && k is ExprVar && (k as ExprVar).name == bindName
-    }
-    if (k == null || !(k is ExprField)) return false
-    var f = k as ExprField
-    if (f.name != "key") return false
-    var base = f.value
-    if (base != null && base is ExprRef2Value) {
-        base = (base as ExprRef2Value).subexpr
-    }
-    return base != null && base is ExprVar && (base as ExprVar).name == bindName
+    return false
 }
 
 // Table-srcB twin of build_join_standalone_pieces: unique table keys ⇒ bucket size ≤ 1, so there is no
@@ -6080,7 +6156,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     // (only the result projection + an optional lead `where` splice for group joins), or any non-count
     // iterator-typed context.
     if ((isGroupJoin && (countOnly || whereLam != null || selectLam != null)) || (!countOnly && ctx.expr_is_iterator)) return null
-    var topSrc = ctx.src->arrayTop()
+    var topSrc = ctx.src->loop_source_expr()
     if (topSrc == null || topSrc._type == null || topSrc._type.firstType == null) return null
     var srcbSrc = joinCall.arguments[1]
     if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
@@ -6089,7 +6165,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
     let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
     if (!is_primitive_join_key_type(keyType)) return null
-    let srcAName  = ctx.src->arraySrcName()
+    let srcAName  = ctx.src->loop_source_name()
     let srcBName  = qn("ajoin_srcB", at)
     let tupAName  = ctx.src->bind_name(at)
     let tupBName  = qn("ajoin_tup_b", at)
@@ -6100,7 +6176,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
     var srcbTab = join_srcb_table_call(joinCall)
     let srcbKv = srcbTab != null && get_call_short_name(srcbTab) == "each_kv"
-    let probeMode = srcbTab != null && !isGroupJoin && join_keyb_is_bare_key(keybBody, tupBName, srcbKv)
+    let probeMode = srcbTab != null && !isGroupJoin && is_bare_key_ref(keybBody, tupBName, srcbKv)
     var pieces : JoinStandalonePieces?
     if (probeMode) {
         pieces = build_join_probe_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, srcBName, srcbKv, "ajoin", at)

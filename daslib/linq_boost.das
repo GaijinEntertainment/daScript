@@ -24,6 +24,69 @@ def private clone_iterator_type(it : TypeDeclPtr) : TypeDeclPtr {
     return <- res
 }
 
+// Bucket-surface lambda stamping. When the chain element is the group_by_lazy shape
+// `tuple<K, array<E>>`, an untyped lambda passed to a direct `<bind>._1 |> <op>(<lambda>)`
+// call can't infer against the fully generic tier-2 params (error 30303) — but the chain
+// type knows E, so the macro stamps it, same as the outer-param injection in visit().
+class private BucketLambdaStamper : AstVisitor {
+    bindName : string
+    elemT : TypeDeclPtr
+    def BucketLambdaStamper(n : string; var et : TypeDeclPtr) {
+        bindName = n
+        elemT = et
+    }
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        let nm = string(expr.name)
+        if ((nm != "select" && nm != "select_to_array" && nm != "sum" && nm != "min"
+                && nm != "max" && nm != "average" && nm != "min_by" && nm != "max_by")
+                || length(expr.arguments) != 2) {
+            return expr
+        }
+        var recv = expr.arguments[0]
+        if (recv != null && recv is ExprRef2Value) {
+            recv = (recv as ExprRef2Value).subexpr
+        }
+        if (recv == null || !(recv is ExprField)) return expr
+        var fld = recv as ExprField
+        if (fld.name != "_1") return expr
+        var base = fld.value
+        if (base != null && base is ExprRef2Value) {
+            base = (base as ExprRef2Value).subexpr
+        }
+        if (base == null || !(base is ExprVar) || (base as ExprVar).name != bindName) return expr
+        var lam = expr.arguments[1]
+        if (lam == null || !(lam is ExprMakeBlock)) return expr
+        var blk = (lam as ExprMakeBlock)._block
+        if (blk == null || !(blk is ExprBlock)) return expr
+        var eb = blk as ExprBlock
+        if (length(eb.arguments) != 1) return expr
+        if (eb.arguments[0]._type == null || eb.arguments[0]._type.isAutoOrAlias) {
+            var et = clone_type(elemT)
+            et.flags.ref = false
+            et.flags.constant = true
+            eb.arguments[0]._type = et
+        }
+        return expr
+    }
+}
+
+[macro_function]
+def private stamp_bucket_reducer_lambdas(var projExpr : ExpressionPtr; bindName : string; iterType : TypeDeclPtr) {
+    if (projExpr == null || iterType == null || iterType.baseType != Type.tTuple
+            || length(iterType.argTypes) != 2) {
+        return
+    }
+    var bucketT = iterType.argTypes[1]
+    if (bucketT == null || bucketT.baseType != Type.tArray || bucketT.firstType == null) return
+    var sc = new BucketLambdaStamper(bindName, clone_type(bucketT.firstType))
+    make_visitor(*sc) $(astVisitorAdapter) {
+        visit_expression(projExpr, astVisitorAdapter)
+    }
+    unsafe {
+        delete sc
+    }
+}
+
 class private AstCallMacro_LinqPred2 : AstCallMacro {
     //! Base call macro for LINQ-style two-argument predicate operators.
     predName = "where_"
@@ -41,6 +104,16 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         macro_verify(!arg0type.firstType.isAutoOrAlias, prog, call.at, "iterable type cannot be auto or alias")
         // replacing function
         var iterType = clone_iterator_type(arg0type)
+        // bucket-surface inner lambdas (`<bind>._1 |> select/max/…(<untyped lambda>)`) get the
+        // bucket element type stamped before the rewrite — see BucketLambdaStamper above
+        var bucketBind = "_"
+        if (call.arguments[1] is ExprMakeBlock) {
+            var bblk = (call.arguments[1] as ExprMakeBlock)._block
+            if (bblk != null && bblk is ExprBlock && length((bblk as ExprBlock).arguments) == 1) {
+                bucketBind = string((bblk as ExprBlock).arguments[0].name)
+            }
+        }
+        stamp_bucket_reducer_lambdas(call.arguments[1], bucketBind, iterType)
         var res : ExpressionPtr
         if (call.arguments[1] is ExprMakeBlock) {
             // named-variable form: the argument is already a `$(x) => …` block (e.g. emitted by linq_das).

@@ -243,12 +243,26 @@ PR1 findings:
 
 End of arc: `skills/linq.md` + linq docs mention the table source.
 
-## Late stage (planned) — reducer shapes & general code hygiene
+## Late stage (IN PROGRESS, 2026-06-11) — reducer shapes & general code hygiene
 
 Cross-source cleanups; none are table-specific. Items 1–2 are user-facing reducer-shape fixes,
 items 3–4 are codebase hygiene investigations (the linq_fold surface is workable but "a tad too
 unwieldy" — the table adapter took several stages, and many fuses read as "add this hook, because
 reasons" rather than falling out of the architecture).
+
+Status: **items 1+2 DONE** (selector overloads `sum/min/max/average(src, selector)`, the
+`_select`-macro bucket-element type stamping, the 2-arg recognizer arm with identity
+canonicalization — branch `bbatkin/linq-reducer-shapes`). **Item 4 partially DONE** (4A
+upstream-join validation dedup + 4B `loop_source_expr`/`loop_source_name` recontract — branch
+`bbatkin/linq-adapter-hygiene`; reverse hooks kept as-is per audit, stringly-Captures →
+typed ChainView deferred, per-source dispatch can't become a registry — macro modules compile
+into separate contexts). **Item 3 DONE with scope notes** (key-probe matchers + `join_keyb_is_bare_key`
+converted to `daslib/match` class patterns — n.b. the AST conversions use BOTH `daslib/ast_match`
+(qmatch) and `daslib/match`, each where it fits; prereq landed = ExprRef2Value transparency in
+match.das. Declined: `is_bucket_reducer_call` (statement-shaped match doesn't fit a
+tuple-returning recognizer) and `extract_decs_bridge` (match.das array patterns reject
+das-vector scrutinees — revisit if the library grows them). Toolbox doc:
+`skills/das_macros.md` "`match` (daslib/match)".
 
 1. **Identity-lambda reducers**: `_._1 |> max($(v) => v)` (also `min`/`sum`/`average`) fails with
    30303 today — the untyped lambda can't infer on the tier-2 lazy-bucket surface, and

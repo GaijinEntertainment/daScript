@@ -260,8 +260,10 @@ latex_elements = {
 
 # Additional stuff for the LaTeX preamble.
 #
-# These unicode characters is not known to LaTeX. If new used in .rst
-# they should be added here.
+# Unicode characters pdflatex doesn't know (sphinx's bundled set covers most
+# common ones — only stragglers land here). When a new char breaks the
+# docs/pdflatex preflight gate, add one line; keep \ensuremath so the mapping
+# works in both text and math mode.
 'preamble': r'''
 \newunicodechar{✓}{\checkmark}
 \newunicodechar{✗}{\texttimes}
@@ -273,6 +275,13 @@ latex_elements = {
 \DeclareUnicodeCharacter{2265}{\ensuremath{\geq}}
 \DeclareUnicodeCharacter{21D2}{\ensuremath{\Rightarrow}}
 \DeclareUnicodeCharacter{00D7}{\ensuremath{\times}}
+\DeclareUnicodeCharacter{2248}{\ensuremath{\approx}}
+\DeclareUnicodeCharacter{2208}{\ensuremath{\in}}
+\DeclareUnicodeCharacter{2209}{\ensuremath{\notin}}
+\DeclareUnicodeCharacter{221A}{\ensuremath{\surd}}
+\DeclareUnicodeCharacter{221E}{\ensuremath{\infty}}
+\DeclareUnicodeCharacter{2227}{\ensuremath{\wedge}}
+\DeclareUnicodeCharacter{2228}{\ensuremath{\vee}}
 ''',
 
 # Latex figure (float) alignment
