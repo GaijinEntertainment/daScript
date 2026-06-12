@@ -9,6 +9,7 @@ require opengl/opengl public
 
 require daslib/safe_addr
 require daslib/contracts
+require daslib/array_boost
 
 require glsl/glsl_opengl public
 
@@ -40,7 +41,7 @@ def write_ssbo(ssbo : uint; data : auto(TT)) {
     if (p_mat == null) {
         panic("can't map ssbo")
     }
-    unsafe {
+    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
         *(reinterpret<TT -const?> p_mat) = data
     }
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)
@@ -50,7 +51,10 @@ def write_ssbo(ssbo : uint; data : auto(TT)) {
 def read_ssbo(ssbo : uint; var data : auto(TT)) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
     var p_mat = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY)
-    unsafe {
+    if (p_mat == null) {
+        panic("can't map ssbo")
+    }
+    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
         data = *(reinterpret<TT?> p_mat)
     }
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)
