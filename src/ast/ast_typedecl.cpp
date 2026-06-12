@@ -2706,7 +2706,7 @@ namespace das
             }
         }
         if (firstType && !firstType->isFullySealed(all)) return false;
-        if (secondType && !firstType->isFullySealed(all)) return false;
+        if (secondType && !secondType->isFullySealed(all)) return false;
         for (auto & argT : argTypes) {
             if (argT && !argT->isFullySealed(all)) return false;
         }

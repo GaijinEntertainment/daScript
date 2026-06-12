@@ -79,11 +79,10 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 %%
 
 <normal>\#[0-9]+,[0-9]+,\"[^\"]+\"\# {
-    string txt = yytext;
     int lRow, lCol;
-    char lFile[256];
-    if ( sscanf ( yytext, "#%i,%i,\"%255s\"#", &lRow, &lCol, lFile )==3 ) {
-        lFile[strlen(lFile)-2] = 0;
+    if ( sscanf ( yytext, "#%i,%i,", &lRow, &lCol )==2 ) {
+        // file name is the quote-bounded span; sscanf %s would stop at whitespace inside it
+        string lFile ( strchr(yytext,'\"')+1, yytext+yyleng-2 );
         auto cfi = yyextra->g_FileAccessStack.back();
         string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = yyextra->g_Access->getFileInfo(incFileName);
