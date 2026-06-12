@@ -115,11 +115,44 @@ annotation-info merge), then:
 - [x] Formatter verified + lint clean on all four changed das files (llvm_jit.das lint
       needs `lib/LLVM.dll` present — dasbind resolves `getDasRoot()/lib/<dll>`).
 
-## Phase 2 — make the lowering correct
+## Phase 2 — make the lowering correct (IN PROGRESS)
 
-Driven by Phase 0 findings + a blacklist audit. Known suspects, each needs a verdict
-(legit-to-drop because infer rebuilds it, e.g. `ExprVar.pBlock` / `ExprReturn._block`
-backlinks — vs lossy-and-matters):
+### Done so far (2026-06-11)
+
+- **Suite-wide forcing flags**: `daslang -aot-macros <script>` (normal run, main.cpp) and
+  `dastest --aot-macros` (dastest_clargs/suite.das → `cop.aot_macros`, + 1MB stack like
+  the `-aot -aot-macros` flow). These are the audit hammer.
+- **Function-per-quote**: QuoteConverter now wraps each lowered construction in a
+  generated `` `quote`lowered`<n> `` private function and replaces the quote with a call.
+  Without this, every lowered qmacro callsite inflates its CALLER's stack frame (sum of
+  construction temporaries), which is fatal in recursive macros — flatten's `lower_stmt`
+  overflowed any reasonable stack. With it, the big frame is a single non-recursive leaf.
+- **FULL tests/ tree, lowering forced: 10103 tests, 10097 passed, 0 failed, 6 skipped —
+  byte-identical verdict to the unlowered baseline.** (92.6s vs 57.7s wall — the forced
+  mode pays QuotePass + giant-tree inference; fine for a debug/audit mode.)
+- **resolve_file_info**: per-file interned dummy FileInfo (module-global table in quote.das,
+  per macro context) replaces a fresh allocation per LineInfo per evaluation. The
+  live-FileInfo upgrade is parked: AOT emits calls with null LineInfoArg and Program does
+  not retain its FileAccess, so there is no reliable runtime handle to the live file.
+- **Anonymous-module entities**: quoted `type<LocalEnum>` / `type<LocalStruct>` (entity
+  lives in the program's unnamed main module) generated `get_module("")` → null-deref at
+  reconstruction. Fixed: `Enumeration` joined the managed by-name set (new C++ builtin
+  `module_find_enumeration`), and TypeDecls referencing anonymous-module enums/structs
+  reconstruct as `make_alias_type_decl("<name>")` — the exact alias shape the parser
+  yields for unresolved names, so splice-site re-infer resolves them.
+
+### Phase 2 addendum (later same day)
+
+- Extended corpus (probe_quote/ab2_*): enum consts, escaped + non-ASCII strings,
+  `finally` blocks, capture-clause lambdas, table literals, tuple literals, generators,
+  double arithmetic — all A/B-identical; `daslang -aot-macros` (CLI) ==
+  `options aot_macros` (module) == unlowered reference.
+- Final full-tree lowered re-run after all Phase 2 changes: SUCCESS, identical verdict.
+
+### Blacklist audit — remaining suspects
+
+Known suspects, each needs a verdict (legit-to-drop because infer rebuilds it, e.g.
+`ExprVar.pBlock` / `ExprReturn._block` backlinks — vs lossy-and-matters):
 
 - [ ] `ExprBlock` annotations + `blockFlags`, `finally` lists.
 - [ ] Capture lists (`CaptureEntryInitData` drops `at`).
@@ -139,7 +172,15 @@ backlinks — vs lossy-and-matters):
 Acceptance bar: lowered tree ≡ `expr->clone()` for every construct the basic suite
 covers (modulo agreed-legit blacklist entries, each documented in quote.das).
 
-## Phase 3 — basic tests (`tests/quote/`)
+## Phase 3 — basic tests (`tests/quote/`) — LANDED 2026-06-11 (20/20)
+
+Implemented as twin fixture modules with identical bodies — `_quote_shapes.das`
+(SimNode path) vs `_quote_shapes_lowered.das` (`options aot_macros`) — plus shared
+entities in `_quote_entities.das` (one named module so describes are identically
+qualified). `test_quote_lowering.das` asserts per-shape describe equality;
+`test_quote_lowered_main.das` covers lowered quotes in the anonymous main module
+(alias fallback) and splice behavior. Registered in tests/aot/CMakeLists.txt
+(test_aot_quote + test_aot_quote_modules). Original checklist:
 
 Self-contained via `options aot_macros` (Phase 1). For each category, A/B: expand the
 same qmacro with lowering on vs off, compare `describe_expression` output, plus a

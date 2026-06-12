@@ -360,6 +360,18 @@ list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "failed_")
 # AOT for template test files
 FILE(GLOB AOT_TEMPLATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/template/*.das")
 
+# AOT for quote lowering test files
+FILE(GLOB AOT_QUOTE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/quote/*.das")
+# Exclude fixture modules (compiled via DAS_AOT_LIB below)
+list(FILTER AOT_QUOTE_FILES EXCLUDE REGEX "/_")
+
+# Quote test module files (A/B fixtures required by the quote tests)
+SET(AOT_QUOTE_MODULE_FILES
+    tests/quote/_quote_entities.das
+    tests/quote/_quote_shapes.das
+    tests/quote/_quote_shapes_lowered.das
+)
+
 # AOT for type_traits test files
 FILE(GLOB AOT_TYPE_TRAITS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/type_traits/*.das")
 
@@ -716,6 +728,14 @@ add_custom_target(test_aot_template)
 SET(TEMPLATE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_TEMPLATE_FILES}" TEMPLATE_AOT_GENERATED_SRC test_aot_template daslang)
 
+add_custom_target(test_aot_quote)
+SET(QUOTE_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_QUOTE_FILES}" QUOTE_AOT_GENERATED_SRC test_aot_quote daslang)
+
+add_custom_target(test_aot_quote_modules)
+SET(QUOTE_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_QUOTE_MODULE_FILES}" QUOTE_MODULES_AOT_GENERATED_SRC test_aot_quote_modules daslang)
+
 add_custom_target(test_aot_type_traits)
 SET(TYPE_TRAITS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_TYPE_TRAITS_FILES}" TYPE_TRAITS_AOT_GENERATED_SRC test_aot_type_traits daslang)
@@ -825,6 +845,8 @@ SOURCE_GROUP_FILES("aot generated" SOA_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SPOOF_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STRINGS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" TEMPLATE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" QUOTE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" QUOTE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" TYPE_TRAITS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" URI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
@@ -904,6 +926,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${TABLE_PACKED_AOT_GENERATED_SRC}
     ${RTTI_AOT_GENERATED_SRC}
     ${TEMPLATE_AOT_GENERATED_SRC}
+    ${QUOTE_AOT_GENERATED_SRC}
+    ${QUOTE_MODULES_AOT_GENERATED_SRC}
     ${TYPE_TRAITS_AOT_GENERATED_SRC}
     ${URI_AOT_GENERATED_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
@@ -952,7 +976,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_regex test_aot_reader_macro
     test_aot_delegate test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
     test_aot_lint test_aot_promote test_aot_table_packed test_aot_rtti
-    test_aot_template test_aot_type_traits test_aot_uri
+    test_aot_template test_aot_quote test_aot_quote_modules test_aot_type_traits test_aot_uri
     test_aot_lpipe
     test_aot_jit
     test_aot_loops

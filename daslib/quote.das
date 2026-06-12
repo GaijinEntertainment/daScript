@@ -146,6 +146,17 @@ def public clone_file_info(b : FileInfoInitData) : FileInfo? {
     return clone_file_info(b.name, b.tabSize)
 }
 
+var private g_resolved_file_infos : table<string; FileInfo?>
+
+def public resolve_file_info(b : FileInfoInitData) : FileInfo? {
+    //! Stable FileInfo for reconstructed LineInfos: one interned dummy per file name
+    //! (per context), instead of a fresh allocation per evaluation.
+    if (!key_exists(g_resolved_file_infos, b.name)) {
+        g_resolved_file_infos[b.name] = clone_file_info(b.name, b.tabSize)
+    }
+    return g_resolved_file_infos[b.name]
+}
+
 let blacklist = [
     ("ast_core::Function", "inferStack"),
     ("ast_core::Function", "annotations"),
@@ -167,6 +178,7 @@ let managed_types = [
     "ast_core::Structure",
     "ast_core::CallMacro",
     "ast_core::Function",
+    "ast_core::Enumeration",
     "rtti_core::FileInfo",
     "ast_core::MakeStruct",
     "rtti_core::LineInfo",
@@ -316,15 +328,36 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
     var mkStr = new ExprMakeStruct(makeType = get_dst_type(clone_type(info)), at = at)
     emplace(mkStr.structs, mkS1)
     mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer | ExprMakeStructFlags.canShadowBlock;
-    if (describe(info) == "rtti_core::FileInfo") return new ExprCall(at = at, name := "clone_file_info",
+    if (describe(info) == "rtti_core::FileInfo") return new ExprCall(at = at, name := "resolve_file_info",
                                arguments := array<Expression?>(mkStr))
     return mkStr;
+}
+
+def public make_alias_type_decl(name : string) : TypeDecl? {
+    //! Reconstruction helper: a by-name alias TypeDecl, resolved by re-infer at the splice site.
+    return new TypeDecl(baseType = Type.alias, alias := name)
 }
 
 def private convert_pointer_expr(mod; data; info; at) : Expression? {
     assume pdata = *unsafe(reinterpret<uint8 const ??> data);
     if (pdata == null) return new ExprConstPtr(at = at);
     assume first_tstr = describe(info.firstType);
+    if (first_tstr == "ast_core::TypeDecl") {
+        // a type that references an enum/struct from an anonymous module (the program's
+        // main module) can't be reconstructed by name — rebuild it as the alias the parser
+        // would have produced for an unresolved name; splice-site re-infer resolves it
+        assume td = unsafe(reinterpret<TypeDecl?>(pdata));
+        var aliasName = ""
+        if (td.enumType != null && (td.enumType._module == null || empty(td.enumType._module.name))) {
+            aliasName = string(td.enumType.name)
+        } elif (td.structType != null && (td.structType._module == null || empty(td.structType._module.name))) {
+            aliasName = string(td.structType.name)
+        }
+        if (!empty(aliasName)) {
+            return new ExprCall(at = at, name := "make_alias_type_decl",
+                arguments := array<Expression?>(create_string_expr(aliasName)));
+        }
+    }
     var final_type = clone_type(info.firstType);
     if (first_tstr == "ast_core::Expression") {
         assume annotation = mod |> module_find_type_annotation(unsafe(reinterpret<Expression?>(pdata)).__rtti);
@@ -366,6 +399,12 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     } elif (tstr == "ast_core::Function") {
          assume pdata = unsafe(reinterpret<Function?>(data));
          return get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
+    } elif (tstr == "ast_core::Enumeration") {
+         assume pdata = unsafe(reinterpret<Enumeration?>(data));
+         // anonymous module (e.g. the program's main module) can't be found by name at
+         // reconstruction time; the TypeDecl-level alias fallback covers that shape
+         if (pdata._module == null || empty(pdata._module.name)) return null
+         return get_find_in_module_expr("module_find_enumeration", pdata._module.name, pdata.name, at);
     } elif (tstr == "rtti_core::Module") {
          assume cur_mod = unsafe(reinterpret<Module?>(data));
          return find_module_expr(cur_mod.name, at);
@@ -397,9 +436,28 @@ def convert_quote_to_expression(var arg_expr : Expression?; at : LineInfo) : Exp
 class QuoteConverter : AstVisitor {
     //! AST visitor that converts quoted expressions to init data.
     astChanged : bool = false
+    mod : Module?
+    counter : int = 0
     def override visitExprQuote(var expr : ExprQuote?) : Expression? {
         astChanged = true
-        return convert_quote_to_expression(expr.arguments[0], expr.at)
+        var conv = convert_quote_to_expression(expr.arguments[0], expr.at)
+        // wrap the construction in a per-quote generated function and replace the quote with
+        // a call: the (large) construction expression then occupies one non-recursive leaf
+        // frame instead of inflating every caller's frame (fatal in recursive macros)
+        var fname = ""
+        while (true) {
+            fname = "`quote`lowered`{counter}"
+            counter++
+            break if (find_unique_function(mod, fname, true) == null)
+        }
+        var fn = new Function(at = expr.at, atDecl = expr.at, name := fname,
+            flags = FunctionFlags.generated | FunctionFlags.privateFunction)
+        fn.result = new TypeDecl(baseType = Type.autoinfer)
+        var blk = new ExprBlock(at = expr.at)
+        emplace_new(blk.list) <| new ExprReturn(at = expr.at, subexpr = conv)
+        fn.body = blk
+        mod |> add_function(fn)
+        return new ExprCall(at = expr.at, name := fname)
     }
 }
 
@@ -412,7 +470,7 @@ class QuotePass : AstPassMacro {
         // `options aot_macros` (self-contained tests, interpreted A/B).
         let lower = compiling_program().policies.aot_macros || (prog._options |> find_arg("aot_macros") ?as tBool ?? false)
         if (!lower) return false // nothing to do
-        var astVisitor = new QuoteConverter()
+        var astVisitor = new QuoteConverter(mod = compiling_module())
         make_visitor(*astVisitor) $(astVisitorAdapter) {
             visit(prog, astVisitorAdapter)
         }

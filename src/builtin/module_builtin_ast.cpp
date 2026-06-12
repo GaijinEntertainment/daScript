@@ -743,6 +743,11 @@ namespace das {
         return module->findStructure(name);
     }
 
+    Enumeration * module_find_enumeration ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
+        if ( !module ) context->throw_error_at(at, "expecting module");
+        return module->findEnum(name);
+    }
+
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
         if ( !fn ) context->throw_error_at(at, "expecting function");
         if ( !fn->builtIn ) context->throw_error_at(at, "expecting built-in interop function");
@@ -1586,6 +1591,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(module_find_structure)>(*this, lib,  "module_find_structure",
             SideEffects::accessExternal, "module_find_structure")
                 ->args({"program","name","context","at"});
+        addExtern<DAS_BIND_FUN(module_find_enumeration)>(*this, lib,  "module_find_enumeration",
+            SideEffects::accessExternal, "module_find_enumeration")
+                ->args({"module","name","context","at"});
         // used variables and functions
         addExtern<DAS_BIND_FUN(get_use_global_variables)>(*this, lib,  "get_use_global_variables",
             SideEffects::invoke, "get_use_global_variables")
