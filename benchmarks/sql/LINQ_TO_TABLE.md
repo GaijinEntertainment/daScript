@@ -4,12 +4,31 @@ Sibling of [LINQ.md](LINQ.md) / [LINQ_TO_DECS.md](LINQ_TO_DECS.md). Plan of reco
 `table<K;V>` / `table<K>` as the 6th `_fold` source, plus the `to_table` sink.
 Edited in-place as PRs land.
 
-Status: **stage 7 committed** (group_by fusion — `can_group_by` + `build_group_by_adapter` on
-`TableAdapter`, riding `plan_group_by_core` with the usage-pruned slot walk as the bucket-fill
-loop; stage 6 = to_table sink; stage 5 = join probe + table-lead joins, 2742f6db2; stage 4 =
+Status: **stage B committed** (point-lookup conjunct extraction — `where(key == X && residual)`
+probes and evaluates the residual on the probed element; stage 7 = group_by fusion, #3103;
+stage 6 = to_table sink; stage 5 = join probe + table-lead joins, 2742f6db2; stage 4 =
 point-lookup folds, ac441c4a0; stage 3 = `%linq!` table sources, 29d23baf6; stage 2 =
 TableAdapter + m7, 571fe879e; stage 1 = `each_kv` builtin, 8751bb9ba; master's fixed-array
 rework merged in after stage 5, 1ab3e6a67; the JIT inline slot walk landed separately, #3100).
+
+Stage B findings:
+- `extract_key_probe` peels the left-assoc `&&` spine: the **leftmost** conjunct must be the
+  key-equality (operand order + invariance/purity gates on X unchanged); the remaining conjuncts
+  AND-rebuild, order-preserving, into a residual evaluated on the probed element only, with a
+  false residual routing to the same miss path. `any(p)`/`count(p)` with a residual ride the
+  element probe (`hit && residual` / `? 1 : 0`).
+- **Leftmost-only is the semantics rule, not a simplification**: keys are unique, so conjuncts
+  right of the key-equality run at most once on both paths — no purity gate needed on the
+  residual (pinned by a bump-counter regression test); a conjunct LEFT of it runs per scan
+  element vs once in the probe, so that order declines and stays the bench's scan control.
+- Dead-generality lesson: a where-run coalescing loop in the matcher was written, then deleted —
+  `collapse_chained_wheres` already merges consecutive wheres at flatten time, so the matcher can
+  never see two `where_` entries. The conjunct peel alone covers both spellings.
+- m7 (2026-06-11 sweep): `point_lookup_residual` (the shape that was a full scan before stage B)
+  466 ns/op INTERP vs the `point_lookup_scan` control's 9967 (~21×); 1270 vs 9049 JIT (~7×) —
+  both normalize to 0.0 ns/elem in the matrix, same cell as the bare probe. The residual probe
+  costs ~2× the bare one per op (the hit path binds the kv pair, copying the value for the
+  residual to read) — still O(1), invisible next to the walk.
 
 Stage 7 findings:
 - **Two overrides were the whole change**: the group_by splice pattern was already adapter-generic
@@ -87,8 +106,8 @@ Stage 4 findings:
 - Scan-semantics mirroring: `first` panics "sequence contains no elements"; `first_or_default`
   binds its default eagerly before the probe (same order as the early-exit lane / linq.das).
 - `collapse_chained_wheres` runs before dispatch, so `where(key==X)|>where(p)` arrives as one
-  `&&` body → correctly declined (compound predicates keep the scan). Conjunct extraction
-  (probe + residual predicate on the probed element) is a named deferred edge below.
+  `&&` body → was correctly declined (compound predicates kept the scan) until stage B built
+  conjunct extraction (probe + residual predicate on the probed element — findings above).
 - m7 INTERP (2026-06-11 sweep): `point_lookup` 0.0 ns/elem (O(1) probe) vs `point_lookup_scan`
   (the same query forced through the walk via a second always-true where) at full scan cost.
 
@@ -275,9 +294,6 @@ reasons" rather than falling out of the architecture).
   upstream-join arm (returns null → tier-2). The fix is a TableJoin analog of `ArrayJoinAdapter`
   (lead loop from the pruned slot walk, srcB hash/probe from the stage-5 pieces); the
   `join_groupby_*` m7 cells are the numbers it would improve. Revisit on demand.
-- **Point-lookup conjunct extraction**: `where(kv.key == X && <residual>)` (incl. the collapsed
-  multi-where form) could probe and evaluate the residual on the probed element only. The matcher
-  currently declines compound predicates; add when a real chain wants it.
 - **Multiple-`from` (cross / SelectMany) over tables**: the unfused `_cross_join` arm passes the
   bare source text so the array×array overload resolves without an `each` unsafe trip; a table
   there has no overload (confusing 30303 cascade). `cross_join` has iterator overloads, so routing
