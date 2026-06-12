@@ -50,4 +50,18 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
+    // GC tests are interp-only under JIT: jitted frames keep locals on the native stack,
+    // so heap_collect can't see a heap pointer whose only reference is a jitted local and
+    // frees it (double-free / reuse-after-collect; Debug memory_model.h assert catches it,
+    // Release passes by luck). Lift only once the JIT spills GC roots somewhere the
+    // collector can scan.
+    if (folder_name == "gc") {
+        let args <- get_command_line_arguments()
+        for (arg in args) {
+            if (arg == "-jit") {
+                *result = false
+                return
+            }
+        }
+    }
 }

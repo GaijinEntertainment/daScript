@@ -264,19 +264,36 @@ replacing the misleading "Internal jit error" panic). The QuotePass gate stays
          reaching JIT from such modules fall back per-function via the new
          DisableJitVisitor `preVisitExprQuote` (warn + disable, replacing whole-file panic).
 - [x] Coverage instead of new jit_tests: lifted the `-jit` folder skips (quote, ast,
-      ast_match, no_aot, gc) in tests/.das_test + the matching `--exclude`s on
+      ast_match, no_aot) in tests/.das_test + the matching `--exclude`s on
       jit_cache_all_tests, and un-marked `[no_jit]` in tests/template/test_push_block_list
       (its stated reason — JIT can't lower ExprQuote — is gone; qmacro_block now JITs).
       Folder results: quote 20/20, ast 1/1, ast_match 380/380 (2 graceful per-function
       fallbacks in daslib/ast_match — macro module, stays raw by design), flatten/no_aot
-      14/14, gc 48/48, template 10/10.
-- [x] NOT quote-related, surfaced while lifting the gc skip: **LLVM JIT does not implement
-      `force_escape_free` / `force_allocate_on_stack`** — three symptoms in tests/gc
-      (heap grows where interp stays flat; scope-exit free aborts "not a chunk pointer"
-      on JIT-allocated owning nodes under persistent_heap; nested `new Inner` make-struct
-      field arrives null). Scoped per-function `[no_jit]` markers on the workers in
-      test_gc_allocate_on_stack / test_gc_escape_free_frees / test_gc_escape_free keep the
-      rest of the folder JIT-covered. Upstream fix is its own work item.
+      14/14, template 10/10. The gc skip was lifted too, then RESTORED — see next item.
+- [x] NOT quote-related, surfaced (and re-buried) while lifting the gc skip: tests/gc is
+      unsound under JIT for two reasons. (1) **LLVM JIT does not implement
+      `force_escape_free` / `force_allocate_on_stack`** — heap grows where interp stays
+      flat; scope-exit free aborts "not a chunk pointer" on JIT-allocated owning nodes
+      under persistent_heap; nested `new Inner` make-struct field arrives null. (2) The
+      one Debug CI caught after the per-function `[no_jit]` round: **`heap_collect` cannot
+      see a heap pointer whose only reference is a local in a jitted frame** (native-stack
+      locals are invisible to the collector) — the object is freed as garbage, and the
+      test's later `delete` double-frees (Debug memory_model.h:109 assert; Release passes
+      by luck until the slot is reused — probe: interp prints n.x=7, jit prints n.x=-1,
+      with or without force_escape_free). (2) is systemic for GC-semantics tests, so the
+      folder-level `-jit` skip in tests/.das_test is restored (root cause in the comment)
+      and the scoped `[no_jit]` markers were reverted. Lift again only when the JIT spills
+      GC roots somewhere the collector can scan. Upstream fix is its own work item.
+- [x] Pre-existing CI infra bug exposed by the gc crash (NOT this PR's doing, heals once
+      the gc skip is back): when the main `-jit` sweep crashes, build.yml falls back to
+      `--isolated-mode` — 32 worker subprocesses all spawn with `-jit -jit`, whose harness
+      dll hash differs from the outer run's prewarmed one → every worker cache-misses the
+      SAME dll path simultaneously and they race writing the same `.o`/`.dll`: "file
+      format not recognized" (half-written .o), "failed to set dynamic section sizes:
+      file truncated" (rewritten mid-link), and the llvm_jit_run.das:342 post-write
+      verify assert (dll swapped between write and reopen). Cost 3 collateral
+      typer_errors "failures" on linux Debug. Fix candidates: lock/atomic-rename in
+      write_dll, or prewarm the worker-flag-combination dll before fan-out.
 - [x] Local full-tree `-jit` sweep caveat (NOT this PR's doing): the in-process sweep
       aborts (exit 127, no diagnostic) at tests/language/table_operations.das
       `ta_test_lock_panic` — a deliberate table-lock panic inside jitted code fails to

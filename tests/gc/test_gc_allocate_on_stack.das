@@ -55,10 +55,6 @@ def sum_plain_new() : int {
 }
 
 // `new Node(x = .., y = ..)` - ExprAscend over make-local -> built directly in the frame
-// no_jit: LLVM JIT doesn't implement force_allocate_on_stack for the ascend lowering —
-// it heap-allocates (failing the flat-heap assert), and the owning variant's scope-exit
-// free then aborts on the mismatched pointer
-[no_jit]
 def sum_ascend_new() : int {
     var total = 0
     for (i in range(N)) {
@@ -69,7 +65,6 @@ def sum_ascend_new() : int {
 }
 
 // shell on the stack; the owned array is still on the heap and is freed at scope exit
-[no_jit] // same force_allocate_on_stack gap as sum_ascend_new — crashes under JIT
 def sum_owning() : int {
     var total = 0
     for (i in range(N)) {

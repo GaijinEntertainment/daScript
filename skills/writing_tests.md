@@ -33,16 +33,20 @@ false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests
 `tests/.das_test` defines `can_visit_folder(folder_name, result)` — dastest consults it
 per subfolder during file collection (only for the `.das_test` at the `--test <root>`
 argument; directly naming a child folder bypasses it). It gates folders on module
-availability (`dasHV`, `dasSQLITE`, …) and on sweep mode by scanning argv — currently
-only `--use-aot` checks remain (e.g. `ast`, `ast_match`, `no_aot`); the former `-jit`
-skips were lifted once `jit_enabled` started triggering daslib/quote lowering. Two traps:
+availability (`dasHV`, `dasSQLITE`, …) and on sweep mode by scanning argv — `--use-aot`
+skips `ast`, `ast_match`, `no_aot`; `-jit` skips only `gc` (heap_collect can't see heap
+pointers whose only reference is a local in a jitted frame — native-stack locals are
+invisible to the collector, so GC-semantics tests are interp-only; the other former `-jit`
+skips were lifted once `jit_enabled` started triggering daslib/quote lowering). Two traps:
 a whole-folder JIT/AOT failure usually means a missing entry here, NOT a per-file fix; and
 the `jit_cache_all_tests` prewarm target (utils/CMakeLists.txt) does NOT consult it — its
 `--exclude` list mirrors the skips manually and must be updated in the same change.
 Per-function `[no_jit]` is the finer-grained alternative when only some functions in a
 kept folder can't JIT — put it on the function whose CODE diverges under JIT, not just the
 `[test]` wrapper (JITted callees replace their SimNode bodies, so an interpreted wrapper
-still calls jitted workers); see the `force_escape_free` workers in tests/gc.
+still calls jitted workers). Beware Release-blind divergence: memory bugs (double-free,
+reuse-after-collect) only trip the Debug memory_model.h assert, so a green local Release
+sweep does NOT prove a lifted skip is sound — Debug CI is the oracle.
 
 ## Test file structure
 
