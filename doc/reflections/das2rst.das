@@ -987,7 +987,7 @@ def document_module_fuzzer(_root : string) {
 def document_module_match(_root : string) {
     var mod = find_module("match")
     var groups <- array<DocGroup>(
-        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
+        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr|match_peel_r2v)$%%))
     )
     document("Pattern matching", mod, "match.rst", groups)
 }
@@ -1017,7 +1017,7 @@ def document_module_linq(_root : string) {
 def document_module_linq_boost(_root : string) {
     var mod = find_module("linq_boost")
     var groups <- array<DocGroup>(
-        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
+        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr|match_peel_r2v)$%%))
     )
     document("Boost module for LINQ", mod, "linq_boost.rst", groups)
 }
