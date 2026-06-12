@@ -1,0 +1,135 @@
+name: nightly daspkg index
+
+# Builds daslang master, then daspkg-installs every package listed in the
+# daspkg-index (borisbat/daspkg-index packages.json) at its default-branch
+# HEAD. The list is fetched at RUN time, so newly published packages are
+# picked up automatically — no workflow edit needed. External ABI breakage
+# surfaces here as a nightly signal instead of inside an unrelated PR's
+# extended_checks run. COVERAGE_GAP.md stage 4.
+#
+# Linux-only by design: the recorded incident class (external module compiled
+# against changed daslang headers) is a compile error, platform-independent.
+#
+# The scheduled run always sweeps master (GitHub runs cron from the default
+# branch). workflow_dispatch from a non-default branch deliberately sweeps
+# THAT branch — an on-demand externals check for ABI-touching PRs (see
+# skills/abi_break_sweep.md); the step summary names the ref it swept.
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  index_sweep:
+    runs-on: ubuntu-latest-fat
+    timeout-minutes: 90
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Install: Required Dev Packages"
+      # mirrors extended_checks' linux lane: apt.llvm.org for llvm-22-dev
+      # (release_modules.txt flips DAS_LLVM_DISABLED=OFF), mesa/glfw/x11 for
+      # the dasImgui-family native package builds
+      run: |
+        set -eux
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+          | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm.gpg
+        echo 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' \
+          | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update -y
+        sudo apt-get install --no-install-recommends -y \
+          mesa-common-dev \
+          libglu1-mesa-dev \
+          libgl1-mesa-dev \
+          libglfw3-dev \
+          libx11-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libxinerama-dev \
+          libxi-dev \
+          llvm-22-dev \
+          jq
+
+    # sccache with local-disk backend, RESTORE-ONLY from extended_checks'
+    # master-seeded slot — this workflow never saves, so it cannot clobber
+    # the per-PR cache slots. A cold slot just means a slower build.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+    - run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+    - name: "Restore sccache objects (read-only)"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-extended-linux-64
+
+    - name: "Build: Daslang (Release)"
+      # mirrors extended_checks' linux build (clang + Ninja + release
+      # modules; dasClangBind OFF for the same libclang/dasLLVM collision)
+      run: |
+        set -eux
+        ACTIVE_MODULES=$(grep -v "^#" ci/release_modules.txt | cut -d':' -f2 | sed 's|^|-D|' | xargs)
+        CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build \
+          -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DDAS_CLANG_BIND_DISABLED=ON \
+          -G Ninja $ACTIVE_MODULES
+        cmake --build ./build --config Release --target daslang
+
+    - name: "Sweep: install every index package at default-branch HEAD"
+      # default-branch HEAD (not release-tag resolution): release tags lag
+      # legitimately after an ABI sweep until externals re-release; branch
+      # HEAD is the externals-merge-first invariant this nightly monitors.
+      # Index order puts dasImgui before its dependents, so dependency
+      # installs reuse the branch-HEAD copy instead of re-resolving.
+      # Resolution goes over the git protocol (ls-remote --symref), not the
+      # GitHub API: anonymous, no rate limits on shared runner IPs, and the
+      # same transport the install's clone uses anyway.
+      run: |
+        set -eux
+        curl -fsSL https://raw.githubusercontent.com/borisbat/daspkg-index/main/packages.json -o /tmp/packages.json
+        failed=()
+        summary=""
+        while IFS=$'\t' read -r name url; do
+          url="${url%$'\r'}"   # jq emits CRLF on some hosts
+          repo="${url#github.com/}"
+          def=$(git ls-remote --symref "https://$url" HEAD | awk '/^ref:/ {sub("refs/heads/","",$2); print $2}') || def=""
+          if [ -z "$def" ]; then
+            echo "::error::$name: cannot resolve default branch for $repo"
+            failed+=("$name")
+            summary+="| $name | :x: default-branch resolve failed |\n"
+            continue
+          fi
+          echo "::group::install $name ($repo @ $def)"
+          if ./bin/daslang utils/daspkg/main.das -- install "$name" --branch "$def"; then
+            summary+="| $name | :white_check_mark: $def |\n"
+          else
+            failed+=("$name")
+            summary+="| $name | :x: install failed ($def) |\n"
+          fi
+          echo "::endgroup::"
+        done < <(jq -r '.[] | [.name, .url] | @tsv' /tmp/packages.json)
+        printf '## daspkg-index sweep — %s @ %s\n\n| package | status |\n|---|---|\n' \
+          "$GITHUB_REF_NAME" "$(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+        printf '%b' "$summary" >> "$GITHUB_STEP_SUMMARY"
+        if [ ${#failed[@]} -gt 0 ]; then
+          echo "FAILED: ${failed[*]}"
+          exit 1
+        fi
