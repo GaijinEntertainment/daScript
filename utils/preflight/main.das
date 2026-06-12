@@ -6,9 +6,11 @@ options persistent_heap
 // and the manual commands this tool automates: skills/preflight.md.
 //
 // Fast tier (default): format --verify, lint on changed .das, clang
-// syntax-only pass on changed C++. --full adds dasgen freshness, the
-// CI-only-das compile sweep, the six doc gates, tests-cpp (ctest -L small),
-// interpreter/JIT/AOT suites, and the sequence smoke.
+// frontend (syntax-only) pass on changed C++ — escalates to a full
+// src+tests-cpp sweep when a header changed, since a header edit can break
+// template instantiation in TUs the diff never touched. --full adds dasgen
+// freshness, the CI-only-das compile sweep, the six doc gates, tests-cpp
+// (ctest -L small), interpreter/JIT/AOT suites, and the sequence smoke.
 //
 // Cross-platform: Windows / macOS / Linux+WSL. Subprocesses go through
 // popen_argv (no shell, no quoting trap), with one exception: the sequence
@@ -241,6 +243,14 @@ def find_clang(cli_path, build_dir : string) : tuple<exe : string; is_cl : bool>
     return (exe = "", is_cl = false)
 }
 
+// TUs the clang frontend pass can compile standalone: core + tests-cpp.
+// Module/util TUs need external or build-generated headers; CI's clang-cl
+// lane covers those.
+def in_core_scope(path : string) : bool {
+    let g = to_generic_path(path)
+    return starts_with(g, "src/") || starts_with(g, "include/") || starts_with(g, "tests-cpp/")
+}
+
 def collect_changed_files(base : string; var das_files, cpp_files : array<string>&; var hdr_count : int&) {
     var seen : table<string>
     let probe = run_argv(["git", "rev-parse", "--verify", "--quiet", base])
@@ -263,8 +273,13 @@ def collect_changed_files(base : string; var das_files, cpp_files : array<string
                 das_files |> push(f)
             } elif (ext == ".cpp" || ext == ".cc") {
                 cpp_files |> push(f)
-            } elif (ext == ".h" || ext == ".hpp") {
-                hdr_count ++
+            } elif (ext == ".h" || ext == ".hpp" || ext == ".inc") {
+                // core-scope only — the sole consumer is the cpp-syntax
+                // full-sweep trigger, and module headers don't ripple into
+                // core TUs (modules depend on core, not the other way)
+                if (in_core_scope(f)) {
+                    hdr_count ++
+                }
             }
         }
     }
@@ -312,25 +327,44 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
 
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    if (empty(ctx.changed_cpp)) {
-        let note = ctx.changed_hdr > 0 ? " — {ctx.changed_hdr} changed header(s) NOT validated by this gate; compile their includers (cmake --build) or rely on CI's clang lanes" : ""
+    if (empty(ctx.changed_cpp) && ctx.changed_hdr == 0) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .cpp files changed vs {ctx.base}{note}")
+            detail = "no C++ changed vs {ctx.base}")
     }
     if (empty(ctx.clang)) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "clang not found — install LLVM (clang-cl/clang on PATH) or pass --clang <path>")
     }
-    // in-scope TUs: core + tests-cpp. Module/util TUs need external or
-    // build-generated headers; CI's clang-cl lane covers those.
     var in_scope : array<string>
     var skipped : array<string>
-    for (f in ctx.changed_cpp) {
-        let g = to_generic_path(f)
-        if (starts_with(g, "src/") || starts_with(g, "include/") || starts_with(g, "tests-cpp/")) {
+    var sweep_note = ""
+    if (ctx.changed_hdr > 0) {
+        // a changed header can break template instantiation in any TU that
+        // includes it — frontend-sweep ALL core TUs instead of just the
+        // changed ones (no codegen, so the full sweep stays in seconds)
+        let ls = run_argv(["git", "ls-files", "--", "src", "tests-cpp"])
+        if (ls.rc != 0) {
+            return GateResult(name = "cpp-syntax", status = GateStatus.Fail, seconds = seconds_since(t0),
+                detail = "git ls-files failed (rc={ls.rc}) — cannot enumerate TUs for the header-change sweep", output = ls.out)
+        }
+        for (f in non_empty_lines(ls.out)) {
+            let ext = extension(f)
+            continue if ((ext != ".cpp" && ext != ".cc") || starts_with(f, "tests-cpp/3rdparty/"))
             in_scope |> push(f)
-        } else {
-            skipped |> push(f)
+        }
+        sweep_note = "{ctx.changed_hdr} changed header(s) → full sweep: "
+        for (f in ctx.changed_cpp) {
+            if (!in_core_scope(f)) {
+                skipped |> push(f)
+            }
+        }
+    } else {
+        for (f in ctx.changed_cpp) {
+            if (in_core_scope(f)) {
+                in_scope |> push(f)
+            } else {
+                skipped |> push(f)
+            }
         }
     }
     if (empty(in_scope)) {
@@ -343,7 +377,12 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     } else {
         flags <- ["-fsyntax-only", "-std=c++17", "-w"]
     }
-    let includes = ["include", "3rdparty/fmt/include", "3rdparty/uriparser/include", "tests-cpp/3rdparty"]
+    var includes <- ["include", "3rdparty/fmt/include", "3rdparty/uriparser/include", "tests-cpp/3rdparty"]
+    if (!empty(ctx.build_dir)) {
+        // configure-time generated headers (modules/external_*.inc) — without
+        // this root, TUs like src/simulate/fs_file_info.cpp false-fail
+        includes |> push(path_join(ctx.build_dir, "include"))
+    }
     let workers = compute_worker_count(length(in_scope), ctx.jobs)
     let chunks <- chunk_files(in_scope, workers)
     var argvs : array<array<string>>
@@ -374,7 +413,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
             }
         }
     }
-    var detail = "{length(in_scope)} file(s) via {ctx.clang}"
+    var detail = "{sweep_note}{length(in_scope)} file(s) via {ctx.clang}"
     if (!empty(skipped)) {
         detail = "{detail}; out of scope: {join(skipped, ", ")}"
     }
@@ -721,7 +760,7 @@ def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors pre-push + CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das, zero warnings"),
-        GateInfo(name = "cpp-syntax", full_only = false, doc = "clang syntax-only pass on changed C++ (MSVC-vs-clang 80/20)"),
+        GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
         GateInfo(name = "docs", full_only = true, doc = "the six doc.yml gates (das2rst, stubs, uncategorized, untracked, sphinx ×2)"),
