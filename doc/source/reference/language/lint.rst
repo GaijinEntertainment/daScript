@@ -492,7 +492,11 @@ The rule skips: workhorse by-value parameters (a ``var int`` is a mutable
 local copy, not a caller burden), class methods and ``[extern]`` stubs
 (signature dictated externally), ``finalize`` overloads (the delete protocol
 requires ``var``), address-taken functions (signature conforms to a
-function-pointer type), and underscore-prefixed names.
+function-pointer type), and underscore-prefixed names. It also skips a
+parameter whose pointer-valued data flows into a mutable-pointee slot —
+a store like ``node.next = b.p`` needs the pointer non-const (error 30915),
+which only ``var b`` provides. Slots that accept a const pointer
+(``void?``, ``Foo const?``, and const-pointer results) do not suppress.
 
 **Cascade:** a parameter that is itself passed onward to a mutable-ref slot
 is skipped — the leaf callee is flagged first; once its signature is fixed,

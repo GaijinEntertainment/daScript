@@ -44,6 +44,11 @@ def no_warn_element_peel() {
     print("{probe_struct(hs[0])}")
 }
 
+// note: the pointer-sink side of the suppression (a pointer field flowing into a
+// mutable-pointee slot demands the root variable stay var) is unobservable here —
+// LINT003's arms gate on canCloneFromConst, which is already false for any
+// pointer-carrying type. lint014_unwritten_var_argument.das pins those shapes
+
 // === Positives — LINT003 still fires when nothing demands mutability ===
 
 def warn_simple() : int {
@@ -55,3 +60,4 @@ def warn_struct_read_only() : int {
     var h = Holder(value = 2)   // LINT003
     return h.value
 }
+

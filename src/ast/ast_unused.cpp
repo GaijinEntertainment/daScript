@@ -111,6 +111,11 @@ namespace das {
             var->access_info = 0;
         }
         void MarkSideEffects ( Module & mod ) {
+            // function bodies stamp access_info on globals too (preVisitLet only covers locals
+            // and arguments) — clear here or the bits go sticky across buildAccessFlags rounds
+            for ( auto & var : mod.globals.each() ) {
+                var->access_info = 0;
+            }
             for ( auto & fn : mod.functions.each() ) {
                 if (!fn->isTemplate && !fn->builtIn) {
                     fn->knownSideEffects = false;
@@ -369,11 +374,13 @@ namespace das {
             }
         }
         // a pointer value copied out of a const variable is itself const (`Foo? const`) and no
-        // longer matches a mutable-pointee destination (error 30915) — flowing a pointer into
-        // such a slot demands the source variable stay mutable
+        // longer matches a mutable-pointee destination (error 30915/30343) — flowing a pointer
+        // into such a slot demands the source variable stay mutable. const-pointer (`Foo? const`),
+        // void?, and const-pointee (`Foo const?`) slots all accept a const source, so they don't
         void markPassMutablePointerSink ( const TypeDeclPtr & slotType, Expression * source ) {
-            if ( !slotType || slotType->baseType!=Type::tPointer ) return;
-            if ( slotType->firstType && slotType->firstType->constant ) return;
+            if ( !slotType || slotType->baseType!=Type::tPointer || slotType->constant ) return;
+            if ( !slotType->firstType || slotType->firstType->baseType==Type::tVoid ) return;
+            if ( slotType->firstType->constant ) return;
             propagatePassMutable(source);
         }
         // make-struct/variant/tuple/array destinations are not worth a per-field type lookup —
