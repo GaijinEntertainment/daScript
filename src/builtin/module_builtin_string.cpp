@@ -493,7 +493,7 @@ namespace das
     char * string_repeat ( const char * str, int count, Context * context, LineInfoArg * at ) {
         uint32_t len = stringLengthSafe ( *context, str );
         if ( !len || count<=0 ) return nullptr;
-        char * res = context->allocateString(nullptr, len * count, at);
+        char * res = context->allocateString(nullptr, uint64_t(len) * uint64_t(count), at);
         for ( char * s = res; count; count--, s+=len ) {
             memcpy ( s, str, len );
         }

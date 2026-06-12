@@ -121,7 +121,7 @@ int main(int argc, char ** argv) {
         das_context_eval_with_catch(ctx, fn_fill, args);
         if (das_context_get_exception(ctx)) { printf("exception in fill_squares\n"); goto done; }
 
-        printf("fill_squares(_, 6) -> size=%u, contents=", owned.size);
+        printf("fill_squares(_, 6) -> size=%llu, contents=", (unsigned long long)owned.size);
         for (uint32_t i = 0; i < owned.size; i++) {
             int v = *(int*)das_array_at(&owned, i, sizeof(int));
             printf("%s%d", i ? "," : "", v);
