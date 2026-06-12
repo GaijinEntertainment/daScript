@@ -149,12 +149,13 @@ def public clone_file_info(b : FileInfoInitData) : FileInfo? {
 var private g_resolved_file_infos : table<string; FileInfo?>
 
 def public resolve_file_info(b : FileInfoInitData) : FileInfo? {
-    //! Stable FileInfo for reconstructed LineInfos: one interned dummy per file name
+    //! Stable FileInfo for reconstructed LineInfos: one interned dummy per (file name, tab size)
     //! (per context), instead of a fresh allocation per evaluation.
-    if (!key_exists(g_resolved_file_infos, b.name)) {
-        g_resolved_file_infos[b.name] = clone_file_info(b.name, b.tabSize)
+    let key = "{b.name}:{b.tabSize}"
+    if (!key_exists(g_resolved_file_infos, key)) {
+        g_resolved_file_infos[key] = clone_file_info(b.name, b.tabSize)
     }
-    return g_resolved_file_infos[b.name]
+    return g_resolved_file_infos[key]
 }
 
 let blacklist = [
@@ -209,10 +210,7 @@ def private create_string_expr(name) {
     return new ExprConstString(value := name);
 }
 
-def private normalize_source_path(p : string) : string {
-    // the same source file may be opened via different spellings at AOT-generation time
-    // and at runtime (slash form, drive-letter case); the path is baked into the lowered
-    // code as a string constant, so it must hash identically — normalize both axes
+def private fix_path_spelling(p : string) : string {
     var r = p |> replace("\\", "/")
     if (length(r) >= 2) {
         r = r |> modify_data() $(var arr) {
@@ -223,6 +221,18 @@ def private normalize_source_path(p : string) : string {
         }
     }
     return r
+}
+
+def private normalize_source_path(p : string) : string {
+    // the same source file may be opened via different spellings at AOT-generation time
+    // and at runtime (slash form, drive-letter case, dasroot-absolute vs repo-relative);
+    // the path is baked into the lowered code as a string constant, so it must hash
+    // identically — canonicalize to dasroot-relative (machine-independent), else absolute
+    var root = fix_path_spelling(get_das_root())
+    if (!(root |> ends_with("/"))) {
+        root += "/"
+    }
+    return fix_path_spelling(p) |> trim_prefix(root)
 }
 
 

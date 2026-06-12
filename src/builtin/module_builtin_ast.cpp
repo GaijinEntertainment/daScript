@@ -813,7 +813,10 @@ namespace das {
             // subobject is not at offset 0, the cast chain performs the base adjustment.
             return apply(static_cast<vector<MakeFieldDeclPtr>*>((MakeStruct*)vec));
         }
-        if (type->baseType == Type::tPointer || tstr == "string") {
+        if (tstr == "string") {
+            return apply(static_cast<vector<const char *>*>(vec));
+        }
+        if (type->baseType == Type::tPointer) {
             // post-gc_node every AST node vector is a plain vector of raw pointers
             return apply(static_cast<vector<void*>*>(vec));
         }

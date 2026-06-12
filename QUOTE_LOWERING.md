@@ -14,8 +14,8 @@ which is plain das code and compiles in all three tiers.
 - **Wiring = option (a):** static `require daslib/quote` from `daslib/templates_boost.das`.
   Activation stays cop-driven via the existing `policies.aot_macros` check
   (quote.das:410) — the pass is inert when the policy is off; `module quote shared` makes
-  the inert require near-free. (Rejected: root-level `addExtraModule` injection — extras l
-  and on the program root only, but QuotePass must fire inside each macro module's own
+  the inert require near-free. (Rejected: root-level `addExtraModule` injection — extras land
+  on the program root only, but QuotePass must fire inside each macro module's own
   compilation, where `[infer_macro]` visibility follows that module's require chain.)
 - **Tests are mandatory before anything ships.** Basic suite first; lifting `no_aot`/jit
   gates on existing tests is *extra* coverage afterwards, not a substitute.
@@ -225,6 +225,14 @@ Findings from the first test_aot build of the lowered fixture's generated C++:
       own-hash → error[50101] on every `` `quote`lowered`N ``. Fixed at the point the
       constant enters the tree: `normalize_source_path` in quote.das (separators → `/`,
       drive letter uppercased). Exactly the skill-documented mismatch class.
+- [x] **Second axis of the same class (review round 1):** dasAot generation gets the
+      file as a dasroot-ABSOLUTE path (CMake `${PROJECT_SOURCE_DIR}`), a runtime
+      `--test tests/...` compile gets it REPO-RELATIVE → same 50101. (The first local
+      "CI-form green" had masked it: hand-probe-generated stubs with relative spellings
+      survived the build's missing daslib-dep tracking.) Fix: `normalize_source_path`
+      now canonicalizes to **dasroot-relative** (`trim_prefix(get_das_root())` after the
+      spelling fix), absolute only outside dasroot. Side effect: baked constants — and
+      therefore stub hashes — are machine-independent (no `/home/runner` vs `D:/Work`).
 - [x] CI-form full tree under test_aot after the fix: **9439 tests, 9433 passed,
       0 failed, 0 errors, 6 skipped** — tests/quote linking and passing under real AOT.
 - [ ] Hash-mismatch fallback test: AOT objects built with `-aot-macros`, runtime without
