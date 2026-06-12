@@ -2670,6 +2670,10 @@ let_variable_name_with_pos_list
         $$ = $list;
         delete $name;
     }
+    |   let_variable_name_with_pos_list[list] ',' MTAG_I '(' expr[subexpr] ')' {
+        $list->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,@subexpr),$subexpr));
+        $$ = $list;
+    }
     |   let_variable_name_with_pos_list[list] ',' NAME[name] DAS_AKA NAME[akaname] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         das_checkName(scanner,*$akaname,tokAt(scanner,@akaname));
@@ -2997,6 +3001,10 @@ variable_name_with_pos_list
         $list->push_back(VariableNameAndPosition(*$name,"",tokAt(scanner,@name)));
         $$ = $list;
         delete $name;
+    }
+    |   variable_name_with_pos_list[list] ',' MTAG_I '(' expr[subexpr] ')' {
+        $list->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,@subexpr),$subexpr));
+        $$ = $list;
     }
     |   variable_name_with_pos_list[list] ',' NAME[name] DAS_AKA NAME[akaname] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));

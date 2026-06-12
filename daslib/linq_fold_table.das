@@ -39,14 +39,16 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
             break if ($e(breakGuard))
         }
     }
-    // Literal loop-var names below: the qmacro grammar only allows $i() in the FIRST iterator slot of a multi-source for, so the zip header uses fixed names (same trade ZipAdapter makes with itA/itB) — they live only inside the generated invoke. keys() deliberately yields NON-const elements (writable temp copies), so the engine-visible bind is a `let` rebind of the loop var — keys are workhorse types, the copy is free, and downstream ==const composition (push_clone of a bare projected key) needs the const.
+    // keys() deliberately yields NON-const elements (writable temp copies), so the engine-visible bind is a `let` rebind of the loop var — keys are workhorse types, the copy is free, and downstream ==const composition (push_clone of a bare projected key) needs the const.
+    let kIter = qn("tkvk", at)
+    let vIter = qn("tkvv", at)
     if (lane == TableLane.KEYS) {
         inner |> push <| qmacro_expr() {
-            let $i(bindName) = _tab_kv_key_
+            let $i(bindName) = $i(kIter)
         }
         inner |> push(body)
         return <- qmacro_block() {
-            for (_tab_kv_key_ in keys($i(srcName))) {
+            for ($i(kIter) in keys($i(srcName))) {
                 $b(inner)
             }
         }
@@ -61,15 +63,14 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
         }
     }
     // KV lane
-    let vName = "_tab_kv_value_"
     var (allUsed, usedFields) = collect_row_usage(body, bindName)
     if (allUsed) {
         inner |> push <| qmacro_expr() {
-            let $i(bindName) = (key = _tab_kv_key_, value = _tab_kv_value_)
+            let $i(bindName) = (key = $i(kIter), value = $i(vIter))
         }
         inner |> push(body)
         return <- qmacro_block() {
-            for (_tab_kv_key_, _tab_kv_value_ in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
+            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
                 $b(inner)
             }
         }
@@ -77,31 +78,31 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
     let useKey = usedFields |> has_value("key")
     let useValue = usedFields |> has_value("value")
     let kLocal = qn("tkey", at)
-    var fieldToLocal <- { "key" => kLocal, "value" => vName }
+    var fieldToLocal <- { "key" => kLocal, "value" => vIter }
     body = flatten_row_to_locals(body, bindName, fieldToLocal)
     if (useKey) {
         inner |> push <| qmacro_expr() {
-            let $i(kLocal) = _tab_kv_key_
+            let $i(kLocal) = $i(kIter)
         }
     }
     inner |> push(body)
     if (useValue && !useKey) {
         return <- qmacro_block() {
-            for ($i(vName) in values($i(srcName))) {
+            for ($i(vIter) in values($i(srcName))) {
                 $b(inner)
             }
         }
     }
     if (useKey && useValue) {
         return <- qmacro_block() {
-            for (_tab_kv_key_, _tab_kv_value_ in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
+            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
                 $b(inner)
             }
         }
     }
     // key-only AND no-field-touched (e.g. bare count walk) both ride the cheaper keys iterator
     return <- qmacro_block() {
-        for (_tab_kv_key_ in keys($i(srcName))) { // nolint:LINT002 body may not read the key (bare-count walk)
+        for ($i(kIter) in keys($i(srcName))) { // nolint:LINT002 body may not read the key (bare-count walk)
             $b(inner)
         }
     }

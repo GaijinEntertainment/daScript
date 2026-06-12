@@ -851,6 +851,28 @@ class private QRulesVisitor : AstVisitor {
             arg.name := new_tag_name
         }
     }
+    def override preVisitExprLetVariable(expr : ExprLet?; var arg : VariablePtr; lastArg : bool) : void {
+        //! Visits let variable and processes per-variable tags (non-first `$i(...)` slots of a
+        //! multi-name declaration; the first slot travels as an ExprTag around the whole let).
+        if (arg.flags.tag) {
+            if (arg.source == null) {
+                compiling_program() |> macro_error(arg.at, "variable '{arg.name}' of let must have tag source")
+                failed = true
+                return
+            }
+            let new_tag_name = "temp`var`{tag_index++}`{arg.at.line}`{arg.at.column}"
+            rblock.list |> emplace_new <| new ExprCall(at = arg.at,
+                name := "renameVariable",
+                arguments := array<Expression?>(
+                    new ExprVar(at = arg.at, name := "rules"),
+                    new ExprConstString(at = arg.at, value := new_tag_name) |> generatedExpr(),
+                    clone_expression(arg.source) |> generatedExpr()
+                ))
+            arg.name := new_tag_name
+            arg.flags ^= VariableFlags.tag
+            arg.source := null
+        }
+    }
     def override preVisitExprFor(var expr : ExprFor?) : void {
         //! Visits for-loop expression and processes iterator tags.
         for (itn, tag in expr.iterators, expr.iteratorsTags) {
