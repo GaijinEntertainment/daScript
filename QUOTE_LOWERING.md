@@ -247,14 +247,94 @@ JIT work in scope before then is the Phase 1 diagnostic (clean `unsupported` mes
 replacing the misleading "Internal jit error" panic). The QuotePass gate stays
 `aot_macros`-only until this phase; extending it to `jit_enabled` lands here.
 
-- [ ] Extend QuotePass gate to `jit_enabled`.
-- [ ] `tests/jit_tests/` coverage for quote under `options jit` (lowered path through
-      LlvmJitVisitor — make-struct of handled types, `to_array_move`, by-name lookups).
+- [x] Extend QuotePass gate to `jit_enabled` (2026-06-12). Two traps found on first contact,
+      both via `daslib/typemacro_boost`:
+      1. **Wrapper return type must be the raw quote's type.** `fn.result = autoinfer` leaked
+         the concrete node type (`quote(0)` → `ExprConstInt?` instead of `Expression?`),
+         breaking `cond ? clone_expression(x) : quote(0)` (30411, cond arms must match
+         exactly). Fix: `fn.result = clone_type(expr._type)` — identity by construction.
+      2. **Macro-module programs must not lower under the jit trigger.** Macro contexts are
+         never JITted (llvm_macro's `is_compiling_macros()` skip), and the lowered
+         construction frames overflowed the macro-context stack at apply time
+         (`stack overflow while calling @typemacro_boost::\`quote\`lowered\`28`). Predicate
+         gotcha: `is_compiling_macros()` reads `Program::isCompilingMacros`, which is only
+         true during `makeMacroModule`'s simulate — at infer time (when QuotePass runs) use
+         `prog.flags.needMacroModule` instead (set at annotation-apply, pre-infer). The
+         infer-time noAot-skip in ast_infer_type.cpp mirrors the same predicate. Raw quotes
+         reaching JIT from such modules fall back per-function via the new
+         DisableJitVisitor `preVisitExprQuote` (warn + disable, replacing whole-file panic).
+- [x] Coverage instead of new jit_tests: lifted the `-jit` folder skips (quote, ast,
+      ast_match, no_aot) in tests/.das_test + the matching `--exclude`s on
+      jit_cache_all_tests, and un-marked `[no_jit]` in tests/template/test_push_block_list
+      (its stated reason — JIT can't lower ExprQuote — is gone; qmacro_block now JITs).
+      Folder results: quote 20/20, ast 1/1, ast_match 380/380 (2 graceful per-function
+      fallbacks in daslib/ast_match — macro module, stays raw by design), flatten/no_aot
+      14/14, template 10/10. The gc skip was lifted too, then RESTORED — see next item.
+- [x] NOT quote-related, surfaced (and re-buried) while lifting the gc skip: tests/gc is
+      unsound under JIT for two reasons. (1) **LLVM JIT does not implement
+      `force_escape_free` / `force_allocate_on_stack`** — heap grows where interp stays
+      flat; scope-exit free aborts "not a chunk pointer" on JIT-allocated owning nodes
+      under persistent_heap; nested `new Inner` make-struct field arrives null. (2) The
+      one Debug CI caught after the per-function `[no_jit]` round: **`heap_collect` cannot
+      see a heap pointer whose only reference is a local in a jitted frame** (native-stack
+      locals are invisible to the collector) — the object is freed as garbage, and the
+      test's later `delete` double-frees (Debug memory_model.h:109 assert; Release passes
+      by luck until the slot is reused — probe: interp prints n.x=7, jit prints n.x=-1,
+      with or without force_escape_free). (2) is systemic for GC-semantics tests, so the
+      folder-level `-jit` skip in tests/.das_test is restored (root cause in the comment)
+      and the scoped `[no_jit]` markers were reverted. Lift again only when the JIT spills
+      GC roots somewhere the collector can scan. Upstream fix is its own work item.
+- [x] Pre-existing CI infra bug exposed by the gc crash (NOT this PR's doing, heals once
+      the gc skip is back): when the main `-jit` sweep crashes, build.yml falls back to
+      `--isolated-mode` — 32 worker subprocesses all spawn with `-jit -jit`, whose harness
+      dll hash differs from the outer run's prewarmed one → every worker cache-misses the
+      SAME dll path simultaneously and they race writing the same `.o`/`.dll`: "file
+      format not recognized" (half-written .o), "failed to set dynamic section sizes:
+      file truncated" (rewritten mid-link), and the llvm_jit_run.das:342 post-write
+      verify assert (dll swapped between write and reopen). Cost 3 collateral
+      typer_errors "failures" on linux Debug. Fix candidates: lock/atomic-rename in
+      write_dll, or prewarm the worker-flag-combination dll before fan-out.
+- [x] Local full-tree `-jit` sweep caveat (NOT this PR's doing): the in-process sweep
+      aborts (exit 127, no diagnostic) at tests/language/table_operations.das
+      `ta_test_lock_panic` — a deliberate table-lock panic inside jitted code fails to
+      unwind to `recover` and kills the process. **Pre-existing**: reproduces with master
+      daslib state, and the content-addressed dll hash is identical with/without the
+      Phase 5 changes (same codegen input). Local-env specific (LLVM 22.1.5 Windows,
+      opt-level 3); master CI Windows -jit is green (different LLVM, plus the
+      `|| --isolated-mode` fallback built into the CI step). Local full-tree signal
+      obtained with `--exclude table_operations --exclude test_linq_table_source` (the
+      second file is just the next deliberate-panic test the abort moves to); CI is the
+      authoritative gate.
+- [x] **Third trap, found only by the full sweep (order-dependent linq failures):** a
+      module that is macro-CALLED but not itself a macro module (daslib/linq_fold_decs —
+      plain functions invoked from linq_boost's fold macros) has `needMacroModule ==
+      false`, so it DOES lower under the jit trigger — and its lowered quotes then
+      evaluate at macro-apply time on the calling macro module's macro-context stack:
+      `stack overflow while calling @linq_fold_decs::\`quote\`lowered\`17` → 31206 → the
+      consumer file fails to compile (tests/linq/test_linq_fold_terminal_select +
+      test_linq_from_decs). Order-dependent because the overflow margin depends on
+      module-cache state at compile time — single-folder runs passed, full-tree
+      root-form runs failed deterministically (bisect: my code at master folder set
+      still failed; zero-predecessor root form still failed → not contamination at all,
+      a per-file stack margin). FIX: `Program::makeMacroModule` sizes the MACRO context
+      to `max(getContextStackSize(), 1MB)` when `aot_macros || jit_enabled` — the
+      headroom lands exactly where lowered quotes evaluate at macro-apply time, for any
+      embedder, with no driver changes. First attempt was a `policies.stack = 1MB` bump
+      in the three jit drivers (main.cpp / dastest / jit.exe), mirroring the
+      `-aot-macros` flow — REGRESSION: `policies.stack` also sizes the PRODUCED
+      program's runtime context, so cross-compiled wasm executables tried to carve 1MB
+      out of wasm linear memory and trapped at runtime (CI `wasm_cross`, f2s.wasm
+      "thrown Wasm exception"). Reverted; the `-aot-macros` global bump keeps its
+      historical behavior. Durable fix remains chunking the lowered construction into
+      bounded frames (Phase 6 candidate) — that would let macro contexts drop the
+      special-casing entirely.
 - [ ] Decide + implement JIT-of-macro-contexts: lift the `is_compiling_macros()` skip in
       llvm_macro.das behind a policy. This is the compile-time payoff twin of AOT'd
       macro modules. Separate PR; needs its own bake time.
-- [ ] `LLVM_JIT_CODEGEN_VERSION` bump only if emitters change (diagnostic-only changes
-      don't).
+- [x] `LLVM_JIT_CODEGEN_VERSION` bump NOT needed: emitters unchanged (gate + collection
+      only), and the dll cache hash folds per-function AOT hashes, so lowered ASTs and
+      changed collection sets self-invalidate. (CLAUDE.md pointer fixed: the constant
+      lives in llvm_jit_run.das, not llvm_macro.das.)
 
 ## Phase 6 — extra coverage + payoff measurement
 

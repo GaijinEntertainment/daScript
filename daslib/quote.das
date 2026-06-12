@@ -483,7 +483,10 @@ class QuoteConverter : AstVisitor {
         }
         var fn = new Function(at = expr.at, atDecl = expr.at, name := fname,
             flags = FunctionFlags.generated | FunctionFlags.privateFunction)
-        fn.result = new TypeDecl(baseType = Type.autoinfer)
+        // preserve the raw quote's static type (Expression?) — autoinfer would leak the
+        // concrete node type (e.g. ExprConstInt?) and break consumers that need type
+        // identity, e.g. `cond ? clone_expression(x) : quote(0)`
+        fn.result = expr._type != null ? clone_type(expr._type) : new TypeDecl(baseType = Type.autoinfer)
         var blk = new ExprBlock(at = expr.at)
         emplace_new(blk.list) <| new ExprReturn(at = expr.at, subexpr = conv)
         fn.body = blk
@@ -497,9 +500,16 @@ class QuotePass : AstPassMacro {
     //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
-        // Triggered by the aot_macros policy (`daslang -aot -aot-macros`) or per-module
-        // `options aot_macros` (self-contained tests, interpreted A/B).
-        let lower = compiling_program().policies.aot_macros || (prog._options |> find_arg("aot_macros") ?as tBool ?? false)
+        // Triggered by the aot_macros policy (`daslang -aot -aot-macros`), the jit_enabled
+        // policy (lowered quotes codegen natively, raw ones can't), or per-module
+        // `options aot_macros` (self-contained tests). Macro-module programs are excluded
+        // from the jit trigger: macro contexts are never JITted (see llvm_macro's
+        // is_compiling_macros skip), and the lowered construction frames can overflow the
+        // macro-context stack at apply time. Raw quotes reaching JIT codegen from such
+        // modules fall back per-function via DisableJitVisitor.
+        let lower = (compiling_program().policies.aot_macros
+            || (compiling_program().policies.jit_enabled && !prog.flags.needMacroModule)
+            || (prog._options |> find_arg("aot_macros") ?as tBool ?? false))
         if (!lower) return false // nothing to do
         var astVisitor = new QuoteConverter(mod = compiling_module())
         make_visitor(*astVisitor) $(astVisitorAdapter) {

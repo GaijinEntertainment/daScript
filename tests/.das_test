@@ -39,26 +39,22 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         }
     }
     // A meta-test that requires the compiler frontend at runtime (e.g. daslib/flatten ->
-    // macro_boost) can't AOT-link in the full-tree batch, and one that runs qmacro at runtime
-    // (flatten_optimize re-entry) carries quote nodes LLVM JIT can't codegen — interp only.
-    if (folder_name == "no_aot") {
+    // macro_boost) can't AOT-link in the full-tree batch. Under -jit it runs fine: quote( )
+    // nodes are lowered by daslib/quote when jit_enabled is set.
+    if (folder_name == "no_aot" || folder_name == "ast_match" || folder_name == "ast") {
         let args <- get_command_line_arguments()
         for (arg in args) {
-            if (arg == "--use-aot" || arg == "-jit") {
+            if (arg == "--use-aot") {
                 *result = false
                 return
             }
         }
     }
-    if (folder_name == "ast_match" || folder_name == "ast") {
-        let args <- get_command_line_arguments()
-        for (arg in args) {
-            if (arg == "--use-aot" || arg == "-jit") {
-                *result = false
-                return
-            }
-        }
-    }
+    // GC tests are interp-only under JIT: jitted frames keep locals on the native stack,
+    // so heap_collect can't see a heap pointer whose only reference is a jitted local and
+    // frees it (double-free / reuse-after-collect; Debug memory_model.h assert catches it,
+    // Release passes by luck). Lift only once the JIT spills GC roots somewhere the
+    // collector can scan.
     if (folder_name == "gc") {
         let args <- get_command_line_arguments()
         for (arg in args) {
@@ -68,16 +64,4 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
-    // The A/B baseline fixture keeps raw quote( ) nodes LLVM JIT can't codegen.
-    // AOT stays on (the lowered twins are the point). Lift with the JIT lowering lane.
-    if (folder_name == "quote") {
-        let args <- get_command_line_arguments()
-        for (arg in args) {
-            if (arg == "-jit") {
-                *result = false
-                return
-            }
-        }
-    }
-
 }

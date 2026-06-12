@@ -3391,7 +3391,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprQuote
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        unsupported(expr, "quote( ) is not jit-able without aot_macros lowering (daslib/quote)")
+        unsupported(expr, "raw quote( ) is not jit-able — daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module")
     }
 
 // ExprIfThenElse
@@ -7643,6 +7643,14 @@ class public DisableJitVisitor : AstVisitor {
             to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
             disable = true
         }
+    }
+
+    def override preVisitExprQuote(expr : ExprQuote?) : void {
+        // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
+        // ever run; a raw one means lowering didn't fire for the defining module (macro
+        // modules stay raw by design) — skip the function instead of failing the file
+        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) — daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {expr.at}, falling back to interpreter.\n")
+        disable = true
     }
 
     def override preVisitExprForBody(expr : ExprFor?) : void {

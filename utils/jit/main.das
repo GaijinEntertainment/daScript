@@ -5,10 +5,9 @@ require daslib/clargs
 require daslib/fio
 require daslib/jobque_boost
 require daslib/strings_boost
-require math
 
 require llvm/daslib/llvm_jit_cli
-require llvm/daslib/llvm_jit_run
+require llvm/daslib/llvm_jit_run // nolint:STYLE030 registration side effect: bakes the native llvm module into a standalone -exe build (see simulate() comment below)
 
 [CommandLineArgs]
 struct JitToolArgs {
@@ -287,7 +286,7 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                     // marked no-jit correctly), which a post-simulate run_jit call
                     // would miss. `require llvm_jit_run` above bakes the native llvm
                     // module into a standalone -exe build of this tool.
-                    simulate(program) $(sok, context, serrors) {
+                    simulate(program) $(sok, _context, serrors) {
                         if (!sok) {
                             to_log(LOG_ERROR, "jit: failed to simulate {input}\n{serrors}\n")
                             success = false
