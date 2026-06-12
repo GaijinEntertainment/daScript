@@ -9,6 +9,11 @@ name: nightly daspkg index
 #
 # Linux-only by design: the recorded incident class (external module compiled
 # against changed daslang headers) is a compile error, platform-independent.
+#
+# The scheduled run always sweeps master (GitHub runs cron from the default
+# branch). workflow_dispatch from a non-default branch deliberately sweeps
+# THAT branch — an on-demand externals check for ABI-touching PRs (see
+# skills/abi_break_sweep.md); the step summary names the ref it swept.
 
 on:
   schedule:
@@ -120,7 +125,8 @@ jobs:
           fi
           echo "::endgroup::"
         done < <(jq -r '.[] | [.name, .url] | @tsv' /tmp/packages.json)
-        printf '## daspkg-index nightly sweep\n\n| package | status |\n|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+        printf '## daspkg-index sweep — %s @ %s\n\n| package | status |\n|---|---|\n' \
+          "$GITHUB_REF_NAME" "$(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
         printf '%b' "$summary" >> "$GITHUB_STEP_SUMMARY"
         if [ ${#failed[@]} -gt 0 ]; then
           echo "FAILED: ${failed[*]}"
