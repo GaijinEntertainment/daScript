@@ -99,8 +99,9 @@ jobs:
       # HEAD is the externals-merge-first invariant this nightly monitors.
       # Index order puts dasImgui before its dependents, so dependency
       # installs reuse the branch-HEAD copy instead of re-resolving.
-      env:
-        GH_TOKEN: ${{ github.token }}
+      # Resolution goes over the git protocol (ls-remote --symref), not the
+      # GitHub API: anonymous, no rate limits on shared runner IPs, and the
+      # same transport the install's clone uses anyway.
       run: |
         set -eux
         curl -fsSL https://raw.githubusercontent.com/borisbat/daspkg-index/main/packages.json -o /tmp/packages.json
@@ -109,7 +110,7 @@ jobs:
         while IFS=$'\t' read -r name url; do
           url="${url%$'\r'}"   # jq emits CRLF on some hosts
           repo="${url#github.com/}"
-          def=$(gh api "repos/$repo" --jq .default_branch) || def=""
+          def=$(git ls-remote --symref "https://$url" HEAD | awk '/^ref:/ {sub("refs/heads/","",$2); print $2}') || def=""
           if [ -z "$def" ]; then
             echo "::error::$name: cannot resolve default branch for $repo"
             failed+=("$name")
