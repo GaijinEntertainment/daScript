@@ -77,6 +77,9 @@ struct DastestArgs {
     @clarg_doc = "Compile and run tests using AOT (ahead-of-time) compilation, failing if AOT is unavailable"
     use_aot : bool
 
+    @clarg_doc = "Force quote()/qmacro lowering (daslib/quote QuotePass) when compiling test files"
+    aot_macros : bool
+
     @clarg_doc = "Enable benchmark execution (all of them)"
     bench : bool
 

@@ -33,6 +33,7 @@ struct SuiteCtx {
     verbose : bool = false
     compile_only : bool = false
     use_aot : bool = false
+    aot_macros : bool = false
     cov_path : string = ""
     debugger : bool = false
     keep_alive : bool = false
@@ -86,6 +87,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.projectPath = args.test_project
     ctx.compile_only = args.compile_only
     ctx.use_aot = args.use_aot || is_in_aot()
+    ctx.aot_macros = args.aot_macros
     ctx.cov_path = args.cov_path
     ctx.testNames := args.test_names
     ctx.bench_names := args.bench_names
@@ -158,6 +160,12 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.aot_module = true
             cop.aot = ctx.use_aot
             cop.fail_on_no_aot = ctx.use_aot
+            cop.aot_macros = ctx.aot_macros
+            if (ctx.aot_macros) {
+                // a lowered quote evaluates one large make-struct construction frame
+                // (same bump the `daslang -aot -aot-macros` flow applies)
+                cop.stack = 1024u * 1024u
+            }
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
             cop.debugger = ctx.debugger

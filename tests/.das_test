@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 
 require daslib/rtti
-require strings
 
 [export, pinvoke]
 def can_visit_folder(folder_name : string; var result : bool?) {
@@ -61,6 +60,17 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         }
     }
     if (folder_name == "gc") {
+        let args <- get_command_line_arguments()
+        for (arg in args) {
+            if (arg == "-jit") {
+                *result = false
+                return
+            }
+        }
+    }
+    // The A/B baseline fixture keeps raw quote( ) nodes LLVM JIT can't codegen.
+    // AOT stays on (the lowered twins are the point). Lift with the JIT lowering lane.
+    if (folder_name == "quote") {
         let args <- get_command_line_arguments()
         for (arg in args) {
             if (arg == "-jit") {

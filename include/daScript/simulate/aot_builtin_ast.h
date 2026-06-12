@@ -557,6 +557,7 @@ namespace das {
     DAS_CC_API Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at );
     DAS_CC_API Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
     DAS_CC_API Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at );
+    DAS_CC_API Enumeration * module_find_enumeration ( const Module* module, const char * name, Context * context, LineInfoArg * at );
     DAS_CC_API void get_use_global_variables ( Function * func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void get_use_functions ( Function * func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at );

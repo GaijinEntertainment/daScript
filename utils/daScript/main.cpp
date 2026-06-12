@@ -285,6 +285,10 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         policies.fail_on_no_aot = false;
     }
     policies.fail_on_lack_of_aot_export = false;
+    policies.aot_macros = aotMacros;    // -aot-macros: force quote lowering (daslib/quote) in a normal run
+    if ( aotMacros ) {
+        policies.stack = 1 * 1024 * 1024;   // a lowered quote evaluates one large construction frame
+    }
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
     policies.scoped_stack_allocator = scopedStackAllocator;
@@ -570,6 +574,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 jitNoCache = true;
             } else if ( cmd=="use-aot") {
                 useAot = true;
+            } else if ( cmd=="aot-macros") {
+                aotMacros = true;   // force quote lowering (daslib/quote) in a normal run
             } else if ( cmd=="output") {
                 if ( i+1 > argc ) {
                     printf("output requires argument\n");

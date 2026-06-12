@@ -274,6 +274,7 @@ Functions with `SideEffects::none` can be **constant-folded** at compile time. I
 | Dependency hash differs | A dependency function's SIM tree changed (different module state in batch) | Compare dep hashes in the hash comment; inspect the specific dependency |
 | AOT hash differs but own + all deps match | Dependency list differs (extra or missing deps) | Check if batch processing adds/removes function instantiations |
 | All hashes match but still fails | Stale generated C++ — `.cpp` file wasn't regenerated | Delete `_aot_generated/*.cpp` and rebuild |
+| Own hash differs after editing a quote-lowered file (`options aot_macros`) | ANY edit — even comment-only — shifts line numbers, and lowered code bakes LineInfos as integer constants | Purge that directory's `_aot_generated/` and rebuild `test_aot` (the custom commands don't track daslib deps either — same purge after `daslib/quote.das` edits) |
 
 ### Batch AOT processing
 

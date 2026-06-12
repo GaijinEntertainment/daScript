@@ -105,12 +105,12 @@ endforeach()
 add_dependencies(all_utils_exe dastest_exe)
 
 # Prewarm the JIT dll cache for the whole test tree, except the folders dastest
-# also excludes under -jit (gc, ast_match, ast, no_aot — they use runtime quote/qmacro
+# also excludes under -jit (gc, ast_match, ast, no_aot, quote — they use runtime quote/qmacro
 # the JIT can't lower). Reuses the jit_exe target built by the foreach above (bin/jit.exe, built
 # with --jit-register-all-modules). Run explicitly:
 #   ninja jit_cache_all_tests
 add_custom_target(jit_cache_all_tests
-    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude stbimage --exclude live_host --exclude audio --exclude strudel --exclude ast_match --exclude ast --exclude no_aot
+    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude stbimage --exclude live_host --exclude audio --exclude strudel --exclude ast_match --exclude ast --exclude no_aot --exclude quote
     DEPENDS jit_exe
     WORKING_DIRECTORY ${UTIL_BIN_DIR}
     COMMENT "JIT-compiling tests/ into the .jitted_scripts cache"

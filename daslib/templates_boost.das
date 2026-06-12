@@ -17,6 +17,9 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/algorithm
 require daslib/strings_boost
+// quote lowering (QuotePass + runtime reconstruction helpers); public so the
+// reconstruction calls generated into qmacro-using modules resolve there
+require daslib/quote public
 
 struct Template {
     //! This structure contains collection of substitution rules for a template.

@@ -3389,6 +3389,11 @@ class public LlvmJitVisitor : AstVisitor {
         unsupported(expr, "try-catch")
     }
 
+// ExprQuote
+    def override preVisitExprQuote(expr : ExprQuote?) : void {
+        unsupported(expr, "quote( ) is not jit-able without aot_macros lowering (daslib/quote)")
+    }
+
 // ExprIfThenElse
     /*
     if_cond_at:

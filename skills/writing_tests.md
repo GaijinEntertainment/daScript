@@ -28,6 +28,20 @@ module isn't built in. **The filter is looked up only at the `--test` ROOT path*
 false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests`
 (CI's form) or target individual files — never a subtree that contains gated dirs.
 
+## Per-folder sweep gating (`tests/.das_test`)
+
+`tests/.das_test` defines `can_visit_folder(folder_name, result)` — dastest consults it
+per subfolder during file collection (only for the `.das_test` at the `--test <root>`
+argument; directly naming a child folder bypasses it). It gates folders on module
+availability (`dasHV`, `dasSQLITE`, …) and on sweep mode by scanning argv for `-jit` /
+`--use-aot` (e.g. `ast`, `ast_match`, `no_aot`, `gc`, `quote` skip under `-jit` — runtime
+quote/qmacro the JIT can't codegen). Two traps: a whole-folder JIT/AOT failure usually
+means a missing entry here, NOT a per-file fix; and the `jit_cache_all_tests` prewarm
+target (utils/CMakeLists.txt) does NOT consult it — its `--exclude` list mirrors the
+`-jit` skips manually and must be updated in the same change. Per-function `[test, no_jit]`
+(tests/template/test_push_block_list.das) is the finer-grained alternative when only some
+tests in a kept folder can't JIT.
+
 ## Test file structure
 
 ```das

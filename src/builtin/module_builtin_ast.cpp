@@ -743,6 +743,11 @@ namespace das {
         return module->findStructure(name);
     }
 
+    Enumeration * module_find_enumeration ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
+        if ( !module ) context->throw_error_at(at, "expecting module");
+        return module->findEnum(name);
+    }
+
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
         if ( !fn ) context->throw_error_at(at, "expecting function");
         if ( !fn->builtIn ) context->throw_error_at(at, "expecting built-in interop function");
@@ -801,10 +806,21 @@ namespace das {
     }
 
     template <typename F>
-    static auto apply_to_vec(void* vec, string_view tstr, F apply) {
+    static auto apply_to_vec(void* vec, TypeDecl * type, F apply) {
+        auto tstr = type->describe();
+        if (tstr == "ast_core::MakeFieldDecl?") {
+            // MakeStruct IS-A vector<MakeFieldDeclPtr> via multiple inheritance; the vector
+            // subobject is not at offset 0, the cast chain performs the base adjustment.
+            return apply(static_cast<vector<MakeFieldDeclPtr>*>((MakeStruct*)vec));
+        }
         if (tstr == "string") {
             return apply(static_cast<vector<const char *>*>(vec));
-        } else if (tstr == "$::das_string") {
+        }
+        if (type->baseType == Type::tPointer) {
+            // post-gc_node every AST node vector is a plain vector of raw pointers
+            return apply(static_cast<vector<void*>*>(vec));
+        }
+        if (tstr == "$::das_string") {
             return apply(static_cast<vector<string>*>(vec));
         } else if (tstr == "ast_core::CaptureEntry") {
             return apply(static_cast<vector<CaptureEntry>*>(vec));
@@ -818,11 +834,6 @@ namespace das {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         } else if (tstr == "rtti_core::LineInfo") {
             return apply(static_cast<vector<LineInfo>*>(vec));
-        } else if (tstr == "ast::MakeStruct*") {
-            return apply(static_cast<vector<MakeStructPtr>*>(vec));
-        } else if (tstr == "ast::MakeFieldDecl*") {
-            auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
-            return apply(static_cast<vector<MakeFieldDeclPtr>*>(vec2));
         } else if (tstr == "ast_core::EnumEntry") {
             return apply(static_cast<vector<Enumeration::EnumEntry>*>(vec));
         }
@@ -831,18 +842,17 @@ namespace das {
     }
 
     void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * /*context*/, LineInfoArg * /*at*/) {
-        auto tstr = type->describe();
         auto get_at = [idx](auto *vec) {
             return static_cast<void*>(&vec->at(idx));
         };
-        return apply_to_vec(vec, tstr, get_at);
+        return apply_to_vec(vec, type, get_at);
     }
 
     int32_t getVectorLength(void* vec, TypeDecl * type, Context * /*context*/, LineInfoArg * /*at*/) {
         auto get_size = [](auto *vec) {
             return vec->size();
         };
-        return (int) apply_to_vec(vec, type->describe(), get_size);
+        return (int) apply_to_vec(vec, type, get_size);
     }
 
     uint32_t getHandledTypeFieldOffset ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at ) {
@@ -1584,6 +1594,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(module_find_structure)>(*this, lib,  "module_find_structure",
             SideEffects::accessExternal, "module_find_structure")
                 ->args({"program","name","context","at"});
+        addExtern<DAS_BIND_FUN(module_find_enumeration)>(*this, lib,  "module_find_enumeration",
+            SideEffects::accessExternal, "module_find_enumeration")
+                ->args({"module","name","context","at"});
         // used variables and functions
         addExtern<DAS_BIND_FUN(get_use_global_variables)>(*this, lib,  "get_use_global_variables",
             SideEffects::invoke, "get_use_global_variables")
