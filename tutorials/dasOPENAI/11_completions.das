@@ -22,7 +22,7 @@ options gc
 require openai/openai_completions
 require tutorial_openai_server
 
-let SERVER_PORT = 18194
+let SERVER_PORT = 18200
 
 [export]
 def main() {

@@ -23,7 +23,7 @@ options gc
 require openai/openai_vision
 require tutorial_openai_server
 
-let SERVER_PORT = 18191
+let SERVER_PORT = 18197
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section 1 — chat_vision

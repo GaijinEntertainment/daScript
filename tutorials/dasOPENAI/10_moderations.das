@@ -21,7 +21,7 @@ options gc
 require openai/openai_moderations
 require tutorial_openai_server
 
-let SERVER_PORT = 18193
+let SERVER_PORT = 18199
 
 // Classify one string and return whether it was flagged.
 def classify(client : OpenAIClient; text : string) : bool {

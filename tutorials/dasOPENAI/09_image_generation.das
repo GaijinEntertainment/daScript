@@ -21,7 +21,7 @@ options gc
 require openai/openai_images
 require tutorial_openai_server
 
-let SERVER_PORT = 18192
+let SERVER_PORT = 18198
 
 [export]
 def main() {
