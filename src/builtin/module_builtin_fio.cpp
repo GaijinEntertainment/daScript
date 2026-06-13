@@ -104,6 +104,26 @@ namespace das {
         return t;
     }
 
+    // Render a clock as local-time text via strftime. Empty/null `fmt` -> "%Y-%m-%d %H:%M".
+    // Companion to the type's `%c` walk() serialization, but caller-formatted. Uses the
+    // reentrant localtime_r/localtime_s into a stack tm (localtime() is not thread-safe and
+    // can return null); a failed conversion or empty render yields an empty string.
+    char * format_time ( Time t, const char * fmt, Context * context, LineInfoArg * at ) {
+        const char * f = ( fmt && *fmt ) ? fmt : "%Y-%m-%d %H:%M";
+        struct tm tmv;
+        bool ok;
+#if defined(__linux__) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
+        ok = localtime_r(&t.time, &tmv) != nullptr;     // desktop POSIX / wasm
+#elif defined(_WIN32)
+        ok = localtime_s(&tmv, &t.time) == 0;           // MSVC: (tm*, const time_t*) -> errno_t
+#else
+        ok = localtime_s(&t.time, &tmv) == 0;           // consoles: POSIX-style (time_t*, tm*)
+#endif
+        char buf[256];
+        size_t n = ok ? strftime(buf, sizeof(buf), f, &tmv) : 0;
+        return context->allocateString(n != 0 ? buf : "", uint32_t(n), at);
+    }
+
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(new TimeAnnotation(lib));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
@@ -111,6 +131,10 @@ namespace das {
             SideEffects::accessExternal, "iso8601_now");
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
+        // accessExternal (not none): reads process locale + timezone, so it must not be
+        // CSE'd or constant-folded across environment changes — same as iso8601_now.
+        addExtern<DAS_BIND_FUN(format_time)>(*this, lib, "format_time", SideEffects::accessExternal, "format_time")
+            ->args({"time","format","context","at"});
         // operations on time
         addExtern<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
             SideEffects::none, "time_equal");
