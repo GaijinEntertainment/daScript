@@ -104,6 +104,15 @@ namespace das {
         return t;
     }
 
+    // Render a clock as local-time text via strftime. Empty/null `fmt` -> "%Y-%m-%d %H:%M".
+    // Companion to the type's `%c` walk() serialization, but caller-formatted.
+    char * format_time ( Time t, const char * fmt, Context * context, LineInfoArg * at ) {
+        const char * f = ( fmt && *fmt ) ? fmt : "%Y-%m-%d %H:%M";
+        char buf[128];
+        size_t n = strftime(buf, sizeof(buf), f, localtime(&t.time));
+        return context->allocateString(buf, uint32_t(n), at);
+    }
+
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(new TimeAnnotation(lib));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
@@ -111,6 +120,8 @@ namespace das {
             SideEffects::accessExternal, "iso8601_now");
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
+        addExtern<DAS_BIND_FUN(format_time)>(*this, lib, "format_time", SideEffects::none, "format_time")
+            ->args({"time","format","context","at"});
         // operations on time
         addExtern<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
             SideEffects::none, "time_equal");
