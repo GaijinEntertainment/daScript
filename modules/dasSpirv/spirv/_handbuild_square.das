@@ -8,7 +8,7 @@ options gen2
 require spirv_builder
 require spirv_dis
 require spirv_grammar
-require fio
+require daslib/fio
 
 def build_square() : array<uint> {
     var m = make_module()

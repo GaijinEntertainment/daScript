@@ -201,9 +201,16 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
 - SPIRV-Tools located: `C:\VulkanSDK\1.4.350.0\Bin\spirv-val.exe`, `spirv-dis.exe`.
 - SPIRV-Headers grammar (core 1.6 rev4, 871 instructions) + GLSL.std.450 grammar located in
   the SDK at `Include/spirv-headers/`; to be vendored + pinned under `spirv_headers/`.
-- Dev loop: pure-das modules are interpreted, so the `E:\daslang\bin\Release\daslang.exe`
-  binary is used read-only with **path-requires** during development; CMake `ADD_MODULE_DAS`
-  registration (needed only for bare-name `require dasSpirv`) is deferred to end of Phase 0/1.
+- Dev loop: pure-das modules are interpreted, so a daslang binary is used read-only with
+  **same-dir requires** during development; CMake `ADD_MODULE_DAS` registration (needed only for
+  bare-name `require dasSpirv`) is deferred to end of Phase 0/1.
+- **Dev-binary correction (Phase 1):** the `E:\daslang\bin\Release\daslang.exe` binary is **0.6.2**
+  (pre-tFixedArray-rework) — its daslib has no `make_fixed_array_type` and TypeDecl has no
+  `fixedDim` field (it uses the old `.dim` array). The worktree is **0.6.3**. Phase-0 code happened
+  not to touch fixed-array AST construction so 0.6.2 sufficed, but the Phase-1 `array<uint>` capture
+  (`make_fixed_array_type` + `to_array_move`) is 0.6.3-only. So Phase-1 dev requires the
+  **worktree's own built `build/.../daslang.exe`** (0.6.3), NOT E:\daslang. Don't code to 0.6.2
+  spellings — they'd break the 0.6.3 CI build.
 
 **Done this session:**
 - `spirv_headers/` vendored: core 1.6 rev4 (871 instructions) + GLSL.std.450 v100 rev2 (81),
@@ -311,8 +318,53 @@ bottom-up traversal fights lvalue/rvalue and (later) structured control flow. De
   globals → entry point (+ interface = Input/Output vars) → `OpExecutionMode LocalSize` →
   function body. Oracle: must match the hand-built `_square_typed.spv` (spirv-val + `out[i]==i*i`).
 
-**NEXT (post-compact):** write `spirv_emit.das` (the above) + `spirv_shader.das` (the
-`[compute_shader]` annotation mirroring `GlslShader.apply/fixup`, `gl_*` builtin globals, and
-the `@@fn` → `array<uint>` capture via `ExprMakeArray` of `ExprConstUInt`). Dev binary:
-`E:\daslang\bin\Release\daslang.exe` (path-require during dev). Throwaway AST-dump macro lives
-at `/tmp/dump_mod.das` + `/tmp/sq_dump.das` if needed again.
+**EMITTER WORKS END-TO-END — the project's hardest unknowns are retired (2026-06-13).**
+`spirv_emit.das` (manual `emit_value`/`emit_ptr` recursion + `generate_spirv`), `spirv_shader.das`
+(the `[compute_shader]` annotation), and `spirv_builtins.das` (`gl_*` globals) are written; the
+real `[compute_shader] def square` fixture (`_emit_square.das`) lowers to a **125-word, id-bound-20
+module that passes `spirv-val --target-env vulkan1.1` (exit 0)** and disassembles cleanly under
+external `spirv-dis` (SPIR-V 1.3, the exact `data[gid.x] = gid.x*gid.x` shape). Same word count +
+id bound as the hand-built `_square_typed.spv`; bytes differ only by section/decoration *ordering*
+(both valid — byte-identity was never the oracle).
+
+**Hard-won findings this session (all load-bearing):**
+
+1. **Dev binary must be the worktree's own 0.6.3 build, not `E:\daslang` (0.6.2).** See the
+   dev-binary correction in the Phase-0 log. Built `build/` + `bin/Release/daslang.exe` (0.6.3) in
+   the worktree; all dev runs use it.
+2. **`array<uint>` literal AST = `to_array_move(ExprMakeArray{makeType=ELEMENT(uint), gen2=true})`.**
+   The `gen2=true` flag is mandatory — it drives the fixed→dynamic conversion. The pre-gen2
+   `make_fixed_array_type(...)`-wrap pattern (from `ast_boost`'s older `walk_and_convert`) is WRONG
+   for a gen2 makeType and produced a malformed node.
+3. **Capture = global declared in `apply` + init filled in `patch` (NOT `fixup`).** Two independent
+   constraints force this:
+   - The capture symbol must exist after `apply` so consumer code referencing it resolves on the
+     first infer. Declaring it later (patch/fixup) **deadlocks**: the consumer fails inference,
+     and `program->patchAnnotations()` is gated behind `!program->failed()` (ast_parse.cpp:920) — so
+     patch never runs. (An accessor *function* with an `array<uint>` body also fails: an empty body
+     is rejected as "does not return a value" before any hook fills it.)
+   - The init (a `to_array_move` **call**) must be set in `patch` with `astChanged=true`, which
+     triggers `restartInfer` so the call is resolved. Setting it in `fixup` (no further infer)
+     leaves the call's `func` null → **crash in `deriveAliases`/`ExprCall::visit`**. (dasGlsl gets
+     away with `fixup` only because `ExprConstString` is self-typed and call-free.)
+4. **Running `generate_spirv` in `patch` sees a LESS-FOLDED AST than `fixup`** — `ExprRef2Value`
+   wrapper nodes are still present (the Phase-1 AST dump was taken in fixup, where they're folded
+   away). The emitter handles them: `emit_value(ExprRef2Value)` recurses on `.subexpr`. This
+   corrects the Phase-1-dump claim "no ExprRef2Value nodes are inserted" — true at fixup, false at
+   patch.
+5. **Field-annotation args use `@name = value`, NOT `@name(value)`** (ds2_parser `annotation_argument`).
+   So `var @ssbo @binding = 0 data : array<uint>`. (The earlier `@binding(0)` in this doc was wrong.)
+6. **`require daslib/fio`, not bare `require fio`** in 0.6.3 (bare form was a 0.6.2 affordance).
+
+Corrected authoring form:
+```das
+var @ssbo @binding = 0 data : array<uint>
+[compute_shader(local_size_x=64, name="square_spv")]
+def square { let i = gl_GlobalInvocationID.x; data[i] = i * i }
+// host reads the `square_spv : array<uint>` global -> vkCreateShaderModule
+```
+
+**NEXT:** (a) convert `_emit_square.das` + the Phase-0 scaffolds into kept `tests/spirv/` dastests
+with opcode-assertion + census + `spirv-val` + LCOV gates; (b) dasVulkan `run_compute_spirv` GPU
+gate (`out[i]==i*i` on local real GPU + lavapipe); (c) CMake `ADD_MODULE_DAS(spirv …)` registration.
+Then Phase 2 (control flow + arithmetic). Dev binary: the worktree's `bin/Release/daslang.exe`.
