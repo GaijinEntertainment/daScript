@@ -260,6 +260,10 @@ Run any tutorial from the project root::
    tutorials/dasOPENAI_05_embeddings_and_models.rst
    tutorials/dasOPENAI_06_audio.rst
    tutorials/dasOPENAI_07_streaming_chat.rst
+   tutorials/dasOPENAI_08_vision.rst
+   tutorials/dasOPENAI_09_image_generation.rst
+   tutorials/dasOPENAI_10_moderations.rst
+   tutorials/dasOPENAI_11_completions.rst
 
 .. _tutorials_daspugixml:
 
