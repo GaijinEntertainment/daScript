@@ -41,6 +41,8 @@ require openai/openai_chat public
 require openai/openai_embeddings public
 require openai/openai_models public
 require openai/openai_completions public
+require openai/openai_images public
+require openai/openai_moderations public
 
 // ──────────────────────────────────────────────────────────────────────────
 // Canned response builders
@@ -159,6 +161,24 @@ def private mock_completion_json() : string {
     return sprint_json(r, false)
 }
 
+def private mock_image_json() : string {
+    let r = ImageResponse(created = 0,
+        data <- [ImageData(url = "https://mock.local/generated_image.png",
+            revised_prompt = "a serene mountain lake at dawn (mock revised prompt)")])
+    return sprint_json(r, false)
+}
+
+// `flagged` lets the tutorial demonstrate both a clean and a flagged verdict by
+// varying the request text (see the /v1/moderations handler below).
+def private mock_moderation_json(flagged : bool) : string {
+    let violence_score = flagged ? 0.92lf : 0.0008lf
+    let r = ModerationResponse(id = "modr-mock", model = "mock-moderation",
+        results <- [ModerationCategoryResult(flagged = flagged,
+            categories <- {"violence" => flagged, "hate" => false, "self-harm" => false},
+            category_scores <- {"violence" => violence_score, "hate" => 0.0002lf, "self-harm" => 0.0001lf})])
+    return sprint_json(r, false)
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Server
 // ──────────────────────────────────────────────────────────────────────────
@@ -201,6 +221,14 @@ class MockOpenAIServer : HvWebServer {
         }
         POST("/v1/completions") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> JSON(mock_completion_json())
+        }
+        POST("/v1/images/generations") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> JSON(mock_image_json())
+        }
+        POST("/v1/moderations") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            // Flag the verdict when the request text contains a sentinel phrase.
+            let flagged = find(string(req.body), "flagged-example") >= 0
+            return resp |> JSON(mock_moderation_json(flagged))
         }
     }
 }

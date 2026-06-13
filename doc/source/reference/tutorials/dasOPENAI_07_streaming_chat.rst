@@ -97,3 +97,5 @@ Quick Reference
    Full source: :download:`tutorials/dasOPENAI/07_streaming_chat.das <../../../../tutorials/dasOPENAI/07_streaming_chat.das>`
 
    For the SSE protocol and ``request_cb`` see :ref:`tutorial_dasHV_sse_and_streaming`.
+
+   Next tutorial: :ref:`tutorial_dasOPENAI_vision`
