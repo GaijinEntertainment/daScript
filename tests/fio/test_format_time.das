@@ -3,9 +3,9 @@ options gen2
 require dastest/testing_boost
 
 // `format_time(clock, fmt)` renders a clock as local-time text via strftime.
-// Assertions stay timezone/DST-independent: the date part of a mid-day clock is
-// stable (a DST normalization never crosses midnight from 09:22), and the
-// formatting mechanism (default pattern, literals, %% escaping) is tz-agnostic.
+// Assertions stay timezone/DST-independent: at 09:22 the date part is stable (the
+// largest DST normalization is one hour, which never carries 09:22 across midnight),
+// and the formatting mechanism (default pattern, literals, %% escaping) is tz-agnostic.
 
 [test]
 def test_format_time(t : T?) {
