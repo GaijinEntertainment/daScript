@@ -24,7 +24,7 @@ Assign it to the request:
 
    var req = ChatCompletionRequest(model = "gpt-4o-mini",
        messages <- [ChatMessage(role = "user",
-           content = "Return the answer to 6*7 as JSON: {\"answer\": N}.")])
+           content = "Return the answer to 6*7 as JSON: \{\"answer\": N\}.")])
    req.response_format = json_object_format()
    let res = chat(client, req)
 
