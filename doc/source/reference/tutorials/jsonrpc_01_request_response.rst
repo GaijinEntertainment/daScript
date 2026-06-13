@@ -77,7 +77,7 @@ Parsing a success response
    let r = parse_response(wire)
    // r.is_success  = true
    // r.id_str      = "1"
-   // r.result_json = ["hello"]
+   // r.result_json = ["hello"]   (may be pretty-printed — use compact_json_whitespace if needed)
 
 Parsing an error response
 ==========================
