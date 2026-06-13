@@ -11,3 +11,4 @@ module does and where its docs live.
    dasimgui
    dasimguinodeeditor
    dasimguiimplot
+   dasvulkan
