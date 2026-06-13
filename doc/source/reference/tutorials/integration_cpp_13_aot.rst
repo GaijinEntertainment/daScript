@@ -92,7 +92,7 @@ to automate both generation and compilation:
    add_custom_target(integration_cpp_13_dasAotStub)
 
    # 2. Generate AOT C++ from the .das file using daslang as the tool
-   DAS_AOT("tutorials/integration/cpp/13_aot.das"
+   DAS_AOT("integration/cpp/13_aot.das"
            INTEGRATION_13_AOT_GENERATED_SRC
            integration_cpp_13_dasAotStub daslang)
 
@@ -101,8 +101,8 @@ to automate both generation and compilation:
        13_aot.cpp
        ${INTEGRATION_13_AOT_GENERATED_SRC}
    )
-   TARGET_LINK_LIBRARIES(integration_cpp_13 libDaScript Threads::Threads)
-   ADD_DEPENDENCIES(integration_cpp_13 libDaScript
+   TARGET_LINK_LIBRARIES(integration_cpp_13 libDaScriptDyn Threads::Threads)
+   ADD_DEPENDENCIES(integration_cpp_13 libDaScriptDyn
                     integration_cpp_13_dasAotStub)
 
 The ``DAS_AOT`` macro:

@@ -162,7 +162,7 @@ Function pointers use ``@@function_name``:
        call_function_twice(@@print_value, 5)
 
        // Fibonacci iteration
-       for_each_fibonacci(5) $(index, value) {
+       for_each_fibonacci(8) $(index, value) {
            print("fib({index}) = {value}\n")
        }
 

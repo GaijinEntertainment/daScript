@@ -72,16 +72,19 @@ The ``DAS_AOT_CTX`` CMake macro drives the generation:
 
 .. code-block:: cmake
 
-   SET(STANDALONE_CTX_GENERATED_SRC)
-   DAS_AOT_CTX("tutorials/integration/cpp/standalone_context.das"
-               STANDALONE_CTX_GENERATED_SRC
+   SET(INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC)
+   add_custom_target(integration_cpp_20_dasAotStubStandalone)
+   DAS_AOT_CTX("integration/cpp/standalone_context.das"
+               INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC
                integration_cpp_20_dasAotStubStandalone daslang)
 
    add_executable(integration_cpp_20
        20_standalone_context.cpp
        standalone_context.das
-       ${STANDALONE_CTX_GENERATED_SRC})
-   TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScript)
+       ${INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC})
+   TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScriptDyn Threads::Threads)
+   ADD_DEPENDENCIES(integration_cpp_20 libDaScriptDyn
+                    integration_cpp_20_dasAotStubStandalone)
 
 This runs ``daslang`` with the ``-ctx`` flag, which invokes
 ``daslib/aot_standalone.das`` to generate:

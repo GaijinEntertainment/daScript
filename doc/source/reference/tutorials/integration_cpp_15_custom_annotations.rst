@@ -31,7 +31,8 @@ daslang with the ``[annotation_name]`` syntax.  They let the host
 application validate, modify, or transform script code during
 compilation.
 
-Built-in examples: ``[export]``, ``[private]``, ``[deprecated]``.
+Built-in examples: ``[export]``, ``[deprecated]`` (note: ``private`` is a
+visibility keyword, not an annotation).
 This tutorial shows how to create your own.
 
 
@@ -197,6 +198,7 @@ Using from daslang
        // Monster now has an "id" field added by [add_field]
        var m = Monster(name = "Dragon", hp = 500, id = 42)
        print("{m.name}: id={m.id}\n")
+   }
 
 
 Building and running

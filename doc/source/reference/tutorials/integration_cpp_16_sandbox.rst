@@ -156,16 +156,21 @@ Loading a project file from C++
 
    string projectPath = getDasRoot()
        + "/path/to/sandbox.das_project";
-   auto fAccess = make_smart<FsFileAccess>(
-       projectPath, make_smart<FsFileAccess>());
+
+   // get_file_access is a link-time resolved function declared in the host.
+   // It compiles the project file, simulates it, and returns a FileAccess
+   // that calls the exported callback functions during compilation.
+   das::FileAccessPtr get_file_access(char * pak);  // declared at file scope
+
+   auto fAccess = get_file_access((char *) projectPath.c_str());
 
    CodeOfPolicies policies;
    auto program = compileDaScript(scriptPath, fAccess, tout,
                                   libGroup, policies);
 
-The ``FsFileAccess(projectPath, fallbackAccess)`` constructor
-compiles and simulates the project file, then looks up exported
-callback functions by name.
+``get_file_access`` (declared at file scope and linked in from the
+daslang library) compiles and simulates the project file, then returns
+a ``FileAccessPtr`` whose callbacks delegate to the exported functions.
 
 Project file callbacks
 ~~~~~~~~~~~~~~~~~~~~~~~~

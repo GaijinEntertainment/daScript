@@ -14,7 +14,7 @@ This tutorial covers ``addInterop`` — the low-level alternative to
 * Accepting "any type" arguments (``vec4f`` template parameter)
 * Runtime ``TypeInfo`` inspection via ``call->types[i]``
 * Accessing call-site debug info via ``call->debugInfo``
-* The ``TypeInfo`` union: ``structType`` / ``enumType`` / ``annotation_or_name``
+* The ``TypeInfo`` union: ``structType`` / ``enumType`` / ``annotation_info``
 
 
 Prerequisites

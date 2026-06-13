@@ -172,7 +172,7 @@ In the script the function takes zero arguments:
 
 .. code-block:: das
 
-   print_stack_info()   // prints "Stack size: 16384 bytes"
+   print_stack_info()   // prints "Context stack size: 16384 bytes"
 
 
 Activating the module in the host
