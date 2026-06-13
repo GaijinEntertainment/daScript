@@ -19,7 +19,9 @@ def public foreach_inst(words : array<uint>; blk : block<(opcode : uint; words :
         let w0 = words[i]
         let wc = int(w0 >> 16u)
         let op = w0 & 0xFFFFu
-        if (wc == 0) {              // malformed: guard against an infinite loop
+        // malformed/truncated: wc==0 would loop forever; i+wc>n would run operands past the
+        // buffer end (out-of-bounds reads in op_has_operand/dump indexing w[s+k]).
+        if (wc == 0 || i + wc > n) {
             break
         }
         invoke(blk, op, words, i + 1, wc - 1)
@@ -29,7 +31,7 @@ def public foreach_inst(words : array<uint>; blk : block<(opcode : uint; words :
 
 def public count_op(words : array<uint>; op : SpvOp) : int {
     var c = 0
-    foreach_inst(words) <| $(opcode : uint; w : array<uint>; s, n : int) {
+    foreach_inst(words) $(opcode : uint; _w : array<uint>; _s, _n : int) {
         if (opcode == uint(op)) {
             c++
         }
@@ -44,7 +46,7 @@ def public has_op(words : array<uint>; op : SpvOp) : bool {
 // The set of distinct opcodes present — the per-module input to the opcode census meta-test.
 def public opcode_set(words : array<uint>) : table<uint> {
     var s : table<uint>
-    foreach_inst(words) <| $(opcode : uint; w : array<uint>; st, n : int) {
+    foreach_inst(words) $(opcode : uint; _w : array<uint>; _st, _n : int) {
         if (!key_exists(s, opcode)) {
             s |> insert(opcode)
         }
@@ -56,10 +58,28 @@ def public opcode_set(words : array<uint>) : table<uint> {
 // (e.g. OpExecutionMode … LocalSize present; OpDecorate … Binding 0).
 def public op_has_operand(words : array<uint>; op : SpvOp; value : uint) : bool {
     var found = false
-    foreach_inst(words) <| $(opcode : uint; w : array<uint>; s, n : int) {
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(op)) {
             for (k in range(n)) {
                 if (w[s + k] == value) {
+                    found = true
+                }
+            }
+        }
+    }
+    return found
+}
+
+// Does any instruction with `op` carry `first` immediately followed by `second` among its
+// operands? Tighter than op_has_operand for decoration / exec-mode shape checks (e.g. Decorate
+// … BuiltIn GlobalInvocationId, ExecutionMode … LocalSize 64) — a bare value that merely
+// collides with some target id elsewhere won't match.
+def public op_has_operand_pair(words : array<uint>; op : SpvOp; first : uint; second : uint) : bool {
+    var found = false
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(op)) {
+            for (k in range(n - 1)) {
+                if (w[s + k] == first && w[s + k + 1] == second) {
                     found = true
                 }
             }
@@ -74,9 +94,9 @@ def public dump(words : array<uint>) : string {
     if (length(words) < 5) {
         return "; (empty or truncated SPIR-V)\n"
     }
-    var out = build_string() <| $(var wr) {
+    let out = build_string() $(var wr) {
         wr |> write("; SPIR-V module: {length(words)} words, id-bound {words[3]}\n")
-        foreach_inst(words) <| $(opcode : uint; w : array<uint>; s, n : int) {
+        foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
             let nm = SPV_OP_NAMES?[opcode] ?? "Op?({opcode})"
             wr |> write(nm)
             for (k in range(n)) {

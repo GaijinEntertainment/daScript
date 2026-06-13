@@ -2,9 +2,10 @@ options gen2
 
 // daslang AST -> SPIR-V codegen. Manual two-function recursion (emit_value / emit_ptr) rather
 // than the auto AstVisitor: SPIR-V's value/pointer (SSA + OpAccessChain) model maps cleanly to
-// it, and lvalue-ness is read straight off the type's ref (&) flag — daslang inserts no
-// ExprRef2Value nodes. generate_spirv is the [macro_function] entry, called by both the shader
-// annotation's fixup and the unit tests, so opcode assertions hit the real codegen path.
+// it, and lvalue-ness is read straight off the type's ref (&) flag. ExprRef2Value wrappers can
+// still appear when generate_spirv runs at the annotation's patch() stage (pre-fold); emit_value
+// peels them. generate_spirv is the [macro_function] entry, called by both the shader annotation's
+// patch and the unit tests, so opcode assertions hit the real codegen path.
 
 module spirv_emit shared public
 
@@ -14,7 +15,6 @@ require spirv_grammar
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
-require daslib/ast_used
 
 // ===== per-global classification =====
 struct GlobalInfo {
@@ -66,6 +66,14 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             errors |> push("ssbo '{vname}' must be an array<T>")
             return
         }
+        // std430 array stride == element sizeOf only for scalars; vec3/struct elements need
+        // larger aligned strides we don't compute yet. Reject non-scalars rather than emit a
+        // wrong/non-portable layout (Phase 4 adds real std430 layout).
+        let et = v._type.firstType.baseType
+        if (et != Type.tInt && et != Type.tUInt && et != Type.tFloat) {
+            errors |> push("ssbo '{vname}' element must be a 32-bit scalar (int/uint/float) for now — std430 vector/struct layout is not yet implemented")
+            return
+        }
         let elem_t = emit_type(m, v._type.firstType)
         let stride = v._type.firstType.sizeOf
         let rta = type_runtime_array(m, elem_t, stride)
@@ -79,6 +87,10 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.StorageBuffer))
         let set = v.annotation |> find_arg("set") ?as tInt ?? 0
         let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("ssbo '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true))
@@ -90,8 +102,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
 // ===== emit a global ExprVar's Variable (or null) =====
 def private global_var_of(e : ExpressionPtr) : Variable const? {
     let ev = e ?as ExprVar
-    if (ev == null) return null
-    if (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return null
+    if (ev == null || ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return null
     return ev.variable
 }
 
@@ -105,17 +116,17 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
             return (id = 0u, pointee = 0u)
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_ssbo) {
+            errors |> push("only ssbo array indexing is supported for now")
+            return (id = 0u, pointee = 0u)   // no AccessChain emitted: don't return an undefined id
+        }
         let pointee = emit_type(m, e._type)
         let idx = emit_value(m, ctx, at.index, errors)
         let res = alloc_id(m)
-        if (gi.is_ssbo) {
-            let ptr_t = type_pointer(m, gi.storage, pointee)
-            var ops <- [ptr_t, res, gi.var_id, const_uint(m, 0u), idx]
-            emit_n(m, SEC_FUNCS, SpvOp.AccessChain, ops)
-            delete ops
-        } else {
-            errors |> push("only ssbo array indexing is supported for now")
-        }
+        let ptr_t = type_pointer(m, gi.storage, pointee)
+        var ops <- [ptr_t, res, gi.var_id, const_uint(m, 0u), idx]
+        emit_n(m, SEC_FUNCS, SpvOp.AccessChain, ops)
+        delete ops
         return (id = res, pointee = pointee)
     }
     let sw = e ?as ExprSwizzle
@@ -126,6 +137,10 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
             return (id = 0u, pointee = 0u)
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (gi.var_id == 0u) {
+            errors |> push("swizzle target global is not classified")
+            return (id = 0u, pointee = 0u)
+        }
         let pointee = emit_type(m, e._type)
         let ptr_t = type_pointer(m, gi.storage, pointee)
         let res = alloc_id(m)
@@ -135,6 +150,10 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
     let gv = global_var_of(e)
     if (gv != null) {
         let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
+        if (gi.var_id == 0u) {
+            errors |> push("global '{gv.name}' is not classified")
+            return (id = 0u, pointee = 0u)
+        }
         return (id = gi.var_id, pointee = gi.value_type)
     }
     errors |> push("unsupported lvalue {e.__rtti}")
@@ -154,21 +173,26 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     if (op2 != null) {
         let l = emit_value(m, ctx, op2.left, errors)
         let r = emit_value(m, ctx, op2.right, errors)
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
         if (op2.op == "*" && e._type.isInteger) {
+            let rt = emit_type(m, e._type)
+            let res = alloc_id(m)
             emit(m, SEC_FUNCS, SpvOp.IMul, rt, res, l, r)
-        } else {
-            errors |> push("unsupported binary op '{op2.op}' on {e._type.baseType}")
+            return res
         }
-        return res
+        errors |> push("unsupported binary op '{op2.op}' on {e._type.baseType}")
+        return 0u   // no instruction emitted: don't return an undefined result id
     }
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
-        return ctx.locals?[intptr(ev.variable)] ?? 0u
+        let lid = ctx.locals?[intptr(ev.variable)] ?? 0u
+        if (lid == 0u) {
+            errors |> push("local '{ev.name}' used before it was assigned an SSA id")
+        }
+        return lid
     }
     if (e._type.flags.ref) {
         let p = emit_ptr(m, ctx, e, errors)
+        if (p.id == 0u) return 0u   // emit_ptr already reported the error; don't OpLoad from id 0
         let res = alloc_id(m)
         emit(m, SEC_FUNCS, SpvOp.Load, p.pointee, res, p.id)
         return res
@@ -183,6 +207,7 @@ def private emit_stmt(var m : SpirvModule; var ctx : EmitCtx; s : ExpressionPtr;
     if (cp != null) {
         let p = emit_ptr(m, ctx, cp.left, errors)
         let val = emit_value(m, ctx, cp.right, errors)
+        if (p.id == 0u || val == 0u) return   // emit_ptr/emit_value already reported; don't OpStore with id 0
         emit(m, SEC_FUNCS, SpvOp.Store, p.id, val)
         return
     }
@@ -215,6 +240,7 @@ def private emit_body(var m : SpirvModule; var ctx : EmitCtx; body : ExpressionP
     }
     for (s in blk.list) {
         emit_stmt(m, ctx, s, errors)
+        break if (ctx.terminated)   // SPIR-V forbids instructions after a block terminator
     }
 }
 
@@ -227,7 +253,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
 
-    collect_dependencies(fn) $(vfun, vvar) {
+    collect_dependencies(fn) $(_vfun, vvar) {
         for (v in vvar) {
             classify_global(m, ctx, v, errors)
         }
@@ -237,9 +263,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
     let t_fn = type_function_void(m, t_void)
     let id_main = alloc_id(m)
 
-    var ep : array<uint>
-    ep |> push(uint(SpvExecutionModel.GLCompute))
-    ep |> push(id_main)
+    var ep <- [uint(SpvExecutionModel.GLCompute), id_main]
     var nm <- string_words("main")
     ep |> push_from(nm)
     delete nm

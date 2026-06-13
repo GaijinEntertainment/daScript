@@ -14,7 +14,6 @@ module spirv_shader shared public
 
 require spirv_emit
 require spirv_builtins public
-require spirv_grammar
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost

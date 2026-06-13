@@ -6,12 +6,13 @@ options gen2
 // all as typed `enum : uint`. SPIR-V's enumerant aliases (many names sharing one value, e.g.
 // the *KHR/*EXT promotions) are fine — daslang enums permit duplicate values.
 //
-// Run:  daslang generator/gen_spirv_grammar.das -- <module-root>
-//   <module-root> defaults to "." — the path that contains spirv_headers/ and spirv/.
+// Run:  daslang generator/gen_spirv_grammar.das -- [--root <dir>]
+//   --root defaults to "." — the path that contains spirv_headers/ and spirv/.
 
-require fio
+require daslib/fio
 require strings
 require daslib/json_boost
+require daslib/clargs
 
 def private j_str(obj : JsonValue?; key : string) : string {
     return obj?[key] ?? ""
@@ -36,7 +37,7 @@ def private value_literal(e : JsonValue?) : string {
 // A few SPIR-V enumerants begin with a digit (Dim "1D"/"2D"/"3D", CooperativeMatrixReduce
 // "2x2"); prefix those with '_' so they are valid daslang enum-member identifiers.
 def private safe_member(name : string) : string {
-    let c = character_at(name, 0)
+    let c = first_character(name)
     if (c >= int(0x30) && c <= int(0x39)) {
         return "_{name}"
     }
@@ -51,13 +52,31 @@ def private each_array(node : JsonValue?; blk : block<(e : JsonValue?) : void>) 
     }
 }
 
+[CommandLineArgs]
+struct GenArgs {
+    @clarg_short = "r"
+    @clarg_doc = "Module root containing spirv_headers/ and spirv/ (default: \".\")"
+    root : string
+
+    @clarg_short = "?"
+    @clarg_doc = "Show this help and exit"
+    help : bool
+}
+
 [export]
 def main {
-    var root = "."
-    let args <- get_command_line_arguments()
-    if (length(args) > 0) {
-        root = args[length(args) - 1]
+    var r <- parse_args(type<GenArgs>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<GenArgs>), "gen_spirv_grammar")
+        return
     }
+    let cfg <- r |> move_unwrap
+    if (cfg.help) {
+        print_help(get_command_info(type<GenArgs>), "gen_spirv_grammar")
+        return
+    }
+    let root = cfg.root |> empty() ? "." : cfg.root
 
     let core_text = fread("{root}/spirv_headers/spirv.core.grammar.json")
     let ext_text = fread("{root}/spirv_headers/extinst.glsl.std.450.grammar.json")
@@ -103,7 +122,7 @@ def main {
 
         // ----- opcodes -----
         w |> write("enum public SpvOp : uint \{\n")
-        each_array(cj?["instructions"]) <| $(ins) {
+        each_array(cj?["instructions"]) $(ins) {
             let name = j_str(ins, "opname")
             let opcode = j_int(ins, "opcode")
             if (name != "" && opcode >= 0) {
@@ -116,7 +135,7 @@ def main {
         // ----- opcode -> full name (disassembler); keyed by raw uint opcode -----
         w |> write("let public SPV_OP_NAMES : table<uint; string> <- \{\n")
         var first = true
-        each_array(cj?["instructions"]) <| $(ins) {
+        each_array(cj?["instructions"]) $(ins) {
             let name = j_str(ins, "opname")
             let opcode = j_int(ins, "opcode")
             if (name != "" && opcode >= 0) {
@@ -127,12 +146,12 @@ def main {
         w |> write("\}\n\n")
 
         // ----- core operand enums (one typed enum per ValueEnum / BitEnum kind) -----
-        each_array(cj?["operand_kinds"]) <| $(k) {
+        each_array(cj?["operand_kinds"]) $(k) {
             let cat = j_str(k, "category")
             let kind = j_str(k, "kind")
             if (cat == "ValueEnum" || cat == "BitEnum") {
                 w |> write("enum public Spv{kind} : uint \{    // {cat}\n")
-                each_array(k?["enumerants"]) <| $(e) {
+                each_array(k?["enumerants"]) $(e) {
                     let en = j_str(e, "enumerant")
                     if (en != "") {
                         w |> write("    {safe_member(en)} = {value_literal(e)}\n")
@@ -146,7 +165,7 @@ def main {
 
         // ----- GLSL.std.450 extended instructions -----
         w |> write("enum public GLSLstd450 : uint \{\n")
-        each_array(ej?["instructions"]) <| $(ins) {
+        each_array(ej?["instructions"]) $(ins) {
             let name = j_str(ins, "opname")
             let opcode = j_int(ins, "opcode")
             if (name != "" && opcode >= 0) {

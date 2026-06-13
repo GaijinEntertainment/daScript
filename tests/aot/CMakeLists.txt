@@ -398,6 +398,28 @@ FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/
 # AOT for loops test files
 FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/loops/*.das")
 
+# AOT for spirv test files (dasSpirv: AST->SPIR-V backend)
+FILE(GLOB AOT_SPIRV_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/spirv/*.das")
+# Exclude the shared fixture module (compiled via DAS_AOT_LIB below)
+list(FILTER AOT_SPIRV_FILES EXCLUDE REGEX "/_")
+
+# Spirv module + test-fixture files, AOT-compiled as libraries (their runtime functions link
+# into test_aot so the tests' stubs resolve). The runtime spirv modules MUST be here — without
+# them the tests' transitive builtin-generic instantiations (array/table finalize, to_array_move,
+# resize, push_from) namespaced to spirv_builder have no stub → error[50101]. The macro-only
+# modules (spirv_emit / spirv_shader) are NOT listed: they run at compile time and contribute no
+# runtime functions. Dependency order (grammar → builder → types → dis → builtins → fixture).
+# The fixture is _spirv_common (not _common) to avoid an AOT-lib symbol clash with
+# tests/linq/_common.das (both would emit das::impl_aot__common → LNK2005 in test_aot).
+SET(AOT_SPIRV_MODULE_FILES
+    modules/dasSpirv/spirv/spirv_grammar.das
+    modules/dasSpirv/spirv/spirv_builder.das
+    modules/dasSpirv/spirv/spirv_types.das
+    modules/dasSpirv/spirv/spirv_dis.das
+    modules/dasSpirv/spirv/spirv_builtins.das
+    tests/spirv/_spirv_common.das
+)
+
 # AOT for daslib test files
 SET(AOT_DASLIB_TEST_FILES
     tests/daslib/clargs_test.das
@@ -756,6 +778,14 @@ add_custom_target(test_aot_loops)
 SET(LOOPS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LOOPS_FILES}" LOOPS_AOT_GENERATED_SRC test_aot_loops daslang)
 
+add_custom_target(test_aot_spirv)
+SET(SPIRV_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_SPIRV_FILES}" SPIRV_AOT_GENERATED_SRC test_aot_spirv daslang)
+
+add_custom_target(test_aot_spirv_modules)
+SET(SPIRV_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_SPIRV_MODULE_FILES}" SPIRV_MODULES_AOT_GENERATED_SRC test_aot_spirv_modules daslang)
+
 add_custom_target(test_aot_fixed_array)
 SET(FIXED_ARRAY_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FIXED_ARRAY_FILES}" FIXED_ARRAY_AOT_GENERATED_SRC test_aot_fixed_array daslang)
@@ -852,6 +882,8 @@ SOURCE_GROUP_FILES("aot generated" URI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" JIT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LOOPS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" SPIRV_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" SPIRV_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
@@ -933,6 +965,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
     ${JIT_AOT_GENERATED_SRC}
     ${LOOPS_AOT_GENERATED_SRC}
+    ${SPIRV_AOT_GENERATED_SRC}
+    ${SPIRV_MODULES_AOT_GENERATED_SRC}
     ${FIXED_ARRAY_AOT_GENERATED_SRC}
     ${TYPEMACRO_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
@@ -980,6 +1014,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_lpipe
     test_aot_jit
     test_aot_loops
+    test_aot_spirv test_aot_spirv_modules
     test_aot_fixed_array test_aot_typemacro
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules

@@ -364,7 +364,76 @@ def square { let i = gl_GlobalInvocationID.x; data[i] = i * i }
 // host reads the `square_spv : array<uint>` global -> vkCreateShaderModule
 ```
 
-**NEXT:** (a) convert `_emit_square.das` + the Phase-0 scaffolds into kept `tests/spirv/` dastests
-with opcode-assertion + census + `spirv-val` + LCOV gates; (b) dasVulkan `run_compute_spirv` GPU
-gate (`out[i]==i*i` on local real GPU + lavapipe); (c) CMake `ADD_MODULE_DAS(spirv …)` registration.
-Then Phase 2 (control flow + arithmetic). Dev binary: the worktree's `bin/Release/daslang.exe`.
+## Phase 1 — test suite + module registration LANDED (2026-06-13)
+
+The emitter is now wired into the main-tree test + AOT machinery. `modules/dasSpirv/CMakeLists.txt`
+registers the seven `spirv/*.das` files via `ADD_MODULE_DAS(spirv spirv <name>)`, so consumers
+`require spirv/spirv_shader` etc. `tests/spirv/` holds the kept dastests (the dev scaffolds
+`_emit_square` / `_square_typed` / `_types_unit` / `_handbuild_square` were converted and deleted):
+
+- `_spirv_common.das` — shared module: the `[compute_shader] square` fixture (→ public `square_spv`
+  global), `validate_spirv()` (shells out to SPIRV-Tools `spirv-val`, soft-skips if absent), and
+  `phase1_emitter_opcodes()` (the declared census set).
+- `test_compute_square.das` — opcode-shape asserts on the captured blob + spirv-val gate.
+- `test_census.das` — gate B: emitted opcode set == declared set, both directions.
+- `test_builder.das` — hand-built square via builder primitives: dedup asserts + spirv-val.
+- `test_types.das` — `emit_type` dedup unit.
+
+All 10 subtests green across all three tiers (interpreter, JIT, AOT); the spirv-val gate genuinely
+runs (exit 0) with `VULKAN_SDK` set. Registered in `tests/aot/CMakeLists.txt` (5-site pattern:
+`test_aot_spirv` for the test files, `test_aot_spirv_modules` via `DAS_AOT_LIB` for `_spirv_common.das`).
+
+**Findings (load-bearing):**
+
+1. **`require spirv/X` resolution needs a `daslang.exe` rebuild.** `ADD_MODULE_DAS` appends to
+   `external_resolve.inc`, which is `#include`d by `src/simulate/fs_file_info.cpp` — so registering a
+   module recompiles that TU. The `.temp` is written at configure; the real `.inc` updates via the
+   `need_and_resolve` target at build. Reconfigure (`cmake -B build`) then rebuild `daslang`.
+2. **The captured global is PUBLIC** (`add_global_var(..., priv=false)`), so the fixture can live in a
+   shared module and the tests `require` it to read `square_spv` — single emit source.
+3. **LCOV (gate A) cannot measure the emitter.** `generate_spirv` runs at COMPILE time (the
+   `[compute_shader]` macro's `patch`); LCOV measures RUNTIME line hits. So `spirv_emit.das` shows
+   0/N under `--cov-path` — that is expected, not a gap. The **census gate (B) is the emitter's
+   coverage proxy.** LCOV meaningfully covers the runtime-exercised files (`spirv_builder`,
+   `spirv_types`, `spirv_dis`) — their numbers grow as later phases add tests.
+4. **Coverage instrumentation breaks shader bodies → `[marker(no_coverage)]` required.**
+   `daslib/coverage` injects a `coverageData` global + `ExprCall` increment statements into every
+   instrumented function; the SPIR-V emitter can't lower those (annotation `patch` fails under
+   `--cov-path`). Mark shader fixtures `[marker(no_coverage)]`. Annotations must share one bracket:
+   `[compute_shader(...), marker(no_coverage)]` — stacked `[...][...]` is a parse error (30151).
+5. **Scaffold footgun (now removed):** `get_command_line_arguments()` returns the *script path* as the
+   last arg, so a scaffold that derived its `.spv` output path from argv overwrote its own source with
+   binary. The dastests never derive paths from argv (they use `create_temp_file_result`).
+6. `emplace` needs a reference-type value (31400); strings (workhorse) use `push`.
+7. **A shared test module named `_common` collides under AOT.** `tests/linq/_common.das` already
+   declares `module _common`; a second `module _common` (in `tests/spirv/`) makes `test_aot` link
+   fail with `LNK2005: das::impl_aot__common already defined` — the AOT-lib registrar symbol is
+   `impl_aot_<module-name>`. Renamed to `_spirv_common` (file + module). daslang requires
+   **require-string == module-name == file-basename** to all agree (else `error[20605] wrong module
+   name`), so the file had to be renamed too, not just the `module` line.
+8. **JIT/AOT need the LLVM-enabled build config.** A bare local configure leaves
+   `DAS_LLVM_DISABLED=ON` (and `DAS_SQLITE_DISABLED=ON`); `-jit` then dies at `can't load LLVM.dll`.
+   Configure to match `ci/release_modules.txt`: `-DDAS_LLVM_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF`.
+   dasLLVM's CMake provisions `lib/LLVM.dll` itself (find_package → falls back to the pinned
+   `llvm-v22.1.5/win64_llvm.tar.gz` prebuilt; copies `LLVM.dll`+`clang-cl.exe`). Toggling LLVM flips
+   the exceptions→setjmp compile def → full daslang rebuild. JIT then runs end-to-end (no manual
+   `lld-link` copy needed; clang-cl finds its linker).
+9. **The runtime spirv modules must be in `test_aot`'s `DAS_AOT_LIB` set, not just the test fixture.**
+   Listing only `tests/spirv/_spirv_common.das` left the tests' transitive builtin-generic
+   instantiations namespaced to `spirv_builder` (array/table `finalize`, `to_array_move`, `resize`,
+   `push_from`) with no AOT stub → `error[50101]`. Fix mirrors dasSQLITE/pugixml: add
+   `modules/dasSpirv/spirv/{spirv_grammar,spirv_builder,spirv_types,spirv_dis,spirv_builtins}.das`
+   to `AOT_SPIRV_MODULE_FILES` (macro-only `spirv_emit`/`spirv_shader` excluded — no runtime funcs).
+   Local gotcha: DAS_AOT custom commands don't track transitive module-`.das` deps, so after editing
+   a spirv module file, `rm -rf tests/spirv/_aot_generated` before rebuilding `test_aot` (CI builds
+   clean, so it never hits this). All three tiers verified green (interp/JIT/AOT 10/10) +
+   `spirv-val` clean. The only full-suite failure is the pre-existing, unrelated
+   `tests/fio/test_format_time.das` (time/locale).
+10. **`DASLANG` env points preflight at the wrong binary.** `utils/preflight` resolves `$DASLANG`
+   first; on this machine it's the main checkout (`d:/Work/daScript/...`, no dasSpirv), so every
+   gate ran against a binary lacking the spirv module → false `spirv/* file not found`. Run preflight
+   with `DASLANG` set inline to the worktree's `bin/Release/daslang.exe`.
+
+**NEXT:** dasVulkan `run_compute_spirv` GPU gate (`out[i]==i*i` on local real GPU + lavapipe CI) —
+the cross-repo Phase-1 piece. Then Phase 2 (control flow + arithmetic). Dev binary: the worktree's
+LLVM-enabled `bin/Release/daslang.exe`.

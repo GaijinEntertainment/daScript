@@ -8,7 +8,6 @@ options gen2
 module spirv_types shared public
 
 require spirv_builder
-require spirv_grammar
 require daslib/ast
 
 def public emit_type(var m : SpirvModule; t : TypeDecl?) : uint {

@@ -38,10 +38,7 @@ def public make_module() : SpirvModule {
 }
 
 def finalize(var m : SpirvModule) {
-    for (s in m.sections) {
-        delete s
-    }
-    delete m.sections
+    delete m.sections       // array<array<uint>>: outer delete finalizes the inner buffers too
     delete m.type_pool
     delete m.const_pool
 }
@@ -105,7 +102,7 @@ def public string_words(s : string) : array<uint> {
     var words : array<uint>
     var cur = 0u
     var shift = 0u
-    peek_data(s) <| $(bytes) {
+    peek_data(s) $(bytes) {
         for (b in bytes) {
             cur = cur | (uint(b) << shift)
             shift += 8u
@@ -191,7 +188,8 @@ def public type_pointer(var m : SpirvModule; sc : SpvStorageClass; pointee : uin
     return id
 }
 
-// void(void) function type — the shape every shader entry point uses.
+// No-parameter OpTypeFunction returning `ret` (deduped). Named *_void because the only caller
+// so far is the compute entry point (ret = void); it generalizes for free to any return type.
 def public type_function_void(var m : SpirvModule; ret : uint) : uint {
     let key = "fn_{ret}"
     let ex = m.type_pool?[key] ?? 0u
@@ -203,6 +201,9 @@ def public type_function_void(var m : SpirvModule; ret : uint) : uint {
 }
 
 def public type_runtime_array(var m : SpirvModule; elem : uint; stride : int) : uint {
+    if (stride <= 0) {
+        panic("type_runtime_array: ArrayStride must be positive, got {stride}")
+    }
     let key = "rta{elem}_s{stride}"
     let ex = m.type_pool?[key] ?? 0u
     return ex if (ex != 0u)
@@ -216,12 +217,17 @@ def public type_runtime_array(var m : SpirvModule; elem : uint; stride : int) : 
 // A block-decorated struct (UBO/SSBO interface). Members + their byte offsets are supplied by
 // the caller (it owns layout). Two structs with identical member ids + offsets dedup to one.
 def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>) : uint {
-    var key = "struct_b"
-    for (mid in members) {
-        key += "_{mid}"
+    if (empty(members) || length(members) != length(offsets)) {
+        panic("type_struct_block: members and offsets must be non-empty and equal length (members={length(members)}, offsets={length(offsets)})")
     }
-    for (off in offsets) {
-        key += "@{off}"
+    let key = build_string() $(var wr) {
+        wr |> write("struct_b")
+        for (mid in members) {
+            wr |> write("_{mid}")
+        }
+        for (off in offsets) {
+            wr |> write("@{off}")
+        }
     }
     let ex = m.type_pool?[key] ?? 0u
     return ex if (ex != 0u)
@@ -252,12 +258,8 @@ def public const_uint(var m : SpirvModule; v : uint) : uint {
 
 // ===== finalize: header (5 words) ++ sections in layout order =====
 def public module_words(m : SpirvModule) : array<uint> {
-    var out : array<uint>
-    out |> push(SPV_MAGIC)
-    out |> push(SPV_VERSION_1_3)
-    out |> push(SPV_GENERATOR_MAGIC)
-    out |> push(m.next_id)              // id bound: all result-ids are < next_id
-    out |> push(0u)                     // schema (reserved, 0)
+    // header: magic, version, generator, id-bound (all result-ids < next_id), schema (0)
+    var out <- [SPV_MAGIC, SPV_VERSION_1_3, SPV_GENERATOR_MAGIC, m.next_id, 0u]
     for (s in m.sections) {
         out |> push_from(s)
     }
