@@ -85,7 +85,7 @@ Key points:
 
 
 The usage file
-=============
+==============
 
 Full source: :download:`19_add_module_option.das <../../../../../tutorials/macros/19_add_module_option.das>`
 

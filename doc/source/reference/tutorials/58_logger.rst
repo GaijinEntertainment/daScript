@@ -50,7 +50,7 @@ machine-readable context. The ``json_boost`` named-tuple form
   //  "fields":{"method":"GET","path":"/users","status":200,"ms":12}}
 
 Level filtering
-==============
+===============
 
 Records below the minimum level are dropped before formatting. The default
 minimum is ``LOG_INFO`` (so ``logger_debug`` is silent unless you lower the
@@ -64,7 +64,7 @@ The runtime levels are ``LOG_TRACE``, ``LOG_DEBUG``, ``LOG_INFO``,
 ``LOG_WARNING``, ``LOG_ERROR``, ``LOG_CRITICAL``.
 
 Per-category overrides
-=====================
+======================
 
 ``logger_set_category_level`` lifts (or lowers) the bar for one category and
 everything beneath it in the dotted hierarchy. An override on ``"app.trace"``
@@ -77,7 +77,7 @@ that prefix still uses the global minimum::
   logger_clear_category_levels()
 
 The diversion hook
-=================
+==================
 
 ``logger_install_hook`` plugs a global debug agent into the runtime so that
 ``print()`` and ``to_log()`` — from this context or any future thread — are
