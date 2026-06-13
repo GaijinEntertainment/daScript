@@ -123,6 +123,133 @@ def public string_words(s : string) : array<uint> {
     return <- words
 }
 
+// ===== cached, deduplicated type + constant emitters =====
+// SPIR-V requires types and constants to be unique. Each helper returns the existing id if the
+// canonical key is already in the pool, else allocates, emits into SEC_TYPES, and caches. ids
+// are 1-based so 0 is a safe "absent" sentinel. Decorations (ArrayStride/Offset/Block) go to
+// SEC_DECOR alongside the type they qualify.
+
+def public type_void(var m : SpirvModule) : uint {
+    let ex = m.type_pool?["void"] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeVoid, id)
+    m.type_pool |> insert("void", id)
+    return id
+}
+
+def public type_bool(var m : SpirvModule) : uint {
+    let ex = m.type_pool?["bool"] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeBool, id)
+    m.type_pool |> insert("bool", id)
+    return id
+}
+
+def public type_int(var m : SpirvModule; width, signedness : uint) : uint {
+    let key = "i{width}_{signedness}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeInt, id, width, signedness)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+def public type_uint(var m : SpirvModule) : uint {
+    return type_int(m, 32u, 0u)
+}
+
+def public type_float(var m : SpirvModule; width : uint) : uint {
+    let key = "f{width}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeFloat, id, width)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+def public type_vector(var m : SpirvModule; comp_id : uint; n : int) : uint {
+    let key = "v{n}_{comp_id}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeVector, id, comp_id, uint(n))
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+def public type_pointer(var m : SpirvModule; sc : SpvStorageClass; pointee : uint) : uint {
+    let key = "p{uint(sc)}_{pointee}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypePointer, id, uint(sc), pointee)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// void(void) function type — the shape every shader entry point uses.
+def public type_function_void(var m : SpirvModule; ret : uint) : uint {
+    let key = "fn_{ret}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeFunction, id, ret)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+def public type_runtime_array(var m : SpirvModule; elem : uint; stride : int) : uint {
+    let key = "rta{elem}_s{stride}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeRuntimeArray, id, elem)
+    emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.ArrayStride), uint(stride))
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// A block-decorated struct (UBO/SSBO interface). Members + their byte offsets are supplied by
+// the caller (it owns layout). Two structs with identical member ids + offsets dedup to one.
+def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>) : uint {
+    var key = "struct_b"
+    for (mid in members) {
+        key += "_{mid}"
+    }
+    for (off in offsets) {
+        key += "@{off}"
+    }
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    var ops : array<uint>
+    ops |> push(id)
+    ops |> push_from(members)
+    emit_n(m, SEC_TYPES, SpvOp.TypeStruct, ops)
+    delete ops
+    emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.Block))
+    for (k in range(length(offsets))) {
+        emit(m, SEC_DECOR, SpvOp.MemberDecorate, id, uint(k), uint(SpvDecoration.Offset), uint(offsets[k]))
+    }
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+def public const_uint(var m : SpirvModule; v : uint) : uint {
+    let key = "cu_{v}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let ut = type_uint(m)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.Constant, ut, id, v)
+    m.const_pool |> insert(key, id)
+    return id
+}
+
 // ===== finalize: header (5 words) ++ sections in layout order =====
 def public module_words(m : SpirvModule) : array<uint> {
     var out : array<uint>

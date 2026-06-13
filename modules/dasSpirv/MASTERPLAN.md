@@ -242,3 +242,77 @@ validated output as a forward regression guard. This replaces "byte-match the re
 **Still open in Phase 0:** convert `_handbuild_square.das` into a kept `tests/spirv/` dastest
 (overlaps the Phase-1 harness + `--cov-path` wiring); CMake `ADD_MODULE_DAS` registration;
 confirm SPIR-V 1.3 on lavapipe + local GPU (lands with the Phase-1 dasVulkan GPU gate).
+
+### Phase 1 — started 2026-06-13
+
+**Type/constant dedup (the #1 risk) — proven.** Added cached `type_void/bool/int/uint/float/
+vector/pointer/function_void/runtime_array/struct_block` + `const_uint` to `spirv_builder.das`
+(0-sentinel pool lookup → emit-once → cache). `_square_typed.das` rebuilds the square module
+through them: byte-identical to the hand-built module (bound 20, 125 words), `spirv-val` clean,
+and assertions confirm dedup (1 `OpTypeInt`/1 `OpConstant`/4 `OpTypePointer` despite repeated
+requests; id-bound doesn't grow on re-request).
+
+**Authoring surface — DECIDED: mirror dasGlsl (Boris's call).** Same pattern as dasGlsl:
+builtins are plain `gl_*` globals recognized by name; I/O globals carry `@`-stacked field
+annotations; function macros `[compute_shader]`/`[vertex_shader]`/`[fragment_shader]` (mirroring
+`[…_program]`) with `local_size_x/y/z`; `@@fn` captures the emitted blob. Annotation set,
+identical to dasGlsl where semantics match, Vulkan-specific where they don't:
+`@in`/`@out`/`@inout` (stage I/O → `Location`), `@location(N)`, `@uniform` (UBO → Uniform/Block,
+Phase 4), `@ssbo` (storage buffer → StorageBuffer/Block), plus the Vulkan descriptor model
+`@binding(N)` + `@set(N)` (default 0) — OpenGL has no descriptor sets, so this is the one
+faithful-but-Vulkan-correct deviation from dasGlsl's flat `@stage`. A bare `var @ssbo data :
+array<uint>` auto-wraps in the required Block-decorated struct (member 0 = the runtime array).
+Target authoring form for square:
+```das
+var @ssbo @binding(0) data : array<uint>
+[compute_shader(local_size_x=64)]
+def square { let i = gl_GlobalInvocationID.x; data[i] = i * i }
+```
+
+**`spirv_types.das` done + validated** — `emit_type(TypeDecl) -> id` for scalars + 2/3/4
+vectors, dedup-backed (`_types_unit.das`: uint emitted once across scalar + uint3-component +
+re-request; bound stays 5). `emit_component_type` for vector lanes.
+
+**Square AST shape (dumped via a throwaway `[dump_ast]` macro overriding the generic
+`preVisitExpression` in `fixup`) — the reference for writing the emitter:**
+```
+body statements (ExprBlock.list):
+  let i = gl_GlobalInvocationID.x
+      init = ExprSwizzle (uint&)   over  ExprVar gl_GlobalInvocationID (uint3& -const)
+             single-component swizzle "x"
+  data[i] = i * i
+      ExprCopy (void):
+        L = ExprAt (uint&)  [ ExprVar data (array<uint>& -const), ExprVar i (uint const) ]
+        R = ExprOp2 "*" (uint)  [ ExprVar i (uint const), ExprVar i (uint const) ]
+```
+Key facts driving codegen: **no `ExprRef2Value` nodes are inserted** — lvalue-ness is read
+straight from the type's `&` (ref) flag. `let i` is a pure value (`uint const`, bare `ExprVar`);
+memory/refs (`data`, `gid`, `data[i]`, `gid.x`) carry `&`. `ExprLet` is *not* delivered to
+`preVisitExpression` (handle it by iterating `ExprBlock.list` / `preVisitExprLet`).
+
+**Emitter design — DECIDED: manual recursion (not the auto AstVisitor).** SPIR-V's
+value/pointer model maps cleanly to two mutually-recursive functions; the auto-visitor's
+bottom-up traversal fights lvalue/rvalue and (later) structured control flow. Deviation from
+"SpirvEmit : AstVisitor" in the plan — revisit for Phase 2 if a visitor proves better.
+- `emit_value(m, ctx, e) : uint` — rvalue/SSA id. `ExprVar` of a `let` → recorded SSA id;
+  `ExprVar`/`ExprAt`/`ExprSwizzle` with `&` → `emit_ptr` then `OpLoad`; `ExprOp2 "*"` (uint) →
+  `OpIMul`; `ExprConst*` → `const_*`.
+- `emit_ptr(m, ctx, e) : {id, pointee_type, storage}` — lvalue. `ExprVar` global → its
+  `OpVariable` id; `ExprAt` on an SSBO array → `OpAccessChain(var, const0 /*member*/, idx)`;
+  single-component `ExprSwizzle` → `OpAccessChain(var, const(component))`.
+- `emit_stmt(ExprCopy)` → `ptr = emit_ptr(L); val = emit_value(R); OpStore`.
+- block driver: iterate `fn.body` (ExprBlock) statements; `ExprLet` → bind each var →
+  `emit_value(init)`; else `emit_stmt`.
+- global model: `GlobalInfo { var_id, storage, is_ssbo_array, elem_type }` keyed by Variable*;
+  classify `gl_*` → builtin Input var + `BuiltIn` deco; `@ssbo` array → StorageBuffer wrapper
+  Block-struct + `DescriptorSet`/`Binding`. First codegen pass may classify by name/type, then
+  switch to reading `@ssbo`/`@binding`/`@set` annotations (mirror dasGlsl's `find_arg`).
+- `generate_spirv(fn, var errors) : array<uint>` orchestrates: `collect_dependencies` → emit
+  globals → entry point (+ interface = Input/Output vars) → `OpExecutionMode LocalSize` →
+  function body. Oracle: must match the hand-built `_square_typed.spv` (spirv-val + `out[i]==i*i`).
+
+**NEXT (post-compact):** write `spirv_emit.das` (the above) + `spirv_shader.das` (the
+`[compute_shader]` annotation mirroring `GlslShader.apply/fixup`, `gl_*` builtin globals, and
+the `@@fn` → `array<uint>` capture via `ExprMakeArray` of `ExprConstUInt`). Dev binary:
+`E:\daslang\bin\Release\daslang.exe` (path-require during dev). Throwaway AST-dump macro lives
+at `/tmp/dump_mod.das` + `/tmp/sq_dump.das` if needed again.
