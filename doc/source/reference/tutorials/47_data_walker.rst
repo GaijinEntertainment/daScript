@@ -35,22 +35,9 @@ A ``DapiDataWalker`` subclass overrides only the callbacks you need.
 All 87 methods default to no-ops, so a minimal walker that prints
 integers, floats, strings, and booleans is very small:
 
-.. code-block:: das
-
-    class ScalarPrinter : DapiDataWalker {
-        def override Int(var value : int&) : void {
-            print("  int: {value}\n")
-        }
-        def override Float(var value : float&) : void {
-            print("  float: {value}\n")
-        }
-        def override String(var value : string&) : void {
-            print("  string: \"{value}\"\n")
-        }
-        def override Bool(var value : bool&) : void {
-            print("  bool: {value}\n")
-        }
-    }
+.. literalinclude:: ../../../../tutorials/language/47_data_walker.das
+   :language: das
+   :lines: 41-54
 
 To walk a value, create the walker, wrap it with ``make_data_walker``,
 then call ``walk_data`` with a pointer and ``TypeInfo``:
@@ -375,21 +362,9 @@ Mutating data in-place
 Scalar callbacks receive ``var value : T&`` — a mutable reference.
 This means the walker can modify data during traversal:
 
-.. code-block:: das
-
-    class FloatClamper : DapiDataWalker {
-        lo : float = 0.0
-        hi : float = 1.0
-
-        def override Float(var value : float&) : void {
-            if (value < lo) {
-                value = lo
-            }
-            if (value > hi) {
-                value = hi
-            }
-        }
-    }
+.. literalinclude:: ../../../../tutorials/language/47_data_walker.das
+   :language: das
+   :lines: 767-779
 
 Walking a ``Particle`` with out-of-range floats clamps them to
 ``[0..1]``:
