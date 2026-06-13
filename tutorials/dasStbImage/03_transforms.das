@@ -57,7 +57,8 @@ def print_img(lbl : string; img : Image) {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // Image.resize(new_w, new_h) returns a new resized Image using the
-// default filter (Catmull-Rom). You can also specify a filter explicitly.
+// default filter (Catmull-Rom when upscaling, Mitchell when downscaling).
+// You can also specify a filter explicitly.
 
 def example_resize() {
     var inscope img <- make_gradient(64, 64)

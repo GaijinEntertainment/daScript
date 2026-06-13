@@ -341,7 +341,7 @@ def tuples_and_variants() {
     let s = Shape(circle = 5.0)
     var js_s = JV(s)
     print("variant: {write_json(js_s)}\n")
-    // output: variant: {"circle":5}
+    // output: variant: {"$variant":0,"circle":5}   ($variant is the active-field index)
 }
 
 // === Vector types ===
