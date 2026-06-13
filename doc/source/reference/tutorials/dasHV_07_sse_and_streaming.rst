@@ -241,3 +241,5 @@ Quick Reference
    Full source: :download:`tutorials/dasHV/07_sse_and_streaming.das <../../../../tutorials/dasHV/07_sse_and_streaming.das>`
 
    Previous tutorial: :ref:`tutorial_dasHV_websockets`
+
+   Next tutorial: :ref:`tutorial_dasHV_https_wss`

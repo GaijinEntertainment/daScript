@@ -136,3 +136,5 @@ direction over 3 seconds.
    Full source: :download:`tutorials/dasAudio/08_midi.das <../../../../tutorials/dasAudio/08_midi.das>`
 
    Audio module reference: :ref:`stdlib_audio`
+
+   Next tutorial: :ref:`tutorial_dasAudio_playback_status`

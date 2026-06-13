@@ -233,6 +233,7 @@ Run any tutorial from the project root::
    tutorials/dasHV_05_cookies_and_forms.rst
    tutorials/dasHV_06_websockets.rst
    tutorials/dasHV_07_sse_and_streaming.rst
+   tutorials/dasHV_08_https_wss.rst
 
 .. _tutorials_dasopenai:
 
@@ -306,6 +307,8 @@ Run any tutorial from the project root::
    tutorials/dasStbImage_03_transforms.rst
    tutorials/dasStbImage_04_pixel_access_and_conversion.rst
    tutorials/dasStbImage_05_drawing_and_blending.rst
+   tutorials/dasStbImage_06_truetype_fonts.rst
+   tutorials/dasStbImage_07_hdr.rst
 
 .. _tutorials_sql:
 
@@ -393,6 +396,8 @@ Run any tutorial from the project root::
    tutorials/dasAudio_06_streaming.rst
    tutorials/dasAudio_07_wav_io.rst
    tutorials/dasAudio_08_midi.rst
+   tutorials/dasAudio_09_playback_status.rst
+   tutorials/dasAudio_10_global_controls.rst
 
 .. _tutorials_dastrudel:
 
