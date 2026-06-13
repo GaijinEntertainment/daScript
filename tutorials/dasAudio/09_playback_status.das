@@ -68,6 +68,9 @@ def main() {
 
         assert(saw_read, "status box never produced a reading")
         print("  final observed state: {last_state}\n")
+        // The whole point of the status box is detecting completion — so confirm
+        // the one-shot tone actually ran through to `stopped` (0.3s tone, ~2s window).
+        assert(reached_stopped, "sound never reached the stopped state within the poll window")
 
         // ──────────────────────────────────────────────────────────────────
         // Release the status box. Order matters: stop the updates, clear the

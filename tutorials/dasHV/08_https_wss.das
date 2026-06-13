@@ -107,9 +107,13 @@ def main() {
             print("GET {https_url}/api/info -> {resp.status_code}: {resp.body}\n")
             var err : string
             var parsed = read_json(string(resp.body), err)
-            ok_json = parsed != null
+            // Don't settle for "it's valid JSON" — an error body parses too. Check
+            // the status and the actual fields the /api/info route promises.
+            let scheme = parsed?["scheme"] ?? ""
+            let tls = parsed?["tls"] ?? false
+            ok_json = resp.status_code == http_status.OK && scheme == "https" && tls
         }
-        assert(ok_json, "HTTPS GET /api/info did not return valid JSON")
+        assert(ok_json, "HTTPS GET /api/info did not return the expected scheme=https, tls=true payload")
     }
     print("\nDone.\n")
 }
