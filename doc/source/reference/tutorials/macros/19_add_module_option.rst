@@ -89,22 +89,9 @@ The usage file
 
 Full source: :download:`19_add_module_option.das <../../../../../tutorials/macros/19_add_module_option.das>`
 
-.. code-block:: das
-
-    require add_module_option_mod
-    options trace_compile = true
-
-    def greet(name : string) {
-        print("Hello, {name}!\n")
-    }
-
-    def add(a, b : int) : int => a + b
-
-    [export]
-    def main() {
-        greet("world")
-        print("2 + 3 = {add(2, 3)}\n")
-    }
+.. literalinclude:: ../../../../../tutorials/macros/19_add_module_option.das
+   :language: das
+   :lines: 23-36
 
 The ``options trace_compile = true`` line is accepted only because
 ``add_module_option_mod`` registered the name — without the ``require``, the

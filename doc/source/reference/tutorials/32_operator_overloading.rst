@@ -24,32 +24,9 @@ Overload ``+``, ``-``, ``*``, ``/``, ``%`` to give your types arithmetic
 behaviour. Each operator is a binary function that takes two values and returns
 a result:
 
-.. code-block:: das
-
-    struct Vec2 {
-        x : float
-        y : float
-    }
-
-    def operator +(a, b : Vec2) : Vec2 {
-        return Vec2(x = a.x + b.x, y = a.y + b.y)
-    }
-
-    def operator -(a, b : Vec2) : Vec2 {
-        return Vec2(x = a.x - b.x, y = a.y - b.y)
-    }
-
-    def operator *(a : Vec2; s : float) : Vec2 {
-        return Vec2(x = a.x * s, y = a.y * s)
-    }
-
-    def operator *(s : float; a : Vec2) : Vec2 {
-        return a * s
-    }
-
-    def operator /(a : Vec2; s : float) : Vec2 {
-        return Vec2(x = a.x / s, y = a.y / s)
-    }
+.. literalinclude:: ../../../../tutorials/language/32_operator_overloading.das
+   :language: das
+   :lines: 27-50
 
 Usage::
 
@@ -122,22 +99,9 @@ Overload ``+=``, ``-=``, ``*=``, ``/=``, ``%=``, ``&=``, ``|=``, ``^=``,
 ``<<=``, ``>>=`` and others for in-place modification. The first argument must
 be ``var ... &`` (mutable reference):
 
-.. code-block:: das
-
-    def operator +=(var a : Vec2&; b : Vec2) {
-        a.x += b.x
-        a.y += b.y
-    }
-
-    def operator -=(var a : Vec2&; b : Vec2) {
-        a.x -= b.x
-        a.y -= b.y
-    }
-
-    def operator *=(var a : Vec2&; s : float) {
-        a.x *= s
-        a.y *= s
-    }
+.. literalinclude:: ../../../../tutorials/language/32_operator_overloading.das
+   :language: das
+   :lines: 145-158
 
 Usage::
 
