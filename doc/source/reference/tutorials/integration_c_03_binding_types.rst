@@ -42,8 +42,9 @@ Binding an enumeration
    das_enumeration_add_value(en, "blue",  "Color_blue",  Color_blue);
    das_module_bind_enumeration(mod, en);
 
-The third argument to ``das_enumeration_make`` selects the underlying
-integer type: ``0`` = int8, ``1`` = int32, ``2`` = int16.
+The third argument to ``das_enumeration_make`` is ``ext`` (boolean):
+non-zero means the enum's underlying storage is ``int64``; zero (the
+common case) means ``int``.
 
 In daslang:
 
@@ -145,7 +146,7 @@ Building and running
 Expected output::
 
    color = green
-   numbers = [10, 20, 30]
+   numbers = [ 10, 20, 30]
    point = (3, 4)
    distance from origin = 5
    as string: (3.00, 4.00)

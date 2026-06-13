@@ -144,7 +144,11 @@ Expected output (Part 2 — error reporting)::
    === Part 2: Error reporting ===
 
    Compilation produced 1 error(s):
-     error 0: bad_script.das:4:19: ...
+     error 0: error[30344]: local variable x initialization type mismatch; int const = string const
+   bad_script.das:4:8
+       let x : int = "not an int"
+           ^
+   not the same type
 
 
 .. seealso::

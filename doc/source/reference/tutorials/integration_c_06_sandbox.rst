@@ -309,35 +309,35 @@ Expected output (Part 1 — valid script)::
 
    clamped: 100
    Hello, sandbox!
-   split: [[ a; b; c]]
+   split: [ a, b, c]
 
 Expected output (Part 2 — banned option)::
 
    === Part 2: Banned option ===
 
    Compilation produced 1 error(s):
-     error 0: option persistent_heap is not allowed here ...
+     error 0: error[50100]: option persistent_heap is not allowed here ...
 
 Expected output (Part 3 — unsafe forbidden)::
 
    === Part 3: Unsafe block forbidden ===
 
    Compilation produced 1 error(s):
-     error 0: unsafe function test ...
+     error 0: error[31012]: unsafe function test ...
 
 Expected output (Part 4 — banned module)::
 
    === Part 4: Banned module ===
 
    Compilation produced 1 error(s):
-     error 0: module not allowed 'fio' ...
+     error 0: error[20605]: module not allowed 'fio_core' ...
 
 Expected output (Part 5 — CodeOfPolicies via C API)::
 
    === Part 5: CodeOfPolicies via C API ===
 
    Compilation with DAS_POLICY_NO_UNSAFE produced 1 error(s):
-     error 0: unsafe function test ...
+     error 0: error[31012]: unsafe function test ...
 
 Part 5 uses ``das_policies_make`` and ``das_policies_set_bool`` to set
 ``DAS_POLICY_NO_UNSAFE`` directly from C, without a ``.das_project``
