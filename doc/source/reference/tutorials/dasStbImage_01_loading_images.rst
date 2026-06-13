@@ -44,7 +44,7 @@ Once loaded, an ``Image`` exposes several query methods:
 ============================  =============================================
 Method                        Description
 ============================  =============================================
-``valid()``                   ``true`` if width > 0 and height > 0
+``valid()``                   ``true`` if width > 0, height > 0, and pixel data is non-empty
 ``stride()``                  Bytes per row (width * channels * bpc)
 ``has_alpha()``               ``true`` if channels is 2 or 4
 ``pixel_size()``              Bytes per pixel (channels * bpc)

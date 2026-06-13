@@ -57,8 +57,8 @@ Blitting
 ========
 
 ``Image.blit(source, x, y)`` copies source pixels onto the image at
-position (x, y).  Both images must have the same number of channels.
-Pixels outside the destination bounds are clipped:
+position (x, y).  Both images must have the same number of channels and
+the same ``bpc``.  Pixels outside the destination bounds are clipped:
 
 .. code-block:: das
 

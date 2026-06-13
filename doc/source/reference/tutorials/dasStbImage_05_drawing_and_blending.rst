@@ -84,6 +84,11 @@ is a common pattern in UI rendering:
 
 .. code-block:: das
 
+   // Helper: pack RGBA channels into a single uint (R in low byte, A in high byte)
+   def pack_rgba(r, g, b, a : int) : uint {
+       return uint(r) | (uint(g) << 8u) | (uint(b) << 16u) | (uint(a) << 24u)
+   }
+
    var canvas = make_image(64, 48, 4)
    // Background
    canvas.fill_rect(0, 0, 64, 48, pack_rgba(30, 30, 50, 255))
