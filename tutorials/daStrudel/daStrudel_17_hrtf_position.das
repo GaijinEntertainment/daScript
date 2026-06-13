@@ -77,7 +77,7 @@ def example_static_positions() {
 //
 // The setters accept patterns. Each event samples the modulation pattern
 // at its onset to get its azimuth. With sine().range(-180, 180).slow(4),
-// the source orbits the listener once every 8 cycles (slow(4) on a 0.5cps
+// the source orbits the listener once every 4 cycles (slow(4) on a 0.5cps
 // stream).
 
 def example_animated_azimuth() {

@@ -44,7 +44,7 @@ def play(var pat : Pattern; seconds : float = 4.0; cps : double = 0.5lf) {
 
 def example_fast() {
     print("=== Section 1: fast(2) — pattern plays twice per cycle ===\n")
-    let pat <- s("c4 e4 g4 c5") |> fast(2.0lf)
+    let pat <- note("c4 e4 g4 c5", "sine") |> sustain(0.4) |> fast(2.0lf)
     play(pat, 4.0)
 }
 
@@ -87,7 +87,7 @@ def example_rev() {
 
 def example_hurry() {
     print("\n=== Section 4: hurry(2) — twice as fast and an octave higher ===\n")
-    let pat <- s("c3 e3 g3 c4") |> hurry(2.0lf)
+    let pat <- note("c3 e3 g3 c4", "sine") |> sustain(0.4) |> hurry(2.0lf)
     play(pat, 4.0)
 }
 

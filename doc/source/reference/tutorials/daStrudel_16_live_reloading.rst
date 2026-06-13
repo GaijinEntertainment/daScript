@@ -46,8 +46,9 @@ Part B: Preserving Player State
 ``require strudel/strudel_live`` is all it takes to keep the strudel
 player state alive across reloads.  The module registers
 ``[before_reload]`` and ``[after_reload]`` hooks that serialise the
-player (tracks, SID, BPM, timing) and the loaded SF2 data into the
-persistent byte store:
+player state (wall time, CPS/BPM, SID, and the sample bank) and the
+loaded SF2 data into the persistent byte store.  Tracks are not
+serialised — ``strudel_init`` re-adds them on every reload:
 
 .. code-block:: das
 
