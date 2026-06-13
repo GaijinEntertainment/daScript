@@ -85,8 +85,8 @@ das_module * register_module_tutorial_c_03(void) {
     das_module_bind_alias(mod, lib, "IntArray", "1<i>A");
 
     // --- Enumeration ---
-    // The third argument to das_enumeration_make is the underlying int type:
-    //   0 = int8, 1 = int (32-bit), 2 = int16.
+    // The third argument ('ext') is a boolean: non-zero = int64 underlying
+    // storage, zero = int.  We pass 1 here, so Color is int64-backed.
     das_enumeration * en = das_enumeration_make("Color", "Color", 1);
     das_enumeration_add_value(en, "red",   "Color_red",   Color_red);
     das_enumeration_add_value(en, "green", "Color_green", Color_green);

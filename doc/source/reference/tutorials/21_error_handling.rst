@@ -38,6 +38,15 @@ general exception handling — only panics are caught::
       print("recovered from panic\n")
   }
 
+.. note::
+
+   Execution resumes after the ``try``/``recover`` block, but a panic means
+   the program reached a broken state. Use ``recover`` to capture the failure
+   (log it, report it) before deciding to stop — **not** as resumable
+   exception handling and not for soft, expected errors. For those, return a
+   status value instead — see :ref:`tutorial_option_and_result`. (Consistent
+   with this, a ``finally`` block is skipped when its body panics.)
+
 assert and verify
 =================
 
