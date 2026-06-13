@@ -3,7 +3,7 @@
 // This tutorial covers:
 //   - Operator precedence via grammar layering
 //   - The `number` built-in terminal
-//   - PEEK for lookahead
+//   - PEEK for positive lookahead, ! for negative lookahead
 //   - commit (cut operator) for error reporting
 //   - WS for whitespace handling
 //   - Recursive rules (parenthesized expressions)
@@ -103,6 +103,39 @@ def eval_and_print(input : string) {
 }
 
 
+// ──────────────────────────────────────────────────────────────────────────
+// Negative lookahead — guard an identifier against reserved keywords
+// ──────────────────────────────────────────────────────────────────────────
+//
+// `!rule` is the mirror image of PEEK: it consumes nothing, but the match
+// succeeds only when `rule` FAILS at this position. The classic use is keyword
+// guarding — accept an identifier UNLESS it spells a reserved word. Here `!"if"`
+// and `!"then"` reject those keywords before the identifier rule even runs.
+
+def identifier(input : string; blk : block<(val : string; err : array<ParsingError>) : void>) {
+    parse(input) {
+        var ident : string
+        rule(!"if", !"then", "{+alpha}" as word, EOF) {
+            return word
+        }
+        var alpha : void?
+        rule(set('a'..'z', 'A'..'Z')) {
+            return null
+        }
+    }
+}
+
+def try_identifier(input : string) {
+    identifier(input) $(val; _err) {
+        if (!empty(val)) {
+            print("  {input} -> identifier \"{val}\"\n")
+        } else {
+            print("  {input} -> rejected (reserved keyword)\n")
+        }
+    }
+}
+
+
 [export]
 def main {
     print("=== Basic arithmetic ===\n")
@@ -129,6 +162,11 @@ def main {
     eval_and_print("2 +")
     eval_and_print("(2 + 3")
     eval_and_print("* 3")
+
+    print("\n=== Negative lookahead (keyword guard) ===\n")
+    try_identifier("hello")     // accepted — not a keyword
+    try_identifier("if")        // rejected — reserved
+    try_identifier("then")      // rejected — reserved
 }
 
 // Expected output:
@@ -154,3 +192,8 @@ def main {
 //
 // === Error cases ===
 //   (error messages for invalid expressions)
+//
+// === Negative lookahead (keyword guard) ===
+//   hello -> identifier "hello"
+//   if -> rejected (reserved keyword)
+//   then -> rejected (reserved keyword)

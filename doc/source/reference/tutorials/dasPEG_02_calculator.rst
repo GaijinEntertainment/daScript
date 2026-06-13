@@ -16,7 +16,7 @@ precedence, parentheses, and unary negation.  You will learn:
 
 - Encoding operator precedence via grammar layering
 - The ``number`` built-in terminal
-- ``PEEK`` for lookahead
+- ``PEEK`` for positive lookahead, ``!`` for negative lookahead
 - ``commit`` (cut) for error reporting
 - Recursive rules
 
@@ -128,6 +128,35 @@ character is a digit before committing to the ``number`` terminal:
 
 This prevents the parser from committing to the number alternative when
 the input does not start with a digit.
+
+Negative Lookahead (``!``)
+==========================
+
+``!rule`` is the mirror of ``PEEK``: it also consumes **no input**, but the
+match succeeds only when ``rule`` *fails* at this position.  The classic use is
+keyword guarding --- accept an identifier unless it spells a reserved word:
+
+.. code-block:: das
+
+   def identifier(input : string;
+                  blk : block<(val : string; err : array<ParsingError>) : void>) {
+       parse(input) {
+           var ident : string
+           rule(!"if", !"then", "{+alpha}" as word, EOF) {
+               return word
+           }
+           var alpha : void?
+           rule(set('a'..'z', 'A'..'Z')) {
+               return null
+           }
+       }
+   }
+
+``!"if"`` and ``!"then"`` reject those keywords before the identifier rule runs,
+so ``"hello"`` parses as an identifier while ``"if"`` and ``"then"`` are
+rejected.  Unlike ``not_set()`` (an inverted character *class* that advances by
+one character --- see :ref:`tutorial_dasPEG_csv_parser`), ``!rule`` is a
+zero-width assertion that can negate *any* rule, not just a character set.
 
 Examples
 ========

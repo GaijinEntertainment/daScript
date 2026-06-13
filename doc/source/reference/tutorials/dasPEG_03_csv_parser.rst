@@ -152,7 +152,7 @@ anything except a specific character":
 
 ``not_set()`` accepts the same range and single-character arguments as
 ``set()``.  Unlike ``!rule`` (negative lookahead, covered in
-:ref:`tutorial_dasPEG_basic_interpreter`), ``not_set()`` is a
+:ref:`tutorial_dasPEG_calculator`), ``not_set()`` is a
 *terminal* --- it always advances the parser by exactly one character
 when it matches.
 
