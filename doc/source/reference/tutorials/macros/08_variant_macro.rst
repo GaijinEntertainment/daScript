@@ -127,11 +127,11 @@ implements the interface → return ``true``.  Otherwise → ``false``:
    let getter_field = "get`{iname}"
    var st = vtype.firstType.structType
    for (fld in st.fields) {
-       if (string(fld.name) == getter_field) {
-           return <- qmacro(true)
+       if (fld.name == getter_field) {
+           return <- quote(true)
        }
    }
-   return <- qmacro(false)
+   return <- quote(false)
 
 The result is a **compile-time constant** — no runtime cost at all.
 ``w is IDrawable`` becomes the literal ``true`` in the final program.
@@ -163,13 +163,12 @@ getter:
 
 .. code-block:: das
 
-   var val = clone_expression(expr.value)
-   return <- qmacro($e(val) != null ? $c(func_name)(*$e(expr.value)) : null)
+   return <- qmacro($e(expr.value) != null ? $c(func_name)(*$e(expr.value)) : null)
 
-``clone_expression`` is needed because the value expression appears
-twice — once in the null check and once in the getter call.  The
-original ``expr.value`` is *moved* into the ``$e()`` splice, so a
-clone provides the second copy.
+``$e(expr.value)`` appears twice without a manual clone because
+``apply_template`` (called internally by ``qmacro``) clones every
+``$e(...)`` substitution independently — each splice site gets its
+own deep copy of the expression.
 
 ``w ?as IDrawable`` becomes::
 
@@ -275,7 +274,7 @@ The full sequence for ``w is IDrawable``:
    InterfaceAsIs checks: Widget? → pointer to struct ✓
    "IDrawable" is an [interface] ✓, Widget has get`IDrawable field ✓
      ↓
-   return qmacro(true) — replaces ExprIsVariant with ExprConstBool
+   return quote(true) — replaces ExprIsVariant with ExprConstBool
      ↓
    simulate → constant folded, zero runtime cost
 
@@ -327,12 +326,12 @@ Key takeaways
      - Check ``expr.value._type`` before claiming an expression
    * - ``find_unique_structure``
      - Look up a struct by name from the compiling program
-   * - ``qmacro(true)``
+   * - ``quote(true)`` / ``quote(false)``
      - Generate a compile-time constant — zero runtime cost
    * - ``$c(name)(args)``
      - Generate a function call by name in ``qmacro``
-   * - ``clone_expression``
-     - Deep-copy an expression for safe double use in ``qmacro``
+   * - ``apply_template`` clone discipline
+     - ``qmacro`` clones each ``$e(...)`` splice independently; no manual pre-clone needed
 
 
 .. seealso::

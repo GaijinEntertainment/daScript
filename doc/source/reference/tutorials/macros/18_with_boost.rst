@@ -190,6 +190,8 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_macro_qmacro`
 
+   Next tutorial: :ref:`tutorial_macro_add_module_option`
+
    Standard library: ``daslib/with_boost.das``
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation
