@@ -86,12 +86,12 @@ Copy vs move — introduction
 ``=`` is copy assignment — works for simple types and copyable values.
 ``<-`` is move assignment — transfers ownership and zeroes the source::
 
-  var p = 10
+  let p = 10
   var q = p       // q is a copy of p
   q = 99          // p is unchanged
 
   var s = 42
-  var r <- s      // r gets 42, s is zeroed
+  let r <- s      // r gets 42, s is zeroed
 
 Move matters for arrays, tables, lambdas, and other heap-allocated types.
 See :ref:`tutorial_arrays` and :ref:`Move, copy, clone <move_copy_clone>`.

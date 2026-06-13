@@ -24,8 +24,8 @@ Inside ``{expr}`` interpolation, add ``:flags width.precision type``::
 **Flags:**
 
 - ``0`` — zero-pad
-- ``-`` — left-align
 - ``+`` — force sign
+- ``<`` — left-align (e.g. ``{x:<10d}``)
 
 **Type characters:**
 

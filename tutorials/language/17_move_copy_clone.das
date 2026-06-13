@@ -129,7 +129,7 @@ def main {
     // string          ✓    ✓    ✓
     // array<T>        ✗    ✓    ✓
     // table<K;V>      ✗    ✓    ✓
-    // lambda          ✗    ✓    ✗
+    // lambda          ✓*   ✓    ✗    (* = copies fat pointer; both vars alias the same capture frame)
     // iterator        ✗    ✓    ✗
     // block           ✗    ✗    ✗
     // POD struct      ✓    ✓    ✓

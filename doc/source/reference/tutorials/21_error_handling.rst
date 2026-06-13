@@ -38,11 +38,6 @@ general exception handling — only panics are caught::
       print("recovered from panic\n")
   }
 
-.. note::
-
-   You cannot ``return`` from inside ``try`` or ``recover`` blocks.
-   Assign results to a variable instead.
-
 assert and verify
 =================
 

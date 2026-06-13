@@ -77,15 +77,17 @@ From the caller's perspective, these look like normal functions:
     init_counter_service()
     print("  increment() = {increment()}\n")
     print("  increment() = {increment()}\n")
+    print("  increment() = {increment()}\n")
     print("  get_counter() = {get_counter()}\n")
     add_to_counter(10)
-    print("  after add = {get_counter()}\n")
+    print("  after add_to_counter(10) = {get_counter()}\n")
     print("  local counter = {counter}\n")
     // output:
     //   increment() = 1
     //   increment() = 2
-    //   get_counter() = 2
-    //   after add = 12
+    //   increment() = 3
+    //   get_counter() = 3
+    //   after add_to_counter(10) = 13
     //   local counter = 0
 
 The agent context's ``counter`` is modified — the caller's local

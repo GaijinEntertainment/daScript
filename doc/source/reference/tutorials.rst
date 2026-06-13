@@ -85,6 +85,8 @@ introduced in earlier tutorials.
    tutorials/54_glob.rst
    tutorials/55_linq_decs.rst
    tutorials/56_linq_query.rst
+   tutorials/57_toml.rst
+   tutorials/58_logger.rst
 
 .. _tutorials_building_from_sdk:
 
@@ -206,6 +208,7 @@ Run any tutorial from the project root::
    tutorials/macros/16_template_type_macro.rst
    tutorials/macros/17_qmacro.rst
    tutorials/macros/18_with_boost.rst
+   tutorials/macros/19_add_module_option.rst
 
 .. _tutorials_dashv:
 
