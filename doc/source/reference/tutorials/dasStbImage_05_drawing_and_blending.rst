@@ -108,3 +108,5 @@ is a common pattern in UI rendering:
    Full source: :download:`tutorials/dasStbImage/05_drawing_and_blending.das <../../../../tutorials/dasStbImage/05_drawing_and_blending.das>`
 
    Previous tutorial: :ref:`tutorial_dasStbImage_pixel_access`
+
+   Next tutorial: :ref:`tutorial_dasStbImage_truetype_fonts`

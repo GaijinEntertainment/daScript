@@ -7,9 +7,28 @@
 // person isn't reverse-engineering it. See README.md in this directory for the
 // reasoning behind the two-action design and the RTD-specific selectors.
 //
+// NOTE: the dashboard editor evaluates a single `new Crawler({...})` expression
+// and rejects comments + sibling top-level declarations (it errors with a JSON
+// parse failure). So this commented mirror is reference-only — when you paste
+// into the dashboard, strip the comments, and do NOT factor logic into a helper
+// function outside the Crawler object (inline it inside the extractor instead).
+//
 // The appId below is the public search ID (also shipped in site/files/docsearch.js).
 // The crawler's admin/write API key is configured separately in the dashboard and
 // is intentionally NOT part of this object.
+//
+// Ranking: pageRank is the FIRST customRanking key (see initialIndexSettings),
+// but docsearch defaults it to 0 on every record, which made desc(weight.pageRank)
+// a dead tiebreaker — ties fell through to level/position and an arbitrary numbered
+// section out-ranked the canonical page (e.g. searching "table" surfaced a tutorial
+// section above the language-reference "Table" page). Action 1's extractor assigns
+// it by URL so the authoritative reference wins textual TIES:
+//   /doc/reference/language/  → 3   canonical concept pages (Array, Table, Structs, …)
+//   …/stdlib/generated/builtin.html → 2   runtime function reference (push, get, length, …)
+//   everything else           → 0   (unchanged default)
+// ast.html (Action 1b) matches no tier (always 0), so it is left untouched.
+// pageRank only reorders results that are otherwise textually tied; it does not
+// override the words/attribute/exact criteria that run before `custom`.
 
 new Crawler({
   appId: "Z88JBBPHHH",
@@ -36,6 +55,7 @@ new Crawler({
     // (empty <dd>) searchable. content is p/li only — never dt (the signatures
     // render as hundreds of syntax-highlight <span>s; pulling that markup into
     // content is what ballooned a 58KB-of-text page into a 349KB record).
+    // The pageRank block at the end assigns the tiers documented in the header.
     {
       indexName: "daslang.io crawler",
       // ast.html is handled by its own signatures-only action below (it has 546
@@ -44,13 +64,13 @@ new Crawler({
         "https://daslang.io/doc/**",
         "!https://daslang.io/doc/stdlib/generated/ast.html",
       ],
-      recordExtractor: ({ helpers, $ }) => {
+      recordExtractor: ({ helpers, $, url }) => {
         // Drop blocks das2rst marked `.. container:: nosearch` (e.g. rtti's
         // 580-value CompilationError enum, which alone blew the per-record size
         // cap): the symbol <dt> + its description stay indexed, only the oversized
         // value/field table is removed. Toggle by symbol name in das2rst.das.
         $(".nosearch").remove();
-        return helpers.docsearch({
+        const records = helpers.docsearch({
           recordProps: {
             lvl0: {
               selectors: ".wy-breadcrumbs li.active",
@@ -76,6 +96,20 @@ new Crawler({
           aggregateContent: true,
           recordVersion: "v3",
         });
+        // pageRank tiers (see header) — canonical pages win textual ties.
+        const p = url.pathname;
+        const pr = p.startsWith("/doc/reference/language/")
+          ? 3
+          : p.endsWith("/stdlib/generated/builtin.html")
+            ? 2
+            : 0;
+        if (pr) {
+          records.forEach((r) => {
+            r.weight = r.weight || {};
+            r.weight.pageRank = pr;
+          });
+        }
+        return records;
       },
     },
     // Action 1b — ast.html ONLY. The AST module exposes 546 public symbols;
@@ -124,7 +158,8 @@ new Crawler({
     // "p, li" catch-all is needed because the landing/downloads/daspkg pages
     // have no <article>/<main>; blog posts use <article>. /doc/** is negated
     // out so doc pages aren't double-processed (a URL matching multiple actions
-    // produces a record from EACH — Algolia crawler semantics).
+    // produces a record from EACH — Algolia crawler semantics). No pageRank tier
+    // matches these URLs.
     {
       indexName: "daslang.io crawler",
       pathsToMatch: ["https://daslang.io/**", "!https://daslang.io/doc/**"],
