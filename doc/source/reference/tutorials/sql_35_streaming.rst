@@ -203,3 +203,5 @@ runtime to materialize one scalar / row / array.
     Full source: :download:`tutorials/sql/35-streaming.das <../../../../tutorials/sql/35-streaming.das>`
 
     Previous tutorial: :ref:`tutorial_sql_backup_vacuum`
+
+    Next tutorial: :ref:`tutorial_sql_attach`

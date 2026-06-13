@@ -60,24 +60,24 @@ smallest ``@sql_primary_key`` per group:
 
 .. code-block:: das
 
-    // Count distinct brands whose first-encountered Car has Year > 2009
+    // Count distinct names whose first-encountered Car has Price > 150
     let n = _sql(db |> select_from(type<Car>)
-                    |> _distinct_by(_.Brand)
-                    |> _count(_.Year > 2009))
-    // SELECT COUNT(*) FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Brand") AS "t0" WHERE "Year" > ?
+                    |> _distinct_by(_.Name)
+                    |> _count(_.Price > 150))
+    // SELECT COUNT(*) FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Name") AS "t0" WHERE "Price" > ?
 
-    // Same shape with long_count for int64 result
+    // Same shape with _long_count for int64 result
     let n64 = _sql(db |> select_from(type<Car>)
-                      |> _distinct_by(_.Brand)
-                      |> _long_count(_.Year > 2009))
+                      |> _distinct_by(_.Name)
+                      |> _long_count(_.Price > 150))
     // (identical SQL; result type widens to int64)
 
-    // Sum of price of the first-encountered Car per brand
+    // Sum of price of the first-encountered Car per name
     let total = _sql(db |> select_from(type<Car>)
-                        |> _distinct_by(_.Brand)
+                        |> _distinct_by(_.Name)
                         |> _select(_.Price)
                         |> sum())
-    // SELECT SUM("Price") FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Brand") AS "t0"
+    // SELECT SUM("Price") FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Name") AS "t0"
 
 "First-encountered" = the row with the minimum ``@sql_primary_key`` value
 per group. For tables where the PK is monotonic with insertion order (the

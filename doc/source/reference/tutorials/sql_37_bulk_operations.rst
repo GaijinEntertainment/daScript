@@ -104,3 +104,5 @@ after, then ``vacuum`` if free-space matters
     Full source: :download:`tutorials/sql/37-bulk_operations.das <../../../../tutorials/sql/37-bulk_operations.das>`
 
     Previous tutorial: :ref:`tutorial_sql_attach`
+
+    Next tutorial: :ref:`tutorial_sql_concurrency`

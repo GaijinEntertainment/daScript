@@ -157,3 +157,5 @@ When NOT to use ATTACH
     Full source: :download:`tutorials/sql/36-attach.das <../../../../tutorials/sql/36-attach.das>`
 
     Previous tutorial: :ref:`tutorial_sql_streaming`
+
+    Next tutorial: :ref:`tutorial_sql_bulk`

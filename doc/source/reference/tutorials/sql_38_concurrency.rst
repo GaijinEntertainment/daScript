@@ -113,3 +113,5 @@ tutorial teaches.
     Full source: :download:`tutorials/sql/38-concurrency.das <../../../../tutorials/sql/38-concurrency.das>`
 
     Previous tutorial: :ref:`tutorial_sql_bulk`
+
+    Next tutorial: :ref:`tutorial_sql_schema_from`
