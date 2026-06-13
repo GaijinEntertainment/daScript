@@ -81,16 +81,31 @@ Attenuation Models
 ==================
 
 Four built-in attenuation models control how volume decreases with distance.
-Each constructor takes a ``max_distance`` parameter:
+``linear_attenuation`` and ``quadratic_attenuation`` take a ``max_distance``
+parameter (distance at which volume reaches zero).
+``inverse_distance_attenuation`` and ``inverse_square_attenuation`` take a
+``dmin`` reference distance (volume is 1.0 at that distance, rolling off
+beyond it):
 
-====================================  ==============================  ==========================================
-Constructor                           Falloff                         Character
-====================================  ==============================  ==========================================
-``inverse_distance_attenuation``      1 / *d*                         Natural, gradual rolloff
-``linear_attenuation``                1 - *d* / *max*                 Straight line to silence at max distance
-``quadratic_attenuation``             1 - (*d* / *max*)\ :sup:`2`     Faster than linear near max distance
-``inverse_square_attenuation``        1 / *d*\ :sup:`2`               Physically accurate, rapid falloff
-====================================  ==============================  ==========================================
+.. list-table::
+   :header-rows: 1
+   :widths: 32 38 30
+
+   * - Constructor
+     - Falloff
+     - Character
+   * - ``inverse_distance_attenuation``
+     - *dmin* / (*d* + *dmin*)
+     - Natural rolloff; full volume at *dmin*
+   * - ``linear_attenuation``
+     - 1 - *d* / *max*
+     - Straight line to silence at *max*
+   * - ``quadratic_attenuation``
+     - 1 - (*d* / *max*)\ :sup:`2`
+     - Faster than linear near *max*
+   * - ``inverse_square_attenuation``
+     - *dmin*\ :sup:`2` / (*d*\ :sup:`2` + *dmin*\ :sup:`2`)
+     - Smooth near *dmin*, rapid falloff
 
 Example --- comparing all four at different distances:
 

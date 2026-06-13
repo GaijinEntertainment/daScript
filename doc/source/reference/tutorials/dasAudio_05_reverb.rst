@@ -113,7 +113,7 @@ The ``ma_chorus_config`` fields are:
 Field           Description
 ==============  ============================================
 ``rate``        LFO modulation rate in Hz
-``depth``       LFO modulation depth (0.0--1.0)
+``depth``       LFO modulation depth in milliseconds (default 8.0 ms)
 ``delay_ms``    Base delay in milliseconds
 ``feedback``    Feedback amount (0.0--1.0)
 ``wet``         Wet/dry mix (0.0 = dry, 1.0 = fully wet)
