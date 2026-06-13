@@ -164,9 +164,9 @@ string to ``JSON(resp, ...)``:
 
 .. note::
 
-   ``JSON()`` always returns status 200.  For non-200 JSON responses,
-   set the body and content-type manually — see
-   :ref:`tutorial_dasHV_http_server_advanced`.
+   ``JSON()`` defaults to status 200 but accepts an optional third argument:
+   ``JSON(resp, json_string, http_status.NOT_FOUND)``.  See
+   :ref:`tutorial_dasHV_http_server_advanced` for examples.
 
 Server Lifecycle
 ================
@@ -190,6 +190,7 @@ Start the server on a background thread, run your test code, then stop:
                            sleep(10u)
                        }
                        server->stop()
+                       server->cleanup()
                        finished |> notify_and_release
                    }
                    started |> join

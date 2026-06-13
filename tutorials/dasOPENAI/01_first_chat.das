@@ -13,8 +13,8 @@
 // which real OpenAI-compatible servers reject.
 //
 // To talk to a real server instead of the mock, point base_url at it and pass
-// the key, e.g.:
-//   let client = openai_client("https://api.openai.com/v1", get_env("OPENAI_API_KEY"))
+// the key, e.g. (requires daslib/fio):
+//   let client = openai_client("https://api.openai.com/v1", get_env_variable("OPENAI_API_KEY"))
 //
 // Run: daslang.exe tutorials/dasOPENAI/01_first_chat.das
 

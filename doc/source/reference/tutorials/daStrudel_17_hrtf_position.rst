@@ -74,7 +74,7 @@ Part B: Animated azimuth
 The setters accept patterns.  Each event samples the modulation
 pattern at its onset to get its azimuth.  With
 ``sine() |> range(-180, 180) |> slow(4)``, the source orbits the
-listener once every 8 cycles (on a 0.5 cps stream):
+listener once every 4 cycles (on a 0.5 cps stream):
 
 .. code-block:: das
 

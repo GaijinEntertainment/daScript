@@ -92,12 +92,10 @@ with different ``k`` and you have a polyrhythm:
 
 .. code-block:: das
 
-    var kick <- atom("bd") |> euclid(3, 8)
-    var hat  <- atom("hh") |> euclid(5, 8)
-    var layers : array<Pattern>
-    layers |> emplace <| kick
-    layers |> emplace <| hat
-    let pat <- stack(layers)
+    let pat <- stack([
+        atom("bd") |> euclid(3, 8),
+        atom("hh") |> euclid(5, 8)
+    ])
     play(pat, 6.0)
 
 Both layers complete every cycle (``n = 8`` in both), but the **3
@@ -105,11 +103,6 @@ onsets** of the kick and the **5 onsets** of the hat sit at different
 grid positions, so the perceived feel is polyrhythmic. Use mismatched
 ``n`` values (e.g. ``(3, 8)`` against ``(2, 5)``) and the cycle length
 becomes ``lcm(8, 5) = 40`` — the patterns realign every 40 steps.
-
-The ``var`` (not ``let``) on ``kick`` and ``hat`` matters: ``stack``
-takes ``array<Pattern>`` and ``emplace`` needs to **move** the lambda
-(Patterns are non-copyable lambdas) — that requires a mutable
-binding.
 
 Part E: ``euclidRot(pat, k, n, rot)`` — rotate the onsets
 =========================================================

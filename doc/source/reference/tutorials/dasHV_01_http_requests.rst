@@ -125,13 +125,17 @@ Status Message
 Binary Data
 ===========
 
-``resp.body`` is a string, but ``resp.content_length`` tells you the
-exact byte count for binary payloads:
+``get_body_bytes(resp)`` extracts the response body as ``array<uint8>`` —
+use it when the server returns non-text binary content such as images
+or raw data files.  ``resp.content_length`` gives the byte count without
+copying:
 
 .. code-block:: das
 
-   GET(url) <| $(resp) {
-       print("Received {resp.content_length} bytes\n")
+   POST(url, "binary test data") $(resp) {
+       var bytes <- get_body_bytes(resp)
+       print("Received {length(bytes)} bytes\n")
+       delete bytes
    }
 
 Quick Reference
@@ -155,6 +159,7 @@ Function                              Description
 ``get_header(resp, key)``             Read a single response header
 ``each_header(resp) <| $(k, v) {}``   Iterate all headers (including Set-Cookie)
 ``status_message(resp)``              Human-readable status phrase
+``get_body_bytes(resp)``              Response body as ``array<uint8>``
 ====================================  ==============================================
 
 .. seealso::

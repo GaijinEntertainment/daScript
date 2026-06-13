@@ -200,8 +200,6 @@ Quick Reference
    * - ``get_url_encoded(req_ptr, key)``
      - Get URL-encoded form field (server)
 
-Source: ``tutorials/dasHV/05_cookies_and_forms.das``
-
 .. seealso::
 
    Full source: :download:`tutorials/dasHV/05_cookies_and_forms.das <../../../../tutorials/dasHV/05_cookies_and_forms.das>`

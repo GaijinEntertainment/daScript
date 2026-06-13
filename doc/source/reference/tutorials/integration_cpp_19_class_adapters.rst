@@ -144,7 +144,7 @@ byte arrays).  The module loads it with ``compileBuiltinModule``:
            addExtern<DAS_BIND_FUN(addObject)>(*this, lib, "add_object",
                SideEffects::modifyExternal, "addObject");
 
-           compileBuiltinModule("class_adapters_module.das",
+           compileBuiltinModule(this, "class_adapters_module.das",
                class_adapters_module_das,
                sizeof(class_adapters_module_das));
        }
@@ -167,29 +167,39 @@ to provide implementations:
 
    class ExampleObject : TutorialBaseClass {
        position : float3
-       speed : float
+       velocity : float3
+       gravity  : float = 9.8f
+       name     : string
 
        def override update(dt : float) : void {
-           position.x += speed * dt
+           print("  [das] {name}.update({dt})\n")
+           position += velocity * dt
+           velocity.y -= gravity * dt
        }
 
-       def override get_position() : float3 {
+       def override get_position : float3 {
+           print("  [das] {name}.get_position => {position}\n")
            return position
        }
    }
 
+   // Helper: registers the object with C++ via the Context* injected argument.
+   // The Context* parameter is injected automatically — do not pass it explicitly.
+   def add_new_object(classPtr) {
+       add_object(classPtr, class_info(*classPtr))
+   }
+
    [export]
    def test {
-       var obj = new ExampleObject()
-       obj.position = float3(0.0, 0.0, 0.0)
-       obj.speed = 10.0
-
-       unsafe {
-           add_object(addr(*obj), class_info(*obj), this_context())
+       print("tick(0.0) = {tick(0.0)}\n\n")          // no objects yet
+       add_new_object(new ExampleObject(name = "A"))
+       for (t in range(3)) {
+           print("tick(0.1) = {tick(0.1)}\n\n")
        }
-
-       let avg = tick(0.5)
-       print("After tick(0.5): avg position = ({avg.x}, {avg.y}, {avg.z})\n")
+       add_new_object(new ExampleObject(name = "B", velocity = float3(1.0, 0.0, 0.0)))
+       for (t in range(3)) {
+           print("tick(0.1) = {tick(0.1)}\n\n")
+       }
    }
 
 
@@ -201,9 +211,21 @@ Build & run
    cmake --build build --config Release --target integration_cpp_19
    bin/Release/integration_cpp_19
 
-Expected output::
+C++ drives each object's overridden ``update`` / ``get_position`` through the
+adapter every tick, so the run is interleaved with per-object traces
+(abridged)::
 
-   After tick(0.5): avg position = (5, 0, 0)
+   tick(0.0) = 0,0,0
+
+     [das] A.update(0.1)
+     [das] A.get_position => 0,0,0
+   tick(0.1) = 0,0,0
+   ...
+     [das] A.update(0.1)
+     [das] A.get_position => 0,-0.58800006,0
+     [das] B.update(0.1)
+     [das] B.get_position => 0.1,0,0
+   tick(0.1) = 0.05,-0.29400003,0
 
 
 .. seealso::

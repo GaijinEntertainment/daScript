@@ -92,7 +92,7 @@ Expected output::
      Simulated successfully.
 
    === Stage 2: Serialize ===
-     Serialized size: 5022 bytes
+     Serialized size: NNN bytes
      Original program released.
 
    === Stage 3: Deserialize ===

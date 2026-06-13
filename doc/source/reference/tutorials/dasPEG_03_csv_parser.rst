@@ -15,7 +15,7 @@ This tutorial builds a CSV parser that demonstrates collection-oriented
 PEG features.  You will learn:
 
 - ``*rule`` (zero-or-more) and ``+rule`` (one-or-more) repetition
-- ``!rule`` (negative lookahead)
+- ``not_set()`` for inverted character classes
 - ``any``, ``EOL``, ``TS`` terminals
 - ``void?`` pattern rules
 - ``string_`` and ``double_`` built-in terminals
@@ -135,19 +135,26 @@ Terminal                      Description
 ``TS``                        Zero or more tabs/spaces (no newlines)
 ============================  =============================================
 
-Negative Lookahead
-==================
+Inverted Character Sets (not_set)
+==================================
 
-``!rule`` succeeds when ``rule`` does **not** match, without consuming
-input.  Useful for "match anything except":
+``not_set(chars...)`` matches any single character **not** in the given
+set.  It is the complement of ``set()`` and is useful for "match
+anything except a specific character":
 
 .. code-block:: das
 
-   // Match any character that is not a newline
+   // Match any character that is not a newline or semicolon
    var expr_text : void?
    rule(not_set('\n', '\r', ';')) {
        return null
    }
+
+``not_set()`` accepts the same range and single-character arguments as
+``set()``.  Unlike ``!rule`` (negative lookahead, covered in
+:ref:`tutorial_dasPEG_basic_interpreter`), ``not_set()`` is a
+*terminal* --- it always advances the parser by exactly one character
+when it matches.
 
 .. seealso::
 

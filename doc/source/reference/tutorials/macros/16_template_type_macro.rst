@@ -33,7 +33,7 @@ path the compiler reads them back to deduce ``auto(T1)``,
 **``[typemacro_function]``** annotation (from ``daslib/typemacro_boost``)
 — converts a regular function into an ``AstTypeMacro``.  It
 auto-generates the class, registers it with ``add_new_type_macro``, and
-extracts ``dimExpr`` arguments into the function parameters.  The first
+extracts ``typeMacroExpr`` arguments into the function parameters.  The first
 two parameters are always ``macroArgument`` (the ``TypeDecl`` node) and
 ``passArgument`` (non-null in generic context); subsequent parameters
 are the user arguments.
@@ -96,7 +96,7 @@ Section 1 — The macro module
 The ``[typemacro_function]`` annotation on ``pair`` converts the
 function into an ``AstTypeMacro`` registered under the name
 ``"pair"``.  The annotation also generates code that extracts
-``dimExpr[1]`` and ``dimExpr[2]`` into the ``T1`` and ``T2``
+``typeMacroExpr[1]`` and ``typeMacroExpr[2]`` into the ``T1`` and ``T2``
 ``TypeDecl?`` parameters.  ``pair`` builds its result from ``Pair``
 and those two arguments, so it never reads the incoming
 ``macroArgument`` type — hence the ``unused_argument(macroArgument)``

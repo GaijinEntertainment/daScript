@@ -38,7 +38,7 @@ Tonal character:
 Part B: Supersaw
 ================
 
-``supersaw`` is seven detuned saws stacked into one voice — the classic
+``supersaw`` is five detuned saws stacked into one voice — the classic
 "trance" pad sound.  It is much wider and fatter than a single saw; a
 low-pass filter tames the top end:
 

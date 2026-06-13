@@ -111,3 +111,5 @@ the recursive case explicitly --- otherwise the audit log doubles
     Full source: :download:`tutorials/sql/41-triggers.das <../../../../tutorials/sql/41-triggers.das>`
 
     Previous tutorial: :ref:`tutorial_sql_fts5`
+
+    Next tutorial: :ref:`tutorial_sql_schema_evolution`

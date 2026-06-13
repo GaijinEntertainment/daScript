@@ -20,9 +20,9 @@ Prerequisites: familiarity with lambdas, function pointers, and typedefs.
 .. code-block:: das
 
     options gen2
-    options no_unused_function_arguments = false
 
     require daslib/delegate
+    require math
 
 
 Declaring delegate types

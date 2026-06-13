@@ -81,7 +81,7 @@ Type compatibility
      - Yes
      - Yes
    * - lambda
-     - No
+     - Yes (alias)
      - Yes
      - No
    * - iterator
@@ -92,6 +92,12 @@ Type compatibility
      - No
      - No
      - No
+
+.. note::
+
+   ``=`` on a lambda copies the fat pointer — both variables share the same
+   capture frame (aliasing, not an independent copy). See
+   :ref:`tutorial_lambdas` for details.
 
 Relaxed assign
 ==============

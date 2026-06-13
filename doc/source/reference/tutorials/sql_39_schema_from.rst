@@ -166,6 +166,8 @@ miscompile.
 
     Full source: :download:`tutorials/sql/39-schema_from.das <../../../../tutorials/sql/39-schema_from.das>`
 
+    Previous tutorial: :ref:`tutorial_sql_concurrency`
+
     Next tutorial: :ref:`tutorial_sql_fts5`
 
     Multi-version ETL: :ref:`tutorial_sql_schema_evolution`

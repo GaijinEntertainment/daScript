@@ -36,7 +36,7 @@ the file and fails with ``missing prerequisite; file not found``:
    das_file_access * fa2 = das_fileaccess_make_default();
    das_fileaccess_introduce_file(fa2, "user_script.das", SCRIPT_SRC, 0);
    das_program * p2 = das_program_compile("user_script.das", fa2, tout, libgrp);
-   // --> error[30901]: missing prerequisite 'my_helpers'; file not found
+   // --> error[20605]: missing prerequisite 'my_helpers'; file not found
 
 
 The solution — ``module X shared``
@@ -161,7 +161,7 @@ Expected output::
    Part 1a: same FileAccess -- compilation succeeded (0 errors)
 
    Part 1b: different FileAccess, module file missing -- compilation failed (1 error):
-     error 0: error[30901]: missing prerequisite 'my_helpers'; file not found ...
+     error 0: error[20605]: missing prerequisite 'my_helpers'; file not found ...
 
    === Part 2: The Solution -- module my_helpers shared ===
 

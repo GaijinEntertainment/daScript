@@ -2,8 +2,8 @@
 //
 // This tutorial covers:
 //   - Oscillator sources via s("sine"|"sawtooth"|"square"|"triangle"|"supersaw")
-//   - Supersaw (seven detuned saws) for thick pad sounds
-//   - Noise sources ("white", "pink", "brown")
+//   - Supersaw (five detuned saws) for thick pad sounds
+//   - Noise sources ("white", "pink")
 //   - FM synthesis with fm() and fmh() (modulation index and harmonicity)
 //
 // Run: daslang.exe tutorials/daStrudel/daStrudel_12_synthesis.das
@@ -56,7 +56,7 @@ def example_oscillators() {
 // Section 2 — Supersaw (thick pad sound)
 // ──────────────────────────────────────────────────────────────────────────
 //
-// The supersaw voice is seven detuned sawtooth oscillators stacked — the
+// The supersaw voice is five detuned sawtooth oscillators stacked — the
 // classic "trance" pad. It is much wider and fatter than a single saw. A
 // low-pass filter tames the top end for a warm tone.
 

@@ -39,11 +39,11 @@ Part A: ``fast(N)``
 
 .. code-block:: das
 
-    let pat <- s("c4 e4 g4 c5") |> fast(2.0lf)
+    let pat <- note("c4 e4 g4 c5", "sine") |> sustain(0.4) |> fast(2.0lf)
     play(pat, 4.0)
 
-The four-note arpeggio plays twice per cycle. ``N`` is a ``double``,
-so non-integer values work — ``fast(1.5lf)`` gives 3 repetitions every
+The four-note arpeggio plays twice per cycle. ``N`` accepts ``int``,
+``float``, or ``double`` — ``fast(1.5lf)`` gives 3 repetitions every
 2 cycles, useful for polyrhythms (covered in tutorial 05).
 
 Part B: ``slow(N)``
@@ -89,7 +89,7 @@ up by ``log2(N)`` octaves:
 
 .. code-block:: das
 
-    let pat <- s("c3 e3 g3 c4") |> hurry(2.0lf)
+    let pat <- note("c3 e3 g3 c4", "sine") |> sustain(0.4) |> hurry(2.0lf)
     play(pat, 4.0)
 
 The pattern plays twice as fast and an octave higher. This is a single
@@ -105,10 +105,10 @@ operator like any other transform:
 
 .. code-block:: das
 
-    let pat <- note("c4 e4 g4 b4", "sine")
+    let pat <- (note("c4 e4 g4 b4", "sine")
         |> sustain(0.4)
         |> rev
-        |> slow(2.0lf)
+        |> slow(2.0lf))
     play(pat, 6.0)
 
 Order matters — ``rev |> slow(2)`` reverses then stretches; ``slow(2) |>

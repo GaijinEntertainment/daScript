@@ -75,30 +75,26 @@ remains continuous:
 When the sweep is finished, ``stop(sid, 0.1)`` fades out and releases the
 stream.
 
-Collected Audio System
-======================
+Rising Chord
+============
 
-``with_audio_system`` is the simplest way to initialise audio, but for
-long-running applications (games, tools) where sounds are created and
-destroyed over time, ``with_collected_audio_system`` adds garbage collection
-for audio resources.  When using it, call ``audio_system_collect``
-periodically to process deferred cleanup:
+The second section of the tutorial streams a rising chord: 10 chunks of
+100 ms each, with the frequency stepping up by 44 Hz per chunk.  Each
+chunk is generated and fed independently via ``append_to_pcm``:
 
 .. code-block:: das
 
-    with_collected_audio_system() {
-        let sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, 1)
-        for (i in range(10)) {
-            var samples <- [for (x in range(chunk_samples));
-                sin(2.0 * PI * 440.0 * float(x) / float(MA_SAMPLE_RATE)) * 0.4
-            ]
-            append_to_pcm(sid, samples)
-            audio_system_collect()
-            sleep(100u)
-        }
-        stop(sid, 0.1)
-        audio_system_collect()
+    let sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, 1)
+    let chunk_samples = MA_SAMPLE_RATE / 10  // 100ms
+    for (i in range(10)) {
+        let freq = 440.0 + float(i) * 44.0
+        var samples <- [for (x in range(chunk_samples));
+            sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE)) * 0.4
+        ]
+        append_to_pcm(sid, samples)
+        sleep(100u)
     }
+    stop(sid, 0.1)
 
 Running the Tutorial
 ====================
@@ -108,8 +104,8 @@ Run from the project root::
    daslang.exe tutorials/dasAudio/06_streaming.das
 
 The tutorial plays a 3-second frequency sweep (220 Hz to 880 Hz), printing
-the current frequency every 10 chunks, then demonstrates the collected
-audio system with a short ascending tone sequence.
+the current frequency every 10 chunks, then plays a 1-second ascending
+tone sequence built from 10 streamed chunks.
 
 .. seealso::
 

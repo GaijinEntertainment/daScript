@@ -22,9 +22,9 @@ Prerequisites: familiarity with structs and arrays.
 .. code-block:: das
 
     options gen2
-    options no_unused_function_arguments = false
 
     require daslib/soa
+    require math
 
 
 What is SOA?

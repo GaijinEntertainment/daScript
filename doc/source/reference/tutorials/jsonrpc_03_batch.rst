@@ -35,7 +35,7 @@ the notification produces no response and input order is preserved.
        if (m == "echo") return jsonrpc::compact_json_whitespace(p)
        return "\"unknown\""
    }
-   // resp = [{"id":1,"result":"pong"},{"id":2,"result":[42]}]
+   // resp = [{"jsonrpc":"2.0","id":1,"result":"pong"},{"jsonrpc":"2.0","id":2,"result":[42]}]
 
 Per-entry errors: continue-on-error
 ====================================

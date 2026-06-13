@@ -152,3 +152,5 @@ exact scope.
    Full source: :download:`tutorials/language/56_linq_query.das <../../../../tutorials/language/56_linq_query.das>`
 
    Previous tutorial: :ref:`tutorial_linq_decs`
+
+   Next tutorial: :ref:`TOML <tutorial_toml>`

@@ -163,8 +163,9 @@ Key points:
 - ``expr.typeexpr.enumType.list`` iterates all ``EnumEntry`` nodes.
 - The bare block provides a lexical scope for the intermediate variable
   inside the loop.
-- The result is a **fixed-size array** (``string[N]``), not a dynamic
-  ``array<string>``.
+- The result is a **dynamic array** (``array<string>``), not a
+  fixed-size ``string[N]`` — ``ExprMakeArray`` always produces a
+  dynamic array.
 
 
 has_non_static_method — returning a bool with subtrait

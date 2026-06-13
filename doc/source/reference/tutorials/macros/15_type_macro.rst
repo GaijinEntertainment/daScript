@@ -21,7 +21,7 @@ inference.
    ``prog`` is the program being compiled.
    ``mod`` is the module that registered the macro.
    ``td`` is the ``TypeDecl`` node representing the macro invocation —
-   its ``dimExpr`` array carries the arguments.
+   its ``typeMacroExpr`` array carries the arguments.
    ``passT`` is non-null only in a generic context (see below).
    Return the resolved ``TypeDeclPtr``, or null on error.
 
@@ -41,7 +41,7 @@ How the parser stores arguments
 
 When the compiler sees a type-macro invocation like
 ``padded(type<float>, 4)`` it creates a ``TypeDecl`` with
-``baseType = Type.typeMacro`` and populates the ``dimExpr`` array:
+``baseType = Type.typeMacro`` and populates the ``typeMacroExpr`` array:
 
 .. list-table::
    :header-rows: 1
@@ -50,18 +50,18 @@ When the compiler sees a type-macro invocation like
    * - Index
      - AST node
      - Contains
-   * - ``dimExpr[0]``
+   * - ``typeMacroExpr[0]``
      - ``ExprConstString``
      - The macro name (``"padded"``)
-   * - ``dimExpr[1]``
+   * - ``typeMacroExpr[1]``
      - ``ExprTypeDecl``
      - The first argument — the type (wraps ``type<float>``)
-   * - ``dimExpr[2]``
+   * - ``typeMacroExpr[2]``
      - ``ExprConstInt``
      - The second argument — the size (``4``)
 
 Type arguments are wrapped in ``ExprTypeDecl``; their inferred result is
-available via ``dimExpr[i]._type``.  Value arguments keep their
+available via ``typeMacroExpr[i]._type``.  Value arguments keep their
 expression type — ``ExprConstInt`` for integer literals,
 ``ExprConstString`` for strings, and so on.
 
@@ -73,14 +73,14 @@ The compiler calls ``visit()`` in two different contexts:
 
 **Concrete** — all type arguments are already inferred.
    Example: ``var data : padded(type<float>, 4)``.
-   Here ``td.dimExpr[1]._type`` is the fully-resolved ``float`` type,
+   Here ``td.typeMacroExpr[1]._type`` is the fully-resolved ``float`` type,
    and ``passT`` is null.
    The macro clones ``_type``, adds a dimension, and returns
    ``float[4]``.
 
 **Generic** — the type includes unresolved type parameters.
    Example: ``def foo(arr : padded(type<auto(TT)>, 4))``.
-   Here ``td.dimExpr[1]._type`` is null because the type has not
+   Here ``td.typeMacroExpr[1]._type`` is null because the type has not
    been inferred yet.  ``passT`` is non-null and carries the actual
    argument type being matched.
    The macro must return a type the compiler can use for generic
@@ -89,7 +89,7 @@ The compiler calls ``visit()`` in two different contexts:
 
 .. important::
 
-   Always check ``td.dimExpr[i]._type == null`` to distinguish the
+   Always check ``td.typeMacroExpr[i]._type == null`` to distinguish the
    generic path from the concrete path.  In the generic path, fall
    back to ``.typeexpr`` or create an ``autoinfer`` type.
 
@@ -105,7 +105,7 @@ The type macro lives in its own module so that it is available via
    :caption: tutorials/macros/type_macro_mod.das
 
 The ``visit`` method first validates that exactly two user arguments
-were provided (``dimExpr`` length 3 — the name plus two arguments) and
+were provided (``typeMacroExpr`` length 3 — the name plus two arguments) and
 that the size argument is a constant integer.
 
 For the **generic path** (``_type == null``): if the first argument is an

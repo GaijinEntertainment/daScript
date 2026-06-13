@@ -182,7 +182,7 @@ three things at compile time:
 
 Both constructors are generated with ``qmacro_function``, registered
 with ``add_function(compiling_module(), fn)``, and marked as
-non-private with ``enumFn.flags &= ~FunctionFlags.privateFunction``.
+non-private with ``enumFn.flags.privateFunction = false``.
 
 
 How string_to_enum works internally
@@ -215,7 +215,7 @@ demonstrates the **code generation** pattern for enumeration macros:
                     }
                     return $i(varName)?[src] ?? default<$t(enumT)>
                 }
-            enumFn.flags &= ~FunctionFlags.privateFunction
+            enumFn.flags.privateFunction = false
             force_at(enumFn, enu.at)
             force_generated(enumFn, true)
             compiling_module() |> add_function(enumFn)
@@ -224,7 +224,7 @@ demonstrates the **code generation** pattern for enumeration macros:
                 $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
                     return $i(varName)?[src] ?? defaultValue
                 }
-            enumFnDefault.flags &= ~FunctionFlags.privateFunction
+            enumFnDefault.flags.privateFunction = false
             force_at(enumFnDefault, enu.at)
             force_generated(enumFnDefault, true)
             compiling_module() |> add_function(enumFnDefault)

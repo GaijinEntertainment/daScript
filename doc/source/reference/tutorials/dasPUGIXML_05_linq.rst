@@ -38,6 +38,7 @@ attribute is absent keeps the struct's declared default:
        "<car id=\"1\" make=\"Audi\"   price=\"45000.0\" year=\"2021\" in_stock=\"true\"/>" +
        "<car id=\"2\" make=\"Toyota\" price=\"28000.0\" year=\"2020\" in_stock=\"true\"/>" +
        "<car id=\"3\" make=\"Ford\"   price=\"31000.0\" in_stock=\"false\"/>" +
+       "<car id=\"4\" make=\"Kia\"    price=\"22000.0\" year=\"2022\" in_stock=\"true\"/>" +
        "</cars>")
 
    parse_xml(CATALOG) $(doc, ok) {
@@ -49,6 +50,7 @@ attribute is absent keeps the struct's declared default:
    // #1 Audi (2021)
    // #2 Toyota (2020)
    // #3 Ford (2000)   <- year attribute absent, default kept
+   // #4 Kia (2022)
 
 Supported field types are the XML scalar attribute types: ``int``, ``uint``,
 ``float``, ``double``, ``bool``, ``string``. Fields of other types keep their
@@ -67,7 +69,7 @@ The iterator is just an iterable, so comprehensions filter and project directly:
            car.make;
            where car.in_stock && car.price < 40000.0]
        print("{affordable}\n")
-       // [ Toyota]
+       // [ Toyota, Kia]
    }
 
 Reverse iteration
