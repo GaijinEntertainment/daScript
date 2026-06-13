@@ -13,7 +13,6 @@ require daslib/ast
 require daslib/rtti
 require daslib/math
 require daslib/ast_boost
-require daslib/utf8_utils
 require daslib/macro_boost
 require daslib/templates_boost
 
@@ -375,7 +374,7 @@ def generate(var gen : ParserGenerator; var def_ : Definition) {
 
 def generate_grammar(var gen : ParserGenerator; var gram : array<Definition>; name : string) {
     for (rule in gram) {
-        gen |> set_rule_type(rule.name |> string(), rule.type_)
+        gen |> set_rule_type(rule.name, rule.type_)
     }
 
     gen |> generate_result_types
@@ -488,10 +487,7 @@ def get_action_block(var alternative : Alternative) : ExpressionPtr {
 
 // Contract: block is managed externally and will clean up its own memory
 def flatten_block(var blk : ExprBlock?) {
-    var result : array<ExpressionPtr>
-    for (e in blk.list) {
-        result |> push(e |> clone_expression)
-    }
+    var result <- [for (e in blk.list); e |> clone_expression]
     return <- result
 }
 
@@ -567,23 +563,14 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
 
         if (Rule(seq = $v(rules))) {
             var result : array<ExpressionPtr>
-
             for (rule in rules) {
-                for (expr in gen |> generate(rule.rule)) {
-                    result |> push(expr)  // nolint:PERF006 — nested generator loop; total size unknown until exhausted
-                }
+                result |> push_from(gen |> generate(rule.rule))
             }
-
             return <- result
         }
 
         if (Rule(alt = $v(alts))) {
-            var results : array<ExpressionPtr>
-
-            for (alt, i in alts, iota()) {
-                results |> push <| generate_one_alternative(gen, alt, i, alts |> length == 1)
-            }
-
+            var results <- [for (alt, i in alts, iota()); generate_one_alternative(gen, alt, i, alts |> length == 1)]
             return <- results
         }
 
@@ -1044,14 +1031,14 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
                 parser |> log_success <| "Alternative {$v(i)} successful"
             }
             if ($v(gen.debug) && !$v(only)) {
-                parser |> log_plain <|  "State: index: {parser.index}, current: {parser.current}"
+                parser |> log_plain <|  "State: index: {parser.index}, current: {get_current_char(parser)}"
             }
             return <- $i(result)
         }
         parser.tabs--
 
         if ($v(gen.debug) && !$v(only)) {
-            parser |> log_plain <| "Resetting index to {parse_pos}, current: {parser.current}"
+            parser |> log_plain <| "Resetting index to {parse_pos}, current: {get_current_char(parser)}"
         }
 
         parser.index = parse_pos

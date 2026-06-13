@@ -119,7 +119,7 @@ def eval_expr_parse(input : string;
 def eval_expr(input : string; vars : table<string; double>) : double {
     eval_vars := vars
     var result = 0.0lf
-    eval_expr_parse(input) $(val; err) {
+    eval_expr_parse(input) $(val; _err) {
         result = val
     }
     return result
@@ -144,7 +144,7 @@ def eval_string_parse(input : string;
 
 def eval_string(input : string) : string {
     var result = ""
-    eval_string_parse(input) $(val; err) {
+    eval_string_parse(input) $(val; _err) {
         result = val
     }
     return result
