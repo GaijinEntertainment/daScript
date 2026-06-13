@@ -172,11 +172,13 @@ to provide implementations:
        name     : string
 
        def override update(dt : float) : void {
+           print("  [das] {name}.update({dt})\n")
            position += velocity * dt
            velocity.y -= gravity * dt
        }
 
        def override get_position : float3 {
+           print("  [das] {name}.get_position => {position}\n")
            return position
        }
    }
@@ -189,7 +191,12 @@ to provide implementations:
 
    [export]
    def test {
+       print("tick(0.0) = {tick(0.0)}\n\n")          // no objects yet
        add_new_object(new ExampleObject(name = "A"))
+       for (t in range(3)) {
+           print("tick(0.1) = {tick(0.1)}\n\n")
+       }
+       add_new_object(new ExampleObject(name = "B", velocity = float3(1.0, 0.0, 0.0)))
        for (t in range(3)) {
            print("tick(0.1) = {tick(0.1)}\n\n")
        }
@@ -204,9 +211,21 @@ Build & run
    cmake --build build --config Release --target integration_cpp_19
    bin/Release/integration_cpp_19
 
-Expected output::
+C++ drives each object's overridden ``update`` / ``get_position`` through the
+adapter every tick, so the run is interleaved with per-object traces
+(abridged)::
 
-   After tick(0.5): avg position = (5, 0, 0)
+   tick(0.0) = 0,0,0
+
+     [das] A.update(0.1)
+     [das] A.get_position => 0,0,0
+   tick(0.1) = 0,0,0
+   ...
+     [das] A.update(0.1)
+     [das] A.get_position => 0,-0.58800006,0
+     [das] B.update(0.1)
+     [das] B.get_position => 0.1,0,0
+   tick(0.1) = 0.05,-0.29400003,0
 
 
 .. seealso::

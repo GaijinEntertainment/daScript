@@ -44,7 +44,8 @@ Binding an enumeration
 
 The third argument to ``das_enumeration_make`` is ``ext`` (boolean):
 non-zero means the enum's underlying storage is ``int64``; zero (the
-common case) means ``int``.
+common case) means ``int``. The example above passes ``1``, so ``Color``
+is int64-backed — pass ``0`` for the usual ``int`` storage.
 
 In daslang:
 
