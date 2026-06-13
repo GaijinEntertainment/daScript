@@ -109,14 +109,25 @@ def eval_and_print(input : string) {
 //
 // `!rule` is the mirror image of PEEK: it consumes nothing, but the match
 // succeeds only when `rule` FAILS at this position. The classic use is keyword
-// guarding — accept an identifier UNLESS it spells a reserved word. Here `!"if"`
-// and `!"then"` reject those keywords before the identifier rule even runs.
+// guarding — accept an identifier UNLESS it is a reserved word. We negate a
+// `keyword` rule that matches a WHOLE keyword (the literal up to EOF), so "if"
+// and "then" are rejected but identifiers that merely start with them ("ifx")
+// are still accepted. (Negating the bare literal `!"if"` would wrongly reject
+// "ifx" too, since the literal matches a prefix.)
 
 def identifier(input : string; blk : block<(val : string; err : array<ParsingError>) : void>) {
     parse(input) {
         var ident : string
-        rule(!"if", !"then", "{+alpha}" as word, EOF) {
+        rule(!keyword, "{+alpha}" as word, EOF) {
             return word
+        }
+        // A reserved keyword is the whole word: the literal then EOF.
+        var keyword : void?
+        rule("if", EOF) {
+            return null
+        }
+        rule("then", EOF) {
+            return null
         }
         var alpha : void?
         rule(set('a'..'z', 'A'..'Z')) {
@@ -126,6 +137,9 @@ def identifier(input : string; blk : block<(val : string; err : array<ParsingErr
 }
 
 def try_identifier(input : string) {
+    // A keyword-rejected parse captures no word, so `val` stays empty. (`err` is
+    // empty on a bare lookahead failure — there is no `commit` — so the captured
+    // value, not the error list, is what distinguishes accept from reject here.)
     identifier(input) $(val; _err) {
         if (!empty(val)) {
             print("  {input} -> identifier \"{val}\"\n")
@@ -167,6 +181,7 @@ def main {
     try_identifier("hello")     // accepted — not a keyword
     try_identifier("if")        // rejected — reserved
     try_identifier("then")      // rejected — reserved
+    try_identifier("ifx")       // accepted — only the exact keyword is reserved
 }
 
 // Expected output:
@@ -197,3 +212,4 @@ def main {
 //   hello -> identifier "hello"
 //   if -> rejected (reserved keyword)
 //   then -> rejected (reserved keyword)
+//   ifx -> identifier "ifx"

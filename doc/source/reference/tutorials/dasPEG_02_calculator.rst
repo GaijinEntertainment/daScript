@@ -134,7 +134,10 @@ Negative Lookahead (``!``)
 
 ``!rule`` is the mirror of ``PEEK``: it also consumes **no input**, but the
 match succeeds only when ``rule`` *fails* at this position.  The classic use is
-keyword guarding --- accept an identifier unless it spells a reserved word:
+keyword guarding --- accept an identifier unless it is a reserved word.  Negate
+a ``keyword`` rule that matches a *whole* keyword (the literal up to ``EOF``),
+so the exact words are rejected but identifiers that merely *start* with them
+(``"ifx"``) are still accepted:
 
 .. code-block:: das
 
@@ -142,8 +145,16 @@ keyword guarding --- accept an identifier unless it spells a reserved word:
                   blk : block<(val : string; err : array<ParsingError>) : void>) {
        parse(input) {
            var ident : string
-           rule(!"if", !"then", "{+alpha}" as word, EOF) {
+           rule(!keyword, "{+alpha}" as word, EOF) {
                return word
+           }
+           // a reserved keyword is the whole word: the literal then EOF
+           var keyword : void?
+           rule("if", EOF) {
+               return null
+           }
+           rule("then", EOF) {
+               return null
            }
            var alpha : void?
            rule(set('a'..'z', 'A'..'Z')) {
@@ -152,11 +163,12 @@ keyword guarding --- accept an identifier unless it spells a reserved word:
        }
    }
 
-``!"if"`` and ``!"then"`` reject those keywords before the identifier rule runs,
-so ``"hello"`` parses as an identifier while ``"if"`` and ``"then"`` are
-rejected.  Unlike ``not_set()`` (an inverted character *class* that advances by
-one character --- see :ref:`tutorial_dasPEG_csv_parser`), ``!rule`` is a
-zero-width assertion that can negate *any* rule, not just a character set.
+``!keyword`` rejects ``"if"`` and ``"then"`` while still accepting ``"ifx"`` ---
+``keyword`` only matches a literal *immediately followed by* ``EOF``, so a
+prefix match alone does not trigger it.  Note ``!rule`` negates *any* rule, not
+just a character set: unlike ``not_set()`` (an inverted character *class* that
+advances by one character --- see :ref:`tutorial_dasPEG_csv_parser`), it is a
+zero-width assertion.
 
 Examples
 ========
