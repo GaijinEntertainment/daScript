@@ -2152,7 +2152,7 @@ namespace das {
                   expr->at, CompilationError::not_resolved_yet_type);
             return Visitor::visit(expr);
         }
-        verifyType(expr->typeexpr, true);
+        verifyType(expr->typeexpr, true, false, /*allowTemplate*/ true);  // type<> introspects; template is fine here
         TypeDecl::clone(expr->type, expr->typeexpr);
         return Visitor::visit(expr);
     }
@@ -2204,7 +2204,7 @@ namespace das {
                       expr->at, CompilationError::not_resolved_yet_typeinfo);
                 return Visitor::visit(expr);
             }
-            verifyType(expr->typeexpr, true);
+            verifyType(expr->typeexpr, true, false, /*allowTemplate*/ true);  // typeinfo introspects; template is fine here
         }
         if (nErrors == program->errors.size()) {
             if (expr->trait == "sizeof") {

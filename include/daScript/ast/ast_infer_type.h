@@ -111,7 +111,7 @@ namespace das {
         string describeFunction(const Function *fun) const;
 
     protected:
-        void verifyType(const TypeDeclPtr &decl, bool allowExplicit = false, bool classMethod = false) const;
+        void verifyType(const TypeDeclPtr &decl, bool allowExplicit = false, bool classMethod = false, bool allowTemplate = false) const;
 
         bool jitEnabled() const;
 
