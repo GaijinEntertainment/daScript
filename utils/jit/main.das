@@ -235,6 +235,9 @@ def run_parallel(files : array<string>; tool : JitToolArgs; jit : JitCliOptions)
                         rc = 1
                     }
                 }
+                // the drain loop only proves all results were pushed; without this join
+                // a straggler worker races the guard ("deleted while being used (ref=1)")
+                completion |> join()
             }
         }
     }
