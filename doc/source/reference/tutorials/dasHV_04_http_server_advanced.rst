@@ -102,7 +102,7 @@ Content-Type and Status Codes
 =============================
 
 ``set_content_type(resp, type)``
-give full control over the response:
+gives full control over the response:
 
 .. code-block:: das
 
