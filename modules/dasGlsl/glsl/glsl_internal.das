@@ -258,6 +258,7 @@ let private glsl_functions <- {
     "uint4"    =>  "uvec4",
     "floori"    =>  "floor",
     "lerp"      =>  "mix",
+    "atan2"     =>  "atan",
     "fast_normalize" => "normalize",
     "saturate"  =>  "SATURATE",
     "int_bits_to_float" => "intBitsToFloat",
