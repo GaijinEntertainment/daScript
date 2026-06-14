@@ -4,7 +4,7 @@ require dastest/testing_boost public
 // Coverage: AOT codegen when a struct and an enum share a name (#3065, fuzzer).
 // daslang keeps structs and enums in separate symbol tables, so this compiles; AOT
 // used to emit `struct var1` and `enum class var1` into the same namespace -- a hard
-// C++ redefinition. The emitter now force-suffixes both (`_Svar1` / `_Evar1`).
+// C++ redefinition. The emitter now disambiguates by prepending `_S`/`_E` (`_Svar1` / `_Evar1`).
 //
 // The struct cannot be referenced by its (now ambiguous) bare name, but it is still
 // emitted as a this-module type, and that emission is what forces the collision in the
