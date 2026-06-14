@@ -330,12 +330,20 @@ def private component_count(bt : Type) : int {
     return 0
 }
 
-// vector constructor name (float2/3/4, int2/3/4, uint2/3/4) -> lane count, else ok=false.
-def private vector_ctor(name : string) : tuple<ok : bool; n : int> {
-    if (name == "float2" || name == "int2" || name == "uint2") return (ok = true, n = 2)
-    if (name == "float3" || name == "int3" || name == "uint3") return (ok = true, n = 3)
-    if (name == "float4" || name == "int4" || name == "uint4") return (ok = true, n = 4)
-    return (ok = false, n = 0)
+// vector constructor name (float2/3/4, int2/3/4, uint2/3/4) -> lane count + component class
+// (0 signed, 1 unsigned, 2 float), else ok=false. The class lets the constructor reject
+// component-kind conversions (e.g. int4(float4(...))), which need conversion ops we don't emit yet.
+def private vector_ctor(name : string) : tuple<ok : bool; n : int; cls : int> {
+    if (name == "float2") return (ok = true, n = 2, cls = 2)
+    if (name == "float3") return (ok = true, n = 3, cls = 2)
+    if (name == "float4") return (ok = true, n = 4, cls = 2)
+    if (name == "int2") return (ok = true, n = 2, cls = 0)
+    if (name == "int3") return (ok = true, n = 3, cls = 0)
+    if (name == "int4") return (ok = true, n = 4, cls = 0)
+    if (name == "uint2") return (ok = true, n = 2, cls = 1)
+    if (name == "uint3") return (ok = true, n = 3, cls = 1)
+    if (name == "uint4") return (ok = true, n = 4, cls = 1)
+    return (ok = false, n = 0, cls = -1)
 }
 
 // OpExtInstImport "GLSL.std.450" once per module; returns the cached set id.
@@ -426,10 +434,17 @@ def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; 
     if (vc.ok) {
         let rt = emit_type(m, e._type)
         if (length(call.arguments) == 1) {
-            let cc = component_count(call.arguments[0]._type.baseType)
-            let aid = emit_value(m, ctx, call.arguments[0], errors)
+            let a0 = call.arguments[0]
+            let cc = component_count(a0._type.baseType)
+            // a different component kind is a conversion (int4(float4(...)), float4(int(...))),
+            // which needs OpConvert* we don't emit yet — reject rather than alias the wrong type.
+            if (scalar_class(a0._type.baseType) != vc.cls) {
+                errors |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
+                return 0u
+            }
+            let aid = emit_value(m, ctx, a0, errors)
             if (aid == 0u) return 0u
-            if (cc == vc.n) return aid                  // identity: float4(someFloat4)
+            if (cc == vc.n) return aid                  // identity: float4(someFloat4), same kind
             if (cc == 1) {                              // splat: float4(scalar) -> repeat N lanes
                 let res = alloc_id(m)
                 var cons <- [rt, res]
@@ -441,10 +456,10 @@ def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; 
                 delete cons
                 return res
             }
-            errors |> push("cannot construct {name} from a single {call.arguments[0]._type.baseType}")
+            errors |> push("cannot construct {name} from a single {a0._type.baseType}")
             return 0u
         }
-        // multi-arg: each constituent contributes its lanes; total must equal n
+        // multi-arg: each constituent contributes its lanes; kinds must match and lanes sum to n
         var total = 0
         let res = alloc_id(m)
         var cons <- [rt, res]
@@ -453,6 +468,11 @@ def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; 
             let cc = component_count(a._type.baseType)
             if (cc == 0) {
                 errors |> push("{name}: argument of type {a._type.baseType} is not a scalar/vector")
+                delete cons
+                return 0u
+            }
+            if (scalar_class(a._type.baseType) != vc.cls) {
+                errors |> push("{name}: constituent of type {a._type.baseType} has a different component kind (conversion not supported yet)")
                 delete cons
                 return 0u
             }

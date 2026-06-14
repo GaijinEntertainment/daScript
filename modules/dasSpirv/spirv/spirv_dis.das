@@ -103,6 +103,20 @@ def public op_first_operand(words : array<uint>; op : SpvOp) : tuple<ok : bool; 
     return (ok = ok, value = value)
 }
 
+// Does any instruction with `op` carry `value` at operand index `idx` (0-based, after word0)?
+// Positional — use this when the operand's POSITION matters and a bare value would false-positive
+// (e.g. OpVariable's storage class at index 2: op_has_operand would also match the result-type/id
+// operands, and small storage-class values like Output collide with ordinary ids).
+def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value : uint) : bool {
+    var found = false
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(op) && idx < n && w[s + idx] == value) {
+            found = true
+        }
+    }
+    return found
+}
+
 // Symbolic dump for eyeballing / diffing against external spirv-dis. Operands are printed as
 // raw decimal words (a result-id-aware pretty printer is a later refinement).
 def public dump(words : array<uint>) : string {

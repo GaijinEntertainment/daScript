@@ -614,3 +614,13 @@ would reject. Fixed: `builtin_info` now records the single stage each builtin is
 I/O in a compute shader) with a clean `error[...]` — restoring "stage drives which builtins are legal."
 Also tightened the two `op_first_operand` entry-model asserts in `test_raster.das` to check `.ok` (an
 empty/truncated module's default `value` 0 collides with `SpvExecutionModel.Vertex`).
+
+Round 2 (same fail-closed family): the vector constructor only checked lane *count*, not component
+*kind* — `int4(float4(...))`/`int4(float2(...), ...)` would alias the wrong-typed id or mix kinds and
+emit invalid SPIR-V. `vector_ctor` now carries the component class; both the single-arg (identity/splat)
+and multi-arg paths reject a constituent whose `scalar_class` differs from the constructor's class with a
+clean "component-kind conversion not supported yet" error (real conversions need `OpConvert*`, deferred).
+Test robustness: added a positional `op_has_operand_at(words, op, idx, value)` to `spirv_dis` and moved
+the three position-sensitive asserts to it (OpVariable storage class at index 2 in `test_raster` +
+`test_control`; OpExecutionMode mode at index 1) — a bare `op_has_operand` value match can false-positive
+against the result-type/id operands when the enum value is a small number.

@@ -48,8 +48,10 @@ def test_vertex_passthrough(t : T?) {
         t |> success(has_location(words, 0u), "tri_vert: has a Location 0 decoration")
         t |> success(has_location(words, 1u), "tri_vert: has a Location 1 decoration")
         t |> success(has_builtin(words, SpvBuiltIn.Position), "tri_vert: gl_Position -> BuiltIn Position")
-        // an Output-storage variable (gl_Position + v_color)
-        t |> success(op_has_operand(words, SpvOp.Variable, uint(SpvStorageClass.Output)),
+        // an Output-storage variable (gl_Position + v_color). OpVariable operands are
+        // [result_type, result_id, storage_class, init?] — check the storage class positionally
+        // (index 2), since a bare value match would also hit the small result-type/id operands.
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Output)),
             "tri_vert: has an Output-storage OpVariable")
         check_ops(t, words, "tri_vert", [SpvOp.CompositeConstruct, SpvOp.Load, SpvOp.Store])
         validate(t, words, "tri_vert")
@@ -64,7 +66,9 @@ def test_fragment_passthrough(t : T?) {
         let fmodel = op_first_operand(words, SpvOp.EntryPoint)
         t |> success(fmodel.ok && fmodel.value == uint(SpvExecutionModel.Fragment),
             "tri_frag: EntryPoint model is Fragment")
-        t |> success(op_has_operand(words, SpvOp.ExecutionMode, uint(SpvExecutionMode.OriginUpperLeft)),
+        // ExecutionMode operands are [entry_id, mode, ...]; check the mode positionally (index 1)
+        // so a small mode value can't false-match the entry-id operand.
+        t |> success(op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(SpvExecutionMode.OriginUpperLeft)),
             "tri_frag: ExecutionMode OriginUpperLeft")
         t |> success(has_location(words, 0u), "tri_frag: has a Location 0 decoration")
         check_ops(t, words, "tri_frag", [SpvOp.CompositeConstruct, SpvOp.Load, SpvOp.Store])
