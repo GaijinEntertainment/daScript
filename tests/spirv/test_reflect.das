@@ -91,6 +91,30 @@ def test_reflect_sampler(t : T?) {
 }
 
 [test]
+def test_reflect_malformed(t : T?) {
+    t |> run("reflect: malformed streams decode to empty (no over-read / over-alloc / panic)") <| @(t : T?) {
+        // empty stream
+        var empty_w : array<uint>
+        var r0 = decode_reflection(empty_w)
+        t |> success(empty(r0.bindings) && empty(r0.push_constants), "empty stream -> empty reflection")
+        finalize(r0)
+        delete empty_w
+        // valid magic + header, but the declared binding count (5) runs past the words
+        var trunc <- [REFLECTION_MAGIC, 0u, 1u, 1u, 1u, 5u]
+        var r1 = decode_reflection(trunc)
+        t |> success(empty(r1.bindings), "truncated binding count -> no bindings parsed")
+        finalize(r1)
+        delete trunc
+        // corrupt huge binding count (decodes to a negative int) must not allocate or crash
+        var huge <- [REFLECTION_MAGIC, 0u, 1u, 1u, 1u, 0xFFFFFFFFu]
+        var r2 = decode_reflection(huge)
+        t |> success(empty(r2.bindings), "huge/negative binding count -> no bindings parsed")
+        finalize(r2)
+        delete huge
+    }
+}
+
+[test]
 def test_reflect_roundtrip(t : T?) {
     t |> run("reflect: encode/decode round-trips a hand-built reflection") <| @(t : T?) {
         var src : SpirvReflection

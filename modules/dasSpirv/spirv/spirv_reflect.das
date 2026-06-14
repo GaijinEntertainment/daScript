@@ -97,11 +97,14 @@ def private stage_flags_from_uint(raw : uint) : SpirvStageFlags {
     return SpirvStageFlags(raw)     // nolint:LINT005
 }
 
-//! Decode the producer's word stream into a typed reflection. An empty / non-magic stream decodes to
-//! an empty reflection (entry "main", local_size (1,1,1)) rather than panicking.
+//! Decode the producer's word stream into a typed reflection. A malformed stream (empty, wrong magic,
+//! or a declared binding/push count that would run past the words) decodes to whatever was parsed so
+//! far rather than over-reading or over-allocating — never panics. The count guards use division (not
+//! `idx + n*stride`) so a corrupt huge count can't overflow before the bound is checked.
 def decode_reflection(words : array<uint>) : SpirvReflection {
     var r = SpirvReflection(entry_point = "main", local_size = int3(1, 1, 1))
-    if (length(words) < 6 || words[0] != REFLECTION_MAGIC) {
+    let n = length(words)
+    if (n < 6 || words[0] != REFLECTION_MAGIC) {
         return <- r
     }
     r.stage = stage_flags_from_uint(words[1])
@@ -109,6 +112,9 @@ def decode_reflection(words : array<uint>) : SpirvReflection {
     var idx = 5
     let nb = int(words[idx])
     idx++
+    if (nb < 0 || nb > (n - idx) / 5) {
+        return <- r
+    }
     r.bindings |> reserve(nb)
     for (_ in range(nb)) {
         var b : SpirvDescriptorBinding
@@ -119,8 +125,14 @@ def decode_reflection(words : array<uint>) : SpirvReflection {
         b.stages = stage_flags_from_uint(words[idx]); idx++
         r.bindings |> push(b)
     }
+    if (idx >= n) {
+        return <- r
+    }
     let np = int(words[idx])
     idx++
+    if (np < 0 || np > (n - idx) / 3) {
+        return <- r
+    }
     r.push_constants |> reserve(np)
     for (_ in range(np)) {
         var p : SpirvPushConstantRange
