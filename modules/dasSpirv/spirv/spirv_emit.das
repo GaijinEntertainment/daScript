@@ -30,6 +30,8 @@ struct GlobalInfo {
     storage    : SpvStorageClass
     value_type : uint               // SPIR-V type-id of the whole variable's value
     is_ssbo    : bool               // wrapped in a Block-decorated struct (member 0 = the array)
+    is_block   : bool               // a Block-decorated struct (ssbo OR ubo); member access -> OpAccessChain by field index
+    is_sampler : bool               // a combined image sampler (UniformConstant OpTypeSampledImage); used via texture()
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -48,6 +50,7 @@ struct EmitCtx {
     loop_stack    : array<LoopTargets>          // innermost loop's {merge, continue} for break/continue
     terminated    : bool                        // current block already has a terminator
     glsl_ext      : uint                        // OpExtInstImport "GLSL.std.450" set id (0 = not imported yet)
+    stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -89,6 +92,83 @@ def private stage_name(stage : ShaderStage) : string {
     if (stage == ShaderStage.Vertex) return "vertex"
     if (stage == ShaderStage.Fragment) return "fragment"
     return "compute"
+}
+
+// ===== std140 layout for a UBO interface block =====
+// std140 base alignment: scalar -> 4, vec2 -> 8, vec3/vec4 -> 16. The base *size* of a vec3 is 12
+// (only its alignment is 16), so a scalar can pack into the trailing 4 bytes after a vec3.
+def private std140_align(bt : Type) : int {
+    let cc = component_count(bt)
+    if (cc == 1) return 4
+    if (cc == 2) return 8
+    return 16
+}
+
+def private std140_size(bt : Type) : int {
+    return component_count(bt) * 4
+}
+
+def private round_up(off, a : int) : int {
+    return ((off + a - 1) / a) * a
+}
+
+// Build a Block-decorated interface struct from a daslang struct's fields, laid out std140. Shared
+// by @uniform and @push_constant blocks. 32-bit scalar/vector/matrix members are supported; nested
+// structs and arrays are not yet. Returns the struct type-id; the caller wraps it in the right
+// storage-class pointer + descriptor decorations.
+def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint> {
+    if (st == null || empty(st.fields)) {
+        errors |> push("interface block '{sname}' must be a struct with at least one field")
+        return (ok = false, type_id = 0u)
+    }
+    var members : array<uint>
+    var offsets : array<int>
+    var mat_strides : array<int>
+    var off = 0
+    for (fld in st.fields) {
+        let mi = matrix_info(fld._type)
+        if (mi.ok) {
+            // std140 matrix: ColMajor, each column padded to vec4 (MatrixStride 16), align 16,
+            // size = 16 * cols. (daslang float3x3 stores packed columns, so its bytes need
+            // repacking host-side before upload; float4x4 columns are already vec4 -> direct.)
+            off = round_up(off, 16)
+            members |> push(emit_type(m, fld._type))
+            offsets |> push(off)
+            mat_strides |> push(16)
+            off += 16 * mi.cols
+            continue
+        }
+        let fbt = fld._type.baseType
+        // only 32-bit int/uint/float scalars + their vectors. scalar_class rejects bool (and any
+        // non-numeric): OpTypeBool has no physical size in a std140/std430 interface block, so a
+        // bool member would emit an invalid layout — reject it fail-closed rather than emit it.
+        if (scalar_class(fbt) < 0) {
+            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, and matrices; bool has no physical interface-block layout in Vulkan)")
+            delete members
+            delete offsets
+            delete mat_strides
+            return (ok = false, type_id = 0u)
+        }
+        off = round_up(off, std140_align(fbt))
+        members |> push(emit_type(m, fld._type))
+        offsets |> push(off)
+        mat_strides |> push(0)
+        off += std140_size(fbt)
+    }
+    let id = type_struct_block(m, members, offsets, mat_strides)
+    delete members
+    delete offsets
+    delete mat_strides
+    return (ok = true, type_id = id)
+}
+
+// ===== combined image sampler detection =====
+// sampler globals are recognized by their opaque marker struct name (sampler2D, ...). Returns the
+// SPIR-V image dimensionality so classify_global can build the OpTypeImage / OpTypeSampledImage.
+def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D)
+    if ("{t.structType.name}" == "sampler2D") return (ok = true, dim = SpvDim._2D)
+    return (ok = false, dim = SpvDim._2D)
 }
 
 // ===== global variable classification + emission =====
@@ -137,6 +217,26 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.interface_ids |> push(vid)
         return
     }
+    // combined image sampler: a global of an opaque sampler type (sampler2D) -> UniformConstant
+    // OpTypeSampledImage + DescriptorSet/Binding. Used only via texture(); not in the entry interface.
+    let si = sampler_info(v._type)
+    if (si.ok) {
+        let img = type_image(m, type_float(m, 32u), si.dim)
+        let simg = type_sampled_image(m, img)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, simg)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("sampler '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = simg, is_sampler = true))
+        return
+    }
     if (v.annotation |> find_arg("ssbo") is tBool) {
         if (v._type.baseType != Type.tArray || v._type.firstType == null) {
             errors |> push("ssbo '{vname}' must be an array<T>")
@@ -169,10 +269,62 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         }
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
-        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin or @ssbo)")
+    // uniform buffer: @uniform struct -> Uniform storage + Block-decorated struct (std140) +
+    // DescriptorSet/Binding. Member reads go through ExprField -> OpAccessChain by field index.
+    if (v.annotation |> find_arg("uniform") is tBool) {
+        if (v._type.baseType != Type.tStructure || v._type.structType == null) {
+            errors |> push("uniform '{vname}' must be a struct")
+            return
+        }
+        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        if (!bs.ok) return
+        let pt = type_pointer(m, SpvStorageClass.Uniform, bs.type_id)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Uniform))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("uniform '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Uniform, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        return
+    }
+    // push constants: @push_constant struct -> PushConstant storage + Block-decorated struct. Same
+    // std140-style member layout + ExprField access as a UBO, but NO descriptor set/binding (push
+    // constants are not descriptors) and not listed in the entry interface (SPIR-V <= 1.3).
+    if (v.annotation |> find_arg("push_constant") is tBool) {
+        if (v._type.baseType != Type.tStructure || v._type.structType == null) {
+            errors |> push("push_constant '{vname}' must be a struct")
+            return
+        }
+        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        if (!bs.ok) return
+        let pt = type_pointer(m, SpvStorageClass.PushConstant, bs.type_id)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.PushConstant))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.PushConstant, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        return
+    }
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, or a sampler type e.g. sampler2D)")
+}
+
+// ===== member index of a struct field by name =====
+// ExprField.fieldIndex is still -1 at the annotation's patch (pre-fold) stage, so resolve the
+// member position by name from the (fully-known) struct type instead.
+def private field_index_by_name(st : Structure?; name : string) : int {
+    if (st == null) return -1
+    var i = 0
+    for (fld in st.fields) {
+        if ("{fld.name}" == name) return i
+        i++
+    }
+    return -1
 }
 
 // ===== emit a global ExprVar's Variable (or null) =====
@@ -219,6 +371,30 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
         var ops <- [ptr_t, res, gi.var_id, const_uint(m, 0u), idx]
         emit_n(m, SEC_FUNCS, SpvOp.AccessChain, ops)
         delete ops
+        return (id = res, pointee = pointee)
+    }
+    // member of a Block global (ubo.color) -> OpAccessChain by field index into the Uniform/SSBO struct
+    let fld = e ?as ExprField
+    if (fld != null) {
+        let bv = global_var_of(fld.value)
+        if (bv == null) {
+            errors |> push("member access '.{fld.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
+            return (id = 0u, pointee = 0u)
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_block) {
+            errors |> push("member access '.{fld.name}': '{bv.name}' is not a block (uniform/ssbo/push_constant) global")
+            return (id = 0u, pointee = 0u)
+        }
+        let midx = field_index_by_name(bv._type.structType, "{fld.name}")
+        if (midx < 0) {
+            errors |> push("member access '.{fld.name}': no such field on '{bv.name}'")
+            return (id = 0u, pointee = 0u)
+        }
+        let pointee = emit_type(m, e._type)
+        let ptr_t = type_pointer(m, gi.storage, pointee)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(m, uint(midx)))
         return (id = res, pointee = pointee)
     }
     let sw = e ?as ExprSwizzle
@@ -445,6 +621,36 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
 // ===== ExprCall: vector constructors, dot (core OpDot), GLSL.std.450 math (OpExtInst) =====
 def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; e : ExpressionPtr; var errors : array<string>) : uint {
     let name = "{call.name}"
+    // ----- texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod -----
+    if (name == "texture") {
+        if (length(call.arguments) != 2) {
+            errors |> push("texture expects (sampler, uv)")
+            return 0u
+        }
+        // implicit-LOD sampling uses screen-space derivatives -> fragment stage only (fail-closed)
+        if (ctx.stage != ShaderStage.Fragment) {
+            errors |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
+            return 0u
+        }
+        let sg = global_var_of(call.arguments[0])
+        if (sg == null) {
+            errors |> push("texture: first argument must be a sampler global")
+            return 0u
+        }
+        let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+        if (!gi.is_sampler) {
+            errors |> push("texture: '{sg.name}' is not a sampler")
+            return 0u
+        }
+        let simg = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+        let uv = emit_value(m, ctx, call.arguments[1], errors)
+        if (uv == 0u) return 0u
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+        return res
+    }
     // ----- vector constructor: OpCompositeConstruct (or splat / identity for one arg) -----
     let vc = vector_ctor(name)
     if (vc.ok) {
@@ -679,6 +885,40 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     return (ok = false, id = 0u)
 }
 
+// ===== `*` over matrices / vectors / scalars =====
+// SPIR-V splits multiplication by operand shape: OpMatrixTimesMatrix / OpMatrixTimesVector /
+// OpVectorTimesScalar. Plain component-wise FMul/IMul (the scalar binop path) only works when both
+// operands have the SAME shape, so the mixed cases are routed here first. Returns handled=false for
+// same-shape operands (let binop_code emit FMul/IMul); handled=true with id=0 on an unsupported mix
+// (error already pushed). Operands l/r are pre-emitted result-ids. Only the daslang-defined matrix
+// operators are handled (matrix*matrix, matrix*vector, and float vector*scalar either order);
+// daslang has no matrix*scalar or vector*matrix operator, so those SPIR-V ops are intentionally absent.
+def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, r : uint; var errors : array<string>) : tuple<handled : bool; id : uint> {
+    let lmat = matrix_info(op2.left._type)
+    let rmat = matrix_info(op2.right._type)
+    let lcc = component_count(op2.left._type.baseType)
+    let rcc = component_count(op2.right._type.baseType)
+    let lcls = scalar_class(op2.left._type.baseType)
+    let rcls = scalar_class(op2.right._type.baseType)
+    // same-shape (scalar*scalar or equal-width vector*vector): component-wise, defer to binop_code
+    if (!lmat.ok && !rmat.ok && lcc == rcc) return (handled = false, id = 0u)
+    let rt = emit_type(m, e._type)
+    let res = alloc_id(m)
+    if (lmat.ok && rmat.ok) {
+        emit(m, SEC_FUNCS, SpvOp.MatrixTimesMatrix, rt, res, l, r)
+    } elif (lmat.ok && rcc > 1) {
+        emit(m, SEC_FUNCS, SpvOp.MatrixTimesVector, rt, res, l, r)
+    } elif (lcc > 1 && rcc == 1 && lcls == 2 && rcls == 2) {
+        emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, l, r)
+    } elif (rcc > 1 && lcc == 1 && lcls == 2 && rcls == 2) {
+        emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, r, l)   // SPIR-V wants the vector first
+    } else {
+        errors |> push("unsupported '*' between {op2.left._type.baseType} and {op2.right._type.baseType} (integer vector/scalar mixes need a splat)")
+        return (handled = true, id = 0u)
+    }
+    return (handled = true, id = res)
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -700,6 +940,12 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
         let l = emit_value(m, ctx, op2.left, errors)
         let r = emit_value(m, ctx, op2.right, errors)
         if (l == 0u || r == 0u) return 0u   // operand error already reported; don't emit with id 0
+        // matrix / vector-scalar `*`: SPIR-V has dedicated linear-algebra ops (operand types differ,
+        // so the plain component-wise FMul path would be invalid). Handled before the scalar binop.
+        if (ops == "*") {
+            let mr = emit_mul(m, op2, e, l, r, errors)
+            if (mr.handled) return mr.id
+        }
         // comparison -> bool result (operands keep their scalar class)
         let cc = cmp_code(ops, cls)
         if (cc.ok) {
@@ -768,6 +1014,27 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
             errors |> push("local '{ev.name}' used before it was assigned an SSA id")
         }
         return lid
+    }
+    // swizzle of a local/computed VALUE (p.x / p.xy on a let or expression result). A swizzle of a
+    // global lvalue is a ref and goes through emit_ptr below; this handles the value case via
+    // OpCompositeExtract (single component) / OpVectorShuffle (multiple).
+    let sw = e ?as ExprSwizzle
+    if (sw != null && global_var_of(sw.value) == null) {
+        let base = emit_value(m, ctx, sw.value, errors)
+        if (base == 0u) return 0u
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        if (length(sw.fields) == 1) {
+            emit(m, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(sw.fields[0]))
+        } else {
+            var ops <- [rt, res, base, base]   // shuffle from a single source: vec1==vec2==base
+            for (f in sw.fields) {
+                ops |> push(uint(f))
+            }
+            emit_n(m, SEC_FUNCS, SpvOp.VectorShuffle, ops)
+            delete ops
+        }
+        return res
     }
     if (e._type.flags.ref) {
         let p = emit_ptr(m, ctx, e, errors)
@@ -1162,6 +1429,7 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
+    ctx.stage = stage
 
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))

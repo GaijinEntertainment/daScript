@@ -653,3 +653,127 @@ textbook OpTypeArray/OpConstantComposite/OpAccessChain, lint + format clean.
 argument in the lint/macro-patch compile. `emit_const` must handle BOTH (and the unary-minus fold), or
 the shader compiles in one context and errors in another. Both shapes produce the identical
 `OpConstantComposite`, so the census stays stable across tiers.
+
+### Phase 4a — UBO struct foundation LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+First Phase-4 (resource breadth) slice: uniform buffer objects. A `@uniform` struct global lowers to a
+Uniform-storage, Block-decorated `OpTypeStruct` with std140 member offsets, read through member access
+(`ubo.field` → `OpAccessChain` by field index → `OpLoad`). All three tiers green (interp/JIT/AOT 40/40),
+spirv-val clean, external `spirv-dis` confirms textbook std140 layout, lint + format clean.
+
+- **std140 layout** (`std140_align`/`std140_size`/`round_up`/`build_block_struct` in `spirv_emit`): scalar
+  align 4, vec2 align 8, vec3/vec4 align 16; the vec3 base *size* is 12 (not 16), so a scalar packs into a
+  vec3's (or vec2's) trailing slot. The fixture struct exercises both packing edge cases — `flags@24` after
+  a vec2, `bias@44` after a vec3. Members + offsets feed the existing `type_struct_block` builder (it already
+  emits `Block` + per-member `Offset` decorations). Scalar/vector members only for now (matrices/nested
+  structs/arrays → 4b+, rejected with a clean error).
+- **`@uniform` classify_global branch** — mirrors the `@ssbo` branch: `Uniform` storage pointer + the
+  Block struct + `DescriptorSet`/`Binding` decorations (defaults 0/0, non-negative-checked). `GlobalInfo`
+  gained `is_block` (set for both ssbo and ubo) so member access knows the global is an AccessChain target.
+- **`ExprField` member access** in `emit_ptr` — `OpAccessChain(var, const(memberIndex))`, pointee =
+  `emit_type(field._type)`, storage from the global's class; `emit_value`'s ref path then `OpLoad`s it.
+- **Tests:** `tests/spirv/test_ubo.das` — a `[fragment_shader]` reading every member of a 6-field UBO;
+  asserts the Uniform OpVariable, DescriptorSet/Binding, Block, and EVERY std140 offset (0/16/24/28/32/44)
+  + AccessChain/Load/CompositeConstruct + spirv-val. The `Uniforms`/`ubo_frag` fixture lives in
+  `_spirv_common`; census unions it under `phase4a_emitter_opcodes` (= const-array set; UBOs add NO new
+  opcodes — Uniform storage + DescriptorSet/Binding are operands, not opcodes).
+
+**Finding (load-bearing):** `ExprField.fieldIndex` is **still -1 at the annotation's patch (pre-fold)
+stage** (member-access resolution hasn't run yet), so the member index must be resolved by **name** from
+the struct type (`field_index_by_name` over `bv._type.structType.fields`), not read off the node. Same
+fold-state class as the Phase-1 `ExprRef2Value` and const-array `float2` findings: the patch-stage AST is
+less resolved than the fixup-stage one.
+
+### Phase 4b — matrices + matrix/vector arithmetic + local swizzle LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Second Phase-4 slice: matrices (the MVP transform) + the linear-algebra products + local-value swizzles.
+All three tiers green (interp/JIT/AOT 42/42), spirv-val clean, external `spirv-dis` confirms a textbook
+MVP vertex shader, lint + format clean.
+
+- **Matrices are `tHandle` types** (`MatrixAnnotation<floatW, C>`, named `float4x4`/`float3x3`/`float3x4`),
+  NOT a distinct `Type` enum member. `matrix_info(t)` reads `t.annotation.name` → (width, cols);
+  `emit_type` lowers to `type_matrix` = `OpTypeMatrix(vector(float, W), C)`.
+- **Column-major maps directly — no transpose.** daslang stores matrices column-major (`m[i]` is column
+  `i`: `float3x3_mul` builds `va.col0 = a.m[0]`; `float4x4_mul_vec4` is `v_mat44_mul_vec4`, standard
+  M·v), which is SPIR-V's **default** `ColMajor`. So daslang `M * v` → `OpMatrixTimesVector`, `M * N` →
+  `OpMatrixTimesMatrix`, with the matrix uploaded as-is. (Caveat: `float4x4` columns are vec4 = std140's
+  MatrixStride 16, so it uploads byte-for-byte; `float3x3` stores packed 12-byte columns and would need
+  host repacking before a std140 upload — emitter SPIR-V is correct either way.)
+- **std140 matrix layout** (in `build_block_struct`): a matrix member gets align 16, size `16*cols`,
+  ColMajor + `MatrixStride 16` member decorations. `type_struct_block` gained a 3rd `mat_strides` arg
+  (folded into the dedup key) so the matrix decorations are part of the one deduped type emission; the
+  2-arg form delegates with zeros.
+- **`emit_mul`** routes `*` by operand shape BEFORE the scalar binop path (component-wise FMul only works
+  for same-shape operands): `OpMatrixTimesMatrix`, `OpMatrixTimesVector`, `OpVectorTimesScalar` (either
+  order). Only the daslang-defined operators are handled — daslang has **no** `matrix*scalar` or
+  `vector*matrix` operator, so those SPIR-V ops are intentionally absent (no dead, untestable emit path);
+  an unsupported mix (e.g. integer vector×scalar) is a clean error.
+- **Local-value swizzle** in `emit_value`: a swizzle of a local/computed VALUE (`clip.xy`, `clip.w` on a
+  `let`) → `OpVectorShuffle` (multi-component) / `OpCompositeExtract` (single). A swizzle of a *global*
+  lvalue stays the Phase-1 emit_ptr + `OpAccessChain` path (guarded by `global_var_of(sw.value) == null`),
+  closing the Phase-3 "local swizzles not supported" gap.
+- **Tests:** `tests/spirv/test_matrix.das` — a `[vertex_shader]` MVP (`cam.proj * cam.view`,
+  `mvp * float4(in_pos,1)`, `clip * 0.5`, `clip.xy` / `clip.w`); asserts TypeMatrix + the three products +
+  both swizzle ops + ColMajor/MatrixStride/std140 offsets (proj@0, view@64) + spirv-val. Census extended
+  to `phase4b_emitter_opcodes` (= 4a set + TypeMatrix/MatrixTimesMatrix/MatrixTimesVector/VectorTimesScalar/
+  VectorShuffle/CompositeExtract), unioned over the `mvp_vert` fixture.
+
+**Finding:** `float4 * float` (vector×scalar) and `M * v` both arrive as **`ExprOp2`** (not `ExprCall`) —
+`ExprOp2 : ExprOp : ExprCallFunc`, so the operator resolves to a `.func` but the node stays `ExprOp2` with
+`.left`/`.right`. So matrix/vector `*` is intercepted in the emitter's existing `ExprOp2` path, before the
+scalar-class `binop_code` (which returns ok=false on the `tHandle`/mismatched-shape operands).
+
+### Phase 4c — push constants LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Third Phase-4 slice: push constants. A `@push_constant` struct global lowers to a PushConstant-storage,
+Block-decorated `OpTypeStruct` — the same struct machinery as a UBO (`build_block_struct` layout +
+`ExprField` member access), but with **no DescriptorSet/Binding** (push constants are not descriptors)
+and not listed in the entry interface (SPIR-V ≤ 1.3). All three tiers green (interp/JIT/AOT 44/44),
+spirv-val clean, external `spirv-dis` confirms PushConstant storage with no descriptor decorations,
+lint + format clean.
+
+- **`@push_constant` classify_global branch** — mirrors `@uniform` minus the descriptor decorations:
+  `PushConstant` storage pointer + the Block struct, `GlobalInfo.is_block = true` so member access reuses
+  the `ExprField` → `OpAccessChain` path verbatim. Layout reuses `build_block_struct` (std140 == std430
+  for the scalar/vector/matrix members we support — they differ only on arrays/nested-struct alignment).
+- **Tests:** `tests/spirv/test_push_constant.das` — a `[fragment_shader]` reading a `@push_constant`
+  block (`pc.tint * pc.gamma`); asserts the PushConstant OpVariable, Block + offsets (tint@0, gamma@16),
+  the **absence** of DescriptorSet/Binding, AccessChain + VectorTimesScalar, + spirv-val. Census set is
+  unchanged (`phase4c_emitter_opcodes` = 4b set — PushConstant is a storage-class operand, not an opcode);
+  the `pc_frag` fixture is unioned in and must stay within the declared set.
+
+### Phase 4d — combined image samplers LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Fourth (final) Phase-4 slice: combined image samplers — the last resource kind. A `sampler2D` global
+lowers to an `OpTypeImage` + `OpTypeSampledImage` in UniformConstant storage with DescriptorSet/Binding;
+`texture(tex, uv)` lowers to `OpLoad` (the sampled image) + `OpImageSampleImplicitLod`. All three tiers
+green (interp/JIT/AOT 46/46), spirv-val clean, external `spirv-dis` confirms a textbook textured fragment
+shader, lint + format clean.
+
+- **Sampler authoring surface (no native daslang type).** daslang has no sampler type, so `spirv_builtins`
+  declares an **opaque marker struct `sampler2D {}`** + a stub `texture(s : sampler2D; uv : float2) : float4`
+  (body never runs — only the AST is read). Shaders write `var @binding = 0 tex : sampler2D` and
+  `texture(tex, uv)`; the emitter recognizes both by name.
+- **`type_image` / `type_sampled_image`** builders. For a sampled 2D float texture:
+  `OpTypeImage %float 2D 0 0 0 1 Unknown` then `OpTypeSampledImage`.
+- **classify_global sampler branch** (detected by the `sampler2D` struct name, not an annotation):
+  UniformConstant pointer + OpVariable + DescriptorSet/Binding, `GlobalInfo.is_sampler`. Not in the entry
+  interface (UniformConstant excluded for SPIR-V ≤ 1.3).
+- **`texture()` in emit_call**: `OpLoad` the sampled image (via the global's var-id) + `OpImageSampleImplicitLod`.
+  Implicit-LOD uses screen-space derivatives, so it is **fragment-only** — `ctx` gained a `stage` field
+  (set in `generate_spirv`) and a non-fragment `texture()` is a clean error (fail-closed).
+- **AOT emitter fix (`daslib/aot_cpp.das`).** A struct used **only as a global variable's type** (never
+  field-accessed) was dropped by `UseTypeMarker` to a forward declaration, so `das_global_zero<sampler2D>`
+  failed with C2027 "use of undefined type" (needs `sizeof`). `UseTypeMarker` now overrides
+  `preVisitGlobalLetVariable` to `mark(variable._type)` — a strictly emit-MORE direction (can only add a
+  struct definition, never remove one), so it cannot regress existing AOT. This is a general AOT codegen
+  correctness fix surfaced by the empty-marker-struct global, not dasSpirv-specific.
+- **Tests:** `tests/spirv/test_sampler.das` — a textured `[fragment_shader]` (`texture(tex, ti_uv)`);
+  asserts OpTypeImage/OpTypeSampledImage, the UniformConstant OpVariable, DescriptorSet/Binding, OpLoad +
+  OpImageSampleImplicitLod, + spirv-val. Census extended to `phase4d_emitter_opcodes` (= 4c set +
+  TypeImage/TypeSampledImage/ImageSampleImplicitLod), unioned over the `tex_frag` fixture.
+
+**Phase 4 (resource breadth) COMPLETE** — UBOs (4a) + matrices (4b) + push constants (4c) + combined image
+samplers (4d). The emitter now covers the full descriptor model. The cross-repo GPU gate (a dasVulkan
+UBO/MVP and/or textured example, regressed on lavapipe + the local GPU — the real-hardware proof of the
+column-major matrix mapping) is the follow-on dasVulkan PR, mirroring the Phase-1/Phase-3 GPU gates.

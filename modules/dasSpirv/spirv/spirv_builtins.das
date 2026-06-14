@@ -22,3 +22,15 @@ var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
 
 // fragment
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
+
+// ===== combined image samplers =====
+// sampler2D is an opaque marker type: a global of this type lowers to an OpTypeSampledImage in
+// UniformConstant storage (the emitter recognizes it by name in classify_global). The struct has no
+// fields — shader code never reads it directly, only passes it to texture(). texture() is likewise a
+// stub: its body is never executed (only the AST is read), and the call lowers to OpImageSampleImplicitLod.
+struct sampler2D {}
+
+[unused_argument(s, uv)]
+def public texture(s : sampler2D; uv : float2) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}

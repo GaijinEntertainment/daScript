@@ -305,6 +305,110 @@ def public catri_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-4a UBO fixture: a @uniform struct read through OpAccessChain by field index. The
+// struct's std140 layout exercises both packing edge cases — a scalar packing after a vec2
+// (uv@16,flags@24,scale@28) and after a vec3 (dir@32,bias@44). Every field is read; member loads
+// feed CompositeConstruct + scalar arithmetic + an int compare. No NEW opcodes vs const-arrays
+// (member access is AccessChain/Load over a Block struct) — it broadens the resource surface. =====
+struct Uniforms {
+    color : float4      // std140 offset 0
+    uv    : float2      // offset 16
+    flags : int         // offset 24 (vec2 size 8 -> 24; int aligns to 4)
+    scale : float       // offset 28
+    dir   : float3      // offset 32 (vec3 aligns to 16)
+    bias  : float       // offset 44 (packs into the vec3's trailing slot: vec3 size 12 -> 44)
+}
+var @uniform @binding = 0 ubo : Uniforms
+var @out @location = 0 u_out : float4
+[fragment_shader(name="ubo_frag_spv"), marker(no_coverage)]
+def ubo_frag {
+    var a = ubo.scale + ubo.bias            // FAdd: two scalar members (off 28 + 44)
+    if (ubo.flags > 0) {                    // int member load + SGreaterThan
+        a = a + 1.0f
+    }
+    let dir4 = float4(ubo.dir, a)           // CompositeConstruct: vec3 member + scalar
+    let uv4 = float4(ubo.uv, a, a)          // CompositeConstruct: vec2 member + 2 scalars
+    u_out = ubo.color                       // vec4 member load
+    if (a > 0.0f) {
+        u_out = dir4
+    }
+    if (a > 1.0f) {
+        u_out = uv4
+    }
+}
+
+def public ubo_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ubo_frag_spv)
+    return <- w
+}
+
+// ===== Phase-4b matrix fixture: a UBO with two float4x4 -> MVP transform. Matrices are tHandle
+// types lowered to OpTypeMatrix (4 float4 columns); daslang stores them column-major (m[i] is
+// column i) so they map to SPIR-V's default ColMajor (+ MatrixStride 16 in std140). Exercises
+// OpMatrixTimesMatrix, OpMatrixTimesVector, OpVectorTimesScalar, and local-value swizzles
+// (OpVectorShuffle for .xy, OpCompositeExtract for .w). =====
+struct Camera {
+    proj : float4x4     // std140 offset 0  (ColMajor, MatrixStride 16, size 64)
+    view : float4x4     // std140 offset 64
+}
+var @uniform @binding = 0 cam : Camera
+var @in @location = 0 in_pos : float3
+var @out @location = 0 mv_color : float4
+[vertex_shader(name="mvp_vert_spv"), marker(no_coverage)]
+def mvp_vert {
+    let mvp = cam.proj * cam.view           // OpMatrixTimesMatrix
+    let world = float4(in_pos, 1.0f)        // OpCompositeConstruct
+    let clip = mvp * world                  // OpMatrixTimesVector
+    gl_Position = clip * 0.5f               // OpVectorTimesScalar (float4 * float)
+    let xy = clip.xy                        // OpVectorShuffle (float2 from a local float4)
+    let w = clip.w                          // OpCompositeExtract (float from a local float4)
+    mv_color = float4(xy, w, 1.0f)          // OpCompositeConstruct from the swizzles
+}
+
+def public mvp_vert_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mvp_vert_spv)
+    return <- w
+}
+
+// ===== Phase-4c push-constant fixture: a @push_constant struct -> PushConstant storage + Block,
+// laid out like a UBO (std140 offsets) but with NO DescriptorSet/Binding (push constants are not
+// descriptors) and not in the entry interface. Member access is the same OpAccessChain/OpLoad. =====
+struct PushData {
+    tint  : float4      // offset 0
+    gamma : float       // offset 16
+}
+var @push_constant pc : PushData
+var @out @location = 0 pc_out : float4
+[fragment_shader(name="pc_frag_spv"), marker(no_coverage)]
+def pc_frag {
+    pc_out = pc.tint * pc.gamma     // PushConstant member loads -> VectorTimesScalar
+}
+
+def public pc_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(pc_frag_spv)
+    return <- w
+}
+
+// ===== Phase-4d combined image sampler fixture: a sampler2D global -> OpTypeImage +
+// OpTypeSampledImage in UniformConstant storage + DescriptorSet/Binding; texture(tex, uv) ->
+// OpLoad the sampled image + OpImageSampleImplicitLod (fragment-only, uses derivatives). =====
+var @binding = 0 tex : sampler2D
+var @in @location = 0 ti_uv : float2
+var @out @location = 0 tex_out : float4
+[fragment_shader(name="tex_frag_spv"), marker(no_coverage)]
+def tex_frag {
+    tex_out = texture(tex, ti_uv)       // OpLoad sampler + OpImageSampleImplicitLod
+}
+
+def public tex_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tex_frag_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -428,6 +532,46 @@ def public phase3_emitter_opcodes : table<uint> {
 def public const_array_emitter_opcodes : table<uint> {
     var s <- phase3_emitter_opcodes()
     for (op in [SpvOp.TypeArray, SpvOp.ConstantComposite]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-4a UBOs add NO new opcodes: @uniform member access is OpAccessChain/OpLoad over a Block-
+// decorated OpTypeStruct, all already in the set (Uniform storage + DescriptorSet/Binding are
+// operands, not opcodes). The declared set is unchanged — the UBO fixture must still stay within it.
+def public phase4a_emitter_opcodes : table<uint> {
+    return <- const_array_emitter_opcodes()
+}
+
+// Phase-4b adds matrices + matrix/vector arithmetic + local-value swizzles. Phase-4a set + these:
+def public phase4b_emitter_opcodes : table<uint> {
+    var s <- phase4a_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeMatrix,                                   // float4x4 -> OpTypeMatrix
+        SpvOp.MatrixTimesMatrix, SpvOp.MatrixTimesVector,   // proj*view, mvp*world
+        SpvOp.VectorTimesScalar,                            // clip * 0.5
+        SpvOp.VectorShuffle, SpvOp.CompositeExtract         // clip.xy / clip.w (local swizzle)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-4c push constants add NO new opcodes: a @push_constant block is the same Block-decorated
+// OpTypeStruct read via OpAccessChain/OpLoad — only the storage class (PushConstant) differs, and
+// that is an operand, not an opcode. The declared set is unchanged.
+def public phase4c_emitter_opcodes : table<uint> {
+    return <- phase4b_emitter_opcodes()
+}
+
+// Phase-4d combined image samplers add the image type pair + the sample op. Phase-4c set + these:
+def public phase4d_emitter_opcodes : table<uint> {
+    var s <- phase4c_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeImage, SpvOp.TypeSampledImage,    // sampler2D -> OpTypeImage + OpTypeSampledImage
+        SpvOp.ImageSampleImplicitLod                // texture(tex, uv)
+    ]) {
         s |> insert(uint(op))
     }
     return <- s
