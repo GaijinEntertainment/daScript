@@ -10,9 +10,25 @@ module spirv_types shared public
 require spirv_builder
 require daslib/ast
 
+// daslang matrices are handled (tHandle) types named float<W>x<C> — W = column-vector width,
+// C = column count (MatrixAnnotation<floatW, C>, column-major: m[i] is column i). Returns the
+// dimensions so emit_type / the std140 layout / matrix arithmetic can treat them structurally.
+def public matrix_info(t : TypeDecl?) : tuple<ok : bool; width : int; cols : int> {
+    if (t == null || t.baseType != Type.tHandle || t.annotation == null) return (ok = false, width = 0, cols = 0)
+    let nm = "{t.annotation.name}"
+    if (nm == "float4x4") return (ok = true, width = 4, cols = 4)
+    if (nm == "float3x3") return (ok = true, width = 3, cols = 3)
+    if (nm == "float3x4") return (ok = true, width = 3, cols = 4)
+    return (ok = false, width = 0, cols = 0)
+}
+
 def public emit_type(var m : SpirvModule; t : TypeDecl?) : uint {
     if (t == null) {
         panic("emit_type: null TypeDecl")
+    }
+    let mi = matrix_info(t)
+    if (mi.ok) {
+        return type_matrix(m, type_vector(m, type_float(m, 32u), mi.width), mi.cols)
     }
     let bt = t.baseType
     if (bt == Type.tVoid) return type_void(m)

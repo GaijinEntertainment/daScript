@@ -343,6 +343,35 @@ def public ubo_frag_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-4b matrix fixture: a UBO with two float4x4 -> MVP transform. Matrices are tHandle
+// types lowered to OpTypeMatrix (4 float4 columns); daslang stores them column-major (m[i] is
+// column i) so they map to SPIR-V's default ColMajor (+ MatrixStride 16 in std140). Exercises
+// OpMatrixTimesMatrix, OpMatrixTimesVector, OpVectorTimesScalar, and local-value swizzles
+// (OpVectorShuffle for .xy, OpCompositeExtract for .w). =====
+struct Camera {
+    proj : float4x4     // std140 offset 0  (ColMajor, MatrixStride 16, size 64)
+    view : float4x4     // std140 offset 64
+}
+var @uniform @binding = 0 cam : Camera
+var @in @location = 0 in_pos : float3
+var @out @location = 0 mv_color : float4
+[vertex_shader(name="mvp_vert_spv"), marker(no_coverage)]
+def mvp_vert {
+    let mvp = cam.proj * cam.view           // OpMatrixTimesMatrix
+    let world = float4(in_pos, 1.0f)        // OpCompositeConstruct
+    let clip = mvp * world                  // OpMatrixTimesVector
+    gl_Position = clip * 0.5f               // OpVectorTimesScalar (float4 * float)
+    let xy = clip.xy                        // OpVectorShuffle (float2 from a local float4)
+    let w = clip.w                          // OpCompositeExtract (float from a local float4)
+    mv_color = float4(xy, w, 1.0f)          // OpCompositeConstruct from the swizzles
+}
+
+def public mvp_vert_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mvp_vert_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -476,4 +505,18 @@ def public const_array_emitter_opcodes : table<uint> {
 // operands, not opcodes). The declared set is unchanged — the UBO fixture must still stay within it.
 def public phase4a_emitter_opcodes : table<uint> {
     return <- const_array_emitter_opcodes()
+}
+
+// Phase-4b adds matrices + matrix/vector arithmetic + local-value swizzles. Phase-4a set + these:
+def public phase4b_emitter_opcodes : table<uint> {
+    var s <- phase4a_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeMatrix,                                   // float4x4 -> OpTypeMatrix
+        SpvOp.MatrixTimesMatrix, SpvOp.MatrixTimesVector,   // proj*view, mvp*world
+        SpvOp.VectorTimesScalar,                            // clip * 0.5
+        SpvOp.VectorShuffle, SpvOp.CompositeExtract         // clip.xy / clip.w (local swizzle)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
 }

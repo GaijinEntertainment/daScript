@@ -178,6 +178,21 @@ def public type_vector(var m : SpirvModule; comp_id : uint; n : int) : uint {
     return id
 }
 
+// A matrix type: `cols` columns, each of type `col_type` (a vector type-id). daslang stores matrices
+// column-major (m[i] is column i), matching SPIR-V's default — so float4x4 -> OpTypeMatrix(v4float, 4).
+def public type_matrix(var m : SpirvModule; col_type : uint; cols : int) : uint {
+    if (cols <= 0) {
+        panic("type_matrix: column count must be positive, got {cols}")
+    }
+    let key = "mat{col_type}_c{cols}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeMatrix, id, col_type, uint(cols))
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 def public type_pointer(var m : SpirvModule; sc : SpvStorageClass; pointee : uint) : uint {
     let key = "p{uint(sc)}_{pointee}"
     let ex = m.type_pool?[key] ?? 0u
@@ -254,8 +269,19 @@ def public const_composite(var m : SpirvModule; type_id : uint; parts : array<ui
 // A block-decorated struct (UBO/SSBO interface). Members + their byte offsets are supplied by
 // the caller (it owns layout). Two structs with identical member ids + offsets dedup to one.
 def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>) : uint {
-    if (empty(members) || length(members) != length(offsets)) {
-        panic("type_struct_block: members and offsets must be non-empty and equal length (members={length(members)}, offsets={length(offsets)})")
+    var no_mats : array<int>   // no matrix members
+    no_mats |> resize(length(members))
+    let id = type_struct_block(m, members, offsets, no_mats)
+    delete no_mats
+    return id
+}
+
+// As above, plus per-member matrix strides: mat_strides[k] > 0 marks member k as a matrix needing
+// ColMajor + MatrixStride decorations (daslang matrices are column-major, so ColMajor matches). The
+// stride is part of the dedup key so the decorations stay tied to a single deduped type emission.
+def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint {
+    if (empty(members) || length(members) != length(offsets) || length(members) != length(mat_strides)) {
+        panic("type_struct_block: members/offsets/mat_strides must be non-empty and equal length (members={length(members)}, offsets={length(offsets)}, mat_strides={length(mat_strides)})")
     }
     let key = build_string() $(var wr) {
         wr |> write("struct_b")
@@ -264,6 +290,9 @@ def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets
         }
         for (off in offsets) {
             wr |> write("@{off}")
+        }
+        for (ms in mat_strides) {
+            wr |> write("m{ms}")
         }
     }
     let ex = m.type_pool?[key] ?? 0u
@@ -277,6 +306,11 @@ def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets
     emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.Block))
     for (k in range(length(offsets))) {
         emit(m, SEC_DECOR, SpvOp.MemberDecorate, id, uint(k), uint(SpvDecoration.Offset), uint(offsets[k]))
+        if (mat_strides[k] > 0) {
+            // a matrix member: column-major (daslang's layout) + the per-column byte stride
+            emit(m, SEC_DECOR, SpvOp.MemberDecorate, id, uint(k), uint(SpvDecoration.ColMajor))
+            emit(m, SEC_DECOR, SpvOp.MemberDecorate, id, uint(k), uint(SpvDecoration.MatrixStride), uint(mat_strides[k]))
+        }
     }
     m.type_pool |> insert(key, id)
     return id

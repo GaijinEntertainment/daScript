@@ -683,3 +683,42 @@ stage** (member-access resolution hasn't run yet), so the member index must be r
 the struct type (`field_index_by_name` over `bv._type.structType.fields`), not read off the node. Same
 fold-state class as the Phase-1 `ExprRef2Value` and const-array `float2` findings: the patch-stage AST is
 less resolved than the fixup-stage one.
+
+### Phase 4b — matrices + matrix/vector arithmetic + local swizzle LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Second Phase-4 slice: matrices (the MVP transform) + the linear-algebra products + local-value swizzles.
+All three tiers green (interp/JIT/AOT 42/42), spirv-val clean, external `spirv-dis` confirms a textbook
+MVP vertex shader, lint + format clean.
+
+- **Matrices are `tHandle` types** (`MatrixAnnotation<floatW, C>`, named `float4x4`/`float3x3`/`float3x4`),
+  NOT a distinct `Type` enum member. `matrix_info(t)` reads `t.annotation.name` → (width, cols);
+  `emit_type` lowers to `type_matrix` = `OpTypeMatrix(vector(float, W), C)`.
+- **Column-major maps directly — no transpose.** daslang stores matrices column-major (`m[i]` is column
+  `i`: `float3x3_mul` builds `va.col0 = a.m[0]`; `float4x4_mul_vec4` is `v_mat44_mul_vec4`, standard
+  M·v), which is SPIR-V's **default** `ColMajor`. So daslang `M * v` → `OpMatrixTimesVector`, `M * N` →
+  `OpMatrixTimesMatrix`, with the matrix uploaded as-is. (Caveat: `float4x4` columns are vec4 = std140's
+  MatrixStride 16, so it uploads byte-for-byte; `float3x3` stores packed 12-byte columns and would need
+  host repacking before a std140 upload — emitter SPIR-V is correct either way.)
+- **std140 matrix layout** (in `build_block_struct`): a matrix member gets align 16, size `16*cols`,
+  ColMajor + `MatrixStride 16` member decorations. `type_struct_block` gained a 3rd `mat_strides` arg
+  (folded into the dedup key) so the matrix decorations are part of the one deduped type emission; the
+  2-arg form delegates with zeros.
+- **`emit_mul`** routes `*` by operand shape BEFORE the scalar binop path (component-wise FMul only works
+  for same-shape operands): `OpMatrixTimesMatrix`, `OpMatrixTimesVector`, `OpVectorTimesScalar` (either
+  order). Only the daslang-defined operators are handled — daslang has **no** `matrix*scalar` or
+  `vector*matrix` operator, so those SPIR-V ops are intentionally absent (no dead, untestable emit path);
+  an unsupported mix (e.g. integer vector×scalar) is a clean error.
+- **Local-value swizzle** in `emit_value`: a swizzle of a local/computed VALUE (`clip.xy`, `clip.w` on a
+  `let`) → `OpVectorShuffle` (multi-component) / `OpCompositeExtract` (single). A swizzle of a *global*
+  lvalue stays the Phase-1 emit_ptr + `OpAccessChain` path (guarded by `global_var_of(sw.value) == null`),
+  closing the Phase-3 "local swizzles not supported" gap.
+- **Tests:** `tests/spirv/test_matrix.das` — a `[vertex_shader]` MVP (`cam.proj * cam.view`,
+  `mvp * float4(in_pos,1)`, `clip * 0.5`, `clip.xy` / `clip.w`); asserts TypeMatrix + the three products +
+  both swizzle ops + ColMajor/MatrixStride/std140 offsets (proj@0, view@64) + spirv-val. Census extended
+  to `phase4b_emitter_opcodes` (= 4a set + TypeMatrix/MatrixTimesMatrix/MatrixTimesVector/VectorTimesScalar/
+  VectorShuffle/CompositeExtract), unioned over the `mvp_vert` fixture.
+
+**Finding:** `float4 * float` (vector×scalar) and `M * v` both arrive as **`ExprOp2`** (not `ExprCall`) —
+`ExprOp2 : ExprOp : ExprCallFunc`, so the operator resolves to a `.func` but the node stays `ExprOp2` with
+`.left`/`.right`. So matrix/vector `*` is intercepted in the emitter's existing `ExprOp2` path, before the
+scalar-class `binop_code` (which returns ok=false on the `tHandle`/mismatched-shape operands).

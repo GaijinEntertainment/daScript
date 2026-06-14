@@ -120,23 +120,39 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
     }
     var members : array<uint>
     var offsets : array<int>
+    var mat_strides : array<int>
     var off = 0
     for (fld in st.fields) {
+        let mi = matrix_info(fld._type)
+        if (mi.ok) {
+            // std140 matrix: ColMajor, each column padded to vec4 (MatrixStride 16), align 16,
+            // size = 16 * cols. (daslang float3x3 stores packed columns, so its bytes need
+            // repacking host-side before upload; float4x4 columns are already vec4 -> direct.)
+            off = round_up(off, 16)
+            members |> push(emit_type(m, fld._type))
+            offsets |> push(off)
+            mat_strides |> push(16)
+            off += 16 * mi.cols
+            continue
+        }
         let fbt = fld._type.baseType
         if (component_count(fbt) == 0) {
-            errors |> push("uniform '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector members for now)")
+            errors |> push("uniform '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector/matrix members for now)")
             delete members
             delete offsets
+            delete mat_strides
             return (ok = false, type_id = 0u)
         }
         off = round_up(off, std140_align(fbt))
         members |> push(emit_type(m, fld._type))
         offsets |> push(off)
+        mat_strides |> push(0)
         off += std140_size(fbt)
     }
-    let id = type_struct_block(m, members, offsets)
+    let id = type_struct_block(m, members, offsets, mat_strides)
     delete members
     delete offsets
+    delete mat_strides
     return (ok = true, type_id = id)
 }
 
@@ -788,6 +804,40 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     return (ok = false, id = 0u)
 }
 
+// ===== `*` over matrices / vectors / scalars =====
+// SPIR-V splits multiplication by operand shape: OpMatrixTimesMatrix / OpMatrixTimesVector /
+// OpVectorTimesScalar. Plain component-wise FMul/IMul (the scalar binop path) only works when both
+// operands have the SAME shape, so the mixed cases are routed here first. Returns handled=false for
+// same-shape operands (let binop_code emit FMul/IMul); handled=true with id=0 on an unsupported mix
+// (error already pushed). Operands l/r are pre-emitted result-ids. Only the daslang-defined matrix
+// operators are handled (matrix*matrix, matrix*vector, and float vector*scalar either order);
+// daslang has no matrix*scalar or vector*matrix operator, so those SPIR-V ops are intentionally absent.
+def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, r : uint; var errors : array<string>) : tuple<handled : bool; id : uint> {
+    let lmat = matrix_info(op2.left._type)
+    let rmat = matrix_info(op2.right._type)
+    let lcc = component_count(op2.left._type.baseType)
+    let rcc = component_count(op2.right._type.baseType)
+    let lcls = scalar_class(op2.left._type.baseType)
+    let rcls = scalar_class(op2.right._type.baseType)
+    // same-shape (scalar*scalar or equal-width vector*vector): component-wise, defer to binop_code
+    if (!lmat.ok && !rmat.ok && lcc == rcc) return (handled = false, id = 0u)
+    let rt = emit_type(m, e._type)
+    let res = alloc_id(m)
+    if (lmat.ok && rmat.ok) {
+        emit(m, SEC_FUNCS, SpvOp.MatrixTimesMatrix, rt, res, l, r)
+    } elif (lmat.ok && rcc > 1) {
+        emit(m, SEC_FUNCS, SpvOp.MatrixTimesVector, rt, res, l, r)
+    } elif (lcc > 1 && rcc == 1 && lcls == 2 && rcls == 2) {
+        emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, l, r)
+    } elif (rcc > 1 && lcc == 1 && lcls == 2 && rcls == 2) {
+        emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, r, l)   // SPIR-V wants the vector first
+    } else {
+        errors |> push("unsupported '*' between {op2.left._type.baseType} and {op2.right._type.baseType} (integer vector/scalar mixes need a splat)")
+        return (handled = true, id = 0u)
+    }
+    return (handled = true, id = res)
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -809,6 +859,12 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
         let l = emit_value(m, ctx, op2.left, errors)
         let r = emit_value(m, ctx, op2.right, errors)
         if (l == 0u || r == 0u) return 0u   // operand error already reported; don't emit with id 0
+        // matrix / vector-scalar `*`: SPIR-V has dedicated linear-algebra ops (operand types differ,
+        // so the plain component-wise FMul path would be invalid). Handled before the scalar binop.
+        if (ops == "*") {
+            let mr = emit_mul(m, op2, e, l, r, errors)
+            if (mr.handled) return mr.id
+        }
         // comparison -> bool result (operands keep their scalar class)
         let cc = cmp_code(ops, cls)
         if (cc.ok) {
@@ -877,6 +933,27 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
             errors |> push("local '{ev.name}' used before it was assigned an SSA id")
         }
         return lid
+    }
+    // swizzle of a local/computed VALUE (p.x / p.xy on a let or expression result). A swizzle of a
+    // global lvalue is a ref and goes through emit_ptr below; this handles the value case via
+    // OpCompositeExtract (single component) / OpVectorShuffle (multiple).
+    let sw = e ?as ExprSwizzle
+    if (sw != null && global_var_of(sw.value) == null) {
+        let base = emit_value(m, ctx, sw.value, errors)
+        if (base == 0u) return 0u
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        if (length(sw.fields) == 1) {
+            emit(m, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(sw.fields[0]))
+        } else {
+            var ops <- [rt, res, base, base]   // shuffle from a single source: vec1==vec2==base
+            for (f in sw.fields) {
+                ops |> push(uint(f))
+            }
+            emit_n(m, SEC_FUNCS, SpvOp.VectorShuffle, ops)
+            delete ops
+        }
+        return res
     }
     if (e._type.flags.ref) {
         let p = emit_ptr(m, ctx, e, errors)
