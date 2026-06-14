@@ -1,4 +1,11 @@
 options gen2
+// The AOT emitter (daslib/aot_cpp::describeCppTypeEx) recurses once per type-nesting
+// level and runs in THIS driver's context, so its depth is bounded by
+// getContextStackSize() here -- NOT by aot_cpp's own `options stack` (that governs only
+// the direct `daslang -aot` C++ driver, where aot_cpp is the root program). A deeply
+// nested type (#3065) overflows the default ~16KB stack; bump so realistic depths emit.
+// Pathological depths still fail-closed (aot_cpp::fail_on_aot_emit_error).
+options stack = 1_048_576
 require daslib/aot_cpp
 require daslib/aot_standalone
 
