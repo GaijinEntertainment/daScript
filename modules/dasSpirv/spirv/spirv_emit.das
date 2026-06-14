@@ -112,12 +112,13 @@ def private round_up(off, a : int) : int {
     return ((off + a - 1) / a) * a
 }
 
-// Build a Block-decorated interface struct from a daslang struct's fields, laid out std140.
-// Scalar/vector members only for now (matrices/nested structs/arrays -> 4b+). Returns the struct
-// type-id; the caller wraps it in the right storage-class pointer + descriptor decorations.
+// Build a Block-decorated interface struct from a daslang struct's fields, laid out std140. Shared
+// by @uniform and @push_constant blocks. 32-bit scalar/vector/matrix members are supported; nested
+// structs and arrays are not yet. Returns the struct type-id; the caller wraps it in the right
+// storage-class pointer + descriptor decorations.
 def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint> {
     if (st == null || empty(st.fields)) {
-        errors |> push("uniform '{sname}' must be a struct with at least one field")
+        errors |> push("interface block '{sname}' must be a struct with at least one field")
         return (ok = false, type_id = 0u)
     }
     var members : array<uint>
@@ -139,7 +140,7 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
         }
         let fbt = fld._type.baseType
         if (component_count(fbt) == 0) {
-            errors |> push("uniform '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector/matrix members for now)")
+            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector/matrix members for now)")
             delete members
             delete offsets
             delete mat_strides
@@ -307,7 +308,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.PushConstant, value_type = bs.type_id, is_ssbo = false, is_block = true))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, or @push_constant)")
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, or a sampler type e.g. sampler2D)")
 }
 
 // ===== member index of a struct field by name =====
@@ -374,12 +375,12 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
     if (fld != null) {
         let bv = global_var_of(fld.value)
         if (bv == null) {
-            errors |> push("member access '.{fld.name}' is only supported on a @uniform/@ssbo block global for now")
+            errors |> push("member access '.{fld.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
             return (id = 0u, pointee = 0u)
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
         if (!gi.is_block) {
-            errors |> push("member access '.{fld.name}': '{bv.name}' is not a block (uniform/ssbo) global")
+            errors |> push("member access '.{fld.name}': '{bv.name}' is not a block (uniform/ssbo/push_constant) global")
             return (id = 0u, pointee = 0u)
         }
         let midx = field_index_by_name(bv._type.structType, "{fld.name}")
