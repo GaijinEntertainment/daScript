@@ -4346,7 +4346,12 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                 dumpDependencies(program, cpp_aot);
                 visit(program, cpp_aot.adapter, true)
             }
-            let full_output = cpp_aot.str()
+            // Don't materialize the (partial) output on the fail-closed path -- mirrors
+            // run_aot. fail_on_aot_emit_error panics below; cleanup still runs first.
+            var full_output = ""
+            if (!program.flags.macroException && !program.flags.failToCompile) {
+                full_output = cpp_aot.str()
+            }
             unsafe {
                 delete cpp_aot.helper.helper
                 delete cpp_aot.collector
