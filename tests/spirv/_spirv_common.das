@@ -305,6 +305,44 @@ def public catri_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-4a UBO fixture: a @uniform struct read through OpAccessChain by field index. The
+// struct's std140 layout exercises both packing edge cases — a scalar packing after a vec2
+// (uv@16,flags@24,scale@28) and after a vec3 (dir@32,bias@44). Every field is read; member loads
+// feed CompositeConstruct + scalar arithmetic + an int compare. No NEW opcodes vs const-arrays
+// (member access is AccessChain/Load over a Block struct) — it broadens the resource surface. =====
+struct Uniforms {
+    color : float4      // std140 offset 0
+    uv    : float2      // offset 16
+    flags : int         // offset 24 (vec2 size 8 -> 24; int aligns to 4)
+    scale : float       // offset 28
+    dir   : float3      // offset 32 (vec3 aligns to 16)
+    bias  : float       // offset 44 (packs into the vec3's trailing slot: vec3 size 12 -> 44)
+}
+var @uniform @binding = 0 ubo : Uniforms
+var @out @location = 0 u_out : float4
+[fragment_shader(name="ubo_frag_spv"), marker(no_coverage)]
+def ubo_frag {
+    var a = ubo.scale + ubo.bias            // FAdd: two scalar members (off 28 + 44)
+    if (ubo.flags > 0) {                    // int member load + SGreaterThan
+        a = a + 1.0f
+    }
+    let dir4 = float4(ubo.dir, a)           // CompositeConstruct: vec3 member + scalar
+    let uv4 = float4(ubo.uv, a, a)          // CompositeConstruct: vec2 member + 2 scalars
+    u_out = ubo.color                       // vec4 member load
+    if (a > 0.0f) {
+        u_out = dir4
+    }
+    if (a > 1.0f) {
+        u_out = uv4
+    }
+}
+
+def public ubo_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ubo_frag_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -431,4 +469,11 @@ def public const_array_emitter_opcodes : table<uint> {
         s |> insert(uint(op))
     }
     return <- s
+}
+
+// Phase-4a UBOs add NO new opcodes: @uniform member access is OpAccessChain/OpLoad over a Block-
+// decorated OpTypeStruct, all already in the set (Uniform storage + DescriptorSet/Binding are
+// operands, not opcodes). The declared set is unchanged — the UBO fixture must still stay within it.
+def public phase4a_emitter_opcodes : table<uint> {
+    return <- const_array_emitter_opcodes()
 }

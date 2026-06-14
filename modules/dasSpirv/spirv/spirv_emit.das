@@ -30,6 +30,7 @@ struct GlobalInfo {
     storage    : SpvStorageClass
     value_type : uint               // SPIR-V type-id of the whole variable's value
     is_ssbo    : bool               // wrapped in a Block-decorated struct (member 0 = the array)
+    is_block   : bool               // a Block-decorated struct (ssbo OR ubo); member access -> OpAccessChain by field index
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -89,6 +90,54 @@ def private stage_name(stage : ShaderStage) : string {
     if (stage == ShaderStage.Vertex) return "vertex"
     if (stage == ShaderStage.Fragment) return "fragment"
     return "compute"
+}
+
+// ===== std140 layout for a UBO interface block =====
+// std140 base alignment: scalar -> 4, vec2 -> 8, vec3/vec4 -> 16. The base *size* of a vec3 is 12
+// (only its alignment is 16), so a scalar can pack into the trailing 4 bytes after a vec3.
+def private std140_align(bt : Type) : int {
+    let cc = component_count(bt)
+    if (cc == 1) return 4
+    if (cc == 2) return 8
+    return 16
+}
+
+def private std140_size(bt : Type) : int {
+    return component_count(bt) * 4
+}
+
+def private round_up(off, a : int) : int {
+    return ((off + a - 1) / a) * a
+}
+
+// Build a Block-decorated interface struct from a daslang struct's fields, laid out std140.
+// Scalar/vector members only for now (matrices/nested structs/arrays -> 4b+). Returns the struct
+// type-id; the caller wraps it in the right storage-class pointer + descriptor decorations.
+def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint> {
+    if (st == null || empty(st.fields)) {
+        errors |> push("uniform '{sname}' must be a struct with at least one field")
+        return (ok = false, type_id = 0u)
+    }
+    var members : array<uint>
+    var offsets : array<int>
+    var off = 0
+    for (fld in st.fields) {
+        let fbt = fld._type.baseType
+        if (component_count(fbt) == 0) {
+            errors |> push("uniform '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector members for now)")
+            delete members
+            delete offsets
+            return (ok = false, type_id = 0u)
+        }
+        off = round_up(off, std140_align(fbt))
+        members |> push(emit_type(m, fld._type))
+        offsets |> push(off)
+        off += std140_size(fbt)
+    }
+    let id = type_struct_block(m, members, offsets)
+    delete members
+    delete offsets
+    return (ok = true, type_id = id)
 }
 
 // ===== global variable classification + emission =====
@@ -169,10 +218,46 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         }
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
-        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin or @ssbo)")
+    // uniform buffer: @uniform struct -> Uniform storage + Block-decorated struct (std140) +
+    // DescriptorSet/Binding. Member reads go through ExprField -> OpAccessChain by field index.
+    if (v.annotation |> find_arg("uniform") is tBool) {
+        if (v._type.baseType != Type.tStructure || v._type.structType == null) {
+            errors |> push("uniform '{vname}' must be a struct")
+            return
+        }
+        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        if (!bs.ok) return
+        let pt = type_pointer(m, SpvStorageClass.Uniform, bs.type_id)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Uniform))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("uniform '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Uniform, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        return
+    }
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, or @uniform)")
+}
+
+// ===== member index of a struct field by name =====
+// ExprField.fieldIndex is still -1 at the annotation's patch (pre-fold) stage, so resolve the
+// member position by name from the (fully-known) struct type instead.
+def private field_index_by_name(st : Structure?; name : string) : int {
+    if (st == null) return -1
+    var i = 0
+    for (fld in st.fields) {
+        if ("{fld.name}" == name) return i
+        i++
+    }
+    return -1
 }
 
 // ===== emit a global ExprVar's Variable (or null) =====
@@ -219,6 +304,30 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
         var ops <- [ptr_t, res, gi.var_id, const_uint(m, 0u), idx]
         emit_n(m, SEC_FUNCS, SpvOp.AccessChain, ops)
         delete ops
+        return (id = res, pointee = pointee)
+    }
+    // member of a Block global (ubo.color) -> OpAccessChain by field index into the Uniform/SSBO struct
+    let fld = e ?as ExprField
+    if (fld != null) {
+        let bv = global_var_of(fld.value)
+        if (bv == null) {
+            errors |> push("member access '.{fld.name}' is only supported on a @uniform/@ssbo block global for now")
+            return (id = 0u, pointee = 0u)
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_block) {
+            errors |> push("member access '.{fld.name}': '{bv.name}' is not a block (uniform/ssbo) global")
+            return (id = 0u, pointee = 0u)
+        }
+        let midx = field_index_by_name(bv._type.structType, "{fld.name}")
+        if (midx < 0) {
+            errors |> push("member access '.{fld.name}': no such field on '{bv.name}'")
+            return (id = 0u, pointee = 0u)
+        }
+        let pointee = emit_type(m, e._type)
+        let ptr_t = type_pointer(m, gi.storage, pointee)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(m, uint(midx)))
         return (id = res, pointee = pointee)
     }
     let sw = e ?as ExprSwizzle

@@ -653,3 +653,33 @@ textbook OpTypeArray/OpConstantComposite/OpAccessChain, lint + format clean.
 argument in the lint/macro-patch compile. `emit_const` must handle BOTH (and the unary-minus fold), or
 the shader compiles in one context and errors in another. Both shapes produce the identical
 `OpConstantComposite`, so the census stays stable across tiers.
+
+### Phase 4a — UBO struct foundation LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+First Phase-4 (resource breadth) slice: uniform buffer objects. A `@uniform` struct global lowers to a
+Uniform-storage, Block-decorated `OpTypeStruct` with std140 member offsets, read through member access
+(`ubo.field` → `OpAccessChain` by field index → `OpLoad`). All three tiers green (interp/JIT/AOT 40/40),
+spirv-val clean, external `spirv-dis` confirms textbook std140 layout, lint + format clean.
+
+- **std140 layout** (`std140_align`/`std140_size`/`round_up`/`build_block_struct` in `spirv_emit`): scalar
+  align 4, vec2 align 8, vec3/vec4 align 16; the vec3 base *size* is 12 (not 16), so a scalar packs into a
+  vec3's (or vec2's) trailing slot. The fixture struct exercises both packing edge cases — `flags@24` after
+  a vec2, `bias@44` after a vec3. Members + offsets feed the existing `type_struct_block` builder (it already
+  emits `Block` + per-member `Offset` decorations). Scalar/vector members only for now (matrices/nested
+  structs/arrays → 4b+, rejected with a clean error).
+- **`@uniform` classify_global branch** — mirrors the `@ssbo` branch: `Uniform` storage pointer + the
+  Block struct + `DescriptorSet`/`Binding` decorations (defaults 0/0, non-negative-checked). `GlobalInfo`
+  gained `is_block` (set for both ssbo and ubo) so member access knows the global is an AccessChain target.
+- **`ExprField` member access** in `emit_ptr` — `OpAccessChain(var, const(memberIndex))`, pointee =
+  `emit_type(field._type)`, storage from the global's class; `emit_value`'s ref path then `OpLoad`s it.
+- **Tests:** `tests/spirv/test_ubo.das` — a `[fragment_shader]` reading every member of a 6-field UBO;
+  asserts the Uniform OpVariable, DescriptorSet/Binding, Block, and EVERY std140 offset (0/16/24/28/32/44)
+  + AccessChain/Load/CompositeConstruct + spirv-val. The `Uniforms`/`ubo_frag` fixture lives in
+  `_spirv_common`; census unions it under `phase4a_emitter_opcodes` (= const-array set; UBOs add NO new
+  opcodes — Uniform storage + DescriptorSet/Binding are operands, not opcodes).
+
+**Finding (load-bearing):** `ExprField.fieldIndex` is **still -1 at the annotation's patch (pre-fold)
+stage** (member-access resolution hasn't run yet), so the member index must be resolved by **name** from
+the struct type (`field_index_by_name` over `bv._type.structType.fields`), not read off the node. Same
+fold-state class as the Phase-1 `ExprRef2Value` and const-array `float2` findings: the patch-stage AST is
+less resolved than the fixup-stage one.
