@@ -14,6 +14,7 @@ require spirv/spirv_shader
 require spirv/spirv_grammar
 require spirv/spirv_builtins public
 require daslib/fio
+require math
 
 // ===== Phase-1 fixture: data[i] = i*i, captured into the `square_spv : array<uint>` global =====
 var @ssbo @binding = 0 data : array<uint>
@@ -213,6 +214,79 @@ def public floop_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
+// (gl_Position/gl_VertexIndex/gl_InstanceIndex/gl_FragCoord), vector constructors
+// (OpCompositeConstruct), dot (OpDot), and GLSL.std.450 math (OpExtInst). Each emitted blob is
+// spirv-val'd; together they add the Phase-3 opcodes to the census. =====
+
+// vertex: vertex-attribute -> clip position + a passthrough varying
+var @in @location = 0 a_pos : float2
+var @in @location = 1 a_color : float3
+var @out @location = 0 v_color : float3
+[vertex_shader(name="tri_vert_spv"), marker(no_coverage)]
+def tri_vert {
+    gl_Position = float4(a_pos, 0.0f, 1.0f)     // CompositeConstruct: vec2 + 2 scalars -> vec4
+    v_color = a_color                            // varying passthrough (vec3 in -> vec3 out)
+}
+
+// fragment: varying -> framebuffer color (OriginUpperLeft execution mode)
+var @in @location = 0 fi_color : float3
+var @out @location = 0 frag_color : float4
+[fragment_shader(name="tri_frag_spv"), marker(no_coverage)]
+def tri_frag {
+    frag_color = float4(fi_color, 1.0f)          // CompositeConstruct: vec3 + scalar -> vec4
+}
+
+// vertex: gl_VertexIndex / gl_InstanceIndex builtins driving a procedural position
+var @out @location = 0 vi_col : float4
+[vertex_shader(name="vindex_spv"), marker(no_coverage)]
+def vindex {
+    var x = 0.0f
+    if (gl_VertexIndex == 0) {                    // VertexIndex (int Input builtin) + IEqual
+        x = 1.0f
+    }
+    if (gl_InstanceIndex > 0) {                   // InstanceIndex (int Input builtin) + SGreaterThan
+        x = x + 0.5f
+    }
+    gl_Position = float4(x, 0.0f, 0.0f, 1.0f)     // CompositeConstruct: 4 scalars
+    vi_col = float4(x, x, x, 1.0f)
+}
+
+// fragment: gl_FragCoord builtin + GLSL.std.450 math (dot/sqrt/clamp) -> grayscale
+var @out @location = 0 m_out : float4
+[fragment_shader(name="raster_math_spv"), marker(no_coverage)]
+def raster_math {
+    let p = gl_FragCoord                          // FragCoord (float4 Input builtin)
+    let d = dot(p, p)                             // OpDot -> float
+    let s = sqrt(d)                               // OpExtInst Sqrt (imports GLSL.std.450)
+    let c = clamp(s, 0.0f, 1.0f)                  // OpExtInst FClamp
+    m_out = float4(c, c, c, 1.0f)                 // CompositeConstruct
+}
+
+def public tri_vert_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tri_vert_spv)
+    return <- w
+}
+
+def public tri_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tri_frag_spv)
+    return <- w
+}
+
+def public vindex_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(vindex_spv)
+    return <- w
+}
+
+def public raster_math_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(raster_math_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -310,6 +384,21 @@ def public phase2_emitter_opcodes : table<uint> {
         SpvOp.LogicalAnd, SpvOp.LogicalOr, SpvOp.LogicalNot,
         // structured control flow
         SpvOp.SelectionMerge, SpvOp.BranchConditional, SpvOp.Branch, SpvOp.LoopMerge
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-3 adds vertex/fragment: stage I/O + rasterizer builtins reuse Decorate/Variable/EntryPoint/
+// ExecutionMode (already declared), so the only NEW opcodes are vector construction, dot, and the
+// GLSL.std.450 ext-inst pair. Phase-2 set + these:
+def public phase3_emitter_opcodes : table<uint> {
+    var s <- phase2_emitter_opcodes()
+    for (op in [
+        SpvOp.CompositeConstruct,           // vector constructors float4(...)/float3(...)
+        SpvOp.Dot,                          // dot(a, b)
+        SpvOp.ExtInstImport, SpvOp.ExtInst  // GLSL.std.450 math (sqrt/clamp/...)
     ]) {
         s |> insert(uint(op))
     }

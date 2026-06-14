@@ -541,3 +541,67 @@ clean error instead of letting `emit_type` panic. Net rule for the emitter: **ev
 dispatch validates its input and produces a clean `error[...]`, never a silent bad blob or a panic.**
 The remaining `emit_type`/`emit_component_type` panics are now unreachable for valid daslang (all
 callers pre-validate); they stand as internal invariants.
+
+### Phase 3 — vertex/fragment shaders LANDED (2026-06-14, branch `bbatkin/dasspirv-phase3`)
+
+The emitter goes from compute-only to all three rasterization-relevant stages. All three tiers green
+(interp/JIT/AOT 36/36), every emitted blob spirv-val clean, external `spirv-dis` confirms textbook
+vertex/fragment structure, lint + format clean.
+
+- **Stage parameterization.** `generate_spirv` gained a `stage : ShaderStage` (Compute/Vertex/Fragment)
+  argument driving the entry-point execution model (`GLCompute`/`Vertex`/`Fragment`) and execution mode:
+  Compute → `LocalSize`, Fragment → `OriginUpperLeft`, Vertex → none. The annotation classes carry the
+  stage via a virtual `shader_stage()` method — `SpirvComputeShader`/`SpirvVertexShader`/
+  `SpirvFragmentShader` are now all `[function_macro]` subclasses of `SpirvShader` (the base defaults to
+  Compute, vertex/fragment override). New annotations: `[vertex_shader]`, `[fragment_shader]`.
+- **Stage I/O (`@in`/`@out` + `@location`).** `classify_global` now recognizes `@in`/`@out` user
+  variables: Input/Output `OpVariable` + a `Location` decoration, listed in the entry-point interface.
+  `@location` is **required and must be non-negative** (fail-closed: a missing/negative location is a
+  clean error, not a silent collide-at-0). `@in`+`@out` together is rejected.
+- **Rasterizer builtins.** `builtin_info` extends the compute builtin table with `gl_Position` (Output,
+  BuiltIn Position), `gl_VertexIndex` / `gl_InstanceIndex` (Input, int) and `gl_FragCoord` (Input,
+  float4). The storage class is now part of the builtin record (compute IDs + the indices/FragCoord are
+  Input; only `gl_Position` is Output) — `classify_global` emits the right pointer storage + lists both
+  Input and Output builtins in the interface. **`gl_Position` is a standalone Output decorated `BuiltIn
+  Position`** (no `gl_PerVertex` block) — spirv-val `--target-env vulkan1.1` accepts it; the GLSL ABI
+  block is not a SPIR-V requirement.
+- **Entry-point interface (SPIR-V ≤ 1.3).** The interface lists exactly the Input/Output vars (stage I/O
+  + Input/Output builtins); SSBO StorageBuffer globals are correctly excluded (the ≤1.3 rule).
+- **Vector constructors → `OpCompositeConstruct`.** `float2/3/4`, `int2/3/4`, `uint2/3/4` arrive as
+  `ExprCall`. One scalar arg → splat (repeat the lane N times); one same-width vector arg → identity
+  (pass through); multiple args → CompositeConstruct of the constituents, each contributing its lanes
+  (a `vec2` contributes 2, so `float4(vec2, s, s)` works). **Lane count is validated** (constituent
+  lanes must sum to N) — a malformed constructor is a clean error.
+- **`dot` → core `OpDot`.** Not an ext-inst — the core op (vector·vector → scalar).
+- **GLSL.std.450 math → `OpExtInst`.** `OpExtInstImport "GLSL.std.450"` is emitted lazily (once, cached
+  in `ctx.glsl_ext`) the first time a math builtin is used. `glsl_ext_op` maps daslang math names to the
+  ext-inst opcode, **class-aware** for `abs`/`min`/`max`/`clamp`/`sign` (F/S/U variant by operand class)
+  with the rest float-only; an unsupported name or wrong class is a clean error (fail-closed).
+- **Tests:** `tests/spirv/test_raster.das` — vertex passthrough (`@in`/`@out` + Location, `gl_Position`,
+  `float4(vec2, s, s)`), fragment passthrough (`OriginUpperLeft`, `float4(vec3, s)`), vertex
+  builtins (`gl_VertexIndex`/`gl_InstanceIndex`), fragment math (`gl_FragCoord` + dot/sqrt/clamp). The
+  EntryPoint execution model is asserted via a new `op_first_operand` helper in `spirv_dis` (positional —
+  `op_has_operand` is unreliable because `Vertex == 0` collides with the name's NUL word). Census gate
+  extended to `phase3_emitter_opcodes` = Phase-2 set + `CompositeConstruct`/`Dot`/`ExtInstImport`/
+  `ExtInst`, unioned over the four new fixtures.
+
+**Findings (load-bearing):**
+
+1. **`dot`/`sqrt`/`clamp`/etc. need `require math` in the fixture file.** They're `math` builtins; without
+   the require they fail typecheck (`module math is not visible directly`) before the emitter ever runs.
+2. **Class virtual method call: drop `self->`.** `self->shader_stage()` trips STYLE028 — call
+   `shader_stage()` unqualified inside the method; the compiler auto-promotes to the same virtual invoke.
+3. **`gl_Position` standalone Output works** (no `gl_PerVertex` block needed for Vulkan ≤1.3) — confirmed
+   by spirv-val. Keeps the emitter simple; the block wrapper can come later only if a stage needs
+   `gl_PointSize`/`gl_ClipDistance`.
+4. **Local-value swizzles (`p.x` on a `let`) are NOT yet supported** — only single-component swizzle of a
+   *global* (via OpAccessChain). Reading a component of a local SSA value needs `OpCompositeExtract`;
+   deferred. The Phase-3 fixtures avoid it (they swizzle only globals, e.g. `gl_GlobalInvocationID.x`).
+5. **Vector·scalar ops (`vec * float`) are NOT yet supported** — would need `OpVectorTimesScalar` (the
+   plain `ExprOp2` path emits `OpFMul`, which requires matching operand types). Deferred to a later slice;
+   the fixtures avoid it.
+
+**Phase 3 COMPLETE** — stages + I/O + builtins + interface (commit 1) + constructors/dot/ext-inst
+(commit 2) + tests/census/masterplan (commit 3). The cross-repo triangle-on-GPU gate (dasVulkan: port
+`triangle.vert`/`.frag` to `[vertex_shader]`/`[fragment_shader]`, delete the committed `.spv`, regress
+the triangle PPM on lavapipe + local GPU) is the follow-on dasVulkan PR, mirroring Phase 1's GPU gate.
