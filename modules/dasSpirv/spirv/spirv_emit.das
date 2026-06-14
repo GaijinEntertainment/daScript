@@ -186,9 +186,25 @@ def private global_var_of(e : ExpressionPtr) : Variable const? {
 def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : tuple<id : uint; pointee : uint> {
     let at = e ?as ExprAt
     if (at != null) {
+        // local fixed-array indexing: positions[i] -> OpAccessChain into the Function-storage var
+        let lev = at.subexpr ?as ExprVar
+        if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
+            let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
+            if (lv.ptr_id != 0u) {
+                let idx = emit_value(m, ctx, at.index, errors)
+                if (idx == 0u) return (id = 0u, pointee = 0u)
+                let pointee = emit_type(m, e._type)
+                let ptr_t = type_pointer(m, SpvStorageClass.Function, pointee)
+                let res = alloc_id(m)
+                emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
+                return (id = res, pointee = pointee)
+            }
+            errors |> push("indexing local '{lev.name}': only fixed-array `var`/`let` locals are indexable")
+            return (id = 0u, pointee = 0u)
+        }
         let bv = global_var_of(at.subexpr)
         if (bv == null) {
-            errors |> push("indexing is only supported on a global ssbo array for now")
+            errors |> push("indexing is only supported on a global ssbo array or a local fixed array for now")
             return (id = 0u, pointee = 0u)
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
@@ -531,6 +547,138 @@ def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; 
     return 0u
 }
 
+// ===== compile-time constants: scalars, all-const vector constructors, const arrays =====
+// Produces a deduped OpConstant / OpConstantComposite for a fully-constant expression. Used for
+// array literals (which must be constant initializers for now) and their constituents. ok=false =>
+// not a compile-time constant (the caller emits a clean error).
+def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : array<string>) : tuple<ok : bool; id : uint> {
+    let r2v = e ?as ExprRef2Value
+    if (r2v != null) return emit_const(m, r2v.subexpr, errors)
+    let cu = e ?as ExprConstUInt
+    if (cu != null) return (ok = true, id = const_uint(m, cu.value))
+    let ci = e ?as ExprConstInt
+    if (ci != null) return (ok = true, id = const_int(m, ci.value))
+    let cf = e ?as ExprConstFloat
+    if (cf != null) return (ok = true, id = const_float(m, cf.value))
+    // unary minus on a constant: depending on fold state `-0.6` can arrive as ExprOp1("-", const)
+    // rather than a folded negative literal. Fold it here so both shapes produce the same constant.
+    let neg = e ?as ExprOp1
+    if (neg != null && "{neg.op}" == "-") {
+        let inner = neg.subexpr ?as ExprRef2Value
+        let sub = inner != null ? inner.subexpr : neg.subexpr
+        let ncf = sub ?as ExprConstFloat
+        if (ncf != null) return (ok = true, id = const_float(m, -ncf.value))
+        let nci = sub ?as ExprConstInt
+        if (nci != null) return (ok = true, id = const_int(m, -nci.value))
+        return (ok = false, id = 0u)
+    }
+    // folded vector constants (float2(0.,−.6) etc. fold to ExprConstFloatN at patch time) ->
+    // OpConstantComposite of per-lane scalar constants.
+    let cf2 = e ?as ExprConstFloat2
+    if (cf2 != null) {
+        let v = cf2.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y)]))
+    }
+    let cf3 = e ?as ExprConstFloat3
+    if (cf3 != null) {
+        let v = cf3.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y), const_float(m, v.z)]))
+    }
+    let cf4 = e ?as ExprConstFloat4
+    if (cf4 != null) {
+        let v = cf4.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y), const_float(m, v.z), const_float(m, v.w)]))
+    }
+    let ci2 = e ?as ExprConstInt2
+    if (ci2 != null) {
+        let v = ci2.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y)]))
+    }
+    let ci3 = e ?as ExprConstInt3
+    if (ci3 != null) {
+        let v = ci3.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y), const_int(m, v.z)]))
+    }
+    let ci4 = e ?as ExprConstInt4
+    if (ci4 != null) {
+        let v = ci4.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y), const_int(m, v.z), const_int(m, v.w)]))
+    }
+    let cu2 = e ?as ExprConstUInt2
+    if (cu2 != null) {
+        let v = cu2.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y)]))
+    }
+    let cu3 = e ?as ExprConstUInt3
+    if (cu3 != null) {
+        let v = cu3.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y), const_uint(m, v.z)]))
+    }
+    let cu4 = e ?as ExprConstUInt4
+    if (cu4 != null) {
+        let v = cu4.value
+        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y), const_uint(m, v.z), const_uint(m, v.w)]))
+    }
+    // all-constant vector constructor -> OpConstantComposite
+    let call = e ?as ExprCall
+    if (call != null) {
+        let vc = vector_ctor("{call.name}")
+        if (!vc.ok) return (ok = false, id = 0u)
+        var total = 0
+        var parts : array<uint>
+        parts |> reserve(length(call.arguments))
+        for (a in call.arguments) {
+            let cc = component_count(a._type.baseType)
+            if (cc == 0 || scalar_class(a._type.baseType) != vc.cls) {
+                errors |> push("{call.name}: constant constructor constituent of type {a._type.baseType} has the wrong component kind")
+                delete parts
+                return (ok = false, id = 0u)
+            }
+            total += cc
+            let pr = emit_const(m, a, errors)
+            if (!pr.ok) {
+                errors |> push("{call.name}: constructor argument is not a compile-time constant")
+                delete parts
+                return (ok = false, id = 0u)
+            }
+            parts |> push(pr.id)
+        }
+        if (total != vc.n) {
+            errors |> push("{call.name}: constant constituent lanes sum to {total}, expected {vc.n}")
+            delete parts
+            return (ok = false, id = 0u)
+        }
+        let cid = const_composite(m, emit_type(m, e._type), parts)
+        delete parts
+        return (ok = true, id = cid)
+    }
+    // const array literal -> OpConstantComposite of element constants
+    let mk = e ?as ExprMakeArray
+    if (mk != null) {
+        // a dynamic array<T> literal is ALSO an ExprMakeArray; emit_type would panic on tArray.
+        // Only fixed-array literals lower to a constant composite — reject the rest cleanly.
+        if (e._type == null || e._type.baseType != Type.tFixedArray) {
+            errors |> push("only fixed-array literals are supported (dynamic array<T> literals are not)")
+            return (ok = false, id = 0u)
+        }
+        var parts : array<uint>
+        parts |> reserve(length(mk.values))
+        for (v in mk.values) {
+            let pr = emit_const(m, v, errors)
+            if (!pr.ok) {
+                errors |> push("array literal element is not a compile-time constant")
+                delete parts
+                return (ok = false, id = 0u)
+            }
+            parts |> push(pr.id)
+        }
+        let cid = const_composite(m, emit_type(m, e._type), parts)
+        delete parts
+        return (ok = true, id = cid)
+    }
+    return (ok = false, id = 0u)
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -602,6 +750,11 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     }
     let call = e ?as ExprCall
     if (call != null) return emit_call(m, ctx, call, e, errors)
+    let mk = e ?as ExprMakeArray
+    if (mk != null) {
+        let r = emit_const(m, e, errors)   // emit_const reports the specific reason on failure
+        return r.ok ? r.id : 0u
+    }
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
         let lv = ctx.local_vars?[intptr(ev.variable)] ?? LocalVar()
@@ -635,9 +788,9 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
 def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
     if (key_exists(ctx.local_vars, intptr(v))) return
     let bt = v._type.baseType
-    if (scalar_class(bt) < 0 && bt != Type.tBool) {
+    if (scalar_class(bt) < 0 && bt != Type.tBool && bt != Type.tFixedArray) {
         // emit_type would panic on an unsupported base type; reject with a clean error instead.
-        errors |> push("local '{v.name}': type {bt} is not supported yet (only 32-bit int/uint/float scalars+vectors and bool)")
+        errors |> push("local '{v.name}': type {bt} is not supported yet (only 32-bit int/uint/float scalars+vectors, bool, and fixed arrays)")
         return
     }
     let vt = emit_type(m, v._type)
@@ -659,7 +812,11 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
     let lt = e ?as ExprLet
     if (lt != null) {
         for (v in lt.variables) {
-            if (!v._type.flags.constant) declare_local_var(m, ctx, v, errors)   // `var` -> memory; `let` -> SSA
+            // `var` -> memory; scalar/vector `let` -> SSA; but a fixed-array `let` needs memory too
+            // (dynamic indexing requires an addressable OpVariable + OpAccessChain).
+            if (!v._type.flags.constant || v._type.baseType == Type.tFixedArray) {
+                declare_local_var(m, ctx, v, errors)
+            }
         }
         return
     }

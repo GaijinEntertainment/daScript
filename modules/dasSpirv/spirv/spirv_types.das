@@ -29,6 +29,11 @@ def public emit_type(var m : SpirvModule; t : TypeDecl?) : uint {
     if (bt == Type.tFloat2) return type_vector(m, type_float(m, 32u), 2)
     if (bt == Type.tFloat3) return type_vector(m, type_float(m, 32u), 3)
     if (bt == Type.tFloat4) return type_vector(m, type_float(m, 32u), 4)
+    // fixed array: float2[3] -> OpTypeArray(element, length). Outermost dim is fixedDim; the
+    // element (firstType) may itself be a fixed array for multi-dim, so recurse.
+    if (bt == Type.tFixedArray && t.firstType != null) {
+        return type_array(m, emit_type(m, t.firstType), t.fixedDim)
+    }
     panic("emit_type: unsupported baseType {bt}")
     return 0u
 }
