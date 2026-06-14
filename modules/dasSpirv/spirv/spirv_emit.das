@@ -1447,9 +1447,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     var ctx : EmitCtx
     ctx.stage = stage
 
+    // Fully overwrite the out-param: a caller that reuses a SpirvReflection (or retries after a
+    // failed attempt) must not accumulate stale bindings / ranges from a previous call.
     reflection.stage = stage_flag(stage)
     reflection.entry_point := "main"
     reflection.local_size = stage == ShaderStage.Compute ? local_size : int3(1, 1, 1)
+    reflection.bindings |> clear()
+    reflection.push_constants |> clear()
 
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
