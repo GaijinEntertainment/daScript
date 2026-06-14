@@ -133,6 +133,16 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
         DEPENDS das-fmt tree_sitter_daslang
     )
 ENDFOREACH()
+
+# das-fmt (utils/dasFormatter, the gen1->gen2 syntax converter) carries its own
+# --tests self-check suite. It's a C++ target (not a daslang -exe util), so invoke
+# the binary directly rather than through dastest. Previously uncovered by CI, which
+# let the make-literal verify-compile tests rot unnoticed. (issue #3094)
+LIST(APPEND _run_utils_tests
+    COMMAND ${CMAKE_COMMAND} -E echo "Running tests das-fmt dasFormatter --tests"
+    COMMAND $<TARGET_FILE:das-fmt> --tests
+    DEPENDS das-fmt
+)
 ADD_CUSTOM_TARGET(run_utils_tests
     ${_run_utils_tests}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
