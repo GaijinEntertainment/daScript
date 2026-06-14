@@ -256,6 +256,31 @@ def public const_uint(var m : SpirvModule; v : uint) : uint {
     return id
 }
 
+// Signed-int and float OpConstants. The literal word is the raw 32-bit pattern: uint(v) carries an
+// int's two's-complement bits; reinterpret carries a float's IEEE-754 bits. Keyed separately from
+// const_uint so int 2 and uint 2 (distinct types) don't collide in the pool.
+def public const_int(var m : SpirvModule; v : int) : uint {
+    let key = "ci_{v}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let it = type_int(m, 32u, 1u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.Constant, it, id, uint(v))
+    m.const_pool |> insert(key, id)
+    return id
+}
+
+def public const_float(var m : SpirvModule; v : float) : uint {
+    let key = "cf_{v}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let ft = type_float(m, 32u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.Constant, ft, id, unsafe(reinterpret<uint>(v)))
+    m.const_pool |> insert(key, id)
+    return id
+}
+
 // ===== finalize: header (5 words) ++ sections in layout order =====
 def public module_words(m : SpirvModule) : array<uint> {
     // header: magic, version, generator, id-bound (all result-ids < next_id), schema (0)

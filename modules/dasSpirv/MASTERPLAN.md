@@ -437,3 +437,40 @@ runs (exit 0) with `VULKAN_SDK` set. Registered in `tests/aot/CMakeLists.txt` (5
 **NEXT:** dasVulkan `run_compute_spirv` GPU gate (`out[i]==i*i` on local real GPU + lavapipe CI) —
 the cross-repo Phase-1 piece. Then Phase 2 (control flow + arithmetic). Dev binary: the worktree's
 LLVM-enabled `bin/Release/daslang.exe`.
+
+## Phase 1 — CROSS-REPO GPU GATE GREEN, milestone fully closed (2026-06-14)
+
+daslang #3133 merged to master (`6caf9bf59`). The dasVulkan side ([borisbat/dasVulkan#3](https://github.com/borisbat/dasVulkan/pull/3))
+replaces the committed `square.comp(.spv)` with a daslang `[compute_shader]` lowered by dasSpirv:
+
+- New `create_shader_module(device, code : array<uint>)` overload (SPIR-V words; `codeSize = 4·len`).
+- The `[compute_shader] square` fixture emits the public `square_spv : array<uint>` global; the raw
+  (`run_compute`) and boost (`run_compute_spirv`/`run_compute_boost`) descriptor paths feed it.
+- `examples/compute.das` authors its own inline `[compute_shader]`.
+
+**Result:** `out[i]==i*i` green on the **local real GPU** (integration suite 5/5) AND **lavapipe CI**
+(PR #3 `build`+`integration` pass). dasVulkan CI builds daslang from `master`, which compiles dasSpirv
+in unconditionally (top-level CMake auto-includes every `modules/*/CMakeLists.txt`); the macro runs
+interpreted, so the `-DDAS_LLVM_DISABLED=ON` CI build is unaffected. Pure daslang→SPIR-V on a real GPU,
+no GLSL/glslang/committed `.spv` anywhere.
+
+### Phase 2 — arithmetic breadth (in progress, branch `bbatkin/dasspirv-phase2`)
+
+First Phase-2 slice: full scalar binary + unary arithmetic. `emit_value`'s `ExprOp2` went from
+`*`-only to a `binop_code(op, scalar_class)` table; added an `ExprOp1` handler via `unop_code`.
+
+- **Binary** (`+ - * / %`): `IAdd`/`ISub`/`IMul` (sign-agnostic), `SDiv`/`UDiv`/`FDiv`, `SRem`/`UMod`/`FRem`.
+- **Unary** (`- ~`): `SNegate`/`FNegate`, `Not`.
+- **Op-semantics probe (load-bearing):** daslang `/` truncates toward zero (`-7/3 == -2`) and `%`
+  takes the **dividend's** sign (`-7%3 == -1`, `7%-3 == 1`) — C semantics. So int `%` → `OpSRem`
+  (dividend's sign), NOT `OpSMod` (divisor's sign); int `/` → `OpSDiv` (truncating). uint → `UDiv`/`UMod`;
+  float → `FDiv`/`FRem`.
+- **Node shapes (probed):** `+ - * / %` are all `ExprOp2`; unary `-`/`~` are `ExprOp1` (`{op, subexpr}`).
+  No `ExprCall` lowering for these on builtin scalars.
+- **Tests:** `tests/spirv/test_arith.das` — uint/int/float fixtures in `_spirv_common.das` (operands are
+  loaded SSBO values + the uint index, so no constants/conversions needed yet), per-op opcode-shape
+  asserts + spirv-val clean. Interp + JIT green (16/16); `marker(no_coverage)` on the new fixtures.
+  Constants (`const_int`/`const_float`/`const_bool`), comparisons (bool result), and control flow
+  (mutable locals as `Function` `OpVariable`, `OpSelectionMerge`/`OpLoopMerge`) are the next slices.
+
+**Reserved word:** `label` is a daslang keyword — a parameter named `label` is `error[30151]`. Use `lbl`.

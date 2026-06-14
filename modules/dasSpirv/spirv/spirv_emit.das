@@ -160,6 +160,44 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
     return (id = 0u, pointee = 0u)
 }
 
+// ===== arithmetic opcode selection =====
+// 0 = signed int, 1 = unsigned int, 2 = float, -1 = other. Vectors classify by their lane kind
+// (IAdd/FAdd/… operate component-wise on vectors with the same opcode as the scalar).
+def private scalar_class(bt : Type) : int {
+    if (bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4) return 0
+    if (bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4) return 1
+    if (bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) return 2
+    return -1
+}
+
+// daslang binary op -> SPIR-V opcode. Add/Sub/Mul are two's-complement sign-agnostic (IAdd for
+// both int kinds). Div/Rem split by kind. daslang `/` truncates toward zero and `%` takes the
+// dividend's sign (probed) -> SDiv/SRem (not the floored SMod); unsigned -> UDiv/UMod; float ->
+// FDiv/FRem (fmod, dividend's sign).
+def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
+    if (op == "+") return (ok = true, code = cls == 2 ? SpvOp.FAdd : SpvOp.IAdd)
+    if (op == "-") return (ok = true, code = cls == 2 ? SpvOp.FSub : SpvOp.ISub)
+    if (op == "*") return (ok = true, code = cls == 2 ? SpvOp.FMul : SpvOp.IMul)
+    if (op == "/") {
+        if (cls == 2) return (ok = true, code = SpvOp.FDiv)
+        if (cls == 0) return (ok = true, code = SpvOp.SDiv)
+        if (cls == 1) return (ok = true, code = SpvOp.UDiv)
+    }
+    if (op == "%") {
+        if (cls == 2) return (ok = true, code = SpvOp.FRem)
+        if (cls == 0) return (ok = true, code = SpvOp.SRem)
+        if (cls == 1) return (ok = true, code = SpvOp.UMod)
+    }
+    return (ok = false, code = SpvOp.Nop)
+}
+
+// daslang unary op -> SPIR-V opcode. `-` negates (FNegate/SNegate); `~` is bitwise Not (int/uint).
+def private unop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
+    if (op == "-") return (ok = true, code = cls == 2 ? SpvOp.FNegate : SpvOp.SNegate)
+    if (op == "~") return (ok = true, code = SpvOp.Not)
+    return (ok = false, code = SpvOp.Nop)
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -169,18 +207,40 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     if (r2v != null) return emit_value(m, ctx, r2v.subexpr, errors)
     let cu = e ?as ExprConstUInt
     if (cu != null) return const_uint(m, cu.value)
+    let ci = e ?as ExprConstInt
+    if (ci != null) return const_int(m, ci.value)
+    let cf = e ?as ExprConstFloat
+    if (cf != null) return const_float(m, cf.value)
     let op2 = e ?as ExprOp2
     if (op2 != null) {
         let l = emit_value(m, ctx, op2.left, errors)
         let r = emit_value(m, ctx, op2.right, errors)
-        if (op2.op == "*" && e._type.isInteger) {
-            let rt = emit_type(m, e._type)
-            let res = alloc_id(m)
-            emit(m, SEC_FUNCS, SpvOp.IMul, rt, res, l, r)
-            return res
+        if (l == 0u || r == 0u) return 0u   // operand error already reported; don't emit with id 0
+        // operand type drives the signed/unsigned/float opcode choice; result type is the same for
+        // arithmetic (comparisons, whose result is bool, arrive in a later phase).
+        let bo = binop_code("{op2.op}", scalar_class(op2.left._type.baseType))
+        if (!bo.ok) {
+            errors |> push("unsupported binary op '{op2.op}' on {op2.left._type.baseType}")
+            return 0u   // no instruction emitted: don't return an undefined result id
         }
-        errors |> push("unsupported binary op '{op2.op}' on {e._type.baseType}")
-        return 0u   // no instruction emitted: don't return an undefined result id
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, bo.code, rt, res, l, r)
+        return res
+    }
+    let op1 = e ?as ExprOp1
+    if (op1 != null) {
+        let v = emit_value(m, ctx, op1.subexpr, errors)
+        if (v == 0u) return 0u
+        let uo = unop_code("{op1.op}", scalar_class(op1.subexpr._type.baseType))
+        if (!uo.ok) {
+            errors |> push("unsupported unary op '{op1.op}' on {op1.subexpr._type.baseType}")
+            return 0u
+        }
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, uo.code, rt, res, v)
+        return res
     }
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {

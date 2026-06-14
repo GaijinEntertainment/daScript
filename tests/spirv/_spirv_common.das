@@ -34,6 +34,59 @@ def public square_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-2 arithmetic fixtures: exercise every binary/unary scalar op the emitter supports.
+// Operands are loaded SSBO values (+ the uint index), so no constants/conversions are needed yet —
+// the opcode-shape + spirv-val gates only require each instruction to be emitted and valid. =====
+var @ssbo @binding = 0 idata : array<int>
+var @ssbo @binding = 0 fdata : array<float>
+
+[compute_shader(local_size_x=64, name="uarith_spv"), marker(no_coverage)]
+def uarith {
+    let i = gl_GlobalInvocationID.x
+    data[i] = data[i] + i       // IAdd
+    data[i] = data[i] - i       // ISub
+    data[i] = data[i] * i       // IMul
+    data[i] = data[i] / i       // UDiv
+    data[i] = data[i] % i       // UMod
+}
+
+[compute_shader(local_size_x=64, name="iarith_spv"), marker(no_coverage)]
+def iarith {
+    let i = gl_GlobalInvocationID.x
+    idata[i] = idata[i] / 2     // SDiv  (signed int OpConstant 2)
+    idata[i] = idata[i] % 3     // SRem  (OpConstant 3)
+    idata[i] = -idata[i]        // SNegate
+    idata[i] = ~idata[i]        // Not
+}
+
+[compute_shader(local_size_x=64, name="farith_spv"), marker(no_coverage)]
+def farith {
+    let i = gl_GlobalInvocationID.x
+    fdata[i] = fdata[i] + 1.0f  // FAdd  (float OpConstant 1.0)
+    fdata[i] = fdata[i] - 1.0f  // FSub
+    fdata[i] = fdata[i] * 2.0f  // FMul  (OpConstant 2.0)
+    fdata[i] = fdata[i] / 2.0f  // FDiv
+    fdata[i] = -fdata[i]        // FNegate
+}
+
+def public uarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(uarith_spv)
+    return <- w
+}
+
+def public iarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(iarith_spv)
+    return <- w
+}
+
+def public farith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(farith_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
