@@ -930,6 +930,9 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
+        virtual bool canVisitStructure ( Structure * str ) override {
+            return !str->isTemplate;    // we don't do a thing with template structures
+        }
         // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
