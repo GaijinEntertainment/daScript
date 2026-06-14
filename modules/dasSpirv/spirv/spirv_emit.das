@@ -529,6 +529,12 @@ def private emit_for(var m : SpirvModule; var ctx : EmitCtx; fr : ExprFor?; var 
         return
     }
     let cls = scalar_class(iv._type.baseType)
+    if (cls != 0 && cls != 1) {
+        // induction must be a 32-bit int/uint; otherwise the synthesized `i < hi` / `i += 1` would
+        // pick a Nop opcode (cmp_code/binop_code return ok=false) and emit invalid SPIR-V silently.
+        errors |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
+        return
+    }
     // bounds (lo inclusive, hi exclusive) evaluated ONCE in the pre-header — range captures them at
     // loop entry. Constant-bound range() folds to ExprConstRange (a half-open [from,to) value);
     // runtime bounds stay an ExprCall to range()/urange().

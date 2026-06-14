@@ -106,3 +106,24 @@ def test_builder_dedup_and_validate(t : T?) {
         delete words
     }
 }
+
+// Regression: const_float must key by raw IEEE-754 bits, not the stringified value. -0.0 and 0.0
+// stringify identically but are distinct bit patterns (0x80000000 vs 0x0) and distinct SPIR-V
+// constants — a stringified key would alias them to one id.
+[test]
+def test_const_float_bitkey(t : T?) {
+    t |> run("builder: const_float keys by bits (0.0 != -0.0), dedup intact") <| @(t : T?) {
+        var m = make_module()
+        let zero = 0.0f
+        let negzero = -zero                 // -0.0 (sign-preserving negate, distinct bit pattern)
+        let id_pos = const_float(m, zero)
+        let id_neg = const_float(m, negzero)
+        t |> success(id_pos != id_neg, "0.0 and -0.0 get distinct constant ids")
+        t |> equal(const_float(m, zero), id_pos)     // dedup still holds per bit pattern
+        t |> equal(const_float(m, negzero), id_neg)
+        var words <- module_words(m)
+        delete m
+        t |> equal(count_op(words, SpvOp.Constant), 2)   // two distinct OpConstant, not collapsed
+        delete words
+    }
+}
