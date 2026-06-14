@@ -210,12 +210,12 @@ def hex_char(var Ch : int) {
     }
 }
 
-def aotSuffixNameEx(funcName : das_string; suffix : string) {
-    return aotSuffixNameEx(string(funcName), suffix);
+def aotSuffixNameEx(funcName : das_string; suffix : string; force : bool = false) {
+    return aotSuffixNameEx(string(funcName), suffix, force);
 }
 
-def aotSuffixNameEx(funcName : string; suffix : string) {
-    var prefix = is_cpp_keyword(funcName);
+def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
+    var prefix = force || is_cpp_keyword(funcName);
 
     let name = build_string() $(var writer) {
         for (ch in funcName) {
@@ -260,16 +260,47 @@ def aotSuffixNameEx(funcName : string; suffix : string) {
     return prefix ? (suffix + name) : name;
 }
 
+// Names used by BOTH a struct and an enum within one C++ namespace (module). In AOT
+// output a struct emits `struct X` and an enum `enum class X`; sharing a name is a hard
+// C++ redefinition. daslang keeps structs and enums in separate lookup tables, so this
+// is legal das (the fuzzer found it, #3065). Such names are force-suffixed (`_S`/`_E`)
+// to disambiguate; keyed by "{namespace}::{name}" and rebuilt at the start of each run.
+var private g_struct_enum_collide : table<string>
+
+def private structEnumNsKey(pm : Module?; name : string) : string {
+    return "{aotModuleName(pm)}::{name}";
+}
+
+def buildStructEnumCollisions(program : ProgramPtr) {
+    g_struct_enum_collide |> clear();
+    program.get_ptr() |> for_each_module_no_order($(pm) {
+        var enumNames : table<string>;
+        pm |> for_each_enumeration($(penum) {
+            enumNames |> insert(string(penum.name));
+        });
+        if (!empty(enumNames)) {
+            pm |> for_each_structure($(ps) {
+                if (enumNames |> key_exists(string(ps.name))) {
+                    g_struct_enum_collide |> insert(structEnumNsKey(pm, string(ps.name)));
+                }
+            });
+        }
+        delete enumNames;
+    });
+}
+
 def aotStructName(st : Structure?) {
-    // Suffix "_S" is prepended only when `st.name` is a C++ keyword (or contains
-    // a non-alnum char, which the parser disallows for struct names — so in
-    // practice: keyword names only). Non-keyword struct names emit unchanged.
-    return aotSuffixNameEx(st.name, "_S");
+    // Suffix "_S" is prepended when `st.name` is a C++ keyword, contains a non-alnum
+    // char (parser-disallowed for struct names — so in practice keyword names), or
+    // collides with a same-namespace enum of the same name (see g_struct_enum_collide).
+    let collide = g_struct_enum_collide |> key_exists(structEnumNsKey(st._module, string(st.name)));
+    return aotSuffixNameEx(st.name, "_S", collide);
 }
 
 def aotEnumName(enu : Enumeration?) {
     // Same shape as aotStructName but for enums.
-    return aotSuffixNameEx(enu.name, "_E");
+    let collide = g_struct_enum_collide |> key_exists(structEnumNsKey(enu._module, string(enu.name)));
+    return aotSuffixNameEx(enu.name, "_E", collide);
 }
 
 def aotEnumValueName(name : das_string) {
@@ -3912,6 +3943,7 @@ class public CppAot : AstVisitor {
 
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
+    buildStructEnumCollisions(program);
     let utm = new UseTypeMarker();
     make_visitor(*utm) $(adapter) {
         visit(program, adapter);
