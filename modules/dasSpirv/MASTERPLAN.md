@@ -722,3 +722,22 @@ MVP vertex shader, lint + format clean.
 `ExprOp2 : ExprOp : ExprCallFunc`, so the operator resolves to a `.func` but the node stays `ExprOp2` with
 `.left`/`.right`. So matrix/vector `*` is intercepted in the emitter's existing `ExprOp2` path, before the
 scalar-class `binop_code` (which returns ok=false on the `tHandle`/mismatched-shape operands).
+
+### Phase 4c — push constants LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Third Phase-4 slice: push constants. A `@push_constant` struct global lowers to a PushConstant-storage,
+Block-decorated `OpTypeStruct` — the same struct machinery as a UBO (`build_block_struct` layout +
+`ExprField` member access), but with **no DescriptorSet/Binding** (push constants are not descriptors)
+and not listed in the entry interface (SPIR-V ≤ 1.3). All three tiers green (interp/JIT/AOT 44/44),
+spirv-val clean, external `spirv-dis` confirms PushConstant storage with no descriptor decorations,
+lint + format clean.
+
+- **`@push_constant` classify_global branch** — mirrors `@uniform` minus the descriptor decorations:
+  `PushConstant` storage pointer + the Block struct, `GlobalInfo.is_block = true` so member access reuses
+  the `ExprField` → `OpAccessChain` path verbatim. Layout reuses `build_block_struct` (std140 == std430
+  for the scalar/vector/matrix members we support — they differ only on arrays/nested-struct alignment).
+- **Tests:** `tests/spirv/test_push_constant.das` — a `[fragment_shader]` reading a `@push_constant`
+  block (`pc.tint * pc.gamma`); asserts the PushConstant OpVariable, Block + offsets (tint@0, gamma@16),
+  the **absence** of DescriptorSet/Binding, AccessChain + VectorTimesScalar, + spirv-val. Census set is
+  unchanged (`phase4c_emitter_opcodes` = 4b set — PushConstant is a storage-class operand, not an opcode);
+  the `pc_frag` fixture is unioned in and must stay within the declared set.

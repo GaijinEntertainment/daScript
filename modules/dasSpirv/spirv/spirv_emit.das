@@ -260,7 +260,23 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Uniform, value_type = bs.type_id, is_ssbo = false, is_block = true))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, or @uniform)")
+    // push constants: @push_constant struct -> PushConstant storage + Block-decorated struct. Same
+    // std140-style member layout + ExprField access as a UBO, but NO descriptor set/binding (push
+    // constants are not descriptors) and not listed in the entry interface (SPIR-V <= 1.3).
+    if (v.annotation |> find_arg("push_constant") is tBool) {
+        if (v._type.baseType != Type.tStructure || v._type.structType == null) {
+            errors |> push("push_constant '{vname}' must be a struct")
+            return
+        }
+        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        if (!bs.ok) return
+        let pt = type_pointer(m, SpvStorageClass.PushConstant, bs.type_id)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.PushConstant))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.PushConstant, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        return
+    }
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, or @push_constant)")
 }
 
 // ===== member index of a struct field by name =====

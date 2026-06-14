@@ -372,6 +372,26 @@ def public mvp_vert_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-4c push-constant fixture: a @push_constant struct -> PushConstant storage + Block,
+// laid out like a UBO (std140 offsets) but with NO DescriptorSet/Binding (push constants are not
+// descriptors) and not in the entry interface. Member access is the same OpAccessChain/OpLoad. =====
+struct PushData {
+    tint  : float4      // offset 0
+    gamma : float       // offset 16
+}
+var @push_constant pc : PushData
+var @out @location = 0 pc_out : float4
+[fragment_shader(name="pc_frag_spv"), marker(no_coverage)]
+def pc_frag {
+    pc_out = pc.tint * pc.gamma     // PushConstant member loads -> VectorTimesScalar
+}
+
+def public pc_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(pc_frag_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -519,4 +539,11 @@ def public phase4b_emitter_opcodes : table<uint> {
         s |> insert(uint(op))
     }
     return <- s
+}
+
+// Phase-4c push constants add NO new opcodes: a @push_constant block is the same Block-decorated
+// OpTypeStruct read via OpAccessChain/OpLoad — only the storage class (PushConstant) differs, and
+// that is an operand, not an opcode. The declared set is unchanged.
+def public phase4c_emitter_opcodes : table<uint> {
+    return <- phase4b_emitter_opcodes()
 }
