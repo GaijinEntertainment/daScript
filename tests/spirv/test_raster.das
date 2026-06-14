@@ -38,8 +38,10 @@ def private has_location(words : array<uint>; loc : uint) : bool {
 def test_vertex_passthrough(t : T?) {
     t |> run("vertex: @in/@out + Location, gl_Position, float4(...) -> CompositeConstruct") <| @(t : T?) {
         var words <- tri_vert_words()
-        // entry point is a Vertex shader with no execution mode
-        t |> success(op_first_operand(words, SpvOp.EntryPoint).value == uint(SpvExecutionModel.Vertex),
+        // entry point is a Vertex shader with no execution mode (assert .ok so an empty/truncated
+        // module can't pass via the default value 0, which collides with SpvExecutionModel.Vertex)
+        let vmodel = op_first_operand(words, SpvOp.EntryPoint)
+        t |> success(vmodel.ok && vmodel.value == uint(SpvExecutionModel.Vertex),
             "tri_vert: EntryPoint model is Vertex")
         t |> success(count_op(words, SpvOp.ExecutionMode) == 0, "tri_vert: vertex has no ExecutionMode")
         // stage I/O Locations (a_pos=0, a_color=1, v_color=0) + the Position builtin
@@ -59,7 +61,8 @@ def test_vertex_passthrough(t : T?) {
 def test_fragment_passthrough(t : T?) {
     t |> run("fragment: OriginUpperLeft, float4(vec3, 1.0) -> CompositeConstruct") <| @(t : T?) {
         var words <- tri_frag_words()
-        t |> success(op_first_operand(words, SpvOp.EntryPoint).value == uint(SpvExecutionModel.Fragment),
+        let fmodel = op_first_operand(words, SpvOp.EntryPoint)
+        t |> success(fmodel.ok && fmodel.value == uint(SpvExecutionModel.Fragment),
             "tri_frag: EntryPoint model is Fragment")
         t |> success(op_has_operand(words, SpvOp.ExecutionMode, uint(SpvExecutionMode.OriginUpperLeft)),
             "tri_frag: ExecutionMode OriginUpperLeft")

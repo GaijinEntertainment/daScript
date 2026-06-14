@@ -64,30 +64,42 @@ def finalize(var c : EmitCtx) {
     delete c.loop_stack
 }
 
-// ===== builtin name -> SpvBuiltIn + storage class (compute + vertex/fragment) =====
-// Most builtins are read-only Inputs; gl_Position is the one written Output. The storage class is
-// what decides whether the variable's pointer type is Input or Output and how it is written.
-def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; storage : SpvStorageClass> {
+// ===== builtin name -> SpvBuiltIn + storage class + the stage it's legal in =====
+// Most builtins are read-only Inputs; gl_Position is the one written Output. The storage class
+// decides Input vs Output pointer type; `req` is the single stage the builtin is valid in, so
+// classify_global can reject a cross-stage reference (e.g. gl_FragCoord in a vertex shader) with a
+// clean error instead of emitting a blob that only spirv-val would catch.
+def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; storage : SpvStorageClass; req : ShaderStage> {
     // compute
-    if (name == "gl_GlobalInvocationID") return (ok = true, bi = SpvBuiltIn.GlobalInvocationId, storage = SpvStorageClass.Input)
-    if (name == "gl_LocalInvocationID") return (ok = true, bi = SpvBuiltIn.LocalInvocationId, storage = SpvStorageClass.Input)
-    if (name == "gl_WorkGroupID") return (ok = true, bi = SpvBuiltIn.WorkgroupId, storage = SpvStorageClass.Input)
-    if (name == "gl_NumWorkGroups") return (ok = true, bi = SpvBuiltIn.NumWorkgroups, storage = SpvStorageClass.Input)
-    if (name == "gl_LocalInvocationIndex") return (ok = true, bi = SpvBuiltIn.LocalInvocationIndex, storage = SpvStorageClass.Input)
+    if (name == "gl_GlobalInvocationID") return (ok = true, bi = SpvBuiltIn.GlobalInvocationId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_LocalInvocationID") return (ok = true, bi = SpvBuiltIn.LocalInvocationId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_WorkGroupID") return (ok = true, bi = SpvBuiltIn.WorkgroupId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_NumWorkGroups") return (ok = true, bi = SpvBuiltIn.NumWorkgroups, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_LocalInvocationIndex") return (ok = true, bi = SpvBuiltIn.LocalInvocationIndex, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
     // vertex
-    if (name == "gl_Position") return (ok = true, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Output)
-    if (name == "gl_VertexIndex") return (ok = true, bi = SpvBuiltIn.VertexIndex, storage = SpvStorageClass.Input)
-    if (name == "gl_InstanceIndex") return (ok = true, bi = SpvBuiltIn.InstanceIndex, storage = SpvStorageClass.Input)
+    if (name == "gl_Position") return (ok = true, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Output, req = ShaderStage.Vertex)
+    if (name == "gl_VertexIndex") return (ok = true, bi = SpvBuiltIn.VertexIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
+    if (name == "gl_InstanceIndex") return (ok = true, bi = SpvBuiltIn.InstanceIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
     // fragment
-    if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input)
-    return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input)
+    if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
+    return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+}
+
+def private stage_name(stage : ShaderStage) : string {
+    if (stage == ShaderStage.Vertex) return "vertex"
+    if (stage == ShaderStage.Fragment) return "fragment"
+    return "compute"
 }
 
 // ===== global variable classification + emission =====
-def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
+def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var errors : array<string>) {
     let vname = "{v.name}"
     let bi = builtin_info(vname)
     if (bi.ok) {
+        if (bi.req != stage) {
+            errors |> push("builtin '{vname}' is only available in the {stage_name(bi.req)} stage, not {stage_name(stage)}")
+            return
+        }
         let vt = emit_type(m, v._type)
         let pt = type_pointer(m, bi.storage, vt)
         let vid = alloc_id(m)
@@ -102,6 +114,10 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     let is_in = v.annotation |> find_arg("in") is tBool
     let is_out = v.annotation |> find_arg("out") is tBool
     if (is_in || is_out) {
+        if (stage == ShaderStage.Compute) {
+            errors |> push("stage variable '{vname}': @in/@out Location I/O is not valid in a compute shader")
+            return
+        }
         if (is_in && is_out) {
             errors |> push("stage variable '{vname}' cannot be both @in and @out")
             return
@@ -975,7 +991,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
 
     collect_dependencies(fn) $(_vfun, vvar) {
         for (v in vvar) {
-            classify_global(m, ctx, v, errors)
+            classify_global(m, ctx, v, stage, errors)
         }
     }
 

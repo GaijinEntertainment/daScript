@@ -605,3 +605,12 @@ vertex/fragment structure, lint + format clean.
 (commit 2) + tests/census/masterplan (commit 3). The cross-repo triangle-on-GPU gate (dasVulkan: port
 `triangle.vert`/`.frag` to `[vertex_shader]`/`[fragment_shader]`, delete the committed `.spv`, regress
 the triangle PPM on lavapipe + local GPU) is the follow-on dasVulkan PR, mirroring Phase 1's GPU gate.
+
+**Review hardening (#3139).** Copilot review surfaced a stage-legality gap in the fail-closed surface:
+`classify_global` recognized vertex/fragment builtins but didn't check they were legal for the *current*
+stage, so a vertex shader referencing `gl_FragCoord` would silently emit a blob that only spirv-val
+would reject. Fixed: `builtin_info` now records the single stage each builtin is valid in (`req`),
+`classify_global` takes the `ShaderStage` and rejects a cross-stage builtin (and `@in`/`@out` Location
+I/O in a compute shader) with a clean `error[...]` — restoring "stage drives which builtins are legal."
+Also tightened the two `op_first_operand` entry-model asserts in `test_raster.das` to check `.ok` (an
+empty/truncated module's default `value` 0 collides with `SpvExecutionModel.Vertex`).
