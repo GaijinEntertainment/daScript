@@ -12,6 +12,7 @@ module spirv_emit shared public
 require spirv_builder
 require spirv_types
 require spirv_grammar
+require spirv_reflect
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
@@ -116,10 +117,10 @@ def private round_up(off, a : int) : int {
 // by @uniform and @push_constant blocks. 32-bit scalar/vector/matrix members are supported; nested
 // structs and arrays are not yet. Returns the struct type-id; the caller wraps it in the right
 // storage-class pointer + descriptor decorations.
-def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint> {
+def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint; size : int> {
     if (st == null || empty(st.fields)) {
         errors |> push("interface block '{sname}' must be a struct with at least one field")
-        return (ok = false, type_id = 0u)
+        return (ok = false, type_id = 0u, size = 0)
     }
     var members : array<uint>
     var offsets : array<int>
@@ -147,7 +148,7 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
             delete members
             delete offsets
             delete mat_strides
-            return (ok = false, type_id = 0u)
+            return (ok = false, type_id = 0u, size = 0)
         }
         off = round_up(off, std140_align(fbt))
         members |> push(emit_type(m, fld._type))
@@ -159,7 +160,15 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
     delete members
     delete offsets
     delete mat_strides
-    return (ok = true, type_id = id)
+    return (ok = true, type_id = id, size = off)
+}
+
+// The single SpirvStageFlags bit for one shader stage. A shader module is one stage, so every
+// binding/range it reflects carries this single bit; the host ORs across stages when merging.
+def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
+    if (stage == ShaderStage.Vertex) return SpirvStageFlags.vertex
+    if (stage == ShaderStage.Fragment) return SpirvStageFlags.fragment
+    return SpirvStageFlags.compute
 }
 
 // ===== combined image sampler detection =====
@@ -172,7 +181,7 @@ def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
 }
 
 // ===== global variable classification + emission =====
-def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var errors : array<string>) {
+def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
     let bi = builtin_info(vname)
     if (bi.ok) {
@@ -235,6 +244,8 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = simg, is_sampler = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.combined_image_sampler, count = 1, stages = stage_flag(stage)))
         return
     }
     if (v.annotation |> find_arg("ssbo") is tBool) {
@@ -270,6 +281,8 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.storage_buffer, count = 1, stages = stage_flag(stage)))
         return
     }
     // uniform buffer: @uniform struct -> Uniform storage + Block-decorated struct (std140) +
@@ -293,6 +306,8 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Uniform, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.uniform_buffer, count = 1, stages = stage_flag(stage)))
         return
     }
     // push constants: @push_constant struct -> PushConstant storage + Block-decorated struct. Same
@@ -309,6 +324,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         let vid = alloc_id(m)
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.PushConstant))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.PushConstant, value_type = bs.type_id, is_ssbo = false, is_block = true))
+        reflection.push_constants |> push(SpirvPushConstantRange(offset = 0, size = bs.size, stages = stage_flag(stage)))
         return
     }
     errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, or a sampler type e.g. sampler2D)")
@@ -1426,17 +1442,21 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 }
 
 [macro_function]
-def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3) : array<uint> {
+def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; var reflection : SpirvReflection) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
     ctx.stage = stage
+
+    reflection.stage = stage_flag(stage)
+    reflection.entry_point := "main"
+    reflection.local_size = stage == ShaderStage.Compute ? local_size : int3(1, 1, 1)
 
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
 
     collect_dependencies(fn) $(_vfun, vvar) {
         for (v in vvar) {
-            classify_global(m, ctx, v, stage, errors)
+            classify_global(m, ctx, v, stage, reflection, errors)
         }
     }
 

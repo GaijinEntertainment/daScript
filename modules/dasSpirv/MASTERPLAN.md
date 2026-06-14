@@ -777,3 +777,133 @@ shader, lint + format clean.
 samplers (4d). The emitter now covers the full descriptor model. The cross-repo GPU gate (a dasVulkan
 UBO/MVP and/or textured example, regressed on lavapipe + the local GPU — the real-hardware proof of the
 column-major matrix mapping) is the follow-on dasVulkan PR, mirroring the Phase-1/Phase-3 GPU gates.
+
+### Phase 4 GPU gate LANDED (2026-06-14, dasVulkan PR #5, merged)
+
+A single combined textured-quad render — UBO column-major MVP + combined image sampler (2×2 checkerboard) +
+push-constant tint — drawn on lavapipe (CI) and the local GPU. The MVP translates x +0.4 in column 3 (the
+transpose-detector spirv-val cannot see); the tint (1,1,0) zeroes blue (the unambiguous push-constant proof:
+a white texel can only go yellow if the constant was delivered). Five sampled pixels assert clear-outside +
+four correctly-tinted quadrants. Files: `tests/integration/{phase4_shaders,test_phase4}.das` + scene helpers.
+**This closes the original masterplan: Phases 0–4 + all three GPU gates (compute, triangle, textured-quad)
+are merged, and dasVulkan now has ZERO GLSL, ZERO committed `.spv`, and no glslang/SDK dependency — the
+project thesis (one language, no external SDK, no committed binaries, code shared with the host) is realized.**
+
+---
+
+## Phases 5+ — beyond resource breadth (planned 2026-06-14)
+
+The next arc deepens the payoff (single-source code-sharing with the host), broadens the shader surface to
+real-engine needs, and makes the capability discoverable + exercised by real demos. Boris's ordering:
+**reflection → textures → control flow**, then docs, then the example apps + the lint expansion.
+
+### Phase 5 — reflection: single source of truth for descriptor layouts
+
+The motivating wart, exposed by the Phase-4 gate: the host (dasVulkan) **hand-declares** the
+`VkDescriptorSetLayout` / push-constant ranges / `VkPipelineLayout` that must exactly mirror the shader's
+`@set`/`@binding`/type/`@push_constant`. Same facts, two places, silent drift if they disagree (validation
+error at best, garbage reads at worst). The shader AST already knows all of it — `classify_global` extracts
+every set/binding today.
+
+**Decision:** dasSpirv emits a **typed reflection companion** next to the SPIR-V blob, and dasVulkan consumes
+it to **auto-build** layouts.
+
+- **Producer (dasSpirv).** `generate_spirv` already walks every global; have it also accumulate a
+  `ShaderReflection` (new `spirv/spirv_reflect.das`, `shared public`). The shader macro captures it into a
+  second module global `{name}_reflect` exactly as the blob is captured into `{name}` (same `apply`-declares /
+  `patch`-fills dance in `spirv_shader.das`). **Encoding decision (settled in impl):** a versioned `array<uint>`
+  encoding (`encode_reflection`) + a typed `decode_reflection` on the host, NOT a typed `ExprMakeStruct`
+  literal. Rationale: the encoded form reuses the existing `build_uint_array_literal` verbatim (the blob's own
+  capture path), so the producer adds ~no macro surface; the host gets the identical typed `SpirvReflection`
+  via one cheap decode at layout-build time. Hand-synthesizing nested `ExprMakeStruct`/`ExprMakeArray`/
+  `MakeFieldDecl` trees + bitfield/struct-TypeDecl lookups was meaningfully more macro risk for a marginal
+  (host avoids one decode call) benefit. Single-source is preserved either way — reflection is still computed
+  exactly once, inside `classify_global`, alongside the SPIR-V emission.
+- **Neutral vocabulary.** dasSpirv must NOT depend on dasVulkan, so reflection uses its own enums:
+  `SpirvDescriptorKind { uniform_buffer; storage_buffer; combined_image_sampler; … }` + a `SpirvStageFlags`
+  bitfield. `ShaderReflection = { stage; entry_point; local_size : int3; bindings : array<DescriptorBinding>;
+  push_constants : array<PushConstantRange>; inputs/outputs : array<IoVar> }`, with
+  `DescriptorBinding = { set; binding; kind; count; stages }`, `PushConstantRange = { offset; size; stages }`.
+- **Consumer (dasVulkan).** New `vulkan_reflect.das` boost: map `SpirvDescriptorKind`→`VkDescriptorType`,
+  `SpirvStageFlags`→`VkShaderStageFlags`; `build_descriptor_set_layouts(reflections…)` (merges per-set across
+  stages, OR-ing stage flags for bindings shared by multiple stages) + `build_pipeline_layout(device,
+  reflections…)`. The Phase-4 textured-quad gate is **rewritten** to build its layout from the two captured
+  reflections instead of hand-declaring it — the regression that reflection equals the hand-written truth (and
+  still renders the same pixels).
+- **Tests.** main-tree `tests/spirv/test_reflect.das` asserts each fixture's reflection (sets/bindings/kinds/
+  push-range/local_size). dasVulkan: the rewritten gate + a `build_descriptor_set_layouts` unit (two stages
+  sharing set 0 merge correctly).
+
+### Phase 6 — texture / resource breadth
+
+Current sampler surface is **combined 2D only**:
+- **Storage images** — `OpTypeImage … 2` (read-write), `image2D` marker, `imageLoad`/`imageStore` →
+  `OpImageRead`/`OpImageWrite`, the `StorageImageRead/WriteWithoutFormat` caps + format decoration. New
+  descriptor kind `storage_image`.
+- **Explicit LOD / fetch** — `textureLod(s,uv,lod)` → `OpImageSampleExplicitLod` (lifts the fragment-only
+  limit → usable in vertex/compute); `texelFetch(s,coord,lod)` → `OpImageFetch`.
+- **More dims** — `sampler3D` / `samplerCube` / `sampler2DArray` (Dim 3D/Cube/2D+Arrayed), each a marker
+  struct + the matching OpTypeImage dim.
+- **Separate image + sampler** (end of phase, optional) — distinct `texture2D` + `sampler` globals,
+  `OpSampledImage` to combine at the call. Defer if it complicates the marker-struct rail.
+- Reflection (Phase 5) extends to the new descriptor kinds. Tests: one fixture per new resource/op; census
+  extends; spirv-val each; a dasVulkan storage-image compute gate (write a gradient, read it back) on
+  lavapipe + local.
+
+### Phase 7 — control-flow / language completeness
+
+Past if/while/for:
+- `OpSwitch` (daslang `switch`) — merge-block + per-case-block + default discipline.
+- Ternary `cond ? a : b` → `OpSelect` (branchless) for scalar/vector.
+- Nested-loop **labeled** break/continue (extend the existing `loop_stack` to named targets).
+- `do { } while` (test-at-end loop block layout).
+- Broaden GLSL.std.450 to the rest of the common math beyond Phase 3: `clamp`/`mix`/`step`/`smoothstep`/
+  `pow`/`exp`/`log`/`fract`/`sign`/`mod`/`atan2`/`reflect`/`refract`/`length`/`distance`/`normalize`/`cross`
+  (+ `dot`→`OpDot`, not ext). Tests + census per op; structured-CFG validity (spirv-val) is the real oracle.
+
+### Phase 8 — docs + tutorials
+
+The only doc today is this masterplan:
+- RST reference under `doc/source/` (mirror the dasVulkan docs effort): the annotation surface, the
+  type/layout mapping, the reflection API, the supported-opcode matrix, the "drivers optimize; we emit naive
+  valid SPIR-V" principle.
+- A `tutorials/` page — "write your GPU shaders in daslang" — compute square → textured quad, showing the
+  daslang source, the disassembly, and the host consuming reflection.
+
+### Phase 9 — `/examples/vulkan` in the main repo (demo-scene + imgui-on-vulkan)
+
+Two runnable apps under `examples/vulkan/` in the **main daslang tree**:
+- **`scene/`** — a small demo-scene: a lit, textured, MVP-animated mesh (UBO matrices + sampler + push-constant
+  + Phase-6 textures), shaders authored in daslang, layouts auto-built from Phase-5 reflection. The showcase of
+  the whole stack in one file.
+- **`imgui/`** — imgui rendered on a Vulkan backend, which requires **resurrecting the dasImgui Vulkan
+  backend**: `dasImgui/src/module_imgui_vulkan.*` exists but is NOT in dasImgui's CMake (unbuilt); the only
+  reference is a gen1 `dasBox/.../example/imgui_vulkan.das` against an obsolete bundled `vulkan_simple_app`.
+  Work: (a) wire `module_imgui_vulkan` into dasImgui's build + register it; (b) bridge it to the **current**
+  dasVulkan boost (InitInfo wants raw `VkInstance`/`Device`/`Queue`/`DescriptorPool`/`RenderPass` via
+  `boost_value_to_vk`); (c) a gen2 example app driving an imgui frame over a dasVulkan swapchain. This is a
+  **dasImgui-repo PR** (third repo, own CI); the main-repo example consumes the result.
+- **CI decision.** The main daslang repo cannot make its mandatory CI depend on an external daspkg package
+  (dasVulkan depends on daslang — wrong direction). So `examples/vulkan/` ships as **source + a README
+  requiring `daspkg install dasVulkan` (+ dasImgui)** and is **NOT wired into main-tree mandatory CI**. The
+  real regression gates stay where lavapipe runs: dasVulkan's integration tests. (A future "examples smoke
+  with daspkg packages present" lane could slot in here — until then, local + dasVulkan-side CI.)
+
+### Phase 10 — vulkan_lint expansion
+
+`daslib/vulkan_lint.das` today is a single rule — **VK001** (prefer the boost wrapper over a raw `vk*` call;
+map generated by the binding generator). Add reflection- and resource-aware rules:
+- **VK002** — a shader global's `@set`/`@binding` collides with another global at the same set+binding in the
+  same stage (caught at shader-compile from the reflection).
+- **VK003** — descriptor declared in the shader has no matching layout binding when the host builds layouts by
+  hand (nudges toward the Phase-5 auto-build path).
+- **VK004** — push-constant range exceeds the guaranteed 128-byte minimum without a documented opt-out.
+- (candidate) raw `vkCmd*` inside a recorded block where a `record_*` boost helper exists.
+- Each rule: opt-out option + test fixture, mirroring VK001.
+
+**Sequencing & dependencies.** 5 → 6 → 7 is the spine (Boris's order). Phase 8 docs trail the surface they
+document (after 7, or incrementally). Phase 9's `scene/` wants Phase-6 textures; the `imgui/` sub-task is
+independent of the dasSpirv phases and can land any time after its dasImgui resurrection. Phase 10's VK002+
+want Phase-5 reflection. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all PR-protected)
+with the standing gates: opcode tests + census + spirv-val + LCOV (main tree), lavapipe + local-GPU regression
+(dasVulkan), lint + format, Copilot-to-dry, no GC leak.

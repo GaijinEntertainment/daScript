@@ -13,6 +13,7 @@ options indenting = 4
 module spirv_shader shared public
 
 require spirv_emit
+require spirv_reflect
 require spirv_builtins public
 require daslib/ast
 require daslib/rtti
@@ -47,6 +48,14 @@ class SpirvShader : AstFunctionAnnotation {
             errors := "can't add global variable {argName}"
             return false
         }
+        // Companion reflection global ({name}_reflect : array<uint>) — the host decodes it via
+        // spirv_reflect::decode_reflection to auto-build descriptor/pipeline layouts.
+        var rtype = new TypeDecl(at = func.at, baseType = Type.tArray)
+        rtype.firstType = new TypeDecl(at = func.at, baseType = Type.tUInt)
+        if (!add_global_var(compiling_module(), "{argName}_reflect", rtype, func.at, false)) {
+            errors := "can't add global variable {argName}_reflect"
+            return false
+        }
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
@@ -58,11 +67,22 @@ class SpirvShader : AstFunctionAnnotation {
         var err : array<string>
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
-            var words <- generate_spirv(func, err, shader_stage(), local_size)
+            var refl : SpirvReflection
+            var words <- generate_spirv(func, err, shader_stage(), local_size, refl)
             if (err |> empty()) {
                 glob.init = build_uint_array_literal(words, func.at)
+                // Fill the companion reflection global in the same patch pass (gated on the blob's
+                // null init, so both fill exactly once).
+                var rwords <- encode_reflection(refl)
+                var rglob <- find_variable(compiling_module(), "{argName}_reflect")
+                if (rglob != null && rglob.init == null) {
+                    rglob.init = build_uint_array_literal(rwords, func.at)
+                }
+                rglob := null
+                delete rwords
                 astChanged = true
             }
+            finalize(refl)
             delete words
         }
         glob := null
