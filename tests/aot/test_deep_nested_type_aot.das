@@ -1,4 +1,4 @@
-﻿options gen2
+options gen2
 require dastest/testing_boost public
 
 // Regression for #3065 / PR #3145 (AOT emitter stack bump). describeCppTypeEx recurses

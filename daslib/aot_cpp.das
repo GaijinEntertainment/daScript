@@ -4191,11 +4191,14 @@ def public fail_on_aot_emit_error(program : ProgramPtr) {
         return
     }
     for (err in program.errors) {
-        var detail = ""
+        var msg = "{describe(err.at)}: error[{int(err.cerr)}]: {err.what}"
         if (!empty(err.extra)) {
-            detail = " -- {err.extra}"
+            msg += " -- {err.extra}"
         }
-        to_log(LOG_ERROR, "{describe(err.at)}: {err.what}{detail}\n")
+        if (!empty(err.fixme)) {
+            msg += " -- {err.fixme}"
+        }
+        to_log(LOG_ERROR, "{msg}\n")
     }
     panic("AOT codegen failed: {length(program.errors)} codegen error(s) during emission (see log)")
 }
