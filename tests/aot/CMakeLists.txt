@@ -415,6 +415,7 @@ SET(AOT_SPIRV_MODULE_FILES
     modules/dasSpirv/spirv/spirv_grammar.das
     modules/dasSpirv/spirv/spirv_builder.das
     modules/dasSpirv/spirv/spirv_types.das
+    modules/dasSpirv/spirv/spirv_reflect.das
     modules/dasSpirv/spirv/spirv_dis.das
     modules/dasSpirv/spirv/spirv_builtins.das
     tests/spirv/_spirv_common.das
