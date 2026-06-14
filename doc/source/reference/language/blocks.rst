@@ -23,9 +23,9 @@ The ``->`` operator can be used instead of ``:`` for the return type:
 If no type signature is specified, ``block`` alone represents a block that takes no
 arguments and returns nothing.
 
-Blocks capture the current stack, so blocks can be passed, but never returned.
-Block variables can only be passed as arguments.
-Global or local block variables are prohibited; returning the block type is also prohibited:
+Blocks capture the current stack, so blocks can be passed and stored in local
+variables, but never returned. Global block variables are prohibited, and returning
+the block type is also prohibited:
 
 .. code-block:: das
 
