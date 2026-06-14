@@ -125,10 +125,6 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
     }
 };
 
-void testFoo ( TestObjectFoo & foo ) {
-    foo.fooData = 1234;
-}
-
 void testAdd ( int & a, int b ) {
     a += b;
 }

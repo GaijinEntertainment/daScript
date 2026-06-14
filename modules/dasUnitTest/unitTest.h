@@ -168,6 +168,11 @@ typedef das::vector<TestObjectFoo> FooArray;
 
 DAS_MOD_API void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context, das::LineInfoArg * lineinfo);
 
+// testFoo is defined inline here (the makeDummy pattern) so AOT-emitted callers that include this
+// header see it and addExtern still gets a constant &testFoo. It used to live only in test_handles.cpp,
+// so AOT callers hit `use of undeclared identifier 'testFoo'` (#3065 fuzzer).
+DAS_MOD_API __forceinline void testFoo ( TestObjectFoo & foo ) { foo.fooData = 1234; }
+
 DAS_MOD_API __forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
 
 struct DAS_MOD_API TestObjectSmart : public das::ptr_ref_count {
