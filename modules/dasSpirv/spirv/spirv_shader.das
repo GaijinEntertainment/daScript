@@ -36,6 +36,8 @@ def private build_uint_array_literal(words : array<uint>; at : LineInfo) : Expre
 }
 
 class SpirvShader : AstFunctionAnnotation {
+    // overridden per stage; drives the entry-point execution model + execution mode in generate_spirv
+    def shader_stage() : ShaderStage => ShaderStage.Compute
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true   // temporary: keeps the function alive through dependency collection
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`spirv"
@@ -56,7 +58,7 @@ class SpirvShader : AstFunctionAnnotation {
         var err : array<string>
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
-            var words <- generate_spirv(func, err, local_size)
+            var words <- generate_spirv(func, err, shader_stage(), local_size)
             if (err |> empty()) {
                 glob.init = build_uint_array_literal(words, func.at)
                 astChanged = true
@@ -74,4 +76,14 @@ class SpirvShader : AstFunctionAnnotation {
 
 [function_macro(name="compute_shader")]
 class SpirvComputeShader : SpirvShader {
+}
+
+[function_macro(name="vertex_shader")]
+class SpirvVertexShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Vertex
+}
+
+[function_macro(name="fragment_shader")]
+class SpirvFragmentShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Fragment
 }

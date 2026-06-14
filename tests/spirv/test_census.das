@@ -26,7 +26,7 @@ def private add_set(var dst : table<uint>; var words : array<uint>) {
 
 [test]
 def test_opcode_census(t : T?) {
-    t |> run("emitter opcode census == declared Phase-2 set (all fixtures)") <| @(t : T?) {
+    t |> run("emitter opcode census == declared Phase-3 set (all fixtures)") <| @(t : T?) {
         var present : table<uint>
         add_set(present, square_words())
         add_set(present, uarith_words())
@@ -37,7 +37,11 @@ def test_opcode_census(t : T?) {
         add_set(present, fctrl_words())
         add_set(present, wloop_words())
         add_set(present, floop_words())
-        var declared <- phase2_emitter_opcodes()
+        add_set(present, tri_vert_words())
+        add_set(present, tri_frag_words())
+        add_set(present, vindex_words())
+        add_set(present, raster_math_words())
+        var declared <- phase3_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }

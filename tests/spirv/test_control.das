@@ -38,8 +38,10 @@ def test_uint_control(t : T?) {
         // unsigned comparisons + equality + logical
         check_ops(t, words, "uctrl", [SpvOp.UGreaterThan, SpvOp.ULessThan, SpvOp.IEqual,
             SpvOp.INotEqual, SpvOp.LogicalAnd, SpvOp.LogicalNot])
-        // a Function-storage OpVariable was declared for the mutable locals
-        t |> success(op_has_operand(words, SpvOp.Variable, uint(SpvStorageClass.Function)),
+        // a Function-storage OpVariable was declared for the mutable locals. OpVariable operands are
+        // [result_type, result_id, storage_class, init?]; check the storage class positionally (index 2)
+        // so the small Function value can't false-match the result-type/id operands.
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Function)),
             "uctrl: has a Function-storage OpVariable")
         validate(t, words, "uctrl")
         delete words

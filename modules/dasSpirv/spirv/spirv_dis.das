@@ -88,6 +88,35 @@ def public op_has_operand_pair(words : array<uint>; op : SpvOp; first : uint; se
     return found
 }
 
+// First operand of the first instruction with `op` (e.g. OpEntryPoint's execution model). Use this
+// instead of op_has_operand when the operand's POSITION matters: an EntryPoint's model value can
+// collide with a later operand (Vertex == 0 matches the name's NUL-terminator word, ids, etc.).
+def public op_first_operand(words : array<uint>; op : SpvOp) : tuple<ok : bool; value : uint> {
+    var ok = false
+    var value = 0u
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(op) && n > 0 && !ok) {
+            ok = true
+            value = w[s]
+        }
+    }
+    return (ok = ok, value = value)
+}
+
+// Does any instruction with `op` carry `value` at operand index `idx` (0-based, after word0)?
+// Positional — use this when the operand's POSITION matters and a bare value would false-positive
+// (e.g. OpVariable's storage class at index 2: op_has_operand would also match the result-type/id
+// operands, and small storage-class values like Output collide with ordinary ids).
+def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value : uint) : bool {
+    var found = false
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(op) && idx >= 0 && idx < n && w[s + idx] == value) {
+            found = true
+        }
+    }
+    return found
+}
+
 // Symbolic dump for eyeballing / diffing against external spirv-dis. Operands are printed as
 // raw decimal words (a result-id-aware pretty printer is a later refinement).
 def public dump(words : array<uint>) : string {

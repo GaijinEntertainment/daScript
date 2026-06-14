@@ -16,6 +16,14 @@ require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
 
+// The shader stage drives the entry-point execution model + execution mode and which builtins
+// are legal. Vertex needs no execution mode; Fragment needs OriginUpperLeft; Compute needs LocalSize.
+enum public ShaderStage {
+    Compute
+    Vertex
+    Fragment
+}
+
 // ===== per-global classification =====
 struct GlobalInfo {
     var_id     : uint
@@ -39,6 +47,7 @@ struct EmitCtx {
     interface_ids : array<uint>                 // EntryPoint interface (Input/Output vars, SPIR-V <= 1.3)
     loop_stack    : array<LoopTargets>          // innermost loop's {merge, continue} for break/continue
     terminated    : bool                        // current block already has a terminator
+    glsl_ext      : uint                        // OpExtInstImport "GLSL.std.450" set id (0 = not imported yet)
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -55,27 +64,76 @@ def finalize(var c : EmitCtx) {
     delete c.loop_stack
 }
 
-// ===== builtin name -> SpvBuiltIn (compute subset; extended in later phases) =====
-def private builtin_for_name(name : string) : tuple<ok : bool; bi : SpvBuiltIn> {
-    if (name == "gl_GlobalInvocationID") return (ok = true, bi = SpvBuiltIn.GlobalInvocationId)
-    if (name == "gl_LocalInvocationID") return (ok = true, bi = SpvBuiltIn.LocalInvocationId)
-    if (name == "gl_WorkGroupID") return (ok = true, bi = SpvBuiltIn.WorkgroupId)
-    if (name == "gl_NumWorkGroups") return (ok = true, bi = SpvBuiltIn.NumWorkgroups)
-    if (name == "gl_LocalInvocationIndex") return (ok = true, bi = SpvBuiltIn.LocalInvocationIndex)
-    return (ok = false, bi = SpvBuiltIn.GlobalInvocationId)
+// ===== builtin name -> SpvBuiltIn + storage class + the stage it's legal in =====
+// Most builtins are read-only Inputs; gl_Position is the one written Output. The storage class
+// decides Input vs Output pointer type; `req` is the single stage the builtin is valid in, so
+// classify_global can reject a cross-stage reference (e.g. gl_FragCoord in a vertex shader) with a
+// clean error instead of emitting a blob that only spirv-val would catch.
+def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; storage : SpvStorageClass; req : ShaderStage> {
+    // compute
+    if (name == "gl_GlobalInvocationID") return (ok = true, bi = SpvBuiltIn.GlobalInvocationId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_LocalInvocationID") return (ok = true, bi = SpvBuiltIn.LocalInvocationId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_WorkGroupID") return (ok = true, bi = SpvBuiltIn.WorkgroupId, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_NumWorkGroups") return (ok = true, bi = SpvBuiltIn.NumWorkgroups, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    if (name == "gl_LocalInvocationIndex") return (ok = true, bi = SpvBuiltIn.LocalInvocationIndex, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+    // vertex
+    if (name == "gl_Position") return (ok = true, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Output, req = ShaderStage.Vertex)
+    if (name == "gl_VertexIndex") return (ok = true, bi = SpvBuiltIn.VertexIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
+    if (name == "gl_InstanceIndex") return (ok = true, bi = SpvBuiltIn.InstanceIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
+    // fragment
+    if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
+    return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+}
+
+def private stage_name(stage : ShaderStage) : string {
+    if (stage == ShaderStage.Vertex) return "vertex"
+    if (stage == ShaderStage.Fragment) return "fragment"
+    return "compute"
 }
 
 // ===== global variable classification + emission =====
-def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
+def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var errors : array<string>) {
     let vname = "{v.name}"
-    let bi = builtin_for_name(vname)
+    let bi = builtin_info(vname)
     if (bi.ok) {
+        if (bi.req != stage) {
+            errors |> push("builtin '{vname}' is only available in the {stage_name(bi.req)} stage, not {stage_name(stage)}")
+            return
+        }
         let vt = emit_type(m, v._type)
-        let pt = type_pointer(m, SpvStorageClass.Input, vt)
+        let pt = type_pointer(m, bi.storage, vt)
         let vid = alloc_id(m)
-        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Input))
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(bi.storage))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.BuiltIn), uint(bi.bi))
-        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Input, value_type = vt, is_ssbo = false))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = bi.storage, value_type = vt, is_ssbo = false))
+        ctx.interface_ids |> push(vid)   // Input + Output builtins both list in the entry interface
+        return
+    }
+    // stage I/O: @in / @out user variables carry an explicit @location. They become Input/Output
+    // OpVariables with a Location decoration and list in the entry-point interface.
+    let is_in = v.annotation |> find_arg("in") is tBool
+    let is_out = v.annotation |> find_arg("out") is tBool
+    if (is_in || is_out) {
+        if (stage == ShaderStage.Compute) {
+            errors |> push("stage variable '{vname}': @in/@out Location I/O is not valid in a compute shader")
+            return
+        }
+        if (is_in && is_out) {
+            errors |> push("stage variable '{vname}' cannot be both @in and @out")
+            return
+        }
+        let loc = v.annotation |> find_arg("location") ?as tInt ?? -1
+        if (loc < 0) {
+            errors |> push("stage variable '{vname}' must specify a non-negative @location (e.g. @in @location = 0)")
+            return
+        }
+        let storage = is_in ? SpvStorageClass.Input : SpvStorageClass.Output
+        let vt = emit_type(m, v._type)
+        let pt = type_pointer(m, storage, vt)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(storage))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)
         return
     }
@@ -263,6 +321,216 @@ def private cmp_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
     return (ok = false, code = SpvOp.Nop)
 }
 
+// number of scalar lanes in a type (scalar = 1, vecN = N, anything else = 0/unknown).
+def private component_count(bt : Type) : int {
+    if (bt == Type.tInt || bt == Type.tUInt || bt == Type.tFloat || bt == Type.tBool) return 1
+    if (bt == Type.tInt2 || bt == Type.tUInt2 || bt == Type.tFloat2) return 2
+    if (bt == Type.tInt3 || bt == Type.tUInt3 || bt == Type.tFloat3) return 3
+    if (bt == Type.tInt4 || bt == Type.tUInt4 || bt == Type.tFloat4) return 4
+    return 0
+}
+
+// vector constructor name (float2/3/4, int2/3/4, uint2/3/4) -> lane count + component class
+// (0 signed, 1 unsigned, 2 float), else ok=false. The class lets the constructor reject
+// component-kind conversions (e.g. int4(float4(...))), which need conversion ops we don't emit yet.
+def private vector_ctor(name : string) : tuple<ok : bool; n : int; cls : int> {
+    if (name == "float2") return (ok = true, n = 2, cls = 2)
+    if (name == "float3") return (ok = true, n = 3, cls = 2)
+    if (name == "float4") return (ok = true, n = 4, cls = 2)
+    if (name == "int2") return (ok = true, n = 2, cls = 0)
+    if (name == "int3") return (ok = true, n = 3, cls = 0)
+    if (name == "int4") return (ok = true, n = 4, cls = 0)
+    if (name == "uint2") return (ok = true, n = 2, cls = 1)
+    if (name == "uint3") return (ok = true, n = 3, cls = 1)
+    if (name == "uint4") return (ok = true, n = 4, cls = 1)
+    return (ok = false, n = 0, cls = -1)
+}
+
+// OpExtInstImport "GLSL.std.450" once per module; returns the cached set id.
+def private ensure_glsl_ext(var m : SpirvModule; var ctx : EmitCtx) : uint {
+    if (ctx.glsl_ext != 0u) return ctx.glsl_ext
+    let id = alloc_id(m)
+    var ops <- [id]
+    var nm <- string_words("GLSL.std.450")
+    ops |> push_from(nm)
+    delete nm
+    emit_n(m, SEC_EXTIMPORT, SpvOp.ExtInstImport, ops)
+    delete ops
+    ctx.glsl_ext = id
+    return id
+}
+
+// daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
+// variant by operand class; the rest are float-only. Operand class comes from arg 0 (vectors
+// classify by lane kind, so length/normalize/cross/etc. read as float-class). ok=false => not a
+// GLSL.std.450 builtin (or wrong class) -> caller emits a clean error.
+def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLstd450> {
+    if (name == "abs") {
+        if (cls == 2) return (ok = true, op = GLSLstd450.FAbs)
+        if (cls == 0) return (ok = true, op = GLSLstd450.SAbs)
+        return (ok = false, op = GLSLstd450.Round)
+    }
+    if (name == "min") {
+        if (cls == 2) return (ok = true, op = GLSLstd450.FMin)
+        if (cls == 0) return (ok = true, op = GLSLstd450.SMin)
+        if (cls == 1) return (ok = true, op = GLSLstd450.UMin)
+        return (ok = false, op = GLSLstd450.Round)
+    }
+    if (name == "max") {
+        if (cls == 2) return (ok = true, op = GLSLstd450.FMax)
+        if (cls == 0) return (ok = true, op = GLSLstd450.SMax)
+        if (cls == 1) return (ok = true, op = GLSLstd450.UMax)
+        return (ok = false, op = GLSLstd450.Round)
+    }
+    if (name == "clamp") {
+        if (cls == 2) return (ok = true, op = GLSLstd450.FClamp)
+        if (cls == 0) return (ok = true, op = GLSLstd450.SClamp)
+        if (cls == 1) return (ok = true, op = GLSLstd450.UClamp)
+        return (ok = false, op = GLSLstd450.Round)
+    }
+    if (name == "sign") {
+        if (cls == 2) return (ok = true, op = GLSLstd450.FSign)
+        if (cls == 0) return (ok = true, op = GLSLstd450.SSign)
+        return (ok = false, op = GLSLstd450.Round)
+    }
+    if (cls != 2) return (ok = false, op = GLSLstd450.Round)   // the rest are float-only
+    if (name == "sqrt") return (ok = true, op = GLSLstd450.Sqrt)
+    if (name == "inversesqrt") return (ok = true, op = GLSLstd450.InverseSqrt)
+    if (name == "sin") return (ok = true, op = GLSLstd450.Sin)
+    if (name == "cos") return (ok = true, op = GLSLstd450.Cos)
+    if (name == "tan") return (ok = true, op = GLSLstd450.Tan)
+    if (name == "asin") return (ok = true, op = GLSLstd450.Asin)
+    if (name == "acos") return (ok = true, op = GLSLstd450.Acos)
+    if (name == "atan") return (ok = true, op = GLSLstd450.Atan)
+    if (name == "atan2") return (ok = true, op = GLSLstd450.Atan2)
+    if (name == "pow") return (ok = true, op = GLSLstd450.Pow)
+    if (name == "exp") return (ok = true, op = GLSLstd450.Exp)
+    if (name == "log") return (ok = true, op = GLSLstd450.Log)
+    if (name == "exp2") return (ok = true, op = GLSLstd450.Exp2)
+    if (name == "log2") return (ok = true, op = GLSLstd450.Log2)
+    if (name == "floor") return (ok = true, op = GLSLstd450.Floor)
+    if (name == "ceil") return (ok = true, op = GLSLstd450.Ceil)
+    if (name == "round") return (ok = true, op = GLSLstd450.Round)
+    if (name == "trunc") return (ok = true, op = GLSLstd450.Trunc)
+    if (name == "fract") return (ok = true, op = GLSLstd450.Fract)
+    if (name == "radians") return (ok = true, op = GLSLstd450.Radians)
+    if (name == "degrees") return (ok = true, op = GLSLstd450.Degrees)
+    if (name == "mix") return (ok = true, op = GLSLstd450.FMix)
+    if (name == "step") return (ok = true, op = GLSLstd450.Step)
+    if (name == "smoothstep") return (ok = true, op = GLSLstd450.SmoothStep)
+    if (name == "length") return (ok = true, op = GLSLstd450.Length)
+    if (name == "distance") return (ok = true, op = GLSLstd450.Distance)
+    if (name == "cross") return (ok = true, op = GLSLstd450.Cross)
+    if (name == "normalize") return (ok = true, op = GLSLstd450.Normalize)
+    if (name == "reflect") return (ok = true, op = GLSLstd450.Reflect)
+    return (ok = false, op = GLSLstd450.Round)
+}
+
+// ===== ExprCall: vector constructors, dot (core OpDot), GLSL.std.450 math (OpExtInst) =====
+def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; e : ExpressionPtr; var errors : array<string>) : uint {
+    let name = "{call.name}"
+    // ----- vector constructor: OpCompositeConstruct (or splat / identity for one arg) -----
+    let vc = vector_ctor(name)
+    if (vc.ok) {
+        let rt = emit_type(m, e._type)
+        if (length(call.arguments) == 1) {
+            let a0 = call.arguments[0]
+            let cc = component_count(a0._type.baseType)
+            // a different component kind is a conversion (int4(float4(...)), float4(int(...))),
+            // which needs OpConvert* we don't emit yet — reject rather than alias the wrong type.
+            if (scalar_class(a0._type.baseType) != vc.cls) {
+                errors |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
+                return 0u
+            }
+            let aid = emit_value(m, ctx, a0, errors)
+            if (aid == 0u) return 0u
+            if (cc == vc.n) return aid                  // identity: float4(someFloat4), same kind
+            if (cc == 1) {                              // splat: float4(scalar) -> repeat N lanes
+                let res = alloc_id(m)
+                var cons <- [rt, res]
+                cons |> reserve(2 + vc.n)
+                for (_l in range(vc.n)) {
+                    cons |> push(aid)
+                }
+                emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+                delete cons
+                return res
+            }
+            errors |> push("cannot construct {name} from a single {a0._type.baseType}")
+            return 0u
+        }
+        // multi-arg: each constituent contributes its lanes; kinds must match and lanes sum to n
+        var total = 0
+        let res = alloc_id(m)
+        var cons <- [rt, res]
+        cons |> reserve(2 + length(call.arguments))
+        for (a in call.arguments) {
+            let cc = component_count(a._type.baseType)
+            if (cc == 0) {
+                errors |> push("{name}: argument of type {a._type.baseType} is not a scalar/vector")
+                delete cons
+                return 0u
+            }
+            if (scalar_class(a._type.baseType) != vc.cls) {
+                errors |> push("{name}: constituent of type {a._type.baseType} has a different component kind (conversion not supported yet)")
+                delete cons
+                return 0u
+            }
+            total += cc
+            let aid = emit_value(m, ctx, a, errors)
+            if (aid == 0u) {
+                delete cons
+                return 0u
+            }
+            cons |> push(aid)
+        }
+        if (total != vc.n) {
+            errors |> push("{name}: constituent lanes sum to {total}, expected {vc.n}")
+            delete cons
+            return 0u
+        }
+        emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+        delete cons
+        return res
+    }
+    // ----- dot: core OpDot (vector . vector -> scalar) -----
+    if (name == "dot") {
+        if (length(call.arguments) != 2) {
+            errors |> push("dot expects 2 arguments")
+            return 0u
+        }
+        let a = emit_value(m, ctx, call.arguments[0], errors)
+        let b = emit_value(m, ctx, call.arguments[1], errors)
+        if (a == 0u || b == 0u) return 0u
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Dot, rt, res, a, b)
+        return res
+    }
+    // ----- GLSL.std.450 math: OpExtInst -----
+    let cls = empty(call.arguments) ? -1 : scalar_class(call.arguments[0]._type.baseType)
+    let ge = glsl_ext_op(name, cls)
+    if (ge.ok) {
+        let set = ensure_glsl_ext(m, ctx)
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        var ops <- [rt, res, set, uint(ge.op)]
+        for (a in call.arguments) {
+            let aid = emit_value(m, ctx, a, errors)
+            if (aid == 0u) {
+                delete ops
+                return 0u
+            }
+            ops |> push(aid)
+        }
+        emit_n(m, SEC_FUNCS, SpvOp.ExtInst, ops)
+        delete ops
+        return res
+    }
+    errors |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
+    return 0u
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -332,6 +600,8 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
         emit(m, SEC_FUNCS, uo.code, rt, res, v)
         return res
     }
+    let call = e ?as ExprCall
+    if (call != null) return emit_call(m, ctx, call, e, errors)
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
         let lv = ctx.local_vars?[intptr(ev.variable)] ?? LocalVar()
@@ -689,7 +959,7 @@ def private emit_stmt(var m : SpirvModule; var ctx : EmitCtx; s : ExpressionPtr;
     if (lt != null) {
         for (v in lt.variables) {
             if (v.init == null) {
-                errors |> push("uninitialized let '{v.name}' not supported")
+                errors |> push("uninitialized local '{v.name}' is not supported (every let/var must have an initializer)")
                 continue
             }
             let lv = ctx.local_vars?[intptr(v)] ?? LocalVar()
@@ -725,8 +995,14 @@ def private emit_body(var m : SpirvModule; var ctx : EmitCtx; body : ExpressionP
 }
 
 // ===== entry =====
+def private execution_model(stage : ShaderStage) : SpvExecutionModel {
+    if (stage == ShaderStage.Vertex) return SpvExecutionModel.Vertex
+    if (stage == ShaderStage.Fragment) return SpvExecutionModel.Fragment
+    return SpvExecutionModel.GLCompute
+}
+
 [macro_function]
-def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : int3) : array<uint> {
+def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
 
@@ -735,7 +1011,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
 
     collect_dependencies(fn) $(_vfun, vvar) {
         for (v in vvar) {
-            classify_global(m, ctx, v, errors)
+            classify_global(m, ctx, v, stage, errors)
         }
     }
 
@@ -743,7 +1019,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
     let t_fn = type_function_void(m, t_void)
     let id_main = alloc_id(m)
 
-    var ep <- [uint(SpvExecutionModel.GLCompute), id_main]
+    var ep <- [uint(execution_model(stage)), id_main]
     var nm <- string_words("main")
     ep |> push_from(nm)
     delete nm
@@ -751,12 +1027,17 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
     emit_n(m, SEC_ENTRY, SpvOp.EntryPoint, ep)
     delete ep
 
-    let lx = local_size.x > 0 ? uint(local_size.x) : 1u
-    let ly = local_size.y > 0 ? uint(local_size.y) : 1u
-    let lz = local_size.z > 0 ? uint(local_size.z) : 1u
-    var em <- [id_main, uint(SpvExecutionMode.LocalSize), lx, ly, lz]
-    emit_n(m, SEC_EXECMODE, SpvOp.ExecutionMode, em)
-    delete em
+    // Compute pins the workgroup size; Fragment fixes the framebuffer origin; Vertex needs none.
+    if (stage == ShaderStage.Compute) {
+        let lx = local_size.x > 0 ? uint(local_size.x) : 1u
+        let ly = local_size.y > 0 ? uint(local_size.y) : 1u
+        let lz = local_size.z > 0 ? uint(local_size.z) : 1u
+        var em <- [id_main, uint(SpvExecutionMode.LocalSize), lx, ly, lz]
+        emit_n(m, SEC_EXECMODE, SpvOp.ExecutionMode, em)
+        delete em
+    } elif (stage == ShaderStage.Fragment) {
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OriginUpperLeft))
+    }
 
     emit(m, SEC_FUNCS, SpvOp.Function, t_void, id_main, 0u, t_fn)
     let id_label = alloc_id(m)
