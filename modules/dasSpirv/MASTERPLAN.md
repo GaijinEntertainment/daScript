@@ -795,7 +795,9 @@ project thesis (one language, no external SDK, no committed binaries, code share
 
 The next arc deepens the payoff (single-source code-sharing with the host), broadens the shader surface to
 real-engine needs, and makes the capability discoverable + exercised by real demos. Boris's ordering:
-**reflection → textures → control flow**, then docs, then the example apps + the lint expansion.
+**reflection → emitter-to-AstVisitor port → textures → control flow**, then docs, then the example apps + the
+lint expansion. The Visitor port lands *before* textures/control-flow on purpose: those two phases add the
+most new node-handling, and the port changes the base they're written against.
 
 ### Phase 5 — reflection: single source of truth for descriptor layouts
 
@@ -834,7 +836,47 @@ it to **auto-build** layouts.
   push-range/local_size). dasVulkan: the rewritten gate + a `build_descriptor_set_layouts` unit (two stages
   sharing set 0 merge correctly).
 
-### Phase 6 — texture / resource breadth
+### Phase 6 — emitter → AstVisitor (clean, behavior-preserving port)
+
+**Why.** dasSpirv's emitter is the only daslang backend that *walks* the AST by hand (manual
+`emit_value`/`emit_ptr` recursion). llvm_jit, the AOT C++ emitter (`daslib/aot_cpp.das`), dasGlsl's
+`GlslExport`, and the C++ interpreter are all **`AstVisitor`s that emit**. The hand-walker is defensible
+today but carries a standing liability: when the AST gains a new `Expression`/`Statement` subtype or the
+`Visitor` interface gains a method/`canVisit*` gate, every Visitor-based backend gets a compile error or an
+unhandled-gate that *forces* the author of the AST change to deal with it — **except dasSpirv**, which
+silently walks past the new node and emits wrong (or no) SPIR-V. That breaks the codegen-fail-closed
+principle and means dasSpirv needs a *separate* manual refactor on someone else's unrelated AST change —
+discovered at the worst possible time. The port makes dasSpirv participate in the same fail-closed contract
+as every other emitter.
+
+**The objection it was hand-rolled to avoid is already solved.** SPIR-V is SSA: a subexpression must thread
+its result-id *up*, which is awkward in a push-based (preVisit/visit) Visitor — that's why the two-function
+recursion felt natural. But **llvm_jit faces the identical problem** (LLVM is SSA too) and solves it with a
+result side-map populated post-order: `visit()` reads children's already-computed ids out of the map. So
+`llvm_jit.das` is a near-exact template (same IR shape, same value-threading, same basic-block emission for
+control flow) — model `SpirvEmit` on it rather than inventing.
+
+**The one genuine ergonomic cost to get right.** The clean value/pointer duality (`emit_ptr` for lvalues —
+store targets, OpAccessChain bases) becomes parent-driven in a Visitor: lvalue-ness is learned from the
+parent (an assignment computes LHS-as-pointer, RHS-as-value) or a "want pointer" flag, not a dedicated
+function. llvm_jit lives with exactly this for GEP-on-store; it's where a naive port would regress, so it's
+the part to design carefully.
+
+**Scope discipline (hard rule, Boris).** A **100% clean port — zero new features.** No "while I'm here"
+additions. The only additions allowed are **tests**: when porting a construct reveals it wasn't covered,
+add the test. The census + spirv-val + interp/AOT + GPU gates are the proof of behavior-preservation; the
+target is **same opcode census + spirv-val-clean + GPU-passing, ideally byte-identical blobs**. That
+existing harness is exactly what makes a core-codegen rewrite safe.
+
+**Shape.** `SpirvEmit : AstVisitor` with: a result-id side-map (`Expression? -> uint`), the existing builder
++ section buffers (unchanged — walk strategy is independent of SPIR-V section ordering), lvalue handling via
+parent context / want-pointer flag, control-flow block + terminator emission in the if/while/for Visitor
+hooks (mirroring llvm_jit), and **`canVisit*` gates wired to hard-error on any unhandled node kind** so
+future AST additions surface as a clean dasSpirv compile error (the fail-closed win, for free). Deliverable
+ordering: write the conversion plan first (every current `emit_*` mapped to its Visitor hook, the result-id
+map, the lvalue strategy, control-flow emission, the `canVisit*` gates) for review *before* touching code.
+
+### Phase 7 — texture / resource breadth
 
 Current sampler surface is **combined 2D only**:
 - **Storage images** — `OpTypeImage … 2` (read-write), `image2D` marker, `imageLoad`/`imageStore` →
@@ -850,7 +892,7 @@ Current sampler surface is **combined 2D only**:
   extends; spirv-val each; a dasVulkan storage-image compute gate (write a gradient, read it back) on
   lavapipe + local.
 
-### Phase 7 — control-flow / language completeness
+### Phase 8 — control-flow / language completeness
 
 Past if/while/for:
 - `OpSwitch` (daslang `switch`) — merge-block + per-case-block + default discipline.
@@ -861,7 +903,7 @@ Past if/while/for:
   `pow`/`exp`/`log`/`fract`/`sign`/`mod`/`atan2`/`reflect`/`refract`/`length`/`distance`/`normalize`/`cross`
   (+ `dot`→`OpDot`, not ext). Tests + census per op; structured-CFG validity (spirv-val) is the real oracle.
 
-### Phase 8 — docs + tutorials
+### Phase 9 — docs + tutorials
 
 The only doc today is this masterplan:
 - RST reference under `doc/source/` (mirror the dasVulkan docs effort): the annotation surface, the
@@ -870,11 +912,11 @@ The only doc today is this masterplan:
 - A `tutorials/` page — "write your GPU shaders in daslang" — compute square → textured quad, showing the
   daslang source, the disassembly, and the host consuming reflection.
 
-### Phase 9 — `/examples/vulkan` in the main repo (demo-scene + imgui-on-vulkan)
+### Phase 10 — `/examples/vulkan` in the main repo (demo-scene + imgui-on-vulkan)
 
 Two runnable apps under `examples/vulkan/` in the **main daslang tree**:
 - **`scene/`** — a small demo-scene: a lit, textured, MVP-animated mesh (UBO matrices + sampler + push-constant
-  + Phase-6 textures), shaders authored in daslang, layouts auto-built from Phase-5 reflection. The showcase of
+  + Phase-7 textures), shaders authored in daslang, layouts auto-built from Phase-5 reflection. The showcase of
   the whole stack in one file.
 - **`imgui/`** — imgui rendered on a Vulkan backend, which requires **resurrecting the dasImgui Vulkan
   backend**: `dasImgui/src/module_imgui_vulkan.*` exists but is NOT in dasImgui's CMake (unbuilt); the only
@@ -889,7 +931,7 @@ Two runnable apps under `examples/vulkan/` in the **main daslang tree**:
   real regression gates stay where lavapipe runs: dasVulkan's integration tests. (A future "examples smoke
   with daspkg packages present" lane could slot in here — until then, local + dasVulkan-side CI.)
 
-### Phase 10 — vulkan_lint expansion
+### Phase 11 — vulkan_lint expansion
 
 `daslib/vulkan_lint.das` today is a single rule — **VK001** (prefer the boost wrapper over a raw `vk*` call;
 map generated by the binding generator). Add reflection- and resource-aware rules:
@@ -901,9 +943,12 @@ map generated by the binding generator). Add reflection- and resource-aware rule
 - (candidate) raw `vkCmd*` inside a recorded block where a `record_*` boost helper exists.
 - Each rule: opt-out option + test fixture, mirroring VK001.
 
-**Sequencing & dependencies.** 5 → 6 → 7 is the spine (Boris's order). Phase 8 docs trail the surface they
-document (after 7, or incrementally). Phase 9's `scene/` wants Phase-6 textures; the `imgui/` sub-task is
-independent of the dasSpirv phases and can land any time after its dasImgui resurrection. Phase 10's VK002+
-want Phase-5 reflection. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all PR-protected)
-with the standing gates: opcode tests + census + spirv-val + LCOV (main tree), lavapipe + local-GPU regression
-(dasVulkan), lint + format, Copilot-to-dry, no GC leak.
+**Sequencing & dependencies.** 5 → 6 → 7 → 8 is the spine (Boris's order). The Phase-6 Visitor port goes
+*before* textures (7) and control-flow (8) because those add the most new node-handling and the port changes
+the base they're written against — porting first avoids writing emit-code we'd immediately rewrite, and
+Phase 8's `switch`/do-while drop into a Visitor's control-flow hooks naturally. Phase 9 docs trail the
+surface they document (after 8, or incrementally). Phase 10's `scene/` wants Phase-7 textures; the `imgui/`
+sub-task is independent of the dasSpirv phases and can land any time after its dasImgui resurrection. Phase
+11's VK002+ want Phase-5 reflection. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all
+PR-protected) with the standing gates: opcode tests + census + spirv-val + LCOV (main tree), lavapipe +
+local-GPU regression (dasVulkan), lint + format, Copilot-to-dry, no GC leak.
