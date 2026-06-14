@@ -66,6 +66,7 @@ def farith {
     fdata[i] = fdata[i] - 1.0f  // FSub
     fdata[i] = fdata[i] * 2.0f  // FMul  (OpConstant 2.0)
     fdata[i] = fdata[i] / 2.0f  // FDiv
+    fdata[i] = fdata[i] % 2.0f  // FRem  (fmod, dividend's sign)
     fdata[i] = -fdata[i]        // FNegate
 }
 
@@ -282,6 +283,33 @@ def public phase1_emitter_opcodes : table<uint> {
         SpvOp.Constant, SpvOp.Variable,
         SpvOp.Function, SpvOp.Label, SpvOp.AccessChain, SpvOp.Load, SpvOp.IMul, SpvOp.Store,
         SpvOp.Return, SpvOp.FunctionEnd
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// The EXACT set generate_spirv emits across ALL Phase-2 fixtures (square + arith + control + loops).
+// The census meta-test unions opcode_set over every fixture and asserts equality with this set in
+// BOTH directions — so a newly-emitted-but-unasserted opcode, or a declared opcode that stopped
+// firing, fails the gate. Phase-1 set + the Phase-2 additions:
+def public phase2_emitter_opcodes : table<uint> {
+    var s <- phase1_emitter_opcodes()
+    for (op in [
+        // types newly needed by Phase 2
+        SpvOp.TypeBool, SpvOp.TypeFloat,
+        // arithmetic breadth
+        SpvOp.IAdd, SpvOp.ISub, SpvOp.UDiv, SpvOp.UMod, SpvOp.SDiv, SpvOp.SRem, SpvOp.SNegate, SpvOp.Not,
+        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FNegate,
+        // comparisons (only the flavors the fixtures actually exercise)
+        SpvOp.IEqual, SpvOp.INotEqual, SpvOp.UGreaterThan, SpvOp.ULessThan,
+        SpvOp.SGreaterThan, SpvOp.SLessThan, SpvOp.SGreaterThanEqual, SpvOp.SLessThanEqual,
+        SpvOp.FOrdEqual, SpvOp.FOrdNotEqual, SpvOp.FOrdGreaterThan, SpvOp.FOrdLessThan,
+        SpvOp.FOrdGreaterThanEqual, SpvOp.FOrdLessThanEqual,
+        // logical
+        SpvOp.LogicalAnd, SpvOp.LogicalOr, SpvOp.LogicalNot,
+        // structured control flow
+        SpvOp.SelectionMerge, SpvOp.BranchConditional, SpvOp.Branch, SpvOp.LoopMerge
     ]) {
         s |> insert(uint(op))
     }

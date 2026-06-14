@@ -48,9 +48,9 @@ def test_int_arith(t : T?) {
 
 [test]
 def test_float_arith(t : T?) {
-    t |> run("float arithmetic: FAdd/FSub/FMul/FDiv/FNegate") <| @(t : T?) {
+    t |> run("float arithmetic: FAdd/FSub/FMul/FDiv/FRem/FNegate") <| @(t : T?) {
         var words <- farith_words()
-        check_ops(t, words, "farith", [SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FNegate])
+        check_ops(t, words, "farith", [SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FNegate])
         validate(t, words, "farith")
         delete words
     }

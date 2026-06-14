@@ -520,8 +520,13 @@ spirv-val clean, external `spirv-dis` confirms textbook structured CFG, lint + f
    `ExprRef2Value`; value-let / loop-var reads are `T const&`.** The const flag on the *variable's*
    `_type` (not the read site) is the stable mutable-vs-SSA discriminator at the `ExprLet` site.
 
-**Deferred (not blocking Phase 2):** the aggregate opcode census (gate B) still validates only the
-square fixture; the Phase-2 opcodes are covered by per-op presence asserts in test_arith/control/
-loops. Extending the census to aggregate across all fixtures is a cheap follow-up.
+**Census gate (B) now aggregates across ALL fixtures.** `test_census.das` unions `opcode_set` over
+every fixture (square + arith + control + loops) and asserts it equals the declared
+`phase2_emitter_opcodes()` set in both directions (failures resolve the numeric opcode to its OpName).
+This caught a real gap: float `%` (FRem) was reachable in the emitter but no fixture exercised it, so
+a `fdata[i] % 2.0f` line was added to `farith` (daslang float `%` is fmod) — test-per-instruction
+restored. The declared set lists only the comparison flavors the fixtures actually emit (e.g. no
+unsigned `>=`/`<=`), so the both-directions check stays exact.
 
-**Phase 2 COMPLETE** — arithmetic (commit 1) + control flow (commit 2). Ready to PR.
+**Phase 2 COMPLETE** — arithmetic (commit 1) + control flow (commit 2) + aggregate census (commit 3).
+All three tiers 26/26, spirv-val clean, lint + format clean.
