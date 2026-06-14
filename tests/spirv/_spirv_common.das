@@ -34,6 +34,185 @@ def public square_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-2 arithmetic fixtures: exercise every binary/unary scalar op the emitter supports.
+// Operands are loaded SSBO values (+ the uint index), so no constants/conversions are needed yet —
+// the opcode-shape + spirv-val gates only require each instruction to be emitted and valid. =====
+var @ssbo @binding = 0 idata : array<int>
+var @ssbo @binding = 0 fdata : array<float>
+
+[compute_shader(local_size_x=64, name="uarith_spv"), marker(no_coverage)]
+def uarith {
+    let i = gl_GlobalInvocationID.x
+    data[i] = data[i] + i       // IAdd
+    data[i] = data[i] - i       // ISub
+    data[i] = data[i] * i       // IMul
+    data[i] = data[i] / i       // UDiv
+    data[i] = data[i] % i       // UMod
+}
+
+[compute_shader(local_size_x=64, name="iarith_spv"), marker(no_coverage)]
+def iarith {
+    let i = gl_GlobalInvocationID.x
+    idata[i] = idata[i] / 2     // SDiv  (signed int OpConstant 2)
+    idata[i] = idata[i] % 3     // SRem  (OpConstant 3)
+    idata[i] = -idata[i]        // SNegate
+    idata[i] = ~idata[i]        // Not
+}
+
+[compute_shader(local_size_x=64, name="farith_spv"), marker(no_coverage)]
+def farith {
+    let i = gl_GlobalInvocationID.x
+    fdata[i] = fdata[i] + 1.0f  // FAdd  (float OpConstant 1.0)
+    fdata[i] = fdata[i] - 1.0f  // FSub
+    fdata[i] = fdata[i] * 2.0f  // FMul  (OpConstant 2.0)
+    fdata[i] = fdata[i] / 2.0f  // FDiv
+    fdata[i] = fdata[i] % 2.0f  // FRem  (fmod, dividend's sign)
+    fdata[i] = -fdata[i]        // FNegate
+}
+
+def public uarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(uarith_spv)
+    return <- w
+}
+
+def public iarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(iarith_spv)
+    return <- w
+}
+
+def public farith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(farith_spv)
+    return <- w
+}
+
+// ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
+// ++/--, comparisons (signed/unsigned/float), logical &&/||/!, and if/else (OpSelectionMerge +
+// OpBranchConditional). One fixture per scalar class so every comparison-opcode flavor is covered. =====
+[compute_shader(local_size_x=64, name="uctrl_spv"), marker(no_coverage)]
+def uctrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = data[i]           // mutable local -> Function OpVariable + Store
+    var k = 0u
+    k++                         // ++ -> Load/IAdd/Store
+    acc += i                    // += -> IAdd
+    acc -= k                    // -= -> ISub
+    acc *= 2u                   // *= -> IMul
+    if (acc > 100u) {           // UGreaterThan + if/else (SelectionMerge, BranchConditional)
+        acc = acc / 3u
+    } else {
+        acc = acc + 1u
+    }
+    if (acc < i && i != 0u) {   // ULessThan, INotEqual, LogicalAnd, single-branch if
+        acc = 0u
+    }
+    if (!(acc == 7u)) {         // IEqual + LogicalNot
+        acc -= 2u
+    }
+    data[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="ictrl_spv"), marker(no_coverage)]
+def ictrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = idata[i]
+    if (acc >= 0) {             // SGreaterThanEqual
+        acc += 2
+    }
+    if (acc <= 10) {            // SLessThanEqual
+        acc -= 3
+    }
+    if (acc > 0 && acc < 100) { // SGreaterThan, SLessThan, LogicalAnd
+        acc = acc / 2
+    }
+    idata[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="fctrl_spv"), marker(no_coverage)]
+def fctrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = fdata[i]
+    if (acc > 1.0f) {                       // FOrdGreaterThan
+        acc *= 0.5f
+    }
+    if (acc < 0.0f || acc != 2.0f) {        // FOrdLessThan, FOrdNotEqual, LogicalOr
+        acc += 3.0f
+    }
+    if (acc == 0.0f) {                      // FOrdEqual
+        acc = 1.0f
+    }
+    if (acc >= 5.0f && acc <= 9.0f) {       // FOrdGreaterThanEqual, FOrdLessThanEqual
+        acc -= 2.0f
+    }
+    fdata[i] = acc
+}
+
+def public uctrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(uctrl_spv)
+    return <- w
+}
+
+def public ictrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ictrl_spv)
+    return <- w
+}
+
+def public fctrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(fctrl_spv)
+    return <- w
+}
+
+// ===== Phase-2 loop fixtures: while + range-for (OpLoopMerge 4-block) with break/continue. The
+// structured CFG these produce is the real spirv-val workout — a misrouted break/continue or a
+// missing block terminator fails validation. =====
+[compute_shader(local_size_x=64, name="wloop_spv"), marker(no_coverage)]
+def wloop {
+    let i = gl_GlobalInvocationID.x
+    var acc = 0u
+    var k = data[i]
+    while (k > 0u) {                // OpLoopMerge + UGreaterThan
+        acc += k
+        k--                        // -- decrement (ExprOp1) -> Load/ISub/Store
+        if (acc > 1000u) {
+            break                  // break -> Branch loop merge
+        }
+    }
+    data[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="floop_spv"), marker(no_coverage)]
+def floop {
+    let gi = gl_GlobalInvocationID.x
+    var acc = 0
+    for (j in range(10)) {          // range(n): init 0, SLessThan, IAdd update
+        if (j == 5) {
+            continue               // continue -> Branch loop continue block
+        }
+        acc += j
+    }
+    for (j in range(2, 8)) {        // range(lo, hi): init lo
+        acc -= j
+    }
+    idata[gi] = acc
+}
+
+def public wloop_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(wloop_spv)
+    return <- w
+}
+
+def public floop_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(floop_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -104,6 +283,33 @@ def public phase1_emitter_opcodes : table<uint> {
         SpvOp.Constant, SpvOp.Variable,
         SpvOp.Function, SpvOp.Label, SpvOp.AccessChain, SpvOp.Load, SpvOp.IMul, SpvOp.Store,
         SpvOp.Return, SpvOp.FunctionEnd
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// The EXACT set generate_spirv emits across ALL Phase-2 fixtures (square + arith + control + loops).
+// The census meta-test unions opcode_set over every fixture and asserts equality with this set in
+// BOTH directions — so a newly-emitted-but-unasserted opcode, or a declared opcode that stopped
+// firing, fails the gate. Phase-1 set + the Phase-2 additions:
+def public phase2_emitter_opcodes : table<uint> {
+    var s <- phase1_emitter_opcodes()
+    for (op in [
+        // types newly needed by Phase 2
+        SpvOp.TypeBool, SpvOp.TypeFloat,
+        // arithmetic breadth
+        SpvOp.IAdd, SpvOp.ISub, SpvOp.UDiv, SpvOp.UMod, SpvOp.SDiv, SpvOp.SRem, SpvOp.SNegate, SpvOp.Not,
+        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FNegate,
+        // comparisons (only the flavors the fixtures actually exercise)
+        SpvOp.IEqual, SpvOp.INotEqual, SpvOp.UGreaterThan, SpvOp.ULessThan,
+        SpvOp.SGreaterThan, SpvOp.SLessThan, SpvOp.SGreaterThanEqual, SpvOp.SLessThanEqual,
+        SpvOp.FOrdEqual, SpvOp.FOrdNotEqual, SpvOp.FOrdGreaterThan, SpvOp.FOrdLessThan,
+        SpvOp.FOrdGreaterThanEqual, SpvOp.FOrdLessThanEqual,
+        // logical
+        SpvOp.LogicalAnd, SpvOp.LogicalOr, SpvOp.LogicalNot,
+        // structured control flow
+        SpvOp.SelectionMerge, SpvOp.BranchConditional, SpvOp.Branch, SpvOp.LoopMerge
     ]) {
         s |> insert(uint(op))
     }
