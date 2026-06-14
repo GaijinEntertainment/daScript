@@ -193,6 +193,32 @@ def public type_matrix(var m : SpirvModule; col_type : uint; cols : int) : uint 
     return id
 }
 
+// OpTypeImage for a standard sampled (non-storage) texture: depth=0, arrayed=0, ms=0, sampled=1
+// (used with a sampler), format=Unknown. `sampled_type` is the texel component scalar (float).
+def public type_image(var m : SpirvModule; sampled_type : uint; dim : SpvDim) : uint {
+    let key = "img{sampled_type}_d{uint(dim)}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    // operands: Sampled Type, Dim, Depth, Arrayed, MS, Sampled, Image Format
+    var ops <- [id, sampled_type, uint(dim), 0u, 0u, 0u, 1u, uint(SpvImageFormat.Unknown)]
+    emit_n(m, SEC_TYPES, SpvOp.TypeImage, ops)
+    delete ops
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// OpTypeSampledImage wrapping an image type — the type of a combined image+sampler descriptor.
+def public type_sampled_image(var m : SpirvModule; image_type : uint) : uint {
+    let key = "simg{image_type}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeSampledImage, id, image_type)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 def public type_pointer(var m : SpirvModule; sc : SpvStorageClass; pointee : uint) : uint {
     let key = "p{uint(sc)}_{pointee}"
     let ex = m.type_pool?[key] ?? 0u

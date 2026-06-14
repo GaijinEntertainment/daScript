@@ -392,6 +392,23 @@ def public pc_frag_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-4d combined image sampler fixture: a sampler2D global -> OpTypeImage +
+// OpTypeSampledImage in UniformConstant storage + DescriptorSet/Binding; texture(tex, uv) ->
+// OpLoad the sampled image + OpImageSampleImplicitLod (fragment-only, uses derivatives). =====
+var @binding = 0 tex : sampler2D
+var @in @location = 0 ti_uv : float2
+var @out @location = 0 tex_out : float4
+[fragment_shader(name="tex_frag_spv"), marker(no_coverage)]
+def tex_frag {
+    tex_out = texture(tex, ti_uv)       // OpLoad sampler + OpImageSampleImplicitLod
+}
+
+def public tex_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tex_frag_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -546,4 +563,16 @@ def public phase4b_emitter_opcodes : table<uint> {
 // that is an operand, not an opcode. The declared set is unchanged.
 def public phase4c_emitter_opcodes : table<uint> {
     return <- phase4b_emitter_opcodes()
+}
+
+// Phase-4d combined image samplers add the image type pair + the sample op. Phase-4c set + these:
+def public phase4d_emitter_opcodes : table<uint> {
+    var s <- phase4c_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeImage, SpvOp.TypeSampledImage,    // sampler2D -> OpTypeImage + OpTypeSampledImage
+        SpvOp.ImageSampleImplicitLod                // texture(tex, uv)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
 }

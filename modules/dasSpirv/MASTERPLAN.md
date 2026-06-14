@@ -741,3 +741,39 @@ lint + format clean.
   the **absence** of DescriptorSet/Binding, AccessChain + VectorTimesScalar, + spirv-val. Census set is
   unchanged (`phase4c_emitter_opcodes` = 4b set — PushConstant is a storage-class operand, not an opcode);
   the `pc_frag` fixture is unioned in and must stay within the declared set.
+
+### Phase 4d — combined image samplers LANDED (2026-06-14, branch `bbatkin/dasspirv-phase4`)
+
+Fourth (final) Phase-4 slice: combined image samplers — the last resource kind. A `sampler2D` global
+lowers to an `OpTypeImage` + `OpTypeSampledImage` in UniformConstant storage with DescriptorSet/Binding;
+`texture(tex, uv)` lowers to `OpLoad` (the sampled image) + `OpImageSampleImplicitLod`. All three tiers
+green (interp/JIT/AOT 46/46), spirv-val clean, external `spirv-dis` confirms a textbook textured fragment
+shader, lint + format clean.
+
+- **Sampler authoring surface (no native daslang type).** daslang has no sampler type, so `spirv_builtins`
+  declares an **opaque marker struct `sampler2D {}`** + a stub `texture(s : sampler2D; uv : float2) : float4`
+  (body never runs — only the AST is read). Shaders write `var @binding = 0 tex : sampler2D` and
+  `texture(tex, uv)`; the emitter recognizes both by name.
+- **`type_image` / `type_sampled_image`** builders. For a sampled 2D float texture:
+  `OpTypeImage %float 2D 0 0 0 1 Unknown` then `OpTypeSampledImage`.
+- **classify_global sampler branch** (detected by the `sampler2D` struct name, not an annotation):
+  UniformConstant pointer + OpVariable + DescriptorSet/Binding, `GlobalInfo.is_sampler`. Not in the entry
+  interface (UniformConstant excluded for SPIR-V ≤ 1.3).
+- **`texture()` in emit_call**: `OpLoad` the sampled image (via the global's var-id) + `OpImageSampleImplicitLod`.
+  Implicit-LOD uses screen-space derivatives, so it is **fragment-only** — `ctx` gained a `stage` field
+  (set in `generate_spirv`) and a non-fragment `texture()` is a clean error (fail-closed).
+- **AOT emitter fix (`daslib/aot_cpp.das`).** A struct used **only as a global variable's type** (never
+  field-accessed) was dropped by `UseTypeMarker` to a forward declaration, so `das_global_zero<sampler2D>`
+  failed with C2027 "use of undefined type" (needs `sizeof`). `UseTypeMarker` now overrides
+  `preVisitGlobalLetVariable` to `mark(variable._type)` — a strictly emit-MORE direction (can only add a
+  struct definition, never remove one), so it cannot regress existing AOT. This is a general AOT codegen
+  correctness fix surfaced by the empty-marker-struct global, not dasSpirv-specific.
+- **Tests:** `tests/spirv/test_sampler.das` — a textured `[fragment_shader]` (`texture(tex, ti_uv)`);
+  asserts OpTypeImage/OpTypeSampledImage, the UniformConstant OpVariable, DescriptorSet/Binding, OpLoad +
+  OpImageSampleImplicitLod, + spirv-val. Census extended to `phase4d_emitter_opcodes` (= 4c set +
+  TypeImage/TypeSampledImage/ImageSampleImplicitLod), unioned over the `tex_frag` fixture.
+
+**Phase 4 (resource breadth) COMPLETE** — UBOs (4a) + matrices (4b) + push constants (4c) + combined image
+samplers (4d). The emitter now covers the full descriptor model. The cross-repo GPU gate (a dasVulkan
+UBO/MVP and/or textured example, regressed on lavapipe + the local GPU — the real-hardware proof of the
+column-major matrix mapping) is the follow-on dasVulkan PR, mirroring the Phase-1/Phase-3 GPU gates.

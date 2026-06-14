@@ -31,6 +31,7 @@ struct GlobalInfo {
     value_type : uint               // SPIR-V type-id of the whole variable's value
     is_ssbo    : bool               // wrapped in a Block-decorated struct (member 0 = the array)
     is_block   : bool               // a Block-decorated struct (ssbo OR ubo); member access -> OpAccessChain by field index
+    is_sampler : bool               // a combined image sampler (UniformConstant OpTypeSampledImage); used via texture()
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -49,6 +50,7 @@ struct EmitCtx {
     loop_stack    : array<LoopTargets>          // innermost loop's {merge, continue} for break/continue
     terminated    : bool                        // current block already has a terminator
     glsl_ext      : uint                        // OpExtInstImport "GLSL.std.450" set id (0 = not imported yet)
+    stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -156,6 +158,15 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
     return (ok = true, type_id = id)
 }
 
+// ===== combined image sampler detection =====
+// sampler globals are recognized by their opaque marker struct name (sampler2D, ...). Returns the
+// SPIR-V image dimensionality so classify_global can build the OpTypeImage / OpTypeSampledImage.
+def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D)
+    if ("{t.structType.name}" == "sampler2D") return (ok = true, dim = SpvDim._2D)
+    return (ok = false, dim = SpvDim._2D)
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var errors : array<string>) {
     let vname = "{v.name}"
@@ -200,6 +211,26 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)
+        return
+    }
+    // combined image sampler: a global of an opaque sampler type (sampler2D) -> UniformConstant
+    // OpTypeSampledImage + DescriptorSet/Binding. Used only via texture(); not in the entry interface.
+    let si = sampler_info(v._type)
+    if (si.ok) {
+        let img = type_image(m, type_float(m, 32u), si.dim)
+        let simg = type_sampled_image(m, img)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, simg)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("sampler '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = simg, is_sampler = true))
         return
     }
     if (v.annotation |> find_arg("ssbo") is tBool) {
@@ -586,6 +617,36 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
 // ===== ExprCall: vector constructors, dot (core OpDot), GLSL.std.450 math (OpExtInst) =====
 def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; e : ExpressionPtr; var errors : array<string>) : uint {
     let name = "{call.name}"
+    // ----- texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod -----
+    if (name == "texture") {
+        if (length(call.arguments) != 2) {
+            errors |> push("texture expects (sampler, uv)")
+            return 0u
+        }
+        // implicit-LOD sampling uses screen-space derivatives -> fragment stage only (fail-closed)
+        if (ctx.stage != ShaderStage.Fragment) {
+            errors |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
+            return 0u
+        }
+        let sg = global_var_of(call.arguments[0])
+        if (sg == null) {
+            errors |> push("texture: first argument must be a sampler global")
+            return 0u
+        }
+        let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+        if (!gi.is_sampler) {
+            errors |> push("texture: '{sg.name}' is not a sampler")
+            return 0u
+        }
+        let simg = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+        let uv = emit_value(m, ctx, call.arguments[1], errors)
+        if (uv == 0u) return 0u
+        let rt = emit_type(m, e._type)
+        let res = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+        return res
+    }
     // ----- vector constructor: OpCompositeConstruct (or splat / identity for one arg) -----
     let vc = vector_ctor(name)
     if (vc.ok) {
@@ -1364,6 +1425,7 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
+    ctx.stage = stage
 
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))

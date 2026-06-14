@@ -566,6 +566,12 @@ class UseTypeMarker : AstVisitor {
     def override preVisitExprBlockArgument(expr_blk : ExprBlock?; variable : VariablePtr; lastArg : bool) {
         mark(variable._type);
     }
+    def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
+        // a global's type must be marked even if its fields are never accessed: das_global[_zero]
+        // needs the complete C++ type (sizeof), so a struct used ONLY as a global's type would
+        // otherwise be dropped to a forward declaration and fail to compile.
+        mark(variable._type);
+    }
     def mark(decl : TypeDeclPtr) {
         if (decl == null) return ;
         if (decl.baseType == Type.tStructure) {

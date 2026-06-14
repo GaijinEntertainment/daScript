@@ -45,7 +45,8 @@ def test_opcode_census(t : T?) {
         add_set(present, ubo_frag_words())
         add_set(present, mvp_vert_words())
         add_set(present, pc_frag_words())
-        var declared <- phase4c_emitter_opcodes()
+        add_set(present, tex_frag_words())
+        var declared <- phase4d_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }
