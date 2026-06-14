@@ -287,6 +287,24 @@ def public raster_math_words : array<uint> {
     return <- w
 }
 
+// ===== const arrays + dynamic indexing: the gl_VertexIndex hardcoded-triangle vertex shader.
+// Exercises OpTypeArray, OpConstantComposite (vec + array constants), a Function-storage array
+// OpVariable initialized from the constant, and OpAccessChain indexing by gl_VertexIndex. =====
+var @out @location = 0 cv_color : float3
+[vertex_shader(name="catri_spv"), marker(no_coverage)]
+def catri {
+    let positions = fixed_array(float2(0.0, -0.6), float2(0.6, 0.6), float2(-0.6, 0.6))
+    let colors = fixed_array(float3(1.0, 0.0, 0.0), float3(0.0, 1.0, 0.0), float3(0.0, 0.0, 1.0))
+    gl_Position = float4(positions[gl_VertexIndex], 0.0, 1.0)   // OpAccessChain + CompositeConstruct
+    cv_color = colors[gl_VertexIndex]
+}
+
+def public catri_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(catri_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -400,6 +418,16 @@ def public phase3_emitter_opcodes : table<uint> {
         SpvOp.Dot,                          // dot(a, b)
         SpvOp.ExtInstImport, SpvOp.ExtInst  // GLSL.std.450 math (sqrt/clamp/...)
     ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Const arrays + dynamic indexing add OpTypeArray + OpConstantComposite (the array/vector constants).
+// Phase-3 set + these:
+def public const_array_emitter_opcodes : table<uint> {
+    var s <- phase3_emitter_opcodes()
+    for (op in [SpvOp.TypeArray, SpvOp.ConstantComposite]) {
         s |> insert(uint(op))
     }
     return <- s

@@ -624,3 +624,32 @@ Test robustness: added a positional `op_has_operand_at(words, op, idx, value)` t
 the three position-sensitive asserts to it (OpVariable storage class at index 2 in `test_raster` +
 `test_control`; OpExecutionMode mode at index 1) — a bare `op_has_operand` value match can false-positive
 against the result-type/id operands when the enum value is a small number.
+
+### Const arrays + dynamic indexing LANDED (2026-06-14, branch `bbatkin/dasspirv-const-arrays`)
+
+Prereq for the dasVulkan triangle gate: the canonical hardcoded triangle is `positions[gl_VertexIndex]`
+over a shader-local constant array, which the emitter couldn't lower. Added const arrays + dynamic
+indexing. All three tiers green (interp/JIT/AOT 38/38), spirv-val clean, external `spirv-dis` confirms
+textbook OpTypeArray/OpConstantComposite/OpAccessChain, lint + format clean.
+
+- **`OpTypeArray` + `OpConstantComposite`** builders in `spirv_builder` (deduped). `OpTypeArray`'s length
+  operand is the id of a uint `OpConstant` (not a literal), emitted first for define-before-use.
+- **`emit_type` handles `tFixedArray`** (`float2[3]`): element from `firstType`, length from the scalar
+  `fixedDim`; recurses for multi-dim.
+- **`emit_const`** — a constant-only lowering path: scalar consts, **folded vector constants**
+  (`ExprConstFloat2/3/4`, `ExprConstInt/UInt2/3/4` read via `.value`), **unfolded** all-const vector
+  *constructors* (`ExprCall` → `OpConstantComposite`), **unary-minus-of-constant** (`ExprOp1("-", const)`),
+  and `ExprMakeArray` → array `OpConstantComposite`. ok=false on any non-constant → clean error.
+- **Array-typed locals are memory-backed.** `collect_locals` declares a `tFixedArray` `let` (not just
+  `var`) as a Function-storage `OpVariable`; the `ExprLet` store writes the array constant into it.
+  `emit_ptr` handles `ExprAt` on a local array → `OpAccessChain` by the (dynamic) index.
+- **Tests:** `tests/spirv/test_const_arrays.das` — the gl_VertexIndex triangle vertex shader; asserts
+  TypeArray/ConstantComposite/AccessChain, the length-3 `OpConstant`, a Function-storage array variable,
+  and the VertexIndex/Position builtins + spirv-val. Census extended to `const_array_emitter_opcodes`
+  (Phase-3 set + `TypeArray`/`ConstantComposite`), unioned over the new `catri` fixture.
+
+**Finding (load-bearing):** `float2(0.0, -0.6)` arrives **fold-state-dependent** — as a folded
+`ExprConstFloat2` in the dastest compile, but as an `ExprCall float2(...)` with an `ExprOp1("-", 0.6)`
+argument in the lint/macro-patch compile. `emit_const` must handle BOTH (and the unary-minus fold), or
+the shader compiles in one context and errors in another. Both shapes produce the identical
+`OpConstantComposite`, so the census stays stable across tiers.
