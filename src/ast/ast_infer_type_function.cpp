@@ -1471,7 +1471,11 @@ namespace das {
                                 return nullptr;
                             }
                             auto retT = TypeDecl::inferGenericType(mkStruct->type, funcC->arguments[iF]->type, true, true, nullptr);
-                            DAS_ASSERTF(retT, "how? it matched during findMatchingFunctions the same way");
+                            if ( !retT ) {
+                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "",
+                                    expr->at, CompilationError::mismatching_function_argument);
+                                return nullptr;
+                            }
                             TypeDecl::applyAutoContracts(mkStruct->type, funcC->arguments[iF]->type);
                             mkStruct->makeType = retT;
                             reportAstChanged();
