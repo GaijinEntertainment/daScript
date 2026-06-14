@@ -79,7 +79,7 @@ namespace das {
     string InferTypes::describeFunction(const Function *fun) const {
         return verbose ? fun->describe() : "";
     }
-    void InferTypes::verifyType(const TypeDeclPtr &decl, bool allowExplicit, bool classMethod) const {
+    void InferTypes::verifyType(const TypeDeclPtr &decl, bool allowExplicit, bool classMethod, bool allowTemplate) const {
         // TODO: enable and cleanup
         if (decl->isExplicit && !allowExplicit) {
             /*
@@ -118,7 +118,7 @@ namespace das {
                               ptrType->at, CompilationError::invalid_annotation_type);
                     }
                 }
-                verifyType(ptrType);
+                verifyType(ptrType, false, false, allowTemplate);
             } else {
                 if (decl->smartPtr) {
                     error("can't declare a void smart pointer", "", "",
@@ -127,7 +127,7 @@ namespace das {
             }
         } else if (decl->baseType == Type::tIterator) {
             if (auto ptrType = decl->firstType) {
-                verifyType(ptrType);
+                verifyType(ptrType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tFixedArray) {
             if (decl->fixedDim <= 0) {
@@ -155,7 +155,7 @@ namespace das {
                     error("can't declare an array of void: '" + describeType(decl) + "'", "", "",
                           decl->at, CompilationError::invalid_array);
                 }
-                verifyType(elemType);
+                verifyType(elemType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tArray) {
             if (auto arrayType = decl->firstType) {
@@ -175,7 +175,7 @@ namespace das {
                     error("can't have array of non-trivial type: '" + describeType(arrayType) + "'", "", "",
                           arrayType->at, CompilationError::invalid_array_type);
                 }
-                verifyType(arrayType);
+                verifyType(arrayType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tTable) {
             if (auto keyType = decl->firstType) {
@@ -191,7 +191,7 @@ namespace das {
                     error("table key has to be declared as a basic 'hashable' type: '" + describeType(keyType) + "'", "", "",
                           keyType->at, CompilationError::invalid_table_type);
                 }
-                verifyType(keyType);
+                verifyType(keyType, false, false, allowTemplate);
             }
             if (auto valueType = decl->secondType) {
                 if (valueType->isAutoOrAlias()) {
@@ -206,7 +206,7 @@ namespace das {
                     error("can't have table value of non-trivial type: '" + describeType(valueType) + "'", "", "",
                           valueType->at, CompilationError::invalid_table_type);
                 }
-                verifyType(valueType);
+                verifyType(valueType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tBlock || decl->baseType == Type::tFunction || decl->baseType == Type::tLambda) {
             if (auto resultType = decl->firstType) {
@@ -214,14 +214,14 @@ namespace das {
                     error("not a valid return type: '" + describeType(resultType) + "'", "", "",
                           resultType->at, CompilationError::invalid_result_type);
                 }
-                verifyType(resultType);
+                verifyType(resultType, false, false, allowTemplate);
             }
             for (auto &argType : decl->argTypes) {
                 if (!classMethod && (argType->ref && argType->isRefType())) {
                     error("can't pass a boxed type by a reference: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_argument_type);
                 }
-                verifyType(argType, true);
+                verifyType(argType, true, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tTuple) {
             for (auto &argType : decl->argTypes) {
@@ -237,7 +237,7 @@ namespace das {
                     error("invalid tuple element type: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_tuple_type);
                 }
-                verifyType(argType);
+                verifyType(argType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tVariant) {
             for (auto &argType : decl->argTypes) {
@@ -253,7 +253,16 @@ namespace das {
                     error("invalid variant element type: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_variant_type);
                 }
-                verifyType(argType);
+                verifyType(argType, false, false, allowTemplate);
+            }
+        } else if (decl->baseType == Type::tStructure) {
+            // A template structure has no concrete layout, so it can't be used where
+            // a real value would live (parameter, variable, field, result). It IS legal
+            // inside type<>/typeinfo introspection, which is how the typemacro machinery
+            // reads a template's fields to instantiate it -- those sites pass allowTemplate.
+            if (!allowTemplate && decl->structType && decl->structType->isTemplate) {
+                error("can't use template structure " + decl->structType->name + " without instantiation", "", "",
+                        decl->at, CompilationError::invalid_structure_template);
             }
         }
     }
