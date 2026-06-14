@@ -15,9 +15,12 @@ require daslib/aot_constants
 
 options strict_smart_pointers = false
 options unsafe_table_lookup = false
-// describeCppTypeEx recurses once per nesting level of a type; a deeply nested
-// function/lambda/tuple type (the fuzzer's, #3065) needs far more than the default
-// ~16KB macro-context stack. Bump it so realistic depths emit; pathological depths
+// describeCppTypeEx recurses once per type-nesting level; a deeply nested
+// function/lambda/tuple type (the fuzzer's, #3065) overflows the default ~16KB stack.
+// This bump only governs when aot_cpp is the ROOT program -- the direct `daslang -aot`
+// C++ driver compiles it as root (utils/daScript/main.cpp::aot_compile). The CMake/CI
+// driver utils/aot/main.das only REQUIRES this module, so getContextStackSize() reads
+// the driver's options there; it carries a matching twin bump. Pathological depths
 // still overflow and are caught fail-closed (see fail_on_aot_emit_error).
 options stack = 1_048_576
 
