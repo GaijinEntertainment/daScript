@@ -1689,7 +1689,7 @@ class public CppAot : AstVisitor {
         } elif (variable.flags.init_via_move) {
             let vname = collector.getVarName(variable);
             var cvname = vname;
-            if (variable._type.flags.constant && variable._type.isRefType) {
+            if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
                 cvname += "_ConstRef";
             }
             write(*ss, "; das_zero({cvname}); das_move({cvname}, ");
