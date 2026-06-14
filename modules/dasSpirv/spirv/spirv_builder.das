@@ -214,6 +214,43 @@ def public type_runtime_array(var m : SpirvModule; elem : uint; stride : int) : 
     return id
 }
 
+// A fixed-size array type. OpTypeArray's length operand is the id of a uint OpConstant (not a
+// literal), so the length constant is emitted first (define-before-use within SEC_TYPES). Deduped
+// by element + length.
+def public type_array(var m : SpirvModule; elem : uint; len : int) : uint {
+    if (len <= 0) {
+        panic("type_array: length must be positive, got {len}")
+    }
+    let key = "arr{elem}_n{len}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let len_id = const_uint(m, uint(len))
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeArray, id, elem, len_id)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// A composite (vector / array / struct) constant from already-emitted constituent constant ids.
+// Deduped by type + constituents — two identical composites collapse to one OpConstantComposite.
+def public const_composite(var m : SpirvModule; type_id : uint; parts : array<uint>) : uint {
+    let key = build_string() $(var wr) {
+        wr |> write("cc{type_id}")
+        for (p in parts) {
+            wr |> write("_{p}")
+        }
+    }
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    var ops <- [type_id, id]
+    ops |> push_from(parts)
+    emit_n(m, SEC_TYPES, SpvOp.ConstantComposite, ops)
+    delete ops
+    m.const_pool |> insert(key, id)
+    return id
+}
+
 // A block-decorated struct (UBO/SSBO interface). Members + their byte offsets are supplied by
 // the caller (it owns layout). Two structs with identical member ids + offsets dedup to one.
 def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>) : uint {
