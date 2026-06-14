@@ -474,3 +474,54 @@ First Phase-2 slice: full scalar binary + unary arithmetic. `emit_value`'s `Expr
   (mutable locals as `Function` `OpVariable`, `OpSelectionMerge`/`OpLoopMerge`) are the next slices.
 
 **Reserved word:** `label` is a daslang keyword — a parameter named `label` is `error[30151]`. Use `lbl`.
+
+### Phase 2 — control flow LANDED (2026-06-14, branch `bbatkin/dasspirv-phase2`)
+
+Second Phase-2 slice: mutable locals + comparisons + logical ops + the full structured-CFG set
+(if/else, while, range-for, break/continue). All three tiers green (interp/JIT/AOT 26/26),
+spirv-val clean, external `spirv-dis` confirms textbook structured CFG, lint + format clean.
+
+- **Mutable locals as Function `OpVariable`s.** A pre-scan (`collect_locals`) walks the WHOLE body
+  once before any body code and declares an `OpVariable` (Function storage) for every mutable local
+  (`var`) and loop-induction variable — SPIR-V requires all Function-storage OpVariables to lead the
+  entry block. Reads → `OpLoad`, writes → `OpStore`; the driver mem2reg's them (NO hand-rolled
+  `OpPhi`). Immutable value-lets (`let`) stay pure SSA ids (the Phase-1 path) — so the square's
+  `let i` is unchanged and the census/exact-count asserts still hold. Discriminator (probed):
+  `var._type.flags.constant` — `false` for `var` (→ memory), `true` for `let` and loop-iter vars.
+- **Compound assignment** (`+= -= *= /= %=`, void-typed `ExprOp2`) and **`++`/`--`** (statement-level
+  `ExprOp1`) → load-modify-store via `emit_load_op_store`.
+- **Comparisons** (`== != < > <= >=`, `ExprOp2` → bool): `cmp_code` table picks I/S/U/FOrd opcode by
+  operand class. Equality is sign-agnostic (`IEqual`/`INotEqual`); ordering splits signed/unsigned/
+  float; floats use the **ordered** (non-NaN) forms.
+- **Logical** `&&`/`||` (`ExprOp2` → bool) → `OpLogicalAnd`/`OpLogicalOr`; `!` (`ExprOp1`) →
+  `OpLogicalNot`. **Eager, NOT short-circuit** — valid because shader condition operands are
+  side-effect free (documented in-code); true short-circuit would need extra control flow.
+- **if/else** → `OpSelectionMerge` + `OpBranchConditional`, then/else/merge blocks. Early-`return`
+  in a branch is handled by the per-block `terminated` flag (skip the trailing `OpBranch merge`).
+- **while + range-for** → the canonical 4-block `OpLoopMerge` shape: header (LoopMerge → branch to
+  cond) / cond (`OpBranchConditional body merge`) / body / continue (→ header), + merge. **break →
+  `OpBranch merge`, continue → `OpBranch continue`** off a `loop_stack`. range-for's `i < hi` test
+  and `i += 1` update are synthesized directly against the induction `OpVariable` (no daslang AST
+  node exists for them); bounds are evaluated ONCE in the pre-header (range captures at entry).
+- **Tests:** `tests/spirv/test_control.das` (uint/int/float fixtures — every comparison flavor +
+  logical + if/else) and `test_loops.das` (while+break, range-for+continue, both `range(n)` and
+  `range(lo,hi)`). Per-op opcode-shape asserts + spirv-val on every blob.
+
+**Findings (load-bearing):**
+
+1. **Constant-bound `range()` folds to `ExprConstRange`, NOT an `ExprCall`.** `range(10)` / `range(2,8)`
+   with literal bounds arrive as `ExprConstRange` (a half-open `[from,to)` value); only
+   *runtime*-bound ranges stay an `ExprCall` to `range`/`urange`. The emitter handles both. Read the
+   const bounds via `unsafe(reinterpret<int2>(cr.value))` → `(from, to)` (daslang `range` is a
+   vector-like pair; `.from`/`.to` parse as swizzle masks and fail — `reinterpret` is the way).
+2. **`continue if (cond)` desugars to a plain `if (cond) { continue }`** — no special postfix handling
+   needed; `ExprBreak`/`ExprContinue` are leaf statements.
+3. **At patch (pre-fold) stage, mutable-local reads are `ExprVar : T&` (non-const ref) wrapped in
+   `ExprRef2Value`; value-let / loop-var reads are `T const&`.** The const flag on the *variable's*
+   `_type` (not the read site) is the stable mutable-vs-SSA discriminator at the `ExprLet` site.
+
+**Deferred (not blocking Phase 2):** the aggregate opcode census (gate B) still validates only the
+square fixture; the Phase-2 opcodes are covered by per-op presence asserts in test_arith/control/
+loops. Extending the census to aggregate across all fixtures is a cheap follow-up.
+
+**Phase 2 COMPLETE** — arithmetic (commit 1) + control flow (commit 2). Ready to PR.

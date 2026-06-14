@@ -87,6 +87,131 @@ def public farith_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
+// ++/--, comparisons (signed/unsigned/float), logical &&/||/!, and if/else (OpSelectionMerge +
+// OpBranchConditional). One fixture per scalar class so every comparison-opcode flavor is covered. =====
+[compute_shader(local_size_x=64, name="uctrl_spv"), marker(no_coverage)]
+def uctrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = data[i]           // mutable local -> Function OpVariable + Store
+    var k = 0u
+    k++                         // ++ -> Load/IAdd/Store
+    acc += i                    // += -> IAdd
+    acc -= k                    // -= -> ISub
+    acc *= 2u                   // *= -> IMul
+    if (acc > 100u) {           // UGreaterThan + if/else (SelectionMerge, BranchConditional)
+        acc = acc / 3u
+    } else {
+        acc = acc + 1u
+    }
+    if (acc < i && i != 0u) {   // ULessThan, INotEqual, LogicalAnd, single-branch if
+        acc = 0u
+    }
+    if (!(acc == 7u)) {         // IEqual + LogicalNot
+        acc -= 2u
+    }
+    data[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="ictrl_spv"), marker(no_coverage)]
+def ictrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = idata[i]
+    if (acc >= 0) {             // SGreaterThanEqual
+        acc += 2
+    }
+    if (acc <= 10) {            // SLessThanEqual
+        acc -= 3
+    }
+    if (acc > 0 && acc < 100) { // SGreaterThan, SLessThan, LogicalAnd
+        acc = acc / 2
+    }
+    idata[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="fctrl_spv"), marker(no_coverage)]
+def fctrl {
+    let i = gl_GlobalInvocationID.x
+    var acc = fdata[i]
+    if (acc > 1.0f) {                       // FOrdGreaterThan
+        acc *= 0.5f
+    }
+    if (acc < 0.0f || acc != 2.0f) {        // FOrdLessThan, FOrdNotEqual, LogicalOr
+        acc += 3.0f
+    }
+    if (acc == 0.0f) {                      // FOrdEqual
+        acc = 1.0f
+    }
+    if (acc >= 5.0f && acc <= 9.0f) {       // FOrdGreaterThanEqual, FOrdLessThanEqual
+        acc -= 2.0f
+    }
+    fdata[i] = acc
+}
+
+def public uctrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(uctrl_spv)
+    return <- w
+}
+
+def public ictrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ictrl_spv)
+    return <- w
+}
+
+def public fctrl_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(fctrl_spv)
+    return <- w
+}
+
+// ===== Phase-2 loop fixtures: while + range-for (OpLoopMerge 4-block) with break/continue. The
+// structured CFG these produce is the real spirv-val workout — a misrouted break/continue or a
+// missing block terminator fails validation. =====
+[compute_shader(local_size_x=64, name="wloop_spv"), marker(no_coverage)]
+def wloop {
+    let i = gl_GlobalInvocationID.x
+    var acc = 0u
+    var k = data[i]
+    while (k > 0u) {                // OpLoopMerge + UGreaterThan
+        acc += k
+        k--                        // -- decrement (ExprOp1) -> Load/ISub/Store
+        if (acc > 1000u) {
+            break                  // break -> Branch loop merge
+        }
+    }
+    data[i] = acc
+}
+
+[compute_shader(local_size_x=64, name="floop_spv"), marker(no_coverage)]
+def floop {
+    let gi = gl_GlobalInvocationID.x
+    var acc = 0
+    for (j in range(10)) {          // range(n): init 0, SLessThan, IAdd update
+        if (j == 5) {
+            continue               // continue -> Branch loop continue block
+        }
+        acc += j
+    }
+    for (j in range(2, 8)) {        // range(lo, hi): init lo
+        acc -= j
+    }
+    idata[gi] = acc
+}
+
+def public wloop_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(wloop_spv)
+    return <- w
+}
+
+def public floop_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(floop_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)

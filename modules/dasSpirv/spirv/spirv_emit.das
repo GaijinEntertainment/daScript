@@ -24,17 +24,35 @@ struct GlobalInfo {
     is_ssbo    : bool               // wrapped in a Block-decorated struct (member 0 = the array)
 }
 
+// A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
+// induction variables get one; reads become OpLoad, writes OpStore. The driver mem2reg's them,
+// so we never hand-roll OpPhi. Immutable value-lets (`let x`) stay pure SSA ids (ctx.locals).
+struct LocalVar {
+    ptr_id     : uint    // OpVariable result-id (Function storage)
+    value_type : uint    // SPIR-V type-id of the pointee
+}
+
 struct EmitCtx {
     globals       : table<uint64; GlobalInfo>   // intptr(Variable) -> classification
     locals        : table<uint64; uint>         // intptr(Variable) -> SSA result-id (value lets)
+    local_vars    : table<uint64; LocalVar>     // intptr(Variable) -> memory-backed local (var / loop var)
     interface_ids : array<uint>                 // EntryPoint interface (Input/Output vars, SPIR-V <= 1.3)
+    loop_stack    : array<LoopTargets>          // innermost loop's {merge, continue} for break/continue
     terminated    : bool                        // current block already has a terminator
+}
+
+// break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
+struct LoopTargets {
+    merge : uint
+    cont  : uint
 }
 
 def finalize(var c : EmitCtx) {
     delete c.globals
     delete c.locals
+    delete c.local_vars
     delete c.interface_ids
+    delete c.loop_stack
 }
 
 // ===== builtin name -> SpvBuiltIn (compute subset; extended in later phases) =====
@@ -147,6 +165,15 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
         emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(m, uint(sw.fields[0])))
         return (id = res, pointee = pointee)
     }
+    let lev = e ?as ExprVar
+    if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
+        let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
+        if (lv.ptr_id != 0u) {
+            return (id = lv.ptr_id, pointee = lv.value_type)
+        }
+        errors |> push("cannot take a pointer to immutable local '{lev.name}' (only `var` locals are addressable)")
+        return (id = 0u, pointee = 0u)
+    }
     let gv = global_var_of(e)
     if (gv != null) {
         let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
@@ -198,6 +225,42 @@ def private unop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
     return (ok = false, code = SpvOp.Nop)
 }
 
+// daslang comparison op -> SPIR-V opcode. Result is always bool. Equality (==/!=) is two's-complement
+// sign-agnostic on integers (IEqual/INotEqual). Ordering splits signed/unsigned/float. `F*` uses the
+// ordered (non-NaN) forms — matching daslang's total order on finite shader values.
+def private cmp_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
+    let is_int = cls == 0 || cls == 1
+    if (op == "==") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdEqual)
+        if (is_int) return (ok = true, code = SpvOp.IEqual)
+    }
+    if (op == "!=") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdNotEqual)
+        if (is_int) return (ok = true, code = SpvOp.INotEqual)
+    }
+    if (op == "<") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdLessThan)
+        if (cls == 0) return (ok = true, code = SpvOp.SLessThan)
+        if (cls == 1) return (ok = true, code = SpvOp.ULessThan)
+    }
+    if (op == ">") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdGreaterThan)
+        if (cls == 0) return (ok = true, code = SpvOp.SGreaterThan)
+        if (cls == 1) return (ok = true, code = SpvOp.UGreaterThan)
+    }
+    if (op == "<=") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdLessThanEqual)
+        if (cls == 0) return (ok = true, code = SpvOp.SLessThanEqual)
+        if (cls == 1) return (ok = true, code = SpvOp.ULessThanEqual)
+    }
+    if (op == ">=") {
+        if (cls == 2) return (ok = true, code = SpvOp.FOrdGreaterThanEqual)
+        if (cls == 0) return (ok = true, code = SpvOp.SGreaterThanEqual)
+        if (cls == 1) return (ok = true, code = SpvOp.UGreaterThanEqual)
+    }
+    return (ok = false, code = SpvOp.Nop)
+}
+
 // ===== rvalue: produce an SSA result-id =====
 def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
     // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
@@ -213,12 +276,30 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     if (cf != null) return const_float(m, cf.value)
     let op2 = e ?as ExprOp2
     if (op2 != null) {
+        let ops = "{op2.op}"
+        // operand type drives the signed/unsigned/float opcode choice for every op family.
+        let cls = scalar_class(op2.left._type.baseType)
         let l = emit_value(m, ctx, op2.left, errors)
         let r = emit_value(m, ctx, op2.right, errors)
         if (l == 0u || r == 0u) return 0u   // operand error already reported; don't emit with id 0
-        // operand type drives the signed/unsigned/float opcode choice; result type is the same for
-        // arithmetic (comparisons, whose result is bool, arrive in a later phase).
-        let bo = binop_code("{op2.op}", scalar_class(op2.left._type.baseType))
+        // comparison -> bool result (operands keep their scalar class)
+        let cc = cmp_code(ops, cls)
+        if (cc.ok) {
+            let bt = type_bool(m)
+            let res = alloc_id(m)
+            emit(m, SEC_FUNCS, cc.code, bt, res, l, r)
+            return res
+        }
+        // logical and/or -> bool. daslang `&&`/`||` short-circuit, but shader condition operands are
+        // side-effect free, so eager OpLogicalAnd/Or is equivalent (no extra control flow needed).
+        if (ops == "&&" || ops == "||") {
+            let bt = type_bool(m)
+            let res = alloc_id(m)
+            emit(m, SEC_FUNCS, ops == "&&" ? SpvOp.LogicalAnd : SpvOp.LogicalOr, bt, res, l, r)
+            return res
+        }
+        // arithmetic -> same type as operands
+        let bo = binop_code(ops, cls)
         if (!bo.ok) {
             errors |> push("unsupported binary op '{op2.op}' on {op2.left._type.baseType}")
             return 0u   // no instruction emitted: don't return an undefined result id
@@ -230,9 +311,16 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     }
     let op1 = e ?as ExprOp1
     if (op1 != null) {
+        let ops = "{op1.op}"
         let v = emit_value(m, ctx, op1.subexpr, errors)
         if (v == 0u) return 0u
-        let uo = unop_code("{op1.op}", scalar_class(op1.subexpr._type.baseType))
+        if (ops == "!") {       // logical not -> bool
+            let bt = type_bool(m)
+            let res = alloc_id(m)
+            emit(m, SEC_FUNCS, SpvOp.LogicalNot, bt, res, v)
+            return res
+        }
+        let uo = unop_code(ops, scalar_class(op1.subexpr._type.baseType))
         if (!uo.ok) {
             errors |> push("unsupported unary op '{op1.op}' on {op1.subexpr._type.baseType}")
             return 0u
@@ -244,6 +332,12 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     }
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
+        let lv = ctx.local_vars?[intptr(ev.variable)] ?? LocalVar()
+        if (lv.ptr_id != 0u) {      // memory-backed local: read through OpLoad
+            let res = alloc_id(m)
+            emit(m, SEC_FUNCS, SpvOp.Load, lv.value_type, res, lv.ptr_id)
+            return res
+        }
         let lid = ctx.locals?[intptr(ev.variable)] ?? 0u
         if (lid == 0u) {
             errors |> push("local '{ev.name}' used before it was assigned an SSA id")
@@ -261,8 +355,290 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     return 0u
 }
 
+// ===== local variable declaration (Function-storage OpVariable) =====
+// SPIR-V requires every Function-storage OpVariable to be among the first instructions of the
+// function's first block. So we pre-scan the whole body (one walk, all scopes — SPIR-V locals are
+// function-scoped, not block-scoped) BEFORE emitting any body code, declaring an OpVariable for each
+// mutable local (`var`) and loop-induction variable. Reads/writes then resolve to OpLoad/OpStore.
+def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr) {
+    if (key_exists(ctx.local_vars, intptr(v))) return
+    let vt = emit_type(m, v._type)
+    let pt = type_pointer(m, SpvStorageClass.Function, vt)
+    let pid = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Variable, pt, pid, uint(SpvStorageClass.Function))
+    ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = pid, value_type = vt))
+}
+
+def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) {
+    if (e == null) return
+    let blk = e ?as ExprBlock
+    if (blk != null) {
+        for (s in blk.list) {
+            collect_locals(m, ctx, s, errors)
+        }
+        return
+    }
+    let lt = e ?as ExprLet
+    if (lt != null) {
+        for (v in lt.variables) {
+            if (!v._type.flags.constant) declare_local_var(m, ctx, v)   // `var` -> memory; `let` -> SSA
+        }
+        return
+    }
+    let ite = e ?as ExprIfThenElse
+    if (ite != null) {
+        collect_locals(m, ctx, ite.if_true, errors)
+        collect_locals(m, ctx, ite.if_false, errors)
+        return
+    }
+    let wh = e ?as ExprWhile
+    if (wh != null) {
+        collect_locals(m, ctx, wh.body, errors)
+        return
+    }
+    let fr = e ?as ExprFor
+    if (fr != null) {
+        for (fv in fr.iteratorVariables) {
+            declare_local_var(m, ctx, fv)
+        }
+        collect_locals(m, ctx, fr.body, errors)
+        return
+    }
+}
+
+// ===== compound assignment + increment/decrement =====
+def private compound_base(op : string) : string {
+    if (op == "+=") return "+"
+    if (op == "-=") return "-"
+    if (op == "*=") return "*"
+    if (op == "/=") return "/"
+    if (op == "%=") return "%"
+    return ""
+}
+
+def private const_one(var m : SpirvModule; cls : int) : uint {
+    if (cls == 2) return const_float(m, 1.0f)
+    if (cls == 1) return const_uint(m, 1u)
+    return const_int(m, 1)
+}
+
+def private const_zero(var m : SpirvModule; cls : int) : uint {
+    if (cls == 2) return const_float(m, 0.0f)
+    if (cls == 1) return const_uint(m, 0u)
+    return const_int(m, 0)
+}
+
+// An integer-valued constant for a loop bound (range bounds are always int or uint, never float).
+def private const_int_for(var m : SpirvModule; cls : int; v : int) : uint {
+    if (cls == 1) return const_uint(m, uint(v))
+    return const_int(m, v)
+}
+
+// load-modify-store against an lvalue: `dst <op>= rhs` and `dst++`/`dst--`.
+def private emit_load_op_store(var m : SpirvModule; var ctx : EmitCtx; lhs : ExpressionPtr; code : SpvOp; rhs : uint; var errors : array<string>) {
+    if (rhs == 0u) return
+    let p = emit_ptr(m, ctx, lhs, errors)
+    if (p.id == 0u) return
+    let cur = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Load, p.pointee, cur, p.id)
+    let res = alloc_id(m)
+    emit(m, SEC_FUNCS, code, p.pointee, res, cur, rhs)
+    emit(m, SEC_FUNCS, SpvOp.Store, p.id, res)
+}
+
+// ===== if / else (OpSelectionMerge + OpBranchConditional) =====
+def private emit_if(var m : SpirvModule; var ctx : EmitCtx; ite : ExprIfThenElse?; var errors : array<string>) {
+    let cond = emit_value(m, ctx, ite.cond, errors)
+    if (cond == 0u) return
+    let merge = alloc_id(m)
+    let then_l = alloc_id(m)
+    let else_l = ite.if_false != null ? alloc_id(m) : merge
+    // the header block selects the merge target, then branches on the condition
+    emit(m, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+    emit(m, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+    ctx.terminated = true
+    emit(m, SEC_FUNCS, SpvOp.Label, then_l)
+    ctx.terminated = false
+    emit_stmt(m, ctx, ite.if_true, errors)
+    if (!ctx.terminated) {
+        emit(m, SEC_FUNCS, SpvOp.Branch, merge)
+        ctx.terminated = true
+    }
+    if (ite.if_false != null) {
+        emit(m, SEC_FUNCS, SpvOp.Label, else_l)
+        ctx.terminated = false
+        emit_stmt(m, ctx, ite.if_false, errors)
+        if (!ctx.terminated) {
+            emit(m, SEC_FUNCS, SpvOp.Branch, merge)
+            ctx.terminated = true
+        }
+    }
+    emit(m, SEC_FUNCS, SpvOp.Label, merge)
+    ctx.terminated = false
+}
+
+// ===== loops (OpLoopMerge, 4-block: header / cond / body / continue + merge) =====
+// Canonical structured-loop shape (matches glslang): the header carries OpLoopMerge then branches to
+// the condition block; the condition block does OpBranchConditional body/merge; the body branches to
+// the continue block; the continue block branches back to the header. break -> merge, continue -> cont.
+// The shared header/cond/continue/merge skeleton. The caller supplies the condition result-id (via
+// `eval_cond`, emitted into the cond block) and the body; `emit_continue` runs in the continue block
+// (range-for's `i += 1`; while passes nothing). Returns nothing — terminator state is left on a fresh
+// merge block.
+def private emit_while(var m : SpirvModule; var ctx : EmitCtx; wh : ExprWhile?; var errors : array<string>) {
+    let header = alloc_id(m)
+    let cond_l = alloc_id(m)
+    let body_l = alloc_id(m)
+    let cont_l = alloc_id(m)
+    let merge = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Branch, header)
+    emit(m, SEC_FUNCS, SpvOp.Label, header)
+    ctx.terminated = false
+    emit(m, SEC_FUNCS, SpvOp.LoopMerge, merge, cont_l, uint(SpvLoopControl.None))
+    emit(m, SEC_FUNCS, SpvOp.Branch, cond_l)
+    emit(m, SEC_FUNCS, SpvOp.Label, cond_l)
+    ctx.terminated = false
+    let c = emit_value(m, ctx, wh.cond, errors)
+    if (c == 0u) return
+    emit(m, SEC_FUNCS, SpvOp.BranchConditional, c, body_l, merge)
+    emit(m, SEC_FUNCS, SpvOp.Label, body_l)
+    ctx.terminated = false
+    ctx.loop_stack |> push(LoopTargets(merge = merge, cont = cont_l))
+    emit_stmt(m, ctx, wh.body, errors)
+    pop(ctx.loop_stack)
+    if (!ctx.terminated) emit(m, SEC_FUNCS, SpvOp.Branch, cont_l)
+    emit(m, SEC_FUNCS, SpvOp.Label, cont_l)
+    ctx.terminated = false
+    emit(m, SEC_FUNCS, SpvOp.Branch, header)
+    emit(m, SEC_FUNCS, SpvOp.Label, merge)
+    ctx.terminated = false
+}
+
+// `for (i in range(lo, hi))` -> init i = lo; loop while i < hi; continue-block does i += 1. The
+// condition (`i < hi`) and update (`i += 1`) are synthesized directly against the induction
+// OpVariable — there is no daslang AST node for them.
+def private emit_for(var m : SpirvModule; var ctx : EmitCtx; fr : ExprFor?; var errors : array<string>) {
+    if (length(fr.iteratorVariables) != 1 || length(fr.sources) != 1) {
+        errors |> push("for: only a single `i in range(...)` iterator is supported for now")
+        return
+    }
+    let iv = fr.iteratorVariables[0]
+    let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+    if (lvr.ptr_id == 0u) {
+        errors |> push("for: induction variable '{iv.name}' was not declared")
+        return
+    }
+    let cls = scalar_class(iv._type.baseType)
+    // bounds (lo inclusive, hi exclusive) evaluated ONCE in the pre-header — range captures them at
+    // loop entry. Constant-bound range() folds to ExprConstRange (a half-open [from,to) value);
+    // runtime bounds stay an ExprCall to range()/urange().
+    var lo = 0u
+    var hi = 0u
+    let cr = fr.sources[0] ?as ExprConstRange
+    if (cr != null) {
+        let fromto = unsafe(reinterpret<int2>(cr.value))   // range == { from : int; to : int }
+        lo = const_int_for(m, cls, fromto.x)
+        hi = const_int_for(m, cls, fromto.y)
+    } else {
+        let src = fr.sources[0] ?as ExprCall
+        if (src == null) {
+            errors |> push("for: source is {fr.sources[0].__rtti}, expected range()/urange()")
+            return
+        }
+        if ("{src.name}" != "range" && "{src.name}" != "urange") {
+            errors |> push("for: source call is '{src.name}', expected range()/urange()")
+            return
+        }
+        let na = length(src.arguments)
+        if (na != 1 && na != 2) {
+            errors |> push("for: only range(n) and range(lo, hi) are supported for now (no step)")
+            return
+        }
+        lo = na == 2 ? emit_value(m, ctx, src.arguments[0], errors) : const_zero(m, cls)
+        hi = emit_value(m, ctx, src.arguments[na - 1], errors)
+    }
+    if (lo == 0u || hi == 0u) return
+    emit(m, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, lo)
+    let header = alloc_id(m)
+    let cond_l = alloc_id(m)
+    let body_l = alloc_id(m)
+    let cont_l = alloc_id(m)
+    let merge = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Branch, header)
+    emit(m, SEC_FUNCS, SpvOp.Label, header)
+    ctx.terminated = false
+    emit(m, SEC_FUNCS, SpvOp.LoopMerge, merge, cont_l, uint(SpvLoopControl.None))
+    emit(m, SEC_FUNCS, SpvOp.Branch, cond_l)
+    emit(m, SEC_FUNCS, SpvOp.Label, cond_l)
+    ctx.terminated = false
+    let cur = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur, lvr.ptr_id)
+    let cc = cmp_code("<", cls)
+    let cres = alloc_id(m)
+    emit(m, SEC_FUNCS, cc.code, type_bool(m), cres, cur, hi)
+    emit(m, SEC_FUNCS, SpvOp.BranchConditional, cres, body_l, merge)
+    emit(m, SEC_FUNCS, SpvOp.Label, body_l)
+    ctx.terminated = false
+    ctx.loop_stack |> push(LoopTargets(merge = merge, cont = cont_l))
+    emit_stmt(m, ctx, fr.body, errors)
+    pop(ctx.loop_stack)
+    if (!ctx.terminated) emit(m, SEC_FUNCS, SpvOp.Branch, cont_l)
+    emit(m, SEC_FUNCS, SpvOp.Label, cont_l)
+    ctx.terminated = false
+    let cur2 = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur2, lvr.ptr_id)
+    let nxt = alloc_id(m)
+    emit(m, SEC_FUNCS, binop_code("+", cls).code, lvr.value_type, nxt, cur2, const_one(m, cls))
+    emit(m, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, nxt)
+    emit(m, SEC_FUNCS, SpvOp.Branch, header)
+    emit(m, SEC_FUNCS, SpvOp.Label, merge)
+    ctx.terminated = false
+}
+
 // ===== statement =====
 def private emit_stmt(var m : SpirvModule; var ctx : EmitCtx; s : ExpressionPtr; var errors : array<string>) {
+    // nested lexical block -> inline its statements (locals are function-scoped, already pre-declared)
+    let blk = s ?as ExprBlock
+    if (blk != null) {
+        for (st in blk.list) {
+            emit_stmt(m, ctx, st, errors)
+            break if (ctx.terminated)   // SPIR-V forbids instructions after a block terminator
+        }
+        return
+    }
+    let ite = s ?as ExprIfThenElse
+    if (ite != null) {
+        emit_if(m, ctx, ite, errors)
+        return
+    }
+    let wh = s ?as ExprWhile
+    if (wh != null) {
+        emit_while(m, ctx, wh, errors)
+        return
+    }
+    let fr = s ?as ExprFor
+    if (fr != null) {
+        emit_for(m, ctx, fr, errors)
+        return
+    }
+    if (s is ExprBreak) {
+        if (empty(ctx.loop_stack)) {
+            errors |> push("break outside of a loop")
+            return
+        }
+        emit(m, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
+        ctx.terminated = true
+        return
+    }
+    if (s is ExprContinue) {
+        if (empty(ctx.loop_stack)) {
+            errors |> push("continue outside of a loop")
+            return
+        }
+        emit(m, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
+        ctx.terminated = true
+        return
+    }
     let cp = s ?as ExprCopy
     if (cp != null) {
         let p = emit_ptr(m, ctx, cp.left, errors)
@@ -271,13 +647,43 @@ def private emit_stmt(var m : SpirvModule; var ctx : EmitCtx; s : ExpressionPtr;
         emit(m, SEC_FUNCS, SpvOp.Store, p.id, val)
         return
     }
+    // compound assignment `dst <op>= rhs` arrives as a void-typed ExprOp2
+    let cop2 = s ?as ExprOp2
+    if (cop2 != null && cop2._type.baseType == Type.tVoid) {
+        let base = compound_base("{cop2.op}")
+        let bo = binop_code(base, scalar_class(cop2.left._type.baseType))
+        if (!bo.ok) {
+            errors |> push("unsupported compound assignment '{cop2.op}'")
+            return
+        }
+        emit_load_op_store(m, ctx, cop2.left, bo.code, emit_value(m, ctx, cop2.right, errors), errors)
+        return
+    }
+    // `dst++` / `dst--` arrive as a statement-level ExprOp1
+    let iop1 = s ?as ExprOp1
+    if (iop1 != null && ("{iop1.op}" == "++" || "{iop1.op}" == "--")) {
+        let cls = scalar_class(iop1.subexpr._type.baseType)
+        let bo = binop_code("{iop1.op}" == "++" ? "+" : "-", cls)
+        if (!bo.ok) {
+            errors |> push("unsupported {iop1.op} on {iop1.subexpr._type.baseType}")
+            return
+        }
+        emit_load_op_store(m, ctx, iop1.subexpr, bo.code, const_one(m, cls), errors)
+        return
+    }
     let lt = s ?as ExprLet
     if (lt != null) {
         for (v in lt.variables) {
-            if (v.init != null) {
-                ctx.locals |> insert(intptr(v), emit_value(m, ctx, v.init, errors))
-            } else {
+            if (v.init == null) {
                 errors |> push("uninitialized let '{v.name}' not supported")
+                continue
+            }
+            let lv = ctx.local_vars?[intptr(v)] ?? LocalVar()
+            if (lv.ptr_id != 0u) {                  // mutable: OpVariable pre-declared -> store init
+                let val = emit_value(m, ctx, v.init, errors)
+                if (val != 0u) emit(m, SEC_FUNCS, SpvOp.Store, lv.ptr_id, val)
+            } else {                                // immutable value-let -> bind SSA id
+                ctx.locals |> insert(intptr(v), emit_value(m, ctx, v.init, errors))
             }
         }
         return
@@ -343,6 +749,8 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; local_size : in
     emit(m, SEC_FUNCS, SpvOp.Label, id_label)
     ctx.terminated = false
 
+    // Function-storage OpVariables must lead the entry block, before any body code.
+    collect_locals(m, ctx, fn.body, errors)
     emit_body(m, ctx, fn.body, errors)
 
     if (!ctx.terminated) {
