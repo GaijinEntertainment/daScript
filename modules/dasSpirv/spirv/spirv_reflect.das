@@ -45,6 +45,9 @@ struct SpirvPushConstantRange {
 //! Everything the host needs to build descriptor-set + pipeline layouts for one shader stage.
 struct SpirvReflection {
     stage          : SpirvStageFlags
+    //! Entry-point name (the host passes this as VkPipelineShaderStageCreateInfo.pName). The emitter
+    //! always names the entry "main", so this is an invariant — NOT serialized by encode_reflection;
+    //! decode_reflection always restores it as "main". Kept in the struct so the host reads one value.
     entry_point    : string
     local_size     : int3           //!< compute workgroup size; (1,1,1) for graphics stages
     bindings       : array<SpirvDescriptorBinding>
