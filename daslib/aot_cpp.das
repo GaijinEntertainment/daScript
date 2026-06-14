@@ -15,6 +15,11 @@ require daslib/aot_constants
 
 options strict_smart_pointers = false
 options unsafe_table_lookup = false
+// describeCppTypeEx recurses once per nesting level of a type; a deeply nested
+// function/lambda/tuple type (the fuzzer's, #3065) needs far more than the default
+// ~16KB macro-context stack. Bump it so realistic depths emit; pathological depths
+// still overflow and are caught fail-closed (see fail_on_aot_emit_error).
+options stack = 1_048_576
 
 def aotFieldName(name : string) : string {
     var result = replace(name, "`", "__");
@@ -4171,6 +4176,27 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
 }
 
 
+def public fail_on_aot_emit_error(program : ProgramPtr) {
+    // Fail-closed (#3065). A macro/codegen exception during the emit visit -- e.g. an
+    // unbounded type recursion overflowing the stack -- is caught and recorded by the
+    // visitor adapter (sets macroException/failToCompile, appends to errors), but the
+    // visit is NOT aborted: it leaves the C++ output partial (a struct missing a field,
+    // a dangling offsetof, ...). Never write such broken C++ -- surface the recorded
+    // errors and abort so the build fails loudly instead of silently emitting code that
+    // does not compile.
+    if (!program.flags.macroException && !program.flags.failToCompile) {
+        return
+    }
+    for (err in program.errors) {
+        var detail = ""
+        if (!empty(err.extra)) {
+            detail = " -- {err.extra}"
+        }
+        to_log(LOG_ERROR, "{describe(err.at)}: {err.what}{detail}\n")
+    }
+    panic("AOT codegen failed: {length(program.errors)} codegen error(s) during emission (see log)")
+}
+
 [export]
 def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) : string {
     //! Generates the complete AOT C++ source code string for a compiled and simulated program.
@@ -4236,12 +4262,15 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                     dumpDependencies(program, cpp_aot);
                     visit(program, cpp_aot.adapter, true)
                 }
-                write(writer, "{cpp_aot.str()}");
+                if (!program.flags.macroException && !program.flags.failToCompile) {
+                    write(writer, "{cpp_aot.str()}");
+                }
                 unsafe {
                     delete cpp_aot.helper.helper
                     delete cpp_aot.collector
                     delete cpp_aot
                 }
+                fail_on_aot_emit_error(program)
             }
             registerAotCpp(unsafe(addr(writer)), program, *pctx, cop.cross_platform, false);
             write(writer, "\n");
@@ -4317,6 +4346,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                 delete cpp_aot.collector
                 delete cpp_aot
             }
+            fail_on_aot_emit_error(program)
             // extract between markers
             let begin_pos = find(full_output, AOT_FUNC_BEGIN)
             if (begin_pos >= 0) {
