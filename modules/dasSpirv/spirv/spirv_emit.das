@@ -655,6 +655,12 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     // const array literal -> OpConstantComposite of element constants
     let mk = e ?as ExprMakeArray
     if (mk != null) {
+        // a dynamic array<T> literal is ALSO an ExprMakeArray; emit_type would panic on tArray.
+        // Only fixed-array literals lower to a constant composite — reject the rest cleanly.
+        if (e._type == null || e._type.baseType != Type.tFixedArray) {
+            errors |> push("only fixed-array literals are supported (dynamic array<T> literals are not)")
+            return (ok = false, id = 0u)
+        }
         var parts : array<uint>
         parts |> reserve(length(mk.values))
         for (v in mk.values) {
@@ -746,12 +752,8 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
     if (call != null) return emit_call(m, ctx, call, e, errors)
     let mk = e ?as ExprMakeArray
     if (mk != null) {
-        let r = emit_const(m, e, errors)
-        if (!r.ok) {
-            errors |> push("array literal must be a compile-time constant for now")
-            return 0u
-        }
-        return r.id
+        let r = emit_const(m, e, errors)   // emit_const reports the specific reason on failure
+        return r.ok ? r.id : 0u
     }
     let ev = e ?as ExprVar
     if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
