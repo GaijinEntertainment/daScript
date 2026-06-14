@@ -171,7 +171,7 @@ def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var erro
         if (lv.ptr_id != 0u) {
             return (id = lv.ptr_id, pointee = lv.value_type)
         }
-        errors |> push("cannot take a pointer to immutable local '{lev.name}' (only `var` locals are addressable)")
+        errors |> push("cannot take the address of '{lev.name}': only `var` locals are addressable (Function-storage OpVariables); `let` values and arguments are not")
         return (id = 0u, pointee = 0u)
     }
     let gv = global_var_of(e)
@@ -202,6 +202,7 @@ def private scalar_class(bt : Type) : int {
 // dividend's sign (probed) -> SDiv/SRem (not the floored SMod); unsigned -> UDiv/UMod; float ->
 // FDiv/FRem (fmod, dividend's sign).
 def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
+    if (cls < 0) return (ok = false, code = SpvOp.Nop)   // unsupported scalar class: don't masquerade as int
     if (op == "+") return (ok = true, code = cls == 2 ? SpvOp.FAdd : SpvOp.IAdd)
     if (op == "-") return (ok = true, code = cls == 2 ? SpvOp.FSub : SpvOp.ISub)
     if (op == "*") return (ok = true, code = cls == 2 ? SpvOp.FMul : SpvOp.IMul)
@@ -220,8 +221,9 @@ def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> 
 
 // daslang unary op -> SPIR-V opcode. `-` negates (FNegate/SNegate); `~` is bitwise Not (int/uint).
 def private unop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
+    if (cls < 0) return (ok = false, code = SpvOp.Nop)   // unsupported scalar class
     if (op == "-") return (ok = true, code = cls == 2 ? SpvOp.FNegate : SpvOp.SNegate)
-    if (op == "~") return (ok = true, code = SpvOp.Not)
+    if (op == "~" && (cls == 0 || cls == 1)) return (ok = true, code = SpvOp.Not)   // bitwise: int/uint only
     return (ok = false, code = SpvOp.Nop)
 }
 
@@ -360,8 +362,14 @@ def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var er
 // function's first block. So we pre-scan the whole body (one walk, all scopes — SPIR-V locals are
 // function-scoped, not block-scoped) BEFORE emitting any body code, declaring an OpVariable for each
 // mutable local (`var`) and loop-induction variable. Reads/writes then resolve to OpLoad/OpStore.
-def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr) {
+def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
     if (key_exists(ctx.local_vars, intptr(v))) return
+    let bt = v._type.baseType
+    if (scalar_class(bt) < 0 && bt != Type.tBool) {
+        // emit_type would panic on an unsupported base type; reject with a clean error instead.
+        errors |> push("local '{v.name}': type {bt} is not supported yet (only 32-bit int/uint/float scalars+vectors and bool)")
+        return
+    }
     let vt = emit_type(m, v._type)
     let pt = type_pointer(m, SpvStorageClass.Function, vt)
     let pid = alloc_id(m)
@@ -381,7 +389,7 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
     let lt = e ?as ExprLet
     if (lt != null) {
         for (v in lt.variables) {
-            if (!v._type.flags.constant) declare_local_var(m, ctx, v)   // `var` -> memory; `let` -> SSA
+            if (!v._type.flags.constant) declare_local_var(m, ctx, v, errors)   // `var` -> memory; `let` -> SSA
         }
         return
     }
@@ -399,7 +407,7 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
     let fr = e ?as ExprFor
     if (fr != null) {
         for (fv in fr.iteratorVariables) {
-            declare_local_var(m, ctx, fv)
+            declare_local_var(m, ctx, fv, errors)
         }
         collect_locals(m, ctx, fr.body, errors)
         return

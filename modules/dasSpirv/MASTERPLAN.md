@@ -529,4 +529,15 @@ restored. The declared set lists only the comparison flavors the fixtures actual
 unsigned `>=`/`<=`), so the both-directions check stays exact.
 
 **Phase 2 COMPLETE** — arithmetic (commit 1) + control flow (commit 2) + aggregate census (commit 3).
-All three tiers 26/26, spirv-val clean, lint + format clean.
+All three tiers 28/28, spirv-val clean, lint + format clean.
+
+**Review hardening (#3137).** Copilot review surfaced an "unvalidated scalar class → silently emits an
+invalid op" class of latent bug. Fixed across the dispatch surface and audited for completeness:
+`const_float` keys by raw IEEE-754 bits (not stringified — `-0.0`/`0.0`/NaN payloads stay distinct;
+regression test added); `binop_code`/`unop_code` reject `cls < 0` (and `~` is gated to int/uint) so an
+unsupported operand type becomes a clean error instead of a masquerading integer op; `emit_for` guards
+the induction class; `declare_local_var` rejects unsupported local types (e.g. `var d : double`) with a
+clean error instead of letting `emit_type` panic. Net rule for the emitter: **every type/opcode
+dispatch validates its input and produces a clean `error[...]`, never a silent bad blob or a panic.**
+The remaining `emit_type`/`emit_component_type` panics are now unreachable for valid daslang (all
+callers pre-validate); they stand as internal invariants.
