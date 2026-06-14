@@ -13,3 +13,11 @@ var gl_WorkGroupID          : uint3     // WorkgroupId
 var gl_LocalInvocationID    : uint3     // LocalInvocationId
 var gl_GlobalInvocationID   : uint3     // GlobalInvocationId
 var gl_LocalInvocationIndex : uint      // LocalInvocationIndex
+
+// vertex (gl_Position is the one Output builtin; the indices are Inputs)
+var gl_Position             : float4    // BuiltIn Position (Output)
+var gl_VertexIndex          : int       // BuiltIn VertexIndex (Input)
+var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
+
+// fragment
+var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
