@@ -3,7 +3,8 @@ options gen2
 // Shader builtin globals, recognized by name in the emitter (mirrors dasGlsl's glsl_common
 // gl_* declarations). They exist only so authored shader code typechecks; the shader body is
 // never executed in daslang — only its AST is read and lowered to SPIR-V. Each maps to a
-// BuiltIn-decorated Input variable in spirv_emit.das.
+// BuiltIn-decorated variable in spirv_emit.das — Input for read-only builtins (the compute IDs,
+// gl_VertexIndex/gl_InstanceIndex, gl_FragCoord), Output for gl_Position (the one written builtin).
 
 module spirv_builtins shared public
 
