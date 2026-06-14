@@ -110,7 +110,7 @@ def public op_first_operand(words : array<uint>; op : SpvOp) : tuple<ok : bool; 
 def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value : uint) : bool {
     var found = false
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
-        if (opcode == uint(op) && idx < n && w[s + idx] == value) {
+        if (opcode == uint(op) && idx >= 0 && idx < n && w[s + idx] == value) {
             found = true
         }
     }
