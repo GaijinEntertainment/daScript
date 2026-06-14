@@ -139,8 +139,11 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
             continue
         }
         let fbt = fld._type.baseType
-        if (component_count(fbt) == 0) {
-            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported yet (only 32-bit scalar/vector/matrix members for now)")
+        // only 32-bit int/uint/float scalars + their vectors. scalar_class rejects bool (and any
+        // non-numeric): OpTypeBool has no physical size in a std140/std430 interface block, so a
+        // bool member would emit an invalid layout — reject it fail-closed rather than emit it.
+        if (scalar_class(fbt) < 0) {
+            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, and matrices; bool has no physical interface-block layout in Vulkan)")
             delete members
             delete offsets
             delete mat_strides
