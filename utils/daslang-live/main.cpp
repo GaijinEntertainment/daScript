@@ -862,9 +862,15 @@ int main(int argc, char * argv[]) {
             string dir = scriptFile.substr(0, slash);
             scriptFile = scriptFile.substr(slash + 1);
 #ifdef _WIN32
-            SetCurrentDirectoryA(dir.c_str());
+            if (!SetCurrentDirectoryA(dir.c_str())) {
+                fprintf(stderr, "ERROR: -cwd failed to change directory to %s\n", dir.c_str());
+                return 1;
+            }
 #else
-            chdir(dir.c_str());
+            if (chdir(dir.c_str()) != 0) {
+                fprintf(stderr, "ERROR: -cwd failed to change directory to %s\n", dir.c_str());
+                return 1;
+            }
 #endif
         }
     }
