@@ -917,6 +917,7 @@ class SpirvEmit : AstVisitor {
             e2pty[k] = pointee
         } else {
             let base = value_of(expr.value)
+            if (base == 0u) return expr   // operand failed to lower (error already pushed) — no 0-operand extract/shuffle
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             if (length(expr.fields) == 1) {
@@ -945,8 +946,9 @@ class SpirvEmit : AstVisitor {
                 errs |> push("indexing local '{lev.name}': only fixed-array `var`/`let` locals are indexable")
                 return expr
             }
-            let pointee = emit_type(bm, expr._type)
             let idx = value_of(expr.index)
+            if (idx == 0u) return expr   // index failed to lower (error already pushed) — no 0-operand access chain
+            let pointee = emit_type(bm, expr._type)
             let ptr_t = type_pointer(bm, SpvStorageClass.Function, pointee)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
@@ -964,8 +966,9 @@ class SpirvEmit : AstVisitor {
             errs |> push("only ssbo array indexing is supported for now")
             return expr
         }
-        let pointee = emit_type(bm, expr._type)
         let idx = value_of(expr.index)
+        if (idx == 0u) return expr   // index failed to lower (error already pushed) — no 0-operand access chain
+        let pointee = emit_type(bm, expr._type)
         let res = alloc_id(bm)
         let ptr_t = type_pointer(bm, gi.storage, pointee)
         var ops <- [ptr_t, res, gi.var_id, const_uint(bm, 0u), idx]
@@ -1323,8 +1326,10 @@ class SpirvEmit : AstVisitor {
         let then_l = alloc_id(bm)
         let else_l = expr.if_false != null ? alloc_id(bm) : merge
         ite_ids[intptr(expr)] = IteIds(merge = merge, then_l = then_l, else_l = else_l)
-        emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
-        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+        if (cond != 0u) {   // a 0 cond means it failed to lower (error already pushed) — no 0-operand branch
+            emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+        }
         emit(bm, SEC_FUNCS, SpvOp.Label, then_l)
         ctx.terminated = false
     }
@@ -1365,7 +1370,9 @@ class SpirvEmit : AstVisitor {
         let ids = loop_ids?[intptr(expr)] ?? LoopIds()
         var bm & = unsafe(*m)
         let c = value_of(expr.cond)
-        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, c, ids.body_l, ids.merge)
+        if (c != 0u) {   // a 0 cond means it failed to lower (error already pushed) — no 0-operand branch
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, c, ids.body_l, ids.merge)
+        }
         emit(bm, SEC_FUNCS, SpvOp.Label, ids.body_l)
         ctx.terminated = false
         ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
@@ -1501,6 +1508,17 @@ class SpirvEmit : AstVisitor {
         }
         emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
         ctx.terminated = true
+    }
+
+    // ----- reject dead code after a block terminator -----
+    // SPIR-V forbids any instruction after a block terminator (OpReturn/OpBranch/...). The hand-walker
+    // dropped such unreachable statements; the visitor can't skip a sibling subtree (no per-statement
+    // canVisit gate), so fail closed instead: a statement reached while the current block is already
+    // terminated is unreachable code (daslang only warns LINT001) and is rejected with a clean error.
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+        if (ctx.terminated) {
+            errs |> push("unreachable code after a block terminator (a statement following return/break/continue) is not supported in SPIR-V shaders")
+        }
     }
 
     // ===== Fail-closed rejections (Phase 6.4) =====
