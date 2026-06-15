@@ -657,8 +657,8 @@ def public vecarith_words : array<uint> {
 
 // ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
 // Phase 3's dot/sqrt/clamp. Keyed on the DASLANG name (lerp -> FMix, rsqrt -> InverseSqrt). Vectors are
-// built from scalar swizzles (multi-component swizzle of a global is a separate, unrelated gap). Each
-// ext-inst is spirv-val'd + asserted by sub-opcode. =====
+// built from scalar swizzles (multi-component swizzle of a global is its own gap, closed in Phase 10.2).
+// Each ext-inst is spirv-val'd + asserted by sub-opcode. =====
 var @in @location = 0 mx_in : float4
 var @out @location = 0 mx_out : float4
 [fragment_shader(name="mathx_spv"), marker(no_coverage)]
@@ -686,6 +686,29 @@ def mathx {
 def public mathx_words : array<uint> {
     var w : array<uint>
     w |> push_from(mathx_spv)
+    return <- w
+}
+
+// ===== Phase-10.2 composite/global swizzle: multi-component swizzle of a bare global (the Phase-8
+// out-of-scope note). A single-component global swizzle stays an lvalue (AccessChain); a multi-component
+// one loads the whole global and OpVectorShuffle's it. Covers a builtin global (gl_FragCoord.xy), an @in
+// global (contiguous .xyz + reordered .yx), single-component global (.w, still the pointer path), and a
+// swizzle of a local value (regression). No new opcodes vs Phase 4b (VectorShuffle/CompositeExtract). =====
+var @in @location = 0 sw_in : float4
+var @out @location = 0 sw_out : float4
+[fragment_shader(name="gswizzle_spv"), marker(no_coverage)]
+def gswizzle {
+    let fc = gl_FragCoord.xy         // multi-component swizzle of a builtin global -> OpVectorShuffle
+    let rgb = sw_in.xyz              // multi-component swizzle of an @in global -> OpVectorShuffle
+    let yx = sw_in.yx                // reordered multi-component swizzle -> OpVectorShuffle
+    let a = sw_in.w                  // single-component global -> AccessChain (pointer), loaded here
+    let lx = rgb.xy                  // swizzle of a LOCAL value (regression) -> OpVectorShuffle
+    sw_out = float4(rgb, fc.x + yx.x + a + lx.y)
+}
+
+def public gswizzle_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(gswizzle_spv)
     return <- w
 }
 
@@ -909,4 +932,11 @@ def public phase8_emitter_opcodes : table<uint> {
     var s <- phase7d_emitter_opcodes()
     s |> insert(uint(SpvOp.Select))     // cond ? a : b
     return <- s
+}
+
+// Phase-10.2 multi-component global swizzle adds NO new opcodes: it routes a bare global through the
+// existing load + OpVectorShuffle / OpCompositeExtract path (both declared by Phase 4b). The set is
+// unchanged; the gswizzle fixture must still stay within it.
+def public phase10_2_emitter_opcodes : table<uint> {
+    return <- phase8_emitter_opcodes()
 }

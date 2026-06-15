@@ -1214,3 +1214,24 @@ two already partly done:
 
 **This closes the emitter language surface.** Phases 9 (docs/tutorial), 10 (examples/vulkan), 11
 (vulkan_lint) are docs/demos/lint on top of a feature-complete emitter — not plumbing.
+
+### Phase 10.2 — composite/global swizzle LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-2-swizzle`)
+
+Foundation rail closing the Phase-8 out-of-scope swizzle note. **Multi-component swizzle of a bare
+global** (`gl_FragCoord.xy`, `a_pos.xyz`, `fin.yx`) now lowers; previously only single-component global
+swizzle + swizzle-of-a-loaded-value existed (the latter already covered `ubo.color.xy` /
+`texture(...).rgb`, since those bases aren't bare globals). No new census opcodes.
+
+**The actual gap (grounded finding):** `visitExprSwizzle` rejected `length(fields) != 1` *only* on the
+bare-global branch. A single-component global swizzle takes the pointer path (`OpAccessChain` to the
+component — keeps it an lvalue, `g.x = …`); a multi-component swizzle can't form one pointer, so it must
+go through the value path (load the whole global `OpVariable` → `OpVectorShuffle`). `visitExprVar` already
+seeds `e2ptr`/`e2pty` for a global, so `value_of(expr.value)` loads the full composite — the fix is a
+one-line guard change (`gv != null && length(fields) == 1` for the pointer path; everything else falls
+through to the existing extract/shuffle value path). `gl_FragCoord.xy` (a common fragment screen-space
+idiom) was the headline previously-broken case.
+
+Fixture `gswizzle` (builtin-global multi-swizzle + @in-global contiguous/reordered swizzle + single-
+component global + local-value swizzle regression) in `test_swizzle.das`; census wired
+(`phase10_2_emitter_opcodes` = Phase-8 set, unchanged). interp + JIT 90/90, spirv-val clean, lint + format
+clean.
