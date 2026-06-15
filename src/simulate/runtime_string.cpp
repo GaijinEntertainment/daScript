@@ -21,12 +21,23 @@ namespace das
     void das_throw(const char * msg) {
         if ( *g_throwBuf ) {
             *g_throwMsg = msg;
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Walign-mismatch"  // mingw jmp_buf alignment
+#endif
             longjmp(**g_throwBuf,1);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
         } else {
             DAS_FATAL_ERROR("unhanded das_throw, %s\n", msg);
         }
     }
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4611)  // setjmp + C++ object destruction
+#endif
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody) {
         // re-entrant: save/restore the outer frame so das_trycatch can nest (e.g. a fmt
         // error raised while already formatting another value) — #2570. prevBuf is set
@@ -42,6 +53,9 @@ namespace das
             catchBody(g_throwMsg->c_str());
         }
     }
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     #else
 
     // DAS_ENABLE_EXCEPTIONS=1: route das_throw through the project's exception class

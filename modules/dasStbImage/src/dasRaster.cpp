@@ -141,10 +141,10 @@ namespace das
             auto i1 = uint32_t(v_extract_yi(iuv4));
             auto i2 = uint32_t(v_extract_zi(iuv4));
             auto i3 = uint32_t(v_extract_wi(iuv4));
-            if ( auto b0 = tspan[i0] ) PSP[0] = solid;
-            if ( auto b1 = tspan[i1] ) PSP[1] = solid;
-            if ( auto b2 = tspan[i2] ) PSP[2] = solid;
-            if ( auto b3 = tspan[i3] ) PSP[3] = solid;
+            if ( tspan[i0] ) PSP[0] = solid;
+            if ( tspan[i1] ) PSP[1] = solid;
+            if ( tspan[i2] ) PSP[2] = solid;
+            if ( tspan[i3] ) PSP[3] = solid;
             PSP += 4;
             uv4 = v_add(uv4,duv4);
         }
@@ -154,13 +154,13 @@ namespace das
             mask &= ((1<<count)-1);
             if ( mask!=0 ) context->throw_error_at(at,"rast_hspan: tspan out of range");
             auto i0 = uint32_t(v_extract_xi(iuv4));
-            if ( auto b0 = tspan[i0] ) PSP[0] = solid;
+            if ( tspan[i0] ) PSP[0] = solid;
             if ( count > 1 ) {
                 auto i1 = uint32_t(v_extract_yi(iuv4));
-                if ( auto b1 = tspan[i1] ) PSP[1] = solid;
+                if ( tspan[i1] ) PSP[1] = solid;
                 if ( count > 2 ) {
                     auto i2 = uint32_t(v_extract_zi(iuv4));
-                    if ( auto b2 = tspan[i2] ) PSP[2] = solid;
+                    if ( tspan[i2] ) PSP[2] = solid;
                 }
             }
         }

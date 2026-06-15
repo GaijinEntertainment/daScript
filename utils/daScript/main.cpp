@@ -150,7 +150,6 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool dryRun = false;
     bool cross_platform = false; // strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
-    bool das_mode = false;
     vector<pair<string, string>> aot_files;
     string project_root;
     vector<string> load_modules;
@@ -169,8 +168,6 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
-            } else if ( strcmp(argv[ai],"-das-mode")==0 ) {
-                das_mode = true;
             } else if ( strcmp(argv[ai],"-cross-platform")==0 ) {
                 cross_platform = true;
             } else if ( strcmp(argv[ai],"-aot-macros")==0 ) {

@@ -93,7 +93,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAddr() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
-        virtual void gc_collect ( gc_root * target, gc_root * from ) override;
+        virtual void gc_collect ( gc_root * to, gc_root * from ) override;
         string target;
         TypeDeclPtr funcType = nullptr;
         Function * func = nullptr;

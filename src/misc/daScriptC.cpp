@@ -285,7 +285,7 @@ void das_context_release ( das_context * context ) {
     if ( context ) delete (Context *) context;
 }
 
-das_function * das_context_find_function ( das_context * context, char * name ) {
+das_function * das_context_find_function ( das_context * context, const char * name ) {
     return (das_function *) ((Context *)context)->findFunction(name);
 }
 

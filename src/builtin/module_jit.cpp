@@ -233,7 +233,7 @@ extern "C" {
             context.globalsSize = globSize;
             context.sharedSize = shrSize;
             context.sharedOwner = true;
-            for (int i = 0; i < totalVariables; i++) {
+            for (size_t i = 0; i < totalVariables; i++) {
                 globalVariables[i] = GlobalVariable{};
             }
             context.allocateGlobalsAndShared();
@@ -262,12 +262,12 @@ extern "C" {
             tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         }
 
-        void *registerJitFunction ( uint64_t index, const char * name, const char * mangledName,
+        void *registerJitFunction ( uint64_t index, const char * funcName, const char * mangledName,
                                    uint64_t mnh, uint32_t stackSize, void * fnPtr,
                                    bool cmres, bool fastcall, bool pinvoke, uint32_t nArguments ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             auto & fn = functions[index];
-            fn.name = code->allocateName(name);
+            fn.name = code->allocateName(funcName);
             fn.mangledName = code->allocateName(mangledName);
             fn.mangledNameHash = mnh;
             fn.stackSize = stackSize;

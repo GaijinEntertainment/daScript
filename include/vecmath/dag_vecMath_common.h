@@ -1585,7 +1585,7 @@ VECTORCALL VECMATH_FINLINE void v_mat44_compose(mat44f &dest, vec4f pos, quat4f 
 //! decompose 3x3 matrix to rotation/scale
 VECTORCALL VECMATH_FINLINE void v_mat33_decompose(mat33f_cref tm, quat4f &rot, vec4f &scl)
 {
-  scl = v_mat44_scale43_sq(mat44f{tm.col0, tm.col1, tm.col2});
+  scl = v_mat44_scale43_sq(mat44f{tm.col0, tm.col1, tm.col2, v_zero()});
   scl = v_sqrt(scl);
   if (v_test_vec_x_lt_0(v_mat33_det(tm)))
     scl = v_perm_xycw(scl, v_neg(scl));

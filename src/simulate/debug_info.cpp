@@ -285,6 +285,7 @@ namespace das
     }
 
     int getVariantFieldOffset ( TypeInfo * info, int index ) {
+        (void)index;
         DAS_ASSERT(info->type==Type::tVariant);
         DAS_ASSERT(uint32_t(index)<info->argCount);
         int al = getVariantAlign(info) - 1;
