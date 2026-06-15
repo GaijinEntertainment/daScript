@@ -655,6 +655,40 @@ def public vecarith_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
+// Phase 3's dot/sqrt/clamp. Keyed on the DASLANG name (lerp -> FMix, rsqrt -> InverseSqrt). Vectors are
+// built from scalar swizzles (multi-component swizzle of a global is a separate, unrelated gap). Each
+// ext-inst is spirv-val'd + asserted by sub-opcode. =====
+var @in @location = 0 mx_in : float4
+var @out @location = 0 mx_out : float4
+[fragment_shader(name="mathx_spv"), marker(no_coverage)]
+def mathx {
+    let x = mx_in.x
+    let y = mx_in.y
+    let v = float3(x, y, x)
+    let w = float3(y, x, y)
+    var r = 0.0f
+    r += sin(x) + cos(x) + tan(x)
+    r += asin(x) + acos(x) + atan(x) + atan2(y, x)
+    r += pow(x, y) + exp(x) + log(x) + exp2(x) + log2(x)
+    r += floor(x) + ceil(x) + round(x) + trunc(x) + fract(x)
+    r += rsqrt(x)
+    r += abs(x) + sign(x) + min(x, y) + max(x, y)
+    r += lerp(x, y, 0.5f)                       // GLSL mix -> FMix
+    r += length(v) + distance(v, w)
+    let n = normalize(v)
+    let cr = cross(v, w)
+    let rf = reflect(v, w)
+    let rr = refract(v, w, 0.5f)
+    mx_out = float4(r + n.x + cr.x + rf.x + rr.x, 0.0f, 0.0f, 1.0f)
+}
+
+def public mathx_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mathx_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)

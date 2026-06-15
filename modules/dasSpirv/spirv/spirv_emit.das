@@ -572,7 +572,11 @@ def private ensure_glsl_ext(var m : SpirvModule; var ctx : EmitCtx) : uint {
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
 // variant by operand class; the rest are float-only. Operand class comes from arg 0 (vectors
 // classify by lane kind, so length/normalize/cross/etc. read as float-class). ok=false => not a
-// GLSL.std.450 builtin (or wrong class) -> caller emits a clean error.
+// GLSL.std.450 builtin (or wrong class) -> caller emits a clean error. NOTE: keyed on the DASLANG name,
+// which differs from the GLSL spelling for two: daslang `lerp` -> FMix, daslang `rsqrt` -> InverseSqrt.
+// Only dependency-free builtin `math` functions appear here (no dead branches). Excluded on purpose:
+// daslang has no mix/step/smoothstep; radians/degrees live in daslib/math_boost as das functions whose
+// bodies reference a PI global the dependency walker can't lower (a shader writes the multiply inline).
 def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLstd450> {
     if (name == "abs") {
         if (cls == 2) return (ok = true, op = GLSLstd450.FAbs)
@@ -604,7 +608,7 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     }
     if (cls != 2) return (ok = false, op = GLSLstd450.Round)   // the rest are float-only
     if (name == "sqrt") return (ok = true, op = GLSLstd450.Sqrt)
-    if (name == "inversesqrt") return (ok = true, op = GLSLstd450.InverseSqrt)
+    if (name == "rsqrt") return (ok = true, op = GLSLstd450.InverseSqrt)   // daslang rsqrt == GLSL inversesqrt
     if (name == "sin") return (ok = true, op = GLSLstd450.Sin)
     if (name == "cos") return (ok = true, op = GLSLstd450.Cos)
     if (name == "tan") return (ok = true, op = GLSLstd450.Tan)
@@ -622,16 +626,13 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     if (name == "round") return (ok = true, op = GLSLstd450.Round)
     if (name == "trunc") return (ok = true, op = GLSLstd450.Trunc)
     if (name == "fract") return (ok = true, op = GLSLstd450.Fract)
-    if (name == "radians") return (ok = true, op = GLSLstd450.Radians)
-    if (name == "degrees") return (ok = true, op = GLSLstd450.Degrees)
-    if (name == "mix") return (ok = true, op = GLSLstd450.FMix)
-    if (name == "step") return (ok = true, op = GLSLstd450.Step)
-    if (name == "smoothstep") return (ok = true, op = GLSLstd450.SmoothStep)
+    if (name == "lerp") return (ok = true, op = GLSLstd450.FMix)            // daslang lerp == GLSL mix
     if (name == "length") return (ok = true, op = GLSLstd450.Length)
     if (name == "distance") return (ok = true, op = GLSLstd450.Distance)
     if (name == "cross") return (ok = true, op = GLSLstd450.Cross)
     if (name == "normalize") return (ok = true, op = GLSLstd450.Normalize)
     if (name == "reflect") return (ok = true, op = GLSLstd450.Reflect)
+    if (name == "refract") return (ok = true, op = GLSLstd450.Refract)
     return (ok = false, op = GLSLstd450.Round)
 }
 
