@@ -689,6 +689,50 @@ def public mathx_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-10.1 SSBO std430 vector elements: array<float2/3/4> runtime arrays. The std430 ArrayStride
+// is the element's base size rounded up to its base alignment: float2 -> 8, float3 -> 16 (size 12, align
+// 16), float4 -> 16. Whole-element load/store + component-wise vector add; no new opcodes vs Phase 8. =====
+var @ssbo @set = 0 @binding = 0 sv2 : array<float2>
+var @ssbo @set = 0 @binding = 1 sv3 : array<float3>
+var @ssbo @set = 0 @binding = 2 sv4 : array<float4>
+[compute_shader(local_size_x=64, name="ssbovec_spv"), marker(no_coverage)]
+def ssbovec {
+    let i = gl_GlobalInvocationID.x
+    sv2[i] = sv2[i] + float2(1.0, 0.0)          // float2 element: ArrayStride 8
+    sv3[i] = sv3[i] + float3(0.0, 1.0, 0.0)     // float3 element: ArrayStride 16 (vec3 size 12, align 16)
+    sv4[i] = sv4[i] + float4(0.0, 0.0, 0.0, 1.0) // float4 element: ArrayStride 16
+}
+
+// ===== Phase-10.1 SSBO std430 struct elements: array<Particle> runtime array. The element struct is
+// laid out std430 (pos@0, vel@8, life@16; max member align 8 -> struct size 24 -> ArrayStride 24) and
+// is NOT Block-decorated (only the outer wrapper struct is). Field access particles[i].field chains a
+// second OpAccessChain off the element pointer. The compute-particle tutorial's foundation rail. =====
+struct Particle {
+    pos  : float2   // std430 offset 0
+    vel  : float2   // offset 8
+    life : float    // offset 16 (struct rounds to align 8 -> stride 24)
+}
+var @ssbo @binding = 0 particles : array<Particle>
+[compute_shader(local_size_x=64, name="ssbostruct_spv"), marker(no_coverage)]
+def ssbostruct {
+    let i = gl_GlobalInvocationID.x
+    let v = particles[i].vel                        // chained AccessChain (element + field) + Load
+    particles[i].pos = particles[i].pos + v         // float2 field read + write
+    particles[i].life = particles[i].life - 1.0f    // scalar field read + write
+}
+
+def public ssbovec_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ssbovec_spv)
+    return <- w
+}
+
+def public ssbostruct_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ssbostruct_spv)
+    return <- w
+}
+
 // ===== Phase-10.2 composite/global swizzle: multi-component swizzle of a bare global (the Phase-8
 // out-of-scope note). A single-component global swizzle stays an lvalue (AccessChain); a multi-component
 // one loads the whole global and OpVectorShuffle's it. Covers a builtin global (gl_FragCoord.xy), an @in
@@ -934,9 +978,17 @@ def public phase8_emitter_opcodes : table<uint> {
     return <- s
 }
 
+// Phase-10.1 SSBO std430 vector/struct elements add NO new opcodes: a vector element is the same
+// OpTypeRuntimeArray (different ArrayStride operand); a struct element is an extra OpTypeStruct
+// (non-Block) read via a chained OpAccessChain/OpLoad — all already declared. The set is unchanged;
+// the new fixtures must still stay within it.
+def public phase10_1_emitter_opcodes : table<uint> {
+    return <- phase8_emitter_opcodes()
+}
+
 // Phase-10.2 multi-component global swizzle adds NO new opcodes: it routes a bare global through the
 // existing load + OpVectorShuffle / OpCompositeExtract path (both declared by Phase 4b). The set is
 // unchanged; the gswizzle fixture must still stay within it.
 def public phase10_2_emitter_opcodes : table<uint> {
-    return <- phase8_emitter_opcodes()
+    return <- phase10_1_emitter_opcodes()
 }

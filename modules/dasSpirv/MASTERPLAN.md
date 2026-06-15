@@ -1215,6 +1215,54 @@ two already partly done:
 **This closes the emitter language surface.** Phases 9 (docs/tutorial), 10 (examples/vulkan), 11
 (vulkan_lint) are docs/demos/lint on top of a feature-complete emitter — not plumbing.
 
+### Phase 9 — SPIR-V reference docs LANDED (2026-06-15, daslang PR #3158, merged)
+
+Reference page `doc/source/reference/spirv.rst` (shader-author surface: annotations, builtins, intrinsics,
+type/layout mapping — all `.. list-table::`) + `spirv_reflect` autogen via a `document_module_spirv` hook
+in `das2rst.das` (host reflection API; `//!<` field docs added to every public field/enum value). Tutorials
+deferred to dasVulkan (Phase 11). Plan + the full 9→15 arc captured in `PHASE9_TUTORIALS.md`.
+
+### Phase 10.1 — SSBO std430 vector/struct elements LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-1-ssbo-std430`)
+
+First foundation rail. Lifts the scalar-only SSBO-element restriction (`array<float4>`, `array<MyStruct>`,
+… now emit valid std430 runtime arrays) — the biggest single unblocker (compute particles + all real
+structured compute data). No new census opcodes: a vector element is the same `OpTypeRuntimeArray` with a
+different `ArrayStride` operand; a struct element is one extra (non-Block) `OpTypeStruct` read via a chained
+`OpAccessChain`/`OpLoad`. spirv-val is the std430 layout oracle (no dasVulkan GPU gate — the Phase-11
+compute-particle tutorial consumes this on a real driver).
+
+- **Builder** (`spirv_builder.das`): `type_struct_layout` (a laid-out `OpTypeStruct` with member Offset +
+  matrix decorations but **no Block**) for the runtime-array element struct; both it and `type_struct_block`
+  route through a shared `type_struct_decorated(..., as_block)` core (the `as_block` flag is in the dedup
+  key, so a Block and a non-Block struct with identical members stay distinct types).
+- **Layout** (`spirv_emit.das`): `build_block_struct` now takes `as_block` and additionally returns the
+  struct's `align` (max member base alignment). New `ssbo_element_layout` computes the element type-id +
+  `ArrayStride`: a 32-bit scalar/vector strides by its base size rounded up to base alignment (float2 → 8,
+  float3 → 16, float4 → 16); a struct element is laid out non-Block and strides by its size rounded to the
+  struct alignment.
+- **Emitter** (`spirv_emit.das`): `GlobalInfo.elem_type` carries the classified element type-id so
+  `visitExprAt` uses it as the pointee (a struct element can't go through `emit_type`, which panics on
+  `tStructure`). `visitExprField` gained a second shape: when the base is an indexed element pointer
+  (`particles[i].field`, `expr.value` already in `e2ptr`), it chains a second `OpAccessChain` off that
+  pointer in the element's storage class — feeding the existing load/store paths for read and write.
+
+**Findings (load-bearing):**
+1. **std140 and std430 member offsets are identical for flat scalar/vector/matrix members.** The two
+   layouts diverge only on array/nested-struct padding (both rejected by `build_block_struct`) and on the
+   final struct-size rounding. So a single offset routine serves both `@uniform` (std140) and SSBO-element
+   (std430) structs; only the runtime-array **stride rounding** (`round_up(size, align)`) and the Block
+   decoration differ. This is why `build_block_struct` could be shared rather than forked.
+2. **`block` is a reserved keyword** (block-type syntax) — a parameter named `block` is a parse error
+   ("expecting $i or name"); used `as_block`.
+3. **Scope guards (fail-closed):** a bare matrix runtime-array element is rejected (wrap it in a struct —
+   keeps the element-layout helper focused); nested-struct and array members inside an SSBO struct are
+   rejected by `build_block_struct` (std430 array/nested padding is a later slice if a tutorial needs it).
+
+Tests: `ssbovec` fixture (float2/3/4 → ArrayStride 8/16/16) + `ssbostruct` fixture (`Particle{pos@0, vel@8,
+life@16}` → element ArrayStride 24, chained field read+write) in `test_ssbo_std430.das`; census wired
+(`phase10_1_emitter_opcodes` = Phase-8 set, unchanged) + both new fixtures added to the union. 92/92 green
+(interp), spirv-val clean on every blob, lint + format clean.
+
 ### Phase 10.2 — composite/global swizzle LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-2-swizzle`)
 
 Foundation rail closing the Phase-8 out-of-scope swizzle note. **Multi-component swizzle of a bare
