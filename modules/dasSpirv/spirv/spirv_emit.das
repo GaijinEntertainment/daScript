@@ -60,6 +60,22 @@ struct LoopTargets {
     cont  : uint
 }
 
+// ===== per-control-flow-node label ids (visitor side-maps; allocated to match the hand-walker's
+// linear id order so the emitted blob stays byte-identical) =====
+struct IteIds {
+    merge   : uint
+    then_l  : uint
+    else_l  : uint   // == merge when there is no else branch (no separate else label emitted)
+}
+
+struct LoopIds {
+    header : uint
+    cond_l : uint
+    body_l : uint
+    cont_l : uint
+    merge  : uint
+}
+
 def finalize(var c : EmitCtx) {
     delete c.globals
     delete c.locals
@@ -1452,6 +1468,9 @@ class SpirvEmit : AstVisitor {
     e2id    : table<uint64; uint>        // intptr(Expression) -> rvalue SSA result-id
     e2ptr   : table<uint64; uint>        // intptr(Expression) -> lvalue pointer result-id
     e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
+    ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
+    loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
+    for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
     errs    : array<string>
 
     // coerce a visited child to an rvalue id: a value passes through; a pointer is OpLoad'd here (the
@@ -1738,13 +1757,208 @@ class SpirvEmit : AstVisitor {
         ctx.terminated = true
         return expr
     }
+
+    // ----- if / elif / else (OpSelectionMerge + OpBranchConditional, multi-phase) -----
+    // Block ids are allocated in the IfBlock hook — AFTER the cond is visited — so the id order
+    // matches the hand-walker (cond ids first, then merge/then/else), keeping the blob byte-identical.
+    // `elif` chains fall out for free: an `if_false` that is itself an ExprIfThenElse just recurses.
+    def override preVisitExprIfThenElse(var expr : ExprIfThenElse?) : void {}
+
+    def override preVisitExprIfThenElseIfBlock(var expr : ExprIfThenElse?; ifBlock : ExpressionPtr) : void {
+        var bm & = unsafe(*m)
+        let cond = value_of(expr.cond)
+        let merge = alloc_id(bm)
+        let then_l = alloc_id(bm)
+        let else_l = expr.if_false != null ? alloc_id(bm) : merge
+        ite_ids[intptr(expr)] = IteIds(merge = merge, then_l = then_l, else_l = else_l)
+        emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, then_l)
+        ctx.terminated = false
+    }
+
+    def override preVisitExprIfThenElseElseBlock(var expr : ExprIfThenElse?; elseBlock : ExpressionPtr) : void {
+        let ids = ite_ids?[intptr(expr)] ?? IteIds()
+        var bm & = unsafe(*m)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.else_l)
+        ctx.terminated = false
+    }
+
+    def override visitExprIfThenElse(var expr : ExprIfThenElse?) : ExpressionPtr {
+        let ids = ite_ids?[intptr(expr)] ?? IteIds()
+        var bm & = unsafe(*m)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
+    }
+
+    // ----- while (OpLoopMerge 4-block, multi-phase) -----
+    def override preVisitExprWhile(var expr : ExprWhile?) : void {
+        var bm & = unsafe(*m)
+        let ids = LoopIds(header = alloc_id(bm), cond_l = alloc_id(bm), body_l = alloc_id(bm),
+                          cont_l = alloc_id(bm), merge = alloc_id(bm))
+        loop_ids[intptr(expr)] = ids
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.header)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.LoopMerge, ids.merge, ids.cont_l, uint(SpvLoopControl.None))
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cond_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cond_l)
+        ctx.terminated = false
+    }
+
+    def override preVisitExprWhileBody(var expr : ExprWhile?; right : ExpressionPtr) : void {
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        let c = value_of(expr.cond)
+        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, c, ids.body_l, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.body_l)
+        ctx.terminated = false
+        ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
+    }
+
+    def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        pop(ctx.loop_stack)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cont_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cont_l)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
+    }
+
+    // ----- for (i in range(...)): synthesized 4-block loop. All setup runs in ForBody (after the
+    // source is visited, so runtime range() endpoints are already in e2id); const ranges read
+    // ExprConstRange.value directly. Block ids allocated here to match the hand-walker's order. -----
+    def override preVisitExprFor(var expr : ExprFor?) : void {
+        // record the for-source so a future visitExprCall (6.3) skips emitting the range() call; its
+        // arguments are still visited normally, so runtime endpoints land in e2id.
+        if (!empty(expr.sources)) {
+            for_src |> insert(intptr(expr.sources[0]))
+        }
+    }
+
+    def override preVisitExprForBody(var expr : ExprFor?) : void {
+        var bm & = unsafe(*m)
+        if (length(expr.iteratorVariables) != 1 || length(expr.sources) != 1) {
+            errs |> push("for: only a single `i in range(...)` iterator is supported for now")
+            return
+        }
+        let iv = expr.iteratorVariables[0]
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        if (lvr.ptr_id == 0u) {
+            errs |> push("for: induction variable '{iv.name}' was not declared")
+            return
+        }
+        let cls = scalar_class(iv._type.baseType)
+        if (cls != 0 && cls != 1) {
+            errs |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
+            return
+        }
+        var lo = 0u
+        var hi = 0u
+        let cr = expr.sources[0] ?as ExprConstRange
+        if (cr != null) {
+            let fromto = unsafe(reinterpret<int2>(cr.value))   // range == { from : int; to : int }
+            lo = const_int_for(bm, cls, fromto.x)
+            hi = const_int_for(bm, cls, fromto.y)
+        } else {
+            let src = expr.sources[0] ?as ExprCall
+            if (src == null) {
+                errs |> push("for: source is {expr.sources[0].__rtti}, expected range()/urange()")
+                return
+            }
+            if ("{src.name}" != "range" && "{src.name}" != "urange") {
+                errs |> push("for: source call is '{src.name}', expected range()/urange()")
+                return
+            }
+            let na = length(src.arguments)
+            if (na != 1 && na != 2) {
+                errs |> push("for: only range(n) and range(lo, hi) are supported for now (no step)")
+                return
+            }
+            lo = na == 2 ? value_of(src.arguments[0]) : const_zero(bm, cls)
+            hi = value_of(src.arguments[na - 1])
+        }
+        if (lo == 0u || hi == 0u) return
+        emit(bm, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, lo)
+        let ids = LoopIds(header = alloc_id(bm), cond_l = alloc_id(bm), body_l = alloc_id(bm),
+                          cont_l = alloc_id(bm), merge = alloc_id(bm))
+        loop_ids[intptr(expr)] = ids
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.header)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.LoopMerge, ids.merge, ids.cont_l, uint(SpvLoopControl.None))
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cond_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cond_l)
+        ctx.terminated = false
+        let cur = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur, lvr.ptr_id)
+        let cc = cmp_code("<", cls)
+        let cres = alloc_id(bm)
+        emit(bm, SEC_FUNCS, cc.code, type_bool(bm), cres, cur, hi)
+        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cres, ids.body_l, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.body_l)
+        ctx.terminated = false
+        ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
+    }
+
+    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (!key_exists(loop_ids, intptr(expr))) return expr   // setup failed; errors already pushed
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        let iv = expr.iteratorVariables[0]
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        let cls = scalar_class(iv._type.baseType)
+        pop(ctx.loop_stack)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cont_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cont_l)
+        ctx.terminated = false
+        let cur2 = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur2, lvr.ptr_id)
+        let nxt = alloc_id(bm)
+        emit(bm, SEC_FUNCS, binop_code("+", cls).code, lvr.value_type, nxt, cur2, const_one(bm, cls))
+        emit(bm, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, nxt)
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
+    }
+
+    // ----- break / continue -> branch to the innermost loop's merge / continue block -----
+    def override preVisitExprBreak(var expr : ExprBreak?) : void {
+        var bm & = unsafe(*m)
+        if (empty(ctx.loop_stack)) {
+            errs |> push("break outside of a loop")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
+        ctx.terminated = true
+    }
+
+    def override preVisitExprContinue(var expr : ExprContinue?) : void {
+        var bm & = unsafe(*m)
+        if (empty(ctx.loop_stack)) {
+            errs |> push("continue outside of a loop")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
+        ctx.terminated = true
+    }
 }
 
 // Phase-6 incremental scaffold: which shader bodies the visitor fully covers today. Grown per sub-phase;
 // removed (always-true) once the visitor handles every construct and emit_body is deleted.
 def private visitor_handles(fn : FunctionPtr) : bool {
     let n = "{fn.name}"
-    return n == "square" || n == "uarith" || n == "iarith" || n == "farith"
+    return (n == "square" || n == "uarith" || n == "iarith" || n == "farith"
+        || n == "uctrl" || n == "ictrl" || n == "fctrl" || n == "wloop" || n == "floop"
+        || n == "nloop" || n == "echain" || n == "eret" || n == "rfor")
 }
 
 def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr; var errors : array<string>) {
