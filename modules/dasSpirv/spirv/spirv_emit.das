@@ -234,7 +234,8 @@ def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
 
 // ===== combined image sampler detection =====
 // sampler globals are recognized by their opaque marker struct name (sampler2D, ...). Returns the
-// SPIR-V image dimensionality so classify_global can build the OpTypeImage / OpTypeSampledImage.
+// OpTypeImage operands classify_global needs: dimensionality (dim), the Arrayed flag (arrayed), and
+// the Depth flag (depth, 1 for a sampler2DShadow comparison sampler, else 0).
 def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim; arrayed : uint; depth : uint> {
     if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D, arrayed = 0u, depth = 0u)
     let n = "{t.structType.name}"
@@ -1488,7 +1489,9 @@ class SpirvEmit : AstVisitor {
             let simg = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             let si = sampler_info(sg._type)
-            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
+            // reconstruct the SAME image type classify_global built for this sampler so OpImage's
+            // result type matches the sampled image's image type -- depth included (type_image dedups on it)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
             let lod = value_of(expr.arguments[1])
@@ -1616,7 +1619,9 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             // extract the underlying image (same dedup key classify_global used for the sampler)
             let si = sampler_info(sg._type)
-            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
+            // reconstruct the SAME image type classify_global built for this sampler so OpImage's
+            // result type matches the sampled image's image type -- depth included (type_image dedups on it)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
             let coord = value_of(expr.arguments[1])
