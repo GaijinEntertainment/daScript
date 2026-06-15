@@ -50,14 +50,11 @@ def lint_main_path() : string {
 
 
 def build_argv(workers : int; fixtures : array<string>; quiet : bool = true) : array<string> {
-    var argv <- [das_exe(), lint_main_path(), "--", "--workers", "{workers}"]
+    var argv <- [das_exe(), "-dasroot", get_das_root(), lint_main_path(), "--", "--workers", "{workers}"]
     if (quiet) {
         argv |> push("-q")
     }
-    argv |> reserve(length(argv) + length(fixtures))
-    for (f in fixtures) {
-        argv |> push(f)
-    }
+    argv |> push_from(fixtures)
     return <- argv
 }
 

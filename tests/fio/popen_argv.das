@@ -113,7 +113,7 @@ def test_popen_argv_child_stdin_isolated(t : T?) {
         // from the parent's terminal/inherited stdin, hanging the test.
         var output : string
         let fixture = path_join(get_das_root(), "tests/mcp/_fixture_echo.das")
-        let rc = run_argv([das_exe(), fixture], output)
+        let rc = run_argv([das_exe(), "-dasroot", get_das_root(), fixture], output)
         t |> equal(rc, 0, "child should exit cleanly")
         t |> equal(output, "", "child should produce no output (EOF on stdin)")
     }

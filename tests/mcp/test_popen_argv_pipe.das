@@ -23,7 +23,7 @@ def test_echo_roundtrip(t : T?) {
         var responses : array<string>
         var rc : int
         unsafe {
-            rc = popen_argv_pipe([exe, echo]) $(stdin_w, stdout_r) {
+            rc = popen_argv_pipe([exe, "-dasroot", get_das_root(), echo]) $(stdin_w, stdout_r) {
                 return if (stdin_w == null || stdout_r == null)
                 fprint(stdin_w, "hello\n")
                 fflush(stdin_w)
@@ -51,7 +51,7 @@ def test_exit_code_propagated(t : T?) {
         let exit_script = fixture_path("_fixture_exit.das")
         var rc : int
         unsafe {
-            rc = popen_argv_pipe([exe, exit_script]) $(stdin_w, stdout_r) {
+            rc = popen_argv_pipe([exe, "-dasroot", get_das_root(), exit_script]) $(stdin_w, stdout_r) {
                 // No I/O. Block returns immediately; parent closes pipes,
                 // waits for the child (which returns 7), captures exit code.
                 pass
@@ -71,7 +71,7 @@ def test_stdin_eof_after_block(t : T?) {
         // path doesn't leave the child hanging.
         var rc : int
         unsafe {
-            rc = popen_argv_pipe([exe, echo]) $(stdin_w, stdout_r) {
+            rc = popen_argv_pipe([exe, "-dasroot", get_das_root(), echo]) $(stdin_w, stdout_r) {
                 pass
             }
         }
