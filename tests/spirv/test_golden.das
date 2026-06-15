@@ -137,5 +137,13 @@ def test_golden_disassembly(t : T?) {
         // census + the matrix/sampler opcode-shape asserts + the dasVulkan GPU gate (6.5).
         check_iso(t, "mvp_vert", mvp_vert_words())
         check_iso(t, "tex_frag", tex_frag_words())
+        // Phase-7 fixtures: no hand-walker baseline (it's gone) — these goldens are the visitor baseline
+        // (forward regression lock). check_iso since both contain calls (conversions / image ops) whose
+        // result ids the post-order visitor allocates after their operands.
+        check_iso(t, "conv", conv_words())
+        check_iso(t, "storimg", storimg_words())
+        check_iso(t, "texlod", texlod_words())
+        check_iso(t, "dims", dims_words())
+        check_iso(t, "septex", septex_words())
     }
 }

@@ -50,4 +50,9 @@ def main {
     emit_golden(dir, "mvp_vert", mvp_vert_words())
     emit_golden(dir, "pc_frag", pc_frag_words())
     emit_golden(dir, "tex_frag", tex_frag_words())
+    emit_golden(dir, "conv", conv_words())
+    emit_golden(dir, "storimg", storimg_words())
+    emit_golden(dir, "texlod", texlod_words())
+    emit_golden(dir, "dims", dims_words())
+    emit_golden(dir, "septex", septex_words())
 }

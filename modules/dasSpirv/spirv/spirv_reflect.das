@@ -16,6 +16,9 @@ enum SpirvDescriptorKind {
     uniform_buffer
     storage_buffer
     combined_image_sampler
+    storage_image
+    sampled_image
+    sampler
 }
 
 //! Stages a binding / push range is used in (the host maps to e.g. VkShaderStageFlags). A single
@@ -54,8 +57,11 @@ struct SpirvReflection {
     push_constants : array<SpirvPushConstantRange>
 }
 
-// 'RFL1' — wire-format magic + version. Bump on any layout change to encode/decode_reflection.
-let REFLECTION_MAGIC = 0x52464C31u
+// 'RFL2' — wire-format magic + version. Bump on any layout OR descriptor-kind change to encode/
+// decode_reflection, so an older consumer rejects a newer stream loudly instead of mis-mapping an
+// unknown SpirvDescriptorKind (kind_from_int falls back to uniform_buffer). Bumped to RFL2 in Phase 7
+// (added storage_image / sampled_image / sampler kinds).
+let REFLECTION_MAGIC = 0x52464C32u
 
 def finalize(var r : SpirvReflection) {
     delete r.bindings
@@ -89,6 +95,9 @@ def encode_reflection(refl : SpirvReflection) : array<uint> {
 def private kind_from_int(k : int) : SpirvDescriptorKind {
     if (k == int(SpirvDescriptorKind.storage_buffer)) return SpirvDescriptorKind.storage_buffer
     if (k == int(SpirvDescriptorKind.combined_image_sampler)) return SpirvDescriptorKind.combined_image_sampler
+    if (k == int(SpirvDescriptorKind.storage_image)) return SpirvDescriptorKind.storage_image
+    if (k == int(SpirvDescriptorKind.sampled_image)) return SpirvDescriptorKind.sampled_image
+    if (k == int(SpirvDescriptorKind.sampler)) return SpirvDescriptorKind.sampler
     return SpirvDescriptorKind.uniform_buffer
 }
 

@@ -918,6 +918,21 @@ now participates in the same fail-closed `AstVisitor` contract as every other da
 
 ### Phase 7 — texture / resource breadth
 
+> Working plan: `PHASE7_TEXTURES.md` (slices + per-slice oracle + the new harness API), written and
+> approved before code. Full coverage in one phase (all four slices, separate-image-sampler included).
+
+**Testing-strategy decision (Boris, 2026-06-14).** Generating valid SPIR-V (spirv-val) is not proof it
+*works* — for images the only real oracle is render/compute → read back → compare. The existing graphics
+gates compare *loosely* (sample ~5 pixels, assert per-channel inequalities); that is the debt. Phase 7
+adopts an **exact analytic oracle** as the backbone: Phase-7 content is procedural, so the expected pixel is
+CPU-computable in daslang — a *stronger* check than a golden image, no committed reference. New dasVulkan
+harness: `compute_image_rgba8` (image-readback analog of `run_compute_spirv`) + `assert_pixels_exact`
+(full-frame exact compare, first-mismatch report). Golden-image diff (`save/load_ppm` + `images_close(tol)`)
+is a *fallback*, added only when a filtered-LOD case needs it. Storage images emit a **known format (Rgba8)**
+so no without-format capability/feature is required (lavapipe-safe). Debt paid down: retrofit the
+textured-quad gate to `assert_pixels_exact` (NEAREST + integer MVP → analyzable); triangle centroid stays
+loose (genuinely fuzzy). Full rationale + the today-vs-debt analysis live in `PHASE7_TEXTURES.md`.
+
 Current sampler surface is **combined 2D only**:
 - **Storage images** — `OpTypeImage … 2` (read-write), `image2D` marker, `imageLoad`/`imageStore` →
   `OpImageRead`/`OpImageWrite`, the `StorageImageRead/WriteWithoutFormat` caps + format decoration. New
@@ -992,3 +1007,58 @@ sub-task is independent of the dasSpirv phases and can land any time after its d
 11's VK002+ want Phase-5 reflection. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all
 PR-protected) with the standing gates: opcode tests + census + spirv-val + LCOV (main tree), lavapipe +
 local-GPU regression (dasVulkan), lint + format, Copilot-to-dry, no GC leak.
+
+---
+
+### Phase 7 — texture / resource breadth LANDED (2026-06-15, branch `bbatkin/dasspirv-phase7-textures`)
+
+Full image/resource coverage, four slices, each its own commit keeping all three tiers green. Plan +
+exact-analytic testing-strategy decision written first (`PHASE7_TEXTURES.md`). All three tiers green
+(interp/JIT/AOT **82/82**), spirv-val clean, lint + format clean, no GC leak. dasVulkan integration **13/13**
+on the local GPU (branch `bbatkin/dasspirv-phase7-storage-image`).
+
+- **7.1 storage images (+ scalar conversions prereq).** `float/int/uint(...)` → `OpConvertSToF/UToF/FToS/
+  FToU` + `OpBitcast` (an unsupported gap the gradient needed; same-class casts pass through, vectors
+  rejected). `image2D` → read-write `OpTypeImage` with a **known Rgba8 format** (so NO StorageImageRead/
+  WriteWithoutFormat capability/feature — lavapipe-safe) + DescriptorSet/Binding; `imageLoad`→`OpImageRead`,
+  `imageStore`→`OpImageWrite`. `type_image` gained `(arrayed, sampled, format)` params (defaults keep the
+  combined-sampler caller byte-identical). Reflection kind `storage_image`. GPU gate: a compute shader writes
+  a coordinate gradient `(x,y,0,255)` to a storage image, read back, **every pixel asserted exact** — the
+  new exact-analytic oracle, the centerpiece of the testing-strategy decision.
+- **7.2 explicit-LOD + texel fetch.** `textureLod`→`OpImageSampleExplicitLod` (Lod operand), `texelFetch`→
+  `OpImage` (extract image from the sampled image) + `OpImageFetch`. Both derivative-free → **stage-agnostic**
+  (the fixture samples in a compute shader, proving the lift off fragment-only). GPU gate: texelFetch-copy a
+  known 64×64 texture into a storage image, assert every pixel equals the source.
+- **7.3 sampler dimensionalities.** `sampler3D`/`samplerCube`/`sampler2DArray` markers; `sampler_info` maps
+  each to image Dim (3D/Cube/2D) + Arrayed; all sample via `texture()` (the handler is dimension-agnostic).
+  No new opcodes — only different OpTypeImage Dim/Arrayed operands. GPU gate (agreed scope): a **sampler2DArray**
+  exact gate (4 solid-color layers, per-quadrant selection, set-compare). Cube/3D covered structurally
+  (spirv-val + the Dim/Arrayed opcode asserts); their behavioral GPU gates deferred (the
+  OpImageSampleImplicitLod sampling opcode is already GPU-proven on 2D in Phase 4).
+- **7.4 separate image + sampler.** `texture2D` → standalone `OpTypeImage`, `sampler` → standalone
+  `OpTypeSampler` (new `type_sampler` builder) — two independent UniformConstant descriptors;
+  `sampleTexture(tex, smp, uv)` combines them at the call via `OpSampledImage` → `OpImageSampleImplicitLod`.
+  Reflection kinds `sampled_image` + `sampler`. GPU gate: a 2×2 checkerboard sampled through the split
+  descriptors, per-quadrant texel assert.
+
+**Testing-strategy upgrade delivered.** The loose pixel-inequality spot-checks are replaced as the Phase-7
+backbone by an **exact analytic oracle**: new dasVulkan harness `compute_image_rgba8` (image-readback analog
+of `run_compute_spirv`) + `assert_pixels_exact` (full-frame exact compare, first-mismatch report) +
+`texelfetch_copy_rgba8`. Every Phase-7 GPU gate asserts exact pixels, not inequalities.
+
+**Findings (load-bearing):**
+1. **The golden gate's resource/composite goldens are the *hand-walker* baseline (Phase-6 frozen).** The
+   visitor allocates call/composite result ids post-order, so regenerating those goldens produces an
+   id-permuted (but `check_iso`-equivalent) text — DON'T overwrite them; add only the new fixtures' goldens.
+   (Six goldens churn on every `_gen_golden` run and must be reverted each slice.)
+2. **Two real lowering gaps surfaced (out of Phase-7 scope, deferred):** float4+float4 **vector add** (the
+   `+` ExprOp2 path is scalar/component-wise only — vector add not wired) and a **folded all-const vector
+   operand** (`float2(0.5,0.5)` as a call arg folds to `ExprConstFloat2`, which `value_of` doesn't lower) —
+   the first texlod fixture leaned on both; rewritten to scalar ops on a runtime uv. These are Phase-8
+   (language completeness) work, not 7.x.
+3. **Scalar conversions were entirely unsupported before 7.1** (the cast handler rejected, and `float(x)` as
+   a workhorse-cast ExprCall hit the fail-closed "unsupported call"). Added minimally as the gradient prereq.
+
+**NEXT:** push both branches, open the daslang PR (emitter + main-tree tests) and the dasVulkan PR (GPU gates
++ exact-analytic harness), Copilot-to-dry. Then Phase 8 (control-flow / language completeness) — which is also
+where the two deferred gaps (vector arithmetic, folded const-vector operands) belong.

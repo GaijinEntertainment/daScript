@@ -193,17 +193,31 @@ def public type_matrix(var m : SpirvModule; col_type : uint; cols : int) : uint 
     return id
 }
 
-// OpTypeImage for a standard sampled (non-storage) texture: depth=0, arrayed=0, ms=0, sampled=1
-// (used with a sampler), format=Unknown. `sampled_type` is the texel component scalar (float).
-def public type_image(var m : SpirvModule; sampled_type : uint; dim : SpvDim) : uint {
-    let key = "img{sampled_type}_d{uint(dim)}"
+// OpTypeImage. `sampled_type` is the texel component scalar. `sampled` = 1 for a sampled texture
+// (used with a sampler, format usually Unknown), 2 for a read-write storage image (a KNOWN format
+// e.g. Rgba8, so no StorageImageRead/WriteWithoutFormat capability is needed). depth=0, ms=0; the
+// arrayed flag distinguishes a 2D/2DArray (etc.) image. Deduped on the full operand tuple.
+def public type_image(var m : SpirvModule; sampled_type : uint; dim : SpvDim;
+                      arrayed : uint = 0u; sampled : uint = 1u; format : SpvImageFormat = SpvImageFormat.Unknown) : uint {
+    let key = "img{sampled_type}_d{uint(dim)}_a{arrayed}_s{sampled}_f{uint(format)}"
     let ex = m.type_pool?[key] ?? 0u
     return ex if (ex != 0u)
     let id = alloc_id(m)
     // operands: Sampled Type, Dim, Depth, Arrayed, MS, Sampled, Image Format
-    var ops <- [id, sampled_type, uint(dim), 0u, 0u, 0u, 1u, uint(SpvImageFormat.Unknown)]
+    var ops <- [id, sampled_type, uint(dim), 0u, arrayed, 0u, sampled, uint(format)]
     emit_n(m, SEC_TYPES, SpvOp.TypeImage, ops)
     delete ops
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// OpTypeSampler — a standalone sampler type (separate image+sampler model). Deduped (no operands).
+def public type_sampler(var m : SpirvModule) : uint {
+    let key = "sampler"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeSampler, id)
     m.type_pool |> insert(key, id)
     return id
 }

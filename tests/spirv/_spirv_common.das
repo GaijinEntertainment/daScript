@@ -518,6 +518,103 @@ def public tex_frag_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-7.1a scalar conversions: float(int/uint), int(float/uint), uint(float/int) ->
+// OpConvertSToF/UToF/FToS/FToU + OpBitcast (int<->uint same-width reinterpret). Reuses the existing
+// int/uint/float SSBOs; every conversion opcode is exercised exactly once. =====
+[compute_shader(local_size_x=64, name="conv_spv"), marker(no_coverage)]
+def conv {
+    let i = gl_GlobalInvocationID.x
+    let s = idata[i]                    // int
+    let u = data[i]                     // uint
+    let f = fdata[i]                    // float
+    fdata[i] = float(s) + float(u)      // ConvertSToF + ConvertUToF
+    idata[i] = int(f) + int(u)          // ConvertFToS + Bitcast (uint -> int)
+    data[i] = uint(f) + uint(s)         // ConvertFToU + Bitcast (int -> uint)
+}
+
+def public conv_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(conv_spv)
+    return <- w
+}
+
+// ===== Phase-7.1b storage image: an image2D global -> UniformConstant OpTypeImage (Rgba8, sampled=2)
+// + DescriptorSet/Binding; imageLoad -> OpImageRead, imageStore -> OpImageWrite. A 2D dispatch writes a
+// coordinate-derived gradient (the GPU gate proves the coordinate mapping; here it just emits valid SPIR-V). =====
+var @binding = 0 img : image2D
+[compute_shader(local_size_x=8, local_size_y=8, name="storimg_spv"), marker(no_coverage)]
+def storimg {
+    let gid = gl_GlobalInvocationID
+    let coord = int2(int(gid.x), int(gid.y))
+    let prev = imageLoad(img, coord)                                            // OpImageRead
+    imageStore(img, coord, float4(float(gid.x), float(gid.y), prev.z, 1.0f))    // OpImageWrite
+}
+
+def public storimg_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(storimg_spv)
+    return <- w
+}
+
+// ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
+// texelFetch -> OpImage (extract image from the sampled image) + OpImageFetch. Both are derivative-free,
+// so this fixture samples in a COMPUTE shader -- proving the stage lift (texture() is fragment-only). =====
+var @binding = 1 cs_tex : sampler2D
+[compute_shader(local_size_x=64, name="texlod_spv"), marker(no_coverage)]
+def texlod {
+    let i = gl_GlobalInvocationID.x
+    let uv = float2(float(i) / 64.0f, 0.5f)                 // runtime uv (not a folded constant)
+    let a = textureLod(cs_tex, uv, 1.0f)                    // OpImageSampleExplicitLod (in compute)
+    let b = texelFetch(cs_tex, int2(int(i), 0), 0)          // OpImage + OpImageFetch
+    fdata[i] = a.x + b.x                                    // scalar swizzles + FAdd
+}
+
+def public texlod_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(texlod_spv)
+    return <- w
+}
+
+// ===== Phase-7.3 additional sampler dimensionalities: samplerCube (Dim Cube), sampler3D (Dim 3D),
+// sampler2DArray (Dim 2D + Arrayed). All sample via texture() with a float3 coordinate. These add NO
+// new opcodes -- only different OpTypeImage Dim/Arrayed operands -- so they must stay within phase7b. =====
+var @binding = 0 cube_tex : samplerCube
+var @binding = 1 vol_tex : sampler3D
+var @binding = 2 arr_tex : sampler2DArray
+var @in @location = 0 dims_dir : float3
+var @out @location = 0 dims_out : float4
+[fragment_shader(name="dims_spv"), marker(no_coverage)]
+def dims_frag {
+    let c = texture(cube_tex, dims_dir)     // samplerCube -> OpTypeImage Dim Cube
+    let v = texture(vol_tex, dims_dir)      // sampler3D   -> OpTypeImage Dim 3D
+    let a = texture(arr_tex, dims_dir)      // sampler2DArray -> OpTypeImage Dim 2D, Arrayed 1
+    dims_out = float4(c.x, v.y, a.z, 1.0f)  // scalar swizzles + CompositeConstruct
+}
+
+def public dims_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(dims_spv)
+    return <- w
+}
+
+// ===== Phase-7.4 separate image + sampler: a texture2D (standalone OpTypeImage) and a sampler
+// (standalone OpTypeSampler) are two independent descriptors; sampleTexture combines them at the call
+// site (OpSampledImage) before sampling. The Vulkan split model, distinct from the combined sampler2D. =====
+var @binding = 0 sep_img : texture2D
+var @binding = 1 sep_smp : sampler
+var @in @location = 0 sep_uv : float2
+var @out @location = 0 sep_out : float4
+[fragment_shader(name="septex_spv"), marker(no_coverage)]
+def septex_frag {
+    sep_out = sampleTexture(sep_img, sep_smp, sep_uv)   // OpSampledImage + OpImageSampleImplicitLod
+}
+
+def public septex_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(septex_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -680,6 +777,50 @@ def public phase4d_emitter_opcodes : table<uint> {
     for (op in [
         SpvOp.TypeImage, SpvOp.TypeSampledImage,    // sampler2D -> OpTypeImage + OpTypeSampledImage
         SpvOp.ImageSampleImplicitLod                // texture(tex, uv)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-7.1 adds scalar conversions + storage images. Phase-4d set + these:
+def public phase7a_emitter_opcodes : table<uint> {
+    var s <- phase4d_emitter_opcodes()
+    for (op in [
+        // scalar conversions
+        SpvOp.ConvertSToF, SpvOp.ConvertUToF, SpvOp.ConvertFToS, SpvOp.ConvertFToU, SpvOp.Bitcast,
+        // storage image read/write (OpTypeImage already declared by Phase-4d samplers)
+        SpvOp.ImageRead, SpvOp.ImageWrite
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-7.2 adds explicit-LOD sampling + texel fetch. Phase-7.1 set + these:
+def public phase7b_emitter_opcodes : table<uint> {
+    var s <- phase7a_emitter_opcodes()
+    for (op in [
+        SpvOp.ImageSampleExplicitLod,   // textureLod(s, uv, lod)
+        SpvOp.Image, SpvOp.ImageFetch   // texelFetch(s, coord, lod)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-7.3 (sampler3D / samplerCube / sampler2DArray) adds NO new opcodes -- only different
+// OpTypeImage Dim/Arrayed operands. The declared set is unchanged; the dims fixture must stay within it.
+def public phase7c_emitter_opcodes : table<uint> {
+    return <- phase7b_emitter_opcodes()
+}
+
+// Phase-7.4 separate image + sampler adds the standalone sampler type + the call-site combine. 7.3 + these:
+def public phase7d_emitter_opcodes : table<uint> {
+    var s <- phase7c_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeSampler,      // a standalone sampler global
+        SpvOp.SampledImage      // sampleTexture combines image + sampler at the call
     ]) {
         s |> insert(uint(op))
     }
