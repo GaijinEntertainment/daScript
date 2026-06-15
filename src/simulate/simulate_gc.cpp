@@ -26,6 +26,7 @@ namespace das
     using loop_point = pair<void *,uint64_t>;
 
     struct BaseGcDataWalker : DataWalker {
+        using DataWalker::beforeIterator;
 
         int32_t            gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         int32_t            gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;

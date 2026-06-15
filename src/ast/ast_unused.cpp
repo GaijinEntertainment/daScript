@@ -818,6 +818,7 @@ namespace das {
     class RemoveUnusedLocalVariables : public PassVisitor {
     public:
         using PassVisitor::PassVisitor;
+        using PassVisitor::visit;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
             return funcIsDirty(fun) && !fun->stub && !fun->isTemplate;    // we don't do a thing with templates

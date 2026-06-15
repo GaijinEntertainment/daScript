@@ -223,6 +223,7 @@ namespace das
     };
 
     struct DAS_API SimVisitor {
+        virtual ~SimVisitor () = default;
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
         virtual void op ( const char * /* name */, uint32_t /* sz */ = 0, const string & /* TT */ = string() ) {}

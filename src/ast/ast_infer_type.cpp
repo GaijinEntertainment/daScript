@@ -5019,7 +5019,7 @@ namespace das {
             }
             local.push_back(pVar);
             expr->iteratorVariables.push_back(pVar);
-            if (expr->iteratorsTupleExpansion.size() > idx && expr->iteratorsTupleExpansion[idx]) {
+            if (int64_t(expr->iteratorsTupleExpansion.size()) > idx && expr->iteratorsTupleExpansion[idx]) {
                 if (pVar->type && !pVar->type->isTuple()) {
                     error("for loop iterator variable " + pVar->name + " is not a tuple", "", "",
                           expr->at, CompilationError::invalid_for_iterator_tuple);

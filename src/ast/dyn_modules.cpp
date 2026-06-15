@@ -74,7 +74,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
                     vec4f args[1] = {
                         cast<char *>::from(fname)
                     };
-                    auto _res = pctx->evalWithCatch(fnTest, args);
+                    pctx->evalWithCatch(fnTest, args);
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         return Result::Exception;

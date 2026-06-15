@@ -505,6 +505,7 @@ namespace das {
      */
     class ConstFolding : public FoldingVisitor {
     public:
+        using PassVisitor::visit;
         ConstFolding( const ProgramPtr & prog, int32_t round ) : FoldingVisitor(prog, round) {}
     public:
         vector<Function *> needRun;
@@ -919,6 +920,7 @@ namespace das {
 
     class RunFolding : public FoldingVisitor {
     public:
+        using PassVisitor::visit;
         RunFolding( const ProgramPtr & prog, vector<Function *> & _needRun ) : FoldingVisitor(prog),
             runProgram(prog.get()), needRun(_needRun) {
         }

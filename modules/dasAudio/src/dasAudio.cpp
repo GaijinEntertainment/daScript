@@ -1132,11 +1132,19 @@ REGISTER_MODULE_IN_NAMESPACE(Module_Audio, das);
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4701) // stb_vorbis.c(4758) : warning C4701: potentially uninitialized local variable 'mid' used
+#pragma warning(disable:4245) // stb_vorbis.c(4396) : signed/unsigned mismatch
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-compare"
 #endif
 
 #undef STB_VORBIS_HEADER_ONLY
 #include <extras/stb_vorbis.c>    /* Enables Vorbis decoding. */
 
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif

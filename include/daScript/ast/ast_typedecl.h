@@ -784,6 +784,8 @@ namespace das {
                            ChooseSmartPtr chooseSmartPtr = ChooseSmartPtr::no);
 
     class DAS_API MangledNameParser {
+    public:
+        virtual ~MangledNameParser () = default;
     protected:
         virtual void error ( const string &, const char * );
         string parseAnyName ( const char * & ch, bool allowModule );
