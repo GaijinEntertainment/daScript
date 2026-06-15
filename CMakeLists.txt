@@ -757,7 +757,6 @@ src/ast/ast_allocate_stack.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
-src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
 include/daScript/ast/compilation_errors.h
@@ -802,7 +801,6 @@ src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -964,6 +962,7 @@ include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
+src/simulate/file_access.cpp
 )
 
 
@@ -1120,7 +1119,9 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_generate.cpp
     src/ast/ast_inscope_pod.cpp
     src/ast/ast_escape_analysis.cpp
+    src/ast/ast_validate.cpp
 
+    src/builtin/module_builtin_ast_serialize.cpp
     src/builtin/module_builtin_ast.cpp
     src/builtin/module_builtin_ast_flags.cpp
     src/builtin/module_builtin_ast_annotations.cpp

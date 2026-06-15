@@ -796,6 +796,18 @@ namespace das {
         return *this;
     }
 
+    // FileInfo serialize used to be a virtual on FileInfo / TextFileInfo. Dropped
+    // so FileInfo's vtable doesn't reference a compiler-only symbol (this TU is
+    // now compiler-only; FileInfo lives in runtime). Dispatch by class tag here.
+    static void serializeFileInfoBody ( AstSerializer & ser, FileInfo * info, uint8_t tag ) {
+        ser << info->name << info->tabSize;
+        if ( tag == 1 ) {
+            auto tf = static_cast<TextFileInfo*>(info);
+            ser.serializeAdaptiveSize32(tf->sourceLength);
+        }
+        if ( !ser.writing ) ser.deleteUponFinish.push_back(info);
+    }
+
     AstSerializer & AstSerializer::operator << ( FileInfo * & info ) {
         dtag(HASH_TAG("FileInfo *"));
         bool is_null = info == nullptr;
@@ -809,7 +821,9 @@ namespace das {
                 uint64_t curOffset = buffer->writingSize() + sizeof(curOffset);
                 *this << curOffset;
                 writingFileInfoMap[info] = curOffset;
-                info->serialize(*this);
+                uint8_t tag = info->serializeKind;
+                *this << tag;
+                serializeFileInfoBody(*this, info, tag);
             } else {
                 *this << writingFileInfoMap[info];
             }
@@ -824,7 +838,7 @@ namespace das {
                     case 1: info = new TextFileInfo; break;
                     default: SERIALIZER_VERIFYF(false, "Unreachable");
                 }
-                info->serialize(*this);
+                serializeFileInfoBody(*this, info, tag);
                 readingFileInfoMap[curOffset] = info;
                 if ( curOffset != savedOffset )
                     readOffset = savedOffset;
@@ -873,6 +887,14 @@ namespace das {
         return *this;
     }
 
+    // FileAccess serialize used to be a virtual on FileAccess / ModuleFileAccess.
+    // Dropped so FileAccess's vtable doesn't reference a compiler-only symbol
+    // (this TU is compiler-only; FileAccess lives in runtime). The class tag is
+    // ptr->serializeKind, written/read by the operator below.
+    static void serializeFileAccessBody ( AstSerializer & ser, FileAccess * fa ) {
+        ser << fa->files;
+    }
+
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
         dtag(HASH_TAG("FileAccessPtr"));
         bool is_null = ptr == nullptr;
@@ -886,7 +908,8 @@ namespace das {
             *this << p;
             if ( fileAccessMap[p] == nullptr ) {
                 fileAccessMap[p] = ptr.get();
-                ptr->serialize(*this);
+                *this << ptr->serializeKind;
+                serializeFileAccessBody(*this, ptr.get());
             }
         } else {
             SerializeNodeId p; *this << p;
@@ -898,7 +921,7 @@ namespace das {
                     default: SERIALIZER_VERIFYF(false, "Unreachable");
                 }
                 fileAccessMap[p] = ptr.get();
-                ptr->serialize(*this);
+                serializeFileAccessBody(*this, ptr.get());
             } else {
                 ptr.orphan();
                 FileAccessPtr t = fileAccessMap[p];
@@ -2879,29 +2902,6 @@ namespace das {
             uint64_t(state->storage->buffer.size()), uint64_t(state->storage->buffer.size()));
         vec4f args[1] = { cast<Array *>::from(&arr) };
         context->invoke(block, args, nullptr, at);
-    }
-
-    void FileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 0;
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
-    }
-
-    void TextFileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 1;
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        ser.serializeAdaptiveSize32(sourceLength);
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
     }
 
 }

@@ -159,7 +159,9 @@ namespace das
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) { src=nullptr; len=0; }
-        virtual void serialize ( AstSerializer & ser );
+        // serialize tag — keeps serialization out of the vtable so the serializer
+        // can live in compiler-only TUs while this class stays in runtime
+        uint8_t               serializeKind = 0;
         // Lazy byte-offset index of line starts. lineOffsets[i] = start of line i+1.
         // Built on first getLine call via getSourceAndLength. O(N) one-time, O(1) per query.
         void buildLineIndex();
@@ -178,14 +180,13 @@ namespace das
 
     class DAS_API TextFileInfo : public FileInfo {
     public:
-        TextFileInfo ( ) = default;
+        TextFileInfo ( ) { serializeKind = 1; }
         TextFileInfo ( const char * src, uint32_t len, bool own )
-            : source(src), sourceLength(len), owner(own) {}
+            : source(src), sourceLength(len), owner(own) { serializeKind = 1; }
         virtual ~TextFileInfo() { if ( owner ) freeSourceData(); }
         virtual void freeSourceData() override;
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) override;
-        virtual void serialize ( AstSerializer & ser ) override;
-    protected:
+    public:
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
         bool                  owner = true;
@@ -263,7 +264,9 @@ namespace das
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
         virtual bool canBeRequired ( const string &, const string &, bool ) const { return true; };
         virtual bool addFsRoot ( const string & , const string & ) { return false; }
-        virtual void serialize ( AstSerializer & ser );
+        // serialize tag — keeps serialization out of the vtable so the serializer
+        // can live in compiler-only TUs while this class stays in runtime
+        uint8_t serializeKind = 0;
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const;
         virtual bool isOptionAllowed ( const string & /*opt*/, const string & /*from*/ ) const { return true; }
         virtual bool isOptionBlocked ( const string & /*opt*/, const string & /*from*/ ) const { return false; }
@@ -285,7 +288,7 @@ namespace das
         bool isLocked() const { return locked; }
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
-    protected:
+    public:
         das_hash_map<string, FileInfoPtr>    files;
         vector<pair<string,string>>          extraModules;
         bool    locked = false;
@@ -308,7 +311,6 @@ namespace das
         virtual bool isModuleAllowed ( const string &, const string & ) const override;
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const override;
         virtual bool canBeRequired ( const string &, const string &, bool ) const override;
-        virtual void serialize ( AstSerializer & ser ) override;
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const override;
         virtual bool isOptionAllowed ( const string & opt, const string & from ) const override;
         virtual bool isOptionBlocked ( const string & opt, const string & from ) const override;
