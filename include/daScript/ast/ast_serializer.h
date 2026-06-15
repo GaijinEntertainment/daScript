@@ -88,7 +88,7 @@ namespace das {
         }
     };
 
-    struct DAS_CC_API AstSerializer {
+    struct DAS_API AstSerializer {
         ~AstSerializer ();
         AstSerializer ( SerializationStorage * storage, bool isWriting );
 

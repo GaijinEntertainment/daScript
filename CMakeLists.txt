@@ -801,6 +801,7 @@ src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
+src/builtin/module_builtin_ast_serialize.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -1121,7 +1122,6 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_escape_analysis.cpp
     src/ast/ast_validate.cpp
 
-    src/builtin/module_builtin_ast_serialize.cpp
     src/builtin/module_builtin_ast.cpp
     src/builtin/module_builtin_ast_flags.cpp
     src/builtin/module_builtin_ast_annotations.cpp
