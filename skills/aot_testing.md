@@ -89,6 +89,8 @@ This applies to ALL test directories (e.g., `tests/fio/`, `tests/fs/`, `tests/js
 
 **Trap:** glob exclusion ALONE is not enough. `test_aot` runs every file under `tests/` regardless of what was stub-generated, so an excluded-but-not-`no_aot` file fails at runtime with `error[50101]` on all its functions (precedent: `tests/fixed_array/test_interop.das`, issue #3077).
 
+**Intentionally-non-compiling `expect`-fixtures** (a `[macro]`/annotation that is *supposed* to fail compilation, driven by a sibling test via `compile_file` + asserting the error text — e.g. fail-closed codegen-rejection fixtures): `options no_aot` does NOT save these. `no_aot` skips *emission*, but the AOT generator (`utils/aot/main.das`) still *compiles* the program first, so a file that fails compilation breaks the AOT build before the no-emit skip applies. Put such fixtures in a **`_`-prefixed file inside a non-globbed subdir** (e.g. `tests/spirv/_fail_closed/_fc_*.das`): the `_` prefix keeps dastest/`test_aot` from discovering+running it, and the subdir keeps the non-recursive `tests/<dir>/*.das` AOT glob from trying to stub-generate it. Add an `expect <code>` directive too so the lint sweep skips it (precedent: `tests/spirv/_fail_closed/`, dasSpirv Phase 6.4 fail-closed gate).
+
 ## Adding a New AOT Test in `tests/aot/`
 
 1. Create `tests/aot/test_foo.das`:
