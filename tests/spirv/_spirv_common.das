@@ -784,6 +784,27 @@ def public fragx_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-10.4 depth-compare (shadow) sampling: a sampler2DShadow sampled via textureCompare
+// (OpImageSampleDrefImplicitLod). The sampler's OpTypeImage carries Depth=1 and the descriptor reflects
+// as a comparison_sampler (not a plain combined_image_sampler). The reference value is the fragment's
+// light-space depth (a runtime @in); the scalar result is the comparison (1 = lit, 0 = shadowed).
+// Implicit LOD -> fragment-only. =====
+var @binding = 0 sh_shadow : sampler2DShadow
+var @in @location = 0 sh_uv : float2
+var @in @location = 1 sh_ref : float
+var @out @location = 0 sh_color : float4
+[fragment_shader(name="fragshadow_spv"), marker(no_coverage)]
+def fragshadow {
+    let lit = textureCompare(sh_shadow, sh_uv, sh_ref)   // OpImageSampleDrefImplicitLod -> scalar in [0,1]
+    sh_color = float4(lit, lit, lit, 1.0f)
+}
+
+def public fragshadow_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(fragshadow_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -1034,5 +1055,14 @@ def public phase10_3_emitter_opcodes : table<uint> {
     ]) {
         s |> insert(uint(op))
     }
+    return <- s
+}
+
+// Phase-10.4 depth-compare sampling adds one opcode: OpImageSampleDrefImplicitLod (textureCompare on a
+// sampler2DShadow). The Depth=1 image flag is an OpTypeImage operand and the comparison_sampler kind is
+// reflection-only — neither is a new opcode. Phase-10.3 set + this:
+def public phase10_4_emitter_opcodes : table<uint> {
+    var s <- phase10_3_emitter_opcodes()
+    s |> insert(uint(SpvOp.ImageSampleDrefImplicitLod))
     return <- s
 }

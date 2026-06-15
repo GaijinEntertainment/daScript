@@ -74,6 +74,19 @@ def public texture(s : sampler2DArray; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
+// ===== depth-compare (shadow) sampling =====
+// sampler2DShadow is an opaque marker for a DEPTH-comparison combined sampler: its OpTypeImage carries
+// the Depth=1 flag and the descriptor is a comparison sampler. textureCompare samples it with a
+// reference value (OpImageSampleDrefImplicitLod) and returns the scalar comparison result in [0,1]
+// (1 = fully lit, 0 = fully shadowed; a filtered sampler returns the PCF average). Implicit LOD ->
+// fragment-only. The stub body never runs — only the call AST is lowered.
+struct sampler2DShadow {}
+
+[unused_argument(s, uv, compare)]
+def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : float {
+    return 0.0
+}
+
 // ===== separate image + sampler =====
 // texture2D is a standalone sampled image (OpTypeImage, no sampler) and sampler is a standalone
 // OpTypeSampler -- two independent descriptors with their own @binding. sampleTexture combines them at
