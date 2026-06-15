@@ -256,6 +256,17 @@ def private storage_image_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
     return (ok = false, dim = SpvDim._2D)
 }
 
+// Exactly the type set emit_type lowers without panicking: a scalar/vector (scalar_class >= 0), bool,
+// a matrix, or a fixed array of those. Lets the @workgroup path reject an unsupported shared type with
+// a clean diagnostic instead of crashing in emit_type (struct/handle/dynamic-array shared vars).
+def private is_emittable_value_type(t : TypeDecl?) : bool {
+    if (t == null) return false
+    if (matrix_info(t).ok) return true
+    let bt = t.baseType
+    if (bt == Type.tFixedArray && t.firstType != null) return is_emittable_value_type(t.firstType)
+    return scalar_class(bt) >= 0 || bt == Type.tBool
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
@@ -452,7 +463,28 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         reflection.push_constants |> push(SpirvPushConstantRange(offset = 0, size = bs.size, stages = stage_flag(stage)))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, or a sampler type e.g. sampler2D)")
+    // workgroup shared memory: @workgroup global -> Workgroup storage (GLSL `shared`). Not a
+    // descriptor and not in the entry interface (Workgroup is not Input/Output, SPIR-V <= 1.3), so no
+    // set/binding and nothing reflected. Compute-only. Read/written via OpLoad/OpStore; a fixed-array
+    // shared global is indexed by visitExprAt's Workgroup branch. (`shared` is a reserved keyword, so
+    // the annotation is spelled @workgroup, matching the SPIR-V storage class.)
+    if (v.annotation |> find_arg("workgroup") is tBool) {
+        if (stage != ShaderStage.Compute) {
+            errors |> push("shared variable '{vname}': @workgroup memory is only valid in a compute shader")
+            return
+        }
+        if (!is_emittable_value_type(v._type)) {
+            errors |> push("shared variable '{vname}': @workgroup type must be a scalar, vector, matrix, or fixed array of those")
+            return
+        }
+        let vt = emit_type(m, v._type)
+        let pt = type_pointer(m, SpvStorageClass.Workgroup, vt)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Workgroup))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Workgroup, value_type = vt, is_ssbo = false))
+        return
+    }
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, or a sampler type e.g. sampler2D)")
 }
 
 // ===== member index of a struct field by name =====
@@ -473,6 +505,44 @@ def private global_var_of(e : ExpressionPtr) : Variable const? {
     let ev = e ?as ExprVar
     if (ev == null || ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return null
     return ev.variable
+}
+
+// ===== root global of an lvalue chain (for an atomic target's memory scope) =====
+// Peels ExprAt/ExprField/ExprSwizzle/ExprRef2Value down to the underlying ExprVar and returns its
+// global Variable (or null if the chain doesn't root in a global). Lets the atomic handler read the
+// target's storage class to pick Workgroup vs Device memory scope.
+def private root_global_of(e : ExpressionPtr) : Variable const? {
+    if (e == null) return null
+    let ev = e ?as ExprVar
+    if (ev != null) {
+        if (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return null
+        return ev.variable
+    }
+    let at = e ?as ExprAt
+    if (at != null) return root_global_of(at.subexpr)
+    let fld = e ?as ExprField
+    if (fld != null) return root_global_of(fld.value)
+    let sw = e ?as ExprSwizzle
+    if (sw != null) return root_global_of(sw.value)
+    let r2v = e ?as ExprRef2Value
+    if (r2v != null) return root_global_of(r2v.subexpr)
+    return null
+}
+
+// ===== atomic call name + operand class -> SPIR-V opcode =====
+// cls: 0 = signed int, 1 = unsigned int. atomicMin/Max pick the signed (SMin/SMax) or unsigned
+// (UMin/UMax) opcode by the operand's signedness; the rest are sign-agnostic. compswap flags the
+// OpAtomicCompareExchange shape (an extra comparator operand + a second semantics id).
+def private atomic_info(name : string; cls : int) : tuple<ok : bool; op : SpvOp; compswap : bool> {
+    if (name == "atomicAdd") return (ok = true, op = SpvOp.AtomicIAdd, compswap = false)
+    if (name == "atomicMin") return (ok = true, op = cls == 1 ? SpvOp.AtomicUMin : SpvOp.AtomicSMin, compswap = false)
+    if (name == "atomicMax") return (ok = true, op = cls == 1 ? SpvOp.AtomicUMax : SpvOp.AtomicSMax, compswap = false)
+    if (name == "atomicAnd") return (ok = true, op = SpvOp.AtomicAnd, compswap = false)
+    if (name == "atomicOr") return (ok = true, op = SpvOp.AtomicOr, compswap = false)
+    if (name == "atomicXor") return (ok = true, op = SpvOp.AtomicXor, compswap = false)
+    if (name == "atomicExchange") return (ok = true, op = SpvOp.AtomicExchange, compswap = false)
+    if (name == "atomicCompSwap") return (ok = true, op = SpvOp.AtomicCompareExchange, compswap = true)
+    return (ok = false, op = SpvOp.AtomicIAdd, compswap = false)
 }
 
 // ===== arithmetic opcode selection =====
@@ -1163,8 +1233,21 @@ class SpirvEmit : AstVisitor {
             return expr
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        // @workgroup shared fixed-array: a BARE array global (not wrapped in a Block struct), so the
+        // access chain is a single index off the variable -- no member-0 indirection like an SSBO.
+        if (gi.storage == SpvStorageClass.Workgroup) {
+            let idx = value_of(expr.index)
+            if (idx == 0u) return expr   // index failed to lower (error already pushed)
+            let pointee = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            let ptr_t = type_pointer(bm, SpvStorageClass.Workgroup, pointee)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, idx)
+            e2ptr[k] = res
+            e2pty[k] = pointee
+            return expr
+        }
         if (!gi.is_ssbo) {
-            errs |> push("only ssbo array indexing is supported for now")
+            errs |> push("only ssbo or @workgroup array indexing is supported for now")
             return expr
         }
         let idx = value_of(expr.index)
@@ -1445,6 +1528,88 @@ class SpirvEmit : AstVisitor {
             }
             emit(bm, SEC_FUNCS, SpvOp.Kill)
             ctx.terminated = true
+            return expr
+        }
+        // barrier(): control + shared-memory barrier (OpControlBarrier at Workgroup execution+memory
+        // scope, WorkgroupMemory|AcquireRelease semantics). memoryBarrierShared(): the memory-only
+        // variant (OpMemoryBarrier, same scope/semantics). Both compute-only; not block terminators.
+        if (name == "barrier" || name == "memoryBarrierShared") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{name}() is only valid in a compute shader")
+                return expr
+            }
+            if (!empty(expr.arguments)) {
+                errs |> push("{name}() takes no arguments")
+                return expr
+            }
+            let scope = const_uint(bm, uint(SpvScope.Workgroup))
+            let sem = const_uint(bm, uint(SpvMemorySemantics.WorkgroupMemory) | uint(SpvMemorySemantics.AcquireRelease))
+            if (name == "barrier") {
+                emit(bm, SEC_FUNCS, SpvOp.ControlBarrier, scope, scope, sem)
+            } else {
+                emit(bm, SEC_FUNCS, SpvOp.MemoryBarrier, scope, sem)
+            }
+            return expr
+        }
+        // atomics: atomicAdd/Min/Max/And/Or/Xor/Exchange/CompSwap on a @workgroup or @ssbo lvalue,
+        // returning the OLD value. The mem param is a reference (T&), so the first arg stays an lvalue
+        // and ptr_of recovers its pointer (peel a defensive ExprRef2Value in case daslang loaded it).
+        // Scope = Workgroup for shared memory, Device for buffer memory; Relaxed semantics (glslang's
+        // default for GLSL atomics). 6-operand shape -> emit_n; CompSwap adds a comparator + neq-sem.
+        let acls = empty(expr.arguments) ? -1 : scalar_class(expr.arguments[0]._type.baseType)
+        let ainfo = atomic_info(name, acls)
+        if (ainfo.ok) {
+            let nargs = ainfo.compswap ? 3 : 2
+            if (length(expr.arguments) != nargs) {
+                errs |> push("{name} expects {nargs} arguments")
+                return expr
+            }
+            if (acls != 0 && acls != 1) {
+                errs |> push("{name}: atomic target must be int or uint")
+                return expr
+            }
+            let arg0 = expr.arguments[0]
+            let r2v = arg0 ?as ExprRef2Value
+            let lvexpr = r2v != null ? r2v.subexpr : arg0
+            let rg = root_global_of(lvexpr)
+            if (rg == null) {
+                errs |> push("{name}: target must be a @workgroup or @ssbo global lvalue")
+                return expr
+            }
+            let p = ptr_of(lvexpr)
+            if (p.id == 0u) {
+                errs |> push("{name}: target is not an addressable lvalue")
+                return expr
+            }
+            let rgi = ctx.globals?[intptr(rg)] ?? GlobalInfo()
+            // only @workgroup (Workgroup) and @ssbo (StorageBuffer) are writable atomic targets; a
+            // @uniform/@push_constant/builtin lvalue is read-only storage -> reject cleanly rather than
+            // emit an OpAtomic* on an invalid storage class (fail-closed, not spirv-val-only).
+            if (rgi.storage != SpvStorageClass.Workgroup && rgi.storage != SpvStorageClass.StorageBuffer) {
+                errs |> push("{name}: atomic target must live in @workgroup or @ssbo memory")
+                return expr
+            }
+            let scope = rgi.storage == SpvStorageClass.Workgroup ? SpvScope.Workgroup : SpvScope.Device
+            let sc_id = const_uint(bm, uint(scope))
+            let sem_id = const_uint(bm, uint(SpvMemorySemantics.Relaxed))
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            if (ainfo.compswap) {
+                let val = value_of(expr.arguments[2])
+                let cmp = value_of(expr.arguments[1])
+                if (val == 0u || cmp == 0u) return expr
+                // OpAtomicCompareExchange: rt res ptr scope eq-sem neq-sem value comparator
+                var ops <- [rt, res, p.id, sc_id, sem_id, sem_id, val, cmp]
+                emit_n(bm, SEC_FUNCS, SpvOp.AtomicCompareExchange, ops)
+                delete ops
+            } else {
+                let val = value_of(expr.arguments[1])
+                if (val == 0u) return expr
+                var ops <- [rt, res, p.id, sc_id, sem_id, val]
+                emit_n(bm, SEC_FUNCS, ainfo.op, ops)
+                delete ops
+            }
+            e2id[k] = res
             return expr
         }
         // dFdx/dFdy/fwidth: screen-space derivatives over the 2x2 quad (OpDPdx/OpDPdy/OpFwidth).

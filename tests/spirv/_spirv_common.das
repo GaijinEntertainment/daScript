@@ -805,6 +805,62 @@ def public fragshadow_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-10.5 compute-tier fixtures: shared memory + barriers + atomics =====
+// cshared: a workgroup-shared scratch array (`@workgroup`, GLSL `shared` -> Workgroup OpVariable),
+// the control + shared-memory sync (barrier() -> OpControlBarrier, memoryBarrierShared() ->
+// OpMemoryBarrier), and an atomicAdd onto an SSBO element (OpAtomicIAdd at Device scope, since the
+// target lives in buffer memory). The canonical tiled-reduction skeleton.
+var @ssbo @binding = 0 rin : array<uint>
+var @ssbo @binding = 1 rout : array<uint>
+var @workgroup rtile : uint[64]
+
+[compute_shader(local_size_x=64, name="cshared_spv"), marker(no_coverage)]
+def cshared {
+    let lid = gl_LocalInvocationID.x
+    let gid = gl_GlobalInvocationID.x
+    rtile[lid] = rin[gid]       // store into shared memory (Workgroup OpAccessChain + OpStore)
+    barrier()                   // OpControlBarrier (execution + shared-memory rendezvous)
+    memoryBarrierShared()       // OpMemoryBarrier (shared-memory ordering)
+    let _o = atomicAdd(rout[0], rtile[lid])   // OpAtomicIAdd onto an SSBO element (Device scope)
+}
+
+// catomics: the rest of the atomic family on @workgroup int + uint scalar counters (Workgroup
+// scope). Both signednesses are present so atomicMin/Max emit BOTH the signed (SMin/SMax) and
+// unsigned (UMin/UMax) opcodes; atomicCompSwap is the OpAtomicCompareExchange CAS. The results feed
+// an SSBO write so they stay live.
+var @workgroup acnt_i : int
+var @workgroup acnt_u : uint
+var @ssbo @binding = 0 aout : array<int>
+
+[compute_shader(local_size_x=64, name="catomics_spv"), marker(no_coverage)]
+def catomics {
+    let gid = gl_GlobalInvocationID.x
+    let v = int(gid)
+    let u = gid
+    let a = atomicMin(acnt_i, v)            // OpAtomicSMin
+    let b = atomicMax(acnt_i, v)            // OpAtomicSMax
+    let c = atomicMin(acnt_u, u)            // OpAtomicUMin
+    let d = atomicMax(acnt_u, u)            // OpAtomicUMax
+    let e = atomicAnd(acnt_i, v)            // OpAtomicAnd
+    let f = atomicOr(acnt_i, v)             // OpAtomicOr
+    let g = atomicXor(acnt_i, v)            // OpAtomicXor
+    let h = atomicExchange(acnt_i, v)       // OpAtomicExchange
+    let kk = atomicCompSwap(acnt_i, 0, v)   // OpAtomicCompareExchange
+    aout[gid] = a + b + e + f + g + h + kk + int(c) + int(d)
+}
+
+def public cshared_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(cshared_spv)
+    return <- w
+}
+
+def public catomics_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(catomics_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -1064,5 +1120,24 @@ def public phase10_3_emitter_opcodes : table<uint> {
 def public phase10_4_emitter_opcodes : table<uint> {
     var s <- phase10_3_emitter_opcodes()
     s |> insert(uint(SpvOp.ImageSampleDrefImplicitLod))
+    return <- s
+}
+
+// Phase-10.5 compute tier adds twelve opcodes: the two barriers (OpControlBarrier / OpMemoryBarrier)
+// and the atomic family (IAdd, signed+unsigned Min/Max, And/Or/Xor, Exchange, CompareExchange). The
+// @workgroup shared global reuses the existing OpVariable / OpTypeArray / OpAccessChain path (a
+// Workgroup storage class, not a new opcode). Phase-10.4 set + these:
+def public phase10_5_emitter_opcodes : table<uint> {
+    var s <- phase10_4_emitter_opcodes()
+    for (op in [
+        SpvOp.ControlBarrier, SpvOp.MemoryBarrier,                  // barrier() / memoryBarrierShared()
+        SpvOp.AtomicIAdd,                                           // atomicAdd
+        SpvOp.AtomicSMin, SpvOp.AtomicUMin,                         // atomicMin (int / uint)
+        SpvOp.AtomicSMax, SpvOp.AtomicUMax,                         // atomicMax (int / uint)
+        SpvOp.AtomicAnd, SpvOp.AtomicOr, SpvOp.AtomicXor,           // atomicAnd / atomicOr / atomicXor
+        SpvOp.AtomicExchange, SpvOp.AtomicCompareExchange           // atomicExchange / atomicCompSwap
+    ]) {
+        s |> insert(uint(op))
+    }
     return <- s
 }
