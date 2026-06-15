@@ -829,9 +829,15 @@ class SpirvEmit : AstVisitor {
         let k = intptr(e)
         if (key_exists(e2id, k)) return e2id?[k] ?? 0u
         if (key_exists(e2ptr, k)) {
+            let pid = e2ptr?[k] ?? 0u
+            let pty = e2pty?[k] ?? 0u
+            if (pid == 0u || pty == 0u) {   // unresolved pointer / pointee — never OpLoad with a 0 operand
+                errs |> push("internal: cannot load {e.__rtti} (unresolved pointer or pointee type)")
+                return 0u
+            }
             var bm & = unsafe(*m)
             let res = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, e2pty?[k] ?? 0u, res, e2ptr?[k] ?? 0u)
+            emit(bm, SEC_FUNCS, SpvOp.Load, pty, res, pid)
             return res
         }
         errs |> push("internal: no rvalue available for {e.__rtti}")
@@ -871,10 +877,17 @@ class SpirvEmit : AstVisitor {
                 e2ptr[k] = lv.ptr_id
                 e2pty[k] = lv.value_type
             } else {
-                e2id[k] = ctx.locals?[vk] ?? 0u
+                let lid = ctx.locals?[vk] ?? 0u
+                if (lid == 0u) {   // value-let read before its init was visited -> no SSA id
+                    errs |> push("local '{expr.name}' used before it was assigned an SSA id")
+                }
+                e2id[k] = lid
             }
         } else {
             let gi = ctx.globals?[intptr(expr.variable)] ?? GlobalInfo()
+            if (gi.var_id == 0u) {   // referenced global was not classified (unsupported / not collected)
+                errs |> push("global '{expr.name}' is not classified")
+            }
             e2ptr[k] = gi.var_id
             e2pty[k] = gi.value_type
         }
@@ -892,6 +905,10 @@ class SpirvEmit : AstVisitor {
                 return expr
             }
             let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
+            if (gi.var_id == 0u) {   // global not classified -> never AccessChain through a 0 base
+                errs |> push("swizzle target global '{gv.name}' is not classified")
+                return expr
+            }
             let pointee = emit_type(bm, expr._type)
             let ptr_t = type_pointer(bm, gi.storage, pointee)
             let res = alloc_id(bm)
@@ -1357,7 +1374,7 @@ class SpirvEmit : AstVisitor {
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
         let ids = loop_ids?[intptr(expr)] ?? LoopIds()
         var bm & = unsafe(*m)
-        pop(ctx.loop_stack)
+        if (!empty(ctx.loop_stack)) pop(ctx.loop_stack)   // guard underflow if the body hook was skipped on an earlier error
         if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cont_l)
         emit(bm, SEC_FUNCS, SpvOp.Label, ids.cont_l)
         ctx.terminated = false
