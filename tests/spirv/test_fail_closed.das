@@ -49,5 +49,6 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_localtype", "type tDouble is not supported")
         check_rejects(t, "_fc_stmt", "memzero is not supported in SPIR-V shaders")
         check_rejects(t, "_fc_deadcode", "unreachable code after a block terminator")
+        check_rejects(t, "_fc_wswz", "cannot assign through a swizzle")
     }
 }

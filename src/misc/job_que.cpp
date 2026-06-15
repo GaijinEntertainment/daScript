@@ -298,7 +298,7 @@ namespace das {
     }
 
     JobStatus::~JobStatus() {
-        DAS_VERIFY(mMagic==STATUS_MAGIC);
+        DAS_VERIFY(mMagic==uint32_t(STATUS_MAGIC));
         DAS_VERIFY(mRef==0);
         mMagic = 0;
         trackRemove();

@@ -105,8 +105,10 @@ void ma_phaser_process(ma_phaser * ph, float * buf, int frame_count) {
         fb_l = in_l;
         fb_r = in_r;
         // Soft-clip feedback to prevent runaway at very high depth
-        if (fb_l > 2.0f) fb_l = 2.0f; if (fb_l < -2.0f) fb_l = -2.0f;
-        if (fb_r > 2.0f) fb_r = 2.0f; if (fb_r < -2.0f) fb_r = -2.0f;
+        if (fb_l > 2.0f) fb_l = 2.0f;
+        if (fb_l < -2.0f) fb_l = -2.0f;
+        if (fb_r > 2.0f) fb_r = 2.0f;
+        if (fb_r < -2.0f) fb_r = -2.0f;
         buf[f * 2]     = (xl + in_l * wet) * norm;
         buf[f * 2 + 1] = (xr + in_r * wet) * norm;
     }

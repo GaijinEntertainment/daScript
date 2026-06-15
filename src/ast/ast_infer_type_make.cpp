@@ -1145,7 +1145,7 @@ namespace das {
             return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         if (expr->recordType && expr->recordType->baseType == Type::tTuple) {
-            if (expr->recordType->argTypes.size() <= index) {
+            if (int64_t(expr->recordType->argTypes.size()) <= index) {
                 error("tuple element _" + to_string(index) + " out of element range", "", "",
                       init->at, CompilationError::exceeds_tuple_index);
                 return Visitor::visitMakeTupleIndex(expr, index, init, lastField);

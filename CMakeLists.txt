@@ -380,6 +380,7 @@ FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" CONFIGURE_DEPENDS "m
 MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     MESSAGE("REGISTER DAS SHARED MODULE ${module_name}")
     SETUP_DAS_SHARED_LIBRARY(${module_name} ${ARGN})
+    DAS_APPLY_STRICT_WARNINGS(${module_name})
 
     # extract from modules/dasLLVM -> dasLLVM
     SET(SHARED_OUTPUT_PATH "${CMAKE_CURRENT_LIST_DIR}/")
@@ -449,6 +450,7 @@ ENDMACRO()
 MACRO(ADD_DAS_STATIC_MODULE_LIB lib)
     MESSAGE("REGISTER DAS STATIC MODULE ${lib}")
     ADD_DAS_STATIC_LIBRARY(${lib} ${ARGN})
+    DAS_APPLY_STRICT_WARNINGS(${lib})
     TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
     # Compiled dynamic module is useless without config.
     # Build only static lib or create .das_module file if no config exists.
@@ -717,9 +719,13 @@ SOURCE_GROUP_FILES("parser" PARSER_SRC)
 SOURCE_GROUP_FILES("parser/generated" PARSER_GENERATED_SRC)
 
 IF(MSVC)
-    # Don't use precompiled headers with flex/bison generated files
+    # flex/bison output is not ours to clean: no PCH (/Y-) and no warnings (/W0)
     FOREACH(file ${PARSER_GENERATED_SRC})
-        SET_SOURCE_FILES_PROPERTIES(${file} PROPERTIES COMPILE_FLAGS "/Y-" )
+        SET_SOURCE_FILES_PROPERTIES(${file} PROPERTIES COMPILE_FLAGS "/Y- /W0" )
+    ENDFOREACH()
+ELSE()
+    FOREACH(file ${PARSER_GENERATED_SRC})
+        SET_SOURCE_FILES_PROPERTIES(${file} PROPERTIES COMPILE_FLAGS "-w" )
     ENDFOREACH()
 ENDIF()
 
@@ -975,15 +981,29 @@ SET(DASCRIPT_FMT_SRC
         CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
 )
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
-    COMPILE_FLAGS "-fexceptions"
-  )
-elseif(MSVC)
+# MSVC first so clang-cl (CXX_COMPILER_ID==Clang but MSVC driver) takes /EHsc, not -fexceptions
+if(MSVC)
   set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
     COMPILE_FLAGS "/EHsc"
   )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
+    COMPILE_FLAGS "-fexceptions"
+  )
 endif()
+
+# flex/bison output (das-fmt's own copy) is not ours to clean
+IF(MSVC)
+  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp PROPERTIES COMPILE_FLAGS "/W0")
+ELSE()
+  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp PROPERTIES COMPILE_FLAGS "-w")
+  # fmt's vendored format-inl.h noreturn helper: GCC needs -Wno-error, clang -Wno-invalid-noreturn
+  IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set_source_files_properties(src/misc/format.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
+  ELSE()
+    set_source_files_properties(src/misc/format.cpp PROPERTIES COMPILE_FLAGS "-Wno-invalid-noreturn")
+  ENDIF()
+ENDIF()
 
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
@@ -1062,6 +1082,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
         ENDIF()
     ENDIF()
     SETUP_CPP11(${library})
+    DAS_APPLY_STRICT_WARNINGS(${library})
     target_compile_features(${library} PUBLIC cxx_std_17)
     #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)
 
@@ -1222,6 +1243,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
         # Static modules generated include.
         target_include_directories(${target_name} PRIVATE ${NEED_MODULES_PATH})
         SETUP_CPP11(${target_name})
+        DAS_APPLY_STRICT_WARNINGS(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()
 
@@ -1264,6 +1286,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     target_include_directories(daslang-live PRIVATE
         ${NEED_MODULES_PATH})
     SETUP_CPP11(daslang-live)
+    DAS_APPLY_STRICT_WARNINGS(daslang-live)
     SETUP_LTO(daslang-live)
     if(APPLE)
         SET_TARGET_PROPERTIES(daslang-live PROPERTIES
@@ -1310,6 +1333,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     target_include_directories(das-fmt PRIVATE ${NEED_MODULES_PATH})
 
     SETUP_CPP11(das-fmt)
+    DAS_APPLY_STRICT_WARNINGS(das-fmt)
     SETUP_LTO(das-fmt)
     install(TARGETS das-fmt RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 get_target_property(DAS_FMT_INCLUDES libDaScriptDyn INCLUDE_DIRECTORIES)

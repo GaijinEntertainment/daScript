@@ -271,7 +271,7 @@ DAS_CC_API das_context * das_context_make ( int stackSize );
 DAS_CC_API void das_context_release ( das_context * context );
 // Find an exported function by name in a simulated context.
 // Returns NULL if no function with that name exists.
-DAS_CC_API das_function * das_context_find_function ( das_context * context, char * name );
+DAS_CC_API das_function * das_context_find_function ( das_context * context, const char * name );
 
 // --- Threading: environment ---
 // daScriptEnvironment is thread-local (TLS).  Every thread that touches

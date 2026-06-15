@@ -970,6 +970,13 @@ class SpirvEmit : AstVisitor {
     def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
         let k = intptr(e)
         if (key_exists(e2ptr, k)) return (id = e2ptr?[k] ?? 0u, pty = e2pty?[k] ?? 0u)
+        // a swizzle that produced a value (not a pointer) used as a write target: a multi-component
+        // swizzle (`v.xy = …`) or a single-component swizzle of a value. Fail-closed with a clear
+        // message rather than the generic "internal: not an lvalue".
+        if (e is ExprSwizzle) {
+            errs |> push("cannot assign through a swizzle — write-swizzle (e.g. `v.xy = …`) is not supported; assign the whole vector instead")
+            return (id = 0u, pty = 0u)
+        }
         errs |> push("internal: {e.__rtti} is not an lvalue")
         return (id = 0u, pty = 0u)
     }
@@ -1065,16 +1072,15 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    // ----- swizzle: global single-component -> pointer (AccessChain); value -> extract/shuffle -----
+    // ----- swizzle: single-component global -> pointer (AccessChain, an lvalue); everything else
+    // (multi-component, or a swizzle of any loaded value: local, UBO/SSBO member, sampler result) ->
+    // value path: load the whole source composite, then CompositeExtract (1) / VectorShuffle (many) -----
     def override visitExprSwizzle(var expr : ExprSwizzle?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
         let gv = global_var_of(expr.value)
-        if (gv != null) {
-            if (length(expr.fields) != 1) {
-                errs |> push("only single-component swizzle of a global is supported for now")
-                return expr
-            }
+        // single-component global -> AccessChain to that one component (keeps it an lvalue: g.x = …)
+        if (gv != null && length(expr.fields) == 1) {
             let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
             if (gi.var_id == 0u) {   // global not classified -> never AccessChain through a 0 base
                 errs |> push("swizzle target global '{gv.name}' is not classified")
@@ -1086,23 +1092,25 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(expr.fields[0])))
             e2ptr[k] = res
             e2pty[k] = pointee
-        } else {
-            let base = value_of(expr.value)
-            if (base == 0u) return expr   // operand failed to lower (error already pushed) — no 0-operand extract/shuffle
-            let rt = emit_type(bm, expr._type)
-            let res = alloc_id(bm)
-            if (length(expr.fields) == 1) {
-                emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(expr.fields[0]))
-            } else {
-                var ops <- [rt, res, base, base]
-                for (f in expr.fields) {
-                    ops |> push(uint(f))
-                }
-                emit_n(bm, SEC_FUNCS, SpvOp.VectorShuffle, ops)
-                delete ops
-            }
-            e2id[k] = res
+            return expr
         }
+        // value path. value_of loads the whole composite (a bare global loads its OpVariable -> the
+        // full vector; gl_FragCoord.xy, a_pos.xyz, … all reach here now), then extract / shuffle.
+        let base = value_of(expr.value)
+        if (base == 0u) return expr   // operand failed to lower (error already pushed) — no 0-operand extract/shuffle
+        let rt = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        if (length(expr.fields) == 1) {
+            emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(expr.fields[0]))
+        } else {
+            var ops <- [rt, res, base, base]
+            for (f in expr.fields) {
+                ops |> push(uint(f))
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.VectorShuffle, ops)
+            delete ops
+        }
+        e2id[k] = res
         return expr
     }
 
