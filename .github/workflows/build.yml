@@ -758,3 +758,40 @@ jobs:
         ctest --build-config Release -L small --output-on-failure
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
+  build_linux_gcc:
+  ###########################################################
+  # Catches gcc-only -Werror breaks at PR time. Every Linux lane in this
+  # workflow builds with CC=clang CXX=clang++, so warnings that only gcc emits
+  # (glibc warn_unused_result on chdir/etc., -Wstringop-overflow / -Warray-bounds
+  # / -Wmaybe-uninitialized false positives under -O3) are invisible to our own
+  # CI and only ever surface downstream, where external module repos build
+  # daslang from source with the default system g++ (e.g. dasImgui's
+  # ubuntu-latest job). This job closes that gap. Compile-only: the clang lanes
+  # already run the test sweeps; the point here is the strict-warning gate.
+  #
+  # Config mirrors the linux_arm lane (GLFW off, HV+SQLITE on); LLVM is left off
+  # to keep this fast — its module also goes through DAS_APPLY_STRICT_WARNINGS,
+  # but the LLVM build dominates walltime and the bulk of strict-compiled code
+  # (core + HV/SQLITE/Audio/PUGIXML/UnitTest modules) is covered without it.
+  ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest-fat
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install toolchain"
+      run: sudo apt-get update && sudo apt-get install -y ninja-build bison
+
+    - name: "Build: Daslang (gcc -Werror)"
+      run: |
+        set -eux
+        CC=gcc CXX=g++ cmake --no-warn-unused-cli -B./build-gcc -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DDAS_GLFW_DISABLED=ON \
+          -DDAS_HV_DISABLED=OFF \
+          -DDAS_SQLITE_DISABLED=OFF \
+          -DDAS_LLVM_DISABLED=ON
+        cmake --build ./build-gcc --parallel
+
