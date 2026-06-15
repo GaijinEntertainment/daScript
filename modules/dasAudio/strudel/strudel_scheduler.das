@@ -17,6 +17,9 @@ require audio/audio_boost
 require audio
 require math
 
+let private CONV_BLOCK_SIZE = 1024
+let private CONV_REVERB_MAX_IR = 8.0   // seconds
+
 //! An active voice: a pre-rendered stereo buffer being played back.
 struct Voice {
     samples : array<float>   // interleaved stereo PCM (raw, no gain/pan)
@@ -113,6 +116,8 @@ struct OrbitBus {
         //! Scratch buffer receiving the chorus's wet output for mixing into the master.
     current_roomsize      : float = -1.0
         //! Most recently applied reverb roomsize (-1 = uninitialized).
+    reverb_tail_frames    : int = 0
+        //! Frames of reverb tail that may still be audible.
     current_delaytime     : float = -1.0
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
@@ -849,20 +854,41 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
         if (bus == null) continue
         // Always process reverb when it exists — convolver needs continuous input
         if (bus.reverb != null) {
+            var has_input = false
             for (s in range(chunkSamples)) {
-                bus.reverb_out_buf[s] = 0.0
+                if (abs(bus.reverb_send_buf[s]) > 0.00001) {
+                    has_input = true
+                    break
+                }
             }
-            unsafe {
-                conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
+            if (has_input) {
+                // Refill the tail budget. Mirrors conv_reverb_init: IR length = decayTime * 1.5,
+                // capped at the max IR, plus block latency. Over-estimating only delays the skip
+                // (a little wasted work); it never cuts the tail short, so it is audibly safe.
+                let irTime = min(bus.current_roomsize * 1.5, CONV_REVERB_MAX_IR)
+                bus.reverb_tail_frames = int(irTime * float(SAMPLE_RATE)) + 2 * CONV_BLOCK_SIZE
             }
-            for (s in range(chunkSamples)) {
-                output[s] += bus.reverb_out_buf[s]
+            if (bus.reverb_tail_frames > 0) {
+                if (chunkSamples > 0) {
+                    unsafe {
+                        memset32(addr(bus.reverb_out_buf[0]), 0u, chunkSamples)
+                    }
+                }
+                unsafe {
+                    conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
+                }
+                for (s in range(chunkSamples)) {
+                    output[s] += bus.reverb_out_buf[s]
+                }
+                bus.reverb_tail_frames -= chunkFrames
             }
         }
         // Always process delay when it exists — internal buffer needs to decay
         if (bus.delay_proc != null) {
-            for (s in range(chunkSamples)) {
-                bus.delay_out_buf[s] = 0.0
+            if (chunkSamples > 0) {
+                unsafe {
+                    memset32(addr(bus.delay_out_buf[0]), 0u, chunkSamples)
+                }
             }
             unsafe {
                 delay_process(bus.delay_proc, addr(bus.delay_send_buf[0]), addr(bus.delay_out_buf[0]), chunkFrames)
@@ -881,8 +907,10 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
                 }
             }
             if (has_send) {
-                for (s in range(chunkSamples)) {
-                    bus.chorus_out_buf[s] = 0.0
+                if (chunkSamples > 0) {
+                    unsafe {
+                        memset32(addr(bus.chorus_out_buf[0]), 0u, chunkSamples)
+                    }
                 }
                 unsafe {
                     chorus_process(bus.chorus, addr(bus.chorus_send_buf[0]), addr(bus.chorus_out_buf[0]), chunkFrames)
