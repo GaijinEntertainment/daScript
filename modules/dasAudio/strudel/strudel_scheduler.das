@@ -184,7 +184,7 @@ def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, ConvReverbQuality.medium)
         bus.current_roomsize = rs
     }
 }
@@ -196,7 +196,7 @@ def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
     bus.current_roomsize = rs
     // Reinitialize with new decay time
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, ConvReverbQuality.medium)
 }
 
 // Initialize delay on an orbit bus.

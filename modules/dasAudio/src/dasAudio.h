@@ -14,6 +14,13 @@
 // AOT-visible declarations for global-scope functions called from namespace das
 float das_ma_sf2_biquad_tick ( ma_sf2_biquad * bq, float input );
 
+// das-facing names (high/medium/low) for the C ConvReverbQuality enum in convolution_reverb.h
+enum class ConvReverbQualityEnum {
+    high   = CONV_QUALITY_HIGH,
+    medium = CONV_QUALITY_MEDIUM,
+    low    = CONV_QUALITY_LOW
+};
+
 namespace das {
     // pull global-scope functions into namespace das for AOT-generated code
     using ::ma_volume_mixer_init;
@@ -66,7 +73,7 @@ namespace das {
     using ::conv_reverb_set_max_ir;
     using ::conv_reverb_get_max_ir;
 
-    void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float decay_time, float lp_freq_start, float lp_freq_end, float fade_in, Context * context, LineInfoArg * at );
+    void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float decay_time, float lp_freq_start, float lp_freq_end, float fade_in, ConvReverbQualityEnum quality, Context * context, LineInfoArg * at );
     void dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames, Context * context, LineInfoArg * at );
     void dasAudio_convReverbProcessMono ( ConvolutionReverb * rev, float * input, float * output, int nSamples, Context * context, LineInfoArg * at );
     void dasAudio_convReverbUninit ( ConvolutionReverb * rev, Context * context, LineInfoArg * at );

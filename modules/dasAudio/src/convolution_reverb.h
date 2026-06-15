@@ -13,6 +13,24 @@
 #define CONV_BLOCK_SIZE 1024   // partition size in samples (~21ms at 48kHz)
 #define CONV_DEFAULT_MAX_IR 8.0f  // default max IR length in seconds
 
+// Reverb quality / cost tier (per-instance, chosen at init).
+//   high   - two decorrelated IRs, one full partitioned convolution per channel (most expensive).
+//   medium - a single mono IR convolved once, split into stereo by two Schroeder allpass filters
+//            (~half the per-block convolution cost; allpass is |H|=1 so the spectrum is preserved,
+//             only phase differs, which the ear reads as stereo width).
+//   low    - reserved for a cheap recirculating-delay reverb (added later); falls back to medium.
+typedef enum {
+    CONV_QUALITY_HIGH   = 0,
+    CONV_QUALITY_MEDIUM = 1,
+    CONV_QUALITY_LOW    = 2
+} ConvReverbQuality;
+
+// Stereo decorrelation for the medium (mono) path: two Schroeder allpass filters at short,
+// mutually-prime delays give each channel independent phase without a second convolution.
+#define CONV_DECORR_TIME_L 0.00591f  // left allpass delay (seconds; ~283 samples @48kHz)
+#define CONV_DECORR_TIME_R 0.00873f  // right allpass delay (seconds; ~419 samples @48kHz)
+#define CONV_DECORR_G      0.6f      // allpass feedback coefficient
+
 struct ConvolutionReverb {
     // Impulse response parameters (exposed to daScript)
     float    decayTime;        // decay time in seconds (time to -60dB)
@@ -20,12 +38,14 @@ struct ConvolutionReverb {
     float    lpFreqEnd;        // lowpass end frequency at -60dB (Hz)
     float    fadeIn;           // fade-in time in seconds
     uint32_t sampleRate;
+    uint32_t quality;          // ConvReverbQuality (high=dual IR, medium=mono IR + allpass)
     // Partitioned convolution state
     void *   fft_aux;          // minfft_aux* (opaque for AOT)
     uint32_t fft_size;         // N = 2 * CONV_BLOCK_SIZE
     uint32_t ir_length;        // original IR length in samples
     uint32_t num_partitions;   // P = ceil(ir_length / CONV_BLOCK_SIZE)
-    // Pre-FFT'd IR partitions: [P][freq_size] per channel
+    // Pre-FFT'd IR partitions: [P][freq_size] per channel.
+    // High: both channels used. Medium: only ir_parts_left (mono); ir_parts_right is null.
     float *  ir_parts_left;
     float *  ir_parts_right;
     // Frequency-domain delay line: [P][freq_size] (circular buffer of input spectra)
@@ -47,11 +67,18 @@ struct ConvolutionReverb {
     float *  pending_right;
     uint32_t pending_count;    // how many pending output samples
     uint32_t pending_offset;   // read position in pending buffer
+    // Stereo decorrelation allpass state (medium path: mono wet -> stereo output)
+    float *  decorr_buf_l;     // left allpass delay line (decorr_len_l floats; null on high path)
+    float *  decorr_buf_r;     // right allpass delay line (decorr_len_r floats; null on high path)
+    uint32_t decorr_len_l;     // left allpass delay length in samples
+    uint32_t decorr_len_r;     // right allpass delay length in samples
+    uint32_t decorr_pos_l;     // left delay-line write position
+    uint32_t decorr_pos_r;     // right delay-line write position
     void *   arena;            // single allocation for all buffers
 };
 
 void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayTime,
-                      float lpFreqStart, float lpFreqEnd, float fadeIn);
+                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality);
 void conv_reverb_process(ConvolutionReverb * rev, const float * input, float * output, uint32_t nFrames);
 void conv_reverb_process_mono(ConvolutionReverb * rev, const float * input, float * output, uint32_t nSamples);
 void conv_reverb_uninit(ConvolutionReverb * rev);
@@ -219,10 +246,37 @@ static void conv_reverb_convolve_channel(ConvolutionReverb * rev, float * out_bu
     }
 }
 
+// Split a mono wet block into a decorrelated stereo pair using two Schroeder allpass filters.
+// io_left holds the mono wet on entry and receives the left channel on exit; out_right receives
+// the right channel. Each allpass realizes H(z) = (z^-D - g)/(1 - g z^-D), which has |H| = 1, so
+// neither channel is colored — they differ only in phase, producing width without a 2nd IR.
+static void conv_reverb_decorrelate(ConvolutionReverb * rev, float * io_left, float * out_right, uint32_t n) {
+    float g = CONV_DECORR_G;
+    float * bl = rev->decorr_buf_l; uint32_t Dl = rev->decorr_len_l; uint32_t pl = rev->decorr_pos_l;
+    float * br = rev->decorr_buf_r; uint32_t Dr = rev->decorr_len_r; uint32_t pr = rev->decorr_pos_r;
+    for (uint32_t i = 0; i < n; i++) {
+        float m = io_left[i];
+        float dl = bl[pl];
+        float wl = m + g * dl;
+        io_left[i] = dl - g * wl;
+        bl[pl] = wl;
+        if (++pl >= Dl) pl = 0;
+        float dr = br[pr];
+        float wr = m + g * dr;
+        out_right[i] = dr - g * wr;
+        br[pr] = wr;
+        if (++pr >= Dr) pr = 0;
+    }
+    rev->decorr_pos_l = pl;
+    rev->decorr_pos_r = pr;
+}
+
 void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayTime,
-                      float lpFreqStart, float lpFreqEnd, float fadeIn) {
+                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality) {
     memset(rev, 0, sizeof(ConvolutionReverb));
     rev->sampleRate = sampleRate;
+    // CONV_QUALITY_LOW is not implemented yet — treat it as medium until the cheap path lands.
+    rev->quality = (quality == CONV_QUALITY_HIGH) ? CONV_QUALITY_HIGH : CONV_QUALITY_MEDIUM;
     rev->decayTime = decayTime;
     rev->lpFreqStart = lpFreqStart;
     rev->lpFreqEnd = lpFreqEnd;
@@ -243,31 +297,45 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
 
     rev->fft_aux = (void*)minfft_mkaux_realdft_1d(N);
 
+    int stereo_ir = (rev->quality == CONV_QUALITY_HIGH);  // high keeps 2 IRs; medium is mono
+    uint32_t ir_channels = stereo_ir ? 2u : 1u;
+
+    // Medium-path decorrelation allpass lengths (scaled to sample rate; mutually prime in samples)
+    if (!stereo_ir) {
+        rev->decorr_len_l = (uint32_t)(CONV_DECORR_TIME_L * (float)sampleRate);
+        rev->decorr_len_r = (uint32_t)(CONV_DECORR_TIME_R * (float)sampleRate);
+        if (rev->decorr_len_l < 1) rev->decorr_len_l = 1;
+        if (rev->decorr_len_r < 1) rev->decorr_len_r = 1;
+    }
+
     // Single arena allocation:
     // IR generation (temporary): ir_left(ir_length) + ir_right(ir_length)
-    // IR partitions: 2 channels * P * freq_size
+    // IR partitions: ir_channels * P * freq_size (high=2, medium=1)
     // FDDL: P * freq_size
     // Working: fft_input_buf(N) + fft_freq_scratch(freq) + fft_accum(freq) + fft_time_scratch(N)
     // History: input_hist_left(B) + input_hist_right(B)
     // Input accum: input_accum(B)
-    // Output overlap: output_overlap_left(B) + output_overlap_right(B)
+    // Output overlap: pending_left(B) + pending_right(B)
+    // Decorrelation (medium only): decorr_buf_l + decorr_buf_r
     uint32_t ir_len = rev->ir_length;
     size_t ir_temp = (size_t)ir_len * 2;
-    size_t parts = (size_t)P * freq_size * 2;
+    size_t parts = (size_t)P * freq_size * ir_channels;
     size_t fddl = (size_t)P * freq_size;
     size_t work = (size_t)N * 2 + (size_t)freq_size * 2;
     size_t hist = (size_t)B * 2;
     size_t accum_buf = (size_t)B;
     size_t overlap = (size_t)B * 2;  // pending_left + pending_right
+    size_t decorr = (size_t)rev->decorr_len_l + (size_t)rev->decorr_len_r;  // 0 on high path
     // ir_temp is reused after init, but we need it during init — allocate max
-    size_t total_floats = ir_temp + parts + fddl + work + hist + accum_buf + overlap;
+    size_t total_floats = ir_temp + parts + fddl + work + hist + accum_buf + overlap + decorr;
     rev->arena = calloc(total_floats, sizeof(float));
 
     float * fptr = (float *)rev->arena;
     float * ir_left  = fptr; fptr += ir_len;
     float * ir_right = fptr; fptr += ir_len;
     rev->ir_parts_left     = fptr; fptr += P * freq_size;
-    rev->ir_parts_right    = fptr; fptr += P * freq_size;
+    if (stereo_ir) { rev->ir_parts_right = fptr; fptr += P * freq_size; }
+    else           { rev->ir_parts_right = nullptr; }
     rev->fddl              = fptr; fptr += P * freq_size;
     rev->fft_input_buf     = fptr; fptr += N;
     rev->fft_freq_scratch  = fptr; fptr += freq_size;
@@ -278,6 +346,10 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
     rev->input_accum       = fptr; fptr += B;
     rev->pending_left  = fptr; fptr += B;
     rev->pending_right = fptr; fptr += B;
+    if (!stereo_ir) {
+        rev->decorr_buf_l = fptr; fptr += rev->decorr_len_l;
+        rev->decorr_buf_r = fptr; fptr += rev->decorr_len_r;
+    }
 
     rev->fddl_pos = 0;
     rev->input_accum_pos = 0;
@@ -287,8 +359,11 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
     memset(rev->pending_right, 0, B * sizeof(float));
     rev->pending_count = B;
     rev->pending_offset = 0;
+    rev->decorr_pos_l = 0;
+    rev->decorr_pos_r = 0;
 
-    // Generate IR
+    // Generate IR. The high path partitions both channels; the medium path uses only the left
+    // (mono) IR and synthesizes stereo width post-convolution via conv_reverb_decorrelate.
     conv_reverb_generate_ir(rev, ir_left, ir_right);
 
     // Partition and FFT each block of the IR
@@ -297,19 +372,21 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
         uint32_t len = ir_len - offset;
         if (len > B) len = B;
 
-        // Left channel partition
+        // Left (or mono) channel partition
         memset(rev->fft_input_buf, 0, N * sizeof(float));
         memcpy(rev->fft_input_buf, ir_left + offset, len * sizeof(float));
         minfft_realdft((minfft_real*)rev->fft_input_buf,
                        (minfft_cmpl*)(rev->ir_parts_left + p * freq_size),
                        CONV_FFT_AUX(rev));
 
-        // Right channel partition
-        memset(rev->fft_input_buf, 0, N * sizeof(float));
-        memcpy(rev->fft_input_buf, ir_right + offset, len * sizeof(float));
-        minfft_realdft((minfft_real*)rev->fft_input_buf,
-                       (minfft_cmpl*)(rev->ir_parts_right + p * freq_size),
-                       CONV_FFT_AUX(rev));
+        // Right channel partition (high path only)
+        if (stereo_ir) {
+            memset(rev->fft_input_buf, 0, N * sizeof(float));
+            memcpy(rev->fft_input_buf, ir_right + offset, len * sizeof(float));
+            minfft_realdft((minfft_real*)rev->fft_input_buf,
+                           (minfft_cmpl*)(rev->ir_parts_right + p * freq_size),
+                           CONV_FFT_AUX(rev));
+        }
     }
     // ir_left/ir_right memory is part of arena but no longer needed
 }
@@ -350,7 +427,14 @@ void conv_reverb_process(ConvolutionReverb * rev, const float * input, float * o
             // Process full block
             conv_reverb_fft_input(rev, rev->input_accum);
             conv_reverb_convolve_channel(rev, rev->pending_left, rev->ir_parts_left);
-            conv_reverb_convolve_channel(rev, rev->pending_right, rev->ir_parts_right);
+            if (rev->quality == CONV_QUALITY_HIGH) {
+                // High: a second full convolution against the decorrelated right IR.
+                conv_reverb_convolve_channel(rev, rev->pending_right, rev->ir_parts_right);
+            } else {
+                // Medium: synthesize stereo from the mono wet via allpass decorrelation
+                // (~half the convolution cost of the high path).
+                conv_reverb_decorrelate(rev, rev->pending_left, rev->pending_right, B);
+            }
             rev->fddl_pos = (rev->fddl_pos + 1) % rev->num_partitions;
             rev->input_accum_pos = 0;
 

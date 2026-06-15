@@ -835,7 +835,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     var pcm_box <- lock_box_create()
     // initialize reverb (convolution: 2s decay, 15kHz→1kHz lowpass sweep)
     g_reverb = new ConvolutionReverb
-    conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)
+    conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01, ConvReverbQuality.medium)
     // initialize chorus
     g_chorus = new ma_chorus
     chorus_init(g_chorus, float(SAMPLE_RATE))
@@ -1165,7 +1165,7 @@ def public midi_init_reverb() {
     //! Initialise the module-global reverb and chorus effects for offline rendering (calling `midi_tick` without running the thread).
     if (g_reverb == null) {
         g_reverb = new ConvolutionReverb
-        conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)
+        conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01, ConvReverbQuality.medium)
     }
     if (g_chorus == null) {
         g_chorus = new ma_chorus
