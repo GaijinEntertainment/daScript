@@ -140,6 +140,8 @@ def public op_operand_is_literal(opName : string; idx : int) : bool {
     if (opName == "OpExtInst") return idx == 3
     if (opName == "OpCompositeExtract") return idx >= 3
     if (opName == "OpVectorShuffle") return idx >= 4
+    // operands: resultType(0) resultId(1) image(2) coord(3) imageOperandsMask(4 = literal) lod-id(5)
+    if (opName == "OpImageSampleExplicitLod" || opName == "OpImageFetch") return idx == 4
     return false
 }
 
