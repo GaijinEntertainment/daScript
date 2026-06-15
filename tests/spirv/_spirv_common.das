@@ -756,6 +756,34 @@ def public gswizzle_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-10.3 fragment realism: discard (OpKill), screen-space derivatives (OpDPdx/OpDPdy/
+// OpFwidth), textureSize (OpImageQuerySizeLod + the ImageQuery capability), and a gl_FragDepth write
+// (BuiltIn FragDepth Output -> the DepthReplacing execution mode). discard/derivatives/gl_FragDepth are
+// fragment-only; textureSize is stage-agnostic (exercised here in a fragment shader for convenience).
+// discard() sits in an if-branch (it is a block terminator); dFdx/dFdy take the whole float2 global,
+// fwidth a scalar. =====
+var @binding = 0 fx_tex : sampler2D
+var @in @location = 0 fx_uv : float2
+var @out @location = 0 fx_color : float4
+[fragment_shader(name="fragx_spv"), marker(no_coverage)]
+def fragx {
+    if (fx_uv.x < 0.0f) {
+        discard()                       // OpKill (fragment-only terminator)
+    }
+    let dx = dFdx(fx_uv)                 // OpDPdx (float2)
+    let dy = dFdy(fx_uv)                 // OpDPdy (float2)
+    let w = fwidth(fx_uv.x)              // OpFwidth (scalar)
+    let sz = textureSize(fx_tex, 0)      // OpImageQuerySizeLod -> int2 (ImageQuery capability)
+    gl_FragDepth = fx_uv.x               // BuiltIn FragDepth write -> DepthReplacing execution mode
+    fx_color = float4(dx.x + dy.y + w, float(sz.x), float(sz.y), 1.0f)
+}
+
+def public fragx_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(fragx_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -991,4 +1019,20 @@ def public phase10_1_emitter_opcodes : table<uint> {
 // unchanged; the gswizzle fixture must still stay within it.
 def public phase10_2_emitter_opcodes : table<uint> {
     return <- phase10_1_emitter_opcodes()
+}
+
+// Phase-10.3 fragment realism adds five opcodes: OpKill (discard), OpDPdx/OpDPdy/OpFwidth (derivatives),
+// and OpImageQuerySizeLod (textureSize). gl_FragDepth reuses the existing builtin Variable/Decorate path
+// (DepthReplacing is an ExecutionMode operand, not an opcode), and OpImage was declared by Phase-7.2
+// texelFetch. Phase-10.2 set + these:
+def public phase10_3_emitter_opcodes : table<uint> {
+    var s <- phase10_2_emitter_opcodes()
+    for (op in [
+        SpvOp.Kill,                         // discard()
+        SpvOp.DPdx, SpvOp.DPdy, SpvOp.Fwidth,   // dFdx/dFdy/fwidth
+        SpvOp.ImageQuerySizeLod             // textureSize(s, lod)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
 }

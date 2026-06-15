@@ -22,6 +22,7 @@ var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
 
 // fragment
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
+var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
 
 // ===== combined image samplers =====
 // sampler2D is an opaque marker type: a global of this type lowers to an OpTypeSampledImage in
@@ -100,3 +101,36 @@ def public imageStore(img : image2D; coord : int2; value : float4) : void {}
 def public imageLoad(img : image2D; coord : int2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
+
+// ===== fragment realism =====
+// discard() abandons the current fragment (OpKill). It is a block terminator, so it must be the last
+// statement on its control-flow path (typically `if (cond) { discard() }`); fragment-only.
+def public discard() : void {}
+
+// Screen-space partial derivatives over the 2x2 fragment quad: dFdx/dFdy (OpDPdx/OpDPdy), and
+// fwidth = |dFdx| + |dFdy| (OpFwidth). Fragment-only. Concrete per-width overloads (NOT a generic):
+// the emitter dispatches by the call name, and a generic instance carries a mangled name the
+// name-match would miss. The stub bodies are never executed — only the call AST is lowered.
+[unused_argument(p)] def public dFdx(p : float) : float { return p }
+[unused_argument(p)] def public dFdx(p : float2) : float2 { return p }
+[unused_argument(p)] def public dFdx(p : float3) : float3 { return p }
+[unused_argument(p)] def public dFdx(p : float4) : float4 { return p }
+[unused_argument(p)] def public dFdy(p : float) : float { return p }
+[unused_argument(p)] def public dFdy(p : float2) : float2 { return p }
+[unused_argument(p)] def public dFdy(p : float3) : float3 { return p }
+[unused_argument(p)] def public dFdy(p : float4) : float4 { return p }
+[unused_argument(p)] def public fwidth(p : float) : float { return p }
+[unused_argument(p)] def public fwidth(p : float2) : float2 { return p }
+[unused_argument(p)] def public fwidth(p : float3) : float3 { return p }
+[unused_argument(p)] def public fwidth(p : float4) : float4 { return p }
+
+// textureSize(sampler, lod): the mip-level dimensions in texels (OpImageQuerySizeLod; needs the
+// ImageQuery capability). int2 for 2D/Cube, int3 for 3D / 2D-array (width,height,depth-or-layers).
+[unused_argument(s, lod)]
+def public textureSize(s : sampler2D; lod : int) : int2 { return int2(0, 0) }
+[unused_argument(s, lod)]
+def public textureSize(s : samplerCube; lod : int) : int2 { return int2(0, 0) }
+[unused_argument(s, lod)]
+def public textureSize(s : sampler3D; lod : int) : int3 { return int3(0, 0, 0) }
+[unused_argument(s, lod)]
+def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0, 0) }

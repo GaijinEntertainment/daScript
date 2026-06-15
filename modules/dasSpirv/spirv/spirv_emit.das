@@ -56,6 +56,8 @@ struct EmitCtx {
     terminated    : bool                        // current block already has a terminator
     glsl_ext      : uint                        // OpExtInstImport "GLSL.std.450" set id (0 = not imported yet)
     stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
+    uses_frag_depth : bool                      // gl_FragDepth referenced (Output-only, so = written) -> emit DepthReplacing
+    image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -106,6 +108,7 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
     if (name == "gl_InstanceIndex") return (ok = true, bi = SpvBuiltIn.InstanceIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
     // fragment
     if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
+    if (name == "gl_FragDepth") return (ok = true, bi = SpvBuiltIn.FragDepth, storage = SpvStorageClass.Output, req = ShaderStage.Fragment)
     return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
 }
 
@@ -266,6 +269,11 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.BuiltIn), uint(bi.bi))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = bi.storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)   // Input + Output builtins both list in the entry interface
+        // gl_FragDepth is Output-only, so any reference to it is a write -> the shader replaces the
+        // fixed-function depth and must declare DepthReplacing. Flagged here at classification.
+        if (bi.bi == SpvBuiltIn.FragDepth) {
+            ctx.uses_frag_depth = true
+        }
         return
     }
     // stage I/O: @in / @out user variables carry an explicit @location. They become Input/Output
@@ -601,6 +609,14 @@ def private ensure_glsl_ext(var m : SpirvModule; var ctx : EmitCtx) : uint {
     delete ops
     ctx.glsl_ext = id
     return id
+}
+
+// OpImageQuerySizeLod (textureSize) requires the ImageQuery capability. Emit it once into SEC_CAPS
+// (which concatenates ahead of the body), deduped via the ctx flag.
+def private ensure_image_query(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.image_query_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.ImageQuery))
+    ctx.image_query_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
@@ -1410,6 +1426,74 @@ class SpirvEmit : AstVisitor {
         var bm & = unsafe(*m)
         let name = "{expr.name}"
         let k = intptr(expr)
+        // discard(): abandon the fragment -> OpKill. A block terminator (sets ctx.terminated), so any
+        // following statement on the same path is rejected as unreachable. Fragment-only.
+        if (name == "discard") {
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("discard() is only valid in a fragment shader")
+                return expr
+            }
+            if (!empty(expr.arguments)) {
+                errs |> push("discard() takes no arguments")
+                return expr
+            }
+            emit(bm, SEC_FUNCS, SpvOp.Kill)
+            ctx.terminated = true
+            return expr
+        }
+        // dFdx/dFdy/fwidth: screen-space derivatives over the 2x2 quad (OpDPdx/OpDPdy/OpFwidth).
+        // Fragment-only; one float/floatN operand, same-typed result. No extra capability (the basic
+        // forms need only Shader; the *Fine/*Coarse variants would need DerivativeControl).
+        if (name == "dFdx" || name == "dFdy" || name == "fwidth") {
+            if (length(expr.arguments) != 1) {
+                errs |> push("{name} expects 1 argument")
+                return expr
+            }
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("{name}: screen-space derivatives are only valid in a fragment shader")
+                return expr
+            }
+            let a = value_of(expr.arguments[0])
+            if (a == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            let op = (name == "dFdx" ? SpvOp.DPdx : (name == "dFdy" ? SpvOp.DPdy : SpvOp.Fwidth))
+            emit(bm, SEC_FUNCS, op, rt, res, a)
+            e2id[k] = res
+            return expr
+        }
+        // textureSize(sampler, lod): mip-level dimensions in texels (OpImageQuerySizeLod). Extract the
+        // image from the sampled image (OpImage), then query; needs the ImageQuery capability.
+        if (name == "textureSize") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("textureSize expects (sampler, lod)")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("textureSize: first argument must be a sampler global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler) {
+                errs |> push("textureSize: '{sg.name}' is not a sampler")
+                return expr
+            }
+            ensure_image_query(bm, *ctx)
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let si = sampler_info(sg._type)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
+            let img = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
+            let lod = value_of(expr.arguments[1])
+            if (lod == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageQuerySizeLod, rt, res, img, lod)
+            e2id[k] = res
+            return expr
+        }
         // texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod
         if (name == "texture") {
             if (length(expr.arguments) != 2) {
@@ -2150,6 +2234,11 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         delete em
     } elif (stage == ShaderStage.Fragment) {
         emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OriginUpperLeft))
+        // gl_FragDepth referenced (detected by classify_global above; Output-only, so a reference is a
+        // write) -> the shader replaces the fixed-function depth.
+        if (ctx.uses_frag_depth) {
+            emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.DepthReplacing))
+        }
     }
 
     emit(m, SEC_FUNCS, SpvOp.Function, t_void, id_main, 0u, t_fn)
