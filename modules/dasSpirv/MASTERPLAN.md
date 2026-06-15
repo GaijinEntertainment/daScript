@@ -1350,3 +1350,42 @@ already works (sample a depth texture as a plain `sampler2D`, compare with a ter
    explicit `compare : float` is clearer, keeps the result type scalar (vs `texture()`'s float4), and
    fail-closes by construction — the type system prevents the wrong sampler/op pairing without an emitter
    check.
+
+### Phase 10.5 — compute tier (shared memory + barriers + atomics) LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-5-compute`)
+
+The cross-thread-compute differentiator: workgroup-shared memory, the barrier sync primitives, and the
+atomic read-modify-write family. Twelve new census opcodes (`OpControlBarrier`/`OpMemoryBarrier` + the
+ten atomics). interp + JIT 104/104, spirv-val clean, external `spirv-dis` confirms textbook lowering,
+lint + format clean.
+
+- **`@workgroup` shared memory → Workgroup storage (GLSL `shared`).** A `@workgroup` global lowers to a
+  Workgroup-class `OpVariable` (scalar, vector, or fixed array). Not a descriptor and not in the entry
+  interface (Workgroup is neither Input nor Output, SPIR-V ≤ 1.3), so no set/binding and nothing
+  reflected; compute-only. A shared fixed-array indexes through `visitExprAt`'s new Workgroup branch — a
+  **bare** array (single-index `OpAccessChain`), with NO member-0 indirection (unlike an SSBO, whose array
+  is wrapped in a Block struct).
+- **`barrier()` → `OpControlBarrier`, `memoryBarrierShared()` → `OpMemoryBarrier`.** Both at Workgroup
+  scope with `WorkgroupMemory | AcquireRelease` (= 264) semantics, matching glslang. `barrier()` is the
+  execution + shared-memory rendezvous (the tiled-reduction sync point); `memoryBarrierShared()` is the
+  memory-only ordering. Compute-only; neither is a block terminator. No extra capability (base `Shader`).
+- **Atomics → `OpAtomic*`.** `atomicAdd`/`Min`/`Max`/`And`/`Or`/`Xor`/`Exchange`/`CompSwap` on a
+  `@workgroup` or `@ssbo` int/uint lvalue, returning the OLD value. `atomicMin`/`Max` pick the signed
+  (`SMin`/`SMax`) or unsigned (`UMin`/`UMax`) opcode by the operand's signedness; `atomicCompSwap` is the
+  `OpAtomicCompareExchange` CAS. Memory scope = Workgroup for shared targets, Device for buffer targets
+  (read off the target's root-global storage class); Relaxed (0) semantics, the glslang default. No extra
+  capability for 32-bit integer atomics (lavapipe-safe).
+
+**Findings (load-bearing):**
+1. **`@shared` is a reserved keyword → the annotation is `@workgroup`.** `var @shared x` is a parse error
+   ("unexpected shared"), same class as the `block` keyword collision in Phase 10.1. `@workgroup` (the
+   SPIR-V storage-class name) parses cleanly and reads well. The shared-memory authoring spelling is
+   `var @workgroup tile : float[64]`.
+2. **The atomic target is a reference parameter (`mem : T&`), NOT by-value.** A by-value `mem : T`
+   workhorse param makes daslang insert an `ExprRef2Value` (a load) around the lvalue arg — a wasted
+   `OpLoad` whose result the atomic ignores. A `T&` ref param keeps the arg an lvalue, so the visitor
+   seeds its `e2ptr` pointer and the emitter recovers it directly (no spurious load). LINT014 then forces
+   dropping `var` (the body only reads `mem`): `mem : int&`, not `var mem : int&`. The emitter still peels
+   a defensive `ExprRef2Value` in case one appears, and `root_global_of` walks the lvalue chain
+   (`ExprAt`/`ExprField`/`ExprSwizzle`/`ExprRef2Value` → root `ExprVar`) to read the storage class for the
+   memory scope. External `spirv-dis` verified: shared scalar atomics at `%uint_2` (Workgroup) scope, the
+   SSBO `atomicAdd` at `%uint_1` (Device).

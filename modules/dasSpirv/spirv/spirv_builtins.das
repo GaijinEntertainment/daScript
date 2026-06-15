@@ -147,3 +147,38 @@ def public textureSize(s : samplerCube; lod : int) : int2 { return int2(0, 0) }
 def public textureSize(s : sampler3D; lod : int) : int3 { return int3(0, 0, 0) }
 [unused_argument(s, lod)]
 def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0, 0) }
+
+// ===== compute synchronization =====
+// barrier() is a control + shared-memory barrier (OpControlBarrier at Workgroup scope): every
+// invocation in the workgroup waits here, and writes to @workgroup memory before the barrier are
+// visible to all after it. The must-have sync point for shared-memory compute (the tiled-reduction
+// pattern). memoryBarrierShared() is the memory-only variant (OpMemoryBarrier) -- it orders shared
+// writes without the execution rendezvous. Both compute-only; the stub bodies never run.
+def public barrier() : void {}
+def public memoryBarrierShared() : void {}
+
+// ===== atomics =====
+// Atomic read-modify-write on a @workgroup or @ssbo lvalue, returning the OLD value (GLSL/SPIR-V
+// semantics). The target is the first argument, passed by reference so the emitter recovers its
+// pointer; int and uint overloads cover signed/unsigned ops (atomicMin/Max pick SMin/UMin /
+// SMax/UMax by the operand's signedness). Lowered to OpAtomicIAdd/SMin/.../Exchange/CompareExchange
+// at Workgroup scope (shared) or Device scope (buffer). The stub bodies never run -- only the call
+// AST is read. Use as `let old = atomicAdd(counter, 1)`.
+[unused_argument(value)] def public atomicAdd(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicAdd(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicMin(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicMin(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicMax(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicMax(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicAnd(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicAnd(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicOr(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicOr(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicXor(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicXor(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value)] def public atomicExchange(mem : int &; value : int) : int { return mem }
+[unused_argument(value)] def public atomicExchange(mem : uint &; value : uint) : uint { return mem }
+// atomicCompSwap(mem, compare, value): if mem == compare, store value; returns the OLD value either
+// way (OpAtomicCompareExchange). The lock-free CAS primitive.
+[unused_argument(compare, value)] def public atomicCompSwap(mem : int &; compare, value : int) : int { return mem }
+[unused_argument(compare, value)] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint { return mem }
