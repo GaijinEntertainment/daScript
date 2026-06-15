@@ -556,6 +556,25 @@ def public storimg_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
+// texelFetch -> OpImage (extract image from the sampled image) + OpImageFetch. Both are derivative-free,
+// so this fixture samples in a COMPUTE shader -- proving the stage lift (texture() is fragment-only). =====
+var @binding = 1 cs_tex : sampler2D
+[compute_shader(local_size_x=64, name="texlod_spv"), marker(no_coverage)]
+def texlod {
+    let i = gl_GlobalInvocationID.x
+    let uv = float2(float(i) / 64.0f, 0.5f)                 // runtime uv (not a folded constant)
+    let a = textureLod(cs_tex, uv, 1.0f)                    // OpImageSampleExplicitLod (in compute)
+    let b = texelFetch(cs_tex, int2(int(i), 0), 0)          // OpImage + OpImageFetch
+    fdata[i] = a.x + b.x                                    // scalar swizzles + FAdd
+}
+
+def public texlod_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(texlod_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -732,6 +751,18 @@ def public phase7a_emitter_opcodes : table<uint> {
         SpvOp.ConvertSToF, SpvOp.ConvertUToF, SpvOp.ConvertFToS, SpvOp.ConvertFToU, SpvOp.Bitcast,
         // storage image read/write (OpTypeImage already declared by Phase-4d samplers)
         SpvOp.ImageRead, SpvOp.ImageWrite
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-7.2 adds explicit-LOD sampling + texel fetch. Phase-7.1 set + these:
+def public phase7b_emitter_opcodes : table<uint> {
+    var s <- phase7a_emitter_opcodes()
+    for (op in [
+        SpvOp.ImageSampleExplicitLod,   // textureLod(s, uv, lod)
+        SpvOp.Image, SpvOp.ImageFetch   // texelFetch(s, coord, lod)
     ]) {
         s |> insert(uint(op))
     }

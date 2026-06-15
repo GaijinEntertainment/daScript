@@ -1252,6 +1252,71 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
+        // textureLod(sampler, uv, lod): OpImageSampleExplicitLod with an explicit Lod operand. No
+        // derivatives -> valid in any stage (not fragment-only like texture()).
+        if (name == "textureLod") {
+            if (length(expr.arguments) != 3) {
+                errs |> push("textureLod expects (sampler, uv, lod)")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("textureLod: first argument must be a sampler global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler) {
+                errs |> push("textureLod: '{sg.name}' is not a sampler")
+                return expr
+            }
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let uv = value_of(expr.arguments[1])
+            let lod = value_of(expr.arguments[2])
+            if (uv == 0u || lod == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, simg, uv, uint(SpvImageOperands.Lod), lod]
+            emit_n(bm, SEC_FUNCS, SpvOp.ImageSampleExplicitLod, ops)
+            delete ops
+            e2id[k] = res
+            return expr
+        }
+        // texelFetch(sampler, coord, lod): OpImage to extract the image from the sampled image, then
+        // OpImageFetch by integer coordinate + Lod. Unfiltered; stage-agnostic.
+        if (name == "texelFetch") {
+            if (length(expr.arguments) != 3) {
+                errs |> push("texelFetch expects (sampler, coord, lod)")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("texelFetch: first argument must be a sampler global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler) {
+                errs |> push("texelFetch: '{sg.name}' is not a sampler")
+                return expr
+            }
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            // extract the underlying image (same dedup key classify_global used for the sampler)
+            let si = sampler_info(sg._type)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim)
+            let img = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
+            let coord = value_of(expr.arguments[1])
+            let lod = value_of(expr.arguments[2])
+            if (coord == 0u || lod == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, img, coord, uint(SpvImageOperands.Lod), lod]
+            emit_n(bm, SEC_FUNCS, SpvOp.ImageFetch, ops)
+            delete ops
+            e2id[k] = res
+            return expr
+        }
         // imageStore(image, coord, value): OpLoad the image + OpImageWrite (void statement, no result)
         if (name == "imageStore") {
             if (length(expr.arguments) != 3) {

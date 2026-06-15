@@ -35,6 +35,20 @@ def public texture(s : sampler2D; uv : float2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
+// textureLod samples with an EXPLICIT level-of-detail (OpImageSampleExplicitLod): no screen-space
+// derivatives, so unlike texture() it is valid in any stage (vertex/compute), not fragment-only.
+[unused_argument(s, uv, lod)]
+def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+// texelFetch reads a single texel by integer coordinate + mip level, unfiltered (OpImage to extract the
+// image from the sampled image, then OpImageFetch). Stage-agnostic (no derivatives).
+[unused_argument(s, coord, lod)]
+def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
 // ===== storage images =====
 // image2D is an opaque marker for a read-write storage image (UniformConstant OpTypeImage with a
 // known Rgba8 format, recognized by name in classify_global). imageStore/imageLoad are stubs: their

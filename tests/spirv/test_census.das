@@ -52,7 +52,8 @@ def test_opcode_census(t : T?) {
         add_set(present, tex_frag_words())
         add_set(present, conv_words())
         add_set(present, storimg_words())
-        var declared <- phase7a_emitter_opcodes()
+        add_set(present, texlod_words())
+        var declared <- phase7b_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }
